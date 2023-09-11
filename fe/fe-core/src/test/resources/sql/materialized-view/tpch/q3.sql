@@ -27,6 +27,6 @@ TOP-N (order by [[35: sum DESC NULLS LAST, 10: o_orderdate ASC NULLS FIRST]])
         AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(35: sum)}] group by [[19: l_orderkey, 10: o_orderdate, 16: o_shippriority]] having [null]
             EXCHANGE SHUFFLE[19, 10, 16]
                 AGGREGATE ([LOCAL] aggregate [{35: sum=sum(34: expr)}] group by [[19: l_orderkey, 10: o_orderdate, 16: o_shippriority]] having [null]
-                    SCAN (mv[lineitem_mv] columns[74: c_mktsegment, 81: l_orderkey, 86: l_shipdate, 91: o_orderdate, 94: o_shippriority, 104: l_saleprice] predicate[74: c_mktsegment = HOUSEHOLD AND 91: o_orderdate < 1995-03-11 AND 86: l_shipdate > 1995-03-11])
+                    SCAN (mv[lineitem_mv] columns[50: c_mktsegment, 57: l_orderkey, 62: l_shipdate, 67: o_orderdate, 70: o_shippriority, 80: l_saleprice] predicate[67: o_orderdate < 1995-03-11 AND 62: l_shipdate > 1995-03-11 AND 50: c_mktsegment = HOUSEHOLD])
 [end]
 

@@ -689,14 +689,34 @@ class SelectStmtWithCaseWhenTest {
                 {"select * from test.t0 where nullif('China', region) = 'China'", "[1: region, VARCHAR, false] != 'China'"},
                 {"select * from test.t0 where nullif('China', region) <> 'China'", "0:EMPTYSET"},
                 {"select * from test.t0 where nullif('China', region) is NULL", "[1: region, VARCHAR, false] = 'China'"},
+                {"select * from test.t0 where (nullif('China', region) is NULL) is NULL",
+                        "0:EMPTYSET"},
+                {"select * from test.t0 where (nullif('China', region) is NULL) is NOT NULL",
+                        "0:OlapScanNode\n" +
+                                "     table: t0, rollup: t0\n" +
+                                "     preAggregation: on"},
                 {"select * from test.t0 where nullif('China', region) is NOT NULL", "[1: region, VARCHAR, false] != 'China'"},
+                {"select * from test.t0 where (nullif('China', region) is NOT NULL) is NULL",
+                        "1: region != 'China' IS NULL"},
+                {"select * from test.t0 where (nullif('China', region) is NOT NULL) is NOT NULL",
+                        "1: region != 'China' IS NOT NULL"},
+
                 {"select * from test.t0 where nullif('China', region) = 'USA'", "0:EMPTYSET"},
                 {"select * from test.t0 where nullif('China', region) <>  'USA'", "[1: region, VARCHAR, false] != 'China'"},
 
                 {"select * from test.t0 where nullif(1, ship_code) = 1", "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
                 {"select * from test.t0 where nullif(1, ship_code) <> 1", "0:EMPTYSET"},
                 {"select * from test.t0 where nullif(1, ship_code) is NULL", "[5: ship_code, INT, true] = 1"},
+                {"select * from test.t0 where (nullif(1, ship_code) is NULL) is NULL", "0:EMPTYSET"},
+                {"select * from test.t0 where (nullif(1, ship_code) is NULL) is NOT NULL",
+                        "0:OlapScanNode\n" +
+                        "     table: t0, rollup: t0\n" +
+                        "     preAggregation: on"},
                 {"select * from test.t0 where nullif(1, ship_code) is NOT NULL", "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
+                {"select * from test.t0 where (nullif(1, ship_code) is NOT NULL) is NULL",
+                        "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
+                {"select * from test.t0 where (nullif(1, ship_code) is NOT NULL) is NOT NULL",
+                        "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
                 {"select * from test.t0 where nullif(1, ship_code) = 2", "0:EMPTYSET"},
                 {"select * from test.t0 where nullif(1, ship_code) <>  2", "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
         };

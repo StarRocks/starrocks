@@ -31,6 +31,6 @@ TOP-N (order by [[37: d_year ASC NULLS FIRST, 50: sum DESC NULLS LAST]])
             AGGREGATE ([GLOBAL] aggregate [{50: sum=sum(50: sum)}] group by [[106: C_CITY, 108: S_CITY, 37: d_year]] having [null]
                 EXCHANGE SHUFFLE[106, 108, 37]
                     AGGREGATE ([LOCAL] aggregate [{50: sum=sum(21: lo_revenue)}] group by [[106: C_CITY, 108: S_CITY, 37: d_year]] having [null]
-                        SCAN (mv[lineorder_flat_mv] columns[106: C_CITY, 107: C_NATION, 92: d_year, 108: S_CITY, 109: S_NATION, 63: LO_REVENUE] predicate[DictMapping(107: C_NATION{71: C_NATION = UNITED STATES}) AND DictMapping(109: S_NATION{78: S_NATION = UNITED STATES}) AND 92: d_year >= 1992 AND 92: d_year <= 1997])
+                        SCAN (mv[lineorder_flat_mv] columns[106: C_CITY, 107: C_NATION, 92: d_year, 108: S_CITY, 109: S_NATION, 63: LO_REVENUE] predicate[DictMapping(109: S_NATION{78: S_NATION = UNITED STATES}) AND 92: d_year >= 1992 AND 92: d_year <= 1997 AND DictMapping(107: C_NATION{71: C_NATION = UNITED STATES})])
 [end]
 

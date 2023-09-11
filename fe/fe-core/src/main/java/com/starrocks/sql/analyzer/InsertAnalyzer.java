@@ -80,7 +80,13 @@ public class InsertAnalyzer {
                     throw new SemanticException("No partition specified in partition lists");
                 }
 
-                for (String partitionName : targetPartitionNames.getPartitionNames()) {
+                List<String> deduplicatePartitionNames =
+                        targetPartitionNames.getPartitionNames().stream().distinct().collect(Collectors.toList());
+                if (deduplicatePartitionNames.size() != targetPartitionNames.getPartitionNames().size()) {
+                    insertStmt.setTargetPartitionNames(new PartitionNames(targetPartitionNames.isTemp(),
+                            deduplicatePartitionNames));
+                }
+                for (String partitionName : deduplicatePartitionNames) {
                     if (Strings.isNullOrEmpty(partitionName)) {
                         throw new SemanticException("there are empty partition name");
                     }
