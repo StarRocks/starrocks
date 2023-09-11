@@ -181,7 +181,7 @@ public:
     Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
                               const size_t& layer) override {
         DCHECK_EQ(sub_field_path.size(), layer);
-        RETURN_IF_ERROR(_dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data()));
+        return _dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data());
     }
 
     Status fill_dst_column(ColumnPtr& dst, const ColumnPtr& src) override {
