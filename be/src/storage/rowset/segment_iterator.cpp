@@ -848,6 +848,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     const uint32_t chunk_capacity = _reserve_chunk_size;
     const uint32_t return_chunk_threshold = std::max<uint32_t>(chunk_capacity - chunk_capacity / 4, 1);
     const bool has_predicate = !_opts.predicates.empty();
+    const bool scan_range_normalized = _scan_range.is_normalized();
     const int64_t prev_raw_rows_read = _opts.stats->raw_rows_read;
 
     _context->_read_chunk->reset();
@@ -869,6 +870,10 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
         chunk_start = next_start;
         DCHECK_EQ(chunk_start, chunk->num_rows());
+
+        if (chunk_start && !scan_range_normalized) {
+            break;
+        }
     }
 
     size_t raw_chunk_size = chunk->num_rows();
