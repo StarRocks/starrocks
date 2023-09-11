@@ -187,6 +187,8 @@ public:
     // should use with migration lock.
     void set_is_migrating(bool is_migrating) { _is_migrating = is_migrating; }
 
+    std::shared_mutex& get_meta_store_lock() { return _meta_store_lock; }
+
     // check tablet is migrating or has been migrated.
     // if tablet is migrating or has been migrated, return true.
     // should use with migration lock.
@@ -340,6 +342,8 @@ private:
     OnceFlag _init_once;
     // meta store lock is used for prevent 2 threads do checkpoint concurrently
     // it will be used in econ-mode in the future
+    // This lock will be also used for prevent SnapshotLoader::move and checkpoint
+    // concurrently for restoring the tablet.
     std::shared_mutex _meta_store_lock;
     std::mutex _ingest_lock;
     std::mutex _base_lock;
