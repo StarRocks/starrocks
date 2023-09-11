@@ -245,7 +245,11 @@ public class TableFunctionTable extends Table {
 
         List<Column> columns = new ArrayList<>();
         for (PSlotDescriptor slot : result.schema) {
-            columns.add(new Column(slot.colName, Type.fromProtobuf(slot.slotType, 0), true));
+            Type tp = Type.fromProtobuf(slot.slotType, 0);
+            if (tp == null) {
+                throw new DdlException("unsupported type:" + slot.slotType.toString() + " ,column name: " + slot.colName);
+            }
+            columns.add(new Column(slot.colName, tp, true));
         }
         return columns;
     }

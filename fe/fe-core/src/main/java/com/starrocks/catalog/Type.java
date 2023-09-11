@@ -1328,10 +1328,8 @@ public abstract class Type implements Cloneable {
                 Type valueType = fromProtobuf(pTypeDesc, nodeIndex + 2);
                 return new MapType(keyType, valueType);
             }
-            default: {
-                return null;
-            }
         }
+        return null;
     }
 
     /**
