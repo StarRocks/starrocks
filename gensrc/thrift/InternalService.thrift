@@ -117,6 +117,11 @@ enum TTabletInternalParallelMode {
   FORCE_SPLIT
 }
 
+enum TOverflowMode {
+  OUTPUT_NULL = 0;
+  REPORT_ERROR = 1;
+}
+
 // Query options with their respective defaults
 struct TQueryOptions {
   2: optional i32 max_errors = 0
@@ -214,6 +219,13 @@ struct TQueryOptions {
   101: optional i64 runtime_profile_report_interval = 30;
 
   102: optional bool enable_collect_table_level_scan_stats;
+<<<<<<< HEAD
+=======
+
+  103: optional i32 interleaving_group_size;
+
+  104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
+>>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419))
 }
 
 
