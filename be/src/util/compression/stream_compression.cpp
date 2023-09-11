@@ -47,6 +47,12 @@
 #include "gutil/strings/substitute.h"
 #include "util/coding.h"
 #include "util/compression/compression_context_pool_singletons.h"
+
+namespace orc {
+uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit);
+class ParseError;
+} // namespace orc
+
 namespace starrocks {
 
 class GzipStreamCompression : public StreamCompression {
@@ -532,6 +538,7 @@ public:
                       size_t* output_bytes_written, bool* stream_end) override;
 
 private:
+    static constexpr const char* NAME = "LzoStreamCompression";
     // Lzop
     static constexpr uint8_t LZOP_MAGIC[9] = {0x89, 0x4c, 0x5a, 0x4f, 0x00, 0x0d, 0x0a, 0x1a, 0x0a};
 
@@ -679,7 +686,7 @@ Status LzoStreamCompression::decompress(uint8_t* input, size_t input_len, size_t
 
         if (compressed_size > LZO_MAX_BLOCK_SIZE) {
             std::stringstream ss;
-            ss << "lzo block size: " << compressed_size
+            ss << NAME << " lzo block size: " << compressed_size
                << " is greater than LZO_MAX_BLOCK_SIZE: " << LZO_MAX_BLOCK_SIZE;
             return Status::InternalError(ss.str());
         }
@@ -725,7 +732,12 @@ Status LzoStreamCompression::decompress(uint8_t* input, size_t input_len, size_t
         if (compressed_size == uncompressed_size) {
             memcpy(ctx->buffer_data, ptr, compressed_size);
         } else {
-            // TODO: lzo decompress.
+            try {
+                (void)orc::lzoDecompress((char*)ptr, (char*)ptr + compressed_size, (char*)ctx->buffer_data,
+                                         (char*)ctx->buffer_data + uncompressed_size);
+            } catch (const std::runtime_error& e) {
+                return Status::InternalError(strings::Substitute("$0 decompress failed", NAME));
+            }
         }
         RETURN_IF_ERROR(checksum(_header.output_checksum_type, "decompressed", uncompressed_checksum, ctx->buffer_data,
                                  uncompressed_size));
@@ -768,7 +780,7 @@ Status LzoStreamCompression::parse_header(uint8_t* input, size_t input_len, bool
     // 1. magic
     if (memcmp(ptr, LZOP_MAGIC, sizeof(LZOP_MAGIC))) {
         std::stringstream ss;
-        ss << "invalid lzo magic number";
+        ss << NAME << " invalid lzo magic number";
         return Status::InternalError(ss.str());
     }
     ptr += sizeof(LZOP_MAGIC);
@@ -778,7 +790,8 @@ Status LzoStreamCompression::parse_header(uint8_t* input, size_t input_len, bool
     ptr = get_uint16(ptr, &_header.version);
     if (_header.version > LZOP_VERSION) {
         std::stringstream ss;
-        ss << "compressed with later version of lzop: " << &_header.version << " must be less than: " << LZOP_VERSION;
+        ss << NAME << " compressed with later version of lzop: " << &_header.version
+           << " must be less than: " << LZOP_VERSION;
         return Status::InternalError(ss.str());
     }
 
@@ -786,7 +799,7 @@ Status LzoStreamCompression::parse_header(uint8_t* input, size_t input_len, bool
     ptr = get_uint16(ptr, &_header.lib_version);
     if (_header.lib_version < MIN_LZO_VERSION) {
         std::stringstream ss;
-        ss << "compressed with incompatible lzo version: " << &_header.lib_version
+        ss << NAME << " compressed with incompatible lzo version: " << &_header.lib_version
            << "must be at least: " << MIN_LZO_VERSION;
         return Status::InternalError(ss.str());
     }
@@ -795,7 +808,7 @@ Status LzoStreamCompression::parse_header(uint8_t* input, size_t input_len, bool
     ptr = get_uint16(ptr, &_header.version_needed);
     if (_header.version_needed > LZOP_VERSION) {
         std::stringstream ss;
-        ss << "compressed with imp incompatible lzo version: " << &_header.version
+        ss << NAME << " compressed with imp incompatible lzo version: " << &_header.version
            << " must be at no more than: " << LZOP_VERSION;
         return Status::InternalError(ss.str());
     }
@@ -804,7 +817,7 @@ Status LzoStreamCompression::parse_header(uint8_t* input, size_t input_len, bool
     ptr = get_uint8(ptr, &_header.method);
     if (_header.method < 1 || _header.method > 3) {
         std::stringstream ss;
-        ss << "invalid compression method: " << _header.method;
+        ss << NAME << " invalid compression method: " << _header.method;
         return Status::InternalError(ss.str());
     }
 
@@ -816,7 +829,7 @@ Status LzoStreamCompression::parse_header(uint8_t* input, size_t input_len, bool
     ptr = get_uint32(ptr, &flags);
     if (flags & (F_RESERVED | F_MULTIPART | F_H_FILTER)) {
         std::stringstream ss;
-        ss << "unsupported lzo flags: " << flags;
+        ss << NAME << " unsupported lzo flags: " << flags;
         return Status::InternalError(ss.str());
     }
     _header.header_checksum_type = header_type(flags);
