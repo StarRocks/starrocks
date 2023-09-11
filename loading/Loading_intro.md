@@ -195,17 +195,9 @@ StarRocks目前的导入方式分为两种：同步和异步。
 
 以下配置属于BE的系统配置，可以通过修改BE的配置文件be.conf来修改：
 
-* push\_write\_mbytes\_per\_sec
-
-    BE上单个Tablet的写入速度限制。默认是10，即10MB/s。根据Schema以及系统的不同，通常BE对单个Tablet的最大写入速度大约在10-30MB/s之间。可以适当调整这个参数来控制导入速度。
-
 * write\_buffer\_size
 
     导入数据在 BE 上会先写入到一个内存块，当这个内存块达到阈值后才会写回磁盘。默认大小是 100MB。过小的阈值可能导致 BE 上存在大量的小文件。可以适当提高这个阈值减少文件数量。但过大的阈值可能导致RPC超时，见下面的配置说明。
-
-* tablet\_writer\_rpc\_timeout\_sec
-
-    导入过程中，发送一个 Batch（1024行）的RPC超时时间。默认为600秒。因为该RPC可能涉及多个分片内存块的写盘操作，所以可能会因为写盘导致RPC超时，可以适当调整这个超时时间来减少超时错误（如 send batch fail 错误）。同时，如果调大write\_buffer\_size配置，也需要适当调大这个参数。
 
 * streaming\_load\_rpc\_max\_alive\_time\_sec
 
