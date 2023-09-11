@@ -4341,7 +4341,6 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
     if (state != nullptr && with_default) {
         auto* auto_increment_state = (AutoIncrementPartialUpdateState*)state;
         Rowset* rowset = auto_increment_state->rowset;
-        uint32_t id = auto_increment_state->id;
         const std::vector<uint32_t>& rowids = auto_increment_state->rowids;
         uint32_t segment_id = auto_increment_state->segment_id;
         uint32_t rssid = rowset->rowset_meta()->get_rowset_seg_id() + segment_id;
@@ -4366,9 +4365,23 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         for (auto i = 0; i < column_ids.size(); ++i) {
             // try to build iterator from delta column file first
             ASSIGN_OR_RETURN(auto col_iter, new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i]));
+            // not found in delta column file, build iterator from main segment
             if (col_iter == nullptr) {
-                // not found in delta column file, build iterator from main segment
-                ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator(id));
+                // find auto increment column index in full tablet schema.
+                // this pr(https://github.com/StarRocks/starrocks/pull/26246) change the function Segment::new_column_iterator and it
+                // will get the tablet column by column index first, and find the column iterator according to tablet column unique id.
+                // but `id` here is not the auto increment column index in full schema, it is the column index in partial schema. So we
+                // need to transfer it to column index in full schema first.
+                // BTW, this is a bugfix, and the following code maybe refator when we support light schema change for primary key table
+                uint32_t idx = 0;
+                auto tablet_schema = _tablet.tablet_schema();
+                for (int i = 0; i < tablet_schema->num_columns(); ++i) {
+                    if (tablet->tablet_schema()->column(i).is_auto_increment()) {
+                        idx = i;
+                        break;
+                    }
+                }
+                ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator(idx));
                 iter_opts.read_file = read_file.get();
             }
             RETURN_IF_ERROR(col_iter->init(iter_opts));
