@@ -141,7 +141,6 @@ public class EsUtil {
      * Transfer es type to sr type.
      **/
     public static Type convertType(String esType) {
-
         switch (esType) {
             case "null":
                 return Type.NULL;
