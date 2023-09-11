@@ -31,6 +31,7 @@ import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TOverflowMode;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TTabletInternalParallelMode;
@@ -1902,6 +1903,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setMax_pushdown_conditions_per_column(maxPushdownConditionsPerColumn);
         }
         tResult.setEnable_spilling(false);
+
+        if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_IF_OVERFLOW)) {
+            tResult.setOverflow_mode(TOverflowMode.REPORT_ERROR);
+        }
 
         // Compression Type
         TCompressionType compressionType = CompressionUtils.findTCompressionByName(transmissionCompressionType);

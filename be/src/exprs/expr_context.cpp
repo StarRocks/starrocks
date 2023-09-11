@@ -215,4 +215,8 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk, uin
     }
 }
 
+bool ExprContext::error_if_overflow() const {
+    return _runtime_state != nullptr && _runtime_state->error_if_overflow();
+}
+
 } // namespace starrocks
