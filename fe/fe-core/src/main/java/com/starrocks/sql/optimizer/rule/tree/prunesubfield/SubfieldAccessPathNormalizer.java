@@ -103,7 +103,7 @@ public class SubfieldAccessPathNormalizer {
         return allAccessPaths.stream().anyMatch(path -> path.root().equals(root));
     }
 
-    public static class Collector extends ScalarOperatorVisitor<Optional<AccessPath>, List<Optional<AccessPath>>> {
+    private static class Collector extends ScalarOperatorVisitor<Optional<AccessPath>, List<Optional<AccessPath>>> {
         @Override
         public Optional<AccessPath> visit(ScalarOperator scalarOperator,
                                           List<Optional<AccessPath>> childrenAccessPaths) {
@@ -159,7 +159,7 @@ public class SubfieldAccessPathNormalizer {
             return Optional.empty();
         }
 
-        public Optional<AccessPath> process(ScalarOperator scalarOperator, Deque<AccessPath> accessPaths) {
+        private Optional<AccessPath> process(ScalarOperator scalarOperator, Deque<AccessPath> accessPaths) {
             // process children in post-order
             List<Optional<AccessPath>> childAccessPaths = scalarOperator.getChildren().stream()
                     .map(child -> process(child, accessPaths))
@@ -169,8 +169,11 @@ public class SubfieldAccessPathNormalizer {
             if (!childAccessPaths.isEmpty() && childAccessPaths.stream().noneMatch(Optional::isPresent)) {
                 return Optional.empty();
             }
-            childAccessPaths.forEach(p -> p.ifPresent(accessPaths::add));
-            return scalarOperator.accept(this, childAccessPaths);
+            Optional<AccessPath> currentPath = scalarOperator.accept(this, childAccessPaths);
+            AccessPath path = currentPath.orElse(null);
+            childAccessPaths.stream().filter(p -> p.isPresent() && p.get() != path)
+                    .map(Optional::get).forEach(accessPaths::add);
+            return currentPath;
         }
     }
 
