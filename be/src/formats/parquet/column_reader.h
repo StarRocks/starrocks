@@ -121,7 +121,9 @@ public:
                                   const size_t& layer) {}
 
     virtual Status filter_dict_column(const ColumnPtr& column, Filter* filter,
-                                      const std::vector<std::string>& sub_field_path, const size_t& layer) {}
+                                      const std::vector<std::string>& sub_field_path, const size_t& layer) {
+        return Status::OK();
+    }
 
     virtual Status fill_dst_column(ColumnPtr& dst, const ColumnPtr& src) {
         dst->swap_column(*src);
