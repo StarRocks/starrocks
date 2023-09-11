@@ -8,10 +8,10 @@
 
 ## 原理
 
-StarRocks 将远端存储文件缓存至本地 BE 节点时，会将原始文件按照一定策略切分为相等大小的 block。Block 是数据缓存的最小单元。例如，查询 Amazon S3 上一个 128 MB 的 Parquet 文件，StarRocks 会按照默认 1 MB 的步长，将该文件拆分成相等的 128 个 block，即 [0, 1 MB)、[1 MB, 2 MB)、[2 MB, 3 MB) ... [127 MB, 128 MB)，并为每个 block 分配一个全局唯一 ID，即 cache key。Cache key 由三部分组成。
+StarRocks 将远端存储文件缓存至本地 BE 节点时，会将原始文件按照一定策略切分为相等大小的 block。block 是数据缓存的最小单元，大小可配置。当配置 block 大小为 1 MB 时，如果查询 Amazon S3 上一个 128 MB 的 Parquet 文件，StarRocks 会按照 1 MB 的步长，将该文件拆分成相等的 128 个 block，即 [0, 1 MB)、[1 MB, 2 MB)、[2 MB, 3 MB) ... [127 MB, 128 MB)，并为每个 block 分配一个全局唯一 ID，即 cache key。Cache key 由三部分组成。
 
 ```Plain
-hash(filename) + filesize + blockId
+hash(filename) + fileModificationTime + blockId
 ```
 
 说明如下。
@@ -19,7 +19,7 @@ hash(filename) + filesize + blockId
 | **组成项** | **说明**                                                     |
 | ---------- | ------------------------------------------------------------ |
 | filename   | 数据文件名称。                                               |
-| filesize   | 数据文件大小，默认 1 MB。                                    |
+| fileModificationTime  | 数据文件最近一次修改时间。                                    |
 | blockId    | StarRocks 在拆分数据文件时为每个 block 分配的 ID。该 ID 在一个文件下是唯一的，非全局唯一。 |
 
 假如该查询命中了 [1 MB, 2 MB) 这个 block，那么：
@@ -27,7 +27,7 @@ hash(filename) + filesize + blockId
 1. StarRocks 检查缓存中是否存在该 block。
 2. 如存在，则从缓存中读取该 block；如不存在，则从 Amazon S3 远端读取该 block 并将其缓存在 BE 上。
 
-开启 Data Cache 后，StarRocks 会缓存从外部存储系统读取的数据文件。如不希望缓存，可进行如下设置。
+开启 Data Cache 后，StarRocks 会缓存从外部存储系统读取的数据文件。如不希望缓存某些数据，可进行如下设置。
 
 ```SQL
 SET enable_populate_block_cache = false;
@@ -37,14 +37,15 @@ SET enable_populate_block_cache = false;
 
 ## 缓存介质
 
-StarRocks 默认以 BE 节点的机器内存作为缓存的存储介质，也支持同时使用内存和磁盘作为两级的混合存储介质。如果您的磁盘类型是 NVMe 或 SSD 等，可同时使用内存和磁盘进行缓存；如果磁盘类型为云磁盘，例如 AWS EBS，建议使用纯内存来缓存。
+StarRocks 以 BE 节点的内存和磁盘作为缓存的存储介质，支持全内存缓存或者内存+磁盘的两级缓存。
+注意，当使用磁盘作为缓存介质时，缓存加速效果和磁盘本身性能直接相关，建议使用高性能本地磁盘（如本地 NVMe 盘）进行数据缓存。如果磁盘本身性能一般，也可通过增加多块盘来减少单盘 I/O 压力。
 
 ## 缓存淘汰机制
 
 在 Data Cache 中，StarRocks 采用 [LRU](https://baike.baidu.com/item/LRU/1269842) (least recently used) 策略来缓存和淘汰数据，大致如下：
 
-- 优先从内存读取数据，如果在内存中没有找到再从磁盘上读取。从磁盘上读取的数据，会被加载到内存中。
-- 从内存中淘汰的数据，会写入磁盘；从磁盘上淘汰的数据，会被废弃。
+- 优先从内存读取数据，如果在内存中没有找到再从磁盘上读取。从磁盘上读取的数据，会尝试加载到内存中。
+- 从内存中淘汰的数据，会尝试写入磁盘；从磁盘上淘汰的数据，会被废弃。
 
 ## 开启 Data Cache
 
@@ -70,13 +71,13 @@ Data Cache 默认关闭。如要启用，则需要在 FE 和 BE 中同时进行�
 
 在每个 BE 的 **conf/be.conf** 文件中增加如下参数。添加后，需重启每个 BE 让配置生效。
 
-| **参数**               | **说明**                                                     |
-| ---------------------- | ------------------------------------------------------------ |
-| block_cache_enable     | 是否启用 Data Cache。<ul><li>`true`：启用。</li><li>`false`：不启用，为默认值。</li></ul> 如要启用，设置该参数值为 `true`。|
-| block_cache_disk_path  | 磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。配置路径后，StarRocks 会自动创建名为 **cachelib_data** 的文件用于缓存 block。 |
-| block_cache_meta_path  | Block 的元数据存储目录，可自定义。推荐创建在 **$STARROCKS_HOME** 路径下。 |
-| block_cache_mem_size   | 内存缓存数据量的上限，单位：字节。默认值为 `2147483648`，即 2 GB。推荐将该参数值最低设置成 20 GB。如在开启 Data Cache 期间，存在大量从磁盘读取数据的情况，可考虑调大该参数。 |
-| block_cache_disk_size  | 单个磁盘缓存数据量的上限，单位：字节。举例：在 `block_cache_disk_path` 中配置了 2 个磁盘，并设置 `block_cache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。 |
+| **参数**               | **说明**                                                     |**默认值** |
+| ---------------------- | ------------------------------------------------------------ |----------|
+| block_cache_enable     | 是否启用 Data Cache。<ul><li>`true`：启用。</li><li>`false`：不启用。| false |
+| block_cache_disk_path  | 磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。BE 进程启动时会自动创建配置的磁盘缓存目录（当父目录不存在时创建失败）。 | ${STARROCKS_HOME}/block_cache |
+| block_cache_meta_path  | Block 的元数据存储目录，一般无需配置。 | ${STARROCKS_HOME}/block_cache |
+| block_cache_mem_size   | 内存缓存数据量的上限，单位：字节。推荐将该参数值最低设置成 20 GB。如在开启 Data Cache 期间，存在大量从磁盘读取数据的情况，可考虑调大该参数。 | 2147483648，即 2 GB |
+| block_cache_disk_size  | 单个磁盘缓存数据量的上限，单位：字节。举例：在 `block_cache_disk_path` 中配置了 2 个磁盘，并设置 `block_cache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。| 0 表示仅使用内存作为缓存介质，不使用磁盘。 |
 
 示例如下：
 
@@ -86,9 +87,6 @@ block_cache_enable = true
 
 # 设置磁盘路径，假设 BE 机器有两块磁盘。
 block_cache_disk_path = /home/disk1/sr/dla_cache_data/;/home/disk2/sr/dla_cache_data/ 
-
-# 设置元数据存储目录。
-block_cache_meta_path = /home/disk1/sr/dla_cache_meta/ 
 
 # 设置内存缓存数据量的上限为 2 GB。
 block_cache_mem_size = 2147483648
