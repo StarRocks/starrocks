@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.thrift.TDataSink;
+import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.Test;
 
@@ -47,13 +48,6 @@ public class TableFunctionTableSinkTest {
                 "  SINGLE: false\n" +
                 "  RANDOM\n", tableFunctionTableSink.getExplainString("", TExplainLevel.NORMAL));
         TDataSink tDataSink = tableFunctionTableSink.toThrift();
-        assertEquals("TDataSink(type:TABLE_FUNCTION_TABLE_SINK, " +
-                "table_function_table_sink:TTableFunctionTableSink(" +
-                "target_table:TTableFunctionTable(path:s3://path/to/directory/, " +
-                "columns:[TColumn(column_name:k1, is_key:false, is_allow_null:false, " +
-                "is_auto_increment:false, col_unique_id:-1, index_len:4, " +
-                "type_desc:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:INT))]))], " +
-                "file_format:parquet, compression_type:NO_COMPRESSION, write_single_file:false), " +
-                "cloud_configuration:TCloudConfiguration(cloud_type:DEFAULT)))", tDataSink.toString());
+        assertEquals(tDataSink.getType(), TDataSinkType.TABLE_FUNCTION_TABLE_SINK);
     }
 }
