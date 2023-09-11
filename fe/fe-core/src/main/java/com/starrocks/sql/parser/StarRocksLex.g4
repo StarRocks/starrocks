@@ -539,7 +539,7 @@ SIMPLE_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' ~'+' .*? '*/' -> channel(HIDDEN)
+    : '/*' ('+'? [ \r\n\t\u3000]* | ~'+' .*?) '*/' -> channel(HIDDEN)
     ;
 
 SEMICOLON: ';';
