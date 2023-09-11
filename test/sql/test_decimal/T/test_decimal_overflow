@@ -1,0 +1,45 @@
+-- name: test_decimal_overflow
+CREATE TABLE `t_decimal_overflow` (
+  `c_id` int(11) NOT NULL,
+  `c_d32` decimal32(9,3) NOT NULL,
+  `c_d64` decimal64(18,5) NOT NULL,
+  `c_d128` decimal128(38,7) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c_id`)
+DISTRIBUTED BY HASH(`c_id`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+INSERT INTO `t_decimal_overflow` (c_id, c_d32, c_d64, c_d128) values
+   (1, 999999.99, 9999999999999.99999, 9999999999999999999999999999999.9999999),
+   (2, -999999.99, -9999999999999.99999, -9999999999999999999999999999999.9999999);
+
+select 274.97790000000000000000 * (round(1103.00000000000000000000 * 1.0000,16) /round(1103.00000000000000000000,16));
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ 274.97790000000000000000 * (round(1103.00000000000000000000 * 1.0000,16) /round(1103.00000000000000000000,16));
+
+select cast(c_d32 * c_d32 as decimal32) from t_decimal_overflow where c_id = 1;
+select cast(c_d32 * c_d32 as decimal32) from t_decimal_overflow where c_id = 2;
+select cast(c_d64 * c_d64 as decimal64) from t_decimal_overflow where c_id = 1;
+select cast(c_d64 * c_d64 as decimal64) from t_decimal_overflow where c_id = 2;
+select cast(c_d128 * c_d128 as decimal128) from t_decimal_overflow where c_id = 1;
+select cast(c_d128 * c_d128 as decimal128) from t_decimal_overflow where c_id = 2;
+select cast(c_d32 * 1.000 as decimal32) from t_decimal_overflow where c_id = 1;
+select cast(c_d32 * 1.000 as decimal32) from t_decimal_overflow where c_id = 2;
+select cast(c_d64 * 1.000000 as decimal64) from t_decimal_overflow where c_id = 1;
+select cast(c_d64 * 1.000000 as decimal64) from t_decimal_overflow where c_id = 2;
+select cast(c_d128 * 1.000000000 as decimal128) from t_decimal_overflow where c_id = 1;
+select cast(c_d128 * 1.000000000 as decimal128) from t_decimal_overflow where c_id = 2;
+
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d32 * c_d32 as decimal32) from t_decimal_overflow where c_id = 1;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d32 * c_d32 as decimal32) from t_decimal_overflow where c_id = 2;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d64 * c_d64 as decimal64) from t_decimal_overflow where c_id = 1;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d64 * c_d64 as decimal64) from t_decimal_overflow where c_id = 2;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d128 * c_d128 as decimal128) from t_decimal_overflow where c_id = 1;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d128 * c_d128 as decimal128) from t_decimal_overflow where c_id = 2;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d32 * 1.000 as decimal32) from t_decimal_overflow where c_id = 1;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d32 * 1.000 as decimal32) from t_decimal_overflow where c_id = 2;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d64 * 1.000000 as decimal64) from t_decimal_overflow where c_id = 1;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d64 * 1.000000 as decimal64) from t_decimal_overflow where c_id = 2;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d128 * 1.000000000 as decimal128) from t_decimal_overflow where c_id = 1;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d128 * 1.000000000 as decimal128) from t_decimal_overflow where c_id = 2;
