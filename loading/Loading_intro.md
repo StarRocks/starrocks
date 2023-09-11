@@ -180,6 +180,14 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
 
     假设 BE 所在机器物理内存大小为 M，则用于导入的内存上限为：`M x 80% x 30%`。
 
+### 会话变量
+
+您可以设置如下[会话变量](../reference/System_variable.md)：
+
+- `query_timeout`
+
+  用于设置查询超时时间。单位：秒。取值范围：`1` ~ `259200`。默认值：`300`，相当于 5 分钟。该变量会作用于当前连接中所有的查询语句，以及 INSERT 语句。
+
 ## 常见问题
 
 请参见[导入常见问题](../faq/loading/Loading_faq.md)。
