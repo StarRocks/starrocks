@@ -1862,6 +1862,7 @@ public class StmtExecutor {
                 label = "FAKE_HIVE_SINK_LABEL";
             } else if (targetTable instanceof TableFunctionTable) {
                 txnStatus = TransactionStatus.VISIBLE;
+                label = "FAKE_TABLE_FUNCTION_TABLE_SINK_LABEL";
             } else {
                 if (isExplainAnalyze) {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr()
@@ -1982,12 +1983,14 @@ public class StmtExecutor {
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("{'label':'").append(label).append("', 'status':'").append(txnStatus.name());
-        sb.append("', 'txnId':'").append(transactionId).append("'");
-        if (!Strings.isNullOrEmpty(errMsg)) {
-            sb.append(", 'err':'").append(errMsg).append("'");
+        if (label.startsWith("FAKE")) {
+            sb.append("{'label':'").append(label).append("', 'status':'").append(txnStatus.name());
+            sb.append("', 'txnId':'").append(transactionId).append("'");
+            if (!Strings.isNullOrEmpty(errMsg)) {
+                sb.append(", 'err':'").append(errMsg).append("'");
+            }
+            sb.append("}");
         }
-        sb.append("}");
 
         context.getState().setOk(loadedRows, filteredRows, sb.toString());
     }

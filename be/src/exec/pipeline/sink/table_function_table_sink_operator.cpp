@@ -163,7 +163,9 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
         auto writer = std::make_unique<RollingAsyncParquetWriter>(_make_table_info(partition_location), _output_exprs,
                                                                   _common_metrics.get(), add_commit_info, state,
                                                                   _driver_sequence);
+        RETURN_IF_ERROR(writer->append_chunk(chunk.get(), state));
         _partition_writers.insert({partition_location, std::move(writer)});
+        return Status::OK();
     }
 
     return _partition_writers[partition_location]->append_chunk(chunk.get(), state);
@@ -215,7 +217,7 @@ Status TableFunctionTableSinkOperatorFactory::prepare(RuntimeState* state) {
         }
         _parquet_file_schema = result.ValueOrDie();
     } else {
-        return Status::InternalError("unsupported format" + _file_format);
+        return Status::InternalError("unsupported file format" + _file_format);
     }
 
     return Status::OK();
