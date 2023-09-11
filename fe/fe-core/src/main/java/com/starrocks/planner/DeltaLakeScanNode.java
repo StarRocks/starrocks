@@ -26,6 +26,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.delta.ExpressionConverter;

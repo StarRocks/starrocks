@@ -53,8 +53,8 @@ public class HiveTableSink extends DataSink {
         this.dataColNames = hiveTable.getDataColumnNames();
         this.tableIdentifier = hiveTable.getUUID();
         this.isStaticPartitionSink = isStaticPartitionSink;
-        this.fileFormat = hiveTable.getHiveProperties().getOrDefault(FILE_FORMAT, "parquet");
-        this.compressionType = hiveTable.getHiveProperties().getOrDefault("compression_codec", "gzip");
+        this.fileFormat = hiveTable.getProperties().getOrDefault(FILE_FORMAT, "parquet");
+        this.compressionType = hiveTable.getProperties().getOrDefault("compression_codec", "gzip");
         String catalogName = hiveTable.getCatalogName();
         Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
         Preconditions.checkState(connector != null,
