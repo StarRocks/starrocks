@@ -27,11 +27,13 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.PartitionUpdate.UpdateMode;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -60,6 +62,7 @@ public class HiveMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(HiveMetadata.class);
     public static final String STARROCKS_QUERY_ID = "starrocks_query_id";
     private final String catalogName;
+    private final HdfsEnvironment hdfsEnvironment;
     private final HiveMetastoreOperations hmsOps;
     private final RemoteFileOperations fileOps;
     private final HiveStatisticsProvider statisticsProvider;
@@ -67,12 +70,14 @@ public class HiveMetadata implements ConnectorMetadata {
     private Executor updateExecutor;
 
     public HiveMetadata(String catalogName,
+                        HdfsEnvironment hdfsEnvironment,
                         HiveMetastoreOperations hmsOps,
                         RemoteFileOperations fileOperations,
                         HiveStatisticsProvider statisticsProvider,
                         Optional<CacheUpdateProcessor> cacheUpdateProcessor,
                         Executor updateExecutor) {
         this.catalogName = catalogName;
+        this.hdfsEnvironment = hdfsEnvironment;
         this.hmsOps = hmsOps;
         this.fileOps = fileOperations;
         this.statisticsProvider = statisticsProvider;
@@ -301,5 +306,10 @@ public class HiveMetadata implements ConnectorMetadata {
     public void clear() {
         hmsOps.invalidateAll();
         fileOps.invalidateAll();
+    }
+
+    @Override
+    public CloudConfiguration getCloudConfiguration() {
+        return hdfsEnvironment.getCloudConfiguration();
     }
 }

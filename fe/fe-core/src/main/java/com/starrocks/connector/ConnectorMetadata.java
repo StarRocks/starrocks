@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
@@ -34,6 +33,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -101,8 +101,8 @@ public interface ConnectorMetadata {
     /**
      * Return partial partition names of the table using partitionValues to filter.
      *
-     * @param databaseName    the name of the database
-     * @param tableName       the name of the table
+     * @param databaseName the name of the database
+     * @param tableName the name of the table
      * @param partitionValues the partition value to filter
      * @return a list of partition names
      */
@@ -114,7 +114,7 @@ public interface ConnectorMetadata {
     /**
      * Get Table descriptor for the table specific by `dbName`.`tblName`
      *
-     * @param dbName  - the string represents the database name
+     * @param dbName - the string represents the database name
      * @param tblName - the string represents the table name
      * @return a Table instance
      */
@@ -125,7 +125,7 @@ public interface ConnectorMetadata {
     /**
      * Get Table descriptor and materialized index for the materialized view index specific by `dbName`.`tblName`
      *
-     * @param dbName  - the string represents the database name
+     * @param dbName - the string represents the database name
      * @param tblName - the string represents the table name
      * @return a Table instance
      */
@@ -141,9 +141,9 @@ public interface ConnectorMetadata {
      *
      * @param table
      * @param partitionKeys selected partition columns
-     * @param snapshotId    selected snapshot id
-     * @param predicate     used to filter metadata for iceberg, etc
-     * @param fieldNames    all selected columns (including partition columns)
+     * @param snapshotId selected snapshot id
+     * @param predicate used to filter metadata for iceberg, etc
+     * @param fieldNames all selected columns (including partition columns)
      * @return the remote file information of the query to scan.
      */
     default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
@@ -158,11 +158,11 @@ public interface ConnectorMetadata {
     /**
      * Get statistics for the table.
      *
-     * @param session       optimizer context
+     * @param session optimizer context
      * @param table
-     * @param columns       selected columns
+     * @param columns selected columns
      * @param partitionKeys selected partition keys
-     * @param predicate     used to filter metadata for iceberg, etc
+     * @param predicate used to filter metadata for iceberg, etc
      * @return the table statistics for the table.
      */
     default Statistics getTableStatistics(OptimizerContext session,
@@ -299,5 +299,8 @@ public interface ConnectorMetadata {
     default void alterView(AlterViewStmt stmt) throws DdlException, UserException {
     }
 
+    default CloudConfiguration getCloudConfiguration() {
+        throw new StarRocksConnectorException("This connector doesn't support getting cloud configuration");
+    }
 }
 

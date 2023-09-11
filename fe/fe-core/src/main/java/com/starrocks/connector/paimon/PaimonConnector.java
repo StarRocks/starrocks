@@ -18,14 +18,13 @@ import com.google.common.base.Strings;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudCredential;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
@@ -38,11 +37,10 @@ import static org.apache.paimon.options.CatalogOptions.URI;
 import static org.apache.paimon.options.CatalogOptions.WAREHOUSE;
 
 public class PaimonConnector implements Connector {
-    private static final Logger LOG = LogManager.getLogger(PaimonConnector.class);
     private static final String PAIMON_CATALOG_TYPE = "paimon.catalog.type";
     private static final String PAIMON_CATALOG_WAREHOUSE = "paimon.catalog.warehouse";
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
-    private final CloudConfiguration cloudConfiguration;
+    private final HdfsEnvironment hdfsEnvironment;
     private Catalog paimonNativeCatalog;
     private final String catalogType;
     private final String metastoreUris;
@@ -53,7 +51,8 @@ public class PaimonConnector implements Connector {
     public PaimonConnector(ConnectorContext context) {
         Map<String, String> properties = context.getProperties();
         this.catalogName = context.getCatalogName();
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.catalogType = properties.get(PAIMON_CATALOG_TYPE);
         this.metastoreUris = properties.get(HIVE_METASTORE_URIS);
         this.warehousePath = properties.get(PAIMON_CATALOG_WAREHOUSE);
@@ -76,8 +75,8 @@ public class PaimonConnector implements Connector {
         }
         paimonOptions.setString(WAREHOUSE.key(), warehousePath);
 
-        if (this.cloudConfiguration.getCloudType() == CloudType.AWS && this.cloudConfiguration instanceof AWSCloudConfiguration) {
-            AWSCloudConfiguration awsCloudConfiguration = (AWSCloudConfiguration) this.cloudConfiguration;
+        if (cloudConfiguration.getCloudType() == CloudType.AWS) {
+            AWSCloudConfiguration awsCloudConfiguration = (AWSCloudConfiguration) cloudConfiguration;
             paimonOptions.set("s3.connection.ssl.enabled", String.valueOf(awsCloudConfiguration.getEnableSSL()));
             paimonOptions.set("s3.path.style.access", String.valueOf(awsCloudConfiguration.getEnablePathStyleAccess()));
             AWSCloudCredential awsCloudCredential = awsCloudConfiguration.getAWSCloudCredential();
@@ -106,11 +105,7 @@ public class PaimonConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return new PaimonMetadata(catalogName, getPaimonNativeCatalog(), catalogType, metastoreUris, warehousePath);
-    }
-
-    @Override
-    public CloudConfiguration getCloudConfiguration() {
-        return cloudConfiguration;
+        return new PaimonMetadata(catalogName, hdfsEnvironment, getPaimonNativeCatalog(), catalogType, metastoreUris,
+                warehousePath);
     }
 }

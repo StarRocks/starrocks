@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -93,9 +93,11 @@ public class HdfsScanNode extends ScanNode {
             return;
         }
         CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
-        if (connector != null) {
-            cloudConfiguration = connector.getCloudConfiguration();
-        }
+        Preconditions.checkState(connector != null,
+                String.format("connector of catalog %s should not be null", catalog));
+        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        Preconditions.checkState(cloudConfiguration != null,
+                String.format("cloudConfiguration of catalog %s should not be null", catalog));
     }
 
     @Override
@@ -147,7 +149,8 @@ public class HdfsScanNode extends ScanNode {
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
-                    output.append(prefix).append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+                    output.append(prefix)
+                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
                 }
             }
         }
