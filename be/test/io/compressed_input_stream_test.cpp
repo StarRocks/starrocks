@@ -61,7 +61,7 @@ protected:
         return std::shared_ptr<StreamCompression>(dec.release());
     }
 
-    void test_lz4_cases(const TestCase& t) {
+    void test_lz4f_cases(const TestCase& t) {
         auto f = std::make_shared<CompressedInputStream>(LZ4F_compress_to_file(t.data), LZ4F_decompressor(),
                                                          t.compressed_buff_len);
         std::string decompressed_data;
@@ -121,7 +121,7 @@ TEST_F(CompressedInputStreamTest, test_LZ4F) {
     // clang-format on
 
     for (const auto& t : cases) {
-        test_lz4_cases(t);
+        test_lz4f_cases(t);
     }
 }
 
