@@ -265,7 +265,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             CloseableIterator<FileScanTask> fileScanTaskIterator = fileScanTaskIterable.iterator();
             Iterator<FileScanTask> fileScanTasks;
             boolean canPruneManifests = limit != -1 && !table.isV2Format() && onlyHasPartitionPredicate(table, predicate)
-                    && limit < Integer.MAX_VALUE && enablePruneManifest();
+                    && limit < Integer.MAX_VALUE && table.getNativeTable().spec().specId() == 0 && enablePruneManifest();
 
             if (canPruneManifests) {
                 // After iceberg uses partition predicate plan files, each manifests entry must have at least one row of data.
