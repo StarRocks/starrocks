@@ -67,7 +67,7 @@ select count(*) from (select * from t0 limit 50, 20) xx;
 -- !result
 select COUNT(*) from (select * from (select * from t0 limit 10) x limit 10, 20) xx;
 -- result:
-10
+0
 -- !result
 select COUNT(*) from (select * from (select * from t0 limit 10, 10) x limit 1, 2) xx;
 -- result:
@@ -101,13 +101,13 @@ select COUNT(*) from (select * from (select * from t0 limit 30, 2) x limit 5) xx
 -- result:
 2
 -- !result
-select COUNT(*) from (select * from (select * from t0 limit 30) x limit 10, 40) xx;
--- result:
-23
--- !result
-select COUNT(*) from (select * from (select * from t0 limit 30) x limit 10, 10) xx;
+select COUNT(*) from (select * from (select * from t0 limit 20) x limit 10, 40) xx;
 -- result:
 10
+-- !result
+select COUNT(*) from (select * from (select * from t0 limit 10) x limit 10, 10) xx;
+-- result:
+0
 -- !result
 select COUNT(*) from (select * from (select * from t0 limit 30) x limit 50, 10) xx;
 -- result:
