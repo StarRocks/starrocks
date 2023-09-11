@@ -23,6 +23,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;

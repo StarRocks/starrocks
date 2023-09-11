@@ -139,6 +139,7 @@ public class HiveMetastoreApiConverter {
                         .collect(Collectors.toList()))
                 .setFullSchema(toFullSchemasForHiveTable(table))
                 .setTableLocation(toTableLocation(table.getSd(), table.getParameters()))
+                .setProperties(table.getParameters())
                 .setStorageFormat(HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name()))
                 .setCreateTime(table.getCreateTime());
         return tableBuilder.build();

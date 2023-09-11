@@ -31,6 +31,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.PredicateUtils;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
