@@ -1,5 +1,7 @@
 # Authenticate to AWS resources
 
+StarRocks supports using three authentication methods to integrate with AWS resources: instance profile-based authentication, assumed role-based authentication, and IAM user-based authentication. This topic describes how to configure AWS credentials by using these authentication methods.
+
 ## Authentication methods
 
 ### Instance profile-based authentication
