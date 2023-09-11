@@ -25,17 +25,17 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.thrift.TAccessPathType;
 
+import java.util.Collection;
 import java.util.Deque;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /*
  * normalize expression to ColumnAccessPath
  */
-public class SubfieldAccessPathNormalizer extends ScalarOperatorVisitor<Void, Void> {
+public class SubfieldAccessPathNormalizer {
     private final Deque<AccessPath> allAccessPaths = Lists.newLinkedList();
-
-    private AccessPath currentPath = null;
 
     private static class AccessPath {
         private final ScalarOperator root;
@@ -49,6 +49,11 @@ public class SubfieldAccessPathNormalizer extends ScalarOperatorVisitor<Void, Vo
         public AccessPath appendPath(String path, TAccessPathType pathType) {
             paths.add(path);
             pathTypes.add(pathType);
+            return this;
+        }
+
+        public AccessPath appendFieldNames(Collection<String> fieldNames) {
+            fieldNames.forEach(fld -> appendPath(fld, TAccessPathType.FIELD));
             return this;
         }
 
@@ -98,84 +103,89 @@ public class SubfieldAccessPathNormalizer extends ScalarOperatorVisitor<Void, Vo
         return allAccessPaths.stream().anyMatch(path -> path.root().equals(root));
     }
 
-    public void add(ScalarOperator operator) {
-        if (operator == null) {
-            return;
+    private static class Collector extends ScalarOperatorVisitor<Optional<AccessPath>, List<Optional<AccessPath>>> {
+        @Override
+        public Optional<AccessPath> visit(ScalarOperator scalarOperator,
+                                          List<Optional<AccessPath>> childrenAccessPaths) {
+            return Optional.empty();
         }
-        operator.accept(this, null);
-    }
 
-    @Override
-    public Void visit(ScalarOperator scalarOperator, Void context) {
-        for (ScalarOperator child : scalarOperator.getChildren()) {
-            child.accept(this, context);
-            if (currentPath != null) {
-                allAccessPaths.push(currentPath);
-                currentPath = null;
+        @Override
+        public Optional<AccessPath> visitVariableReference(ColumnRefOperator variable,
+                                                           List<Optional<AccessPath>> childrenAccessPaths) {
+            if (variable.getType().isComplexType()) {
+                return Optional.of(new AccessPath(variable));
             }
-        }
-        return null;
-    }
-
-    @Override
-    public Void visitVariableReference(ColumnRefOperator variable, Void context) {
-        if (variable.getType().isComplexType()) {
-            currentPath = new AccessPath(variable);
-            allAccessPaths.push(currentPath);
-        }
-        return null;
-    }
-
-    @Override
-    public Void visitSubfield(SubfieldOperator subfieldOperator, Void context) {
-        subfieldOperator.getChild(0).accept(this, context);
-        if (currentPath != null) {
-            subfieldOperator.getFieldNames()
-                    .forEach(p -> currentPath.appendPath(p, TAccessPathType.FIELD));
-        }
-        return null;
-    }
-
-    @Override
-    public Void visitCollectionElement(CollectionElementOperator collectionElementOp, Void context) {
-        if (!collectionElementOp.getChild(1).isConstant()) {
-            collectionElementOp.getChild(1).accept(this, context);
+            return Optional.empty();
         }
 
-        collectionElementOp.getChild(0).accept(this, context);
-        if (currentPath == null) {
-            return null;
+        @Override
+        public Optional<AccessPath> visitSubfield(SubfieldOperator subfieldOperator,
+                                                  List<Optional<AccessPath>> childAccessPaths) {
+            return childAccessPaths.get(0).map(parent -> parent.appendFieldNames(subfieldOperator.getFieldNames()));
         }
 
-        if (!collectionElementOp.getChild(1).isConstant()) {
-            currentPath.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.ALL);
-            return null;
-        }
-        currentPath.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.INDEX);
-        return null;
-    }
-
-    @Override
-    public Void visitCall(CallOperator call, Void context) {
-        if (!PruneSubfieldRule.SUPPORT_FUNCTIONS.contains(call.getFnName())) {
-            return visit(call, context);
-        }
-
-        if (call.getFnName().equals(FunctionSet.MAP_KEYS)) {
-            call.getChild(0).accept(this, context);
-            if (currentPath != null) {
-                currentPath.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.KEY);
+        @Override
+        public Optional<AccessPath> visitCollectionElement(CollectionElementOperator collectionElementOp,
+                                                           List<Optional<AccessPath>> childrenAccessPaths) {
+            Optional<AccessPath> parent = childrenAccessPaths.get(0);
+            if (!parent.isPresent()) {
+                return Optional.empty();
             }
-            return null;
-        } else if (FunctionSet.MAP_SIZE.equals(call.getFnName())
-                || FunctionSet.CARDINALITY.equals(call.getFnName())
-                || FunctionSet.ARRAY_LENGTH.equals(call.getFnName())) {
-            call.getChild(0).accept(this, context);
-            if (currentPath != null) {
-                currentPath.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.OFFSET);
+
+            if (!collectionElementOp.getChild(1).isConstant()) {
+                return parent.map(p -> p.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.ALL));
+            } else {
+                return parent.map(p -> p.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.INDEX));
             }
         }
 
-        return null;
+        @Override
+        public Optional<AccessPath> visitCall(CallOperator call, List<Optional<AccessPath>> childrenAccessPaths) {
+            if (!PruneSubfieldRule.SUPPORT_FUNCTIONS.contains(call.getFnName())) {
+                return Optional.empty();
+            }
+
+            if (call.getFnName().equals(FunctionSet.MAP_KEYS)) {
+                return childrenAccessPaths.get(0)
+                        .map(p -> p.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.KEY));
+            } else if (FunctionSet.MAP_SIZE.equals(call.getFnName())
+                    || FunctionSet.CARDINALITY.equals(call.getFnName())
+                    || FunctionSet.ARRAY_LENGTH.equals(call.getFnName())) {
+                return childrenAccessPaths.get(0)
+                        .map(p -> p.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.OFFSET));
+            }
+
+            return Optional.empty();
+        }
+
+        private Optional<AccessPath> process(ScalarOperator scalarOperator, Deque<AccessPath> accessPaths) {
+            // process children in post-order
+            List<Optional<AccessPath>> childAccessPaths = scalarOperator.getChildren().stream()
+                    .map(child -> process(child, accessPaths))
+                    .collect(Collectors.toList());
+            // no AccessPaths gathered from children of intermediate ScalarOperator means current
+            // scalar operator contains not nested types.
+            if (!childAccessPaths.isEmpty() && childAccessPaths.stream().noneMatch(Optional::isPresent)) {
+                return Optional.empty();
+            }
+            Optional<AccessPath> currentPath = scalarOperator.accept(this, childAccessPaths);
+            AccessPath path = currentPath.orElse(null);
+            // When an AccessPath from offspring ScalarOperators can be extended to a longer AccessPath
+            // in current ScalarOperator would not gathered until it can not be extended.
+            // Since AccessPath is extended by appending path component in-place, so AccessPaths in
+            // childAccessPaths that is not identical to AccessPath of the current ScalarOperator is
+            // non-extendable.
+            childAccessPaths.stream().filter(p -> p.isPresent() && p.get() != path)
+                    .map(Optional::get).forEach(accessPaths::add);
+            return currentPath;
+        }
+    }
+
+    public void collect(List<ScalarOperator> scalarOperators) {
+        Collector collector = new Collector();
+        List<Optional<AccessPath>> paths =
+                scalarOperators.stream().map(op -> collector.process(op, allAccessPaths)).collect(Collectors.toList());
+        paths.forEach(p -> p.ifPresent(allAccessPaths::add));
     }
 }
