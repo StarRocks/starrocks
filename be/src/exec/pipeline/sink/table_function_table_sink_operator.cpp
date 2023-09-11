@@ -14,10 +14,9 @@
 
 #include "table_function_table_sink_operator.h"
 
-#include <utility>
-
 #include "formats/parquet/file_writer.h"
 #include "glog/logging.h"
+#include "util/url_coding.h"
 
 namespace starrocks::pipeline {
 
@@ -52,7 +51,7 @@ StatusOr<std::string> column_to_string(const TypeDescriptor& type_desc, const Co
     }
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
-        return datum.get_slice().to_string();
+        return url_encode(datum.get_slice().to_string());
     }
     default: {
         return Status::InvalidArgument("unsupported partition column type" + type_desc.debug_string());
