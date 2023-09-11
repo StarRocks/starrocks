@@ -50,7 +50,6 @@
 
 namespace orc {
 uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit);
-class ParseError;
 } // namespace orc
 
 namespace starrocks {
