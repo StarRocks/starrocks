@@ -28,6 +28,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.AutoInferUtil;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.filelist.RepoCreator;
@@ -139,25 +140,25 @@ public class StatisticsMetaManager extends FrontendDaemon {
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
-        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
-        KeysType keysType = KeysType.UNIQUE_KEYS;
-        CreateTableStmt stmt = new CreateTableStmt(false, false,
-                tableName,
-                StatisticUtils.buildStatsColumnDef(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME),
-                EngineType.defaultEngine().name(),
-                new KeysDesc(keysType, KEY_COLUMN_NAMES),
-                null,
-                new HashDistributionDesc(10, KEY_COLUMN_NAMES),
-                properties,
-                null,
-                "");
-
-        Analyzer.analyze(stmt, context);
         try {
+            int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            KeysType keysType = KeysType.UNIQUE_KEYS;
+            CreateTableStmt stmt = new CreateTableStmt(false, false,
+                    tableName,
+                    StatisticUtils.buildStatsColumnDef(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME),
+                    EngineType.defaultEngine().name(),
+                    new KeysDesc(keysType, KEY_COLUMN_NAMES),
+                    null,
+                    new HashDistributionDesc(10, KEY_COLUMN_NAMES),
+                    properties,
+                    null,
+                    "");
+
+            Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().createTable(stmt);
-        } catch (DdlException e) {
-            LOG.warn("Failed to create sample statistics" + e.getMessage());
+        } catch (UserException e) {
+            LOG.warn("Failed to create sample statistics, " + e.getMessage());
             return false;
         }
         LOG.info("create sample statistics table done");
@@ -171,24 +172,25 @@ public class StatisticsMetaManager extends FrontendDaemon {
                 StatsConstants.FULL_STATISTICS_TABLE_NAME);
         KeysType keysType = RunMode.allowCreateLakeTable() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
-        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
-        CreateTableStmt stmt = new CreateTableStmt(false, false,
-                tableName,
-                StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
-                EngineType.defaultEngine().name(),
-                new KeysDesc(keysType, FULL_STATISTICS_KEY_COLUMNS),
-                null,
-                new HashDistributionDesc(10, FULL_STATISTICS_KEY_COLUMNS),
-                properties,
-                null,
-                "");
 
-        Analyzer.analyze(stmt, context);
         try {
+            int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            CreateTableStmt stmt = new CreateTableStmt(false, false,
+                    tableName,
+                    StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
+                    EngineType.defaultEngine().name(),
+                    new KeysDesc(keysType, FULL_STATISTICS_KEY_COLUMNS),
+                    null,
+                    new HashDistributionDesc(10, FULL_STATISTICS_KEY_COLUMNS),
+                    properties,
+                    null,
+                    "");
+
+            Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().createTable(stmt);
-        } catch (DdlException e) {
-            LOG.warn("Failed to create full statistics table" + e.getMessage());
+        } catch (UserException e) {
+            LOG.warn("Failed to create full statistics table, " + e.getMessage());
             return false;
         }
         LOG.info("create full statistics table done");
@@ -202,24 +204,24 @@ public class StatisticsMetaManager extends FrontendDaemon {
                 StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
         KeysType keysType = RunMode.allowCreateLakeTable() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
-        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
-        CreateTableStmt stmt = new CreateTableStmt(false, false,
-                tableName,
-                StatisticUtils.buildStatsColumnDef(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME),
-                EngineType.defaultEngine().name(),
-                new KeysDesc(keysType, HISTOGRAM_KEY_COLUMNS),
-                null,
-                new HashDistributionDesc(10, HISTOGRAM_KEY_COLUMNS),
-                properties,
-                null,
-                "");
-
-        Analyzer.analyze(stmt, context);
         try {
+            int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            CreateTableStmt stmt = new CreateTableStmt(false, false,
+                    tableName,
+                    StatisticUtils.buildStatsColumnDef(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME),
+                    EngineType.defaultEngine().name(),
+                    new KeysDesc(keysType, HISTOGRAM_KEY_COLUMNS),
+                    null,
+                    new HashDistributionDesc(10, HISTOGRAM_KEY_COLUMNS),
+                    properties,
+                    null,
+                    "");
+
+            Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().createTable(stmt);
-        } catch (DdlException e) {
-            LOG.warn("Failed to create histogram statistics table" + e.getMessage());
+        } catch (UserException e) {
+            LOG.warn("Failed to create histogram statistics table, " + e.getMessage());
             return false;
         }
         LOG.info("create histogram statistics table done");
@@ -239,24 +241,25 @@ public class StatisticsMetaManager extends FrontendDaemon {
                 StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
         KeysType keysType = RunMode.allowCreateLakeTable() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
-        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
-        CreateTableStmt stmt = new CreateTableStmt(false, false,
-                tableName,
-                StatisticUtils.buildStatsColumnDef(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME),
-                EngineType.defaultEngine().name(),
-                new KeysDesc(keysType, EXTERNAL_FULL_STATISTICS_KEY_COLUMNS),
-                null,
-                new HashDistributionDesc(10, EXTERNAL_FULL_STATISTICS_KEY_COLUMNS),
-                properties,
-                null,
-                "");
 
-        Analyzer.analyze(stmt, context);
         try {
+            int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            CreateTableStmt stmt = new CreateTableStmt(false, false,
+                    tableName,
+                    StatisticUtils.buildStatsColumnDef(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME),
+                    EngineType.defaultEngine().name(),
+                    new KeysDesc(keysType, EXTERNAL_FULL_STATISTICS_KEY_COLUMNS),
+                    null,
+                    new HashDistributionDesc(10, EXTERNAL_FULL_STATISTICS_KEY_COLUMNS),
+                    properties,
+                    null,
+                    "");
+
+            Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().createTable(stmt);
-        } catch (DdlException e) {
-            LOG.warn("Failed to create full statistics table" + e.getMessage());
+        } catch (UserException e) {
+            LOG.warn("Failed to create full statistics table, " + e.getMessage());
             return false;
         }
         LOG.info("create external full statistics table done");

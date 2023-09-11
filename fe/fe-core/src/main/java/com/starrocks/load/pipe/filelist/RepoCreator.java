@@ -15,6 +15,7 @@
 package com.starrocks.load.pipe.filelist;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -63,7 +64,7 @@ public class RepoCreator {
         return GlobalStateMgr.getCurrentState().getDb(FileListTableRepo.FILE_LIST_DB_NAME) != null;
     }
 
-    public static void createTable() {
+    public static void createTable() throws UserException {
         String sql = FileListTableRepo.SQLBuilder.buildCreateTableSql();
         RepoExecutor.getInstance().executeDDL(sql);
     }
