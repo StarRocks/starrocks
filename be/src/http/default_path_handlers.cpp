@@ -91,8 +91,8 @@ void config_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* 
     (*output) << "</pre>";
 }
 
-void add_running_compaction_output(std::vector<CompactionManager::RunningCompactionMetric> compaction_metrics,
-                                   std::stringstream* output, CompactionType type) {
+void add_running_compaction_output(const std::vector<CompactionManager::RunningCompactionMetric>& compaction_metrics,
+                                   std::stringstream* output, const CompactionType& type) {
     std::string type_str;
     if (type == BASE_COMPACTION) {
         type_str = "Base";
@@ -139,7 +139,7 @@ void add_running_compaction_output(std::vector<CompactionManager::RunningCompact
     int i = 1;
     for (const auto& item : compaction_metrics) {
         std::string input_rowsets_str;
-        for (std::string rowset_str : item.input_rowsets) {
+        for (const auto& rowset_str : item.input_rowsets) {
             input_rowsets_str += rowset_str + " ; ";
         }
 
@@ -155,8 +155,8 @@ void add_running_compaction_output(std::vector<CompactionManager::RunningCompact
     (*output) << "</tbody></table>\n";
 }
 
-void add_waiting_compaction_output(std::vector<CompactionManager::WaitingCompactionMetric> compaction_metrics,
-                                   std::stringstream* output, CompactionType type) {
+void add_waiting_compaction_output(const std::vector<CompactionManager::WaitingCompactionMetric>& compaction_metrics,
+                                   std::stringstream* output, const CompactionType& type) {
     std::string type_str;
     if (type == BASE_COMPACTION) {
         type_str = "Base";
