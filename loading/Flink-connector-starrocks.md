@@ -1,232 +1,641 @@
 # 从 Apache Flink® 持续导入
 
-## 功能简介
+StarRocks 提供 Apache Flink® 连接器 (以下简称 Flink connector)，可以通过 Flink 导入数据至 StarRocks表。
 
-StarRocks 提供 flink-connector-starrocks，导入数据至 StarRocks，相比于 Flink 官方提供的 flink-connector-jdbc，导入性能更佳。
-flink-connector-starrocks 的内部实现是通过缓存并批量由 [Stream Load](./StreamLoad.md) 导入。
+基本原理是 Flink connector 在内存中积攒小批数据，再通过 [Stream Load](./StreamLoad.md) 一次性导入 StarRocks。
 
-## 支持的数据源
+Flink Connector 支持 DataStream API，Table API & SQL 和 Python API。
 
-* CSV
-* JSON
+StarRocks 提供的 Flink connector，相比于 Flink 提供的 [flink-connector-jdbc](https://nightlies.apache.org/flink/flink-docs-master/docs/connectors/table/jdbc/)，性能更优越和稳定。
 
-## 操作步骤
+> **注意**
+>
+> 使用 Flink connector 导入数据至 StarRocks 需要目标表的 SELECT 和 INSERT 权限。如果您的用户账号没有这些权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
 
-### 步骤一：添加 pom 依赖
+## 版本要求
 
-[源码地址](https://github.com/StarRocks/flink-connector-starrocks)
+| Connector | Flink       | StarRocks  | Java | Scala      |
+| --------- | ----------- | ---------- | ---- | ---------- |
+| 1.2.7     | 1.11 ~ 1.15 | 2.1 及以上 | 8    | 2.11、2.12 |
 
-将以下内容加入`pom.xml`:
+## 获取 Flink connector
 
-点击 [版本信息](https://search.maven.org/search?q=g:com.starrocks) 查看页面Latest Version信息，替换下面x.x.x内容
+您可以通过以下方式获取 Flink connector JAR 文件：
 
-```Plain text
-<dependency>
-    <groupId>com.starrocks</groupId>
-    <artifactId>flink-connector-starrocks</artifactId>
-    <!-- for flink-1.15, connector 1.2.3+ -->
-    <version>x.x.x_flink-1.15</version>
-    <!-- for flink-1.14 -->
-    <version>x.x.x_flink-1.14_2.11</version>
-    <version>x.x.x_flink-1.14_2.12</version>
-    <!-- for flink-1.13 -->
-    <version>x.x.x_flink-1.13_2.11</version>
-    <version>x.x.x_flink-1.13_2.12</version>
-    <!-- for flink-1.12 -->
-    <version>x.x.x_flink-1.12_2.11</version>
-    <version>x.x.x_flink-1.12_2.12</version>
-    <!-- for flink-1.11 -->
-    <version>x.x.x_flink-1.11_2.11</version>
-    <version>x.x.x_flink-1.11_2.12</version>
-</dependency>
-```
+- 直接下载已经编译好的 JAR 文件。
+- 在 Maven 项目的 pom 文件添加 Flink connector 为依赖项，作为依赖下载。
+- 通过源码手动编译成 JAR 文件。
 
-### 步骤二：调用 flink-connector-starrocks
+Flink connector JAR 文件的命名格式如下：
 
-* 如您使用 Flink DataStream API，则需要参考如下命令。
+- 适用于 Flink 1.15 版本及以后的 Flink connector 命名格式为 `flink-connector-starrocks-${connector_version}_flink-${flink_version}.jar`。例如您安装了 Flink 1.15，并且想要使用 1.2.7 版本的 Flink connector，则您可以使用 `flink-connector-starrocks-1.2.7_flink-1.15.jar`。
+- 适用于 Flink 1.15 版本之前的 Flink connector 命名格式为 `flink-connector-starrocks-${connector_version}_flink-${flink_version}_${scala_version}.jar`。例如您安装了 Flink 1.14 和 Scala 2.12，并且您想要使用 1.2.7 版本的 Flink connector，您可以使用 `flink-connector-starrocks-1.2.7_flink-1.14_2.12.jar`。
 
-    ```scala
-    // -------- 原始数据为 json 格式 --------
-    fromElements(new String[]{
-        "{\"score\": \"99\", \"name\": \"stephen\"}",
-        "{\"score\": \"100\", \"name\": \"lebron\"}"
-    }).addSink(
-        StarRocksSink.sink(
-            // the sink options
-            StarRocksSinkOptions.builder()
-                .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port/xxxxx")
-                .withProperty("load-url", "fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port")
-                .withProperty("username", "xxx")
-                .withProperty("password", "xxx")
-                .withProperty("table-name", "xxx")
-                //  自 2.4 版本，支持更新主键模型中的部分列。您可以通过以下两个属性指定需要更新的列，并且需要在 'sink.properties.columns' 的最后显式添加 '__op' 列。
-                // .withProperty("sink.properties.partial_update", "true")
-                // .withProperty("sink.properties.columns", "k1,k2,k3,__op")
-                .withProperty("sink.properties.format", "json")
-                .withProperty("sink.properties.strip_outer_array", "true")
-                .build()
-        )
-    ).setParallelism(1); // 设置并行度，多并行度情况下需要考虑如何保证数据有序性。
+> **注意**
+>
+> 一般情况下最新版本的 Flink connector 只维护最近 3 个版本的 Flink。
 
-    // -------- 原始数据为 CSV 格式 --------
-    class RowData {
-        public int score;
-        public String name;
-        public RowData(int score, String name) {
-            ......
-        }
-    }
-    fromElements(
-        new RowData[]{
-            new RowData(99, "stephen"),
-            new RowData(100, "lebron")
-        }
-    ).addSink(
-        StarRocksSink.sink(
-            // the table structure
-            TableSchema.builder()
-                .field("score", DataTypes.INT())
-                .field("name", DataTypes.VARCHAR(20))
-                .build(),
-            // the sink options
-            StarRocksSinkOptions.builder()
-                .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port?xxxxx")
-                .withProperty("load-url", "fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port")
-                .withProperty("username", "xxx")
-                .withProperty("password", "xxx")
-                .withProperty("table-name", "xxx")
-                .withProperty("database-name", "xxx")
-                //  自 2.4 版本，支持更新主键模型中的部分列。您可以通过以下两个属性指定需要更新的列，并且需要在 'sink.properties.columns' 的最后显式添加 '__op' 列。
-                // .withProperty("sink.properties.partial_update", "true")
-                // .withProperty("sink.properties.columns", "k1,k2,k3,__op")
-                .withProperty("sink.properties.column_separator", "\\x01")
-                .withProperty("sink.properties.row_delimiter", "\\x02")
-                .build(),
-            // set the slots with streamRowData
-            (slots, streamRowData) -> {
-                slots[0] = streamRowData.score;
-                slots[1] = streamRowData.name;
-            }
-        )
-    );
+### 直接下载
+
+可以在 [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks) 获取不同版本的 Flink connector JAR 文件。
+
+### Maven 依赖
+
+在 Maven 项目的 `pom.xml` 文件中，根据以下格式将 Flink connector 添加为依赖项。将 `flink_version`、`scala_version` 和 `connector_version` 分别替换为相应的版本。
+
+- 适用于 Flink 1.15 版本及以后的 Flink connector
+
+    ```XML
+    <dependency>
+        <groupId>com.starrocks</groupId>
+        <artifactId>flink-connector-starrocks</artifactId>
+        <version>${connector_version}_flink-${flink_version}</version>
+    </dependency>
     ```
 
-* 如您使用 Flink Table API，则需要参考如下命令。
+- 适用于 Flink 1.15 版本之前的 Flink connector
 
-    ```scala
-    // -------- 原始数据为 CSV 格式 --------
-    // create a table with `structure` and `properties`
-    // Needed: Add `com.starrocks.connector.flink.table.StarRocksDynamicTableSinkFactory`
-    //         to: `src/main/resources/META-INF/services/org.apache.flink.table.factories.Factory`
-    tEnv.executeSql(
-        "CREATE TABLE USER_RESULT(" +
-            "name VARCHAR," +
-            "score BIGINT" +
-        ") WITH ( " +
-            "'connector' = 'starrocks'," +
-            "'jdbc-url'='jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port/xxxxx'," +
-            "'load-url'='fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port'," +
-            "'database-name' = 'xxx'," +
-            "'table-name' = 'xxx'," +
-            "'username' = 'xxx'," +
-            "'password' = 'xxx'," +
-            "'sink.buffer-flush.max-rows' = '1000000'," +
-            "'sink.buffer-flush.max-bytes' = '300000000'," +
-            "'sink.buffer-flush.interval-ms' = '5000'," +
-            // 自 2.4 版本，支持更新主键模型中的部分列。您可以通过以下两个属性指定需要更新的列，并且需要在 'sink.properties.columns' 的最后显式添加 '__op' 列。
-            // "'sink.properties.partial_update' = 'true'," +
-            // "'sink.properties.columns' = 'k1,k2,k3,__op'," + 
-            "'sink.properties.column_separator' = '\\x01'," +
-            "'sink.properties.row_delimiter' = '\\x02'," +
-            "'sink.properties.*' = 'xxx'," + // Stream Load 属性，例如 `'sink.properties.columns' = 'k1, v1'`。
-            "'sink.max-retries' = '3'," +
-            "'sink.parallelism' = '1'" // 设置并行度，多并行度情况下需要考虑如何保证数据有序性。
-        ")"
-    );
+    ```XML
+    <dependency>
+        <groupId>com.starrocks</groupId>
+        <artifactId>flink-connector-starrocks</artifactId>
+        <version>${connector_version}_flink-${flink_version}_${scala_version}</version>
+    </dependency>
     ```
+
+### 手动编译
+
+1. 下载 [Flink connector 代码](https://github.com/StarRocks/starrocks-connector-for-apache-flink)。
+2. 执行以下命令将 Flink connector 的源代码编译成一个 JAR 文件。请注意，将 `flink_version` 替换为相应的Flink 版本。
+
+    ```Bash
+    sh build.sh <flink_version>
+    ```
+
+    例如，如果您的环境中的 Flink 版本为1.15，您需要执行以下命令：
+
+    ```Bash
+    sh build.sh 1.15
+    ```
+
+3. 前往 `target/` 目录，找到编译完成的 Flink connector JAR 文件，例如 `flink-connector-starrocks-1.2.7_flink-1.15-SNAPSHOT.jar`，该文件在编译过程中生成。
+
+    > **注意**：
+    >
+    > 未正式发布的 Flink connector 的名称包含 `SNAPSHOT` 后缀。
 
 ## 参数说明
 
-其中Sink选项如下：
+| 参数                              | 是否必填 | 默认值        | 描述                                                         |
+| --------------------------------- | -------- | ------------- | ------------------------------------------------------------ |
+| connector                         | Yes      | NONE          | 固定设置为 `starrocks`。                                     |
+| jdbc-url                          | Yes      | NONE          | 用于访问 FE 节点上的 MySQL 服务器。多个地址用英文逗号（,）分隔。格式：`jdbc:mysql://<fe_host1>:<fe_query_port1>,<fe_host2>:<fe_query_port2>`。 |
+| load-url                          | Yes      | NONE          | 用于访问 FE 节点上的 HTTP 服务器。多个地址用英文分号（;）分隔。格式：`<fe_host1>:<fe_http_port1>;<fe_host2>:<fe_http_port2>`。 |
+| database-name                     | Yes      | NONE          | StarRocks 数据库名。                                         |
+| table-name                        | Yes      | NONE          | StarRocks 表名。                                             |
+| username                          | Yes      | NONE          | StarRocks 集群的用户名。使用 Flink connector 导入数据至 StarRocks 需要目标表的 SELECT 和 INSERT 权限。如果您的用户账号没有这些权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+ |
+| password                          | Yes      | NONE          | StarRocks 集群的用户密码。                                   |
+| sink.version                      | No       | AUTO          | 导入数据的接口。此参数自 Flink connector 1.2.4 开始支持。<ul><li>V1：使用 [Stream Load](./StreamLoad.md) 接口导入数据。1.2.4 之前的 Flink connector 仅支持此模式。</li> <li>V2：使用 [Stream Load 事务接口](../loading/Stream_Load_transaction_interface.md)导入数据。要求 StarRocks 版本大于等于 2.4。建议选择 V2，因为其降低内存使用，并提供了更稳定的 exactly-once 实现。</li> <li>AUTO：如果 StarRocks 版本支持 Stream Load 事务接口，将自动选择 V2，否则选择 V1。</li></ul> |
+| sink.label-prefix                 | No       | NONE          | 指定 Stream Load 使用的 label 的前缀。                       |
+| sink.semantic                     | No       | at-least-once | sink 的语义。取值：at-least-once 和 exactly-once.            |
+| sink.buffer-flush.max-bytes       | No       | 94371840(90M) | 积攒在内存的数据大小，达到该阈值后数据通过 Stream Load 一次性导入 StarRocks。取值范围：[64MB, 10GB]。将此参数设置为较大的值可以提高导入性能，但可能会增加导入延迟。 该参数只在 `sink.semantic` 为`at-least-once`才会生效。 `sink.semantic` 为 `exactly-once`，则只有 Flink checkpoint 触发时 flush 内存的数据，因此该参数不生效。 |
+| sink.buffer-flush.max-rows        | No       | 500000        | 积攒在内存的数据条数，达到该阈值后数据通过 Stream Load 一次性导入 StarRocks。取值范围：[64000, 5000000]。该参数只在 `sink.version` 为 `V1`，`sink.semantic` 为 `at-least-once` 才会生效。 |
+| sink.buffer-flush.interval-ms     | No       | 300000        | 数据发送的间隔，用于控制数据写入 StarRocks 的延迟，取值范围：[1000, 3600000]。该参数只在 `sink.semantic` 为 `at-least-once`才会生效。 |
+| sink.max-retries                  | No       | 3             | Stream Load 失败后的重试次数。超过该数量上限，则数据导入任务报错。取值范围：[0, 10]。该参数只在 `sink.version` 为 `V1` 才会生效。 |
+| sink.connect.timeout-ms           | No       | 1000          | 与 FE 建立 HTTP 连接的超时时间。取值范围：[100, 60000]。     |
+| sink.wait-for-continue.timeout-ms | No       | 10000         | 此参数自 Flink connector 1.2.7 开始支持。等待 FE HTTP 100-continue 应答的超时时间。取值范围：[3000, 600000]。 |
+| sink.ignore.update-before         | No       | TRUE          | 此参数自 Flink connector 1.2.8 开始支持。将数据导入到主键模型表时，是否忽略来自 Flink 的 UPDATE_BEFORE 记录。如果将此参数设置为 false，则将该记录在主键模型表中视为DELETE 操作。 |
+| sink.parallelism                  | No       | NONE          | 写入的并行度。仅适用于Flink SQL。如果未设置， Flink planner 将决定并行度。**在多并行度的场景中，用户需要确保数据按正确顺序写入。** |
+| sink.properties.*                 | No       | NONE          | Stream Load 的参数，控制 Stream Load 导入行为。例如 参数 sink.properties.format 表示 Stream Load 所导入的数据格式，如 CSV 或者 JSON。全部参数和解释，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。 |
+| sink.properties.format            | No       | csv           | Stream Load 导入时的数据格式。Flink connector 会将内存的数据转换为对应格式，然后通过 Stream Load 导入至 StarRocks。取值为 CSV 或者 JSON。 |
+| sink.properties.column_separator  | No       | \t            | CSV 数据的列分隔符。                                         |
+| sink.properties.row_delimiter     | No       | \n            | CSV 数据的行分隔符。                                         |
+| sink.properties.max_filter_ratio  | No       | 0             | 导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：0~1。默认值：0 。详细信息，请参见  [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。 |
 
-| 参数                             | 是否必填 | 默认值        | 数据类型 | 描述                                                         |
-| -------------------------------- | -------- | ------------- | -------- | ------------------------------------------------------------ |
-| connector                        | 是       | 无          | String   | 固定设置为 `starrocks`。                                     |
-| jdbc-url                         | 是      | 无          | String   | FE 的 MySQL Server 连接地址。格式为 `jdbc:mysql://<fe_host>:<fe_query_port>`。 |
-| load-url                         | 是      | 无          | String   | FE 的 HTTP Server 连接地址。格式为 `<fe_host1>:<fe_http_port1>;<fe_host2>:<fe_http_port2>`，可以提供多个地址，使用英文分号 (;) 分隔。例如 `192.168.xxx.xxx:8030;192.168.xxx.xxx:8030`。 |
-| database-name                    | 是      | 无          | String   | StarRocks 目标数据库的名称。                                 |
-| table-name                       | 是      | 无          | String   | StarRocks 目标数据表的名称。                                 |
-| username                         | 是      | 无          | String   | 用于访问 StarRocks 集群的用户名。该账号需具备 StarRocks 目标数据表的写权限。有关用户权限的说明，请参见[用户权限](https://docs.starrocks.io/zh-cn/latest/administration/User_privilege)。 |
-| password                         | 是      | 无          | String   | 用于访问 StarRocks 集群的用户密码。                          |
-| sink.semantic                    | 否       | at-least-once | String   | 数据 sink 至 StarRocks 的语义。<ul><li>`at-least-once`： 至少一次。</li><li>`exactly-once`：精确一次。</li></ul> |
-| sink.version                     | 否       | AUTO          | String   | 实现 sink 的 exactly-once 语义的版本，仅适用于 1.2.4 及以上版本。<ul><li>`V2`：V2 版本，表示使用 [Stream Load 事务接口](./Flink-connector-starrocks.md)，StarRocks 2.4 及以上版本支持该接口。</li><li>`V1`：V1 版本，表示使用 Stream Load 非事务接口。</li><li>`AUTO`： 由 connector 自动选择版本，如果 connector 为 1.2.4 及以上版本，StarRocks 为 2.4 及以上版本，则使用 Stream Load 事务接口。反之，则使用 Stream Load 非事务接口。</li></ul>|
-| sink.buffer-flush.max-bytes      | 否       | 94371840(90M) | String   | 数据攒批的大小，达到该阈值后将数据通过 Stream Load 批量写入 StarRocks。取值范围：[64MB, 10GB]。V1 版本 exactly-once 下只有 Flink checkpoint 触发时 flush，该参数不生效。|
-| sink.buffer-flush.max-rows       | 否       | 500000        | String   | 数据攒批的条数，达到该阈值后将数据通过 Stream Load 批量写入 StarRocks。取值范围：[64000, 5000000]。V1 版本 exactly-once 下只有 Flink checkpoint 触发时 flush，该参数不生效。|
-| sink.buffer-flush.interval-ms    | 否       | 300000        | String   | 数据攒批发送的间隔，用于控制数据写入 StarRocks 的延迟，取值范围：[1000, 3600000]。V1 版本 exactly-once 下只有 Flink checkpoint 触发时 flush，该参数不生效。|
-| sink.max-retries                 | 否       | 3             | String   | Stream Load 失败后的重试次数。超过该数量上限，则数据导入任务报错。取值范围：[0, 10]。 |
-| sink.connect.timeout-ms          | 否       | 1000          | String   | 连接 `load-url` 的超时时间。取值范围：[100, 60000]。 |
-| sink.properties.*                | 否       | 无          | String   | Stream Load 的参数，控制导入行为，例如 `sink.properties.columns`，支持的参数和说明，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。 <br> **说明** <br> 自 2.4 版本起，flink-connector-starrocks 支持主键模型的表进行部分更新。 |
-| sink.properties.format           | 否       | CSV           | String   | Stream Load 导入时的数据格式。取值为 `CSV` 或者 `JSON`。      |
-| sink.properties.timeout          | 否       | 600           | String   | Stream Load 超时时间，单位为秒。 exactly-once 下需要确保该值大于 Flink checkpoint 间隔。 |
-| sink.properties.max_filter_ratio | 否       | 0             | String   | 用于指定导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：0~1。默认值：0。更多说明，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD#opt_properties)。|
+## 数据类型映射
 
-## Flink 与 StarRocks 的数据类型映射关系
+| Flink 数据类型                    | StarRocks 数据类型 |
+| --------------------------------- | ------------------ |
+| BOOLEAN                           | BOOLEAN            |
+| TINYINT                           | TINYINT            |
+| SMALLINT                          | SMALLINT           |
+| INTEGER                           | INTEGER            |
+| BIGINT                            | BIGINT             |
+| FLOAT                             | FLOAT              |
+| DOUBLE                            | DOUBLE             |
+| DECIMAL                           | DECIMAL            |
+| BINARY                            | INT                |
+| CHAR                              | STRING             |
+| VARCHAR                           | STRING             |
+| STRING                            | STRING             |
+| DATE                              | DATE               |
+| TIMESTAMP_WITHOUT_TIME_ZONE(N)    | DATETIME           |
+| TIMESTAMP_WITH_LOCAL_TIME_ZONE(N) | DATETIME           |
+| ARRAY<T>                          | ARRAY<T>           |
+| MAP<KT,VT>                        | JSON STRING        |
+| ROW<arg T...>                     | JSON STRING        |
 
-| Flink type | StarRocks type |
-|  :-: | :-: |
-| BOOLEAN | BOOLEAN |
-| TINYINT | TINYINT |
-| SMALLINT | SMALLINT |
-| INTEGER | INTEGER |
-| BIGINT | BIGINT |
-| FLOAT | FLOAT |
-| DOUBLE | DOUBLE |
-| DECIMAL | DECIMAL |
-| BINARY | INT |
-| CHAR | STRING |
-| VARCHAR | STRING |
-| STRING | STRING |
-| DATE | DATE |
-| TIMESTAMP_WITHOUT_TIME_ZONE(N) | DATETIME |
-| TIMESTAMP_WITH_LOCAL_TIME_ZONE(N) | DATETIME |
-| ARRAY\<T\> | ARRAY\<T\> |
-| MAP\<KT,VT\> | JSON STRING |
-| ROW\<arg T...\> | JSON STRING |
+## 使用说明
 
->注意：当前不支持 Flink 的 BYTES、VARBINARY、TIME、INTERVAL、MULTISET、RAW，具体可参考 [Flink 数据类型](https://nightlies.apache.org/flink/flink-docs-master/docs/dev/table/types/)。
+- 导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](https://docs.starrocks.io/zh-cn/latest/sql-reference/sql-statements/account-management/GRANT) 给用户赋权。
+- 自 2.4 版本 StarRocks 开始支持 [Stream Load 事务接口](https://docs.starrocks.io/zh-cn/latest/loading/Stream_Load_transaction_interface)。自 Flink connector 1.2.4 版本起， Sink 基于 Stream Load 事务接口重新设计 exactly-once 的实现，相较于原来基于 Stream Load 非事务接口实现的 exactly-once，降低了内存使用和 checkpoint 耗时，提高了作业的实时性和稳定性。并且，自 Flink connector 1.2.4 版本起，如果StarRocks 支持 Stream Load 事务接口，则 Sink 默认使用 Stream Load 事务接口，如果需要使用 Stream Load  非事务接口实现，则需要配置 `sink.version` 为`V1`。
+    > 注意
+    >
+    > 如果只升级 StarRocks 或 Flink connector，sink 会自动选择  Stream Load  非事务接口实现。
+- 基于 Stream Load 非事务接口实现的 exactly-once，依赖 Flink 的 checkpoint 机制，在每次 checkpoint 时保存批数据以及其 label，在 checkpoint 后完成的第一次 invoke 中阻塞 flush 所有缓存在 state 当中的数据，以此达到精准一次。但如果 StarRocks 宕机，会导致 Flink sink stream 算子长时间阻塞，并引起 Flink 的监控报警或强制 kill。
+- 如果遇到导入停止的情况，请尝试增加 Flink 任务的内存。
+- 如果代码运行正常且 Flink 能接收到数据，但是数据写入 StarRocks 不成功时，请确认 Flink 机器能访问 BE 的 http_port 端口，这里指能 ping通集群 show backends 显示的 ip:port。举个例子：如果一台机器有外网和内网 IP，且 FE 和 BE 的 http_port均可通过外网ip:port 访问，由于集群里绑定的 ip 为内网 IP，任务里 loadurl 写的 FE 外网 ip:http_port，FE会将写入任务转发给 BE 内网 ip:port，这时如果 Flink 机器 ping 不通 BE 的内网 IP，则写入失败。
 
-## 注意事项
+## 使用示例
 
-* 自 2.4 版本 StarRocks 开始支持[Stream Load 事务接口](./Stream_Load_transaction_interface.md)。自 Flink connector 1.2.4 版本起， Sink 基于事务接口重新设计实现了 exactly-once，相较于原来基于非事务接口的实现，降低了内存使用和 checkpoint 耗时，提高了作业的实时性和稳定性。
-  自 Flink connector 1.2.4 版本起，sink 默认使用事务接口实现。如果需要使用非事务接口实现，则需要配置 `sink.version` 为`V1`。
-   > **注意**
-   >
-   > 如果只升级 StarRocks 或 Flink connector，sink 会自动选择非事务接口实现。
+### 准备工作
 
-* 基于Stream Load非事务接口实现的exactly-once，依赖flink的checkpoint-interval在每次checkpoint时保存批数据以及其label，在checkpoint完成后的第一次invoke中阻塞flush所有缓存在state当中的数据，以此达到精准一次。但如果StarRocks挂掉了，会导致用户的flink sink stream 算子长时间阻塞，并引起flink的监控报警或强制kill。
+#### 创建 StarRocks 表
 
-* 默认使用csv格式进行导入，用户可以通过指定`'sink.properties.row_delimiter' = '\\x02'`（此参数自 StarRocks-1.15.0 开始支持）与`'sink.properties.column_separator' = '\\x01'`来自定义行分隔符与列分隔符。
+创建数据库 `test`，并创建主键模型表  `score_board`。
 
-* 如果遇到导入停止的 情况，请尝试增加flink任务的内存。
+```SQL
+CREATE DATABASE test;
 
-* 如果代码运行正常且能接收到数据，但是写入不成功时请确认当前机器能访问BE的http_port端口，这里指能ping通集群show backends显示的ip:port。举个例子：如果一台机器有外网和内网ip，且FE/BE的http_port均可通过外网ip:port访问，集群里绑定的ip为内网ip，任务里loadurl写的FE外网ip:http_port，FE会将写入任务转发给BE内网ip:port，这时如果Client机器ping不通BE的内网ip就会写入失败。
+CREATE TABLE test.score_board(
+    id int(11) NOT NULL COMMENT "",
+    name varchar(65533) NULL DEFAULT "" COMMENT "",
+    score int(11) NOT NULL DEFAULT "0" COMMENT ""
+)
+ENGINE=OLAP
+PRIMARY KEY(id)
+DISTRIBUTED BY HASH(id);
+```
 
-## 导入数据可观测指标
+#### Flink 环境
 
-| Name | Type | Description |
-|  :-: | :-:  | :-:  |
-| totalFlushBytes | counter | successfully flushed bytes. |
-| totalFlushRows | counter | successfully flushed rows. |
-| totalFlushSucceededTimes | counter | number of times that the data-batch been successfully flushed. |
-| totalFlushFailedTimes | counter | number of times that the flushing been failed. |
-| totalFilteredRows | counter | number of rows filtered. totalFlushRows includes those rows. |
+- 下载 Flink 二进制文件 [Flink 1.15.2](https://archive.apache.org/dist/flink/flink-1.15.2/flink-1.15.2-bin-scala_2.12.tgz)，并解压到目录 `flink-1.15.2`。
+- 下载 [Flink connector 1.2.7](https://repo1.maven.org/maven2/com/starrocks/flink-connector-starrocks/1.2.7_flink-1.15/flink-connector-starrocks-1.2.7_flink-1.15.jar)，并将其放置在目录 `flink-1.15.2/lib` 中。
+- 运行以下命令启动 Flink 集群：
 
-flink-connector-starrocks 导入底层调用的 Stream Load实现，可以在 flink 日志中查看导入状态
+    ```Bash
+    cd flink-1.15.2
+    ./bin/start-cluster.sh
+    ```
 
-* 日志中如果有 `http://$fe:${http_port}/api/$db/$tbl/_stream_load` 生成，表示成功触发了 Stream Load 任务，任务结果也会打印在 flink 日志中，返回值可参考 [Stream Load 返回值](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD#返回值)。
+### 使用 Flink SQL 写入数据
 
-* 日志中如果没有上述信息，请在 [StarRocks 论坛](https://forum.starrocks.com/) 提问，我们会及时跟进。
+- 运行以下命令以启动 Flink SQL 客户端。
 
-## 常见问题
+    ```Bash
+    ./bin/sql-client.sh
+    ```
 
-请参见 [FLink Connector 常见问题](../faq/loading/Flink_connector_faq)。
+- 在 Flink SQL 客户端，创建一个表 `score_board`，并且插入数据。 注意，如果您想将数据导入到 StarRocks 主键模型表中，您必须在 Flink 表的 DDL 中定义主键。对于其他类型的 StarRocks 表，这是可选的。
+
+    ```sql
+    CREATE TABLE `score_board` (
+        `id` INT,
+        `name` STRING,
+        `score` INT,
+        PRIMARY KEY (id) NOT ENFORCED
+    ) WITH (
+        'connector' = 'starrocks',
+        'jdbc-url' = 'jdbc:mysql://127.0.0.1:9030',
+        'load-url' = '127.0.0.1:8030',
+        'database-name' = 'test',
+        'table-name' = 'score_board',
+        'username' = 'root',
+        'password' = ''
+    );
+
+    INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 100);
+    ```
+
+### 使用 Flink DataStream 写入数据
+
+根据 input records 的类型，编写对应 Flink DataStream 作业，例如 input records 为 CSV 格式的 Java `String`、JSON 格式的 Java `String` 或自定义的 Java 对象。
+
+- 如果 input records 为 CSV 格式的 `String`，对应的 Flink DataStream 作业的主要代码如下所示，完整代码请参见 [LoadCsvRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadCsvRecords.java)。
+
+    ```Java
+    /**
+     * Generate CSV-format records. Each record has three values separated by "\t". 
+     * These values will be loaded to the columns `id`, `name`, and `score` in the StarRocks table.
+     */
+    String[] records = new String[]{
+            "1\tstarrocks-csv\t100",
+            "2\tflink-csv\t100"
+    };
+    DataStream<String> source = env.fromElements(records);
+    
+    /**
+     * Configure the Flink connector with the required properties.
+     * You also need to add properties "sink.properties.format" and "sink.properties.column_separator"
+     * to tell the Flink connector the input records are CSV-format, and the column separator is "\t".
+     * You can also use other column separators in the CSV-format records,
+     * but remember to modify the "sink.properties.column_separator" correspondingly.
+     */
+    StarRocksSinkOptions options = StarRocksSinkOptions.builder()
+            .withProperty("jdbc-url", jdbcUrl)
+            .withProperty("load-url", loadUrl)
+            .withProperty("database-name", "test")
+            .withProperty("table-name", "score_board")
+            .withProperty("username", "root")
+            .withProperty("password", "")
+            .withProperty("sink.properties.format", "csv")
+            .withProperty("sink.properties.column_separator", "\t")
+            .build();
+    // Create the sink with the options.
+    SinkFunction<String> starRockSink = StarRocksSink.sink(options);
+    source.addSink(starRockSink);
+    ```
+
+- 如果 input records 为 JSON 格式的 `String`，对应的 Flink DataStream 作业的主要代码如下所示，完整代码请参见[LoadJsonRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadJsonRecords.java)。
+
+    ```Java
+    /**
+     * Generate JSON-format records. 
+     * Each record has three key-value pairs corresponding to the columns id, name, and score in the StarRocks table.
+     */
+    String[] records = new String[]{
+            "{\"id\":1, \"name\":\"starrocks-json\", \"score\":100}",
+            "{\"id\":2, \"name\":\"flink-json\", \"score\":100}",
+    };
+    DataStream<String> source = env.fromElements(records);
+    
+    /** 
+     * Configure the Flink connector with the required properties.
+     * You also need to add properties "sink.properties.format" and "sink.properties.strip_outer_array"
+     * to tell the Flink connector the input records are JSON-format and to strip the outermost array structure. 
+     */
+    StarRocksSinkOptions options = StarRocksSinkOptions.builder()
+            .withProperty("jdbc-url", jdbcUrl)
+            .withProperty("load-url", loadUrl)
+            .withProperty("database-name", "test")
+            .withProperty("table-name", "score_board")
+            .withProperty("username", "root")
+            .withProperty("password", "")
+            .withProperty("sink.properties.format", "json")
+            .withProperty("sink.properties.strip_outer_array", "true")
+            .build();
+    // Create the sink with the options.
+    SinkFunction<String> starRockSink = StarRocksSink.sink(options);
+    source.addSink(starRockSink);
+    ```
+
+- 如果 input records 为自定义的 Java 对象，对应的 Flink DataStream 作业的主要代码如下所示，完整代码请参见[LoadCustomJavaRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadCustomJavaRecords.java)。
+
+  - 本示例中，input record 是一个简单的 POJO `RowData`。
+
+    ```Java
+    public static class RowData {
+            public int id;
+            public String name;
+            public int score;
+      
+            public RowData() {}
+      
+            public RowData(int id, String name, int score) {
+                this.id = id;
+                this.name = name;
+                this.score = score;
+            }
+        }
+    ```
+
+  - 主要代码如下所示：
+
+    ```Java
+    // Generate records which use RowData as the container.
+    RowData[] records = new RowData[]{
+            new RowData(1, "starrocks-rowdata", 100),
+            new RowData(2, "flink-rowdata", 100),
+        };
+    DataStream<RowData> source = env.fromElements(records);
+    
+    // Configure the Flink connector with the required properties.
+    StarRocksSinkOptions options = StarRocksSinkOptions.builder()
+            .withProperty("jdbc-url", jdbcUrl)
+            .withProperty("load-url", loadUrl)
+            .withProperty("database-name", "test")
+            .withProperty("table-name", "score_board")
+            .withProperty("username", "root")
+            .withProperty("password", "")
+            .build();
+    
+    /**
+     * The Flink connector will use a Java object array (Object[]) to represent a row to be loaded into the StarRocks table,
+     * and each element is the value for a column.
+     * You need to define the schema of the Object[] which matches that of the StarRocks table.
+     */
+    TableSchema schema = TableSchema.builder()
+            .field("id", DataTypes.INT().notNull())
+            .field("name", DataTypes.STRING())
+            .field("score", DataTypes.INT())
+            // When the StarRocks table is a Primary Key table, you must specify notNull(), for example, DataTypes.INT().notNull(), for the primary key `id`.
+            .primaryKey("id")
+            .build();
+    // Transform the RowData to the Object[] according to the schema.
+    RowDataTransformer transformer = new RowDataTransformer();
+    // Create the sink with the schema, options, and transformer.
+    SinkFunction<RowData> starRockSink = StarRocksSink.sink(schema, options, transformer);
+    source.addSink(starRockSink);
+    ```
+
+  - 其中 `RowDataTransformer` 定义如下：
+
+    ```Java
+    private static class RowDataTransformer implements StarRocksSinkRowBuilder<RowData> {
+    
+        /**
+         * Set each element of the object array according to the input RowData.
+         * The schema of the array matches that of the StarRocks table.
+         */
+        @Override
+        public void accept(Object[] internalRow, RowData rowData) {
+            internalRow[0] = rowData.id;
+            internalRow[1] = rowData.name;
+            internalRow[2] = rowData.score;
+            // When the StarRocks table is a Primary Key table, you need to set the last element to indicate whether the data loading is an UPSERT or DELETE operation.
+            internalRow[internalRow.length - 1] = StarRocksSinkOP.UPSERT.ordinal();
+        }
+    }  
+    ```
+
+## 最佳实践
+
+### 导入至主键模型表
+
+本节将展示如何将数据导入到 StarRocks 主键模型表中，以实现部分更新和条件更新。以下示例使用 Flink SQL。 部分更新和条件更新的更多介绍，请参见[通过导入实现数据变更](./Load_to_Primary_Key_tables.md)。
+
+#### 准备工作
+
+在StarRocks中创建一个名为`test`的数据库，并在其中创建一个名为`score_board`的主键模型表。
+
+```sql
+CREATE DATABASE `test`;
+
+CREATE TABLE `test`.`score_board`
+(
+    `id` int(11) NOT NULL COMMENT "",
+    `name` varchar(65533) NULL DEFAULT "" COMMENT "",
+    `score` int(11) NOT NULL DEFAULT "0" COMMENT ""
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`);
+```
+
+#### 部分更新
+
+本示例展示如何通过导入数据仅更新 StarRocks 表中列 `name`的值。
+
+1. 在 MySQL 客户端向 StarRocks 表 `score_board` 插入两行数据。
+
+      ```sql
+      mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 100);
+      
+      mysql> select * from score_board;
+      +------+-----------+-------+
+      | id   | name      | score |
+      +------+-----------+-------+
+      |    1 | starrocks |   100 |
+      |    2 | flink     |   100 |
+      +------+-----------+-------+
+      2 rows in set (0.02 sec)
+      ```
+
+2. 在 Flink SQL 客户端创建表 `score_board` 。
+   - DDL 中仅包含列 `id` 和 `name` 的定义。
+   - 将选项 `sink.properties.partial_update` 设置为 `true`，以要求 Flink connector 执行部分更新。
+   - 如果 Flink connector 版本小于等于 1.2.7，则还需要将选项 `sink.properties.columns` 设置为`id,name,__op`，以告诉 Flink connector 需要更新的列。请注意，您需要在末尾附加字段 `__op`。字段 `__op` 表示导入是 UPSERT 还是 DELETE 操作，其值由 Flink connector 自动设置。
+
+      ```sql
+      CREATE TABLE score_board (
+          id INT,
+          name STRING,
+          PRIMARY KEY (id) NOT ENFORCED
+      ) WITH (
+          'connector' = 'starrocks',
+          'jdbc-url' = 'jdbc:mysql://127.0.0.1:9030',
+          'load-url' = '127.0.0.1:8030',
+          'database-name' = 'test',
+          'table-name' = 'score_board',
+          'username' = 'root',
+          'password' = '',
+          'sink.properties.partial_update' = 'true',
+          -- only for Flink connector version <= 1.2.7
+          'sink.properties.columns' = 'id,name,__op'
+      ); 
+      ```
+
+3. 将两行数据插入两行数据到表中。数据行的主键与 StarRocks 表的数据行主键相同，但是 `name` 列的值被修改。
+
+      ```SQL
+      INSERT INTO `score_board` VALUES (1, 'starrocks-update'), (2, 'flink-update');
+      ```
+
+4. 在 MySQL 客户端查询 StarRocks 表。
+
+      ```SQL
+      mysql> select * from score_board;
+      +------+------------------+-------+
+      | id   | name             | score |
+      +------+------------------+-------+
+      |    1 | starrocks-update |   100 |
+      |    2 | flink-update     |   100 |
+      +------+------------------+-------+
+      2 rows in set (0.02 sec)
+      ```
+
+    您会看到只有 `name` 列的值发生了变化，而 `score` 列的值没有变化。
+
+#### 条件更新
+
+本示例展示如何根据 `score` 列的值进行条件更新。只有导入的数据行中 `score` 列值大于等于 StarRocks 表当前值时，该数据行才会更新。
+
+1. 在 MySQL 客户端中向 StarRocks 表中插入两行数据。
+
+    ```SQL
+    mysql> INSERT INTO score_board VALUES (1, 'starrocks', 100), (2, 'flink', 100);
+
+    mysql> select * from score_board;
+    +------+-----------+-------+
+    +------+-----------+-------+
+    +------+-----------+-------+
+    2 rows in set (0.02 sec)
+    ```
+
+2. 在 Flink SQL 客户端按照以下方式创建表`score_board`：
+   - DDL 中包括所有列的定义。
+   - 将选项  `sink.properties.merge_condition` 设置为 `score`，要求 Flink connector 使用 `score`  列作为更新条件。
+   - 将选项 `sink.version` 设置为 `V1` ，要求  Flink connector 使用 Stream Load 接口导入数据。因为只有  Stream Load 接口支持条件更新。
+
+      ```SQL
+      CREATE TABLE `score_board` (
+          `id` INT,
+          `name` STRING,
+          `score` INT,
+          PRIMARY KEY (id) NOT ENFORCED
+      ) WITH (
+          'connector' = 'starrocks',
+          'jdbc-url' = 'jdbc:mysql://127.0.0.1:9030',
+          'load-url' = '127.0.0.1:8030',
+          'database-name' = 'test',
+          'table-name' = 'score_board',
+          'username' = 'root',
+          'password' = '',
+          'sink.properties.merge_condition' = 'score',
+          'sink.version' = 'V1'
+      );
+      ```
+
+3. 在 Flink SQL 客户端插入两行数据到表中。数据行的主键与 StarRocks 表中的行相同。第一行数据 `score` 列中具有较小的值，而第二行数据 `score` 列中具有较大的值。
+
+      ```SQL
+      INSERT INTO `score_board` VALUES (1, 'starrocks-update', 99), (2, 'flink-update', 101);
+      ```
+
+4. 在 MySQL客户端查询 StarRocks表。
+
+      ```SQL
+      mysql> select * from score_board;
+      +------+--------------+-------+
+      | id   | name         | score |
+      +------+--------------+-------+
+      |    1 | starrocks    |   100 |
+      |    2 | flink-update |   101 |
+      +------+--------------+-------+
+      2 rows in set (0.03 sec)
+      ```
+
+    您会注意到仅第二行数据发生了变化，而第一行数据未发生变化。
+
+### 导入至 Bitmap 列
+
+`BITMAP` 常用于加速精确去重计数，例如计算独立访客数（UV），更多信息，请参见[使用 Bitmap 实现精确去重](../using_starrocks/Using_bitmap.md)。
+
+本示例以计算独立访客数（UV）为例，展示如何导入数据至 StarRocks 表 `BITMAP` 列中。
+
+1. 在 MySQL 客户端中创建一个 StarRocks 聚合表。
+
+   在数据库`test`中，创建聚合表 `page_uv`，其中列 `visit_users` 被定义为 `BITMAP` 类型，并配置聚合函数 `BITMAP_UNION`。
+
+      ```SQL
+      CREATE TABLE `test`.`page_uv` (
+        `page_id` INT NOT NULL COMMENT 'page ID',
+        `visit_date` datetime NOT NULL COMMENT 'access time',
+        `visit_users` BITMAP BITMAP_UNION NOT NULL COMMENT 'user ID'
+      ) ENGINE=OLAP
+      AGGREGATE KEY(`page_id`, `visit_date`)
+      DISTRIBUTED BY HASH(`page_id`);
+      ```
+
+2. 在 Flink SQL 客户端中创建一个表。
+
+   因为表中的 `visit_user_id` 列是`BIGINT`类型，我们希望将此列的数据导入到StarRocks表中的`visit_users`列，该列是`BITMAP`类型。因此，在定义表的 DDL 时，需要注意以下几点：
+
+   - 由于 Flink 不支持 `BITMAP` 类型，您需要将 `visit_user_id` 列定义为`BIGINT`类型，以代表StarRocks表中的 `visit_users` 列。
+   - 您需要将选项 `sink.properties.columns` 设置为`page_id,visit_date,user_id,visit_users=to_bitmap(visit_user_id)`，以告诉 Flink connector 如何将该表的列和 StarRocks 表的列进行映射，并且还需要使用 `to_bitmap` 函数，将`BIGINT` 类型 `visit_user_id` 列的数据转换为 `BITMAP`类型。
+
+      ```SQL
+      CREATE TABLE `page_uv` (
+          `page_id` INT,
+          `visit_date` TIMESTAMP,
+          `visit_user_id` BIGINT
+      ) WITH (
+          'connector' = 'starrocks',
+          'jdbc-url' = 'jdbc:mysql://127.0.0.1:9030',
+          'load-url' = '127.0.0.1:8030',
+          'database-name' = 'test',
+          'table-name' = 'page_uv',
+          'username' = 'root',
+          'password' = '',
+          'sink.properties.columns' = 'page_id,visit_date,visit_user_id,visit_users=to_bitmap(visit_user_id)'
+      );
+      ```
+
+3. 在 Flink SQL 客户端中插入数据至表中。
+
+      ```SQL
+      INSERT INTO `page_uv` VALUES
+         (1, CAST('2020-06-23 01:30:30' AS TIMESTAMP), 13),
+         (1, CAST('2020-06-23 01:30:30' AS TIMESTAMP), 23),
+         (1, CAST('2020-06-23 01:30:30' AS TIMESTAMP), 33),
+         (1, CAST('2020-06-23 02:30:30' AS TIMESTAMP), 13),
+         (2, CAST('2020-06-23 01:30:30' AS TIMESTAMP), 23);
+      ```
+
+4. 在 MySQL 客户端查询 StarRocks 表来计算页面 UV 数。
+
+      ```SQL
+      MySQL [test]> SELECT page_id, COUNT(DISTINCT visit_users) FROM page_uv GROUP BY page_id;
+      +---------+-----------------------------+
+      +---------+-----------------------------+
+      +---------+-----------------------------+
+      2 rows in set (0.05 sec)
+      ```
+
+### 导入至 HLL 列
+
+`HLL` 可用于近似去重计数，更多信息，请参见[使用 HLL 实现近似去重](https://chat.openai.com/using_starrocks/Using_HLL)。
+
+本示例以计算独立访客数（UV）为例，展示如何导入数据至 StarRocks 表 `HLL` 列中。
+
+1. 在 MySQL 客户端中创建一个 StarRocks 聚合表。
+
+   在数据库 `test` 中，创建一个名为`hll_uv`的聚合表，其中列`visit_users`被定义为`HLL`类型，并配置聚合函数`HLL_UNION`。
+
+    ```SQL
+    CREATE TABLE hll_uv (
+    page_id INT NOT NULL COMMENT 'page ID',
+    visit_date datetime NOT NULL COMMENT 'access time',
+    visit_users HLL HLL_UNION NOT NULL COMMENT 'user ID'
+    ) ENGINE=OLAP
+    AGGREGATE KEY(page_id, visit_date)
+    DISTRIBUTED BY HASH(page_id);
+    ```
+
+2. 在 Flink SQL客户端中创建一个表。
+
+   表中的`visit_user_id`列是`BIGINT`类型，我们希望将此列的数据导入至 StarRocks 表中的`visit_users`列，该列是 `HLL` 类型。因此，在定义表的 DDL 时，需要注意以下几点：
+
+    - 由于 Flink 不支持`HLL`类型，您需要将 `visit_user_id` 列定义为 `BIGINT` 类型，以代表 StarRocks 表中的 `visit_users` 列。
+    - 您需要将选项 `sink.properties.columns` 设置为`page_id,visit_date,user_id,visit_users=hll_hash(visit_user_id)`，以告诉 Flink connector 如何将该表的列和 StarRocks 表的列进行映射。还需要使用 `hll_hash` 函数，将 `BIGINT` 类型的 `visit_user_id` 列的数据转换为 `HLL` 类型。
+
+    ```SQL
+    CREATE TABLE hll_uv (
+        page_id INT,
+        visit_date TIMESTAMP,
+        visit_user_id BIGINT
+    ) WITH (
+        'connector' = 'starrocks',
+        'jdbc-url' = 'jdbc:mysql://127.0.0.1:9030',
+        'load-url' = '127.0.0.1:8030',
+        'database-name' = 'test',
+        'table-name' = 'hll_uv',
+        'username' = 'root',
+        'password' = '',
+        'sink.properties.columns' = 'page_id,visit_date,visit_user_id,visit_users=hll_hash(visit_user_id)'
+    );
+    ```
+
+3. 在 Flink SQL 客户端中插入数据至表中。
+
+    ```SQL
+    INSERT INTO hll_uv VALUES
+    (3, CAST('2023-07-24 12:00:00' AS TIMESTAMP), 78),
+    (4, CAST('2023-07-24 13:20:10' AS TIMESTAMP), 2),
+    (3, CAST('2023-07-24 12:30:00' AS TIMESTAMP), 674);
+    ```
+
+4. 在 MySQL 客户端查询 StarRocks 表来计算页面 UV 数。
+
+    ```SQL
+    mysql> SELECT `page_id`, COUNT(DISTINCT `visit_users`) FROM `hll_uv` GROUP BY `page_id`;
+    **+---------+-----------------------------+
+    | page_id | count(DISTINCT visit_users) |
+    +---------+-----------------------------+
+    |       3 |                           2 |
+    |       4 |                           1 |
+    +---------+-----------------------------+
+    2 rows in set (0.04 sec)
+    ```
