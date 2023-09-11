@@ -25,36 +25,6 @@ jobs:
       PASS: ${{ steps.check.outputs.pass }}
       THIRDPARTY: ${{ steps.thirdparty-checker.outputs.thirdparty }}
     steps:
-      - name: upload info
-        env:
-          PR_NUMBER: ${{ github.event.number }}
-        run: |
-          echo $PR_NUMBER > pr_num.txt
-          GITHUB_SHA=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.sha)
-          echo ${GITHUB_SHA} > head_sha.txt
-
-      - name: Upload the PR number
-        uses: actions/upload-artifact@v2
-        with:
-          name: pr_num
-          path: ./pr_num.txt
-          retention-days: 3
-
-      - name: Upload the PR HEAD REF
-        uses: actions/upload-artifact@v2
-        with:
-          name: head_sha
-          path: ./head_sha.txt
-          retention-days: 3
-      
-      - uses: dorny/paths-filter@v2
-        id: thirdparty-checker
-        with:
-          filters: |
-            thirdparty:
-            - 'thirdparty/**'
-            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
-      
       - name: Check
         id: check
         if: >
@@ -64,6 +34,14 @@ jobs:
         run: |
           echo "pass=true" >> $GITHUB_OUTPUT
 
+      - uses: dorny/paths-filter@v2
+        id: thirdparty-checker
+        if: always()
+        with:
+          filters: |
+            thirdparty:
+            - 'thirdparty/**'
+            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
   be-checker:
     runs-on: ubuntu-latest
