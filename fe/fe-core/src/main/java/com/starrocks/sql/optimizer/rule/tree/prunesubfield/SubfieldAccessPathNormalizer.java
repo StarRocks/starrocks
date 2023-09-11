@@ -171,6 +171,11 @@ public class SubfieldAccessPathNormalizer {
             }
             Optional<AccessPath> currentPath = scalarOperator.accept(this, childAccessPaths);
             AccessPath path = currentPath.orElse(null);
+            // When an AccessPath from offspring ScalarOperators can be extended to a longer AccessPath
+            // in current ScalarOperator would not gathered until it can not be extended.
+            // Since AccessPath is extended by appending path component in-place, so AccessPaths in
+            // childAccessPaths that is not identical to AccessPath of the current ScalarOperator is
+            // non-extendable.
             childAccessPaths.stream().filter(p -> p.isPresent() && p.get() != path)
                     .map(Optional::get).forEach(accessPaths::add);
             return currentPath;
