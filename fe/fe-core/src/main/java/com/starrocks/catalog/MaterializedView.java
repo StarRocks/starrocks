@@ -1040,6 +1040,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         DistributionInfo distributionInfo = this.getDefaultDistributionInfo();
         sb.append("\n").append(distributionInfo.toSql());
 
+        // order by
+        if (CollectionUtils.isNotEmpty(getTableProperty().getMvSortKeys())) {
+            String str = Joiner.on(",").join(getTableProperty().getMvSortKeys());
+            sb.append("\nORDER BY (").append(str).append(")");
+        }
+
         // refresh scheme
         MvRefreshScheme refreshScheme = this.getRefreshScheme();
         if (refreshScheme == null) {
@@ -1066,19 +1072,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         // properties
         sb.append("\nPROPERTIES (\n");
-        Map<String, String> properties = this.getTableProperty().getProperties();
         boolean first = true;
-        for (Map.Entry<String, String> entry : this.getTableProperty().getProperties().entrySet()) {
+        Map<String, String> properties = this.getTableProperty().getProperties();
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            String name = entry.getKey();
+            String value = entry.getValue();
             if (!first) {
                 sb.append(",\n");
             }
             first = false;
-            String name = entry.getKey();
-            String value = entry.getValue();
-            sb.append("\"").append(name.toUpperCase()).append("\"");
+            sb.append("\"").append(name).append("\"");
             sb.append(" = ");
-            sb.append("\"").append(value.toUpperCase()).append("\"");
+            sb.append("\"").append(value).append("\"");
         }
+        appendUniqueProperties(sb);
 
         sb.append("\n)");
         String define = this.getSimpleDefineSql();

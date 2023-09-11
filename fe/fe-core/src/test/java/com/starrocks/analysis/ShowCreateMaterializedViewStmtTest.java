@@ -413,12 +413,41 @@ public class ShowCreateMaterializedViewStmtTest {
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
                 "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("deferred_mv4", "deferred_mv4_copy");
+        currentState.createMaterializedView(
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
+    }
+
+    @Test
+    public void testMvOrderBy() throws Exception {
+        String mvName = "mv11_orderby";
+        String createMvSql = "create materialized view mv11_orderby " +
+                "distributed by hash(k3) buckets 10 " +
+                "order by (k3) " +
+                "refresh deferred manual " +
+                "as select k1 as k3, k2 from tbl1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        Table table = currentState.getDb("test").getTable(mvName);
+        List<String> createTableStmt = Lists.newArrayList();
+        GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv11_orderby` (`k3`, `k2`)\n" +
+                "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
+                "ORDER BY (k3)\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
+        String copySql = createTableStmt.get(0).replaceAll(mvName, mvName + "_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
     }
