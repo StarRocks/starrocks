@@ -276,7 +276,8 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
 
         // do evaluation with dictionary.
-        Status status = ExecNode::eval_conjuncts(_scanner_ctx.conjunct_ctxs_by_slot.at(slot_id), dict_value_chunk.get(), filter_ptr);
+        Status status = ExecNode::eval_conjuncts(_scanner_ctx.conjunct_ctxs_by_slot.at(slot_id), dict_value_chunk.get(),
+                                                 filter_ptr);
         if (!status.ok()) {
             LOG(WARNING) << "eval conjuncts fails: " << status.message();
             return false;

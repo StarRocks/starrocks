@@ -179,7 +179,7 @@ public:
     }
 
     Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
-                            const size_t& layer) override {
+                              const size_t& layer) override {
         DCHECK_EQ(sub_field_path.size(), layer);
         RETURN_IF_ERROR(_dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data()));
     }
@@ -915,7 +915,7 @@ public:
     }
 
     Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
-                            const size_t& layer) override {
+                              const size_t& layer) override {
         const std::string& sub_field = sub_field_path[layer];
         StructColumn* struct_column = nullptr;
         if (column->is_nullable()) {
