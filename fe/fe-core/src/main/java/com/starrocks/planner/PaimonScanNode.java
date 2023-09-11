@@ -155,8 +155,7 @@ public class PaimonScanNode extends ScanNode {
         scanRangeLocationsList.add(scanRangeLocations);
     }
 
-    @VisibleForTesting
-    static long getTotalFileLength(DataSplit split) {
+    long getTotalFileLength(DataSplit split) {
         long totalFileLength = split.dataFiles().stream().map(DataFileMeta::fileSize).reduce(0L, Long::sum);
         return totalFileLength;
     }

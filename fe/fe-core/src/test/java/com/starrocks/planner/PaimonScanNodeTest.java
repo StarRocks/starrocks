@@ -62,7 +62,7 @@ public class PaimonScanNodeTest {
     }
 
     @Test
-    public void testTotalFileLength() {
+    public void testTotalFileLength(@Mocked PaimonTable table) {
         BinaryRow row1 = new BinaryRow(2);
         BinaryRowWriter writer = new BinaryRowWriter(row1, 10);
         writer.writeInt(0, 2000);
@@ -75,13 +75,14 @@ public class PaimonScanNodeTest {
         meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
                 1, 1, 1, DUMMY_LEVEL));
 
-        List<DataFileMeta> meta2 = new ArrayList<>();
-        meta2.add(new DataFileMeta("file3", 100, 400, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL));
-
         DataSplit split = DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1).withDataFiles(meta1)
                 .isStreaming(false).build();
-        long totalFileLength = PaimonScanNode.getTotalFileLength(split);
-        Assert.assertTrue(totalFileLength > 0);
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
+        long totalFileLength = scanNode.getTotalFileLength(split);
+
+        Assert.assertEquals(200, totalFileLength);
     }
 }

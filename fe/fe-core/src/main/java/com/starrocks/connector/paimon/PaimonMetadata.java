@@ -222,7 +222,6 @@ public class PaimonMetadata implements ConnectorMetadata {
         return builder.build();
     }
 
-    @VisibleForTesting
     long getRowCount(List<? extends Split> splits) {
         long rowCount = 0;
         for (Split split : splits) {
