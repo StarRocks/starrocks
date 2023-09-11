@@ -1041,7 +1041,7 @@ public class ReportHandler extends Daemon {
                 TabletMeta tabletMeta = tabletMetaList.get(i);
 
                 // 1. If size of tabletMigrationMap exceeds (Config.tablet_sched_max_migration_task_sent_once - running_tasks_on_be),
-                // dot not send more tasks. The number of tasks running on be cannot exceed Config.tablet_sched_max_migration_task_sent_once
+                // dot not send more tasks. The number of tasks running on BE cannot exceed Config.tablet_sched_max_migration_task_sent_once
                 if (batchTask.getTaskNum() >=
                         Config.tablet_sched_max_migration_task_sent_once
                                 - AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false)) {
@@ -1050,7 +1050,7 @@ public class ReportHandler extends Daemon {
                     break OUTER;
                 }
 
-                // 2. If the task already running on be, do not send again
+                // 2. If the task already running on BE, do not send again
                 if (AgentTaskQueue.getTask(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, tabletId) != null) {
                     LOG.debug("migrate of tablet:{} is already running on BE", tabletId);
                     break OUTER;
@@ -1061,10 +1061,13 @@ public class ReportHandler extends Daemon {
                 if (db == null) {
                     continue;
                 }
-                OlapTable table = null;
+                OlapTable table;
                 db.readLock();
                 try {
                     table = (OlapTable) db.getTable(tabletMeta.getTableId());
+                    if (table == null) {
+                        continue;
+                    }
                 } finally {
                     db.readUnlock();
                 }
