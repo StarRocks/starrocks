@@ -762,7 +762,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 if (precision != null) {
                     desc.setColumnPrecision(precision);
                 }
-                desc.setColumnDefault(column.getMetaDefaultValue(null));
                 final Integer columnLength = column.getType().getColumnSize();
                 if (columnLength != null) {
                     desc.setColumnLength(columnLength);
