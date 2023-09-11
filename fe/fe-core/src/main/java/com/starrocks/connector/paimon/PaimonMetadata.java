@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.paimon;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
