@@ -264,6 +264,9 @@ public class IcebergMetadata implements ConnectorMetadata {
                     scan.planFiles(), scan.targetSplitSize());
             CloseableIterator<FileScanTask> fileScanTaskIterator = fileScanTaskIterable.iterator();
             Iterator<FileScanTask> fileScanTasks;
+
+            // Under the condition of ensuring that the data is correct, we disabled the limit optimization when table has
+            // partition evolution because this may cause data diff.
             boolean canPruneManifests = limit != -1 && !table.isV2Format() && onlyHasPartitionPredicate(table, predicate)
                     && limit < Integer.MAX_VALUE && table.getNativeTable().spec().specId() == 0 && enablePruneManifest();
 
