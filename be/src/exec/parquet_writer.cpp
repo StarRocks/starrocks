@@ -33,9 +33,7 @@ RollingAsyncParquetWriter::RollingAsyncParquetWriter(
           _parent_profile(parent_profile),
           _commit_func(std::move(commit_func)),
           _state(state),
-          _driver_id(driver_id) {
-    init();
-}
+          _driver_id(driver_id) {}
 
 Status RollingAsyncParquetWriter::init() {
     ASSIGN_OR_RETURN(
