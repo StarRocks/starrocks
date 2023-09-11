@@ -1132,9 +1132,8 @@ public class MaterializedViewRewriter {
                 }
                 final Operator.Builder newScanOpBuilder = OperatorBuilderFactory.build(mvScanOptExpression.getOp());
                 newScanOpBuilder.withOperator(mvScanOptExpression.getOp());
-                final ScalarOperator pruneFinalCompensationPredicate =
-                        MvNormalizePredicateRule.pruneRedundantPredicates(finalCompensationPredicate);
-                newScanOpBuilder.setPredicate(pruneFinalCompensationPredicate);
+                final ScalarOperator normalizedPredicate = normalizePredicate(finalCompensationPredicate);
+                newScanOpBuilder.setPredicate(normalizedPredicate);
                 mvScanOptExpression = OptExpression.create(newScanOpBuilder.build());
                 mvScanOptExpression.setLogicalProperty(null);
                 deriveLogicalProperty(mvScanOptExpression);
@@ -1143,6 +1142,13 @@ public class MaterializedViewRewriter {
             // add projection
             return viewBasedRewrite(rewriteContext, mvScanOptExpression);
         }
+    }
+
+    private ScalarOperator normalizePredicate(ScalarOperator predicate) {
+        ScalarOperator pruneFinalCompensationPredicate =
+                MvNormalizePredicateRule.pruneRedundantPredicates(predicate);
+        PredicateSplit split = PredicateSplit.splitPredicate(pruneFinalCompensationPredicate);
+        return Utils.compoundAnd(split.getEqualPredicates(), split.getRangePredicates(), split.getResidualPredicates());
     }
 
     private ScalarOperator getMVCompensationPredicate(RewriteContext rewriteContext,
