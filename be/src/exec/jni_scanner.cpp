@@ -441,7 +441,6 @@ Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
     size_t chunk_size = (*chunk)->num_rows();
     _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
-    _scanner_ctx.append_partition_column_to_chunk(chunk, chunk_size);
     RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));
     return status;
 }
