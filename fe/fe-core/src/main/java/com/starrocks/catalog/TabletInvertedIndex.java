@@ -319,16 +319,17 @@ public class TabletInvertedIndex {
         if (db == null) {
             return;
         }
-        db.readLock();
-        try {
-            OlapTable table = (OlapTable) db.getTable(tabletMeta.getTableId());
-            if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
-                LOG.debug("tablet:{} is primary key table, do not support migrate", tabletId);
-                // Currently, primary key table doesn't support tablet migration between local disks.
-                return;
-            }
-        } finally {
-            db.readUnlock();
+        // NOTICE: Database lock shouldn't be requested here:
+        // 1. the caller of addToTabletMigrationMap is holding TabletInvertedIndex's read lock,
+        //  and if the db lock is requested here, it can fall into dead lock,
+        //  because the lock order in other threads is db lock first.
+        // 2. db.getTable is thread safe, and table's key type will never be changed,
+        // so there is no need to request the db lock.
+        OlapTable table = (OlapTable) db.getTable(tabletMeta.getTableId());
+        if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+            LOG.debug("tablet:{} is primary key table, do not support migrate", tabletId);
+            // Currently, primary key table doesn't support tablet migration between local disks.
+            return;
         }
 
         tabletMigrationMap.put(storageMedium, tabletId);
