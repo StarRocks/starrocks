@@ -14,7 +14,9 @@
 
 #pragma once
 
+#include <cstddef>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace starrocks::parquet {
@@ -22,7 +24,7 @@ namespace starrocks::parquet {
 class ColumnReadOrderCtx {
 public:
     ColumnReadOrderCtx(std::vector<int> col_idxs, size_t all_cost, std::unordered_map<int, size_t> col_cost)
-            : _column_indices(col_idxs), _min_round_cost(all_cost), _column_cost_map(std::move(col_cost)) {}
+            : _column_indices(std::move(col_idxs)), _min_round_cost(all_cost), _column_cost_map(std::move(col_cost)) {}
 
     ~ColumnReadOrderCtx() = default;
 
