@@ -312,7 +312,7 @@ public class InsertStmt extends DmlStmt {
         }
 
         if (writeSingleFile && partitionBy != null) {
-            throw new SemanticException("cannot use partition_by and single simultaneously");
+            throw new SemanticException("cannot use partition_by and single simultaneously.");
         }
 
         if (writeSingleFile) {
@@ -330,7 +330,7 @@ public class InsertStmt extends DmlStmt {
         // extra validation for using partitionBy
         if (!path.endsWith("/")) {
             throw new SemanticException(
-                    "If partition_by is used, path should be a directory ends with forward slash(/)");
+                    "If partition_by is used, path should be a directory ends with forward slash(/).");
         }
 
         List<String> columnNames = columns.stream().map(Column::getName).collect(Collectors.toList());
