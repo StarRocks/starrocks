@@ -222,9 +222,7 @@ public class LoadPlanner {
         this.label = label;
         this.timeoutS = timeoutS;
         this.etlJobType = EtlJobType.STREAM_LOAD;
-        if (Config.enable_pipeline_load) {
-            this.context.getSessionVariable().setEnablePipelineEngine(true);
-        }
+        this.context.getSessionVariable().setEnablePipelineEngine(true);
     }
 
     public void setWarehouseId(long warehouseId) {
@@ -321,23 +319,18 @@ public class LoadPlanner {
         if (!needShufflePlan) {
             sinkFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
         }
-        prepareSinkFragment(sinkFragment, partitionIds, true, true, forceReplicatedStorage);
+        prepareSinkFragment(sinkFragment, partitionIds, true, forceReplicatedStorage);
         if (this.context != null) {
-            if (this.context.getSessionVariable().isEnablePipelineEngine() && Config.enable_pipeline_load) {
-                if (needShufflePlan) {
-                    sinkFragment.setPipelineDop(1);
-                    sinkFragment.setParallelExecNum(parallelInstanceNum);
-                    sinkFragment.setForceSetTableSinkDop();
-                } else {
-                    sinkFragment.setPipelineDop(parallelInstanceNum);
-                    sinkFragment.setParallelExecNum(1);
-                }
-                sinkFragment.setHasOlapTableSink();
-                sinkFragment.setForceAssignScanRangesPerDriverSeq();
-            } else {
+            if (needShufflePlan) {
                 sinkFragment.setPipelineDop(1);
                 sinkFragment.setParallelExecNum(parallelInstanceNum);
+                sinkFragment.setForceSetTableSinkDop();
+            } else {
+                sinkFragment.setPipelineDop(parallelInstanceNum);
+                sinkFragment.setParallelExecNum(1);
             }
+            sinkFragment.setHasOlapTableSink();
+            sinkFragment.setForceAssignScanRangesPerDriverSeq();
         } else {
             sinkFragment.setPipelineDop(1);
             sinkFragment.setParallelExecNum(parallelInstanceNum);
@@ -429,7 +422,7 @@ public class LoadPlanner {
         return nullExprInAutoIncrement;
     }
 
-    private void prepareSinkFragment(PlanFragment sinkFragment, List<Long> partitionIds, boolean canUsePipeLine,
+    private void prepareSinkFragment(PlanFragment sinkFragment, List<Long> partitionIds,
                                      boolean completeTabletSink, boolean forceReplicatedStorage) throws UserException {
         DataSink dataSink = null;
         if (destTable instanceof OlapTable) {
@@ -442,7 +435,7 @@ public class LoadPlanner {
                 enableAutomaticPartition = olapTable.supportedAutomaticPartition();
             }
             Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
-            dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds, canUsePipeLine,
+            dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds,
                     olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
                     checkNullExprInAutoIncrement(), enableAutomaticPartition, warehouseId);
             if (this.missAutoIncrementColumn == Boolean.TRUE) {

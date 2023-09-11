@@ -120,7 +120,6 @@ public class OlapTableSink extends DataSink {
     // set after init called
     private TDataSink tDataSink;
 
-    private final boolean enablePipelineLoad;
     private final TWriteQuorumType writeQuorum;
     private final boolean enableReplicatedStorage;
 
@@ -135,25 +134,10 @@ public class OlapTableSink extends DataSink {
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
                          boolean nullExprInAutoIncrement, boolean enableAutomaticPartition) {
-        this(dstTable, tupleDescriptor, partitionIds, true, writeQuorum, enableReplicatedStorage,
-                nullExprInAutoIncrement, enableAutomaticPartition);
-    }
-
-    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
-                         TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
-                         boolean nullExprInAutoIncrement, boolean enableAutomaticPartition, long warehouseId) {
-        this(dstTable, tupleDescriptor, partitionIds, writeQuorum, enableReplicatedStorage, nullExprInAutoIncrement, enableAutomaticPartition);
-        this.warehouseId = warehouseId;
-    }
-
-    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
-                         boolean enablePipelineLoad, TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
-                         boolean nullExprInAutoIncrement, boolean enableAutomaticPartition) {
         this.dstTable = dstTable;
         this.tupleDescriptor = tupleDescriptor;
         this.partitionIds = partitionIds;
         this.clusterId = dstTable.getClusterId();
-        this.enablePipelineLoad = enablePipelineLoad;
         this.writeQuorum = writeQuorum;
         this.enableReplicatedStorage = enableReplicatedStorage;
         this.nullExprInAutoIncrement = nullExprInAutoIncrement;
@@ -172,10 +156,10 @@ public class OlapTableSink extends DataSink {
         this.partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
     }
 
-    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
-                         boolean enablePipelineLoad, TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
+    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds, 
+                         TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
                          boolean nullExprInAutoIncrement, boolean enableAutomaticPartition, long warehouseId) {
-        this(dstTable, tupleDescriptor, partitionIds, enablePipelineLoad, writeQuorum, enableReplicatedStorage,
+        this(dstTable, tupleDescriptor, partitionIds, writeQuorum, enableReplicatedStorage,
                 nullExprInAutoIncrement, enableAutomaticPartition);
         this.warehouseId = warehouseId;
     }
@@ -634,8 +618,7 @@ public class OlapTableSink extends DataSink {
     }
 
     public boolean canUsePipeLine() {
-        // @TODO(silverbullet233): remove this config and always return true
-        return Config.enable_pipeline_load && enablePipelineLoad;
+        return true;
     }
 
     public int getClusterId() {

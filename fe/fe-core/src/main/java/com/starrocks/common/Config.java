@@ -2026,6 +2026,7 @@ public class Config extends ConfigBase {
     /**
      * Enable pipeline engine load
      */
+    @Deprecated
     @ConfField(mutable = true)
     public static boolean enable_pipeline_load = true;
 
