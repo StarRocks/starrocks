@@ -196,11 +196,12 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
             const auto* null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
             const auto num_rows = null_column->size();
             if constexpr (lt_is_string<LT>) {
+                const auto& data = data_column->get_proxy_data();
                 for (auto i = 0; i < num_rows; ++i) {
                     if (nullable_column->is_null(i)) {
                         ARROW_RETURN_NOT_OK(builder->AppendNull());
                     } else {
-                        ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data_column->get_slice(i), -1, -1)));
+                        ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], -1, -1)));
                     }
                 }
             } else {
@@ -223,8 +224,9 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
             const auto* data_column = down_cast<StarRocksColumnType*>(column.get());
             const auto num_rows = column->size();
             if constexpr (lt_is_string<LT>) {
+                const auto& data = data_column->get_proxy_data();
                 for (auto i = 0; i < num_rows; ++i) {
-                    ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data_column->get_slice(i), -1, -1)));
+                    ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], -1, -1)));
                 }
             } else {
                 const auto& data = data_column->get_data();
