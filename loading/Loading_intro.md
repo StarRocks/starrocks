@@ -163,17 +163,9 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
 
 您可以通过修改每个 BE 的配置文件 **be.conf** 来设置如下参数：
 
-- `push_write_mbytes_per_sec`
-
-  BE 上单个 Tablet 的最大写入速度，默认值为 10 MB/s。根据表结构 (Schema) 的不同，通常 BE 对单个 Tablet 的最大写入速度大约在 10 MB/s 到 30 MB/s 之间。可以适当调整该参数的取值来控制导入速度。
-
 - `write_buffer_size`
 
-  BE 上内存块的大小阈值，默认阈值为 100 MB。导入的数据在 BE 上会先写入一个内存块，当内存块的大小达到这个阈值以后才会写回磁盘。如果阈值过小，可能会导致 BE 上存在大量的小文件，影响查询的性能，这时候可以适当提高这个阈值来减少文件数量。如果阈值过大，可能会导致远程过程调用（Remote Procedure Call，简称 RPC）超时，这时候需要配合下面的 `tablet_writer_rpc_timeout_sec` 参数来适当地调整 `write_buffer_size` 参数的取值。
-
-- `tablet_writer_rpc_timeout_sec`
-
-  导入过程中，Coordinator BE 发送一批次数据的 RPC 超时时间，默认为 600 秒。每批次数据包含 1024 行。RPC 可能涉及多个分片内存块的写盘操作，所以可能会因为写盘导致 RPC 超时，这时候可以适当地调整这个超时时间来减少超时错误（如 "send batch fail" 错误）。同时，如果调大 `write_buffer_size` 参数的取值，也需要适当地调大 `tablet_writer_rpc_timeout_sec` 参数的取值。
+  BE 上内存块的大小阈值，默认阈值为 100 MB。导入的数据在 BE 上会先写入一个内存块，当内存块的大小达到这个阈值以后才会写回磁盘。如果阈值过小，可能会导致 BE 上存在大量的小文件，影响查询的性能，这时候可以适当提高这个阈值来减少文件数量。如果阈值过大，可能会导致远程过程调用（Remote Procedure Call，简称 RPC）超时，这时候可以适当地调整该参数的取值。
 
 - `streaming_load_rpc_max_alive_time_sec`
 
