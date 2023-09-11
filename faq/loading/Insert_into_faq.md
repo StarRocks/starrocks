@@ -10,7 +10,7 @@
 
 该错误因流式导入 RPC 超时导致。您可以通过在配置文件中调节 RPC 超时相关参数解决。
 
-您需要在 BE 配置文件 **be.conf** 中修改以下两个系统配置项，并重启集群使修改生效。
+您需要在 BE 配置文件 **be.conf** 中修改以下系统配置项，并重启集群使修改生效：
 
 - `streaming_load_rpc_max_alive_time_sec`: 流式导入 RPC 的超时时间，默认为 1200，单位为秒。
 - `tablet_writer_rpc_timeout_sec`：TabletWriter 的超时时长，默认为 600，单位为秒。
