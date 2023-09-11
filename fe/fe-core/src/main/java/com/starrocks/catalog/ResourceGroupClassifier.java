@@ -259,7 +259,7 @@ public class ResourceGroupClassifier {
         private static final Pattern STR_RANGE_PATTERN = Pattern.compile(STR_RANGE_REGEX, Pattern.CASE_INSENSITIVE);
 
         public static final String FORMAT_STR_RANGE_MESSAGE = "the format must be '[min, max)' " +
-                "where min and max are double (including infinity and -infinity) " +
+                "where min and max are finite double " +
                 "and min must be less than max";
 
         @SerializedName(value = "min")
@@ -281,6 +281,10 @@ public class ResourceGroupClassifier {
             try {
                 double min = Double.parseDouble(matcher.group(1));
                 double max = Double.parseDouble(matcher.group(2));
+
+                if (!Double.isFinite(min) || !Double.isFinite(max)) {
+                    return null;
+                }
 
                 if (min >= max) {
                     return null;

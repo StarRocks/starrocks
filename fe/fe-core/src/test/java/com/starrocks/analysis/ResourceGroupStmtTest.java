@@ -1193,7 +1193,8 @@ public class ResourceGroupStmtTest {
         }
 
         List<TestCase> testCases = ImmutableList.of(
-                new TestCase("[1000,infinity)", "[2, 100)"),
+                new TestCase("[1000,Infinity)", "[2, 100)"),
+                new TestCase("[1000,NaN)", "[2, 100)"),
                 new TestCase("[-infinity,1000)", "[2, 100)"),
 
                 new TestCase("[1, 10]", "[2, 100)"),
