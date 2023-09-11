@@ -220,6 +220,14 @@ You can configure the following parameters in the configuration file **be.conf**
 
     If the memory capacity of the machine on which the BE resides is M, the maximum amount of memory that can be consumed for load jobs is calculated as follows: `M x 90% x 90% x 30%`.
 
+### System variable configurations
+
+You can configure the following [system variable](../reference/System_variable.md):
+
+- `query_timeout`
+
+  The query timeout duration. Unit: seconds. Value range: `1` to `259200`. Default value: `300`. This variable will act on all query statements in the current connection, as well as INSERT statements.
+
 ## Troubleshooting
 
 For more information, see [FAQ about data loading](../faq/loading/Loading_faq.md).
