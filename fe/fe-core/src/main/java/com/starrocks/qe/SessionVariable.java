@@ -31,6 +31,7 @@ import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TOverflowMode;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TTabletInternalParallelMode;
@@ -1901,7 +1902,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         if (maxPushdownConditionsPerColumn > -1) {
             tResult.setMax_pushdown_conditions_per_column(maxPushdownConditionsPerColumn);
         }
+<<<<<<< HEAD
         tResult.setEnable_spilling(false);
+=======
+
+        if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_IF_OVERFLOW)) {
+            tResult.setOverflow_mode(TOverflowMode.REPORT_ERROR);
+        }
+
+        tResult.setEnable_spill(enableSpill);
+        if (enableSpill) {
+            tResult.setSpill_mem_table_size(spillMemTableSize);
+            tResult.setSpill_mem_table_num(spillMemTableNum);
+            tResult.setSpill_mem_limit_threshold(spillMemLimitThreshold);
+            tResult.setSpill_operator_min_bytes(spillOperatorMinBytes);
+            tResult.setSpill_operator_max_bytes(spillOperatorMaxBytes);
+            tResult.setSpill_revocable_max_bytes(spillRevocableMaxBytes);
+            tResult.setSpill_encode_level(spillEncodeLevel);
+            tResult.setSpillable_operator_mask(spillableOperatorMask);
+        }
+>>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419))
 
         // Compression Type
         TCompressionType compressionType = CompressionUtils.findTCompressionByName(transmissionCompressionType);

@@ -119,6 +119,8 @@ public:
     StatusOr<ColumnPtr> evaluate(vectorized::Chunk* chunk, uint8_t* filter = nullptr);
     StatusOr<ColumnPtr> evaluate(Expr* expr, vectorized::Chunk* chunk, uint8_t* filter = nullptr);
 
+    bool error_if_overflow() const;
+
 private:
     friend class Expr;
     friend class ScalarFnCall;

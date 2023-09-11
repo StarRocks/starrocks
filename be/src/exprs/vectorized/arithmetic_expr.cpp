@@ -6,11 +6,20 @@
 
 #include "common/object_pool.h"
 #include "common/statusor.h"
+<<<<<<< HEAD:be/src/exprs/vectorized/arithmetic_expr.cpp
 #include "exprs/vectorized/arithmetic_operation.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/decimal_binary_function.h"
 #include "exprs/vectorized/decimal_cast_expr.h"
 #include "exprs/vectorized/unary_function.h"
+=======
+#include "exprs/arithmetic_operation.h"
+#include "exprs/binary_function.h"
+#include "exprs/decimal_binary_function.h"
+#include "exprs/decimal_cast_expr.h"
+#include "exprs/overflow.h"
+#include "exprs/unary_function.h"
+>>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/src/exprs/arithmetic_expr.cpp
 #include "runtime/decimalv3.h"
 #include "util/pred_guard.h"
 
@@ -55,25 +64,25 @@ public:
             if (lhs_pt == TYPE_DECIMAL64 && rhs_pt == TYPE_DECIMAL64 && Type == TYPE_DECIMAL128) {
                 ASSIGN_OR_RETURN(auto l, _children[0]->get_child(0)->evaluate_checked(context, chunk));
                 ASSIGN_OR_RETURN(auto r, _children[1]->get_child(0)->evaluate_checked(context, chunk));
-                return VectorizedStrictDecimalBinaryFunction<MulOp64x64_128, false>::template evaluate<
+                return VectorizedStrictDecimalBinaryFunction<MulOp64x64_128, OverflowMode::IGNORE>::template evaluate<
                         TYPE_DECIMAL64, TYPE_DECIMAL64, Type>(l, r);
             }
             if (lhs_pt == TYPE_DECIMAL32 && rhs_pt == TYPE_DECIMAL64 && Type == TYPE_DECIMAL128) {
                 ASSIGN_OR_RETURN(auto l, _children[0]->get_child(0)->evaluate_checked(context, chunk));
                 ASSIGN_OR_RETURN(auto r, _children[1]->get_child(0)->evaluate_checked(context, chunk));
-                return VectorizedStrictDecimalBinaryFunction<MulOp32x64_128, false>::template evaluate<
+                return VectorizedStrictDecimalBinaryFunction<MulOp32x64_128, OverflowMode::IGNORE>::template evaluate<
                         TYPE_DECIMAL32, TYPE_DECIMAL64, Type>(l, r);
             }
             if (lhs_pt == TYPE_DECIMAL64 && rhs_pt == TYPE_DECIMAL32 && Type == TYPE_DECIMAL128) {
                 ASSIGN_OR_RETURN(auto l, _children[0]->get_child(0)->evaluate_checked(context, chunk));
                 ASSIGN_OR_RETURN(auto r, _children[1]->get_child(0)->evaluate_checked(context, chunk));
-                return VectorizedStrictDecimalBinaryFunction<MulOp32x64_128, false>::template evaluate<
+                return VectorizedStrictDecimalBinaryFunction<MulOp32x64_128, OverflowMode::IGNORE>::template evaluate<
                         TYPE_DECIMAL32, TYPE_DECIMAL64, Type>(r, l);
             }
             if (lhs_pt == TYPE_DECIMAL32 && rhs_pt == TYPE_DECIMAL32 && Type == TYPE_DECIMAL128) {
                 ASSIGN_OR_RETURN(auto l, _children[0]->get_child(0)->evaluate_checked(context, chunk));
                 ASSIGN_OR_RETURN(auto r, _children[1]->get_child(0)->evaluate_checked(context, chunk));
-                return VectorizedStrictDecimalBinaryFunction<MulOp32x32_128, false>::template evaluate<
+                return VectorizedStrictDecimalBinaryFunction<MulOp32x32_128, OverflowMode::IGNORE>::template evaluate<
                         TYPE_DECIMAL32, TYPE_DECIMAL32, Type>(r, l);
             }
         }
@@ -93,7 +102,13 @@ public:
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
         if constexpr (pt_is_decimal<Type>) {
             // Enable overflow checking in decimal arithmetic
-            return VectorizedStrictDecimalBinaryFunction<OP, true>::template evaluate<Type>(l, r);
+            if (context != nullptr && context->error_if_overflow()) {
+                return VectorizedStrictDecimalBinaryFunction<OP, OverflowMode::REPORT_ERROR>::template evaluate<Type>(
+                        l, r);
+            } else {
+                return VectorizedStrictDecimalBinaryFunction<OP, OverflowMode::OUTPUT_NULL>::template evaluate<Type>(l,
+                                                                                                                     r);
+            }
         } else {
             using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
             return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type>(l, r);
@@ -114,6 +129,7 @@ template <PrimitiveType Type, typename Op>
 class VectorizedDivArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedDivArithmeticExpr);
+<<<<<<< HEAD:be/src/exprs/vectorized/arithmetic_expr.cpp
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
         if constexpr (is_intdiv_op<Op> && pt_is_bigint<Type>) {
             using CastFunction = VectorizedUnaryFunction<DecimalTo<true>>;
@@ -132,7 +148,35 @@ public:
             }
             default:
                 return evaluate_internal<Type>(context, ptr);
+=======
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+        if constexpr (is_intdiv_op<Op> && lt_is_bigint<Type>) {
+#define EVALUATE_CHECKED_OVERFLOW(Mode)                                                   \
+    using CastFunction = VectorizedUnaryFunction<DecimalTo<Mode>>;                        \
+    switch (_children[0]->type().type) {                                                  \
+    case TYPE_DECIMAL32: {                                                                \
+        ASSIGN_OR_RETURN(auto column, evaluate_internal<TYPE_DECIMAL32>(context, ptr));   \
+        return CastFunction::evaluate<TYPE_DECIMAL32, LogicalType::TYPE_BIGINT>(column);  \
+    }                                                                                     \
+    case TYPE_DECIMAL64: {                                                                \
+        ASSIGN_OR_RETURN(auto column, evaluate_internal<TYPE_DECIMAL64>(context, ptr));   \
+        return CastFunction::evaluate<TYPE_DECIMAL64, LogicalType::TYPE_BIGINT>(column);  \
+    }                                                                                     \
+    case TYPE_DECIMAL128: {                                                               \
+        ASSIGN_OR_RETURN(auto column, evaluate_internal<TYPE_DECIMAL128>(context, ptr));  \
+        return CastFunction::evaluate<TYPE_DECIMAL128, LogicalType::TYPE_BIGINT>(column); \
+    }                                                                                     \
+    default:                                                                              \
+        return evaluate_internal<Type>(context, ptr);                                     \
+    }
+
+            if (context != nullptr && context->error_if_overflow()) {
+                EVALUATE_CHECKED_OVERFLOW(OverflowMode::REPORT_ERROR);
+            } else {
+                EVALUATE_CHECKED_OVERFLOW(OverflowMode::OUTPUT_NULL);
+>>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/src/exprs/arithmetic_expr.cpp
             }
+#undef EVALUATE_CHECKED_OVERFLOW
         } else {
             return evaluate_internal<Type>(context, ptr);
         }
@@ -143,9 +187,20 @@ private:
     StatusOr<ColumnPtr> evaluate_internal(ExprContext* context, vectorized::Chunk* ptr) {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
+<<<<<<< HEAD:be/src/exprs/vectorized/arithmetic_expr.cpp
         if constexpr (pt_is_decimal<LType>) {
             using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<LType, DivOp, true>;
             return VectorizedDiv::template evaluate<LType>(l, r);
+=======
+        if constexpr (lt_is_decimal<LType>) {
+            if (context != nullptr && context->error_if_overflow()) {
+                using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<LType, DivOp, OverflowMode::REPORT_ERROR>;
+                return VectorizedDiv::template evaluate<LType>(l, r);
+            } else {
+                using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<LType, DivOp, OverflowMode::OUTPUT_NULL>;
+                return VectorizedDiv::template evaluate<LType>(l, r);
+            }
+>>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/src/exprs/arithmetic_expr.cpp
         } else {
             using RightZeroCheck = ArithmeticRightZeroCheck<LType>;
             using ArithmeticDiv = ArithmeticBinaryOperator<DivOp, LType>;
@@ -163,9 +218,20 @@ public:
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 
+<<<<<<< HEAD:be/src/exprs/vectorized/arithmetic_expr.cpp
         if constexpr (pt_is_decimal<Type>) {
             using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<Type, ModOp, true>;
             return VectorizedDiv::template evaluate<Type>(l, r);
+=======
+        if constexpr (lt_is_decimal<Type>) {
+            if (context != nullptr && context->error_if_overflow()) {
+                using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<Type, ModOp, OverflowMode::REPORT_ERROR>;
+                return VectorizedDiv::template evaluate<Type>(l, r);
+            } else {
+                using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<Type, ModOp, OverflowMode::OUTPUT_NULL>;
+                return VectorizedDiv::template evaluate<Type>(l, r);
+            }
+>>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/src/exprs/arithmetic_expr.cpp
         } else {
             using RightZeroCheck = ArithmeticRightZeroCheck<Type>;
             using ArithmeticMod = ArithmeticBinaryOperator<ModOp, Type>;

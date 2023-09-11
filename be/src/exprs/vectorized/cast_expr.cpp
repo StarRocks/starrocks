@@ -1069,13 +1069,26 @@ public:
         // For json type, it could not be converted from decimal directly, as a workaround we convert decimal
         // to double at first, then convert double to JSON
         if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
+<<<<<<< HEAD:be/src/exprs/vectorized/cast_expr.cpp
             if constexpr (pt_is_decimal<FromType>) {
                 ColumnPtr double_column =
                         VectorizedUnaryFunction<DecimalTo<true>>::evaluate<FromType, TYPE_DOUBLE>(column);
+=======
+            if constexpr (lt_is_decimal<FromType>) {
+                ColumnPtr double_column;
+                if (context != nullptr && context->error_if_overflow()) {
+                    double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<
+                            FromType, TYPE_DOUBLE>(column);
+                } else {
+                    double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<
+                            FromType, TYPE_DOUBLE>(column);
+                }
+>>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/src/exprs/cast_expr.cpp
                 result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(double_column);
             } else {
                 result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(column);
             }
+<<<<<<< HEAD:be/src/exprs/vectorized/cast_expr.cpp
         } else if constexpr (pt_is_decimal<FromType> && pt_is_decimal<ToType>) {
             return VectorizedUnaryFunction<DecimalToDecimal<true>>::evaluate<FromType, ToType>(
                     column, to_type.precision, to_type.scale);
@@ -1084,6 +1097,33 @@ public:
         } else if constexpr (pt_is_decimal<ToType>) {
             return VectorizedUnaryFunction<DecimalFrom<true>>::evaluate<FromType, ToType>(column, to_type.precision,
                                                                                           to_type.scale);
+=======
+        } else if constexpr (lt_is_decimal<FromType> && lt_is_decimal<ToType>) {
+            if (context != nullptr && context->error_if_overflow()) {
+                return VectorizedUnaryFunction<DecimalToDecimal<OverflowMode::REPORT_ERROR>>::evaluate<FromType,
+                                                                                                       ToType>(
+                        column, to_type.precision, to_type.scale);
+            } else {
+                return VectorizedUnaryFunction<DecimalToDecimal<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
+                        column, to_type.precision, to_type.scale);
+            }
+        } else if constexpr (lt_is_decimal<FromType>) {
+            if (context != nullptr && context->error_if_overflow()) {
+                return VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
+                        column);
+            } else {
+                return VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
+                        column);
+            }
+        } else if constexpr (lt_is_decimal<ToType>) {
+            if (context != nullptr && context->error_if_overflow()) {
+                return VectorizedUnaryFunction<DecimalFrom<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
+                        column, to_type.precision, to_type.scale);
+            } else {
+                return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
+                        column, to_type.precision, to_type.scale);
+            }
+>>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/src/exprs/cast_expr.cpp
         } else {
             result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(column);
         }
@@ -1243,8 +1283,19 @@ public:
             return VectorizedStringStrictUnaryFunction<CastToString>::template evaluate<Type, TYPE_VARCHAR>(column);
         }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/cast_expr.cpp
         if constexpr (pt_is_decimal<Type>) {
             return VectorizedUnaryFunction<DecimalTo<true>>::evaluate<Type, TYPE_VARCHAR>(column);
+=======
+        if constexpr (lt_is_decimal<Type>) {
+            if (context != nullptr && context->error_if_overflow()) {
+                return VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<Type, TYPE_VARCHAR>(
+                        column);
+            } else {
+                return VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<Type, TYPE_VARCHAR>(
+                        column);
+            }
+>>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/src/exprs/cast_expr.cpp
         }
 
         // must be: TYPE_FLOAT, TYPE_DOUBLE, TYPE_CHAR, TYPE_VARCHAR...
