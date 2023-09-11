@@ -34,8 +34,8 @@ import java.util.Set;
 
 import static java.util.Locale.ENGLISH;
 
-public class RangerStarRocksAccessControl extends RangerAccessController {
-    public RangerStarRocksAccessControl() {
+public class RangerStarRocksAccessController extends RangerAccessController {
+    public RangerStarRocksAccessController() {
         super("starrocks");
     }
 

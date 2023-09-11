@@ -25,7 +25,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import java.util.List;
 import java.util.Set;
 
-public interface AccessControl {
+public interface AccessController {
     default void checkSystemAction(UserIdentity currentUser, Set<Long> roleIds, PrivilegeType privilegeType)
             throws AccessDeniedException {
         throw new AccessDeniedException();

@@ -192,7 +192,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             g_publish_tablet_version_latency << (butil::gettimeofday_us() - run_ts);
         };
 
-        auto st = thread_pool->submit_func(task, ThreadPool::HIGH_PRIORITY);
+        auto st = thread_pool->submit_func(task);
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
             LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_id=" << tablet_id
@@ -254,7 +254,7 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
             }
         };
 
-        auto st = thread_pool->submit_func(task, ThreadPool::HIGH_PRIORITY);
+        auto st = thread_pool->submit_func(task);
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
             LOG(WARNING) << "Fail to submit publish log version task: " << st;

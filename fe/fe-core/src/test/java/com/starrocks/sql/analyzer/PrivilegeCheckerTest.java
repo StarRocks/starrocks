@@ -60,11 +60,11 @@ import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
-import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
@@ -621,27 +621,27 @@ public class PrivilegeCheckerTest {
                 "grant DROP on db1.tbl1 to test", ctx), ctx);
         ctxToTestUser();
         AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
-        AnalyzeJob analyzeJob = new AnalyzeJob(-1, -1, Lists.newArrayList(),
+        NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(-1, -1, Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
-        List<String> showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, analyzeJob);
+        List<String> showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, nativeAnalyzeJob);
         System.out.println(showResult);
         // can show result for analyze job with all type
         Assert.assertNotNull(showResult);
 
-        analyzeJob.setId(2);
-        analyzeManager.addAnalyzeJob(analyzeJob);
+        nativeAnalyzeJob.setId(2);
+        analyzeManager.addAnalyzeJob(nativeAnalyzeJob);
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db3.tbl1 to test");
         try {
-            new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+            new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db2.tbl1 to test");
-        new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl2 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db2.tbl1 from test");
@@ -649,54 +649,54 @@ public class PrivilegeCheckerTest {
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db1 = globalStateMgr.getDb("db1");
-        analyzeJob = new AnalyzeJob(db1.getId(), -1, Lists.newArrayList(),
+        nativeAnalyzeJob = new NativeAnalyzeJob(db1.getId(), -1, Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
-        showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, analyzeJob);
+        showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, nativeAnalyzeJob);
         System.out.println(showResult);
         // can show result for analyze job with db.*
         Assert.assertNotNull(showResult);
 
-        analyzeJob.setId(3);
-        analyzeManager.addAnalyzeJob(analyzeJob);
+        nativeAnalyzeJob.setId(3);
+        analyzeManager.addAnalyzeJob(nativeAnalyzeJob);
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
         try {
-            new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+            new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
-        new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl2 from test");
 
         Table tbl1 = db1.getTable("tbl1");
-        analyzeJob = new AnalyzeJob(db1.getId(), tbl1.getId(), Lists.newArrayList(),
+        nativeAnalyzeJob = new NativeAnalyzeJob(db1.getId(), tbl1.getId(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
-        showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, analyzeJob);
+        showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, nativeAnalyzeJob);
         System.out.println(showResult);
         // can show result for analyze job on table that user has any privilege on
         Assert.assertNotNull(showResult);
-        Assert.assertEquals("tbl1", showResult.get(2));
+        Assert.assertEquals("tbl1", showResult.get(3));
 
-        analyzeJob.setId(4);
-        analyzeManager.addAnalyzeJob(analyzeJob);
+        nativeAnalyzeJob.setId(4);
+        analyzeManager.addAnalyzeJob(nativeAnalyzeJob);
         try {
-            new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+            new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
-        new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
 
         Database db2 = globalStateMgr.getDb("db2");
         tbl1 = db2.getTable("tbl1");
-        analyzeJob = new AnalyzeJob(db2.getId(), tbl1.getId(), Lists.newArrayList(),
+        nativeAnalyzeJob = new NativeAnalyzeJob(db2.getId(), tbl1.getId(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
-        showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, analyzeJob);
+        showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, nativeAnalyzeJob);
         System.out.println(showResult);
         // cannot show result for analyze job on table that user doesn't have any privileges on
         Assert.assertNull(showResult);

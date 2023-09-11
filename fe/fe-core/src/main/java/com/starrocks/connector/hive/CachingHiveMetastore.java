@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
@@ -348,7 +347,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
 
     private Map<HivePartitionName, Partition> loadPartitionsByNames(Iterable<? extends HivePartitionName> partitionNames) {
         HivePartitionName hivePartitionName = Iterables.get(partitionNames, 0);
-        Map<String, Partition> partitionsByNames =  metastore.getPartitionsByNames(
+        Map<String, Partition> partitionsByNames = metastore.getPartitionsByNames(
                 hivePartitionName.getDatabaseName(),
                 hivePartitionName.getTableName(),
                 Streams.stream(partitionNames).map(partitionName -> partitionName.getPartitionNames().get())
@@ -428,7 +427,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
         HivePartitionName hivePartitionName = Iterables.get(partitionNames, 0);
         Table table = getTable(hivePartitionName.getDatabaseName(), hivePartitionName.getTableName());
 
-        Map<String, HivePartitionStats> partitionsStatistics =  metastore.getPartitionStatistics(table,
+        Map<String, HivePartitionStats> partitionsStatistics = metastore.getPartitionStatistics(table,
                 Streams.stream(partitionNames).map(partitionName -> partitionName.getPartitionNames().get())
                         .collect(Collectors.toList()));
 
@@ -441,7 +440,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
 
     @Override
     public List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName,
-                                                             boolean onlyCachedPartitions) {
+                                                boolean onlyCachedPartitions) {
         HiveTableName hiveTableName = HiveTableName.of(hiveDbName, hiveTblName);
         tableNameLockMap.putIfAbsent(hiveTableName, hiveDbName + "_" + hiveTblName + "_lock");
         String lockStr = tableNameLockMap.get(hiveTableName);
@@ -534,9 +533,9 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     private <T> List<HivePartitionName> refreshPartitions(List<HivePartitionName> presentInCache,
-                                       List<String> partitionNamesInHMS,
-                                       Function<List<HivePartitionName>, Map<HivePartitionName, T>> reload,
-                                       LoadingCache<HivePartitionName, T> cache) {
+                                                          List<String> partitionNamesInHMS,
+                                                          Function<List<HivePartitionName>, Map<HivePartitionName, T>> reload,
+                                                          LoadingCache<HivePartitionName, T> cache) {
         List<HivePartitionName> needToRefresh = Lists.newArrayList();
         List<HivePartitionName> needToInvalidate = Lists.newArrayList();
         for (HivePartitionName name : presentInCache) {

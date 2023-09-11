@@ -256,7 +256,7 @@ public class PlanFragmentBuilder {
         view.setMaintenancePlan(execPlan);
         List<Long> fakePartitionIds = Arrays.asList(1L, 2L, 3L);
 
-        DataSink tableSink = new OlapTableSink(view, tupleDesc, fakePartitionIds, true,
+        DataSink tableSink = new OlapTableSink(view, tupleDesc, fakePartitionIds,
                 view.writeQuorum(), view.enableReplicatedStorage(), false, false);
         execPlan.getTopFragment().setSink(tableSink);
 
@@ -659,7 +659,11 @@ public class PlanFragmentBuilder {
         }
 
         // get all column access path, and mark paths which one is predicate used
-        private List<ColumnAccessPath> computeAllColumnAccessPath(PhysicalScanOperator scan) {
+        private List<ColumnAccessPath> computeAllColumnAccessPath(PhysicalScanOperator scan, ExecPlan context) {
+            if (!context.getConnectContext().getSessionVariable().isCboPredicateSubfieldPath()) {
+                return scan.getColumnAccessPaths();
+            }
+
             if (scan.getPredicate() == null) {
                 return scan.getColumnAccessPaths();
             }
@@ -669,7 +673,7 @@ public class PlanFragmentBuilder {
 
             List<ColumnAccessPath> paths = Lists.newArrayList();
             SubfieldAccessPathNormalizer normalizer = new SubfieldAccessPathNormalizer();
-            collector.getComplexExpressions().forEach(normalizer::add);
+            normalizer.collect(collector.getComplexExpressions());
 
             for (ColumnRefOperator key : scan.getColRefToColumnMetaMap().keySet()) {
                 if (!key.getType().isComplexType()) {
@@ -768,7 +772,7 @@ public class PlanFragmentBuilder {
             }
 
             // set column access path
-            scanNode.setColumnAccessPaths(computeAllColumnAccessPath(node));
+            scanNode.setColumnAccessPaths(computeAllColumnAccessPath(node, context));
 
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
@@ -894,7 +898,7 @@ public class PlanFragmentBuilder {
                     slotDescriptor.setIsNullable(column.isAllowNull());
                     slotDescriptor.setIsMaterialized(true);
                     context.getColRefToExpr()
-                            .put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
+                            .putIfAbsent(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
                 }
             }
             minMaxTuple.computeMemLayout();

@@ -13,5 +13,5 @@
 // limitations under the License.
 package com.starrocks.privilege;
 
-public abstract class ExternalAccessController implements AccessControl {
+public abstract class ExternalAccessController implements AccessController {
 }

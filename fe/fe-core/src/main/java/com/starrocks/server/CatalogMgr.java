@@ -47,8 +47,8 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.NativeAccessControl;
-import com.starrocks.privilege.ranger.hive.RangerHiveAccessControl;
+import com.starrocks.privilege.NativeAccessController;
+import com.starrocks.privilege.ranger.hive.RangerHiveAccessController;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
@@ -121,9 +121,9 @@ public class CatalogMgr {
             Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
             String serviceName = properties.get("ranger.plugin.hive.service.name");
             if (serviceName == null) {
-                Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+                Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
             } else {
-                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessControl(serviceName));
+                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
             }
 
             catalogs.put(catalogName, catalog);

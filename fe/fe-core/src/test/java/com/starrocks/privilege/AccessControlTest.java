@@ -25,7 +25,7 @@ import org.junit.Test;
 public class AccessControlTest {
     @Test
     public void testBasic() {
-        AccessControl accessControl = new AccessControl() {
+        AccessController accessControl = new AccessController() {
         };
 
         Assert.assertThrows(AccessDeniedException.class, () ->

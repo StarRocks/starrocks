@@ -32,8 +32,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class NativeAccessControl implements AccessControl {
-    private static final Logger LOG = LogManager.getLogger(NativeAccessControl.class);
+public class NativeAccessController implements AccessController {
+    private static final Logger LOG = LogManager.getLogger(NativeAccessController.class);
 
     @Override
     public void checkSystemAction(UserIdentity currentUser, Set<Long> roleIds, PrivilegeType privilegeType)

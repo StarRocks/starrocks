@@ -29,8 +29,8 @@ import java.util.Set;
 
 import static java.util.Locale.ENGLISH;
 
-public class RangerHiveAccessControl extends RangerAccessController {
-    public RangerHiveAccessControl(String serviceName) {
+public class RangerHiveAccessController extends RangerAccessController {
+    public RangerHiveAccessController(String serviceName) {
         super(serviceName);
     }
 

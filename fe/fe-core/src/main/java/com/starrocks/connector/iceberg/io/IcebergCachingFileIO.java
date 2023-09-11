@@ -52,16 +52,13 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.Config;
-import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
-import org.apache.iceberg.aws.s3.S3FileIO;
 import org.apache.iceberg.exceptions.NotFoundException;
-import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
 import org.apache.iceberg.hadoop.Util;
@@ -69,6 +66,7 @@ import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.io.OutputFile;
 import org.apache.iceberg.io.PositionOutputStream;
+import org.apache.iceberg.io.ResolvingFileIO;
 import org.apache.iceberg.io.SeekableInputStream;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
@@ -80,16 +78,11 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
-
-import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_LEGACY;
-import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
-import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.KEY_ENABLE_TABULAR_SUPPORT;
 
 /**
  * Implementation of FileIO that adds metadata content caching features.
@@ -111,45 +104,12 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
     private FileIO wrappedIO;
     private Configuration conf;
 
-    public IcebergCachingFileIO() {
-    }
-
-    public IcebergCachingFileIO(FileIO io) {
-        this.wrappedIO = io;
-    }
-
     @Override
     public void initialize(Map<String, String> properties) {
-        String type = properties.get(ICEBERG_CATALOG_TYPE);
-        if (type == null) {
-            type = properties.get(ICEBERG_CATALOG_LEGACY);
-        }
-
-        if (type == null) {
-            throw new StarRocksConnectorException("iceberg catalog type can't be null");
-        }
-
-        if (wrappedIO == null) {
-            switch (type.toLowerCase(Locale.ROOT)) {
-                case "hive":
-                case "rest":
-                    // Not all rest catalog is tabular, we need to make a distinction here.
-                    if (properties.getOrDefault(KEY_ENABLE_TABULAR_SUPPORT, "false").equalsIgnoreCase("true")) {
-                        // If we are using tabular, we must use S3FileIO
-                        wrappedIO = new S3FileIO();
-                    } else {
-                        wrappedIO = new HadoopFileIO(conf);
-                    }
-                    break;
-                case "glue":
-                    wrappedIO = new S3FileIO();
-                    break;
-                default:
-                    throw new StarRocksConnectorException("Unknown type %s", type);
-            }
-
-            wrappedIO.initialize(properties);
-        }
+        ResolvingFileIO resolvingFileIO = new ResolvingFileIO();
+        resolvingFileIO.setConf(conf);
+        wrappedIO = resolvingFileIO;
+        wrappedIO.initialize(properties);
 
         if (ENABLE_DISK_CACHE) {
             this.fileContentCache = TwoLevelCacheHolder.INSTANCE;

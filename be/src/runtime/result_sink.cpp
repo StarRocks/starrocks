@@ -155,8 +155,9 @@ Status ResultSink::close(RuntimeState* state, Status exec_status) {
         }
         _sender->close(final_status);
     }
-    state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
-                                                    state->fragment_instance_id());
+    auto st = state->exec_env()->result_mgr()->cancel_at_time(
+            time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
+    st.permit_unchecked_error();
     Expr::close(_output_expr_ctxs, state);
 
     _closed = true;

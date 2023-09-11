@@ -386,7 +386,7 @@ public class SchemaChangeHandler extends AlterHandler {
             Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
         Column modColumn = alterClause.getColumn();
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
-            if (olapTable.getBaseColumn(modColumn.getName()).isKey()) {
+            if (olapTable.getBaseColumn(modColumn.getName()) != null && olapTable.getBaseColumn(modColumn.getName()).isKey()) {
                 throw new DdlException("Can not modify key column: " + modColumn.getName() + " for primary key table");
             }
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
@@ -1589,6 +1589,12 @@ public class SchemaChangeHandler extends AlterHandler {
         } else if (metaType == TTabletMetaType.BUCKET_SIZE) {
             long bucketSize = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE));
             if (bucketSize == olapTable.getAutomaticBucketSize()) {
+                return;
+            }
+        } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
+            int primaryIndexCacheExpireSec = Integer.parseInt(properties.get(
+                    PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
+            if (primaryIndexCacheExpireSec == olapTable.primaryIndexCacheExpireSec()) {
                 return;
             }
         } else {

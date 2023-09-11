@@ -146,7 +146,7 @@ OutPut Exchange Id: 03
 1:HdfsScanNode
 TABLE: lineitem
 NON-PARTITION PREDICATES: 24: l_shipmode IN ('REG AIR', 'MAIL'), 21: l_commitdate < 22: l_receiptdate, 20: l_shipdate < 21: l_commitdate, 22: l_receiptdate >= '1997-01-01', 22: l_receiptdate < '1998-01-01'
-MIN/MAX PREDICATES: 30: l_shipmode >= 'MAIL', 31: l_shipmode <= 'REG AIR', 32: l_receiptdate >= '1997-01-01', 33: l_receiptdate < '1998-01-01'
+MIN/MAX PREDICATES: 24: l_shipmode >= 'MAIL', 24: l_shipmode <= 'REG AIR', 22: l_receiptdate >= '1997-01-01', 22: l_receiptdate < '1998-01-01'
 partitions=1/1
 avgRowSize=30.0
 cardinality: 6125233

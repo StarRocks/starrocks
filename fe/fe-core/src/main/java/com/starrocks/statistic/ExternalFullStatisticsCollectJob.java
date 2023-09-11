@@ -30,6 +30,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.hive.HiveMetaClient;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
@@ -129,9 +131,17 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         String columnNameStr = StringEscapeUtils.escapeSql(columnName);
         String quoteColumnName = StatisticUtils.quoting(columnName);
 
+        String nullValue;
+        if (table.isIcebergTable()) {
+            nullValue = IcebergApiConverter.PARTITION_NULL_VALUE;
+        } else {
+            nullValue = HiveMetaClient.PARTITION_NULL_VALUE;
+        }
+
         context.put("version", StatsConstants.STATISTIC_EXTERNAL_VERSION);
         // all table now, partition later
-        context.put("partitionNameStr", partitionName);
+        context.put("partitionNameStr", PartitionUtil.normalizePartitionName(partitionName,
+                table.getPartitionColumnNames(), nullValue));
         context.put("columnNameStr", columnNameStr);
         context.put("dataSize", fullAnalyzeGetDataSize(column));
         context.put("dbName", db.getOriginName());
@@ -159,7 +169,11 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             for (int i = 0; i < partitionColumnNames.size(); i++) {
                 String partitionColumnName = partitionColumnNames.get(i);
                 String partitionValue = partitionValues.get(i);
-                partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " = '" + partitionValue + "'");
+                if (partitionValue.equals(nullValue)) {
+                    partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " IS NULL");
+                } else {
+                    partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " = '" + partitionValue + "'");
+                }
             }
             context.put("partitionPredicate", Joiner.on(" AND ").join(partitionPredicate));
         }
