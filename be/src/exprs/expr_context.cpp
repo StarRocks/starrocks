@@ -186,4 +186,8 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, Chunk* chunk, uint8_t* filter
     }
 }
 
+bool ExprContext::error_if_overflow() const {
+    return _runtime_state != nullptr && _runtime_state->error_if_overflow();
+}
+
 } // namespace starrocks

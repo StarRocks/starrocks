@@ -339,6 +339,10 @@ public:
 
     int32_t spill_encode_level() const { return _query_options.spill_encode_level; }
 
+    bool error_if_overflow() const {
+        return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;
+    }
+
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
     std::vector<TTabletCommitInfo>& tablet_commit_infos() { return _tablet_commit_infos; }

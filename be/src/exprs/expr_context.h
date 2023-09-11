@@ -115,6 +115,8 @@ public:
     StatusOr<ColumnPtr> evaluate(Chunk* chunk, uint8_t* filter = nullptr);
     StatusOr<ColumnPtr> evaluate(Expr* expr, Chunk* chunk, uint8_t* filter = nullptr);
 
+    bool error_if_overflow() const;
+
 private:
     friend class Expr;
     friend class OlapScanNode;

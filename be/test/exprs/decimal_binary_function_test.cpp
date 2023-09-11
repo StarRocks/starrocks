@@ -22,6 +22,7 @@
 #include <random>
 
 #include "exprs/decimal_cast_expr_test_helper.h"
+#include "exprs/overflow.h"
 
 namespace starrocks {
 
@@ -235,11 +236,11 @@ Columns prepare_const_const(const DecimalTestCase& test_case, int lhs_precision,
 
 using Func = std::function<ColumnPtr(ColumnPtr const&, ColumnPtr const&)>;
 
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow,
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode,
           bool assert_overflow = false>
 void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Columns columns, int result_precision,
                                    int result_scale, size_t off, [[maybe_unused]] const std::vector<bool>& overflows) {
-    using ColumnWiseOp = UnpackConstColumnDecimalBinaryFunction<Op, check_overflow>;
+    using ColumnWiseOp = UnpackConstColumnDecimalBinaryFunction<Op, overflow_mode>;
     using CppType = RunTimeCppType<ResultType>;
     using ColumnType = RunTimeColumnType<ResultType>;
     ASSERT_TRUE(columns.size() == 2);
@@ -251,7 +252,7 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
     if (result->is_constant()) {
         ASSERT_TRUE(test_cases.size() == 1);
         if (result->only_null()) {
-            ASSERT_TRUE(check_overflow);
+            ASSERT_TRUE(null_if_overflow<overflow_mode>);
         } else {
             auto* decimal_column = (ColumnType*)(ColumnHelper::get_data_column(result.get()));
             ASSERT_EQ(result_precision, decimal_column->precision());
@@ -276,7 +277,7 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
         return;
     }
 
-    if constexpr (!check_overflow) {
+    if constexpr (!check_overflow<overflow_mode>) {
         ASSERT_TRUE(!columns[0]->is_constant() || !columns[1]->is_constant());
     }
 
@@ -302,7 +303,7 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
         auto actual = DecimalV3Cast::to_string<CppType>(value, decimal_column->precision(), decimal_column->scale());
         //std::cout << "test#" << i << ": lhs=" << lhs_datum << ", rhs=" << rhs_datum << ", expect=" << expect
         //          << ", actual=" << actual << std::endl;
-        if constexpr (check_overflow) {
+        if constexpr (check_overflow<overflow_mode>) {
             if constexpr (assert_overflow) {
                 const auto& expect_overflow = overflows[i];
                 ASSERT_EQ(expect_overflow, result->is_null(row_idx));
@@ -322,7 +323,7 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
     }
 }
 
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow,
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode,
           bool assert_overflow = false>
 void test_decimal_binary_functions_with_nullable_columns(DecimalTestCaseArray const& test_cases, Columns columns,
                                                          int result_precision, int result_scale, size_t off,
@@ -333,10 +334,10 @@ void test_decimal_binary_functions_with_nullable_columns(DecimalTestCaseArray co
     ASSERT_TRUE(columns.size() == 2);
     ColumnPtr result = nullptr;
     if constexpr (is_add_op<Op> || is_sub_op<Op> || is_mul_op<Op>) {
-        using ColumnWiseOp = VectorizedStrictDecimalBinaryFunction<Op, check_overflow>;
+        using ColumnWiseOp = VectorizedStrictDecimalBinaryFunction<Op, overflow_mode>;
         result = ColumnWiseOp::template evaluate<LhsType, RhsType, ResultType>(columns[0], columns[1]);
     } else {
-        using ColumnWiseOp = VectorizedUnstrictDecimalBinaryFunction<ResultType, Op, check_overflow>;
+        using ColumnWiseOp = VectorizedUnstrictDecimalBinaryFunction<ResultType, Op, overflow_mode>;
         result = ColumnWiseOp::template evaluate<LhsType, RhsType, ResultType>(columns[0], columns[1]);
     }
 
@@ -361,7 +362,7 @@ void test_decimal_binary_functions_with_nullable_columns(DecimalTestCaseArray co
 
         CppType& value = data[row_idx];
         auto actual = DecimalV3Cast::to_string<CppType>(value, decimal_column->precision(), decimal_column->scale());
-        if constexpr (check_overflow) {
+        if constexpr (check_overflow<overflow_mode>) {
             if constexpr (assert_overflow) {
                 const auto& expect_overflow = overflows[i];
                 ASSERT_EQ(expect_overflow, result->is_null(row_idx));
@@ -381,41 +382,41 @@ void test_decimal_binary_functions_with_nullable_columns(DecimalTestCaseArray co
     }
 }
 
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
 void test_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                         int rhs_scale, int result_precision, int result_scale) {
     Columns columns = prepare_vector_vector<LhsType, RhsType>(test_cases, lhs_precision, lhs_scale, rhs_precision,
                                                               rhs_scale, 0, 0);
-    test_decimal_binary_functions<LhsType, RhsType, ResultType, Op, check_overflow>(
+    test_decimal_binary_functions<LhsType, RhsType, ResultType, Op, overflow_mode>(
             test_cases, columns, result_precision, result_scale, 0, std::vector<bool>());
 }
 
-template <LogicalType Type, typename Op, bool check_overflow>
+template <LogicalType Type, typename Op, OverflowMode overflow_mode>
 void test_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                         int rhs_scale, int result_precision, int result_scale) {
-    test_vector_vector<Type, Type, Type, Op, check_overflow>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                             rhs_scale, result_precision, result_scale);
+    test_vector_vector<Type, Type, Type, Op, overflow_mode>(test_cases, lhs_precision, lhs_scale, rhs_precision,
+                                                            rhs_scale, result_precision, result_scale);
 }
 
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
 void test_vector_vector_assert_overflow(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                         int rhs_precision, int rhs_scale, int result_precision, int result_scale,
                                         const std::vector<bool>& overflows) {
     Columns columns = prepare_vector_vector<LhsType, RhsType>(test_cases, lhs_precision, lhs_scale, rhs_precision,
                                                               rhs_scale, 0, 0);
-    test_decimal_binary_functions<LhsType, RhsType, ResultType, Op, check_overflow, true>(
+    test_decimal_binary_functions<LhsType, RhsType, ResultType, Op, overflow_mode, true>(
             test_cases, columns, result_precision, result_scale, 0, overflows);
 }
 
-template <LogicalType Type, typename Op, bool check_overflow>
+template <LogicalType Type, typename Op, OverflowMode overflow_mode>
 void test_vector_vector_assert_overflow(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                         int rhs_precision, int rhs_scale, int result_precision, int result_scale,
                                         const std::vector<bool>& overflows) {
-    test_vector_vector_assert_overflow<Type, Type, Type, Op, check_overflow>(
+    test_vector_vector_assert_overflow<Type, Type, Type, Op, overflow_mode>(
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale, overflows);
 }
 
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
 void test_const_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                        int rhs_scale, int result_precision, int result_scale) {
     std::random_device rd;
@@ -426,20 +427,20 @@ void test_const_vector(DecimalTestCaseArray const& test_cases, int lhs_precision
     for (auto& tc : test_cases) {
         Columns columns = prepare_const_vector<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
                                                                  front_fill_size, rear_fill_size);
-        test_decimal_binary_functions<LhsType, RhsType, ResultType, Op, check_overflow>(
+        test_decimal_binary_functions<LhsType, RhsType, ResultType, Op, overflow_mode>(
                 DecimalTestCaseArray{tc}, columns, result_precision, result_scale, front_fill_size,
                 std::vector<bool>());
     }
 }
 
-template <LogicalType Type, typename Op, bool check_overflow>
+template <LogicalType Type, typename Op, OverflowMode overflow_mode>
 void test_const_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                        int rhs_scale, int result_precision, int result_scale) {
-    test_const_vector<Type, Type, Type, Op, check_overflow>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                            rhs_scale, result_precision, result_scale);
+    test_const_vector<Type, Type, Type, Op, overflow_mode>(test_cases, lhs_precision, lhs_scale, rhs_precision,
+                                                           rhs_scale, result_precision, result_scale);
 }
 
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
 void test_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                        int rhs_scale, int result_precision, int result_scale) {
     std::random_device rd;
@@ -450,37 +451,37 @@ void test_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision
     for (auto& tc : test_cases) {
         Columns columns = prepare_vector_const<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
                                                                  front_fill_size, rear_fill_size);
-        test_decimal_binary_functions<LhsType, RhsType, ResultType, Op, check_overflow>(
+        test_decimal_binary_functions<LhsType, RhsType, ResultType, Op, overflow_mode>(
                 DecimalTestCaseArray{tc}, columns, result_precision, result_scale, front_fill_size,
                 std::vector<bool>());
     }
 }
 
-template <LogicalType Type, typename Op, bool check_overflow>
+template <LogicalType Type, typename Op, OverflowMode overflow_mode>
 void test_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                        int rhs_scale, int result_precision, int result_scale) {
-    return test_vector_const<Type, Type, Type, Op, check_overflow>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                                   rhs_scale, result_precision, result_scale);
+    return test_vector_const<Type, Type, Type, Op, overflow_mode>(test_cases, lhs_precision, lhs_scale, rhs_precision,
+                                                                  rhs_scale, result_precision, result_scale);
 }
 
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
 void test_const_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                       int rhs_scale, int result_precision, int result_scale) {
     for (auto& tc : test_cases) {
         Columns columns = prepare_const_const<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision, rhs_scale);
-        test_decimal_binary_functions<LhsType, RhsType, ResultType, Op, check_overflow>(
+        test_decimal_binary_functions<LhsType, RhsType, ResultType, Op, overflow_mode>(
                 DecimalTestCaseArray{tc}, columns, result_precision, result_scale, 0, std::vector<bool>());
     }
 }
 
-template <LogicalType Type, typename Op, bool check_overflow>
+template <LogicalType Type, typename Op, OverflowMode overflow_mode>
 void test_const_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                       int rhs_scale, int result_precision, int result_scale) {
-    test_const_const<Type, Type, Type, Op, check_overflow>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                           rhs_scale, result_precision, result_scale);
+    test_const_const<Type, Type, Type, Op, overflow_mode>(test_cases, lhs_precision, lhs_scale, rhs_precision,
+                                                          rhs_scale, result_precision, result_scale);
 }
 
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
 void test_nullable_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
     std::random_device rd;
@@ -491,19 +492,19 @@ void test_nullable_vector_const(DecimalTestCaseArray const& test_cases, int lhs_
     for (auto& tc : test_cases) {
         Columns columns = prepare_nullable_vector_const<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision,
                                                                           rhs_scale, front_fill_size, rear_fill_size);
-        test_decimal_binary_functions_with_nullable_columns<LhsType, RhsType, ResultType, Op, check_overflow>(
+        test_decimal_binary_functions_with_nullable_columns<LhsType, RhsType, ResultType, Op, overflow_mode>(
                 DecimalTestCaseArray{tc}, columns, result_precision, result_scale, front_fill_size,
                 std::vector<bool>());
     }
 }
-template <LogicalType Type, typename Op, bool check_overflow>
+template <LogicalType Type, typename Op, OverflowMode overflow_mode>
 void test_nullable_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
-    test_nullable_vector_const<Type, Type, Type, Op, check_overflow>(
-            test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
+    test_nullable_vector_const<Type, Type, Type, Op, overflow_mode>(test_cases, lhs_precision, lhs_scale, rhs_precision,
+                                                                    rhs_scale, result_precision, result_scale);
 }
 
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
 void test_const_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
     std::random_device rd;
@@ -514,31 +515,55 @@ void test_const_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_
     for (auto& tc : test_cases) {
         Columns columns = prepare_const_nullable_vector<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision,
                                                                           rhs_scale, front_fill_size, rear_fill_size);
-        test_decimal_binary_functions_with_nullable_columns<LhsType, RhsType, ResultType, Op, check_overflow>(
+        test_decimal_binary_functions_with_nullable_columns<LhsType, RhsType, ResultType, Op, overflow_mode>(
                 DecimalTestCaseArray{tc}, columns, result_precision, result_scale, front_fill_size,
                 std::vector<bool>());
     }
 }
-template <LogicalType Type, typename Op, bool check_overflow>
+template <LogicalType Type, typename Op, OverflowMode overflow_mode>
 void test_const_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
-    test_const_nullable_vector<Type, Type, Type, Op, check_overflow>(
-            test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
+    test_const_nullable_vector<Type, Type, Type, Op, overflow_mode>(test_cases, lhs_precision, lhs_scale, rhs_precision,
+                                                                    rhs_scale, result_precision, result_scale);
 }
 
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
 void test_nullable_vector_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                           int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
     Columns columns = prepare_nullable_vector_nullable_vector<LhsType, RhsType>(test_cases, lhs_precision, lhs_scale,
                                                                                 rhs_precision, rhs_scale, 0, 0);
-    test_decimal_binary_functions_with_nullable_columns<LhsType, RhsType, ResultType, Op, check_overflow>(
+    test_decimal_binary_functions_with_nullable_columns<LhsType, RhsType, ResultType, Op, overflow_mode>(
             test_cases, columns, result_precision, result_scale, 0, std::vector<bool>());
 }
-template <LogicalType Type, typename Op, bool check_overflow>
+
+template <LogicalType Type, typename Op, OverflowMode overflow_mode>
 void test_nullable_vector_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                           int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
-    return test_nullable_vector_nullable_vector<Type, Type, Type, Op, check_overflow>(
+    return test_nullable_vector_nullable_vector<Type, Type, Type, Op, overflow_mode>(
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
+}
+
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op>
+void test_overflow_report_error(const std::string& lv, const std::string& rv, int lhs_precision, int lhs_scale,
+                                int rhs_precision, int rhs_scale) {
+    using LhsCppType = RunTimeCppType<LhsType>;
+    using LhsColumnType = RunTimeColumnType<LhsType>;
+
+    using RhsCppType = RunTimeCppType<RhsType>;
+    using RhsColumnType = RunTimeColumnType<RhsType>;
+
+    auto lhs_column = LhsColumnType::create(lhs_precision, lhs_scale);
+    auto rhs_column = RhsColumnType::create(rhs_precision, rhs_scale);
+    lhs_column->resize(1);
+    rhs_column->resize(1);
+    auto lhs_data = &ColumnHelper::cast_to_raw<LhsType>(lhs_column)->get_data().front();
+    auto rhs_data = &ColumnHelper::cast_to_raw<RhsType>(rhs_column)->get_data().front();
+
+    DecimalV3Cast::from_string<LhsCppType>(&lhs_data[0], lhs_precision, lhs_scale, lv.c_str(), lv.size());
+    DecimalV3Cast::from_string<RhsCppType>(&rhs_data[0], rhs_precision, rhs_scale, rv.c_str(), rv.size());
+
+    using ColumnWiseOp = VectorizedStrictDecimalBinaryFunction<Op, OverflowMode::REPORT_ERROR>;
+    ColumnWiseOp::template evaluate<LhsType, RhsType, ResultType>(lhs_column, rhs_column);
 }
 
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p30s20_add_decimal128p38s28_eq_decimal128p38s28) {
@@ -620,17 +645,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p30s20_add_decimal128p38s28_eq_
              "436672123.5356179969190535681943088653"},
             {"4975741476.85157908539479032939", "7829802341.2748292194789550064799926301",
              "12805543818.1264083048737453358699926301"}};
-    test_vector_vector<TYPE_DECIMAL128, AddOp, true>(test_cases, 30, 20, 38, 28, 38, 28);
-    test_vector_vector<TYPE_DECIMAL128, AddOp, false>(test_cases, 30, 20, 38, 28, 38, 28);
-    test_vector_const<TYPE_DECIMAL128, AddOp, true>(test_cases, 30, 20, 38, 28, 38, 28);
-    test_vector_const<TYPE_DECIMAL128, AddOp, false>(test_cases, 30, 20, 38, 28, 38, 28);
-    test_const_vector<TYPE_DECIMAL128, AddOp, true>(test_cases, 30, 20, 38, 28, 38, 28);
-    test_const_vector<TYPE_DECIMAL128, AddOp, false>(test_cases, 30, 20, 38, 28, 38, 28);
-    test_const_const<TYPE_DECIMAL128, AddOp, true>(test_cases, 30, 20, 38, 28, 38, 28);
-    test_const_const<TYPE_DECIMAL128, AddOp, false>(test_cases, 30, 20, 38, 28, 38, 28);
-    test_const_nullable_vector<TYPE_DECIMAL128, AddOp, true>(test_cases, 30, 20, 38, 28, 38, 28);
-    test_nullable_vector_const<TYPE_DECIMAL128, AddOp, true>(test_cases, 30, 20, 38, 28, 38, 28);
-    test_nullable_vector_nullable_vector<TYPE_DECIMAL128, AddOp, true>(test_cases, 30, 20, 38, 28, 38, 28);
+    test_vector_vector<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 30, 20, 38, 28, 38, 28);
+    test_vector_vector<TYPE_DECIMAL128, AddOp, OverflowMode::IGNORE>(test_cases, 30, 20, 38, 28, 38, 28);
+    test_vector_const<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 30, 20, 38, 28, 38, 28);
+    test_vector_const<TYPE_DECIMAL128, AddOp, OverflowMode::IGNORE>(test_cases, 30, 20, 38, 28, 38, 28);
+    test_const_vector<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 30, 20, 38, 28, 38, 28);
+    test_const_vector<TYPE_DECIMAL128, AddOp, OverflowMode::IGNORE>(test_cases, 30, 20, 38, 28, 38, 28);
+    test_const_const<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 30, 20, 38, 28, 38, 28);
+    test_const_const<TYPE_DECIMAL128, AddOp, OverflowMode::IGNORE>(test_cases, 30, 20, 38, 28, 38, 28);
+    test_const_nullable_vector<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 30, 20, 38, 28, 38, 28);
+    test_nullable_vector_const<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 30, 20, 38, 28, 38, 28);
+    test_nullable_vector_nullable_vector<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 30, 20, 38, 28,
+                                                                                            38, 28);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal32p6s2_add_decimal32p4s3_eq_decimal32p9s3) {
     DecimalTestCaseArray test_cases = {{"9999.99", "9.999", "10009.989"},
@@ -678,17 +704,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal32p6s2_add_decimal32p4s3_eq_decima
                                        {"3130.89", "6.757", "3137.647"},
                                        {"-6381.35", "-4.877", "-6386.227"},
                                        {"5306.82", "-3.635", "5303.185"}};
-    test_vector_vector<TYPE_DECIMAL32, AddOp, true>(test_cases, 6, 2, 4, 3, 9, 3);
-    test_vector_vector<TYPE_DECIMAL32, AddOp, false>(test_cases, 6, 2, 4, 3, 9, 3);
-    test_vector_const<TYPE_DECIMAL32, AddOp, true>(test_cases, 6, 2, 4, 3, 9, 3);
-    test_vector_const<TYPE_DECIMAL32, AddOp, false>(test_cases, 6, 2, 4, 3, 9, 3);
-    test_const_vector<TYPE_DECIMAL32, AddOp, true>(test_cases, 6, 2, 4, 3, 9, 3);
-    test_const_vector<TYPE_DECIMAL32, AddOp, false>(test_cases, 6, 2, 4, 3, 9, 3);
-    test_const_const<TYPE_DECIMAL32, AddOp, true>(test_cases, 6, 2, 4, 3, 9, 3);
-    test_const_const<TYPE_DECIMAL32, AddOp, false>(test_cases, 6, 2, 4, 3, 9, 3);
-    test_const_nullable_vector<TYPE_DECIMAL32, AddOp, true>(test_cases, 6, 2, 4, 3, 9, 3);
-    test_nullable_vector_const<TYPE_DECIMAL32, AddOp, true>(test_cases, 6, 2, 4, 3, 9, 3);
-    test_nullable_vector_nullable_vector<TYPE_DECIMAL32, AddOp, true>(test_cases, 6, 2, 4, 3, 9, 3);
+    test_vector_vector<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 6, 2, 4, 3, 9, 3);
+    test_vector_vector<TYPE_DECIMAL32, AddOp, OverflowMode::IGNORE>(test_cases, 6, 2, 4, 3, 9, 3);
+    test_vector_const<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 6, 2, 4, 3, 9, 3);
+    test_vector_const<TYPE_DECIMAL32, AddOp, OverflowMode::IGNORE>(test_cases, 6, 2, 4, 3, 9, 3);
+    test_const_vector<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 6, 2, 4, 3, 9, 3);
+    test_const_vector<TYPE_DECIMAL32, AddOp, OverflowMode::IGNORE>(test_cases, 6, 2, 4, 3, 9, 3);
+    test_const_const<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 6, 2, 4, 3, 9, 3);
+    test_const_const<TYPE_DECIMAL32, AddOp, OverflowMode::IGNORE>(test_cases, 6, 2, 4, 3, 9, 3);
+    test_const_nullable_vector<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 6, 2, 4, 3, 9, 3);
+    test_nullable_vector_const<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 6, 2, 4, 3, 9, 3);
+    test_nullable_vector_nullable_vector<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 6, 2, 4, 3, 9,
+                                                                                           3);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal64p9s2_add_decimal64p18s9_eq_decimal64p18s9) {
     DecimalTestCaseArray test_cases = {{"9999999.99", "999999999.999999999", "1009999999.989999999"},
@@ -736,17 +763,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal64p9s2_add_decimal64p18s9_eq_decim
                                        {"-7395895.68", "-14389308.852363634", "-21785204.532363634"},
                                        {"-3100297.81", "933112676.101379889", "930012378.291379889"},
                                        {"-9657790.77", "-625096544.888136982", "-634754335.658136982"}};
-    test_vector_vector<TYPE_DECIMAL64, AddOp, true>(test_cases, 9, 2, 18, 9, 18, 9);
-    test_vector_vector<TYPE_DECIMAL64, AddOp, false>(test_cases, 9, 2, 18, 9, 18, 9);
-    test_vector_const<TYPE_DECIMAL64, AddOp, true>(test_cases, 9, 2, 18, 9, 18, 9);
-    test_vector_const<TYPE_DECIMAL64, AddOp, false>(test_cases, 9, 2, 18, 9, 18, 9);
-    test_const_vector<TYPE_DECIMAL64, AddOp, true>(test_cases, 9, 2, 18, 9, 18, 9);
-    test_const_vector<TYPE_DECIMAL64, AddOp, false>(test_cases, 9, 2, 18, 9, 18, 9);
-    test_const_const<TYPE_DECIMAL64, AddOp, true>(test_cases, 9, 2, 18, 9, 18, 9);
-    test_const_const<TYPE_DECIMAL64, AddOp, false>(test_cases, 9, 2, 18, 9, 18, 9);
-    test_const_nullable_vector<TYPE_DECIMAL64, AddOp, true>(test_cases, 9, 2, 18, 9, 18, 9);
-    test_nullable_vector_const<TYPE_DECIMAL64, AddOp, true>(test_cases, 9, 2, 18, 9, 18, 9);
-    test_nullable_vector_nullable_vector<TYPE_DECIMAL64, AddOp, true>(test_cases, 9, 2, 18, 9, 18, 9);
+    test_vector_vector<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 2, 18, 9, 18, 9);
+    test_vector_vector<TYPE_DECIMAL64, AddOp, OverflowMode::IGNORE>(test_cases, 9, 2, 18, 9, 18, 9);
+    test_vector_const<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 2, 18, 9, 18, 9);
+    test_vector_const<TYPE_DECIMAL64, AddOp, OverflowMode::IGNORE>(test_cases, 9, 2, 18, 9, 18, 9);
+    test_const_vector<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 2, 18, 9, 18, 9);
+    test_const_vector<TYPE_DECIMAL64, AddOp, OverflowMode::IGNORE>(test_cases, 9, 2, 18, 9, 18, 9);
+    test_const_const<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 2, 18, 9, 18, 9);
+    test_const_const<TYPE_DECIMAL64, AddOp, OverflowMode::IGNORE>(test_cases, 9, 2, 18, 9, 18, 9);
+    test_const_nullable_vector<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 2, 18, 9, 18, 9);
+    test_nullable_vector_const<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 2, 18, 9, 18, 9);
+    test_nullable_vector_nullable_vector<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 2, 18, 9, 18,
+                                                                                           9);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s29_add_decimal128p28s23_eq_decimal128p38s29) {
     DecimalTestCaseArray test_cases = {
@@ -826,17 +854,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s29_add_decimal128p28s23_eq_
              "346412976.64193176239014856229930720220"},
             {"814713310.91412625460492314804893469799", "14944.19745575522970573657688",
              "814728255.11158200983462888462581469799"}};
-    test_vector_vector<TYPE_DECIMAL128, AddOp, true>(test_cases, 38, 29, 28, 23, 38, 29);
-    test_vector_vector<TYPE_DECIMAL128, AddOp, false>(test_cases, 38, 29, 28, 23, 38, 29);
-    test_vector_const<TYPE_DECIMAL128, AddOp, true>(test_cases, 38, 29, 28, 23, 38, 29);
-    test_vector_const<TYPE_DECIMAL128, AddOp, false>(test_cases, 38, 29, 28, 23, 38, 29);
-    test_const_vector<TYPE_DECIMAL128, AddOp, true>(test_cases, 38, 29, 28, 23, 38, 29);
-    test_const_vector<TYPE_DECIMAL128, AddOp, false>(test_cases, 38, 29, 28, 23, 38, 29);
-    test_const_const<TYPE_DECIMAL128, AddOp, true>(test_cases, 38, 29, 28, 23, 38, 29);
-    test_const_const<TYPE_DECIMAL128, AddOp, false>(test_cases, 38, 29, 28, 23, 38, 29);
-    test_const_nullable_vector<TYPE_DECIMAL128, AddOp, true>(test_cases, 38, 29, 28, 23, 38, 29);
-    test_nullable_vector_const<TYPE_DECIMAL128, AddOp, true>(test_cases, 38, 29, 28, 23, 38, 29);
-    test_nullable_vector_nullable_vector<TYPE_DECIMAL128, AddOp, true>(test_cases, 38, 29, 28, 23, 38, 29);
+    test_vector_vector<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 29, 28, 23, 38, 29);
+    test_vector_vector<TYPE_DECIMAL128, AddOp, OverflowMode::IGNORE>(test_cases, 38, 29, 28, 23, 38, 29);
+    test_vector_const<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 29, 28, 23, 38, 29);
+    test_vector_const<TYPE_DECIMAL128, AddOp, OverflowMode::IGNORE>(test_cases, 38, 29, 28, 23, 38, 29);
+    test_const_vector<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 29, 28, 23, 38, 29);
+    test_const_vector<TYPE_DECIMAL128, AddOp, OverflowMode::IGNORE>(test_cases, 38, 29, 28, 23, 38, 29);
+    test_const_const<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 29, 28, 23, 38, 29);
+    test_const_const<TYPE_DECIMAL128, AddOp, OverflowMode::IGNORE>(test_cases, 38, 29, 28, 23, 38, 29);
+    test_const_nullable_vector<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 29, 28, 23, 38, 29);
+    test_nullable_vector_const<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 29, 28, 23, 38, 29);
+    test_nullable_vector_nullable_vector<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 29, 28, 23,
+                                                                                            38, 29);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal32p5s5_add_decimal32p6s2_eq_decimal32p9s5) {
     DecimalTestCaseArray test_cases = {{"0.99999", "9999.99", "10000.98999"},
@@ -884,17 +913,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal32p5s5_add_decimal32p6s2_eq_decima
                                        {"0.86931", "-2649.62", "-2648.75069"},
                                        {"0.46404", "-3843.14", "-3842.67596"},
                                        {"0.93959", "2124.67", "2125.60959"}};
-    test_vector_vector<TYPE_DECIMAL32, AddOp, true>(test_cases, 5, 5, 6, 2, 9, 5);
-    test_vector_vector<TYPE_DECIMAL32, AddOp, false>(test_cases, 5, 5, 6, 2, 9, 5);
-    test_vector_const<TYPE_DECIMAL32, AddOp, true>(test_cases, 5, 5, 6, 2, 9, 5);
-    test_vector_const<TYPE_DECIMAL32, AddOp, false>(test_cases, 5, 5, 6, 2, 9, 5);
-    test_const_vector<TYPE_DECIMAL32, AddOp, true>(test_cases, 5, 5, 6, 2, 9, 5);
-    test_const_vector<TYPE_DECIMAL32, AddOp, false>(test_cases, 5, 5, 6, 2, 9, 5);
-    test_const_const<TYPE_DECIMAL32, AddOp, true>(test_cases, 5, 5, 6, 2, 9, 5);
-    test_const_const<TYPE_DECIMAL32, AddOp, false>(test_cases, 5, 5, 6, 2, 9, 5);
-    test_const_nullable_vector<TYPE_DECIMAL32, AddOp, true>(test_cases, 5, 5, 6, 2, 9, 5);
-    test_nullable_vector_const<TYPE_DECIMAL32, AddOp, true>(test_cases, 5, 5, 6, 2, 9, 5);
-    test_nullable_vector_nullable_vector<TYPE_DECIMAL32, AddOp, true>(test_cases, 5, 5, 6, 2, 9, 5);
+    test_vector_vector<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 5, 5, 6, 2, 9, 5);
+    test_vector_vector<TYPE_DECIMAL32, AddOp, OverflowMode::IGNORE>(test_cases, 5, 5, 6, 2, 9, 5);
+    test_vector_const<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 5, 5, 6, 2, 9, 5);
+    test_vector_const<TYPE_DECIMAL32, AddOp, OverflowMode::IGNORE>(test_cases, 5, 5, 6, 2, 9, 5);
+    test_const_vector<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 5, 5, 6, 2, 9, 5);
+    test_const_vector<TYPE_DECIMAL32, AddOp, OverflowMode::IGNORE>(test_cases, 5, 5, 6, 2, 9, 5);
+    test_const_const<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 5, 5, 6, 2, 9, 5);
+    test_const_const<TYPE_DECIMAL32, AddOp, OverflowMode::IGNORE>(test_cases, 5, 5, 6, 2, 9, 5);
+    test_const_nullable_vector<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 5, 5, 6, 2, 9, 5);
+    test_nullable_vector_const<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 5, 5, 6, 2, 9, 5);
+    test_nullable_vector_nullable_vector<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 5, 5, 6, 2, 9,
+                                                                                           5);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal64p18s11_add_decimal64p12s5_eq_decimal64p18s11) {
     DecimalTestCaseArray test_cases = {{"9999999.99999999999", "9999999.99999", "19999999.99998999999"},
@@ -942,17 +972,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal64p18s11_add_decimal64p12s5_eq_dec
                                        {"310474.86147925182", "6780992.77370", "7091467.63517925182"},
                                        {"7066952.79949447594", "2017203.20571", "9084156.00520447594"},
                                        {"-6160737.94855374226", "-807330.86052", "-6968068.80907374226"}};
-    test_vector_vector<TYPE_DECIMAL64, AddOp, true>(test_cases, 18, 11, 12, 5, 18, 11);
-    test_vector_vector<TYPE_DECIMAL64, AddOp, false>(test_cases, 18, 11, 12, 5, 18, 11);
-    test_vector_const<TYPE_DECIMAL64, AddOp, true>(test_cases, 18, 11, 12, 5, 18, 11);
-    test_vector_const<TYPE_DECIMAL64, AddOp, false>(test_cases, 18, 11, 12, 5, 18, 11);
-    test_const_vector<TYPE_DECIMAL64, AddOp, true>(test_cases, 18, 11, 12, 5, 18, 11);
-    test_const_vector<TYPE_DECIMAL64, AddOp, false>(test_cases, 18, 11, 12, 5, 18, 11);
-    test_const_const<TYPE_DECIMAL64, AddOp, true>(test_cases, 18, 11, 12, 5, 18, 11);
-    test_const_const<TYPE_DECIMAL64, AddOp, false>(test_cases, 18, 11, 12, 5, 18, 11);
-    test_const_nullable_vector<TYPE_DECIMAL64, AddOp, true>(test_cases, 18, 11, 12, 5, 18, 11);
-    test_nullable_vector_const<TYPE_DECIMAL64, AddOp, true>(test_cases, 18, 11, 12, 5, 18, 11);
-    test_nullable_vector_nullable_vector<TYPE_DECIMAL64, AddOp, true>(test_cases, 18, 11, 12, 5, 18, 11);
+    test_vector_vector<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 18, 11, 12, 5, 18, 11);
+    test_vector_vector<TYPE_DECIMAL64, AddOp, OverflowMode::IGNORE>(test_cases, 18, 11, 12, 5, 18, 11);
+    test_vector_const<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 18, 11, 12, 5, 18, 11);
+    test_vector_const<TYPE_DECIMAL64, AddOp, OverflowMode::IGNORE>(test_cases, 18, 11, 12, 5, 18, 11);
+    test_const_vector<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 18, 11, 12, 5, 18, 11);
+    test_const_vector<TYPE_DECIMAL64, AddOp, OverflowMode::IGNORE>(test_cases, 18, 11, 12, 5, 18, 11);
+    test_const_const<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 18, 11, 12, 5, 18, 11);
+    test_const_const<TYPE_DECIMAL64, AddOp, OverflowMode::IGNORE>(test_cases, 18, 11, 12, 5, 18, 11);
+    test_const_nullable_vector<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 18, 11, 12, 5, 18, 11);
+    test_nullable_vector_const<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 18, 11, 12, 5, 18, 11);
+    test_nullable_vector_nullable_vector<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 18, 11, 12, 5,
+                                                                                           18, 11);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s38_add_decimal128p38s38_eq_decimal128p38s38) {
     DecimalTestCaseArray test_cases = {
@@ -1029,17 +1060,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s38_add_decimal128p38s38_eq_
              "-0.33748787165569134455062427983875276083"},
             {"-0.67467574067481850167560732049745640318", "-0.82039350481122346181845032396528195764",
              "-1.49506924548604196349405764446273836082"}};
-    test_vector_vector<TYPE_DECIMAL128, AddOp, true>(test_cases, 38, 38, 38, 38, 38, 38);
-    test_vector_vector<TYPE_DECIMAL128, AddOp, false>(test_cases, 38, 38, 38, 38, 38, 38);
-    test_vector_const<TYPE_DECIMAL128, AddOp, true>(test_cases, 38, 38, 38, 38, 38, 38);
-    test_vector_const<TYPE_DECIMAL128, AddOp, false>(test_cases, 38, 38, 38, 38, 38, 38);
-    test_const_vector<TYPE_DECIMAL128, AddOp, true>(test_cases, 38, 38, 38, 38, 38, 38);
-    test_const_vector<TYPE_DECIMAL128, AddOp, false>(test_cases, 38, 38, 38, 38, 38, 38);
-    test_const_const<TYPE_DECIMAL128, AddOp, true>(test_cases, 38, 38, 38, 38, 38, 38);
-    test_const_const<TYPE_DECIMAL128, AddOp, false>(test_cases, 38, 38, 38, 38, 38, 38);
-    test_const_nullable_vector<TYPE_DECIMAL128, AddOp, true>(test_cases, 38, 38, 38, 38, 38, 38);
-    test_nullable_vector_const<TYPE_DECIMAL128, AddOp, true>(test_cases, 38, 38, 38, 38, 38, 38);
-    test_nullable_vector_nullable_vector<TYPE_DECIMAL128, AddOp, true>(test_cases, 38, 38, 38, 38, 38, 38);
+    test_vector_vector<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 38, 38, 38, 38, 38);
+    test_vector_vector<TYPE_DECIMAL128, AddOp, OverflowMode::IGNORE>(test_cases, 38, 38, 38, 38, 38, 38);
+    test_vector_const<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 38, 38, 38, 38, 38);
+    test_vector_const<TYPE_DECIMAL128, AddOp, OverflowMode::IGNORE>(test_cases, 38, 38, 38, 38, 38, 38);
+    test_const_vector<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 38, 38, 38, 38, 38);
+    test_const_vector<TYPE_DECIMAL128, AddOp, OverflowMode::IGNORE>(test_cases, 38, 38, 38, 38, 38, 38);
+    test_const_const<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 38, 38, 38, 38, 38);
+    test_const_const<TYPE_DECIMAL128, AddOp, OverflowMode::IGNORE>(test_cases, 38, 38, 38, 38, 38, 38);
+    test_const_nullable_vector<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 38, 38, 38, 38, 38);
+    test_nullable_vector_const<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 38, 38, 38, 38, 38);
+    test_nullable_vector_nullable_vector<TYPE_DECIMAL128, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 38, 38, 38,
+                                                                                            38, 38);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal32p9s2_add_decimal32p9s2_eq_decimal32p9s2) {
     DecimalTestCaseArray test_cases = {{"9999999.99", "9999999.99", "19999999.98"},
@@ -1087,14 +1119,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal32p9s2_add_decimal32p9s2_eq_decima
                                        {"4367854.80", "2928178.33", "7296033.13"},
                                        {"4977479.77", "-7748164.05", "-2770684.28"},
                                        {"8140199.01", "6887181.94", "15027380.95"}};
-    test_vector_vector<TYPE_DECIMAL32, AddOp, true>(test_cases, 9, 2, 9, 2, 9, 2);
-    test_vector_vector<TYPE_DECIMAL32, AddOp, false>(test_cases, 9, 2, 9, 2, 9, 2);
-    test_vector_const<TYPE_DECIMAL32, AddOp, true>(test_cases, 9, 2, 9, 2, 9, 2);
-    test_vector_const<TYPE_DECIMAL32, AddOp, false>(test_cases, 9, 2, 9, 2, 9, 2);
-    test_const_vector<TYPE_DECIMAL32, AddOp, true>(test_cases, 9, 2, 9, 2, 9, 2);
-    test_const_vector<TYPE_DECIMAL32, AddOp, false>(test_cases, 9, 2, 9, 2, 9, 2);
-    test_const_const<TYPE_DECIMAL32, AddOp, true>(test_cases, 9, 2, 9, 2, 9, 2);
-    test_const_const<TYPE_DECIMAL32, AddOp, false>(test_cases, 9, 2, 9, 2, 9, 2);
+    test_vector_vector<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 2, 9, 2, 9, 2);
+    test_vector_vector<TYPE_DECIMAL32, AddOp, OverflowMode::IGNORE>(test_cases, 9, 2, 9, 2, 9, 2);
+    test_vector_const<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 2, 9, 2, 9, 2);
+    test_vector_const<TYPE_DECIMAL32, AddOp, OverflowMode::IGNORE>(test_cases, 9, 2, 9, 2, 9, 2);
+    test_const_vector<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 2, 9, 2, 9, 2);
+    test_const_vector<TYPE_DECIMAL32, AddOp, OverflowMode::IGNORE>(test_cases, 9, 2, 9, 2, 9, 2);
+    test_const_const<TYPE_DECIMAL32, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 2, 9, 2, 9, 2);
+    test_const_const<TYPE_DECIMAL32, AddOp, OverflowMode::IGNORE>(test_cases, 9, 2, 9, 2, 9, 2);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal64p17s9_add_decimal64p17s9_eq_decimal64p18s9) {
     DecimalTestCaseArray test_cases = {{"99999999.999999999", "99999999.999999999", "199999999.999999998"},
@@ -1142,14 +1174,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal64p17s9_add_decimal64p17s9_eq_deci
                                        {"-62876211.621087932", "86876581.959110312", "24000370.338022380"},
                                        {"76564882.553342952", "-91266268.954760214", "-14701386.401417262"},
                                        {"-50140855.530337280", "-35274287.273107290", "-85415142.803444570"}};
-    test_vector_vector<TYPE_DECIMAL64, AddOp, true>(test_cases, 17, 9, 17, 9, 18, 9);
-    test_vector_vector<TYPE_DECIMAL64, AddOp, false>(test_cases, 17, 9, 17, 9, 18, 9);
-    test_vector_const<TYPE_DECIMAL64, AddOp, true>(test_cases, 17, 9, 17, 9, 18, 9);
-    test_vector_const<TYPE_DECIMAL64, AddOp, false>(test_cases, 17, 9, 17, 9, 18, 9);
-    test_const_vector<TYPE_DECIMAL64, AddOp, true>(test_cases, 17, 9, 17, 9, 18, 9);
-    test_const_vector<TYPE_DECIMAL64, AddOp, false>(test_cases, 17, 9, 17, 9, 18, 9);
-    test_const_const<TYPE_DECIMAL64, AddOp, true>(test_cases, 17, 9, 17, 9, 18, 9);
-    test_const_const<TYPE_DECIMAL64, AddOp, false>(test_cases, 17, 9, 17, 9, 18, 9);
+    test_vector_vector<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 17, 9, 17, 9, 18, 9);
+    test_vector_vector<TYPE_DECIMAL64, AddOp, OverflowMode::IGNORE>(test_cases, 17, 9, 17, 9, 18, 9);
+    test_vector_const<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 17, 9, 17, 9, 18, 9);
+    test_vector_const<TYPE_DECIMAL64, AddOp, OverflowMode::IGNORE>(test_cases, 17, 9, 17, 9, 18, 9);
+    test_const_vector<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 17, 9, 17, 9, 18, 9);
+    test_const_vector<TYPE_DECIMAL64, AddOp, OverflowMode::IGNORE>(test_cases, 17, 9, 17, 9, 18, 9);
+    test_const_const<TYPE_DECIMAL64, AddOp, OverflowMode::OUTPUT_NULL>(test_cases, 17, 9, 17, 9, 18, 9);
+    test_const_const<TYPE_DECIMAL64, AddOp, OverflowMode::IGNORE>(test_cases, 17, 9, 17, 9, 18, 9);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p15s11_div_decimal128p25s22_eq_decimal128p38s12) {
     DecimalTestCaseArray test_cases = {{"9999.99999999999", "999.9999999999999999999999", "10"},
@@ -1197,17 +1229,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p15s11_div_decimal128p25s22_eq_
                                        {"1352.82423985800", "-547.3441345315043848260712", "-2.471615487423"},
                                        {"729.55662250914", "380.6496092864635723207224", "1.916609408523"},
                                        {"-1585.50133094284", "347.3142457187999537378553", "-4.565033972797"}};
-    test_vector_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 15, 11, 25, 22, 38, 12);
-    test_vector_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 15, 11, 25, 22, 38, 12);
-    test_vector_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 15, 11, 25, 22, 38, 12);
-    test_vector_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 15, 11, 25, 22, 38, 12);
-    test_const_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 15, 11, 25, 22, 38, 12);
-    test_const_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 15, 11, 25, 22, 38, 12);
-    test_const_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 15, 11, 25, 22, 38, 12);
-    test_const_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 15, 11, 25, 22, 38, 12);
-    test_const_nullable_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 15, 11, 25, 22, 38, 12);
-    test_nullable_vector_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 15, 11, 25, 22, 38, 12);
-    test_nullable_vector_nullable_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 15, 11, 25, 22, 38, 12);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 15, 11, 25, 22, 38, 12);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 15, 11, 25, 22, 38, 12);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 15, 11, 25, 22, 38, 12);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 15, 11, 25, 22, 38, 12);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 15, 11, 25, 22, 38, 12);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 15, 11, 25, 22, 38, 12);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 15, 11, 25, 22, 38, 12);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 15, 11, 25, 22, 38, 12);
+    test_const_nullable_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 15, 11, 25, 22, 38, 12);
+    test_nullable_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 15, 11, 25, 22, 38, 12);
+    test_nullable_vector_nullable_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 15, 11, 25, 22,
+                                                                                            38, 12);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal32p7s2_div_decimal32p3s2_eq_decimal128p38s8) {
     DecimalTestCaseArray test_cases = {{"99999.99", "9.99", "10010.00900901"},
@@ -1255,17 +1288,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal32p7s2_div_decimal32p3s2_eq_decima
                                        {"-97770.51", "-5.82", "16799.05670103"},
                                        {"-27003.53", "4.11", "-6570.20194647"},
                                        {"-34864.13", "-2.06", "16924.33495146"}};
-    test_vector_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 7, 2, 3, 2, 38, 8);
-    test_vector_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 7, 2, 3, 2, 38, 8);
-    test_vector_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 7, 2, 3, 2, 38, 8);
-    test_vector_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 7, 2, 3, 2, 38, 8);
-    test_const_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 7, 2, 3, 2, 38, 8);
-    test_const_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 7, 2, 3, 2, 38, 8);
-    test_const_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 7, 2, 3, 2, 38, 8);
-    test_const_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 7, 2, 3, 2, 38, 8);
-    test_const_nullable_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 7, 2, 3, 2, 38, 8);
-    test_nullable_vector_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 7, 2, 3, 2, 38, 8);
-    test_nullable_vector_nullable_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 7, 2, 3, 2, 38, 8);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 2, 3, 2, 38, 8);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 7, 2, 3, 2, 38, 8);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 2, 3, 2, 38, 8);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 7, 2, 3, 2, 38, 8);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 2, 3, 2, 38, 8);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 7, 2, 3, 2, 38, 8);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 2, 3, 2, 38, 8);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 7, 2, 3, 2, 38, 8);
+    test_const_nullable_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 2, 3, 2, 38, 8);
+    test_nullable_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 2, 3, 2, 38, 8);
+    test_nullable_vector_nullable_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 2, 3, 2, 38,
+                                                                                            8);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal64p12s8_div_decimal64p9s6_eq_decimal128p38s12) {
     DecimalTestCaseArray test_cases = {{"9999.99999999", "999.999999", "10.000000009990"},
@@ -1313,14 +1347,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal64p12s8_div_decimal64p9s6_eq_decim
                                        {"6398.69670583", "565.243257", "11.320253053156"},
                                        {"-9450.30961930", "24.258915", "-389.560275853228"},
                                        {"1558.23869752", "-496.994912", "-3.135321227433"}};
-    test_vector_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 12, 8, 9, 6, 38, 12);
-    test_vector_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 12, 8, 9, 6, 38, 12);
-    test_vector_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 12, 8, 9, 6, 38, 12);
-    test_vector_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 12, 8, 9, 6, 38, 12);
-    test_const_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 12, 8, 9, 6, 38, 12);
-    test_const_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 12, 8, 9, 6, 38, 12);
-    test_const_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 12, 8, 9, 6, 38, 12);
-    test_const_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 12, 8, 9, 6, 38, 12);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 12, 8, 9, 6, 38, 12);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 12, 8, 9, 6, 38, 12);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 12, 8, 9, 6, 38, 12);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 12, 8, 9, 6, 38, 12);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 12, 8, 9, 6, 38, 12);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 12, 8, 9, 6, 38, 12);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 12, 8, 9, 6, 38, 12);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 12, 8, 9, 6, 38, 12);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p25s17_div_decimal128p9s0_eq_decimal128p38s17) {
     DecimalTestCaseArray test_cases = {{"99999999.99999999999999999", "999999999", "0.10000000010000000"},
@@ -1368,14 +1402,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p25s17_div_decimal128p9s0_eq_de
                                        {"68225778.23064308437573415", "-769973761", "-0.08860792625197404"},
                                        {"47367143.19011734346518047", "610301254", "0.07761272466616518"},
                                        {"85848629.92129111690055903", "364576713", "0.23547480368361080"}};
-    test_vector_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 25, 17, 9, 0, 38, 17);
-    test_vector_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 25, 17, 9, 0, 38, 17);
-    test_vector_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 25, 17, 9, 0, 38, 17);
-    test_vector_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 25, 17, 9, 0, 38, 17);
-    test_const_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 25, 17, 9, 0, 38, 17);
-    test_const_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 25, 17, 9, 0, 38, 17);
-    test_const_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 25, 17, 9, 0, 38, 17);
-    test_const_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 25, 17, 9, 0, 38, 17);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 25, 17, 9, 0, 38, 17);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 25, 17, 9, 0, 38, 17);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 25, 17, 9, 0, 38, 17);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 25, 17, 9, 0, 38, 17);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 25, 17, 9, 0, 38, 17);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 25, 17, 9, 0, 38, 17);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 25, 17, 9, 0, 38, 17);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 25, 17, 9, 0, 38, 17);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal32p9s3_div_decimal32p3s0_eq_decimal128p38s9) {
     DecimalTestCaseArray test_cases = {{"999999.999", "999", "1001.001000000"},
@@ -1423,14 +1457,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal32p9s3_div_decimal32p3s0_eq_decima
                                        {"242121.137", "973", "248.839811922"},
                                        {"-193814.768", "-446", "434.562260090"},
                                        {"-240048.747", "-929", "258.394776103"}};
-    test_vector_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 9, 3, 3, 0, 38, 9);
-    test_vector_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 9, 3, 3, 0, 38, 9);
-    test_vector_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 9, 3, 3, 0, 38, 9);
-    test_vector_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 9, 3, 3, 0, 38, 9);
-    test_const_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 9, 3, 3, 0, 38, 9);
-    test_const_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 9, 3, 3, 0, 38, 9);
-    test_const_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 9, 3, 3, 0, 38, 9);
-    test_const_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 9, 3, 3, 0, 38, 9);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 3, 3, 0, 38, 9);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 9, 3, 3, 0, 38, 9);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 3, 3, 0, 38, 9);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 9, 3, 3, 0, 38, 9);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 3, 3, 0, 38, 9);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 9, 3, 3, 0, 38, 9);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 3, 3, 0, 38, 9);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 9, 3, 3, 0, 38, 9);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal64p17s2_div_decimal64p15s0_eq_decimal128p38s8) {
     DecimalTestCaseArray test_cases = {{"999999999999999.99", "999999999999999", "1"},
@@ -1478,14 +1512,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal64p17s2_div_decimal64p15s0_eq_deci
                                        {"372085889948693.63", "936797518158384", "0.39718924"},
                                        {"904482717533081.91", "-425466412804779", "-2.12586162"},
                                        {"446252633031284.02", "-512319100731698", "-0.87104430"}};
-    test_vector_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 17, 2, 15, 0, 38, 8);
-    test_vector_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 17, 2, 15, 0, 38, 8);
-    test_vector_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 17, 2, 15, 0, 38, 8);
-    test_vector_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 17, 2, 15, 0, 38, 8);
-    test_const_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 17, 2, 15, 0, 38, 8);
-    test_const_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 17, 2, 15, 0, 38, 8);
-    test_const_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 17, 2, 15, 0, 38, 8);
-    test_const_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 17, 2, 15, 0, 38, 8);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 17, 2, 15, 0, 38, 8);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 17, 2, 15, 0, 38, 8);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 17, 2, 15, 0, 38, 8);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 17, 2, 15, 0, 38, 8);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 17, 2, 15, 0, 38, 8);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 17, 2, 15, 0, 38, 8);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 17, 2, 15, 0, 38, 8);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 17, 2, 15, 0, 38, 8);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal32p7s0_div_decimal32p3s1_eq_decimal128p38s6) {
     DecimalTestCaseArray test_cases = {{"9999999", "99.9", "100100.090090"},
@@ -1533,14 +1567,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal32p7s0_div_decimal32p3s1_eq_decima
                                        {"5811623", "-66.7", "-87130.779610"},
                                        {"2207779", "99.4", "22211.056338"},
                                        {"-542981", "87.4", "-6212.597254"}};
-    test_vector_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 7, 0, 3, 1, 38, 6);
-    test_vector_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 7, 0, 3, 1, 38, 6);
-    test_vector_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 7, 0, 3, 1, 38, 6);
-    test_vector_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 7, 0, 3, 1, 38, 6);
-    test_const_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 7, 0, 3, 1, 38, 6);
-    test_const_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 7, 0, 3, 1, 38, 6);
-    test_const_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 7, 0, 3, 1, 38, 6);
-    test_const_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 7, 0, 3, 1, 38, 6);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 0, 3, 1, 38, 6);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 7, 0, 3, 1, 38, 6);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 0, 3, 1, 38, 6);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 7, 0, 3, 1, 38, 6);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 0, 3, 1, 38, 6);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 7, 0, 3, 1, 38, 6);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 0, 3, 1, 38, 6);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 7, 0, 3, 1, 38, 6);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p19s0_mod_decimal128p25s10_eq_decimal128p38s10) {
     DecimalTestCaseArray test_cases = {
@@ -1589,17 +1623,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p19s0_mod_decimal128p25s10_eq_d
             {"-7341118520804255717", "626477587531744.1469953720", "-54150107277802.5082309040"},
             {"-1203448675473009682", "40966023177328.8636775864", "-30778615796982.6072219136"},
             {"-4287335955395136634", "354431798245120.1851337606", "-128923822162874.6220317824"}};
-    test_vector_vector<TYPE_DECIMAL128, ModOp, true>(test_cases, 19, 0, 25, 10, 38, 10);
-    test_vector_vector<TYPE_DECIMAL128, ModOp, false>(test_cases, 19, 0, 25, 10, 38, 10);
-    test_vector_const<TYPE_DECIMAL128, ModOp, true>(test_cases, 19, 0, 25, 10, 38, 10);
-    test_vector_const<TYPE_DECIMAL128, ModOp, false>(test_cases, 19, 0, 25, 10, 38, 10);
-    test_const_vector<TYPE_DECIMAL128, ModOp, true>(test_cases, 19, 0, 25, 10, 38, 10);
-    test_const_vector<TYPE_DECIMAL128, ModOp, false>(test_cases, 19, 0, 25, 10, 38, 10);
-    test_const_const<TYPE_DECIMAL128, ModOp, true>(test_cases, 19, 0, 25, 10, 38, 10);
-    test_const_const<TYPE_DECIMAL128, ModOp, false>(test_cases, 19, 0, 25, 10, 38, 10);
-    test_const_nullable_vector<TYPE_DECIMAL128, ModOp, true>(test_cases, 19, 0, 25, 10, 38, 10);
-    test_nullable_vector_const<TYPE_DECIMAL128, ModOp, true>(test_cases, 19, 0, 25, 10, 38, 10);
-    test_nullable_vector_nullable_vector<TYPE_DECIMAL128, ModOp, true>(test_cases, 19, 0, 25, 10, 38, 10);
+    test_vector_vector<TYPE_DECIMAL128, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 19, 0, 25, 10, 38, 10);
+    test_vector_vector<TYPE_DECIMAL128, ModOp, OverflowMode::IGNORE>(test_cases, 19, 0, 25, 10, 38, 10);
+    test_vector_const<TYPE_DECIMAL128, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 19, 0, 25, 10, 38, 10);
+    test_vector_const<TYPE_DECIMAL128, ModOp, OverflowMode::IGNORE>(test_cases, 19, 0, 25, 10, 38, 10);
+    test_const_vector<TYPE_DECIMAL128, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 19, 0, 25, 10, 38, 10);
+    test_const_vector<TYPE_DECIMAL128, ModOp, OverflowMode::IGNORE>(test_cases, 19, 0, 25, 10, 38, 10);
+    test_const_const<TYPE_DECIMAL128, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 19, 0, 25, 10, 38, 10);
+    test_const_const<TYPE_DECIMAL128, ModOp, OverflowMode::IGNORE>(test_cases, 19, 0, 25, 10, 38, 10);
+    test_const_nullable_vector<TYPE_DECIMAL128, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 19, 0, 25, 10, 38, 10);
+    test_nullable_vector_const<TYPE_DECIMAL128, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 19, 0, 25, 10, 38, 10);
+    test_nullable_vector_nullable_vector<TYPE_DECIMAL128, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 19, 0, 25, 10,
+                                                                                            38, 10);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal32p7s0_mod_decimal32p3s1_eq_decimal32p9s1) {
     DecimalTestCaseArray test_cases = {{"9999999", "99.9", "9"},
@@ -1647,17 +1682,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal32p7s0_mod_decimal32p3s1_eq_decima
                                        {"8204400", "-79.7", "2.3"},
                                        {"3174301", "93.5", "69.5"},
                                        {"-280267", "93.8", "-86.4"}};
-    test_vector_vector<TYPE_DECIMAL32, ModOp, true>(test_cases, 7, 0, 3, 1, 9, 1);
-    test_vector_vector<TYPE_DECIMAL32, ModOp, false>(test_cases, 7, 0, 3, 1, 9, 1);
-    test_vector_const<TYPE_DECIMAL32, ModOp, true>(test_cases, 7, 0, 3, 1, 9, 1);
-    test_vector_const<TYPE_DECIMAL32, ModOp, false>(test_cases, 7, 0, 3, 1, 9, 1);
-    test_const_vector<TYPE_DECIMAL32, ModOp, true>(test_cases, 7, 0, 3, 1, 9, 1);
-    test_const_vector<TYPE_DECIMAL32, ModOp, false>(test_cases, 7, 0, 3, 1, 9, 1);
-    test_const_const<TYPE_DECIMAL32, ModOp, true>(test_cases, 7, 0, 3, 1, 9, 1);
-    test_const_const<TYPE_DECIMAL32, ModOp, false>(test_cases, 7, 0, 3, 1, 9, 1);
-    test_const_nullable_vector<TYPE_DECIMAL32, ModOp, true>(test_cases, 7, 0, 3, 1, 9, 1);
-    test_nullable_vector_const<TYPE_DECIMAL32, ModOp, true>(test_cases, 7, 0, 3, 1, 9, 1);
-    test_nullable_vector_nullable_vector<TYPE_DECIMAL32, ModOp, true>(test_cases, 7, 0, 3, 1, 9, 1);
+    test_vector_vector<TYPE_DECIMAL32, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 0, 3, 1, 9, 1);
+    test_vector_vector<TYPE_DECIMAL32, ModOp, OverflowMode::IGNORE>(test_cases, 7, 0, 3, 1, 9, 1);
+    test_vector_const<TYPE_DECIMAL32, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 0, 3, 1, 9, 1);
+    test_vector_const<TYPE_DECIMAL32, ModOp, OverflowMode::IGNORE>(test_cases, 7, 0, 3, 1, 9, 1);
+    test_const_vector<TYPE_DECIMAL32, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 0, 3, 1, 9, 1);
+    test_const_vector<TYPE_DECIMAL32, ModOp, OverflowMode::IGNORE>(test_cases, 7, 0, 3, 1, 9, 1);
+    test_const_const<TYPE_DECIMAL32, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 0, 3, 1, 9, 1);
+    test_const_const<TYPE_DECIMAL32, ModOp, OverflowMode::IGNORE>(test_cases, 7, 0, 3, 1, 9, 1);
+    test_const_nullable_vector<TYPE_DECIMAL32, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 0, 3, 1, 9, 1);
+    test_nullable_vector_const<TYPE_DECIMAL32, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 0, 3, 1, 9, 1);
+    test_nullable_vector_nullable_vector<TYPE_DECIMAL32, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 0, 3, 1, 9,
+                                                                                           1);
 }
 
 TEST_F(DecimalBinaryFunctionTest, test_decimal64p10s0_mod_decimal64p9s5_eq_decimal64p18s5) {
@@ -1706,17 +1742,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal64p10s0_mod_decimal64p9s5_eq_decim
                                        {"6165666620", "3528.43279", "2008.79983"},
                                        {"-847919062", "-6873.70436", "-6386.96784"},
                                        {"3073937658", "-9682.00813", "6578.81443"}};
-    test_vector_vector<TYPE_DECIMAL64, ModOp, true>(test_cases, 10, 0, 9, 5, 18, 5);
-    test_vector_vector<TYPE_DECIMAL64, ModOp, false>(test_cases, 10, 0, 9, 5, 18, 5);
-    test_vector_const<TYPE_DECIMAL64, ModOp, true>(test_cases, 10, 0, 9, 5, 18, 5);
-    test_vector_const<TYPE_DECIMAL64, ModOp, false>(test_cases, 10, 0, 9, 5, 18, 5);
-    test_const_vector<TYPE_DECIMAL64, ModOp, true>(test_cases, 10, 0, 9, 5, 18, 5);
-    test_const_vector<TYPE_DECIMAL64, ModOp, false>(test_cases, 10, 0, 9, 5, 18, 5);
-    test_const_const<TYPE_DECIMAL64, ModOp, true>(test_cases, 10, 0, 9, 5, 18, 5);
-    test_const_const<TYPE_DECIMAL64, ModOp, false>(test_cases, 10, 0, 9, 5, 18, 5);
-    test_const_nullable_vector<TYPE_DECIMAL64, ModOp, true>(test_cases, 10, 0, 9, 5, 18, 5);
-    test_nullable_vector_const<TYPE_DECIMAL64, ModOp, true>(test_cases, 10, 0, 9, 5, 18, 5);
-    test_nullable_vector_nullable_vector<TYPE_DECIMAL64, ModOp, true>(test_cases, 10, 0, 9, 5, 18, 5);
+    test_vector_vector<TYPE_DECIMAL64, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 10, 0, 9, 5, 18, 5);
+    test_vector_vector<TYPE_DECIMAL64, ModOp, OverflowMode::IGNORE>(test_cases, 10, 0, 9, 5, 18, 5);
+    test_vector_const<TYPE_DECIMAL64, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 10, 0, 9, 5, 18, 5);
+    test_vector_const<TYPE_DECIMAL64, ModOp, OverflowMode::IGNORE>(test_cases, 10, 0, 9, 5, 18, 5);
+    test_const_vector<TYPE_DECIMAL64, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 10, 0, 9, 5, 18, 5);
+    test_const_vector<TYPE_DECIMAL64, ModOp, OverflowMode::IGNORE>(test_cases, 10, 0, 9, 5, 18, 5);
+    test_const_const<TYPE_DECIMAL64, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 10, 0, 9, 5, 18, 5);
+    test_const_const<TYPE_DECIMAL64, ModOp, OverflowMode::IGNORE>(test_cases, 10, 0, 9, 5, 18, 5);
+    test_const_nullable_vector<TYPE_DECIMAL64, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 10, 0, 9, 5, 18, 5);
+    test_nullable_vector_const<TYPE_DECIMAL64, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 10, 0, 9, 5, 18, 5);
+    test_nullable_vector_nullable_vector<TYPE_DECIMAL64, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 10, 0, 9, 5, 18,
+                                                                                           5);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p15s0_div_decimal128p25s17_eq_decimal128p38s6) {
     DecimalTestCaseArray test_cases = {{"999999999999999", "99999999.99999999999999999", "10000000"},
@@ -1764,14 +1801,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p15s0_div_decimal128p25s17_eq_d
                                        {"-192687054134394", "20305515.96744102909828465", "-9489394.627714"},
                                        {"-574633718564171", "26995620.02571797212079092", "-21286183.388888"},
                                        {"-562422579463537", "-40941330.91455957957681706", "13737281.297407"}};
-    test_vector_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 15, 0, 25, 17, 38, 6);
-    test_vector_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 15, 0, 25, 17, 38, 6);
-    test_vector_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 15, 0, 25, 17, 38, 6);
-    test_vector_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 15, 0, 25, 17, 38, 6);
-    test_const_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 15, 0, 25, 17, 38, 6);
-    test_const_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 15, 0, 25, 17, 38, 6);
-    test_const_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 15, 0, 25, 17, 38, 6);
-    test_const_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 15, 0, 25, 17, 38, 6);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 15, 0, 25, 17, 38, 6);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 15, 0, 25, 17, 38, 6);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 15, 0, 25, 17, 38, 6);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 15, 0, 25, 17, 38, 6);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 15, 0, 25, 17, 38, 6);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 15, 0, 25, 17, 38, 6);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 15, 0, 25, 17, 38, 6);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 15, 0, 25, 17, 38, 6);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal64p13s0_div_decimal64p9s3_eq_decimal128p38s6) {
     DecimalTestCaseArray test_cases = {{"9999999999999", "999999.999", "10000000.009999"},
@@ -1819,14 +1856,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal64p13s0_div_decimal64p9s3_eq_decim
                                        {"9732313140496", "-564089.673", "-17253131.206492"},
                                        {"-8313546164646", "-961638.869", "8645185.248482"},
                                        {"211575831776", "-156421.503", "-1352600.682887"}};
-    test_vector_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 13, 0, 9, 3, 38, 6);
-    test_vector_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 13, 0, 9, 3, 38, 6);
-    test_vector_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 13, 0, 9, 3, 38, 6);
-    test_vector_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 13, 0, 9, 3, 38, 6);
-    test_const_vector<TYPE_DECIMAL128, DivOp, true>(test_cases, 13, 0, 9, 3, 38, 6);
-    test_const_vector<TYPE_DECIMAL128, DivOp, false>(test_cases, 13, 0, 9, 3, 38, 6);
-    test_const_const<TYPE_DECIMAL128, DivOp, true>(test_cases, 13, 0, 9, 3, 38, 6);
-    test_const_const<TYPE_DECIMAL128, DivOp, false>(test_cases, 13, 0, 9, 3, 38, 6);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 13, 0, 9, 3, 38, 6);
+    test_vector_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 13, 0, 9, 3, 38, 6);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 13, 0, 9, 3, 38, 6);
+    test_vector_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 13, 0, 9, 3, 38, 6);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 13, 0, 9, 3, 38, 6);
+    test_const_vector<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 13, 0, 9, 3, 38, 6);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_cases, 13, 0, 9, 3, 38, 6);
+    test_const_const<TYPE_DECIMAL128, DivOp, OverflowMode::IGNORE>(test_cases, 13, 0, 9, 3, 38, 6);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p14s11_mod_decimal128p25s24_eq_decimal128p38s24) {
     DecimalTestCaseArray test_cases = {
@@ -1875,14 +1912,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p14s11_mod_decimal128p25s24_eq_
             {"-89.98857039894", "-5.219267312564343871218155", "-1.261026085346154189291365"},
             {"-417.25741255056", "-9.615706041593941633216225", "-3.782052762020509771702325"},
             {"-550.40864136515", "8.919012908470573845421394", "-6.348853948444995429294966"}};
-    test_vector_vector<TYPE_DECIMAL128, ModOp, true>(test_cases, 14, 11, 25, 24, 38, 24);
-    test_vector_vector<TYPE_DECIMAL128, ModOp, false>(test_cases, 14, 11, 25, 24, 38, 24);
-    test_vector_const<TYPE_DECIMAL128, ModOp, true>(test_cases, 14, 11, 25, 24, 38, 24);
-    test_vector_const<TYPE_DECIMAL128, ModOp, false>(test_cases, 14, 11, 25, 24, 38, 24);
-    test_const_vector<TYPE_DECIMAL128, ModOp, true>(test_cases, 14, 11, 25, 24, 38, 24);
-    test_const_vector<TYPE_DECIMAL128, ModOp, false>(test_cases, 14, 11, 25, 24, 38, 24);
-    test_const_const<TYPE_DECIMAL128, ModOp, true>(test_cases, 14, 11, 25, 24, 38, 24);
-    test_const_const<TYPE_DECIMAL128, ModOp, false>(test_cases, 14, 11, 25, 24, 38, 24);
+    test_vector_vector<TYPE_DECIMAL128, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 14, 11, 25, 24, 38, 24);
+    test_vector_vector<TYPE_DECIMAL128, ModOp, OverflowMode::IGNORE>(test_cases, 14, 11, 25, 24, 38, 24);
+    test_vector_const<TYPE_DECIMAL128, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 14, 11, 25, 24, 38, 24);
+    test_vector_const<TYPE_DECIMAL128, ModOp, OverflowMode::IGNORE>(test_cases, 14, 11, 25, 24, 38, 24);
+    test_const_vector<TYPE_DECIMAL128, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 14, 11, 25, 24, 38, 24);
+    test_const_vector<TYPE_DECIMAL128, ModOp, OverflowMode::IGNORE>(test_cases, 14, 11, 25, 24, 38, 24);
+    test_const_const<TYPE_DECIMAL128, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 14, 11, 25, 24, 38, 24);
+    test_const_const<TYPE_DECIMAL128, ModOp, OverflowMode::IGNORE>(test_cases, 14, 11, 25, 24, 38, 24);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal32p7s2_mod_decimal32p3s2_eq_decimal32p9s2) {
     DecimalTestCaseArray test_cases = {{"99999.99", "9.99", "0.09"},
@@ -1930,14 +1967,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal32p7s2_mod_decimal32p3s2_eq_decima
                                        {"-88487.59", "1.71", "-0.22"},
                                        {"-62357.07", "-4.26", "-3.45"},
                                        {"-34972.69", "-0.71", "-0.22"}};
-    test_vector_vector<TYPE_DECIMAL32, ModOp, true>(test_cases, 7, 2, 3, 2, 9, 2);
-    test_vector_vector<TYPE_DECIMAL32, ModOp, false>(test_cases, 7, 2, 3, 2, 9, 2);
-    test_vector_const<TYPE_DECIMAL32, ModOp, true>(test_cases, 7, 2, 3, 2, 9, 2);
-    test_vector_const<TYPE_DECIMAL32, ModOp, false>(test_cases, 7, 2, 3, 2, 9, 2);
-    test_const_vector<TYPE_DECIMAL32, ModOp, true>(test_cases, 7, 2, 3, 2, 9, 2);
-    test_const_vector<TYPE_DECIMAL32, ModOp, false>(test_cases, 7, 2, 3, 2, 9, 2);
-    test_const_const<TYPE_DECIMAL32, ModOp, true>(test_cases, 7, 2, 3, 2, 9, 2);
-    test_const_const<TYPE_DECIMAL32, ModOp, false>(test_cases, 7, 2, 3, 2, 9, 2);
+    test_vector_vector<TYPE_DECIMAL32, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 2, 3, 2, 9, 2);
+    test_vector_vector<TYPE_DECIMAL32, ModOp, OverflowMode::IGNORE>(test_cases, 7, 2, 3, 2, 9, 2);
+    test_vector_const<TYPE_DECIMAL32, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 2, 3, 2, 9, 2);
+    test_vector_const<TYPE_DECIMAL32, ModOp, OverflowMode::IGNORE>(test_cases, 7, 2, 3, 2, 9, 2);
+    test_const_vector<TYPE_DECIMAL32, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 2, 3, 2, 9, 2);
+    test_const_vector<TYPE_DECIMAL32, ModOp, OverflowMode::IGNORE>(test_cases, 7, 2, 3, 2, 9, 2);
+    test_const_const<TYPE_DECIMAL32, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 7, 2, 3, 2, 9, 2);
+    test_const_const<TYPE_DECIMAL32, ModOp, OverflowMode::IGNORE>(test_cases, 7, 2, 3, 2, 9, 2);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal64p11s8_mod_decimal64p9s7_eq_decimal64p18s8) {
     DecimalTestCaseArray test_cases = {{"999.99999999", "99.9999999", "0.00000099"},
@@ -1985,14 +2022,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal64p11s8_mod_decimal64p9s7_eq_decim
                                        {"519.39882254", "95.9184850", "39.80639754"},
                                        {"-144.80040473", "-70.5479193", "-3.70456613"},
                                        {"-621.54729545", "-76.2382137", "-11.64158585"}};
-    test_vector_vector<TYPE_DECIMAL64, ModOp, true>(test_cases, 11, 8, 9, 7, 18, 8);
-    test_vector_vector<TYPE_DECIMAL64, ModOp, false>(test_cases, 11, 8, 9, 7, 18, 8);
-    test_vector_const<TYPE_DECIMAL64, ModOp, true>(test_cases, 11, 8, 9, 7, 18, 8);
-    test_vector_const<TYPE_DECIMAL64, ModOp, false>(test_cases, 11, 8, 9, 7, 18, 8);
-    test_const_vector<TYPE_DECIMAL64, ModOp, true>(test_cases, 11, 8, 9, 7, 18, 8);
-    test_const_vector<TYPE_DECIMAL64, ModOp, false>(test_cases, 11, 8, 9, 7, 18, 8);
-    test_const_const<TYPE_DECIMAL64, ModOp, true>(test_cases, 11, 8, 9, 7, 18, 8);
-    test_const_const<TYPE_DECIMAL64, ModOp, false>(test_cases, 11, 8, 9, 7, 18, 8);
+    test_vector_vector<TYPE_DECIMAL64, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 11, 8, 9, 7, 18, 8);
+    test_vector_vector<TYPE_DECIMAL64, ModOp, OverflowMode::IGNORE>(test_cases, 11, 8, 9, 7, 18, 8);
+    test_vector_const<TYPE_DECIMAL64, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 11, 8, 9, 7, 18, 8);
+    test_vector_const<TYPE_DECIMAL64, ModOp, OverflowMode::IGNORE>(test_cases, 11, 8, 9, 7, 18, 8);
+    test_const_vector<TYPE_DECIMAL64, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 11, 8, 9, 7, 18, 8);
+    test_const_vector<TYPE_DECIMAL64, ModOp, OverflowMode::IGNORE>(test_cases, 11, 8, 9, 7, 18, 8);
+    test_const_const<TYPE_DECIMAL64, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 11, 8, 9, 7, 18, 8);
+    test_const_const<TYPE_DECIMAL64, ModOp, OverflowMode::IGNORE>(test_cases, 11, 8, 9, 7, 18, 8);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p37s10_mod_decimal128p19s0_eq_decimal128p38s10) {
     DecimalTestCaseArray test_cases = {
@@ -2041,14 +2078,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p37s10_mod_decimal128p19s0_eq_d
             {"703705951470571265241650745.6103595237", "-440292678426069664", "179896338935711609.6103595237"},
             {"-448396464273958359356356812.7270470068", "-1103614251073279439", "-433593374512676914.7270470068"},
             {"-516945573350517038940528510.3300588707", "703292555006229313", "-428755557624421724.3300588707"}};
-    test_vector_vector<TYPE_DECIMAL128, ModOp, true>(test_cases, 37, 10, 19, 0, 38, 10);
-    test_vector_vector<TYPE_DECIMAL128, ModOp, false>(test_cases, 37, 10, 19, 0, 38, 10);
-    test_vector_const<TYPE_DECIMAL128, ModOp, true>(test_cases, 37, 10, 19, 0, 38, 10);
-    test_vector_const<TYPE_DECIMAL128, ModOp, false>(test_cases, 37, 10, 19, 0, 38, 10);
-    test_const_vector<TYPE_DECIMAL128, ModOp, true>(test_cases, 37, 10, 19, 0, 38, 10);
-    test_const_vector<TYPE_DECIMAL128, ModOp, false>(test_cases, 37, 10, 19, 0, 38, 10);
-    test_const_const<TYPE_DECIMAL128, ModOp, true>(test_cases, 37, 10, 19, 0, 38, 10);
-    test_const_const<TYPE_DECIMAL128, ModOp, false>(test_cases, 37, 10, 19, 0, 38, 10);
+    test_vector_vector<TYPE_DECIMAL128, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 37, 10, 19, 0, 38, 10);
+    test_vector_vector<TYPE_DECIMAL128, ModOp, OverflowMode::IGNORE>(test_cases, 37, 10, 19, 0, 38, 10);
+    test_vector_const<TYPE_DECIMAL128, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 37, 10, 19, 0, 38, 10);
+    test_vector_const<TYPE_DECIMAL128, ModOp, OverflowMode::IGNORE>(test_cases, 37, 10, 19, 0, 38, 10);
+    test_const_vector<TYPE_DECIMAL128, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 37, 10, 19, 0, 38, 10);
+    test_const_vector<TYPE_DECIMAL128, ModOp, OverflowMode::IGNORE>(test_cases, 37, 10, 19, 0, 38, 10);
+    test_const_const<TYPE_DECIMAL128, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 37, 10, 19, 0, 38, 10);
+    test_const_const<TYPE_DECIMAL128, ModOp, OverflowMode::IGNORE>(test_cases, 37, 10, 19, 0, 38, 10);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal32p9s3_mod_decimal32p3s0_eq_decimal32p9s3) {
     DecimalTestCaseArray test_cases = {{"999999.999", "999", "0.999"},
@@ -2096,14 +2133,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal32p9s3_mod_decimal32p3s0_eq_decima
                                        {"712934.753", "624", "326.753"},
                                        {"802450.008", "-288", "82.008"},
                                        {"-408672.100", "554", "-374.100"}};
-    test_vector_vector<TYPE_DECIMAL32, ModOp, true>(test_cases, 9, 3, 3, 0, 9, 3);
-    test_vector_vector<TYPE_DECIMAL32, ModOp, false>(test_cases, 9, 3, 3, 0, 9, 3);
-    test_vector_const<TYPE_DECIMAL32, ModOp, true>(test_cases, 9, 3, 3, 0, 9, 3);
-    test_vector_const<TYPE_DECIMAL32, ModOp, false>(test_cases, 9, 3, 3, 0, 9, 3);
-    test_const_vector<TYPE_DECIMAL32, ModOp, true>(test_cases, 9, 3, 3, 0, 9, 3);
-    test_const_vector<TYPE_DECIMAL32, ModOp, false>(test_cases, 9, 3, 3, 0, 9, 3);
-    test_const_const<TYPE_DECIMAL32, ModOp, true>(test_cases, 9, 3, 3, 0, 9, 3);
-    test_const_const<TYPE_DECIMAL32, ModOp, false>(test_cases, 9, 3, 3, 0, 9, 3);
+    test_vector_vector<TYPE_DECIMAL32, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 3, 3, 0, 9, 3);
+    test_vector_vector<TYPE_DECIMAL32, ModOp, OverflowMode::IGNORE>(test_cases, 9, 3, 3, 0, 9, 3);
+    test_vector_const<TYPE_DECIMAL32, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 3, 3, 0, 9, 3);
+    test_vector_const<TYPE_DECIMAL32, ModOp, OverflowMode::IGNORE>(test_cases, 9, 3, 3, 0, 9, 3);
+    test_const_vector<TYPE_DECIMAL32, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 3, 3, 0, 9, 3);
+    test_const_vector<TYPE_DECIMAL32, ModOp, OverflowMode::IGNORE>(test_cases, 9, 3, 3, 0, 9, 3);
+    test_const_const<TYPE_DECIMAL32, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 3, 3, 0, 9, 3);
+    test_const_const<TYPE_DECIMAL32, ModOp, OverflowMode::IGNORE>(test_cases, 9, 3, 3, 0, 9, 3);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal64p17s5_mod_decimal64p11s0_eq_decimal64p18s5) {
     DecimalTestCaseArray test_cases = {{"999999999999.99999", "99999999999", "9.99999"},
@@ -2151,14 +2188,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal64p17s5_mod_decimal64p11s0_eq_deci
                                        {"901467078994.55401", "-38003812277", "27379396623.55401"},
                                        {"780876971551.84693", "-71583534641", "65041625141.84693"},
                                        {"966612870052.51187", "-5842683459", "2570099317.51187"}};
-    test_vector_vector<TYPE_DECIMAL64, ModOp, true>(test_cases, 17, 5, 11, 0, 18, 5);
-    test_vector_vector<TYPE_DECIMAL64, ModOp, false>(test_cases, 17, 5, 11, 0, 18, 5);
-    test_vector_const<TYPE_DECIMAL64, ModOp, true>(test_cases, 17, 5, 11, 0, 18, 5);
-    test_vector_const<TYPE_DECIMAL64, ModOp, false>(test_cases, 17, 5, 11, 0, 18, 5);
-    test_const_vector<TYPE_DECIMAL64, ModOp, true>(test_cases, 17, 5, 11, 0, 18, 5);
-    test_const_vector<TYPE_DECIMAL64, ModOp, false>(test_cases, 17, 5, 11, 0, 18, 5);
-    test_const_const<TYPE_DECIMAL64, ModOp, true>(test_cases, 17, 5, 11, 0, 18, 5);
-    test_const_const<TYPE_DECIMAL64, ModOp, false>(test_cases, 17, 5, 11, 0, 18, 5);
+    test_vector_vector<TYPE_DECIMAL64, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 17, 5, 11, 0, 18, 5);
+    test_vector_vector<TYPE_DECIMAL64, ModOp, OverflowMode::IGNORE>(test_cases, 17, 5, 11, 0, 18, 5);
+    test_vector_const<TYPE_DECIMAL64, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 17, 5, 11, 0, 18, 5);
+    test_vector_const<TYPE_DECIMAL64, ModOp, OverflowMode::IGNORE>(test_cases, 17, 5, 11, 0, 18, 5);
+    test_const_vector<TYPE_DECIMAL64, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 17, 5, 11, 0, 18, 5);
+    test_const_vector<TYPE_DECIMAL64, ModOp, OverflowMode::IGNORE>(test_cases, 17, 5, 11, 0, 18, 5);
+    test_const_const<TYPE_DECIMAL64, ModOp, OverflowMode::OUTPUT_NULL>(test_cases, 17, 5, 11, 0, 18, 5);
+    test_const_const<TYPE_DECIMAL64, ModOp, OverflowMode::IGNORE>(test_cases, 17, 5, 11, 0, 18, 5);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p14s7_mul_decimal128p15s13_eq_decimal128p38s20) {
     DecimalTestCaseArray test_cases = {{"9999999.9999999", "99.9999999999999", "999999999.99998900000000000001"},
@@ -2206,17 +2243,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p14s7_mul_decimal128p15s13_eq_d
                                        {"2135270.8932478", "-59.4856253344513", "-127017924.34329778897388793214"},
                                        {"-5117146.3353753", "90.7328324270471", "-464293180.95228525464724927663"},
                                        {"-114625.2118252", "-64.7847660599647", "7425967.53266948134273457044"}};
-    test_vector_vector<TYPE_DECIMAL128, MulOp, true>(test_cases, 14, 7, 15, 13, 38, 20);
-    test_vector_vector<TYPE_DECIMAL128, MulOp, false>(test_cases, 14, 7, 15, 13, 38, 20);
-    test_vector_const<TYPE_DECIMAL128, MulOp, true>(test_cases, 14, 7, 15, 13, 38, 20);
-    test_vector_const<TYPE_DECIMAL128, MulOp, false>(test_cases, 14, 7, 15, 13, 38, 20);
-    test_const_vector<TYPE_DECIMAL128, MulOp, true>(test_cases, 14, 7, 15, 13, 38, 20);
-    test_const_vector<TYPE_DECIMAL128, MulOp, false>(test_cases, 14, 7, 15, 13, 38, 20);
-    test_const_const<TYPE_DECIMAL128, MulOp, true>(test_cases, 14, 7, 15, 13, 38, 20);
-    test_const_const<TYPE_DECIMAL128, MulOp, false>(test_cases, 14, 7, 15, 13, 38, 20);
-    test_const_nullable_vector<TYPE_DECIMAL128, MulOp, true>(test_cases, 14, 7, 15, 13, 38, 20);
-    test_nullable_vector_const<TYPE_DECIMAL128, MulOp, true>(test_cases, 14, 7, 15, 13, 38, 20);
-    test_nullable_vector_nullable_vector<TYPE_DECIMAL128, MulOp, true>(test_cases, 14, 7, 15, 13, 38, 20);
+    test_vector_vector<TYPE_DECIMAL128, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 14, 7, 15, 13, 38, 20);
+    test_vector_vector<TYPE_DECIMAL128, MulOp, OverflowMode::IGNORE>(test_cases, 14, 7, 15, 13, 38, 20);
+    test_vector_const<TYPE_DECIMAL128, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 14, 7, 15, 13, 38, 20);
+    test_vector_const<TYPE_DECIMAL128, MulOp, OverflowMode::IGNORE>(test_cases, 14, 7, 15, 13, 38, 20);
+    test_const_vector<TYPE_DECIMAL128, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 14, 7, 15, 13, 38, 20);
+    test_const_vector<TYPE_DECIMAL128, MulOp, OverflowMode::IGNORE>(test_cases, 14, 7, 15, 13, 38, 20);
+    test_const_const<TYPE_DECIMAL128, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 14, 7, 15, 13, 38, 20);
+    test_const_const<TYPE_DECIMAL128, MulOp, OverflowMode::IGNORE>(test_cases, 14, 7, 15, 13, 38, 20);
+    test_const_nullable_vector<TYPE_DECIMAL128, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 14, 7, 15, 13, 38, 20);
+    test_nullable_vector_const<TYPE_DECIMAL128, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 14, 7, 15, 13, 38, 20);
+    test_nullable_vector_nullable_vector<TYPE_DECIMAL128, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 14, 7, 15, 13,
+                                                                                            38, 20);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal32p5s2_mul_decimal32p5s1_eq_decimal32p9s3) {
     DecimalTestCaseArray test_cases = {{"999.99", "9999.9", "1409865.409"},
@@ -2264,17 +2302,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal32p5s2_mul_decimal32p5s1_eq_decima
                                        {"704.65", "-7497.9", "-988427.939"},
                                        {"662.39", "4582.8", "-1259366.404"},
                                        {"-546.47", "4504.4", "1833447.828"}};
-    test_vector_vector<TYPE_DECIMAL32, MulOp, true>(test_cases, 5, 2, 5, 1, 9, 3);
-    test_vector_vector<TYPE_DECIMAL32, MulOp, false>(test_cases, 5, 2, 5, 1, 9, 3);
-    test_vector_const<TYPE_DECIMAL32, MulOp, true>(test_cases, 5, 2, 5, 1, 9, 3);
-    test_vector_const<TYPE_DECIMAL32, MulOp, false>(test_cases, 5, 2, 5, 1, 9, 3);
-    test_const_vector<TYPE_DECIMAL32, MulOp, true>(test_cases, 5, 2, 5, 1, 9, 3);
-    test_const_vector<TYPE_DECIMAL32, MulOp, false>(test_cases, 5, 2, 5, 1, 9, 3);
-    test_const_const<TYPE_DECIMAL32, MulOp, true>(test_cases, 5, 2, 5, 1, 9, 3);
-    test_const_const<TYPE_DECIMAL32, MulOp, false>(test_cases, 5, 2, 5, 1, 9, 3);
-    test_const_nullable_vector<TYPE_DECIMAL32, MulOp, true>(test_cases, 5, 2, 5, 1, 9, 3);
-    test_nullable_vector_const<TYPE_DECIMAL32, MulOp, true>(test_cases, 5, 2, 5, 1, 9, 3);
-    test_nullable_vector_nullable_vector<TYPE_DECIMAL32, MulOp, true>(test_cases, 5, 2, 5, 1, 9, 3);
+    test_vector_vector<TYPE_DECIMAL32, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 5, 2, 5, 1, 9, 3);
+    test_vector_vector<TYPE_DECIMAL32, MulOp, OverflowMode::IGNORE>(test_cases, 5, 2, 5, 1, 9, 3);
+    test_vector_const<TYPE_DECIMAL32, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 5, 2, 5, 1, 9, 3);
+    test_vector_const<TYPE_DECIMAL32, MulOp, OverflowMode::IGNORE>(test_cases, 5, 2, 5, 1, 9, 3);
+    test_const_vector<TYPE_DECIMAL32, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 5, 2, 5, 1, 9, 3);
+    test_const_vector<TYPE_DECIMAL32, MulOp, OverflowMode::IGNORE>(test_cases, 5, 2, 5, 1, 9, 3);
+    test_const_const<TYPE_DECIMAL32, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 5, 2, 5, 1, 9, 3);
+    test_const_const<TYPE_DECIMAL32, MulOp, OverflowMode::IGNORE>(test_cases, 5, 2, 5, 1, 9, 3);
+    test_const_nullable_vector<TYPE_DECIMAL32, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 5, 2, 5, 1, 9, 3);
+    test_nullable_vector_const<TYPE_DECIMAL32, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 5, 2, 5, 1, 9, 3);
+    test_nullable_vector_nullable_vector<TYPE_DECIMAL32, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 5, 2, 5, 1, 9,
+                                                                                           3);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal64p16s4_mul_decimal64p4s3_eq_decimal64p18s7) {
     DecimalTestCaseArray test_cases = {{"999999999999.9999", "9.999", "775627963145.2231921"},
@@ -2322,17 +2361,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal64p16s4_mul_decimal64p4s3_eq_decim
                                        {"670097572887.8554", "3.989", "828344810878.7000290"},
                                        {"736082785867.9490", "6.370", "-845175876134.0303548"},
                                        {"-381480307337.5364", "7.793", "716472779660.4891580"}};
-    test_vector_vector<TYPE_DECIMAL64, MulOp, true>(test_cases, 16, 4, 4, 3, 18, 7);
-    test_vector_vector<TYPE_DECIMAL64, MulOp, false>(test_cases, 16, 4, 4, 3, 18, 7);
-    test_vector_const<TYPE_DECIMAL64, MulOp, true>(test_cases, 16, 4, 4, 3, 18, 7);
-    test_vector_const<TYPE_DECIMAL64, MulOp, false>(test_cases, 16, 4, 4, 3, 18, 7);
-    test_const_vector<TYPE_DECIMAL64, MulOp, true>(test_cases, 16, 4, 4, 3, 18, 7);
-    test_const_vector<TYPE_DECIMAL64, MulOp, false>(test_cases, 16, 4, 4, 3, 18, 7);
-    test_const_const<TYPE_DECIMAL64, MulOp, true>(test_cases, 16, 4, 4, 3, 18, 7);
-    test_const_const<TYPE_DECIMAL64, MulOp, false>(test_cases, 16, 4, 4, 3, 18, 7);
-    test_const_nullable_vector<TYPE_DECIMAL64, MulOp, true>(test_cases, 16, 4, 4, 3, 18, 7);
-    test_nullable_vector_const<TYPE_DECIMAL64, MulOp, true>(test_cases, 16, 4, 4, 3, 18, 7);
-    test_nullable_vector_nullable_vector<TYPE_DECIMAL64, MulOp, true>(test_cases, 16, 4, 4, 3, 18, 7);
+    test_vector_vector<TYPE_DECIMAL64, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 16, 4, 4, 3, 18, 7);
+    test_vector_vector<TYPE_DECIMAL64, MulOp, OverflowMode::IGNORE>(test_cases, 16, 4, 4, 3, 18, 7);
+    test_vector_const<TYPE_DECIMAL64, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 16, 4, 4, 3, 18, 7);
+    test_vector_const<TYPE_DECIMAL64, MulOp, OverflowMode::IGNORE>(test_cases, 16, 4, 4, 3, 18, 7);
+    test_const_vector<TYPE_DECIMAL64, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 16, 4, 4, 3, 18, 7);
+    test_const_vector<TYPE_DECIMAL64, MulOp, OverflowMode::IGNORE>(test_cases, 16, 4, 4, 3, 18, 7);
+    test_const_const<TYPE_DECIMAL64, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 16, 4, 4, 3, 18, 7);
+    test_const_const<TYPE_DECIMAL64, MulOp, OverflowMode::IGNORE>(test_cases, 16, 4, 4, 3, 18, 7);
+    test_const_nullable_vector<TYPE_DECIMAL64, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 16, 4, 4, 3, 18, 7);
+    test_nullable_vector_const<TYPE_DECIMAL64, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 16, 4, 4, 3, 18, 7);
+    test_nullable_vector_nullable_vector<TYPE_DECIMAL64, MulOp, OverflowMode::OUTPUT_NULL>(test_cases, 16, 4, 4, 3, 18,
+                                                                                           7);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p31s6_sub_decimal128p34s8_eq_decimal128p38s8) {
     DecimalTestCaseArray test_cases = {
@@ -2405,17 +2445,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p31s6_sub_decimal128p34s8_eq_de
              "56996805961234840915521075.00964909"},
             {"5808943082534482268879950.393443", "-38136483080721731398635132.11663572",
              "43945426163256213667515082.51007872"}};
-    test_vector_vector<TYPE_DECIMAL128, SubOp, true>(test_cases, 31, 6, 34, 8, 38, 8);
-    test_vector_vector<TYPE_DECIMAL128, SubOp, false>(test_cases, 31, 6, 34, 8, 38, 8);
-    test_vector_const<TYPE_DECIMAL128, SubOp, true>(test_cases, 31, 6, 34, 8, 38, 8);
-    test_vector_const<TYPE_DECIMAL128, SubOp, false>(test_cases, 31, 6, 34, 8, 38, 8);
-    test_const_vector<TYPE_DECIMAL128, SubOp, true>(test_cases, 31, 6, 34, 8, 38, 8);
-    test_const_vector<TYPE_DECIMAL128, SubOp, false>(test_cases, 31, 6, 34, 8, 38, 8);
-    test_const_const<TYPE_DECIMAL128, SubOp, true>(test_cases, 31, 6, 34, 8, 38, 8);
-    test_const_const<TYPE_DECIMAL128, SubOp, false>(test_cases, 31, 6, 34, 8, 38, 8);
-    test_const_nullable_vector<TYPE_DECIMAL128, SubOp, true>(test_cases, 31, 6, 34, 8, 38, 8);
-    test_nullable_vector_const<TYPE_DECIMAL128, SubOp, true>(test_cases, 31, 6, 34, 8, 38, 8);
-    test_nullable_vector_nullable_vector<TYPE_DECIMAL128, SubOp, true>(test_cases, 31, 6, 34, 8, 38, 8);
+    test_vector_vector<TYPE_DECIMAL128, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 31, 6, 34, 8, 38, 8);
+    test_vector_vector<TYPE_DECIMAL128, SubOp, OverflowMode::IGNORE>(test_cases, 31, 6, 34, 8, 38, 8);
+    test_vector_const<TYPE_DECIMAL128, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 31, 6, 34, 8, 38, 8);
+    test_vector_const<TYPE_DECIMAL128, SubOp, OverflowMode::IGNORE>(test_cases, 31, 6, 34, 8, 38, 8);
+    test_const_vector<TYPE_DECIMAL128, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 31, 6, 34, 8, 38, 8);
+    test_const_vector<TYPE_DECIMAL128, SubOp, OverflowMode::IGNORE>(test_cases, 31, 6, 34, 8, 38, 8);
+    test_const_const<TYPE_DECIMAL128, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 31, 6, 34, 8, 38, 8);
+    test_const_const<TYPE_DECIMAL128, SubOp, OverflowMode::IGNORE>(test_cases, 31, 6, 34, 8, 38, 8);
+    test_const_nullable_vector<TYPE_DECIMAL128, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 31, 6, 34, 8, 38, 8);
+    test_nullable_vector_const<TYPE_DECIMAL128, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 31, 6, 34, 8, 38, 8);
+    test_nullable_vector_nullable_vector<TYPE_DECIMAL128, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 31, 6, 34, 8,
+                                                                                            38, 8);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal32p4s2_sub_decimal32p6s4_eq_decimal32p9s4) {
     DecimalTestCaseArray test_cases = {{"99.99", "99.9999", "-0.0099"},
@@ -2463,14 +2504,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal32p4s2_sub_decimal32p6s4_eq_decima
                                        {"-2.59", "-16.5820", "13.9920"},
                                        {"30.01", "-55.3397", "85.3497"},
                                        {"-34.59", "-74.7302", "40.1402"}};
-    test_vector_vector<TYPE_DECIMAL32, SubOp, true>(test_cases, 4, 2, 6, 4, 9, 4);
-    test_vector_vector<TYPE_DECIMAL32, SubOp, false>(test_cases, 4, 2, 6, 4, 9, 4);
-    test_vector_const<TYPE_DECIMAL32, SubOp, true>(test_cases, 4, 2, 6, 4, 9, 4);
-    test_vector_const<TYPE_DECIMAL32, SubOp, false>(test_cases, 4, 2, 6, 4, 9, 4);
-    test_const_vector<TYPE_DECIMAL32, SubOp, true>(test_cases, 4, 2, 6, 4, 9, 4);
-    test_const_vector<TYPE_DECIMAL32, SubOp, false>(test_cases, 4, 2, 6, 4, 9, 4);
-    test_const_const<TYPE_DECIMAL32, SubOp, true>(test_cases, 4, 2, 6, 4, 9, 4);
-    test_const_const<TYPE_DECIMAL32, SubOp, false>(test_cases, 4, 2, 6, 4, 9, 4);
+    test_vector_vector<TYPE_DECIMAL32, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 4, 2, 6, 4, 9, 4);
+    test_vector_vector<TYPE_DECIMAL32, SubOp, OverflowMode::IGNORE>(test_cases, 4, 2, 6, 4, 9, 4);
+    test_vector_const<TYPE_DECIMAL32, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 4, 2, 6, 4, 9, 4);
+    test_vector_const<TYPE_DECIMAL32, SubOp, OverflowMode::IGNORE>(test_cases, 4, 2, 6, 4, 9, 4);
+    test_const_vector<TYPE_DECIMAL32, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 4, 2, 6, 4, 9, 4);
+    test_const_vector<TYPE_DECIMAL32, SubOp, OverflowMode::IGNORE>(test_cases, 4, 2, 6, 4, 9, 4);
+    test_const_const<TYPE_DECIMAL32, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 4, 2, 6, 4, 9, 4);
+    test_const_const<TYPE_DECIMAL32, SubOp, OverflowMode::IGNORE>(test_cases, 4, 2, 6, 4, 9, 4);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal64p11s5_sub_decimal64p18s12_eq_decimal64p18s12) {
     DecimalTestCaseArray test_cases = {{"999999.99999", "999999.999999999999", "-0.000009999999"},
@@ -2518,14 +2559,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal64p11s5_sub_decimal64p18s12_eq_dec
                                        {"-179251.29605", "319444.891069099630", "-498696.187119099630"},
                                        {"113717.68336", "-377670.640222284138", "491388.323582284138"},
                                        {"468626.59505", "121406.960236864241", "347219.634813135759"}};
-    test_vector_vector<TYPE_DECIMAL64, SubOp, true>(test_cases, 11, 5, 18, 12, 18, 12);
-    test_vector_vector<TYPE_DECIMAL64, SubOp, false>(test_cases, 11, 5, 18, 12, 18, 12);
-    test_vector_const<TYPE_DECIMAL64, SubOp, true>(test_cases, 11, 5, 18, 12, 18, 12);
-    test_vector_const<TYPE_DECIMAL64, SubOp, false>(test_cases, 11, 5, 18, 12, 18, 12);
-    test_const_vector<TYPE_DECIMAL64, SubOp, true>(test_cases, 11, 5, 18, 12, 18, 12);
-    test_const_vector<TYPE_DECIMAL64, SubOp, false>(test_cases, 11, 5, 18, 12, 18, 12);
-    test_const_const<TYPE_DECIMAL64, SubOp, true>(test_cases, 11, 5, 18, 12, 18, 12);
-    test_const_const<TYPE_DECIMAL64, SubOp, false>(test_cases, 11, 5, 18, 12, 18, 12);
+    test_vector_vector<TYPE_DECIMAL64, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 11, 5, 18, 12, 18, 12);
+    test_vector_vector<TYPE_DECIMAL64, SubOp, OverflowMode::IGNORE>(test_cases, 11, 5, 18, 12, 18, 12);
+    test_vector_const<TYPE_DECIMAL64, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 11, 5, 18, 12, 18, 12);
+    test_vector_const<TYPE_DECIMAL64, SubOp, OverflowMode::IGNORE>(test_cases, 11, 5, 18, 12, 18, 12);
+    test_const_vector<TYPE_DECIMAL64, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 11, 5, 18, 12, 18, 12);
+    test_const_vector<TYPE_DECIMAL64, SubOp, OverflowMode::IGNORE>(test_cases, 11, 5, 18, 12, 18, 12);
+    test_const_const<TYPE_DECIMAL64, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 11, 5, 18, 12, 18, 12);
+    test_const_const<TYPE_DECIMAL64, SubOp, OverflowMode::IGNORE>(test_cases, 11, 5, 18, 12, 18, 12);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p34s7_sub_decimal128p29s5_eq_decimal128p38s7) {
     DecimalTestCaseArray test_cases = {
@@ -2598,14 +2639,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p34s7_sub_decimal128p29s5_eq_de
              "803877453756516477614629244.9383877"},
             {"733803306326475847099651045.2642731", "335471485030510034013807.16863",
              "733467834841445337065637238.0956431"}};
-    test_vector_vector<TYPE_DECIMAL128, SubOp, true>(test_cases, 34, 7, 29, 5, 38, 7);
-    test_vector_vector<TYPE_DECIMAL128, SubOp, false>(test_cases, 34, 7, 29, 5, 38, 7);
-    test_vector_const<TYPE_DECIMAL128, SubOp, true>(test_cases, 34, 7, 29, 5, 38, 7);
-    test_vector_const<TYPE_DECIMAL128, SubOp, false>(test_cases, 34, 7, 29, 5, 38, 7);
-    test_const_vector<TYPE_DECIMAL128, SubOp, true>(test_cases, 34, 7, 29, 5, 38, 7);
-    test_const_vector<TYPE_DECIMAL128, SubOp, false>(test_cases, 34, 7, 29, 5, 38, 7);
-    test_const_const<TYPE_DECIMAL128, SubOp, true>(test_cases, 34, 7, 29, 5, 38, 7);
-    test_const_const<TYPE_DECIMAL128, SubOp, false>(test_cases, 34, 7, 29, 5, 38, 7);
+    test_vector_vector<TYPE_DECIMAL128, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 34, 7, 29, 5, 38, 7);
+    test_vector_vector<TYPE_DECIMAL128, SubOp, OverflowMode::IGNORE>(test_cases, 34, 7, 29, 5, 38, 7);
+    test_vector_const<TYPE_DECIMAL128, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 34, 7, 29, 5, 38, 7);
+    test_vector_const<TYPE_DECIMAL128, SubOp, OverflowMode::IGNORE>(test_cases, 34, 7, 29, 5, 38, 7);
+    test_const_vector<TYPE_DECIMAL128, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 34, 7, 29, 5, 38, 7);
+    test_const_vector<TYPE_DECIMAL128, SubOp, OverflowMode::IGNORE>(test_cases, 34, 7, 29, 5, 38, 7);
+    test_const_const<TYPE_DECIMAL128, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 34, 7, 29, 5, 38, 7);
+    test_const_const<TYPE_DECIMAL128, SubOp, OverflowMode::IGNORE>(test_cases, 34, 7, 29, 5, 38, 7);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal32p6s5_sub_decimal32p4s2_eq_decimal32p9s5) {
     DecimalTestCaseArray test_cases = {{"9.99999", "99.99", "-89.99001"},
@@ -2653,14 +2694,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal32p6s5_sub_decimal32p4s2_eq_decima
                                        {"6.20602", "-92.21", "98.41602"},
                                        {"1.32342", "84.60", "-83.27658"},
                                        {"-8.14264", "-76.72", "68.57736"}};
-    test_vector_vector<TYPE_DECIMAL32, SubOp, true>(test_cases, 6, 5, 4, 2, 9, 5);
-    test_vector_vector<TYPE_DECIMAL32, SubOp, false>(test_cases, 6, 5, 4, 2, 9, 5);
-    test_vector_const<TYPE_DECIMAL32, SubOp, true>(test_cases, 6, 5, 4, 2, 9, 5);
-    test_vector_const<TYPE_DECIMAL32, SubOp, false>(test_cases, 6, 5, 4, 2, 9, 5);
-    test_const_vector<TYPE_DECIMAL32, SubOp, true>(test_cases, 6, 5, 4, 2, 9, 5);
-    test_const_vector<TYPE_DECIMAL32, SubOp, false>(test_cases, 6, 5, 4, 2, 9, 5);
-    test_const_const<TYPE_DECIMAL32, SubOp, true>(test_cases, 6, 5, 4, 2, 9, 5);
-    test_const_const<TYPE_DECIMAL32, SubOp, false>(test_cases, 6, 5, 4, 2, 9, 5);
+    test_vector_vector<TYPE_DECIMAL32, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 6, 5, 4, 2, 9, 5);
+    test_vector_vector<TYPE_DECIMAL32, SubOp, OverflowMode::IGNORE>(test_cases, 6, 5, 4, 2, 9, 5);
+    test_vector_const<TYPE_DECIMAL32, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 6, 5, 4, 2, 9, 5);
+    test_vector_const<TYPE_DECIMAL32, SubOp, OverflowMode::IGNORE>(test_cases, 6, 5, 4, 2, 9, 5);
+    test_const_vector<TYPE_DECIMAL32, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 6, 5, 4, 2, 9, 5);
+    test_const_vector<TYPE_DECIMAL32, SubOp, OverflowMode::IGNORE>(test_cases, 6, 5, 4, 2, 9, 5);
+    test_const_const<TYPE_DECIMAL32, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 6, 5, 4, 2, 9, 5);
+    test_const_const<TYPE_DECIMAL32, SubOp, OverflowMode::IGNORE>(test_cases, 6, 5, 4, 2, 9, 5);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal64p18s13_sub_decimal64p11s6_eq_decimal64p18s13) {
     DecimalTestCaseArray test_cases = {{"99999.9999999999999", "99999.999999", "0.0000009999999"},
@@ -2708,14 +2749,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal64p18s13_sub_decimal64p11s6_eq_dec
                                        {"74719.8269072728377", "75169.943624", "-450.1167167271623"},
                                        {"-15781.6385731459534", "-12923.439599", "-2858.1989741459534"},
                                        {"-91298.4606984177119", "14193.444740", "-105491.9054384177119"}};
-    test_vector_vector<TYPE_DECIMAL64, SubOp, true>(test_cases, 18, 13, 11, 6, 18, 13);
-    test_vector_vector<TYPE_DECIMAL64, SubOp, false>(test_cases, 18, 13, 11, 6, 18, 13);
-    test_vector_const<TYPE_DECIMAL64, SubOp, true>(test_cases, 18, 13, 11, 6, 18, 13);
-    test_vector_const<TYPE_DECIMAL64, SubOp, false>(test_cases, 18, 13, 11, 6, 18, 13);
-    test_const_vector<TYPE_DECIMAL64, SubOp, true>(test_cases, 18, 13, 11, 6, 18, 13);
-    test_const_vector<TYPE_DECIMAL64, SubOp, false>(test_cases, 18, 13, 11, 6, 18, 13);
-    test_const_const<TYPE_DECIMAL64, SubOp, true>(test_cases, 18, 13, 11, 6, 18, 13);
-    test_const_const<TYPE_DECIMAL64, SubOp, false>(test_cases, 18, 13, 11, 6, 18, 13);
+    test_vector_vector<TYPE_DECIMAL64, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 18, 13, 11, 6, 18, 13);
+    test_vector_vector<TYPE_DECIMAL64, SubOp, OverflowMode::IGNORE>(test_cases, 18, 13, 11, 6, 18, 13);
+    test_vector_const<TYPE_DECIMAL64, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 18, 13, 11, 6, 18, 13);
+    test_vector_const<TYPE_DECIMAL64, SubOp, OverflowMode::IGNORE>(test_cases, 18, 13, 11, 6, 18, 13);
+    test_const_vector<TYPE_DECIMAL64, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 18, 13, 11, 6, 18, 13);
+    test_const_vector<TYPE_DECIMAL64, SubOp, OverflowMode::IGNORE>(test_cases, 18, 13, 11, 6, 18, 13);
+    test_const_const<TYPE_DECIMAL64, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 18, 13, 11, 6, 18, 13);
+    test_const_const<TYPE_DECIMAL64, SubOp, OverflowMode::IGNORE>(test_cases, 18, 13, 11, 6, 18, 13);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s37_sub_decimal128p38s37_eq_decimal128p38s37) {
     DecimalTestCaseArray test_cases = {
@@ -2792,14 +2833,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s37_sub_decimal128p38s37_eq_
              "2.7628504469790028870787606558795472037"},
             {"-8.7242732380520100061423696468014466798", "-4.7009748792012557916712889114003709319",
              "-4.0232983588507542144710807354010757479"}};
-    test_vector_vector<TYPE_DECIMAL128, SubOp, true>(test_cases, 38, 37, 38, 37, 38, 37);
-    test_vector_vector<TYPE_DECIMAL128, SubOp, false>(test_cases, 38, 37, 38, 37, 38, 37);
-    test_vector_const<TYPE_DECIMAL128, SubOp, true>(test_cases, 38, 37, 38, 37, 38, 37);
-    test_vector_const<TYPE_DECIMAL128, SubOp, false>(test_cases, 38, 37, 38, 37, 38, 37);
-    test_const_vector<TYPE_DECIMAL128, SubOp, true>(test_cases, 38, 37, 38, 37, 38, 37);
-    test_const_vector<TYPE_DECIMAL128, SubOp, false>(test_cases, 38, 37, 38, 37, 38, 37);
-    test_const_const<TYPE_DECIMAL128, SubOp, true>(test_cases, 38, 37, 38, 37, 38, 37);
-    test_const_const<TYPE_DECIMAL128, SubOp, false>(test_cases, 38, 37, 38, 37, 38, 37);
+    test_vector_vector<TYPE_DECIMAL128, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 37, 38, 37, 38, 37);
+    test_vector_vector<TYPE_DECIMAL128, SubOp, OverflowMode::IGNORE>(test_cases, 38, 37, 38, 37, 38, 37);
+    test_vector_const<TYPE_DECIMAL128, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 37, 38, 37, 38, 37);
+    test_vector_const<TYPE_DECIMAL128, SubOp, OverflowMode::IGNORE>(test_cases, 38, 37, 38, 37, 38, 37);
+    test_const_vector<TYPE_DECIMAL128, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 37, 38, 37, 38, 37);
+    test_const_vector<TYPE_DECIMAL128, SubOp, OverflowMode::IGNORE>(test_cases, 38, 37, 38, 37, 38, 37);
+    test_const_const<TYPE_DECIMAL128, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 38, 37, 38, 37, 38, 37);
+    test_const_const<TYPE_DECIMAL128, SubOp, OverflowMode::IGNORE>(test_cases, 38, 37, 38, 37, 38, 37);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal32p9s2_sub_decimal32p9s2_eq_decimal32p9s2) {
     DecimalTestCaseArray test_cases = {{"9999999.99", "9999999.99", "0"},
@@ -2847,14 +2888,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal32p9s2_sub_decimal32p9s2_eq_decima
                                        {"206849.83", "-9297503.07", "9504352.90"},
                                        {"8765765.42", "-6104097.70", "14869863.12"},
                                        {"2314600.13", "-6732808.59", "9047408.72"}};
-    test_vector_vector<TYPE_DECIMAL32, SubOp, true>(test_cases, 9, 2, 9, 2, 9, 2);
-    test_vector_vector<TYPE_DECIMAL32, SubOp, false>(test_cases, 9, 2, 9, 2, 9, 2);
-    test_vector_const<TYPE_DECIMAL32, SubOp, true>(test_cases, 9, 2, 9, 2, 9, 2);
-    test_vector_const<TYPE_DECIMAL32, SubOp, false>(test_cases, 9, 2, 9, 2, 9, 2);
-    test_const_vector<TYPE_DECIMAL32, SubOp, true>(test_cases, 9, 2, 9, 2, 9, 2);
-    test_const_vector<TYPE_DECIMAL32, SubOp, false>(test_cases, 9, 2, 9, 2, 9, 2);
-    test_const_const<TYPE_DECIMAL32, SubOp, true>(test_cases, 9, 2, 9, 2, 9, 2);
-    test_const_const<TYPE_DECIMAL32, SubOp, false>(test_cases, 9, 2, 9, 2, 9, 2);
+    test_vector_vector<TYPE_DECIMAL32, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 2, 9, 2, 9, 2);
+    test_vector_vector<TYPE_DECIMAL32, SubOp, OverflowMode::IGNORE>(test_cases, 9, 2, 9, 2, 9, 2);
+    test_vector_const<TYPE_DECIMAL32, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 2, 9, 2, 9, 2);
+    test_vector_const<TYPE_DECIMAL32, SubOp, OverflowMode::IGNORE>(test_cases, 9, 2, 9, 2, 9, 2);
+    test_const_vector<TYPE_DECIMAL32, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 2, 9, 2, 9, 2);
+    test_const_vector<TYPE_DECIMAL32, SubOp, OverflowMode::IGNORE>(test_cases, 9, 2, 9, 2, 9, 2);
+    test_const_const<TYPE_DECIMAL32, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 9, 2, 9, 2, 9, 2);
+    test_const_const<TYPE_DECIMAL32, SubOp, OverflowMode::IGNORE>(test_cases, 9, 2, 9, 2, 9, 2);
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal64p18s15_sub_decimal64p18s15_eq_decimal64p18s15) {
     DecimalTestCaseArray test_cases = {{"999.999999999999999", "999.999999999999999", "0"},
@@ -2902,14 +2943,14 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal64p18s15_sub_decimal64p18s15_eq_de
                                        {"87.222692156793347", "209.659799435793034", "-122.437107278999687"},
                                        {"259.513532937364050", "-571.904356334394336", "831.417889271758386"},
                                        {"-57.241918690550156", "-668.401908164319819", "611.159989473769663"}};
-    test_vector_vector<TYPE_DECIMAL64, SubOp, true>(test_cases, 18, 15, 18, 15, 18, 15);
-    test_vector_vector<TYPE_DECIMAL64, SubOp, false>(test_cases, 18, 15, 18, 15, 18, 15);
-    test_vector_const<TYPE_DECIMAL64, SubOp, true>(test_cases, 18, 15, 18, 15, 18, 15);
-    test_vector_const<TYPE_DECIMAL64, SubOp, false>(test_cases, 18, 15, 18, 15, 18, 15);
-    test_const_vector<TYPE_DECIMAL64, SubOp, true>(test_cases, 18, 15, 18, 15, 18, 15);
-    test_const_vector<TYPE_DECIMAL64, SubOp, false>(test_cases, 18, 15, 18, 15, 18, 15);
-    test_const_const<TYPE_DECIMAL64, SubOp, true>(test_cases, 18, 15, 18, 15, 18, 15);
-    test_const_const<TYPE_DECIMAL64, SubOp, false>(test_cases, 18, 15, 18, 15, 18, 15);
+    test_vector_vector<TYPE_DECIMAL64, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 18, 15, 18, 15, 18, 15);
+    test_vector_vector<TYPE_DECIMAL64, SubOp, OverflowMode::IGNORE>(test_cases, 18, 15, 18, 15, 18, 15);
+    test_vector_const<TYPE_DECIMAL64, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 18, 15, 18, 15, 18, 15);
+    test_vector_const<TYPE_DECIMAL64, SubOp, OverflowMode::IGNORE>(test_cases, 18, 15, 18, 15, 18, 15);
+    test_const_vector<TYPE_DECIMAL64, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 18, 15, 18, 15, 18, 15);
+    test_const_vector<TYPE_DECIMAL64, SubOp, OverflowMode::IGNORE>(test_cases, 18, 15, 18, 15, 18, 15);
+    test_const_const<TYPE_DECIMAL64, SubOp, OverflowMode::OUTPUT_NULL>(test_cases, 18, 15, 18, 15, 18, 15);
+    test_const_const<TYPE_DECIMAL64, SubOp, OverflowMode::IGNORE>(test_cases, 18, 15, 18, 15, 18, 15);
 }
 
 using DecimalOverflowTestCase = std::tuple<std::string, std::string, std::string, bool>;
@@ -2929,8 +2970,8 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s16_div_decimal128p38s16_eq_
         test_case_array.emplace_back(std::get<0>(tc), std::get<1>(tc), std::get<2>(tc));
         overflows.emplace_back(std::get<3>(tc));
     }
-    test_vector_vector_assert_overflow<TYPE_DECIMAL128, DivOp, true>(test_case_array, 38, 16, 38, 16, 38, 16,
-                                                                     overflows);
+    test_vector_vector_assert_overflow<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_case_array, 38, 16, 38,
+                                                                                          16, 38, 16, overflows);
 }
 
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s15_div_decimal128p38s15_eq_decimal128p38s15) {
@@ -2948,8 +2989,8 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s15_div_decimal128p38s15_eq_
         test_case_array.emplace_back(std::get<0>(tc), std::get<1>(tc), std::get<2>(tc));
         overflows.emplace_back(std::get<3>(tc));
     }
-    test_vector_vector_assert_overflow<TYPE_DECIMAL128, DivOp, true>(test_case_array, 38, 15, 38, 15, 38, 15,
-                                                                     overflows);
+    test_vector_vector_assert_overflow<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_case_array, 38, 15, 38,
+                                                                                          15, 38, 15, overflows);
 }
 
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s14_div_decimal128p38s14_eq_decimal128p38s14) {
@@ -2967,29 +3008,29 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s14_div_decimal128p38s14_eq_
         test_case_array.emplace_back(std::get<0>(tc), std::get<1>(tc), std::get<2>(tc));
         overflows.emplace_back(std::get<3>(tc));
     }
-    test_vector_vector_assert_overflow<TYPE_DECIMAL128, DivOp, true>(test_case_array, 38, 14, 38, 14, 38, 14,
-                                                                     overflows);
+    test_vector_vector_assert_overflow<TYPE_DECIMAL128, DivOp, OverflowMode::OUTPUT_NULL>(test_case_array, 38, 14, 38,
+                                                                                          14, 38, 14, overflows);
 }
 
 template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op>
 void test_decimal_fast_mul_help(const DecimalTestCaseArray& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
 #if defined(__x86_64__) && defined(__GNUC__)
-    test_vector_vector<LhsType, RhsType, ResultType, Op, false>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                                rhs_scale, result_precision, result_scale);
-    test_vector_const<LhsType, RhsType, ResultType, Op, false>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                               rhs_scale, result_precision, result_scale);
-    test_const_vector<LhsType, RhsType, ResultType, Op, false>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                               rhs_scale, result_precision, result_scale);
-    test_const_const<LhsType, RhsType, ResultType, Op, false>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                              rhs_scale, result_precision, result_scale);
-    test_nullable_vector_const<LhsType, RhsType, ResultType, Op, false>(
+    test_vector_vector<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
-    test_const_nullable_vector<LhsType, RhsType, ResultType, Op, false>(
+    test_vector_const<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
-    test_nullable_vector_nullable_vector<LhsType, RhsType, ResultType, Op, false>(
+    test_const_vector<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
-    test_vector_vector<ResultType, ResultType, ResultType, MulOp, false>(
+    test_const_const<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
+            test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
+    test_nullable_vector_const<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
+            test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
+    test_const_nullable_vector<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
+            test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
+    test_nullable_vector_nullable_vector<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
+            test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
+    test_vector_vector<ResultType, ResultType, ResultType, MulOp, OverflowMode::IGNORE>(
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
 #endif
 }
@@ -3087,6 +3128,18 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal_fast_mul_64x64) {
             {"60915079068521.5269", "-99999121308263.0016", "-6091454381275516575941632856.40914304"}};
     test_decimal_fast_mul_help<TYPE_DECIMAL64, TYPE_DECIMAL64, TYPE_DECIMAL128, MulOp64x64_128>(test_cases, 18, 4, 18,
                                                                                                 4, 38, 8);
+}
+
+TEST_F(DecimalBinaryFunctionTest, test_overflow_report_error) {
+    ASSERT_THROW((test_overflow_report_error<TYPE_DECIMAL32, TYPE_DECIMAL32, TYPE_DECIMAL32, MulOp>(
+                         "274.97790", "1.0000", 9, 5, 9, 4)),
+                 std::overflow_error);
+    ASSERT_THROW((test_overflow_report_error<TYPE_DECIMAL64, TYPE_DECIMAL64, TYPE_DECIMAL64, MulOp>(
+                         "274.97790000000", "1.000000", 18, 11, 18, 6)),
+                 std::overflow_error);
+    ASSERT_THROW((test_overflow_report_error<TYPE_DECIMAL128, TYPE_DECIMAL128, TYPE_DECIMAL128, MulOp>(
+                         "274.97790000000000000000", "1.0000000000000000", 38, 20, 38, 16)),
+                 std::overflow_error);
 }
 
 } // namespace starrocks

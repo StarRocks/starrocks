@@ -48,6 +48,7 @@ import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TOverflowMode;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
@@ -2555,6 +2556,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
         if (maxPushdownConditionsPerColumn > -1) {
             tResult.setMax_pushdown_conditions_per_column(maxPushdownConditionsPerColumn);
+        }
+
+        if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_IF_OVERFLOW)) {
+            tResult.setOverflow_mode(TOverflowMode.REPORT_ERROR);
         }
 
         tResult.setEnable_spill(enableSpill);

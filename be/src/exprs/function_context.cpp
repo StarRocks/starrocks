@@ -156,6 +156,10 @@ const char* FunctionContext::error_msg() const {
     }
 }
 
+bool FunctionContext::error_if_overflow() const {
+    return _state != nullptr && _state->error_if_overflow();
+}
+
 void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {
     switch (scope) {
     case THREAD_LOCAL:
