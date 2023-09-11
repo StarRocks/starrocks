@@ -72,7 +72,7 @@ struct DecimalDecimalCast {
                     if constexpr (check_overflow<overflow_mode>) {
                         if (overflow) {
                             if constexpr (error_if_overflow<overflow_mode>) {
-                                throw std::overflow_error("Decimal overflow");
+                                throw std::overflow_error("The type cast from decimal to decimal overflows");
                             } else {
                                 static_assert(null_if_overflow<overflow_mode>);
                                 has_null = true;
@@ -91,7 +91,7 @@ struct DecimalDecimalCast {
                 if constexpr (check_overflow<overflow_mode>) {
                     if (overflow) {
                         if constexpr (error_if_overflow<overflow_mode>) {
-                            throw std::overflow_error("Decimal overflow");
+                            throw std::overflow_error("The type cast from decimal to decimal overflows");
                         } else {
                             static_assert(null_if_overflow<overflow_mode>);
                             has_null = true;
@@ -109,7 +109,7 @@ struct DecimalDecimalCast {
                 if constexpr (check_overflow<overflow_mode>) {
                     if (overflow) {
                         if constexpr (error_if_overflow<overflow_mode>) {
-                            throw std::overflow_error("Decimal overflow");
+                            throw std::overflow_error("The type cast from decimal to decimal overflows");
                         } else {
                             static_assert(null_if_overflow<overflow_mode>);
                             has_null = true;
@@ -209,7 +209,7 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, NonDecimalType, Decimal
             if constexpr (check_overflow<overflow_mode>) {
                 if (overflow) {
                     if constexpr (error_if_overflow<overflow_mode>) {
-                        throw std::overflow_error("Decimal overflow");
+                        throw std::overflow_error("The type cast from other types to decimal overflows");
                     } else {
                         static_assert(null_if_overflow<overflow_mode>);
                         has_null = true;
@@ -316,7 +316,7 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, NonDecimalType, Decimal
             if (check_overflow<overflow_mode>) {
                 if (overflow) {
                     if constexpr (error_if_overflow<overflow_mode>) {
-                        throw std::overflow_error("Decimal overflow");
+                        throw std::overflow_error("The type cast from decimal to other types overflows");
                     } else {
                         static_assert(null_if_overflow<overflow_mode>);
                         nulls[i] = DATUM_NULL;
@@ -363,7 +363,7 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, StringType, DecimalLTGu
             if constexpr (check_overflow<overflow_mode>) {
                 if (overflow) {
                     if constexpr (error_if_overflow<overflow_mode>) {
-                        throw std::overflow_error("Decimal overflow");
+                        throw std::overflow_error("The type cast from string to decimal overflows");
                     } else {
                         static_assert(null_if_overflow<overflow_mode>);
                         has_null = true;

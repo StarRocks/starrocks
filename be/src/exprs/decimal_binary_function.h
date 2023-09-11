@@ -18,6 +18,7 @@
 #include "exprs/arithmetic_operation.h"
 #include "exprs/binary_function.h"
 #include "exprs/overflow.h"
+#include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -63,7 +64,12 @@ struct DecimalBinaryFunction {
                 // adjusting operand generates decimal overflow
                 if constexpr (check_overflow<overflow_mode>) {
                     if (overflow) {
-                        return true;
+                        if constexpr (error_if_overflow<overflow_mode>) {
+                            throw std::overflow_error(strings::Substitute(
+                                    "The '$0' operation involving decimal values overflows", get_op_name<Op>()));
+                        } else {
+                            return true;
+                        }
                     }
                 }
             }
@@ -94,7 +100,8 @@ struct DecimalBinaryFunction {
             if constexpr (check_overflow<overflow_mode>) {
                 if (overflow) {
                     if constexpr (error_if_overflow<overflow_mode>) {
-                        throw std::overflow_error("Decimal overflow");
+                        throw std::overflow_error(strings::Substitute(
+                                "The '$0' operation involving decimal values overflows", get_op_name<Op>()));
                     } else {
                         static_assert(null_if_overflow<overflow_mode>);
                         *has_null = true;
