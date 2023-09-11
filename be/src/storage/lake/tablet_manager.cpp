@@ -367,6 +367,19 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
 
 StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
     Tablet tablet(this, tablet_id);
+#ifdef USE_STAROS
+    // fill partition id
+    if (g_worker != nullptr) {
+        auto res = g_worker->partition_id_of_shard(tablet_id);
+        if (res.ok()) {
+            tablet.set_partition_id(res.value());
+        } else {
+            return to_status(res.status());
+        }
+    } else {
+        // This should only happen in unit tests
+    }
+#endif
     if (auto metadata = get_latest_cached_tablet_metadata(tablet_id); metadata != nullptr) {
         tablet.set_version_hint(metadata->version());
     }

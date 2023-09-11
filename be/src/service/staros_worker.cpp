@@ -114,6 +114,44 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::get_shard_info(ShardId 
     return it->second.shard_info;
 }
 
+absl::StatusOr<int64_t> StarOSWorker::partition_id_of_shard(ShardId id) {
+    // Helper function: extract partition id from shard info
+    auto extract_partition_id = [](const ShardInfo& shard_info) -> int64_t {
+        const auto& properties = shard_info.properties;
+        auto it = properties.find("partitionId");
+        if (it != properties.end()) {
+            // Assume the value of partitionId is a valid number
+            return ::atol(it->second.c_str());
+        }
+        return 0; // 0 is an invalid partition id
+    };
+
+    {
+        std::unique_lock l(_mtx);
+        auto it = _shards.find(id);
+        if (it != _shards.end()) {
+            return extract_partition_id(it->second.shard_info);
+        }
+    }
+
+    // Shard info not found in memory cache, asking StarMgr.
+    static const int64_t kGetShardInfoTimeout = 5 * 1000 * 1000; // 5s (heartbeat interval)
+    static const int64_t kCheckInterval = 10 * 1000;             // 10ms
+    Awaitility wait;
+    auto cond = []() { return g_starlet->is_ready(); };
+    auto ret = wait.timeout(kGetShardInfoTimeout).interval(kCheckInterval).until(cond);
+    if (!ret) {
+        return absl::UnavailableError("starlet is still not ready!");
+    }
+    // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
+    auto info_or = g_starlet->get_shard_info(id);
+    if (info_or.ok()) {
+        return extract_partition_id(info_or.value());
+    } else {
+        return info_or.status();
+    }
+}
+
 std::vector<staros::starlet::ShardInfo> StarOSWorker::shards() const {
     std::vector<staros::starlet::ShardInfo> vec;
     vec.reserve(_shards.size());

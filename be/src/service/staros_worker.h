@@ -66,6 +66,11 @@ public:
     // `conf`: a k-v map, provides additional information about the filesystem configuration
     absl::StatusOr<std::shared_ptr<FileSystem>> get_shard_filesystem(ShardId id, const Configuration& conf);
 
+    // Get partition id of the shard identified by id |id|.
+    // May trigger remote RPC call.
+    // If the shard properties does not contain "partitionId", return 0
+    absl::StatusOr<int64_t> partition_id_of_shard(ShardId id);
+
 private:
     struct ShardInfoDetails {
         ShardInfo shard_info;

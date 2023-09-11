@@ -145,9 +145,14 @@ public:
 
     int64_t data_size();
 
+    void set_partition_id(int64_t partition_id) { _partition_id = partition_id; }
+
+    int64_t partition_id() const { return _partition_id; }
+
 private:
     TabletManager* _mgr;
     int64_t _id;
+    int64_t _partition_id = 0;
     int64_t _version_hint = 0;
 };
 

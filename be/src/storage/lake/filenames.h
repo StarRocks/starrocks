@@ -79,8 +79,12 @@ inline std::string tablet_metadata_lock_filename(int64_t tablet_id, int64_t vers
     return fmt::format("{:016X}_{:016X}_{:016X}.lock", tablet_id, version, expire_time);
 }
 
-inline std::string gen_segment_filename(int64_t txn_id) {
-    return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
+inline std::string gen_segment_filename(int64_t partition_id, int64_t txn_id) {
+    if (partition_id > 0) {
+        return fmt::format("{}/{:016x}_{}.dat", partition_id, txn_id, generate_uuid_string());
+    } else {
+        return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
+    }
 }
 
 inline std::string gen_del_filename(int64_t txn_id) {
