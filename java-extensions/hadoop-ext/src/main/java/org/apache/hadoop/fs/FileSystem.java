@@ -594,8 +594,6 @@ public abstract class FileSystem extends Configured
             LOGGER.debug("Bypassing cache to create filesystem {}", uri);
             return createFileSystem(uri, conf);
         }
-
-        LOGGER.warn("[hadoop-ext] FileSystem.Cache from hadoop-ext package");
         return CACHE.get(uri, conf);
     }
 
@@ -3727,7 +3725,8 @@ public abstract class FileSystem extends Configured
     private static FileSystem createFileSystem(URI uri, Configuration conf)
             throws IOException {
         Cache.StarRocksUtils.addConfigResourcesToConfiguration(conf);
-        LOGGER.info("[hadoop-ext] FileSystem.createFileSystem. conf.XXX = " + conf.get("XXX", "null"));
+        LOGGER.info(String.format("%s FileSystem.createFileSystem. conf.XXX = %s", Cache.StarRocksUtils.LOG_MESSAGE_PREFIX,
+                conf.get("XXX", "null")));
         Tracer tracer = FsTracer.get(conf);
         try (TraceScope scope = tracer.newScope("FileSystem#createFileSystem");
                 DurationInfo ignored =
@@ -3796,7 +3795,7 @@ public abstract class FileSystem extends Configured
 
         FileSystem get(URI uri, Configuration conf) throws IOException {
             Key key = new Key(uri, conf);
-            LOGGER.info("[hadoop-ext] FileSystem.get. key = " + key.toString());
+            LOGGER.info(String.format("%s FileSystem.get. key = %s", StarRocksUtils.LOG_MESSAGE_PREFIX, key.toString()));
             return getInternal(uri, conf, key);
         }
 
@@ -4010,6 +4009,7 @@ public abstract class FileSystem extends Configured
             public static final String HDFS_RUNTIME_JARS = "hadoop.runtime.jars";
             public static final String HDFS_CLOUD_CONFIGURATION_STRING = "hadoop.cloud.configuration.string";
             public static final String STARROCKS_HOME_ENV = "STARROCKS_HOME";
+            public static final String LOG_MESSAGE_PREFIX = "[hadoop-ext]";
 
             public static void addConfigResourcesToConfiguration(Configuration conf) {
                 if (conf.getBoolean(HDFS_CONFIG_RESOURCES_LOADED, false)) {
@@ -4021,13 +4021,13 @@ public abstract class FileSystem extends Configured
                 }
                 final String STARROCKS_HOME_DIR = System.getenv(STARROCKS_HOME_ENV);
                 if (STARROCKS_HOME_DIR == null) {
-                    LOGGER.info(String.format("[hadoop-ext] env '%s' is not defined", STARROCKS_HOME_ENV));
+                    LOGGER.info(String.format("%s env '%s' is not defined", LOG_MESSAGE_PREFIX, STARROCKS_HOME_ENV));
                     return;
                 }
                 String[] parts = configResources.split(",");
                 for (String p : parts) {
                     Path path = new Path(STARROCKS_HOME_DIR + "/conf/", p);
-                    LOGGER.info(String.format("[hadoop-ext] Add path '%s' to configuration", path.toString()));
+                    LOGGER.info(String.format("%s Add path '%s' to configuration", LOG_MESSAGE_PREFIX, path.toString()));
                     conf.addResource(path);
                 }
                 conf.setBoolean(HDFS_CONFIG_RESOURCES_LOADED, true);
