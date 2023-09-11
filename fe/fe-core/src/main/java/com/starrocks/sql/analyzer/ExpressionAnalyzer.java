@@ -254,7 +254,7 @@ public class ExpressionAnalyzer {
                 funcName = expression.toString();
             }
             throw new SemanticException(funcName + " can't use lambda functions, " +
-                    "as it is not a supported high-order function", expression.getPos());
+                    "as it is not a supported high-order function");
         }
         int childSize = expression.getChildren().size();
         // move the lambda function to the first if it is at the last.
@@ -278,7 +278,7 @@ public class ExpressionAnalyzer {
                     expr.setType(Type.ARRAY_INT); // Let it have item type.
                 }
                 if (!expr.getType().isArrayType()) {
-                    throw new SemanticException(i + "th lambda input should be arrays", expr.getPos());
+                    throw new SemanticException(i + "-th lambda input ( " + expr + " ) should be arrays");
                 }
                 Type itemType = ((ArrayType) expr.getType()).getItemType();
                 scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
@@ -289,21 +289,21 @@ public class ExpressionAnalyzer {
             // map_apply(func, map)
             if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
                 if (!(expression.getChild(0).getChild(0) instanceof MapExpr)) {
-                    throw new SemanticException("The right part of map lambda function (" +
-                            expression.getChild(0).toSql() + ") should have key and value arguments",
+                    throw new SemanticException("The right part of map lambda function ( " +
+                            expression.getChild(0).toSql() + " ) should have key and value arguments",
                             expression.getChild(0).getPos());
                 }
             } else {
                 if (expression.getChild(0).getChild(0) instanceof MapExpr) {
-                    throw new SemanticException("The right part of map lambda function (" +
-                            expression.getChild(0).toSql() + ") should have only one arguments",
+                    throw new SemanticException("The right part of map lambda function ( " +
+                            expression.getChild(0).toSql() + " ) should have only one arguments",
                             expression.getChild(0).getPos());
                 }
             }
             if (expression.getChild(0).getChildren().size() != 3) {
                 Expr child = expression.getChild(0);
-                throw new SemanticException("The left part of map lambda function (" +
-                        child.toSql() + ") should have 2 arguments, but there are "
+                throw new SemanticException("The left part of map lambda function ( " +
+                        child.toSql() + " ) should have 2 arguments, but there are "
                         + (child.getChildren().size() - 1) + " arguments", child.getPos());
             }
             Expr expr = expression.getChild(1);
@@ -312,7 +312,7 @@ public class ExpressionAnalyzer {
                 expr.setType(Type.ANY_MAP); // Let it have item type.
             }
             if (!expr.getType().isMapType()) {
-                throw new SemanticException("Lambda inputs should be maps", expr.getPos());
+                throw new SemanticException("Lambda input ( " + expr.toSql() + " ) should be maps");
             }
             Type keyType = ((MapType) expr.getType()).getKeyType();
             Type valueType = ((MapType) expr.getType()).getValueType();
@@ -347,14 +347,34 @@ public class ExpressionAnalyzer {
     }
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
-        if (expression.hasLambdaFunction(expression)) {
-            analyzeHighOrderFunction(visitor, expression, scope);
+        boolean hasLambdaFunc = false;
+        String originalSQL = expression.toSql();
+        try {
+            hasLambdaFunc = expression.hasLambdaFunction(expression);
+        } catch (SemanticException e) {
+            if (e.canNested()) {
+                throw new SemanticException(e.getDetailMsg() + " in " + originalSQL, expression.getPos(), false);
+            } else {
+                throw e;
+            }
+        }
+        if (hasLambdaFunc) {
+            try {
+                analyzeHighOrderFunction(visitor, expression, scope);
+                visitor.visit(expression, scope);
+            } catch (SemanticException e) {
+                if (e.canNested()) {
+                    throw new SemanticException(e.getDetailMsg() + " in " + originalSQL, expression.getPos(), false);
+                } else {
+                    throw e;
+                }
+            }
         } else {
             for (Expr expr : expression.getChildren()) {
                 bottomUpAnalyze(visitor, expr, scope);
             }
+            visitor.visit(expression, scope);
         }
-        visitor.visit(expression, scope);
     }
 
     public static class Visitor extends AstVisitor<Void, Scope> {
@@ -1184,17 +1204,17 @@ public class ExpressionAnalyzer {
                                 node.getPos());
                     }
                     if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
-                        throw new SemanticException("The first input of " + fnName +
+                        throw new SemanticException(fnName + "'s first input " + node.getChild(0) +
                                 " should be an array or a lambda function", node.getPos());
                     }
                     if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
-                        throw new SemanticException("The second input of " + fnName +
+                        throw new SemanticException(fnName + "'s second input " + node.getChild(1) +
                                 " should be an array or a lambda function", node.getPos());
                     }
                     // force the second array be of Type.ARRAY_BOOLEAN
                     if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
-                        throw new SemanticException("The second input of array_filter " +
-                                node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>", node.getPos());
+                        throw new SemanticException(fnName + "'s second input " + node.getChild(1) +
+                                "  can't cast to ARRAY<BOOL>", node.getPos());
                     }
                     break;
                 case FunctionSet.ALL_MATCH:
@@ -1203,13 +1223,13 @@ public class ExpressionAnalyzer {
                         throw new SemanticException(fnName + " should have a input array", node.getPos());
                     }
                     if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
-                        throw new SemanticException("The first input of " + fnName + " should be an array",
+                        throw new SemanticException(fnName + "'s input " + node.getChild(0) + " should be an array",
                                 node.getPos());
                     }
-                    // force the second array be of Type.ARRAY_BOOLEAN
+                    // force the input array be of Type.ARRAY_BOOLEAN
                     if (!Type.canCastTo(node.getChild(0).getType(), Type.ARRAY_BOOLEAN)) {
-                        throw new SemanticException("The second input of " + fnName +
-                                node.getChild(0).getType().toString() + "  can't cast to ARRAY<BOOL>", node.getPos());
+                        throw new SemanticException(fnName + "'s input " +
+                                node.getChild(0) + "  can't cast to ARRAY<BOOL>", node.getPos());
                     }
                     break;
                 case FunctionSet.ARRAY_SORTBY:
@@ -1218,11 +1238,11 @@ public class ExpressionAnalyzer {
                                 node.getPos());
                     }
                     if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
-                        throw new SemanticException("The first input of " + fnName +
+                        throw new SemanticException(fnName + "'s first input " + node.getChild(0) +
                                 " should be an array or a lambda function", node.getPos());
                     }
                     if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
-                        throw new SemanticException("The second input of " + fnName +
+                        throw new SemanticException(fnName + "'s second input " + node.getChild(1) +
                                 " should be an array or a lambda function", node.getPos());
                     }
                     break;
@@ -1243,20 +1263,20 @@ public class ExpressionAnalyzer {
                 case FunctionSet.MAP_FILTER:
                     if (node.getChildren().size() != 2) {
                         throw new SemanticException(fnName + " should have 2 inputs, " +
-                                "but there are just " + node.getChildren().size() + " inputs.");
+                                "but there are just " + node.getChildren().size() + " inputs");
                     }
                     if (!node.getChild(0).getType().isMapType() && !node.getChild(0).getType().isNull()) {
-                        throw new SemanticException("The first input of " + fnName +
+                        throw new SemanticException(fnName + "'s first input " + node.getChild(0) +
                                 " should be a map or a lambda function.");
                     }
                     if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
-                        throw new SemanticException("The second input of " + fnName +
-                                " should be a array or a lambda function.");
+                        throw new SemanticException(fnName + "'s second input " + node.getChild(1) +
+                                " should be an array or a lambda function.");
                     }
                     // force the second array be of Type.ARRAY_BOOLEAN
                     if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
-                        throw new SemanticException("The second input of map_filter " +
-                                node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
+                        throw new SemanticException(fnName + "'s second input " + node.getChild(1) +
+                                "  can't cast to ARRAY<BOOL>");
                     }
                     break;
                 case FunctionSet.GROUP_CONCAT:
