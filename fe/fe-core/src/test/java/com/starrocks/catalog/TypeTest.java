@@ -36,6 +36,11 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.proto.PScalarType;
+import com.starrocks.proto.PTypeDesc;
+import com.starrocks.proto.PTypeNode;
+import com.starrocks.thrift.TPrimitiveType;
+import com.starrocks.thrift.TTypeNodeType;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -232,5 +237,77 @@ public class TypeTest {
                 deType.toString());
         // test initialed fieldMap by ctor in deserializer.
         Assert.assertEquals(1, ((StructType) deType).getFieldPos("c1"));
+    }
+
+    private PTypeDesc buildScalarType(TPrimitiveType tPrimitiveType) {
+        PTypeNode tn = new PTypeNode();
+        tn.type = TTypeNodeType.SCALAR.getValue();
+        tn.scalarType = new PScalarType();
+        tn.scalarType.type = tPrimitiveType.getValue();
+
+        PTypeDesc td = new PTypeDesc();
+        td.types = new ArrayList<>();
+        td.types.add(tn);
+        return td;
+    }
+
+    private PTypeDesc buildArrayType(TPrimitiveType tPrimitiveType) {
+        // BIGINT
+        PTypeDesc td = new PTypeDesc();
+        td.types = new ArrayList<>();
+
+        // 1st: ARRAY
+        PTypeNode tn = new PTypeNode();
+        tn.type = TTypeNodeType.ARRAY.getValue();
+        td.types.add(tn);
+
+        // 2nd: BIGINT
+        tn = new PTypeNode();
+        tn.type = TTypeNodeType.SCALAR.getValue();
+        tn.scalarType = new PScalarType();
+        tn.scalarType.type = tPrimitiveType.getValue();
+        td.types.add(tn);
+        return td;
+    }
+
+    private PTypeDesc buildMapType(TPrimitiveType keyType, TPrimitiveType valueType) {
+        PTypeDesc td = new PTypeDesc();
+        td.types = new ArrayList<>();
+
+        // 1st: ARRAY
+        PTypeNode tn = new PTypeNode();
+        tn.type = TTypeNodeType.MAP.getValue();
+        td.types.add(tn);
+
+        // 2nd: key
+        tn = new PTypeNode();
+        tn.type = TTypeNodeType.SCALAR.getValue();
+        tn.scalarType = new PScalarType();
+        tn.scalarType.type = keyType.getValue();
+        td.types.add(tn);
+
+        // 3nd: value
+        tn = new PTypeNode();
+        tn.type = TTypeNodeType.SCALAR.getValue();
+        tn.scalarType = new PScalarType();
+        tn.scalarType.type = valueType.getValue();
+        td.types.add(tn);
+        return td;
+    }
+
+
+    @Test
+    public void testPTypeDescFromProtobuf() {
+        PTypeDesc pTypeDesc = buildScalarType(TPrimitiveType.BIGINT);
+        Type tp = Type.fromProtobuf(pTypeDesc, 0);
+        Assert.assertTrue(tp.isBigint());
+
+        pTypeDesc = buildArrayType(TPrimitiveType.BIGINT);
+        tp = Type.fromProtobuf(pTypeDesc, 0);
+        Assert.assertTrue(tp.isArrayType());
+
+        pTypeDesc = buildMapType(TPrimitiveType.BIGINT, TPrimitiveType.BOOLEAN);
+        tp = Type.fromProtobuf(pTypeDesc, 0);
+        Assert.assertTrue(tp.isMapType());
     }
 }
