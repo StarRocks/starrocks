@@ -65,9 +65,6 @@ bool check_fpe_of_min_div_by_minus_one(LType lhs, RType rhs) {
     }
 }
 
-<<<<<<< HEAD:be/src/exprs/vectorized/arithmetic_operation.h
-template <typename Op, PrimitiveType Type, typename = guard::Guard, typename = guard::Guard>
-=======
 template <typename Op>
 std::string get_op_name() {
     if constexpr (is_add_op<Op>) {
@@ -105,8 +102,7 @@ std::string get_op_name() {
     }
 }
 
-template <typename Op, LogicalType Type, typename = guard::Guard, typename = guard::Guard>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/src/exprs/arithmetic_operation.h
+template <typename Op, PrimitiveType Type, typename = guard::Guard, typename = guard::Guard>
 struct ArithmeticBinaryOperator {
     template <typename LType, typename RType, typename ResultType>
     static inline ReturnType<Type, ResultType> apply(const LType& l, const RType& r) {

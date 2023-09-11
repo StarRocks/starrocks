@@ -8,12 +8,8 @@
 
 #include <random>
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-#include "exprs/vectorized/decimal_cast_expr_test_helper.h"
-=======
-#include "exprs/decimal_cast_expr_test_helper.h"
 #include "exprs/overflow.h"
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+#include "exprs/vectorized/decimal_cast_expr_test_helper.h"
 
 namespace starrocks::vectorized {
 
@@ -227,12 +223,8 @@ Columns prepare_const_const(const DecimalTestCase& test_case, int lhs_precision,
 
 using Func = std::function<ColumnPtr(ColumnPtr const&, ColumnPtr const&)>;
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow,
-=======
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode,
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
-          bool assert_overflow = false>
+template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op,
+          OverflowMode overflow_mode, bool assert_overflow = false>
 void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Columns columns, int result_precision,
                                    int result_scale, size_t off, [[maybe_unused]] const std::vector<bool>& overflows) {
     using ColumnWiseOp = UnpackConstColumnDecimalBinaryFunction<Op, overflow_mode>;
@@ -318,12 +310,8 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
     }
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow,
-=======
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode,
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
-          bool assert_overflow = false>
+template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op,
+          OverflowMode overflow_mode, bool assert_overflow = false>
 void test_decimal_binary_functions_with_nullable_columns(DecimalTestCaseArray const& test_cases, Columns columns,
                                                          int result_precision, int result_scale, size_t off,
                                                          [[maybe_unused]] const std::vector<bool>& overflows) {
@@ -381,11 +369,8 @@ void test_decimal_binary_functions_with_nullable_columns(DecimalTestCaseArray co
     }
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow>
-=======
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op,
+          OverflowMode overflow_mode>
 void test_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                         int rhs_scale, int result_precision, int result_scale) {
     Columns columns = prepare_vector_vector<LhsType, RhsType>(test_cases, lhs_precision, lhs_scale, rhs_precision,
@@ -394,22 +379,15 @@ void test_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_precisio
             test_cases, columns, result_precision, result_scale, 0, std::vector<bool>());
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType Type, typename Op, bool check_overflow>
-=======
-template <LogicalType Type, typename Op, OverflowMode overflow_mode>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+template <PrimitiveType Type, typename Op, OverflowMode overflow_mode>
 void test_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                         int rhs_scale, int result_precision, int result_scale) {
     test_vector_vector<Type, Type, Type, Op, overflow_mode>(test_cases, lhs_precision, lhs_scale, rhs_precision,
                                                             rhs_scale, result_precision, result_scale);
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow>
-=======
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op,
+          OverflowMode overflow_mode>
 void test_vector_vector_assert_overflow(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                         int rhs_precision, int rhs_scale, int result_precision, int result_scale,
                                         const std::vector<bool>& overflows) {
@@ -419,11 +397,7 @@ void test_vector_vector_assert_overflow(DecimalTestCaseArray const& test_cases, 
             test_cases, columns, result_precision, result_scale, 0, overflows);
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType Type, typename Op, bool check_overflow>
-=======
-template <LogicalType Type, typename Op, OverflowMode overflow_mode>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+template <PrimitiveType Type, typename Op, OverflowMode overflow_mode>
 void test_vector_vector_assert_overflow(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                         int rhs_precision, int rhs_scale, int result_precision, int result_scale,
                                         const std::vector<bool>& overflows) {
@@ -431,11 +405,8 @@ void test_vector_vector_assert_overflow(DecimalTestCaseArray const& test_cases, 
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale, overflows);
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow>
-=======
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op,
+          OverflowMode overflow_mode>
 void test_const_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                        int rhs_scale, int result_precision, int result_scale) {
     std::random_device rd;
@@ -452,22 +423,15 @@ void test_const_vector(DecimalTestCaseArray const& test_cases, int lhs_precision
     }
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType Type, typename Op, bool check_overflow>
-=======
-template <LogicalType Type, typename Op, OverflowMode overflow_mode>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+template <PrimitiveType Type, typename Op, OverflowMode overflow_mode>
 void test_const_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                        int rhs_scale, int result_precision, int result_scale) {
     test_const_vector<Type, Type, Type, Op, overflow_mode>(test_cases, lhs_precision, lhs_scale, rhs_precision,
                                                            rhs_scale, result_precision, result_scale);
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow>
-=======
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op,
+          OverflowMode overflow_mode>
 void test_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                        int rhs_scale, int result_precision, int result_scale) {
     std::random_device rd;
@@ -484,22 +448,15 @@ void test_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision
     }
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType Type, typename Op, bool check_overflow>
-=======
-template <LogicalType Type, typename Op, OverflowMode overflow_mode>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+template <PrimitiveType Type, typename Op, OverflowMode overflow_mode>
 void test_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                        int rhs_scale, int result_precision, int result_scale) {
     return test_vector_const<Type, Type, Type, Op, overflow_mode>(test_cases, lhs_precision, lhs_scale, rhs_precision,
                                                                   rhs_scale, result_precision, result_scale);
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow>
-=======
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op,
+          OverflowMode overflow_mode>
 void test_const_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                       int rhs_scale, int result_precision, int result_scale) {
     for (auto& tc : test_cases) {
@@ -509,22 +466,15 @@ void test_const_const(DecimalTestCaseArray const& test_cases, int lhs_precision,
     }
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType Type, typename Op, bool check_overflow>
-=======
-template <LogicalType Type, typename Op, OverflowMode overflow_mode>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+template <PrimitiveType Type, typename Op, OverflowMode overflow_mode>
 void test_const_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                       int rhs_scale, int result_precision, int result_scale) {
     test_const_const<Type, Type, Type, Op, overflow_mode>(test_cases, lhs_precision, lhs_scale, rhs_precision,
                                                           rhs_scale, result_precision, result_scale);
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow>
-=======
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op,
+          OverflowMode overflow_mode>
 void test_nullable_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
     std::random_device rd;
@@ -540,22 +490,16 @@ void test_nullable_vector_const(DecimalTestCaseArray const& test_cases, int lhs_
                 std::vector<bool>());
     }
 }
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType Type, typename Op, bool check_overflow>
-=======
-template <LogicalType Type, typename Op, OverflowMode overflow_mode>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+
+template <PrimitiveType Type, typename Op, OverflowMode overflow_mode>
 void test_nullable_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
     test_nullable_vector_const<Type, Type, Type, Op, overflow_mode>(test_cases, lhs_precision, lhs_scale, rhs_precision,
                                                                     rhs_scale, result_precision, result_scale);
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow>
-=======
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op,
+          OverflowMode overflow_mode>
 void test_const_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
     std::random_device rd;
@@ -571,22 +515,16 @@ void test_const_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_
                 std::vector<bool>());
     }
 }
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType Type, typename Op, bool check_overflow>
-=======
-template <LogicalType Type, typename Op, OverflowMode overflow_mode>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+
+template <PrimitiveType Type, typename Op, OverflowMode overflow_mode>
 void test_const_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
     test_const_nullable_vector<Type, Type, Type, Op, overflow_mode>(test_cases, lhs_precision, lhs_scale, rhs_precision,
                                                                     rhs_scale, result_precision, result_scale);
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow>
-=======
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op,
+          OverflowMode overflow_mode>
 void test_nullable_vector_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                           int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
     Columns columns = prepare_nullable_vector_nullable_vector<LhsType, RhsType>(test_cases, lhs_precision, lhs_scale,
@@ -594,19 +532,15 @@ void test_nullable_vector_nullable_vector(DecimalTestCaseArray const& test_cases
     test_decimal_binary_functions_with_nullable_columns<LhsType, RhsType, ResultType, Op, overflow_mode>(
             test_cases, columns, result_precision, result_scale, 0, std::vector<bool>());
 }
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-template <PrimitiveType Type, typename Op, bool check_overflow>
-=======
 
-template <LogicalType Type, typename Op, OverflowMode overflow_mode>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+template <PrimitiveType Type, typename Op, OverflowMode overflow_mode>
 void test_nullable_vector_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                           int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
     return test_nullable_vector_nullable_vector<Type, Type, Type, Op, overflow_mode>(
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
 }
 
-template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op>
+template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op>
 void test_overflow_report_error(const std::string& lv, const std::string& rv, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale) {
     using LhsCppType = RunTimeCppType<LhsType>;
@@ -3078,20 +3012,15 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s14_div_decimal128p38s14_eq_
 template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op>
 void test_decimal_fast_mul_help(const DecimalTestCaseArray& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-    test_vector_vector<LhsType, RhsType, ResultType, Op, false>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                                rhs_scale, result_precision, result_scale);
-    test_vector_const<LhsType, RhsType, ResultType, Op, false>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                               rhs_scale, result_precision, result_scale);
-    test_const_vector<LhsType, RhsType, ResultType, Op, false>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                               rhs_scale, result_precision, result_scale);
-    test_const_const<LhsType, RhsType, ResultType, Op, false>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                              rhs_scale, result_precision, result_scale);
-    test_nullable_vector_const<LhsType, RhsType, ResultType, Op, false>(
-=======
-#if defined(__x86_64__) && defined(__GNUC__)
     test_vector_vector<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+            test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
+    test_vector_const<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
+            test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
+    test_const_vector<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
+            test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
+    test_const_const<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
+            test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
+    test_nullable_vector_const<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
     test_vector_const<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
@@ -3108,6 +3037,7 @@ void test_decimal_fast_mul_help(const DecimalTestCaseArray& test_cases, int lhs_
     test_vector_vector<ResultType, ResultType, ResultType, MulOp, OverflowMode::IGNORE>(
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
 }
+
 TEST_F(DecimalBinaryFunctionTest, test_decimal_fast_mul_32x32) {
     DecimalTestCaseArray test_cases = {{"0.14", "3348947.24", "468852.6136"},
                                        {"-9786689.10", "7798141.97", "-76317991018051.5270"},
@@ -3204,9 +3134,6 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal_fast_mul_64x64) {
                                                                                                 4, 38, 8);
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/decimal_binary_function_test.cpp
-} // namespace starrocks::vectorized
-=======
 TEST_F(DecimalBinaryFunctionTest, test_overflow_report_error) {
     ASSERT_THROW((test_overflow_report_error<TYPE_DECIMAL32, TYPE_DECIMAL32, TYPE_DECIMAL32, MulOp>(
                          "274.97790", "1.0000", 9, 5, 9, 4)),
@@ -3218,6 +3145,4 @@ TEST_F(DecimalBinaryFunctionTest, test_overflow_report_error) {
                          "274.97790000000000000000", "1.0000000000000000", 38, 20, 38, 16)),
                  std::overflow_error);
 }
-
-} // namespace starrocks
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/test/exprs/decimal_binary_function_test.cpp
+} // namespace starrocks::vectorized

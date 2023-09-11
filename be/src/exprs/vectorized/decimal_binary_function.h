@@ -3,23 +3,15 @@
 #pragma once
 
 #include "column/column_builder.h"
-<<<<<<< HEAD:be/src/exprs/vectorized/decimal_binary_function.h
+#include "exprs/overflow.h"
 #include "exprs/vectorized/arithmetic_operation.h"
 #include "exprs/vectorized/binary_function.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
 
 namespace starrocks::vectorized {
-template <bool check_overflow, typename Op>
-=======
-#include "exprs/arithmetic_operation.h"
-#include "exprs/binary_function.h"
-#include "exprs/overflow.h"
-#include "gutil/strings/substitute.h"
-#include "types/logical_type.h"
 
-namespace starrocks {
 template <OverflowMode overflow_mode, typename Op>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/src/exprs/decimal_binary_function.h
 struct DecimalBinaryFunction {
     // Adjust the scale of lhs operand, then evaluate binary operation, the rules about operand
     // scaling is defined in function: compute_result_type.  each operations are depicted as
@@ -246,11 +238,7 @@ template <typename OP, OverflowMode overflow_mode = OverflowMode::IGNORE>
 using VectorizedStrictDecimalBinaryFunction =
         UnionNullableColumnBinaryFunction<UnpackConstColumnDecimalBinaryFunction<OP, overflow_mode>>;
 
-<<<<<<< HEAD:be/src/exprs/vectorized/decimal_binary_function.h
-template <PrimitiveType Type, typename OP, bool check_overflow = false>
-=======
-template <LogicalType Type, typename OP, OverflowMode overflow_mode = OverflowMode::IGNORE>
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419)):be/src/exprs/decimal_binary_function.h
+template <PrimitiveType Type, typename OP, OverflowMode overflow_mode = OverflowMode::IGNORE>
 using VectorizedUnstrictDecimalBinaryFunction =
         ProduceNullableColumnBinaryFunction<UnpackConstColumnBinaryFunction<ArithmeticRightZeroCheck<Type>>,
                                             UnpackConstColumnDecimalBinaryFunction<OP, overflow_mode>>;
