@@ -574,6 +574,8 @@ private:
         return ptr + sizeof(uint32_t);
     }
 
+    enum LzoChecksum { CHECK_NONE, CHECK_CRC32, CHECK_ADLER };
+
     LzoChecksum header_type(int flags) { return (flags & F_H_CRC32) ? CHECK_CRC32 : CHECK_ADLER; }
 
     LzoChecksum input_type(int flags) {
@@ -584,15 +586,11 @@ private:
         return (flags & F_CRC32_D) ? CHECK_CRC32 : (flags & F_ADLER32_D) ? CHECK_ADLER : CHECK_NONE;
     }
 
-    Status parse_header_info(uint8_t* input, size_t input_len, size_t* input_bytes_read, size_t* more_bytes_needed);
+    Status parse_header(uint8_t* input, size_t input_len, bool* more_data);
 
     Status checksum(LzoChecksum type, const std::string& source, uint32_t expected, uint8_t* ptr, size_t len);
 
-private:
-    bool _is_header_loaded = false;
-    enum LzoChecksum { CHECK_NONE, CHECK_CRC32, CHECK_ADLER };
-
-    struct HeaderInfo {
+    struct Header {
         uint16_t version;
         uint16_t lib_version;
         uint16_t version_needed;
@@ -603,9 +601,17 @@ private:
         LzoChecksum input_checksum_type;
         LzoChecksum output_checksum_type;
     };
-    
 
-    struct HeaderInfo _header_info;
+    bool _is_header_loaded = false;
+    struct Header _header;
+
+    struct Context {
+        std::vector<uint8_t> buffer;
+        uint8_t* buffer_data;
+        size_t buffer_size = 0;
+        size_t buffer_used = 0;
+    };
+    Context _ctx;
 };
 
 Status LzoStreamCompression::init() {
@@ -613,140 +619,126 @@ Status LzoStreamCompression::init() {
 }
 
 Status LzoStreamCompression::decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
-                                        size_t output_max_len, size_t* decompressed_len, bool* stream_end) {
-    size_t* more_input_bytes = &input_len;
-    size_t* more_output_bytes = &output_max_len;
+                                        size_t output_len, size_t* output_bytes_write, bool* stream_end) {
+    *input_bytes_read = 0;
+    *output_bytes_write = 0;
+    *stream_end = false;
+    Context* ctx = &_ctx;
+    Status st = Status::OK();
 
     if (!_is_header_loaded) {
         // this is the first time to call lzo decompress, parse the header info first
-        RETURN_IF_ERROR(parse_header_info(input, input_len, input_bytes_read, more_input_bytes));
-        if (*more_input_bytes > 0) {
-            return Status::OK();
+        bool more_data = false;
+        RETURN_IF_ERROR(parse_header(input, input_len, &more_data));
+        if (more_data) {
+            return st;
         }
+        *input_bytes_read += _header.header_size;
+        input += _header.header_size;
+        input_len -= _header.header_size;
     }
 
-    // LOG(INFO) << "after load header: " << *input_bytes_read;
+    if (ctx->buffer_size == ctx->buffer_used) {
+        // read compressed block
+        // compressed-block ::=
+        //   <uncompressed-size>
+        //   <compressed-size>
+        //   <uncompressed-checksums>
+        //   <compressed-checksums>
+        //   <compressed-data>
 
-    // read compressed block
-    // compressed-block ::=
-    //   <uncompressed-size>
-    //   <compressed-size>
-    //   <uncompressed-checksums>
-    //   <compressed-checksums>
-    //   <compressed-data>
-    int left_input_len = input_len - *input_bytes_read;
-    if (left_input_len < sizeof(uint32_t)) {
-        // block is at least have uncompressed_size
-        *more_input_bytes = sizeof(uint32_t) - left_input_len;
-        return Status::OK();
-    }
+        // in following we use ptr to trace pointer
+        // and ptr-input as input read bytes.
+        uint8_t* ptr = input;
+        uint32_t uncompressed_size = 0;
+        uint32_t compressed_size = 0;
+        uint32_t uncompressed_checksum = 0;
+        uint32_t compressed_checksum = 0;
+        bool do_compressed_check = false;
 
-    uint8_t* block_start = input + *input_bytes_read;
-    uint8_t* ptr = block_start;
-    // 1. uncompressed size
-    uint32_t uncompressed_size;
-    ptr = get_uint32(ptr, &uncompressed_size);
-    left_input_len -= sizeof(uint32_t);
-    if (uncompressed_size == 0) {
-        *stream_end = true;
-        return Status::OK();
-    }
+        // 1. uncompressed-size
+        if (input_len < sizeof(uint32_t)) {
+            return st;
+        }
+        ptr = get_uint32(ptr, &uncompressed_size);
+        input_len -= sizeof(uint32_t);
 
-    // 2. compressed size
-    if (left_input_len < sizeof(uint32_t)) {
-        *more_input_bytes = sizeof(uint32_t) - left_input_len;
-        return Status::OK();
-    }
-
-    uint32_t compressed_size;
-    ptr = get_uint32(ptr, &compressed_size);
-    left_input_len -= sizeof(uint32_t);
-    if (compressed_size > LZO_MAX_BLOCK_SIZE) {
-        std::stringstream ss;
-        ss << "lzo block size: " << compressed_size << " is greater than LZO_MAX_BLOCK_SIZE: " << LZO_MAX_BLOCK_SIZE;
-        return Status::InternalError(ss.str());
-    }
-
-    // 3. out checksum
-    uint32_t out_checksum = 0;
-    if (_header_info.output_checksum_type != CHECK_NONE) {
-        if (left_input_len < sizeof(uint32_t)) {
-            *more_input_bytes = sizeof(uint32_t) - left_input_len;
+        // no data in this block.
+        if (uncompressed_size == 0) {
+            *input_bytes_read += (ptr - input);
+            *stream_end = true;
             return Status::OK();
         }
 
-        ptr = get_uint32(ptr, &out_checksum);
-        left_input_len -= sizeof(uint32_t);
-    }
-
-    // 4. in checksum
-    uint32_t in_checksum = 0;
-    if (compressed_size < uncompressed_size && _header_info.input_checksum_type != CHECK_NONE) {
-        if (left_input_len < sizeof(uint32_t)) {
-            *more_input_bytes = sizeof(uint32_t) - left_input_len;
-            return Status::OK();
+        // 2. compressed size
+        if (input_len < sizeof(uint32_t)) {
+            return st;
         }
+        ptr = get_uint32(ptr, &compressed_size);
+        input_len -= sizeof(uint32_t);
 
-        ptr = get_uint32(ptr, &out_checksum);
-        left_input_len -= sizeof(uint32_t);
-    } else {
-        // If the compressed data size is equal to the uncompressed data size, then
-        // the uncompressed data is stored and there is no compressed checksum.
-        in_checksum = out_checksum;
-    }
-
-    // 5. checksum compressed data
-    if (left_input_len < compressed_size) {
-        *more_input_bytes = compressed_size - left_input_len;
-        return Status::OK();
-    }
-    RETURN_IF_ERROR(checksum(_header_info.input_checksum_type, "compressed", in_checksum, ptr, compressed_size));
-
-    // 6. decompress
-    if (output_max_len < uncompressed_size) {
-        *more_output_bytes = uncompressed_size - output_max_len;
-        return Status::OK();
-    }
-    if (compressed_size == uncompressed_size) {
-        // the data is uncompressed, just copy to the output buf
-        memmove(output, ptr, compressed_size);
-        ptr += compressed_size;
-    } else {
-        // decompress
-        *decompressed_len = uncompressed_size;
-        // int ret = lzo1x_decompress_safe(ptr, compressed_size, output, reinterpret_cast<lzo_uint*>(&uncompressed_size),
-        //                                 nullptr);
-        int ret = 0;
-        if (ret != 0 || uncompressed_size != *decompressed_len) {
+        if (compressed_size > LZO_MAX_BLOCK_SIZE) {
             std::stringstream ss;
-            ss << "Lzo decompression failed with ret: " << ret << " decompressed len: " << uncompressed_size
-               << " expected: " << *decompressed_len;
+            ss << "lzo block size: " << compressed_size
+               << " is greater than LZO_MAX_BLOCK_SIZE: " << LZO_MAX_BLOCK_SIZE;
             return Status::InternalError(ss.str());
         }
 
-        RETURN_IF_ERROR(
-                checksum(_header_info.output_checksum_type, "decompressed", out_checksum, output, uncompressed_size));
+        // 3. uncompressed data checksum
+        if (_header.output_checksum_type != CHECK_NONE) {
+            if (input_len < sizeof(uint32_t)) {
+                return st;
+            }
+            ptr = get_uint32(ptr, &uncompressed_checksum);
+            input_len -= sizeof(uint32_t);
+        }
+
+        // 4. compressed data checksum
+        if (compressed_size < uncompressed_size && _header.input_checksum_type != CHECK_NONE) {
+            if (input_len < sizeof(uint32_t)) {
+                return st;
+            }
+            ptr = get_uint32(ptr, &compressed_checksum);
+            input_len -= sizeof(uint32_t);
+            do_compressed_check = true;
+        }
+
+        // 5. checksum compressed data
+        if (input_len < compressed_size) {
+            return st;
+        }
+        if (do_compressed_check) {
+            RETURN_IF_ERROR(
+                    checksum(_header.input_checksum_type, "compressed", compressed_checksum, ptr, compressed_size));
+        }
+
+        // 6. decompress data
+        if (uncompressed_size > output_len) {
+            ctx->buffer.reserve(uncompressed_size);
+            ctx->buffer_data = ctx->buffer.data();
+        } else {
+            ctx->buffer_data = output;
+        }
+        ctx->buffer_size = uncompressed_size;
+        ctx->buffer_used = 0;
+
+        if (compressed_size == uncompressed_size) {
+            memcpy(ctx->buffer_data, ptr, compressed_size);
+        } else {
+            // TODO: lzo decompress.
+        }
+        RETURN_IF_ERROR(checksum(_header.output_checksum_type, "decompressed", uncompressed_checksum, ctx->buffer_data,
+                                 uncompressed_size));
         ptr += compressed_size;
+        *input_bytes_read += (ptr - input);
     }
 
-    // 7. peek next block's uncompressed size
-    uint32_t next_uncompressed_size;
-    get_uint32(ptr, &next_uncompressed_size);
-    if (next_uncompressed_size == 0) {
-        // 0 means current block is the last block.
-        // consume this uncompressed_size to finish reading.
-        ptr += sizeof(uint32_t);
+    output_len = std::min(output_len, ctx->buffer_size - ctx->buffer_used);
+    if (ctx->buffer_data != output) {
+        std::memcpy(output, ctx->buffer_data + ctx->buffer_used, output_len);
     }
-
-    // 8. done
-    *stream_end = true;
-    *decompressed_len = uncompressed_size;
-    *input_bytes_read += ptr - block_start;
-
-    LOG(INFO) << "finished decompress lzo block."
-              << " compressed_size: " << compressed_size << " decompressed_len: " << *decompressed_len
-              << " input_bytes_read: " << *input_bytes_read << " next_uncompressed_size: " << next_uncompressed_size;
-
+    ctx->buffer_used += output_len;
+    *output_bytes_write += output_len;
     return Status::OK();
 }
 
@@ -763,17 +755,16 @@ Status LzoStreamCompression::decompress(uint8_t* input, size_t input_len, size_t
 //   <file-name>
 //   <header-checksum>
 //   <extra-field> -- presence indicated in flags, not currently used.
-Status LzoStreamCompression::parse_header_info(uint8_t* input, size_t input_len, size_t* input_bytes_read,
-                                               size_t* more_input_bytes) {
+Status LzoStreamCompression::parse_header(uint8_t* input, size_t input_len, bool* more) {
+    *more = false;
+    uint8_t* ptr = input;
+
+    // =======================================
     if (input_len < MIN_HEADER_SIZE) {
-        LOG(INFO) << "highly recommanded that Lzo header size is larger than " << MIN_HEADER_SIZE
-                  << ", or parsing header info may failed."
-                  << " only given: " << input_len;
-        *more_input_bytes = MIN_HEADER_SIZE - input_len;
+        *more = true;
         return Status::OK();
     }
 
-    uint8_t* ptr = input;
     // 1. magic
     if (memcmp(ptr, LZOP_MAGIC, sizeof(LZOP_MAGIC))) {
         std::stringstream ss;
@@ -784,37 +775,36 @@ Status LzoStreamCompression::parse_header_info(uint8_t* input, size_t input_len,
     uint8_t* header = ptr;
 
     // 2. version
-    ptr = get_uint16(ptr, &_header_info.version);
-    if (_header_info.version > LZOP_VERSION) {
+    ptr = get_uint16(ptr, &_header.version);
+    if (_header.version > LZOP_VERSION) {
         std::stringstream ss;
-        ss << "compressed with later version of lzop: " << &_header_info.version
-           << " must be less than: " << LZOP_VERSION;
+        ss << "compressed with later version of lzop: " << &_header.version << " must be less than: " << LZOP_VERSION;
         return Status::InternalError(ss.str());
     }
 
     // 3. lib version
-    ptr = get_uint16(ptr, &_header_info.lib_version);
-    if (_header_info.lib_version < MIN_LZO_VERSION) {
+    ptr = get_uint16(ptr, &_header.lib_version);
+    if (_header.lib_version < MIN_LZO_VERSION) {
         std::stringstream ss;
-        ss << "compressed with incompatible lzo version: " << &_header_info.lib_version
+        ss << "compressed with incompatible lzo version: " << &_header.lib_version
            << "must be at least: " << MIN_LZO_VERSION;
         return Status::InternalError(ss.str());
     }
 
     // 4. version needed
-    ptr = get_uint16(ptr, &_header_info.version_needed);
-    if (_header_info.version_needed > LZOP_VERSION) {
+    ptr = get_uint16(ptr, &_header.version_needed);
+    if (_header.version_needed > LZOP_VERSION) {
         std::stringstream ss;
-        ss << "compressed with imp incompatible lzo version: " << &_header_info.version
+        ss << "compressed with imp incompatible lzo version: " << &_header.version
            << " must be at no more than: " << LZOP_VERSION;
         return Status::InternalError(ss.str());
     }
 
     // 5. method
-    ptr = get_uint8(ptr, &_header_info.method);
-    if (_header_info.method < 1 || _header_info.method > 3) {
+    ptr = get_uint8(ptr, &_header.method);
+    if (_header.method < 1 || _header.method > 3) {
         std::stringstream ss;
-        ss << "invalid compression method: " << _header_info.method;
+        ss << "invalid compression method: " << _header.method;
         return Status::InternalError(ss.str());
     }
 
@@ -829,9 +819,9 @@ Status LzoStreamCompression::parse_header_info(uint8_t* input, size_t input_len,
         ss << "unsupported lzo flags: " << flags;
         return Status::InternalError(ss.str());
     }
-    _header_info.header_checksum_type = header_type(flags);
-    _header_info.input_checksum_type = input_type(flags);
-    _header_info.output_checksum_type = output_type(flags);
+    _header.header_checksum_type = header_type(flags);
+    _header.input_checksum_type = input_type(flags);
+    _header.output_checksum_type = output_type(flags);
 
     // 8. skip mode and mtime
     ptr += 3 * sizeof(int32_t);
@@ -840,46 +830,31 @@ Status LzoStreamCompression::parse_header_info(uint8_t* input, size_t input_len,
     uint8_t filename_len;
     ptr = get_uint8(ptr, &filename_len);
 
+    // =============================
     // here we already consume (MIN_HEADER_SIZE)
     // from now we have to check left input is enough for each step
+
+    // filename + checksum(uint32_t)
     size_t left = input_len - (ptr - input);
-    if (left < filename_len) {
-        *more_input_bytes = filename_len - left;
+    if (left < (filename_len + sizeof(uint32_t))) {
+        *more = true;
         return Status::OK();
     }
 
-    _header_info.filename = std::string((char*)ptr, (size_t)filename_len);
+    _header.filename = std::string((char*)ptr, (size_t)filename_len);
     ptr += filename_len;
     left -= filename_len;
 
-    // 10. checksum
-    if (left < sizeof(uint32_t)) {
-        *more_input_bytes = sizeof(uint32_t) - left;
-        return Status::OK();
-    }
+    // 10. header checksum
     uint32_t expected_checksum;
-    uint8_t* cur = ptr;
+    uint8_t* header_end = ptr;
     ptr = get_uint32(ptr, &expected_checksum);
-    // uint32_t computed_checksum;
-    // if (_header_info.header_checksum_type == CHECK_CRC32) {
-    //     computed_checksum = CRC32_INIT_VALUE;
-    //     computed_checksum = lzo_crc32(computed_checksum, header, cur - header);
-    // } else {
-    //     computed_checksum = ADLER32_INIT_VALUE;
-    //     computed_checksum = lzo_adler32(computed_checksum, header, cur - header);
-    // }
-
-    // if (computed_checksum != expected_checksum) {
-    //     std::stringstream ss;
-    //     ss << "invalid header checksum: " << computed_checksum << " expected: " << expected_checksum;
-    //     return Status::InternalError(ss.str());
-    // }
     left -= sizeof(uint32_t);
 
     // 11. skip extra
     if (flags & F_H_EXTRA_FIELD) {
         if (left < sizeof(uint32_t)) {
-            *more_input_bytes = sizeof(uint32_t) - left;
+            *more = true;
             return Status::OK();
         }
         uint32_t extra_len;
@@ -888,19 +863,18 @@ Status LzoStreamCompression::parse_header_info(uint8_t* input, size_t input_len,
 
         // add the checksum and the len to the total ptr size.
         if (left < sizeof(int32_t) + extra_len) {
-            *more_input_bytes = sizeof(int32_t) + extra_len - left;
+            *more = true;
             return Status::OK();
         }
         left -= sizeof(int32_t) + extra_len;
         ptr += sizeof(int32_t) + extra_len;
     }
 
-    _header_info.header_size = ptr - input;
-    *input_bytes_read = _header_info.header_size;
-
+    // ================================
+    RETURN_IF_ERROR(checksum(_header.header_checksum_type, "header", expected_checksum, header, header_end - header));
+    _header.header_size = ptr - input;
     _is_header_loaded = true;
     LOG(INFO) << debug_info();
-
     return Status::OK();
 }
 
@@ -935,12 +909,12 @@ Status LzoStreamCompression::checksum(LzoChecksum type, const std::string& sourc
 std::string LzoStreamCompression::debug_info() {
     std::stringstream ss;
     ss << "LzoStreamCompression."
-       << " version: " << _header_info.version << " lib version: " << _header_info.lib_version
-       << " version needed: " << _header_info.version_needed << " method: " << (uint16_t)_header_info.method
-       << " filename: " << _header_info.filename << " header size: " << _header_info.header_size
-       << " header checksum type: " << _header_info.header_checksum_type
-       << " input checksum type: " << _header_info.input_checksum_type
-       << " output checksum type: " << _header_info.output_checksum_type;
+       << " version: " << _header.version << " lib version: " << _header.lib_version
+       << " version needed: " << _header.version_needed << " method: " << (uint16_t)_header.method
+       << " filename: " << _header.filename << " header size: " << _header.header_size
+       << " header checksum type: " << _header.header_checksum_type
+       << " input checksum type: " << _header.input_checksum_type
+       << " output checksum type: " << _header.output_checksum_type;
     return ss.str();
 }
 
@@ -984,4 +958,3 @@ Status StreamCompression::create_decompressor(CompressionTypePB type,
 }
 
 } // namespace starrocks
-`
