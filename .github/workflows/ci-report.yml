@@ -65,9 +65,8 @@ jobs:
       - name: INFO
         id: info
         run: |
-          echo ${PR_NUMBER}
-          echo ${BASE_REF}
-          echo ${HEAD_SHA}
+          echo ${{ steps.pr_details.outputs.PR_NUMBER }}
+          echo ${{ steps.pr_details.outputs.base_ref }}
 
   FE-REPORT:
     runs-on: [ self-hosted, quick ]
@@ -110,7 +109,7 @@ jobs:
           fi
 
       - name: Publish UT Report
-        uses: mikepenz/action-junit-report@v3
+        uses: mikepenz/action-junit-report@v4
         id: publish_report
         if: steps.download-ut-xml.outputs.size != '0'
         env:
@@ -120,6 +119,7 @@ jobs:
           check_name: 'FE UT Report'
           detailed_summary: true
           fail_on_failure: true
+          commit: ${{ github.event.workflow_run.head_sha }}
           report_paths: ./fe/fe-core/target/surefire-reports/*.xml
 
       - name: Merge FE Coverage
@@ -254,7 +254,6 @@ jobs:
         if: steps.download-ut-xml.outputs.size != '0'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          git checkout coverage
           ECI_ID=`./bin/create_eci.sh ${BASE_REF} ${REPO}`
           TOTAL_COV_XML=/var/local/env/be_total_coverage_${PR_ID}.xml
           
@@ -292,8 +291,12 @@ jobs:
           total_xml: ${{ steps.merge.outputs.COV_XML }}
         run: |
           rm -rf ${{ github.workspace }}/*
-          [[ "${{ steps.merge.outputs.ECI_ID }}" != "" ]] && eci rm ${{ steps.merge.outputs.ECI_ID }}
-          [[ "${total_xml}" != "" ]] && rm -f ${total_xml}
+          if [[ "${{ steps.merge.outputs.ECI_ID }}" != "" ]]; then
+            eci rm ${{ steps.merge.outputs.ECI_ID }}
+          fi
+          if [[ "${total_xml}" != "" ]]; then
+            rm -f ${total_xml}
+          fi
 
   SQL-Tester-REPORT:
     runs-on: [ self-hosted, quick ]
