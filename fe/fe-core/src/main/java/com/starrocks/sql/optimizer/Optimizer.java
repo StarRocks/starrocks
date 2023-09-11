@@ -217,9 +217,9 @@ public class Optimizer {
             // valid the final plan
             PlanValidator.getInstance().validatePlan(finalPlan, rootTaskContext);
             // validate mv and log tracer if needed
-            MVRewriteValidator.getInstance().validateMV(finalPlan);
-            // Audit the usage of materialized view
-            MVRewriteValidator.getInstance().auditMv(finalPlan, context);
+            MVRewriteValidator.getInstance().validateMV(connectContext, finalPlan, rootTaskContext);
+            // audit mv
+            MVRewriteValidator.getInstance().auditMv(connectContext, finalPlan, rootTaskContext);
             return finalPlan;
         }
     }
