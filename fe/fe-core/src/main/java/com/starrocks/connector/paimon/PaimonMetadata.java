@@ -206,11 +206,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                 catalogName, table, null, -1, predicate, fieldNames);
         RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
         List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
-        long rowCount = 0;
-        for (Split split : splits) {
-            DataSplit dataSplit = (DataSplit) split;
-            rowCount += dataSplit.files().stream().map(DataFileMeta::rowCount).reduce(0L, Long::sum);
-        }
+        long rowCount = getRowCount(splits);
         if (rowCount == 0) {
             builder.setOutputRowCount(1);
         } else {
@@ -218,6 +214,15 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
 
         return builder.build();
+    }
+
+    long getRowCount(List<? extends Split> splits) {
+        long rowCount = 0;
+        for (Split split : splits) {
+            DataSplit dataSplit = (DataSplit) split;
+            rowCount += dataSplit.dataFiles().stream().map(DataFileMeta::rowCount).reduce(0L, Long::sum);
+        }
+        return rowCount;
     }
 
     private List<Predicate> extractPredicates(PaimonTable paimonTable, ScalarOperator predicate) {
