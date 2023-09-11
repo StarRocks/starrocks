@@ -41,9 +41,9 @@
 
 #include "common/logging.h"
 #include "exprs/expr.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/current_thread.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
 
