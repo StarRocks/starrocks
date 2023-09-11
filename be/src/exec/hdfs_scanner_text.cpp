@@ -363,7 +363,7 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
         bool has_bom = false;
         if (scan_range->offset == 0) {
             CSVReader::Record first_line;
-            reader->next_record(&first_line);
+            RETURN_IF_ERROR(reader->next_record(&first_line));
             if (first_line.size >= 3 && (unsigned char)first_line.data[0] == 0xEF &&
                 (unsigned char)first_line.data[1] == 0xBB && (unsigned char)first_line.data[2] == 0xBF) {
                 has_bom = true;

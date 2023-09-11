@@ -178,10 +178,10 @@ public:
         column = dict_code_column;
     }
 
-    void filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+    Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
                             const size_t& layer) override {
         DCHECK_EQ(sub_field_path.size(), layer);
-        _dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data());
+        RETURN_IF_ERROR(_dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data()));
     }
 
     Status fill_dst_column(ColumnPtr& dst, const ColumnPtr& src) override {
@@ -914,7 +914,7 @@ public:
                                                            layer + 1);
     }
 
-    void filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+    Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
                             const size_t& layer) override {
         const std::string& sub_field = sub_field_path[layer];
         StructColumn* struct_column = nullptr;
