@@ -581,21 +581,21 @@ private:
         return ptr + sizeof(uint32_t);
     }
 
-    enum LzoChecksum { CHECK_NONE, CHECK_CRC32, CHECK_ADLER };
+    enum ChecksumType { CHECK_NONE, CHECK_CRC32, CHECK_ADLER };
 
-    LzoChecksum header_type(int flags) { return (flags & F_H_CRC32) ? CHECK_CRC32 : CHECK_ADLER; }
+    ChecksumType header_type(int flags) { return (flags & F_H_CRC32) ? CHECK_CRC32 : CHECK_ADLER; }
 
-    LzoChecksum input_type(int flags) {
+    ChecksumType input_type(int flags) {
         return (flags & F_CRC32_C) ? CHECK_CRC32 : (flags & F_ADLER32_C) ? CHECK_ADLER : CHECK_NONE;
     }
 
-    LzoChecksum output_type(int flags) {
+    ChecksumType output_type(int flags) {
         return (flags & F_CRC32_D) ? CHECK_CRC32 : (flags & F_ADLER32_D) ? CHECK_ADLER : CHECK_NONE;
     }
 
     Status parse_header(uint8_t* input, size_t input_len, bool* more_data);
 
-    Status checksum(LzoChecksum type, const std::string& source, uint32_t expected, uint8_t* ptr, size_t len);
+    Status verify_checksum(ChecksumType type, const std::string& source, uint32_t expected, uint8_t* ptr, size_t len);
 
     struct Header {
         uint16_t version;
@@ -604,9 +604,9 @@ private:
         uint8_t method;
         std::string filename;
         uint32_t header_size;
-        LzoChecksum header_checksum_type;
-        LzoChecksum input_checksum_type;
-        LzoChecksum output_checksum_type;
+        ChecksumType header_checksum_type;
+        ChecksumType input_checksum_type;
+        ChecksumType output_checksum_type;
     };
 
     bool _is_header_loaded = false;
@@ -715,8 +715,8 @@ Status LzoStreamCompression::decompress(uint8_t* input, size_t input_len, size_t
             return st;
         }
         if (do_compressed_check) {
-            RETURN_IF_ERROR(
-                    checksum(_header.input_checksum_type, "compressed", compressed_checksum, ptr, compressed_size));
+            RETURN_IF_ERROR(verify_checksum(_header.input_checksum_type, "compressed", compressed_checksum, ptr,
+                                            compressed_size));
         }
 
         // 6. decompress data
@@ -739,8 +739,8 @@ Status LzoStreamCompression::decompress(uint8_t* input, size_t input_len, size_t
                 return Status::InternalError(strings::Substitute("$0 decompress failed", NAME));
             }
         }
-        RETURN_IF_ERROR(checksum(_header.output_checksum_type, "decompressed", uncompressed_checksum, ctx->buffer_data,
-                                 uncompressed_size));
+        RETURN_IF_ERROR(verify_checksum(_header.output_checksum_type, "decompressed", uncompressed_checksum,
+                                        ctx->buffer_data, uncompressed_size));
         ptr += compressed_size;
         *input_bytes_read += (ptr - input);
     }
@@ -884,37 +884,37 @@ Status LzoStreamCompression::parse_header(uint8_t* input, size_t input_len, bool
     }
 
     // ================================
-    RETURN_IF_ERROR(checksum(_header.header_checksum_type, "header", expected_checksum, header, header_end - header));
+    RETURN_IF_ERROR(
+            verify_checksum(_header.header_checksum_type, "header", expected_checksum, header, header_end - header));
     _header.header_size = ptr - input;
     _is_header_loaded = true;
-    LOG(INFO) << debug_info();
     return Status::OK();
 }
 
-Status LzoStreamCompression::checksum(LzoChecksum type, const std::string& source, uint32_t expected, uint8_t* ptr,
-                                      size_t len) {
-    // uint32_t computed_checksum;
-    // switch (type) {
-    // case CHECK_NONE:
-    //     return Status::OK();
-    // case CHECK_CRC32:
-    //     computed_checksum = lzo_crc32(CRC32_INIT_VALUE, ptr, len);
-    //     break;
-    // case CHECK_ADLER:
-    //     computed_checksum = lzo_adler32(ADLER32_INIT_VALUE, ptr, len);
-    //     break;
-    // default:
-    //     std::stringstream ss;
-    //     ss << "Invalid checksum type: " << type;
-    //     return Status::InternalError(ss.str());
-    // }
+Status LzoStreamCompression::verify_checksum(ChecksumType type, const std::string& source, uint32_t expected,
+                                             uint8_t* ptr, size_t len) {
+    uint32_t computed_checksum;
+    switch (type) {
+    case CHECK_NONE:
+        return Status::OK();
+    case CHECK_CRC32:
+        computed_checksum = crc32(CRC32_INIT_VALUE, ptr, len);
+        break;
+    case CHECK_ADLER:
+        computed_checksum = adler32(ADLER32_INIT_VALUE, ptr, len);
+        break;
+    default:
+        std::stringstream ss;
+        ss << "Invalid checksum type: " << type;
+        return Status::InternalError(ss.str());
+    }
 
-    // if (computed_checksum != expected) {
-    //     std::stringstream ss;
-    //     ss << "checksum of " << source << " block failed."
-    //        << " computed checksum: " << computed_checksum << " expected: " << expected;
-    //     return Status::InternalError(ss.str());
-    // }
+    if (computed_checksum != expected) {
+        std::stringstream ss;
+        ss << NAME << " checksum of " << source << " block failed."
+           << " computed checksum: " << computed_checksum << " expected: " << expected;
+        return Status::InternalError(ss.str());
+    }
 
     return Status::OK();
 }
@@ -922,12 +922,11 @@ Status LzoStreamCompression::checksum(LzoChecksum type, const std::string& sourc
 std::string LzoStreamCompression::debug_info() {
     std::stringstream ss;
     ss << "LzoStreamCompression."
-       << " version: " << _header.version << " lib version: " << _header.lib_version
-       << " version needed: " << _header.version_needed << " method: " << (uint16_t)_header.method
-       << " filename: " << _header.filename << " header size: " << _header.header_size
-       << " header checksum type: " << _header.header_checksum_type
-       << " input checksum type: " << _header.input_checksum_type
-       << " output checksum type: " << _header.output_checksum_type;
+       << " header version: " << _header.version << ", lib version: " << _header.lib_version
+       << ", version needed: " << _header.version_needed << ", method: " << (uint16_t)_header.method
+       << ", header size: " << _header.header_size << ", header checksum type: " << _header.header_checksum_type
+       << ", input checksum type: " << _header.input_checksum_type
+       << ", output checksum type: " << _header.output_checksum_type;
     return ss.str();
 }
 
