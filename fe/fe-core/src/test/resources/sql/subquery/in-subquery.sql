@@ -1,6 +1,6 @@
 [sql]
 select t0.v1 from t0 where t0.v2 in (select t3.v11 from t3)
-    [result]
+[result]
 LEFT SEMI JOIN (join-predicate [2: v2 = 5: v11] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
@@ -9,7 +9,7 @@ LEFT SEMI JOIN (join-predicate [2: v2 = 5: v11] post-join-predicate [null])
 
 [sql]
 select t0.v1 from t0 where (t0.v2 in (select t3.v11 from t3)) is null
-    [result]
+[result]
 CTEAnchor(cteid=1)
     CTEProducer(cteid=1)
         SCAN (columns[5: v11] predicate[null])
