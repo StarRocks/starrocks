@@ -51,6 +51,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -254,14 +255,14 @@ public class TabletStatMgr extends FrontendDaemon {
         long start = System.currentTimeMillis();
         try {
             for (Map.Entry<Long, List<TabletInfo>> entry : beToTabletInfos.entrySet()) {
-                Backend backend = systemInfoService.getBackend(entry.getKey());
-                if (backend == null) {
+                ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
+                if (node == null) {
                     continue;
                 }
                 TabletStatRequest request = new TabletStatRequest();
                 request.tabletInfos = entry.getValue();
 
-                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                 Future<TabletStatResponse> responseFuture = lakeService.getTabletStats(request);
                 responseList.add(responseFuture);
             }
