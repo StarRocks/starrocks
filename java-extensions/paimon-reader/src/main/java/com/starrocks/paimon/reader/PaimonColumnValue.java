@@ -119,7 +119,24 @@ public class PaimonColumnValue implements ColumnValue {
 
     @Override
     public void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values) {
+<<<<<<< HEAD
 
+=======
+        ColumnarRow array = (ColumnarRow) fieldData;
+        List<DataField> fields = ((RowType) dataType).getFields();
+        for (int i = 0; i < structFieldIndex.size(); i++) {
+            Integer idx = structFieldIndex.get(i);
+            PaimonColumnValue cv = null;
+            if (idx != null) {
+                DataField dataField = fields.get(idx);
+                Object o = InternalRowUtils.get(array, i, dataField.type());
+                if (o != null) {
+                    cv = new PaimonColumnValue(o, dataField.type());
+                }
+            }
+            values.add(cv);
+        }
+>>>>>>> 23221f3577 ([BugFix]Fix paimon table struct type (#30817))
     }
 
     @Override
