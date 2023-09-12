@@ -2,11 +2,11 @@
 
 You can build your own monitoring services, or use the Prometheus + Grafana solution. StarRocks provides a Prometheus-compatible interface that directly links to the HTTP port of the BE and FE to obtain monitoring information from the cluster.
 
-## Monitoring Indicators
+## Metrics
 
 The available metrics are:
 
-|Indicator|Unit|Type|Meaning|
+|Metric|Unit|Type|Meaning|
 |---|:---:|:---:|---|
 |be_broker_count|count|average|Number of brokers |
 |be_brpc_endpoint_count|count|average|Number of StubCache in BRPC|
@@ -88,7 +88,7 @@ The available metrics are:
 |cpu_softirq| percentage|average|cpu_softirq usage rate |
 |cpu_steal| percentage|average|cpu_steal usage rate |
 |disk_free|bytes|average| Free disk capacity |
-|disk_io_svctm|Ms|average| Disk IO service time |
+|disk_io_svctm|ms|average| Disk IO service time |
 |disk_io_util|percentage|average| Disk usage |
 |disk_used|bytes|average| Used disk capacity |
 |starrocks_fe_meta_log_count|count|Instantaneous|The number of Edit Logs without a checkpoint. A value within `100000` is considered reasonable.|
@@ -97,8 +97,8 @@ The available metrics are:
 |starrocks_fe_query_resource_group_err|count|cumulative|The number of incorrect queries for each resource group|
 |starrocks_be_resource_group_cpu_limit_ratio|percentage|Instantaneous|Instantaneous value of resource group cpu quota ratio|
 |starrocks_be_resource_group_cpu_use_ratio|percentage|average|The ratio of CPU time used by the resource group to the CPU time of all resource groups|
-|starrocks_be_resource_group_mem_limit_bytes|Byte|Instantaneous|Instantaneous value of resource group memory quota|
-|starrocks_be_resource_group_mem_allocated_bytes|Byte|Instantaneous|Instantaneous value of resource group memory usage|
+|starrocks_be_resource_group_mem_limit_bytes|byte|Instantaneous|Instantaneous value of resource group memory quota|
+|starrocks_be_resource_group_mem_allocated_bytes|byte|Instantaneous|Instantaneous value of resource group memory usage|
 
 ## Monitoring Alarm Best Practices
 
