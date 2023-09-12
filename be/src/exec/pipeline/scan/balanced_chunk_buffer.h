@@ -46,6 +46,8 @@ public:
     ChunkBufferLimiter* limiter() { return _limiter.get(); }
     void update_limiter(Chunk* chunk);
 
+    int64_t memory_usage() const { return _memory_usage; }
+
 private:
     struct LimiterContext {
         // ========================
@@ -67,6 +69,7 @@ private:
     const BalanceStrategy _strategy;
     std::vector<SubBuffer> _sub_buffers;
     std::atomic_int64_t _output_index = 0;
+    std::atomic_int64_t _memory_usage = 0;
 
     ChunkBufferLimiterPtr _limiter;
     LimiterContext _limiter_context;
