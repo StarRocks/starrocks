@@ -27,6 +27,8 @@ select sum(c1), max(c2) from t0 group by c0 order by 1, 2 limit 5;
 
 select count(*) from (select distinct c0 from t0) tb;
 select count(*) from (select c0, c1, sum(c2) from t0 group by c0, c1) tb;
+-- distinct with limit
+select count(*) from (select distinct c0 from t0 limit 100) tb;
 
 set tablet_internal_parallel_mode="auto";
 
@@ -39,3 +41,5 @@ select sum(c1), max(c2) from t0 group by c0 order by 1, 2 limit 5;
 
 select count(*) from (select distinct c0 from t0) tb;
 select count(*) from (select c0, c1, sum(c2) from t0 group by c0, c1) tb;
+-- distinct with limit
+select count(*) from (select distinct c0 from t0 limit 100) tb;
