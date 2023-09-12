@@ -195,7 +195,7 @@ PROPERTIES
     "type" = "iceberg",
     "iceberg.catalog.type" = "rest",
     "iceberg.catalog.uri" = "https://api.tabular.io/ws",
-    "iceberg.catalog.credential" = "t-5Ii8e3FIbT9m0",
+    "iceberg.catalog.credential" = "t-5Ii8e3FIbT9m0:aaaa-3bbbbbbbbbbbbbbbbbbb",
     "iceberg.catalog.warehouse" = "sandbox"
 );
 ```
