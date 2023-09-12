@@ -36,13 +36,13 @@ Release date: August 16, 2023
 - Supports aggregate functions [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md), [COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md), and [CORR](../sql-reference/sql-functions/aggregate-functions/corr.md).
 - Supports the following [window functions](../sql-reference/sql-functions/Window_function.md): COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP.
 
-## Improvements
+### Improvements
 
 - Added more prompts in the error message `xxx too many versions xxx`. [#28397](https://github.com/StarRocks/starrocks/pull/28397)
 - Dynamic partitioning further supports the partitioning unit to be year. [#28386](https://github.com/StarRocks/starrocks/pull/28386)
 - The partitioning field is case-insensitive when expression partitioning is used at table creation and [INSERT OVERWRITE is used to overwrite data in a specific partition](../table_design/expression_partitioning.md#load-data-into-partitions). [#28309](https://github.com/StarRocks/starrocks/pull/28309)
 
-## Bug Fixes
+### Bug Fixes
 
 Fixed the following issues:
 
