@@ -103,6 +103,7 @@ public class View extends Table {
 
     // cache used table names
     private List<TableName> tableRefsCache = Lists.newArrayList();
+    private boolean isNativeView = true;
 
     // Used for read from image
     public View() {
@@ -196,6 +197,14 @@ public class View extends Table {
 
     public String getReason() {
         return reason;
+    }
+
+    public boolean isNativeView() {
+        return isNativeView;
+    }
+
+    public void setIsNativeView(boolean isNativeView) {
+        this.isNativeView = isNativeView;
     }
 
     @Override

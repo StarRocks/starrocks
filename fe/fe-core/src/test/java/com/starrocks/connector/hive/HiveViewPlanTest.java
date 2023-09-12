@@ -67,6 +67,14 @@ public class HiveViewPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testHive4() throws Exception {
+        String sql = "select * from hive0.tpch.customer_expr_view where c_custkey = 1";
+        String sqlPlan = getFragmentPlan(sql);
+        assertContains(sqlPlan, "<slot 1> : 1: c_custkey\n" +
+                "  |  <slot 9> : CAST(1: c_custkey AS BIGINT) + 1");
+    }
+
+    @Test
     public void testHiveViewParseFail() throws Exception {
         HiveView hiveView = new HiveView(1, "hive0", "test", null, "select\n" +
                  "    t1b,t1a\n" +

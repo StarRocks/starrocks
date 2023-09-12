@@ -333,6 +333,18 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                                   "(select * from tpch.customer)", "VIRTUAL_VIEW");
         HiveView view3 = HiveMetastoreApiConverter.toHiveView(hmsView3, MOCKED_HIVE_CATALOG_NAME);
         mockTables.put(hmsView3.getTableName(), new HiveTableInfo(view3));
+
+        cols = Lists.newArrayList();
+        cols.add(new FieldSchema("c_custkey", "int", null));
+        cols.add(new FieldSchema("expr", "int", null));
+        sd = new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
+                                   Maps.newHashMap());
+        Table hmsView4 =
+                new Table("customer_expr_view", "tpch", null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null,
+                        "select c_custkey, c_custkey + 1 as expr from tpch.customer",
+                        "VIRTUAL_VIEW");
+        HiveView view4 = HiveMetastoreApiConverter.toHiveView(hmsView4, MOCKED_HIVE_CATALOG_NAME);
+        mockTables.put(hmsView4.getTableName(), new HiveTableInfo(view4));
     }
 
     public static void mockTPCHTable() {
