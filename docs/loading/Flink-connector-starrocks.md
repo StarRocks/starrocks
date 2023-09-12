@@ -136,8 +136,6 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 
 ## Usage notes
 
-# Usage notes
-
 ### Exactly Once
 
 - If you want sink to guarantee exactly-once semantics, we recommend you to upgrade StarRocks to 2.5 or later, and Flink connector to 1.2.4 or later
