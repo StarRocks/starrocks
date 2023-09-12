@@ -61,7 +61,7 @@ protected:
         return std::shared_ptr<StreamCompression>(dec.release());
     }
 
-    void test(const TestCase& t) {
+    void test_lz4f_cases(const TestCase& t) {
         auto f = std::make_shared<CompressedInputStream>(LZ4F_compress_to_file(t.data), LZ4F_decompressor(),
                                                          t.compressed_buff_len);
         std::string decompressed_data;
@@ -121,7 +121,46 @@ TEST_F(CompressedInputStreamTest, test_LZ4F) {
     // clang-format on
 
     for (const auto& t : cases) {
-        test(t);
+        test_lz4f_cases(t);
+    }
+}
+
+TEST_F(CompressedInputStreamTest, test_LZO0) {
+    const char* path = "be/test/exec/test_data/csv_scanner/decompress_test0.csv.lzo";
+    std::string out;
+    read_compressed_file(CompressionTypePB::LZO, path, out);
+    std::string expected = R"(Alice,1
+Bob,2
+CharlieX,3
+)";
+    std::cout << out << "\n";
+    ASSERT_EQ(out, expected);
+}
+
+TEST_F(CompressedInputStreamTest, test_LZO1) {
+    const char* path = "be/test/exec/test_data/csv_scanner/decompress_test1.csv.lzo";
+
+    std::string head = R"(0,1
+1,2
+2,3
+3,4
+4,5
+5,6
+6,)";
+
+    std::string tail = R"(9998
+99998,99999
+99999,100000
+)";
+
+    std::vector<size_t> buffer_sizes = {
+            1024, 2048, 4096, 128 * 1024, 256 * 1024, 1024 * 1024, 2 * 1024 * 1024, 8 * 1024 * 1024};
+    for (size_t buffer_size : buffer_sizes) {
+        std::string out;
+        read_compressed_file(CompressionTypePB::LZO, path, out, buffer_size);
+        ASSERT_EQ(out.size(), 1177785);
+        ASSERT_EQ(out.substr(0, head.size()), head);
+        ASSERT_EQ(out.substr(out.size() - tail.size(), tail.size()), tail);
     }
 }
 
