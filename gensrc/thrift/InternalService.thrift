@@ -133,6 +133,11 @@ enum TTabletInternalParallelMode {
   FORCE_SPLIT
 }
 
+enum TOverflowMode {
+  OUTPUT_NULL = 0;
+  REPORT_ERROR = 1;
+}
+
 // Query options with their respective defaults
 struct TQueryOptions {
   1: optional bool abort_on_error = 0
@@ -265,6 +270,8 @@ struct TQueryOptions {
 
   100: optional i64 group_concat_max_len = 1024;
   102: optional bool enable_collect_table_level_scan_stats;
+
+  104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
 }
 
 
