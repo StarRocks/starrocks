@@ -110,6 +110,10 @@ public class LeaderOpExecutor {
                 }
             }
         }
+
+        if (result.isSetResource_group_name()) {
+            ctx.getAuditEventBuilder().setResourceGroup(result.getResource_group_name());
+        }
     }
 
     private void afterForward() throws DdlException {
