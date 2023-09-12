@@ -34,6 +34,7 @@
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
+#include "testutil/assert.h"
 
 namespace starrocks::parquet {
 
@@ -703,9 +704,9 @@ void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId 
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr);
-    Expr::prepare(*conjunct_ctxs, _runtime_state);
-    Expr::open(*conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
+    ASSERT_OK(Expr::prepare(*conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(*conjunct_ctxs, _runtime_state));
 }
 
 void FileReaderTest::_create_in_predicate_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id,
@@ -752,9 +753,9 @@ void FileReaderTest::_create_in_predicate_conjunct_ctxs(TExprOpcode::type opcode
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr);
-    Expr::prepare(*conjunct_ctxs, _runtime_state);
-    Expr::open(*conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
+    ASSERT_OK(Expr::prepare(*conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(*conjunct_ctxs, _runtime_state));
 }
 
 void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
@@ -798,9 +799,9 @@ void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, Slot
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr);
-    Expr::prepare(*conjunct_ctxs, _runtime_state);
-    Expr::open(*conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
+    ASSERT_OK(Expr::prepare(*conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(*conjunct_ctxs, _runtime_state));
 }
 
 void FileReaderTest::_create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id,
@@ -856,9 +857,9 @@ void FileReaderTest::_create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr);
-    Expr::prepare(*conjunct_ctxs, _runtime_state);
-    Expr::open(*conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
+    ASSERT_OK(Expr::prepare(*conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(*conjunct_ctxs, _runtime_state));
 }
 
 THdfsScanRange* FileReaderTest::_create_scan_range(const std::string& file_path, size_t scan_length) {
