@@ -24,6 +24,13 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
   ![Unload data - JDBC Connector](../assets/unload_flink_connector_2.png)
 
+## 版本要求
+
+| Connector | Flink       | StarRocks  | Java | Scala      |
+| --------- | ----------- | ---------- | ---- | ---------- |
+| 1.2.8     | 1.13 ~ 1.17 | 2.1 及以上 | 8    | 2.11、2.12 |
+| 1.2.7     | 1.11 ~ 1.15 | 2.1 及以上 | 8    | 2.11、2.12 |
+
 ## 前提条件
 
 已部署 Flink。若您尚未部署 Flink，请参照如下步骤完成部署：
