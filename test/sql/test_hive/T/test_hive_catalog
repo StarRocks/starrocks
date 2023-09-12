@@ -1,0 +1,8 @@
+-- name: testHiveCatalog
+
+create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+
+-- only partition column Predicate with runtime filter
+select * from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy where col_date = (select max(col_date) from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy);
+
+drop catalog hive_sql_test_${uuid0}
