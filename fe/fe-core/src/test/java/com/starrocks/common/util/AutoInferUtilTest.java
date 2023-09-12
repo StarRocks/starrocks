@@ -26,7 +26,8 @@ public class AutoInferUtilTest {
         try {
             AutoInferUtil.calDefaultReplicationNum();
         } catch (UserException e) {
-            Assert.assertTrue(e instanceof NoAliveBackendException && e.getMessage().contains("No alive backend") );
+            Assert.assertTrue(e instanceof NoAliveBackendException
+                    && e.getMessage().contains("No alive backend"));
         }
     }
 }
