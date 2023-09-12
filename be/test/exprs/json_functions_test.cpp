@@ -61,7 +61,7 @@ public:
         EXPECT_EQ(simdjson::error_code::SUCCESS, doc.get_object().get(obj));
 
         std::vector<SimpleJsonPath> path;
-        JsonFunctions::parse_json_paths(jsonpath, &path);
+        RETURN_IF_ERROR(JsonFunctions::parse_json_paths(jsonpath, &path));
 
         simdjson::ondemand::value val;
         RETURN_IF_ERROR(JsonFunctions::extract_from_object(obj, path, &val));
@@ -353,7 +353,7 @@ TEST_P(JsonQueryTestFixture, json_query) {
     Columns columns{ints, builder.build(true)};
 
     ctx.get()->set_constant_columns(columns);
-    JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    ASSERT_OK(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
 
     ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
@@ -872,7 +872,8 @@ public:
         Columns columns{ints, builder.build(true)};
 
         _ctx->set_constant_columns(columns);
-        JsonFunctions::native_json_path_prepare(_ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        RETURN_IF_ERROR(JsonFunctions::native_json_path_prepare(_ctx.get(),
+                                                                FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
         return columns;
     }
 
