@@ -46,6 +46,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
+#include "testutil/sync_point.h"
 #include "util/brpc_stub_cache.h"
 #include "util/concurrent_limiter.h"
 #include "util/cpu_info.h"
@@ -67,7 +68,6 @@ extern TLoadTxnBeginResult k_stream_load_begin_result;
 extern TLoadTxnCommitResult k_stream_load_commit_result;
 extern TLoadTxnRollbackResult k_stream_load_rollback_result;
 extern TStreamLoadPutResult k_stream_load_put_result;
-extern Status k_stream_load_plan_status;
 
 class StreamLoadActionTest : public testing::Test {
 public:
@@ -81,7 +81,6 @@ public:
         k_stream_load_commit_result = TLoadTxnCommitResult();
         k_stream_load_rollback_result = TLoadTxnRollbackResult();
         k_stream_load_put_result = TStreamLoadPutResult();
-        k_stream_load_plan_status = Status::OK();
         k_response_str = "";
         config::streaming_load_max_mb = 1;
 
@@ -255,6 +254,10 @@ TEST_F(StreamLoadActionTest, receive_failed) {
 #endif
 
 TEST_F(StreamLoadActionTest, plan_fail) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("StreamLoadExecutor::execute_plan_fragment:1",
+                                          [](void* arg) { *((Status*)arg) = Status::InternalError("TestFail"); });
+
     StreamLoadAction action(&_env, _limiter.get());
 
     HttpRequest request(_evhttp_req);
@@ -263,7 +266,7 @@ TEST_F(StreamLoadActionTest, plan_fail) {
     request._ev_req = &ev_req;
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
     request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
-    k_stream_load_plan_status = Status::InternalError("TestFail");
+
     request.set_handler(&action);
     action.on_header(&request);
     action.handle(&request);
@@ -271,6 +274,9 @@ TEST_F(StreamLoadActionTest, plan_fail) {
     rapidjson::Document doc;
     doc.Parse(k_response_str.c_str());
     ASSERT_STREQ("Fail", doc["Status"].GetString());
+
+    SyncPoint::GetInstance()->ClearCallBack("StreamLoadExecutor::execute_plan_fragment:1");
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
 } // namespace starrocks

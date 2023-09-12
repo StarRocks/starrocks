@@ -65,7 +65,7 @@ public class AWSCloudConfigurationTest {
         Assert.assertNotNull(awsCloudCredential);
         Assert.assertEquals("AWSCloudCredential{useAWSSDKDefaultBehavior=false, useInstanceProfile=false, " +
                 "accessKey='ak', secretKey='sk', sessionToken='', iamRoleArn='', externalId='', " +
-                "region='us-west-1', endpoint=''}", awsCloudCredential.getCredentialString());
+                "region='us-west-1', endpoint=''}", awsCloudCredential.toCredString());
 
         hiveConf = new HiveConf();
         awsCloudCredential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);

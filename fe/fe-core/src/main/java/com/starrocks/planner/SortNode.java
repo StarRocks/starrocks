@@ -343,11 +343,6 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     }
 
     @Override
-    public boolean canUsePipeLine() {
-        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
-    }
-
-    @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return !withRuntimeFilters && getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }

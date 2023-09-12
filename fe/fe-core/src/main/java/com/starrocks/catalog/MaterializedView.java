@@ -32,6 +32,7 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.backup.Status;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -50,6 +51,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -57,14 +59,13 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
-import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
@@ -106,6 +107,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public enum RefreshMoment {
         IMMEDIATE,
         DEFERRED
+    }
+
+    public enum PlanMode {
+        VALID,
+        INVALID,
+        UNKNOWN
     }
 
     public static class BasePartitionInfo {
@@ -366,67 +373,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "maxMVRewriteStaleness")
     private int maxMVRewriteStaleness = 0;
 
-    // MVRewriteContextCache is a cache that stores metadata related to the materialized view rewrite context.
-    // This cache is used during the FE's lifecycle to improve the performance of materialized view
-    // rewriting operations.
-    // By caching the metadata related to the materialized view rewrite context,
-    // subsequent materialized view rewriting operations can avoid recomputing this metadata,
-    // which can save time and resources.
-    public static class MVRewriteContextCache {
-        // mv's logical plan
-        private final OptExpression logicalPlan;
-
-        // mv plan's output columns, used for mv rewrite
-        private final List<ColumnRefOperator> outputColumns;
-
-        // column ref factory used when compile mv plan
-        private final ColumnRefFactory refFactory;
-
-        // indidate whether this mv is a SPJG plan
-        // if not, we do not store other fields to save memory,
-        // because we will not use other fields
-        private boolean isValidMvPlan;
-
-        public MVRewriteContextCache() {
-            this.logicalPlan = null;
-            this.outputColumns = null;
-            this.refFactory = null;
-            this.isValidMvPlan = false;
-        }
-
-        public MVRewriteContextCache(
-                OptExpression logicalPlan,
-                List<ColumnRefOperator> outputColumns,
-                ColumnRefFactory refFactory) {
-            this.logicalPlan = logicalPlan;
-            this.outputColumns = outputColumns;
-            this.refFactory = refFactory;
-            this.isValidMvPlan = true;
-        }
-
-        public OptExpression getLogicalPlan() {
-            return logicalPlan;
-        }
-
-        public List<ColumnRefOperator> getOutputColumns() {
-            return outputColumns;
-        }
-
-        public ColumnRefFactory getRefFactory() {
-            return refFactory;
-        }
-
-        public boolean isValidMvPlan() {
-            return isValidMvPlan;
-        }
-    }
-
-    // Materialized view plan cache used for mv rewrite, it is kept in memory for now.
-    // NOTE: Invalidate this when the materialized view is activated again.
-    // TODO: Add more policies to valid/invalidate this:
-    //  - When session variables changed
-    //  - When executes multi times.
-    private MVRewriteContextCache mvRewriteContextCache;
+    // it is a property in momery, do not serialize it
+    private PlanMode planMode = PlanMode.UNKNOWN;
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -461,7 +409,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.indexIdToMeta.put(indexId, indexMeta);
 
         this.baseTableInfos = Lists.newArrayList();
-        this.baseTableInfos.add(new BaseTableInfo(db.getId(), db.getFullName(), baseTable.getId()));
+        this.baseTableInfos.add(new BaseTableInfo(db.getId(), db.getFullName(), baseTable.getName(), baseTable.getId()));
 
         Map<Long, Partition> idToPartitions = new HashMap<>(baseTable.idToPartition.size());
         Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
@@ -498,14 +446,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * active the materialized again & reload the state.
      */
     public void setActive() {
-        // reset mv rewrite cache when it is active again
-        this.mvRewriteContextCache = null;
         this.active = true;
+        // reset mv rewrite cache when it is active again
+        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
     }
 
     public void setInactiveAndReason(String reason) {
         this.active = false;
         this.inactiveReason = reason;
+        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
     }
 
     public String getInactiveReason() {
@@ -550,6 +499,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setRefreshScheme(MvRefreshScheme refreshScheme) {
         this.refreshScheme = refreshScheme;
+    }
+
+    public void setPlanMode(PlanMode planMode) {
+        this.planMode = planMode;
+    }
+
+    public boolean isValidPlan() {
+        return !planMode.equals(PlanMode.INVALID);
     }
 
     /**
@@ -893,11 +850,32 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (baseTableIds != null) {
                 // for compatibility
                 for (long tableId : baseTableIds) {
-                    baseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), tableId));
+                    Table table = db.getTable(tableId);
+                    if (table == null) {
+                        setInactiveAndReason(String.format("mv's base table %s does not exist ", tableId));
+                        return false;
+                    }
+                    baseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), table.getName(), tableId));
                 }
             } else {
                 active = false;
                 return false;
+            }
+        } else {
+            // for compatibility
+            if (baseTableInfos.stream().anyMatch(t -> Strings.isNullOrEmpty(t.getTableName()))) {
+                // fill table name for base table info.
+                List<BaseTableInfo> newBaseTableInfos = Lists.newArrayList();
+                for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                    Table table = baseTableInfo.getTable();
+                    if (table == null) {
+                        setInactiveAndReason(String.format("mv's base table %s does not exist ",
+                                baseTableInfo.getTableId()));
+                        return false;
+                    }
+                    newBaseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), table.getName(), table.getId()));
+                }
+                this.baseTableInfos = newBaseTableInfos;
             }
         }
 
@@ -987,10 +965,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         AsyncRefreshContext asyncRefreshContext = this.refreshScheme.asyncRefreshContext;
         return this.refreshScheme.getType() == MaterializedView.RefreshType.ASYNC &&
                 asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
-    }
-
-    public TableProperty.QueryRewriteConsistencyMode getForceExternalTableQueryRewrite() {
-        return tableProperty.getForceExternalTableQueryRewrite();
     }
 
     public boolean shouldTriggeredRefreshBy(String dbName, String tableName) {
@@ -1326,9 +1300,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
             // skip check external table if the external does not support rewrite.
             if (!table.isNativeTableOrMaterializedView()) {
-                if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
-                    return Sets.newHashSet();
-                }
                 if (tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE) {
                     return getVisiblePartitionNames();
                 }
@@ -1384,9 +1355,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // skip external table that is not supported for query rewrite, return all partition ?
             // skip check external table if the external does not support rewrite.
             if (!baseTable.isNativeTableOrMaterializedView()) {
-                if (!supportPartialPartitionQueryRewriteForExternalTable(baseTable)) {
-                    return Sets.newHashSet();
-                }
                 if (tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE) {
                     return getVisiblePartitionNames();
                 }
@@ -1487,14 +1455,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.maintenancePlan = maintenancePlan;
     }
 
-    public MVRewriteContextCache getPlanContext() {
-        return mvRewriteContextCache;
-    }
-
-    public void setPlanContext(MVRewriteContextCache mvRewriteContextCache) {
-        this.mvRewriteContextCache = mvRewriteContextCache;
-    }
-
     /**
      * Infer the distribution info based on tables and MV query.
      * Currently is max{bucket_num of base_table}
@@ -1563,5 +1523,41 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public String inspectMeta() {
         return GsonUtils.GSON.toJson(this);
+    }
+
+    @Override
+    public Status resetIdsForRestore(GlobalStateMgr globalStateMgr, Database db, int restoreReplicationNum) {
+        // change db_id to new restore id
+        this.dbId = db.getId();
+        return super.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
+    }
+
+    /**
+     * Post actions after restore. Rebuild the materialized view by using table name instead of table ids
+     * because the table ids have changed since the restore.
+     * @param db : the new database after restore.
+     * @return   : rebuild status, ok if success other error status.
+     */
+    public Status doAfterRestore(Database db) throws DdlException {
+        if (baseTableInfos == null) {
+            setInactiveAndReason("base mv is not active: base info is null");
+            return new Status(Status.ErrCode.NOT_FOUND,
+                    "Materialized view's base info is not found");
+        }
+
+        // reset its status to active
+        GlobalStateMgr.getCurrentState().getAlterJobMgr()
+                .alterMaterializedViewStatus(this, AlterMaterializedViewStatusClause.ACTIVE, false);
+        LOG.info("active materialized view {} succeed", getName());
+
+        // rebuild mv task
+        TaskBuilder.rebuildMVTask(db.getFullName(), this);
+
+        // clear baseTable ids if it exists
+        if (this.baseTableIds != null) {
+            this.baseTableIds.clear();
+        }
+        LOG.info("rebuild materialized view success, {}", this.getName());
+        return Status.OK;
     }
 }

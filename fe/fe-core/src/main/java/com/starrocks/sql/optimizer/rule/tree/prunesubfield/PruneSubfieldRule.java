@@ -66,9 +66,7 @@ public class PruneSubfieldRule extends TransformationRule {
 
         // normalize access path
         SubfieldAccessPathNormalizer normalizer = new SubfieldAccessPathNormalizer();
-        for (ScalarOperator expr : allSubfieldExpr) {
-            expr.accept(normalizer, null);
-        }
+        normalizer.collect(allSubfieldExpr);
 
         List<ColumnAccessPath> accessPaths = Lists.newArrayList();
         for (ColumnRefOperator ref : scan.getColRefToColumnMetaMap().keySet()) {

@@ -1188,15 +1188,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         }
         if (typeName.equals("varchar")) {
             ScalarType type = ScalarType.createVarcharType(length);
-            if (length != -1) {
-                type.setAssignedStrLenInColDefinition();
-            }
             return type;
         } else if (typeName.equals("char")) {
             ScalarType type = ScalarType.createCharType(length);
-            if (length != -1) {
-                type.setAssignedStrLenInColDefinition();
-            }
             return type;
         } else if (typeName.equals("decimal")) {
             if (precision != -1) {

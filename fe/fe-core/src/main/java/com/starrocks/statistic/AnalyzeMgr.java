@@ -104,7 +104,7 @@ public class AnalyzeMgr implements Writable {
         GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeJob(job);
     }
 
-    public void updateAnalyzeJobWithoutLog(AnalyzeJob job) {
+    public void updateAnalyzeJobWithoutLog(NativeAnalyzeJob job) {
         analyzeJobMap.put(job.getId(), job);
     }
 
@@ -123,11 +123,16 @@ public class AnalyzeMgr implements Writable {
         return Lists.newLinkedList(analyzeJobMap.values());
     }
 
-    public void replayAddAnalyzeJob(AnalyzeJob job) {
+    public List<NativeAnalyzeJob> getAllNativeAnalyzeJobList() {
+        return analyzeJobMap.values().stream().filter(AnalyzeJob::isNative).map(job -> (NativeAnalyzeJob) job).
+                collect(Collectors.toList());
+    }
+
+    public void replayAddAnalyzeJob(NativeAnalyzeJob job) {
         analyzeJobMap.put(job.getId(), job);
     }
 
-    public void replayRemoveAnalyzeJob(AnalyzeJob job) {
+    public void replayRemoveAnalyzeJob(NativeAnalyzeJob job) {
         analyzeJobMap.remove(job.getId());
     }
 
@@ -137,10 +142,6 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void replayAddAnalyzeStatus(AnalyzeStatus status) {
-        analyzeStatusMap.put(status.getId(), status);
-    }
-
-    public void addOrUpdateAnalyzeStatus(AnalyzeStatus status) {
         analyzeStatusMap.put(status.getId(), status);
     }
 
@@ -180,13 +181,19 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
-    public void dropExternalStats(String tableUUID) {
+    public void dropExternalAnalyzeStatus(String tableUUID) {
         List<AnalyzeStatus> expireList = analyzeStatusMap.values().stream().
                 filter(status -> status instanceof ExternalAnalyzeStatus).
                 filter(status -> ((ExternalAnalyzeStatus) status).getTableUUID().equals(tableUUID)).
                 collect(Collectors.toList());
 
         expireList.forEach(status -> analyzeStatusMap.remove(status.getId()));
+        for (AnalyzeStatus status : expireList) {
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeStatus(status);
+        }
+    }
+
+    public void dropExternalBasicStatsData(String tableUUID) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         statisticExecutor.dropTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
     }
@@ -537,7 +544,7 @@ public class AnalyzeMgr implements Writable {
 
         if (null != data) {
             if (null != data.jobs) {
-                for (AnalyzeJob job : data.jobs) {
+                for (NativeAnalyzeJob job : data.jobs) {
                     replayAddAnalyzeJob(job);
                 }
             }
@@ -566,7 +573,7 @@ public class AnalyzeMgr implements Writable {
     public void write(DataOutput out) throws IOException {
         // save history
         SerializeData data = new SerializeData();
-        data.jobs = getAllAnalyzeJobList();
+        data.jobs = getAllNativeAnalyzeJobList();
         data.nativeStatus = new ArrayList<>(getAnalyzeStatusMap().values().stream().
                 filter(AnalyzeStatus::isNative).
                 map(status -> (NativeAnalyzeStatus) status).collect(Collectors.toSet()));
@@ -593,10 +600,8 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-
-        List<NativeAnalyzeStatus> analyzeStatuses = getAnalyzeStatusMap().values().stream().
-                filter(AnalyzeStatus::isNative).
-                map(status -> (NativeAnalyzeStatus) status).distinct().collect(Collectors.toList());
+        List<AnalyzeStatus> analyzeStatuses = getAnalyzeStatusMap().values().stream()
+                .distinct().collect(Collectors.toList());
 
         int numJson = 1 + analyzeJobMap.size()
                 + 1 + analyzeStatuses.size()
@@ -631,13 +636,13 @@ public class AnalyzeMgr implements Writable {
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         int analyzeJobSize = reader.readInt();
         for (int i = 0; i < analyzeJobSize; ++i) {
-            AnalyzeJob analyzeJob = reader.readJson(AnalyzeJob.class);
-            replayAddAnalyzeJob(analyzeJob);
+            NativeAnalyzeJob nativeAnalyzeJob = reader.readJson(NativeAnalyzeJob.class);
+            replayAddAnalyzeJob(nativeAnalyzeJob);
         }
 
         int analyzeStatusSize = reader.readInt();
         for (int i = 0; i < analyzeStatusSize; ++i) {
-            NativeAnalyzeStatus analyzeStatus = reader.readJson(NativeAnalyzeStatus.class);
+            AnalyzeStatus analyzeStatus = reader.readJson(AnalyzeStatus.class);
             replayAddAnalyzeStatus(analyzeStatus);
         }
 
@@ -656,7 +661,7 @@ public class AnalyzeMgr implements Writable {
 
     private static class SerializeData {
         @SerializedName("analyzeJobs")
-        public List<AnalyzeJob> jobs;
+        public List<NativeAnalyzeJob> jobs;
 
         @SerializedName("analyzeStatus")
         public List<NativeAnalyzeStatus> nativeStatus;

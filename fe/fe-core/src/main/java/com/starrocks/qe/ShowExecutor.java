@@ -196,6 +196,7 @@ import com.starrocks.sql.ast.ShowProcesslistStmt;
 import com.starrocks.sql.ast.ShowProfilelistStmt;
 import com.starrocks.sql.ast.ShowRepositoriesStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowResourceGroupUsageStmt;
 import com.starrocks.sql.ast.ShowResourcesStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
@@ -306,6 +307,8 @@ public class ShowExecutor {
             handleShowProfilelist();
         } else if (stmt instanceof ShowRunningQueriesStmt) {
             handleShowRunningQueries();
+        } else if (stmt instanceof ShowResourceGroupUsageStmt) {
+            handleShowResourceGroupUsage();
         } else if (stmt instanceof ShowEnginesStmt) {
             handleShowEngines();
         } else if (stmt instanceof ShowFunctionsStmt) {
@@ -748,6 +751,26 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
+    private void handleShowResourceGroupUsage() {
+        ShowResourceGroupUsageStmt showStmt = (ShowResourceGroupUsageStmt) stmt;
+        List<List<String>> rows = Lists.newArrayList();
+
+        GlobalStateMgr.getCurrentSystemInfo().backendAndComputeNodeStream()
+                .flatMap(worker -> worker.getResourceGroupUsages().stream()
+                        .map(usage -> new ShowResourceGroupUsageStmt.ShowItem(worker, usage)))
+                .filter(item -> showStmt.getGroupName() == null ||
+                        showStmt.getGroupName().equals(item.getUsage().getGroup().getName()))
+                .sorted()
+                .forEach(item -> {
+                    List<String> row = ShowResourceGroupUsageStmt.getColumnSuppliers().stream()
+                            .map(columnSupplier -> columnSupplier.apply(item))
+                            .collect(Collectors.toList());
+                    rows.add(row);
+                });
+
+        resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
+    }
+
     // Handle show authors
     private void handleEmpty() {
         // Only success
@@ -1090,10 +1113,8 @@ public class ShowExecutor {
         createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
-        }
-        String storageVolumeId = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeIdOfDb(db.getId());
-        if (!Strings.isNullOrEmpty(storageVolumeId)) {
-            String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeName(storageVolumeId);
+        } else if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
             createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
         }
         rows.add(Lists.newArrayList(showStmt.getDb(), createSqlBuilder.toString()));

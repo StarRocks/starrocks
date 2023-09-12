@@ -140,6 +140,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_BUCKET_SIZE = "bucket_size";
 
+    public static final String PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC = "primary_index_cache_expire_sec";
+
     public static final String PROPERTIES_TABLET_TYPE = "tablet_type";
 
     public static final String PROPERTIES_STRICT_RANGE = "strict_range";
@@ -157,6 +159,10 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
+
+    // 1. `force_external_table_query_rewrite` is used to control whether external table can be rewritten or not
+    // 2. external table can be rewritten by default if not specific.
+    // 3. you can use `query_rewrite_consistency` to control mv's rewrite consistency.
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
     public static final String PROPERTIES_QUERY_REWRITE_CONSISTENCY = "query_rewrite_consistency";
     public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
@@ -773,6 +779,26 @@ public class PropertyAnalyzer {
         return val;
     }
 
+    public static int analyzePrimaryIndexCacheExpireSecProp(Map<String, String> properties, String propKey, int defaultVal)
+            throws AnalysisException {
+        int val = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
+            String valStr = properties.get(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+            try {
+                val = Integer.parseInt(valStr);
+                if (val < 0) {
+                    throw new AnalysisException("Property " + PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC 
+                            + " must not be less than 0");
+                }
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Property " + PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC 
+                        + " must be integer: " + valStr);
+            }
+            properties.remove(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+        }
+        return val;
+    }
+
     public static List<UniqueConstraint> analyzeUniqueConstraint(Map<String, String> properties, Database db, OlapTable table) {
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
         List<UniqueConstraint> analyzedUniqueConstraints = Lists.newArrayList();
@@ -865,7 +891,7 @@ public class PropertyAnalyzer {
 
         BaseTableInfo tableInfo;
         if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
-            tableInfo = new BaseTableInfo(parentDb.getId(), dbName, table.getId());
+            tableInfo = new BaseTableInfo(parentDb.getId(), dbName, table.getName(), table.getId());
         } else {
             tableInfo = new BaseTableInfo(catalogName, dbName, table.getName(), table.getTableIdentifier());
         }

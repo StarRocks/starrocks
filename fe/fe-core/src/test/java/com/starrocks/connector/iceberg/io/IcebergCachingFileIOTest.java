@@ -15,9 +15,7 @@
 
 package com.starrocks.connector.iceberg.io;
 
-import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.io.InputFile;
 import org.junit.Assert;
 import org.junit.Test;
@@ -41,32 +39,25 @@ public class IcebergCachingFileIOTest {
     }
 
     @Test
-    public void testnewInputFile() {
+    public void testNewInputFile() {
         writeIcebergMetaTestFile();
         String path = "file:/tmp/0001.metadata.json";
 
-        // create hadoopFileIO
-        HadoopFileIO hadoopFileIO = new HadoopFileIO(new Configuration());
         // create iceberg cachingFileIO
-        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO(hadoopFileIO);
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
         Map<String, String> icebergProperties = new HashMap<>();
         icebergProperties.put("iceberg.catalog.type", "hive");
         cachingFileIO.initialize(icebergProperties);
 
-        // get input file by hadoopFileIO and cachingFileIO
-        InputFile hadoopFileIOInputFile = hadoopFileIO.newInputFile(path);
         InputFile cachingFileIOInputFile = cachingFileIO.newInputFile(path);
         cachingFileIOInputFile.newStream();
 
         String cachingFileIOPath = cachingFileIOInputFile.location();
-        String hadoopFileIOPath = hadoopFileIOInputFile.location();
-        Assert.assertEquals(path, hadoopFileIOPath);
         Assert.assertEquals(path, cachingFileIOPath);
 
         long cacheIOInputFileSize = cachingFileIOInputFile.getLength();
-        long hadoopIOInputFileSize = hadoopFileIOInputFile.getLength();
         Assert.assertEquals(cacheIOInputFileSize, 39);
-        Assert.assertEquals(hadoopIOInputFileSize, 39);
-        hadoopFileIO.deleteFile(path);
+        cachingFileIO.deleteFile(path);
     }
 }

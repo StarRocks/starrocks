@@ -14,6 +14,7 @@
 
 package com.starrocks.scheduler;
 
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import org.apache.logging.log4j.LogManager;
@@ -36,10 +37,10 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
                     .setUser(ctx.getQualifiedUser())
                     .setDb(ctx.getDatabase())
                     .setCatalog(ctx.getCurrentCatalog());
-            ctx.getPlannerProfile().reset();
-
+            Tracers.register(ctx);
             executor = ctx.executeSql(context.getDefinition());
         } finally {
+            Tracers.close();
             if (executor != null) {
                 auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
             } else {

@@ -53,14 +53,14 @@ public class HiveTableSink extends DataSink {
         this.dataColNames = hiveTable.getDataColumnNames();
         this.tableIdentifier = hiveTable.getUUID();
         this.isStaticPartitionSink = isStaticPartitionSink;
-        this.fileFormat = hiveTable.getHiveProperties().getOrDefault(FILE_FORMAT, "parquet");
-        this.compressionType = hiveTable.getHiveProperties().getOrDefault("compression_codec", "gzip");
+        this.fileFormat = hiveTable.getProperties().getOrDefault(FILE_FORMAT, "parquet");
+        this.compressionType = hiveTable.getProperties().getOrDefault("compression_codec", "gzip");
         String catalogName = hiveTable.getCatalogName();
         Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalogName));
 
-        this.cloudConfiguration = connector.getCloudConfiguration();
+        this.cloudConfiguration = connector.getMetadata().getCloudConfiguration();
 
         Preconditions.checkState(cloudConfiguration != null,
                 String.format("cloudConfiguration of catalog %s should not be null", catalogName));
@@ -103,11 +103,6 @@ public class HiveTableSink extends DataSink {
     @Override
     public DataPartition getOutputPartition() {
         return null;
-    }
-
-    @Override
-    public boolean canUsePipeLine() {
-        return true;
     }
 
     @Override

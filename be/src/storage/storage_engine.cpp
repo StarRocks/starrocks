@@ -349,7 +349,7 @@ std::vector<DataDir*> StorageEngine::get_stores() {
 template std::vector<DataDir*> StorageEngine::get_stores<false>();
 template std::vector<DataDir*> StorageEngine::get_stores<true>();
 
-Status StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos, bool need_update) {
+void StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos, bool need_update) {
     data_dir_infos->clear();
 
     // 1. update available capacity of each data dir
@@ -374,8 +374,6 @@ Status StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos,
     for (auto& entry : path_map) {
         data_dir_infos->emplace_back(entry.second);
     }
-
-    return Status::OK();
 }
 
 void StorageEngine::_start_disk_stat_monitor() {
@@ -575,7 +573,8 @@ bool StorageEngine::_delete_tablets_on_unused_root_path() {
         exit(0);
     }
 
-    (void)_tablet_manager->drop_tablets_on_error_root_path(tablet_info_vec);
+    auto st = _tablet_manager->drop_tablets_on_error_root_path(tablet_info_vec);
+    st.permit_unchecked_error();
     // If tablet_info_vec is not empty, means we have dropped some tablets.
     return !tablet_info_vec.empty();
 }
@@ -673,7 +672,8 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
                           << " tablet_uid=" << tablet_info.first.tablet_uid;
                 continue;
             }
-            StorageEngine::instance()->txn_manager()->delete_txn(partition_id, tablet, transaction_id);
+            auto st = StorageEngine::instance()->txn_manager()->delete_txn(partition_id, tablet, transaction_id);
+            st.permit_unchecked_error();
         }
     }
     LOG(INFO) << "Cleared transaction task txn_id: " << transaction_id;
@@ -983,7 +983,7 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     const int32_t trash_expire = config::trash_file_expire_time_sec;
     const double guard_space = config::storage_flood_stage_usage_percent / 100.0;
     std::vector<DataDirInfo> data_dir_infos;
-    RETURN_IF_ERROR(get_all_data_dir_info(&data_dir_infos, false));
+    get_all_data_dir_info(&data_dir_infos, false);
 
     time_t now = time(nullptr);
     tm local_tm_now;
@@ -1023,7 +1023,7 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     }
 
     // clear expire incremental rowset, move deleted tablet to trash
-    (void)_tablet_manager->start_trash_sweep();
+    CHECK(_tablet_manager->start_trash_sweep().ok());
 
     // clean rubbish transactions
     _clean_unused_txns();
@@ -1063,40 +1063,54 @@ void StorageEngine::do_manual_compact(bool force_compact) {
 }
 
 void StorageEngine::_clean_unused_rowset_metas() {
-    std::vector<RowsetMetaSharedPtr> invalid_rowset_metas;
-    auto clean_rowset_func = [this, &invalid_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
-                                                           std::string_view meta_str) -> bool {
+    size_t total_rowset_meta_count = 0;
+    std::vector<std::pair<TabletUid, RowsetId>> invalid_rowsets;
+    auto clean_rowset_func = [&](const TabletUid& tablet_uid, RowsetId rowset_id, std::string_view meta_str) -> bool {
+        total_rowset_meta_count++;
         bool parsed = false;
         auto rowset_meta = std::make_shared<RowsetMeta>(meta_str, &parsed);
         if (!parsed) {
-            LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
-            // return false will break meta iterator, return true to skip this error
+            LOG(WARNING) << "parse rowset meta string failed, remove rowset meta, rowset_id:" << rowset_id
+                         << " tablet_uid: " << tablet_uid;
+            invalid_rowsets.emplace_back(rowset_meta->tablet_uid(), rowset_meta->rowset_id());
             return true;
         }
         if (rowset_meta->tablet_uid() != tablet_uid) {
-            LOG(WARNING) << "tablet uid is not equal, skip the rowset"
-                         << ", rowset_id=" << rowset_meta->rowset_id() << ", in_put_tablet_uid=" << tablet_uid
+            LOG(WARNING) << "tablet uid is not match, remove rowset meta, rowset_id=" << rowset_meta->rowset_id()
+                         << " tablet: " << rowset_meta->tablet_id() << ", tablet_uid_in_key=" << tablet_uid
                          << ", tablet_uid in rowset meta=" << rowset_meta->tablet_uid();
+            invalid_rowsets.emplace_back(rowset_meta->tablet_uid(), rowset_meta->rowset_id());
             return true;
         }
 
         TabletSharedPtr tablet = _tablet_manager->get_tablet(rowset_meta->tablet_id(), tablet_uid);
         if (tablet == nullptr) {
+            // maybe too many due to historical bug, limit logging
+            LOG_EVERY_SECOND(WARNING) << "tablet not found, remove rowset meta, rowset_id=" << rowset_meta->rowset_id()
+                                      << " tablet: " << rowset_meta->tablet_id();
+            invalid_rowsets.emplace_back(rowset_meta->tablet_uid(), rowset_meta->rowset_id());
             return true;
         }
         if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE && (!tablet->rowset_meta_is_useful(rowset_meta))) {
-            LOG(INFO) << "rowset meta is useless any more, remote it. rowset_id=" << rowset_meta->rowset_id();
-            invalid_rowset_metas.push_back(rowset_meta);
+            LOG(INFO) << "rowset meta is useless, remove rowset meta, rowset_id=" << rowset_meta->rowset_id()
+                      << " tablet:" << tablet->tablet_id();
+            invalid_rowsets.emplace_back(rowset_meta->tablet_uid(), rowset_meta->rowset_id());
         }
         return true;
     };
     auto data_dirs = get_stores();
     for (auto data_dir : data_dirs) {
+        int64_t start_ts = MonotonicMillis();
         (void)RowsetMetaManager::traverse_rowset_metas(data_dir->get_meta(), clean_rowset_func);
-        for (auto& rowset_meta : invalid_rowset_metas) {
-            (void)RowsetMetaManager::remove(data_dir->get_meta(), rowset_meta->tablet_uid(), rowset_meta->rowset_id());
+        if (!invalid_rowsets.empty()) {
+            for (auto& rowset : invalid_rowsets) {
+                (void)RowsetMetaManager::remove(data_dir->get_meta(), rowset.first, rowset.second);
+            }
+            LOG(WARNING) << "traverse_rowset_meta and remove " << invalid_rowsets.size() << "/"
+                         << total_rowset_meta_count << " invalid rowset metas, path:" << data_dir->path()
+                         << " duration:" << (MonotonicMillis() - start_ts) << "ms";
+            invalid_rowsets.clear();
         }
-        invalid_rowset_metas.clear();
     }
 }
 

@@ -212,6 +212,7 @@ public class LoadingTaskPlanner {
             slotDesc.setIsNullable(false);
         }
 
+        Load.checkMergeCondition(mergeConditionStr, table, destColumns, false);
         if (Config.enable_shuffle_load && needShufflePlan()) {
             if (Config.eliminate_shuffle_load_by_replicated_storage) {
                 buildDirectPlan(loadId, fileStatusesList, filesAdded, true);
@@ -246,14 +247,13 @@ public class LoadingTaskPlanner {
             enableAutomaticPartition = table.supportedAutomaticPartition();
         }
         Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
-        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
+        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds,
                 table.writeQuorum(), forceReplicatedStorage ? true : table.enableReplicatedStorage(),
                 checkNullExprInAutoIncrement(), enableAutomaticPartition);
         if (table.getAutomaticBucketSize() > 0) {
             olapTableSink.setAutomaticBucketSize(table.getAutomaticBucketSize());
         }
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
-        Load.checkMergeCondition(mergeConditionStr, table, false);
         olapTableSink.setPartialUpdateMode(partialUpdateMode);
         olapTableSink.complete(mergeConditionStr);
 
@@ -262,15 +262,10 @@ public class LoadingTaskPlanner {
         sinkFragment.setSink(olapTableSink);
 
         if (this.context != null) {
-            if (this.context.getSessionVariable().isEnablePipelineEngine() && Config.enable_pipeline_load) {
-                sinkFragment.setPipelineDop(parallelInstanceNum);
-                sinkFragment.setParallelExecNum(1);
-                sinkFragment.setHasOlapTableSink();
-                sinkFragment.setForceAssignScanRangesPerDriverSeq();
-            } else {
-                sinkFragment.setPipelineDop(1);
-                sinkFragment.setParallelExecNum(parallelInstanceNum);
-            }
+            sinkFragment.setPipelineDop(parallelInstanceNum);
+            sinkFragment.setParallelExecNum(1);
+            sinkFragment.setHasOlapTableSink();
+            sinkFragment.setForceAssignScanRangesPerDriverSeq();
         } else {
             sinkFragment.setPipelineDop(1);
             sinkFragment.setParallelExecNum(parallelInstanceNum);
@@ -331,14 +326,13 @@ public class LoadingTaskPlanner {
         } else {
             enableAutomaticPartition = table.supportedAutomaticPartition();
         }
-        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
+        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds,
                 table.writeQuorum(), table.enableReplicatedStorage(),
                 checkNullExprInAutoIncrement(), enableAutomaticPartition);
         if (table.getAutomaticBucketSize() > 0) {
             olapTableSink.setAutomaticBucketSize(table.getAutomaticBucketSize());
         }
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
-        Load.checkMergeCondition(mergeConditionStr, table, false);
         olapTableSink.setPartialUpdateMode(partialUpdateMode);
         olapTableSink.complete(mergeConditionStr);
 
@@ -349,11 +343,9 @@ public class LoadingTaskPlanner {
         // which may lead to inconsistent replica for primary key.
         // If you want to set tablet sink dop > 1, please enable single tablet loading and disable shuffle service
         if (this.context != null) {
-            if (this.context.getSessionVariable().isEnablePipelineEngine() && Config.enable_pipeline_load) {
-                sinkFragment.setHasOlapTableSink();
-                sinkFragment.setForceSetTableSinkDop();
-                sinkFragment.setForceAssignScanRangesPerDriverSeq();
-            }
+            sinkFragment.setHasOlapTableSink();
+            sinkFragment.setForceSetTableSinkDop();
+            sinkFragment.setForceAssignScanRangesPerDriverSeq();
             sinkFragment.setPipelineDop(1);
             sinkFragment.setParallelExecNum(parallelInstanceNum);
         }

@@ -81,7 +81,6 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
@@ -1682,7 +1681,6 @@ public class OlapTable extends Table {
             tableProperty.write(out);
         }
         tempPartitions.write(out);
-        out.writeInt(maxColUniqueId);
     }
 
     @Override
@@ -1783,7 +1781,6 @@ public class OlapTable extends Table {
         }
         tempPartitions.unsetPartitionInfo();
 
-        maxColUniqueId = in.readInt();
         // In the present, the fullSchema could be rebuilt by schema change while the
         // properties is changed by MV.
         // After that, some properties of fullSchema and nameToColumn may be not same as
@@ -2128,6 +2125,13 @@ public class OlapTable extends Table {
         return false;
     }
 
+    public int primaryIndexCacheExpireSec() {
+        if (tableProperty != null) {
+            return tableProperty.primaryIndexCacheExpireSec();
+        }
+        return 0;
+    }
+
     public String getPersistentIndexTypeString() {
         if (tableProperty != null) {
             return tableProperty.getPersistentIndexTypeString();
@@ -2170,6 +2174,16 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                         Boolean.valueOf(enablePersistentIndex).toString());
         tableProperty.buildEnablePersistentIndex();
+    }
+
+    public void setPrimaryIndexCacheExpireSec(int primaryIndexCacheExpireSec) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC,
+                        Integer.valueOf(primaryIndexCacheExpireSec).toString());
+        tableProperty.buildPrimaryIndexCacheExpireSec();
     }
 
     public void setPersistentIndexType(TPersistentIndexType persistentIndexType) {
@@ -2800,11 +2814,6 @@ public class OlapTable extends Table {
         if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
             properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
                     tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
-        }
-        StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-        String storageVolumeId = svm.getStorageVolumeIdOfTable(id);
-        if (storageVolumeId != null) {
-            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, svm.getStorageVolumeName(storageVolumeId));
         }
         return properties;
     }

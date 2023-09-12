@@ -107,7 +107,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                     queryColumnRefRewriter, false);
         }
         List<ScalarOperator> onPredicates = MvUtils.collectOnPredicate(queryExpression);
-        onPredicates = onPredicates.stream().map(MvUtils::canonizePredicate).collect(Collectors.toList());
+        onPredicates = onPredicates.stream().map(MvUtils::canonizePredicateForRewrite).collect(Collectors.toList());
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         for (MaterializationContext mvContext : mvCandidateContexts) {
             MvRewriteContext mvRewriteContext;
@@ -169,7 +169,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         }
         ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
         if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
-            queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
+            queryPredicate = MvUtils.canonizePredicateForRewrite(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
         }
         return PredicateSplit.splitPredicate(queryPredicate);
     }

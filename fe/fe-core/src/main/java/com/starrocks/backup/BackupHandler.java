@@ -313,7 +313,7 @@ public class BackupHandler extends FrontendDaemon implements Writable {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
                     return;
                 }
-                if (!tbl.isOlapTable()) {
+                if (!tbl.isOlapTableOrMaterializedView()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tblName);
                 }
 

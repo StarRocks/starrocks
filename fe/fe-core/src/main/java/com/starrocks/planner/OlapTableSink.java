@@ -119,7 +119,6 @@ public class OlapTableSink extends DataSink {
     // set after init called
     private TDataSink tDataSink;
 
-    private final boolean enablePipelineLoad;
     private final TWriteQuorumType writeQuorum;
     private final boolean enableReplicatedStorage;
 
@@ -133,18 +132,10 @@ public class OlapTableSink extends DataSink {
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
                          boolean nullExprInAutoIncrement, boolean enableAutomaticPartition) {
-        this(dstTable, tupleDescriptor, partitionIds, true, writeQuorum, enableReplicatedStorage,
-                nullExprInAutoIncrement, enableAutomaticPartition);
-    }
-
-    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
-                         boolean enablePipelineLoad, TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
-                         boolean nullExprInAutoIncrement, boolean enableAutomaticPartition) {
         this.dstTable = dstTable;
         this.tupleDescriptor = tupleDescriptor;
         this.partitionIds = partitionIds;
         this.clusterId = dstTable.getClusterId();
-        this.enablePipelineLoad = enablePipelineLoad;
         this.writeQuorum = writeQuorum;
         this.enableReplicatedStorage = enableReplicatedStorage;
         this.nullExprInAutoIncrement = nullExprInAutoIncrement;
@@ -616,7 +607,7 @@ public class OlapTableSink extends DataSink {
     }
 
     public boolean canUsePipeLine() {
-        return Config.enable_pipeline_load && enablePipelineLoad;
+        return true;
     }
 
     public int getClusterId() {

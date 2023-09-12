@@ -223,6 +223,24 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         }
     }
 
+    public String getStorageVolumeNameOfTable(long tableId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            String svId = getStorageVolumeIdOfTable(tableId);
+            // If sv id is null, the table is upgraded from old version.
+            // Builtin storage volume will be returned.
+            return svId != null ? getStorageVolume(svId).getName() : BUILTIN_STORAGE_VOLUME;
+        }
+    }
+
+    public String getStorageVolumeNameOfDb(long dbId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            String svId = getStorageVolumeIdOfDb(dbId);
+            // If sv id is null, the db is upgraded from old version.
+            // Builtin storage volume will be returned.
+            return svId != null ? getStorageVolume(svId).getName() : BUILTIN_STORAGE_VOLUME;
+        }
+    }
+
     public StorageVolume getDefaultStorageVolume() {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return getStorageVolume(getDefaultStorageVolumeId());

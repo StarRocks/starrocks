@@ -187,7 +187,21 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
             clause.setNeedTableStable(false);
             clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
+            String valStr = properties.get(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+            try {
+                int val = Integer.parseInt(valStr);
+                if (val < 0) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Property " 
+                            + PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC + " must not be less than 0");
+                }
+            } catch (NumberFormatException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Property " 
+                        + PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC + " must be integer: " + valStr);
+            }
+            clause.setNeedTableStable(false);
+            clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
+        }  else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
             if (!properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX).equalsIgnoreCase("true") &&
                     !properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX).equalsIgnoreCase("false")) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
