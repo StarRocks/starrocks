@@ -1780,8 +1780,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (request.getCatalog_name() == null) {
                 request.setCatalog_name(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             }
-            GlobalStateMgr.getCurrentState().refreshExternalTable(new TableName(request.getCatalog_name(),
-                    request.getDb_name(), request.getTable_name()), request.getPartitions());
+            String catalog = request.getCatalog_name();
+            String db = request.getDb_name();
+            String table = request.getTable_name();
+            List<String> partitions = request.getPartitions() == null ? new ArrayList<>() : request.getPartitions();
+            LOG.info("Start to refresh external table {}.{}.{}.{}", catalog, db, table, partitions);
+            GlobalStateMgr.getCurrentState().refreshExternalTable(new TableName(catalog, db, table), partitions);
+            LOG.info("Finish to refresh external table {}.{}.{}.{}", catalog, db, table, partitions);
             return new TRefreshTableResponse(new TStatus(TStatusCode.OK));
         } catch (Exception e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
