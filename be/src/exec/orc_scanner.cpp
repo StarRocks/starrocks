@@ -83,7 +83,7 @@ Status ORCScanner::open() {
     }
     _orc_reader = std::make_unique<OrcChunkReader>(_state->chunk_size(), _orc_slot_descriptors);
     _orc_reader->set_broker_load_mode(_strict_mode);
-    _orc_reader->set_timezone(_state->timezone());
+    RETURN_IF_ERROR(_orc_reader->set_timezone(_state->timezone()));
     _orc_reader->drop_nanoseconds_in_datetime();
     _orc_reader->set_runtime_state(_state);
     _orc_reader->set_case_sensitive(_case_sensitive);
