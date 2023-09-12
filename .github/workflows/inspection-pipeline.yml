@@ -3,7 +3,8 @@ name: INSPECTION PIPELINE
 on:
   schedule:
     - cron: "0 9 * * 1-5"
-    - cron: "0 17 * * 1-5"
+    - cron: "0 14 * * 1-5"
+    - cron: "0 19 * * 1-5"
   workflow_dispatch:
 
 concurrency:
@@ -109,7 +110,7 @@ jobs:
         if: always()
         id: download-ut-xml
         env:
-          bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
+          bucket_prefix: ${{ steps.branch.outputs.bucket_prefix }}
           PR_NUMBER: ${{ steps.run_ut.outputs.PR_NUMBER }}
         run: |
           oss_path=oss://${bucket_prefix}-ci-release/$BRANCH/Release/pr/UT-Report/${PR_NUMBER}
