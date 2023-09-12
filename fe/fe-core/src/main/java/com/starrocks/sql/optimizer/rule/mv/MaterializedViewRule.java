@@ -272,11 +272,6 @@ public class MaterializedViewRule extends Rule {
                 MaterializedIndexMeta mvMeta = iterator.next();
                 Long mvIdx = mvMeta.getIndexId();
 
-                //                if (!checkAggregationFunction(queryScanNodeColumnNameToIds, queryRelIdToAggFunctions.get(relationId),
-                //                        mvIdx, mvMeta, queryRelIdToEnableMVRewrite.get(relationId), queryRelIdToIsSPJQuery.get(relationId))) {
-                //                    iterator.remove();
-                //                    continue;
-                //                }
                 if (!checkOutputColumns(queryRelIdToColumnNameIds.get(relationId),
                         queryRelIdToScanNodeOutputColumnIds.get(relationId), mvIdx, mvMeta)) {
                     iterator.remove();
