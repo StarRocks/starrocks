@@ -210,6 +210,11 @@ set_target_properties(curl PROPERTIES IMPORTED_LOCATION ${CURL_LIBRARY})
 add_library(lz4 STATIC IMPORTED)
 set_target_properties(lz4 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/liblz4.a)
 
+if ($ENV{WITH_LZO} STREQUAL "ON")
+    add_library(lzo STATIC IMPORTED)
+    set_target_properties(lzo PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/liblzo2.a)
+endif()
+
 add_library(thrift STATIC IMPORTED)
 set_target_properties(thrift PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libthrift.a)
 
@@ -607,6 +612,9 @@ endif()
 if (${WITH_STARCACHE} STREQUAL "ON")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_STARCACHE")
 endif()
+if ($ENV{WITH_LZO} STREQUAL "ON")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_LZO")
+endif()
 
 # When LLVM is used, should give GCC_HOME to get c++11 header to use new string and list
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -876,6 +884,13 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
         ${STARROCKS_DEPENDENCIES}
         breakpad
         libdeflate
+    )
+endif()
+
+if ($ENV{WITH_LZO} STREQUAL "ON")
+    set(STARROCKS_DEPENDENCIES
+        ${STARROCKS_DEPENDENCIES}
+        lzo
     )
 endif()
 
