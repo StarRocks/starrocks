@@ -62,4 +62,21 @@ public class ShowColumnStmtTest {
         Assert.assertEquals("uuid()", resultSet.getResultRows().get(0).get(5));
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testOnlyMetricTypeDefaultValue() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "show full columns from test_only_metric_default;";
+        ShowColumnStmt showColumnStmt = (ShowColumnStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        ShowExecutor executor = new ShowExecutor(ctx, showColumnStmt);
+        ShowResultSet resultSet = executor.execute();
+        // here must set null not \N
+        Assert.assertNull(resultSet.getResultRows().get(0).get(5));
+        Assert.assertNull(resultSet.getResultRows().get(1).get(5));
+        Assert.assertNull(resultSet.getResultRows().get(2).get(5));
+        Assert.assertNull(resultSet.getResultRows().get(3).get(5));
+    }
+
+>>>>>>> d92ec9fbc4 ([BugFix] Fix bug column default null convert to \N (#30799))
 }
