@@ -104,8 +104,7 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_preaggregati
 
 Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_limited_memory(const ChunkPtr& chunk,
                                                                              const size_t chunk_size) {
-    bool ht_needs_expansion = _aggregator->hash_set_variant().need_expand(chunk_size);
-    if (ht_needs_expansion && _limited_mem_state.has_limited(*_aggregator)) {
+    if (_limited_mem_state.has_limited(*_aggregator)) {
         RETURN_IF_ERROR(_push_chunk_by_force_streaming(chunk));
         _aggregator->set_streaming_all_states(true);
     } else {
