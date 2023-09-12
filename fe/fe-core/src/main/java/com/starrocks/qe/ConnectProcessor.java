@@ -718,8 +718,9 @@ public class ConnectProcessor {
                 result.setChannelBufferList(executor.getProxyResultBuffer());
             }
 
-            if (StringUtils.isNotEmpty(ctx.getAuditEventBuilder().build().resourceGroup)) {
-                result.setResource_group_name(ctx.getAuditEventBuilder().build().resourceGroup);
+            String resourceGroupName = ctx.getAuditEventBuilder().build().resourceGroup;
+            if (StringUtils.isNotEmpty(resourceGroupName)) {
+                result.setResource_group_name(resourceGroupName);
             }
         }
         return result;
