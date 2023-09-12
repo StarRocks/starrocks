@@ -19,7 +19,7 @@
     + [Check environment configurations](./deployment/environment_configurations.md)
     + [Prepare deployment files](./deployment/prepare_deployment_files.md)
   + Deploy
-    + Deploy classic StarRocks
+    + Deploy shared-nothing StarRocks
       + [Deploy StarRocks manually](./deployment/deploy_manually.md)
       + Deploy on Kubernetes
         + [Deploy StarRocks with Operator](./deployment/sr_operator.md)
