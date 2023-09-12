@@ -118,8 +118,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, long snapshotId,
-                                                   ScalarOperator predicate, List<String> fieldNames) {
-        return normal.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames);
+                                                   ScalarOperator predicate, List<String> fieldNames, long limit) {
+        return normal.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames, limit);
     }
 
     @Override
@@ -129,8 +129,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
-                                         List<PartitionKey> partitionKeys, ScalarOperator predicate) {
-        return normal.getTableStatistics(session, table, columns, partitionKeys, predicate);
+                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit) {
+        return normal.getTableStatistics(session, table, columns, partitionKeys, predicate, limit);
     }
 
     @Override
