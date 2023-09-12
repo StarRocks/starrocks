@@ -145,7 +145,61 @@ When you load data from Apache Flink® into StarRocks, take note of the followin
 
 - If the preceding code runs as expected and StarRocks can receive data, but the data loading fails, check whether your machine can access the HTTP port of the backends (BEs) in your StarRocks cluster. If you can successfully ping the HTTP port returned by the execution of the SHOW BACKENDS command in your StarRocks cluster, your machine can access the HTTP port of the BEs in your StarRocks cluster. For example, a machine has a public IP address and a private IP address, the HTTP ports of frontends (FEs) and BEs can be accessed through the public IP address of the FEs and BEs, the IP address that is bounded with your StarRocks cluster is the private IP address, and the value of `loadurl` for the Flink task is the HTTP port of the public IP address of the FEs. The FEs forwards the data loading task to the private IP address of the BEs. In this example, if the machine cannot ping the private IP address of the BEs, the data loading fails.
 
+<<<<<<< HEAD
 - If you set `sink.semantic` to `exactly-once`, `sink.buffer-flush.max-bytes`, `sink.buffer-flush.max-bytes`, and `sink.buffer-flush.interval-ms` are invalid.
+=======
+    - If the label prefix is not specified, lingering transactions will be cleaned up by StarRocks only after they time out. However the number of running transactions can reach the limitation of StarRocks `max_running_txn_num_per_db` if
+      Flink jobs fail frequently before transactions time out. The timeout length is controlled by StarRocks FE configuration
+      `prepared_transaction_default_timeout_second` whose default value is `86400` (1 day). You can set a smaller value to it
+      to make transactions expired faster when the label prefix is not specified.
+
+- If you are certain that the Flink job will eventually recover from checkpoint or savepoint after a long downtime because of stop or continuous failover,
+  please adjust the following StarRocks configurations accordingly, to avoid data loss.
+
+  - `prepared_transaction_default_timeout_second`: StarRocks FE configuration, default value is `86400`. The value of this configuration needs to be larger than the downtime
+    of the Flink job. Otherwise, the lingering transactions that are included in a successful checkpoint may be aborted because of timeout before you restart the
+    Flink job, which leads to data loss.
+
+    Note that when you set a larger value to this configuration, it is better to specify the value of `sink.label-prefix` so that the lingering transactions can be cleaned according to the label prefix and some information in
+      checkpoint, instead of due to timeout (which may cause data loss).
+
+  - `label_keep_max_second` and `label_keep_max_num`: StarRocks FE configurations, default values are `259200` and `1000`
+    respectively. For details, see [FE configurations](https://docs.starrocks.io/en-us/latest/loading/Loading_intro#fe-configurations). The value of `label_keep_max_second` needs to be larger than the downtime of the Flink job. Otherwise, the Flink connector can not check the state of transactions in StarRocks by using the transaction labels saved in the Flink's savepoint or checkpoint and figure out whether these transactions are committed or not, which may eventually lead to data loss.
+
+  These configurations are mutable and can be modified by using `ADMIN SET FRONTEND CONFIG`:
+
+  ```SQL
+    ADMIN SET FRONTEND CONFIG ("prepared_transaction_default_timeout_second" = "3600");
+    ADMIN SET FRONTEND CONFIG ("label_keep_max_second" = "259200");
+    ADMIN SET FRONTEND CONFIG ("label_keep_max_num" = "1000");
+  ```
+
+### Flush Policy
+
+The Flink connector will buffer the data in memory, and flush them in batch to StarRocks via Stream Load. How the flush
+is triggered is different between at-least-once and exactly-once.
+
+For at-least-once, the flush will be triggered when any of the following conditions are met:
+
+- the bytes of buffered rows reaches the limit `sink.buffer-flush.max-bytes`
+- the number of buffered rows reaches the limit `sink.buffer-flush.max-rows`. (Only valid for sink version V1)
+- the elapsed time since the last flush reaches the limit `sink.buffer-flush.interval-ms`
+- a checkpoint is triggered
+
+For exactly-once, the flush only happens when a checkpoint is triggered.
+
+### Monitoring load metrics
+
+The Flink connector provides the following metrics to monitor loading.
+
+| Metric                     | Type    | Description                                                     |
+|--------------------------|---------|-----------------------------------------------------------------|
+| totalFlushBytes          | counter | successfully flushed bytes.                                     |
+| totalFlushRows           | counter | number of rows successfully flushed.                                      |
+| totalFlushSucceededTimes | counter | number of times that the data is successfully flushed.  |
+| totalFlushFailedTimes    | counter | number of times that the data fails to be flushed.                  |
+| totalFilteredRows        | counter | number of rows filtered, which is also included in totalFlushRows.    |
+>>>>>>> 81d817b706 ([Doc] ] fixing linting errors in connectors  (#30882))
 
 ## Examples
 
@@ -482,6 +536,10 @@ takes effect only when the new value for `score` is has a greater or equal to th
     - Define the DDL including all of columns.
     - Set the option `sink.properties.merge_condition` to `score` to tell the connector to use the column `score`
     as the condition.
+<<<<<<< HEAD
+=======
+    - Set the option `sink.version` to `V1` which tells the connector to use Stream Load.
+>>>>>>> 81d817b706 ([Doc] ] fixing linting errors in connectors  (#30882))
 
     ```SQL
     CREATE TABLE `score_board` (
