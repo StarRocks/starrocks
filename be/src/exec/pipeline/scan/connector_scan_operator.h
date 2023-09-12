@@ -82,6 +82,7 @@ public:
     size_t num_buffered_chunks() const override;
     size_t buffer_size() const override;
     size_t buffer_capacity() const override;
+    size_t buffer_memory_usage() const override;
     size_t default_buffer_capacity() const override;
     ChunkBufferTokenPtr pin_chunk(int num_chunks) override;
     bool is_buffer_full() const override;
