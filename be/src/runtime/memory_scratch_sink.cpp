@@ -30,13 +30,13 @@
 #include "exprs/expr.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/primitive_type.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_state.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
-#include "util/date_func.h"
 
 namespace starrocks {
 
@@ -86,6 +86,9 @@ Status MemoryScratchSink::prepare(RuntimeState* state) {
 }
 
 Status MemoryScratchSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+    // Same as ResultSinkOperator, The memory of the output result set should not be counted in the query memory,
+    // otherwise it will cause memory statistics errors.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return Status::OK();
     }
