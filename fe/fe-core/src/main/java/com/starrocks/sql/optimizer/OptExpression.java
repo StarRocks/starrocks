@@ -203,7 +203,7 @@ public class OptExpression {
         StringBuilder sb = new StringBuilder();
         sb.append(headlinePrefix).append(op.accept(new DebugOperatorTracer(), null));
         limitLine -= 1;
-        if (limitLine <= 0 || inputs.isEmpty()) {
+        if (limitLine <= 0) {
             return sb.toString();
         }
         sb.append('\n');
