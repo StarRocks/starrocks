@@ -2829,12 +2829,15 @@ public class OlapTable extends Table {
     }
 
     // ------ for lake table and lake materialized view start ------
-    public String getStoragePath() {
-        throw new SemanticException("getStoragePath is not supported");
+    public FilePathInfo getDefaultFilePathInfo() {
+        return tableProperty.getStorageInfo().getFilePathInfo();
     }
 
-    public FilePathInfo getPartitionFilePathInfo() {
-        throw new SemanticException("getPartitionFilePathInfo is not supported");
+    public FilePathInfo getPartitionFilePathInfo(long partitionId) {
+        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+        builder.mergeFrom(getDefaultFilePathInfo());
+        builder.setFullPath(builder.getFullPath() + "/" + partitionId);
+        return builder.build();
     }
 
     public FileCacheInfo getPartitionFileCacheInfo(long partitionId) {
