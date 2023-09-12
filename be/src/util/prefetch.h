@@ -19,6 +19,9 @@
 #define XXH_PREFETCH(ptr) _mm_prefetch((const char*)(ptr), _MM_HINT_T0)
 #elif defined(__GNUC__) && ((__GNUC__ >= 4) || ((__GNUC__ == 3) && (__GNUC_MINOR__ >= 1)))
 #define XXH_PREFETCH(ptr) __builtin_prefetch((ptr), 0 /* rw==read */, 3 /* locality */)
+#else
+#define XXH_PREFETCH(ptr) (void)(ptr) /* disabled */
 #endif
+
 #define SEQUENTIAL_DISTINCT 16L
 #define SEQUENTIAL_PREFETCH(x) XXH_PREFETCH(x);
