@@ -16,6 +16,7 @@ StarRocks 提供的 Flink connector，相比于 Flink 提供的 [flink-connector
 
 | Connector | Flink       | StarRocks  | Java | Scala      |
 | --------- | ----------- | ---------- | ---- | ---------- |
+| 1.2.8     | 1.13 ~ 1.17 | 2.1 及以上 | 8    | 2.11、2.12 |
 | 1.2.7     | 1.11 ~ 1.15 | 2.1 及以上 | 8    | 2.11、2.12 |
 
 ## 获取 Flink connector
@@ -93,11 +94,11 @@ Flink connector JAR 文件的命名格式如下：
 | load-url                          | Yes      | NONE          | 用于访问 FE 节点上的 HTTP 服务器。多个地址用英文分号（;）分隔。格式：`<fe_host1>:<fe_http_port1>;<fe_host2>:<fe_http_port2>`。 |
 | database-name                     | Yes      | NONE          | StarRocks 数据库名。                                         |
 | table-name                        | Yes      | NONE          | StarRocks 表名。                                             |
-| username                          | Yes      | NONE          | StarRocks 集群的用户名。使用 Flink connector 导入数据至 StarRocks 需要目标表的 SELECT 和 INSERT 权限。如果您的用户账号没有这些权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
- |
+| username                          | Yes      | NONE          | StarRocks 集群的用户名。使用 Flink connector 导入数据至 StarRocks 需要目标表的 SELECT 和 INSERT 权限。如果您的用户账号没有这些权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。|
 | password                          | Yes      | NONE          | StarRocks 集群的用户密码。                                   |
+| sink.semantic                     | No           | at-least-once     | sink 保证的语义。有效值：**at-least-once** 和 **exactly-once**。 |
 | sink.version                      | No       | AUTO          | 导入数据的接口。此参数自 Flink connector 1.2.4 开始支持。<ul><li>V1：使用 [Stream Load](./StreamLoad.md) 接口导入数据。1.2.4 之前的 Flink connector 仅支持此模式。</li> <li>V2：使用 [Stream Load 事务接口](../loading/Stream_Load_transaction_interface.md)导入数据。要求 StarRocks 版本大于等于 2.4。建议选择 V2，因为其降低内存使用，并提供了更稳定的 exactly-once 实现。</li> <li>AUTO：如果 StarRocks 版本支持 Stream Load 事务接口，将自动选择 V2，否则选择 V1。</li></ul> |
-| sink.label-prefix                 | No       | NONE          | 指定 Stream Load 使用的 label 的前缀。                       |
+| sink.label-prefix                 | No       | NONE          | 指定 Stream Load 使用的 label 的前缀。 如果 Flink connector 版本为 1.2.8 及以上，并且 sink 保证 exactly-once 语义，则建议配置 label 前缀。详细信息，参见[exactly once](#exactly-once)。                      |
 | sink.semantic                     | No       | at-least-once | sink 的语义。取值：at-least-once 和 exactly-once.            |
 | sink.buffer-flush.max-bytes       | No       | 94371840(90M) | 积攒在内存的数据大小，达到该阈值后数据通过 Stream Load 一次性导入 StarRocks。取值范围：[64MB, 10GB]。将此参数设置为较大的值可以提高导入性能，但可能会增加导入延迟。 该参数只在 `sink.semantic` 为`at-least-once`才会生效。 `sink.semantic` 为 `exactly-once`，则只有 Flink checkpoint 触发时 flush 内存的数据，因此该参数不生效。 |
 | sink.buffer-flush.max-rows        | No       | 500000        | 积攒在内存的数据条数，达到该阈值后数据通过 Stream Load 一次性导入 StarRocks。取值范围：[64000, 5000000]。该参数只在 `sink.version` 为 `V1`，`sink.semantic` 为 `at-least-once` 才会生效。 |
@@ -138,14 +139,65 @@ Flink connector JAR 文件的命名格式如下：
 
 ## 使用说明
 
-- 导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](https://docs.starrocks.io/zh-cn/latest/sql-reference/sql-statements/account-management/GRANT) 给用户赋权。
-- 自 2.4 版本 StarRocks 开始支持 [Stream Load 事务接口](https://docs.starrocks.io/zh-cn/latest/loading/Stream_Load_transaction_interface)。自 Flink connector 1.2.4 版本起， Sink 基于 Stream Load 事务接口重新设计 exactly-once 的实现，相较于原来基于 Stream Load 非事务接口实现的 exactly-once，降低了内存使用和 checkpoint 耗时，提高了作业的实时性和稳定性。并且，自 Flink connector 1.2.4 版本起，如果StarRocks 支持 Stream Load 事务接口，则 Sink 默认使用 Stream Load 事务接口，如果需要使用 Stream Load  非事务接口实现，则需要配置 `sink.version` 为`V1`。
-    > 注意
-    >
-    > 如果只升级 StarRocks 或 Flink connector，sink 会自动选择  Stream Load  非事务接口实现。
-- 基于 Stream Load 非事务接口实现的 exactly-once，依赖 Flink 的 checkpoint 机制，在每次 checkpoint 时保存批数据以及其 label，在 checkpoint 后完成的第一次 invoke 中阻塞 flush 所有缓存在 state 当中的数据，以此达到精准一次。但如果 StarRocks 宕机，会导致 Flink sink stream 算子长时间阻塞，并引起 Flink 的监控报警或强制 kill。
-- 如果遇到导入停止的情况，请尝试增加 Flink 任务的内存。
-- 如果代码运行正常且 Flink 能接收到数据，但是数据写入 StarRocks 不成功时，请确认 Flink 机器能访问 BE 的 http_port 端口，这里指能 ping通集群 show backends 显示的 ip:port。举个例子：如果一台机器有外网和内网 IP，且 FE 和 BE 的 http_port均可通过外网ip:port 访问，由于集群里绑定的 ip 为内网 IP，任务里 loadurl 写的 FE 外网 ip:http_port，FE会将写入任务转发给 BE 内网 ip:port，这时如果 Flink 机器 ping 不通 BE 的内网 IP，则写入失败。
+### Exactly Once
+
+- 如果您希望 sink 保证 exactly-once 语义，则建议升级 StarRocks 到 2.5 或更高版本，并将 Flink connector 升级到 1.2.4 或更高版本。
+
+  - 自 2.4 版本 StarRocks 开始支持 [Stream Load 事务接口](https://docs.starrocks.io/zh-cn/latest/loading/Stream_Load_transaction_interface)。自 Flink connector 1.2.4 版本起， Sink 基于 Stream Load 事务接口重新设计 exactly-once 的实现，相较于原来基于 Stream Load 非事务接口实现的 exactly-once，降低了内存使用和 checkpoint 耗时，提高了作业的实时性和稳定性。
+  - 自 Flink connector 1.2.4 版本起，如果 StarRocks 支持 Stream Load 事务接口，则 Sink 默认使用 Stream Load 事务接口，如果需要使用 Stream Load  非事务接口实现，则需要配置 `sink.version` 为`V1`。
+  > **注意**
+  >
+  > 如果只升级 StarRocks 或 Flink connector，sink 会自动选择  Stream Load  非事务接口实现。
+
+- sink 保证 exactly-once 语义相关配置
+  
+  - `sink.semantic` 的值必须为 `exactly-once`.
+  
+  - 如果 Flink connector 版本为 1.2.8 及更高，则建议指定 `sink.label-prefix` 的值。需要注意的是，label 前缀在 StarRocks 的所有类型的导入作业中必须是唯一的，包括 Flink job、Routine Load 和 Broker Load。
+
+    - 如果指定了 label 前缀，Flink connector 将使用 label 前缀清理因为 Flink job 失败而生成的未完成事务，例如在checkpoint 进行过程中 Flink job 失败。如果使用 `SHOW PROC '/transactions/<db_id>/running';` 查看这些事务在 StarRock 的状态，则返回结果会显示事务通常处于 `PREPARED` 状态。当 Flink job 从 checkpoint 恢复时，Flink connector 将根据 label 前缀和 checkpoint 中的信息找到这些未完成的事务，并中止事务。当 Flink job 因某种原因退出时，由于采用了两阶段提交机制来实现 exactly-once语义，Flink connector 无法中止事务。当 Flink 作业退出时，Flink connector 尚未收到来自 Flink checkpoint coordinator 的通知，说明这些事务是否应包含在成功的 checkpoint 中，如果中止这些事务，则可能导致数据丢失。您可以在这篇[文章](https://flink.apache.org/2018/02/28/an-overview-of-end-to-end-exactly-once-processing-in-apache-flink-with-apache-kafka-too/)中了解如何在 Flink 中实现端到端的 exactly-once。
+    - 如果未指定 label 前缀，则未完成的事务将在超时后由 StarRocks 清理。然而，如果 Flink job 在事务超时之前频繁失败，则运行中的事务数量可能会达到 StarRocks 的 `max_running_txn_num_per_db` 限制。超时长度由 StarRocks FE 配置 `prepared_transaction_default_timeout_second` 控制，默认值为 `86400`（1天）。如果未指定 label 前缀，您可以设置一个较小的值，使事务更快超时。
+
+- 如果您确定 Flink job 将在长时间停止后最终会使用 checkpoint 或 savepoint 恢复，则为避免数据丢失，请调整以下 StarRocks 配置：
+
+  - `prepared_transaction_default_timeout_second`：StarRocks FE 参数，默认值为 `86400`。此参数值需要大于 Flink job 的停止时间。否则，在重新启动 Flink job 之前，可能会因事务超时而中止未完成事务，这些事务可能包含在成功 checkpoint 中的，如果中止，则会导致数据丢失。
+  
+    请注意，当您设置一个较大的值时，则建议指定 `sink.label-prefix` 的值，则 Flink connector 可以根据 label 前缀和检查点中的一些信息来清理未完成的事务，而不是因事务超时后由 StarRocks 清理（这可能会导致数据丢失）。
+
+  - `label_keep_max_second` 和 `label_keep_max_num`：StarRocks FE 参数，默认值分别为 `259200` 和 `1000`。更多信息，参见[FE 配置](../loading/Loading_intro#fe-configurations)。`label_keep_max_second` 的值需要大于 Flink job 的停止时间。否则，Flink connector 无法使用保存在 Flink 的 savepoint 或 checkpoint 中的事务 lable 来检查事务在 StarRocks 中的状态，并判断这些事务是否已提交，最终可能导致数据丢失。
+
+  您可以使用 `ADMIN SET FRONTEND CONFIG` 修改上述配置。
+
+    ```SQL
+    ADMIN SET FRONTEND CONFIG ("prepared_transaction_default_timeout_second" = "3600");
+    ADMIN SET FRONTEND CONFIG ("label_keep_max_second" = "259200");
+    ADMIN SET FRONTEND CONFIG ("label_keep_max_num" = "1000");
+    ```
+
+### Flush 策略
+
+Flink connector 先在内存中 buffer 数据，然后通过 Stream Load 将其一次性 flush 到 StarRocks。在 at-least-once 和 exactly-once 场景中使用不同的方式触发 flush 。
+
+对于 at-least-once，在满足以下任何条件时触发 flush：
+
+- buffer 数据的字节达到限制 `sink.buffer-flush.max-bytes`
+- buffer 数据行数达到限制 `sink.buffer-flush.max-rows`。（仅适用于版本 V1）
+- 自上次 flush 以来经过的时间达到限制 `sink.buffer-flush.interval-ms`
+- 触发了 checkpoint
+
+对于 exactly-once，仅在触发 checkpoint 时触发 flush。
+
+### 监控导入指标
+
+Flink connector 提供以下指标来监控导入情况。
+
+| 指标名称                     | 类型   | 描述                                               |
+| ------------------------ | ------ | -------------------------------------------------- |
+| totalFlushBytes          | Counter| 成功 flush 的字节。                                 |
+| totalFlushRows           | Counter | 成功 flush 的行数。                                   |
+| totalFlushSucceededTimes | Counter |  flush 数据的成功次数。                           |
+| totalFlushFailedTimes    | Counter | flush 数据的失败次数。                                   |
+| totalFilteredRows        | Counter | 已过滤的行数，这些行数也包含在 totalFlushRows 中。 |
 
 ## 使用示例
 
@@ -467,7 +519,7 @@ DISTRIBUTED BY HASH(`id`);
 2. 在 Flink SQL 客户端按照以下方式创建表`score_board`：
    - DDL 中包括所有列的定义。
    - 将选项  `sink.properties.merge_condition` 设置为 `score`，要求 Flink connector 使用 `score`  列作为更新条件。
-   - 将选项 `sink.version` 设置为 `V1` ，要求  Flink connector 使用 Stream Load 接口导入数据。因为只有  Stream Load 接口支持条件更新。
+   - 将选项 `sink.version` 设置为 `V1` ，要求 Flink connector 使用 Stream Load 接口导入数据。因为只有 Stream Load 接口支持条件更新。
 
       ```SQL
       CREATE TABLE `score_board` (
