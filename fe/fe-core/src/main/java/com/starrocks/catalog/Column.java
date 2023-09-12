@@ -44,7 +44,6 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
@@ -580,7 +579,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 return defaultExpr.getExpr();
             }
         }
-        return FeConstants.NULL_STRING;
+        return null;
     }
 
     public String toSqlWithoutAggregateTypeName() {

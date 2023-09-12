@@ -81,7 +81,6 @@ import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
@@ -1243,7 +1242,7 @@ public class ShowExecutor {
                 final String columnType = col.getType().canonicalName().toLowerCase();
                 final String isAllowNull = col.isAllowNull() ? "YES" : "NO";
                 final String isKey = col.isKey() ? "YES" : "NO";
-                String defaultValue = FeConstants.NULL_STRING;
+                String defaultValue = null;
                 if (!col.getType().isOnlyMetricType()) {
                     defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
                 }
