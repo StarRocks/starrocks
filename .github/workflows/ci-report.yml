@@ -1,5 +1,5 @@
 name: CI Report
-run-name: CI Report(# ${{ github.event.workflow_run.id }})
+run-name: CI Report(#${{ github.event.workflow_run.id }})
 
 on:
   workflow_run:
