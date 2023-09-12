@@ -87,9 +87,15 @@ public class MaterializedViewAnalyzerTest {
         ShowExecutor showExecutor = new ShowExecutor(starRocksAssert.getCtx(),
                 (ShowStmt) analyzeSuccess("show full columns from mv1"));
         ShowResultSet showResultSet = showExecutor.execute();
+<<<<<<< HEAD
         Assert.assertEquals("[[a, date, , YES, YES, \\N, , , a1]," +
                         " [b, int, , YES, YES, \\N, , , b2]," +
                         " [c, int, , YES, YES, \\N, , , ]]",
+=======
+        Assert.assertEquals("[[a, date, , YES, YES, null, NONE, , a1]," +
+                        " [b, int, , YES, YES, null, NONE, , b2]," +
+                        " [c, int, , YES, YES, null, NONE, , ]]",
+>>>>>>> d92ec9fbc4 ([BugFix] Fix bug column default null convert to \N (#30799))
                 showResultSet.getResultRows().toString());
     }
 
