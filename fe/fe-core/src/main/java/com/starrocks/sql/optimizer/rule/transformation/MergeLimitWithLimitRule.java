@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -78,10 +77,6 @@ public class MergeLimitWithLimitRule extends TransformationRule {
 
         Operator result;
         if (l1.hasOffset() || l2.hasOffset()) {
-            if (l1.hasOffset()) {
-                Preconditions.checkState(!l1.isLocal());
-            }
-
             // l2 range
             long l2Min = l2.hasOffset() ? l2.getOffset() : Operator.DEFAULT_OFFSET;
             long l2Max = l2Min + l2.getLimit();
