@@ -591,7 +591,7 @@ struct AggHashSetVariant {
     size_t allocated_memory_usage(const MemPool* pool) const;
 
 private:
-    Type type = Type::phase1_slice;
+    Type _type = Type::phase1_slice;
 };
 
 } // namespace starrocks

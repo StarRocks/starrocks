@@ -16,6 +16,8 @@
 
 #include <variant>
 
+#include "util/failpoint/fail_point.h"
+
 namespace starrocks::pipeline {
 
 bool AggregateStreamingSourceOperator::has_output() const {
@@ -71,6 +73,9 @@ StatusOr<ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(RuntimeState* st
     return std::move(chunk);
 }
 
+// used to verify https://github.com/StarRocks/starrocks/issues/30078
+DEFINE_FAIL_POINT(force_reset_aggregator_after_agg_streaming_sink_finish);
+
 Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(ChunkPtr* chunk, RuntimeState* state) {
     if (!_aggregator->it_hash().has_value()) {
         _aggregator->hash_map_variant().visit(
@@ -79,6 +84,25 @@ Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(ChunkPtr* c
     }
 
     RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), chunk));
+<<<<<<< HEAD
+=======
+
+    auto need_reset_aggregator = _aggregator->is_streaming_all_states() && _aggregator->is_ht_eos();
+
+    FAIL_POINT_TRIGGER_EXECUTE(force_reset_aggregator_after_agg_streaming_sink_finish, {
+        if (_aggregator->is_sink_complete()) {
+            need_reset_aggregator = true;
+        }
+    });
+
+    if (need_reset_aggregator) {
+        if (!_aggregator->is_sink_complete()) {
+            RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr, false));
+        }
+        _aggregator->set_streaming_all_states(false);
+    }
+
+>>>>>>> 95690a0cc5 ([BugFix] Fix mem limited streaming agg may hang (#30228))
     return Status::OK();
 }
 

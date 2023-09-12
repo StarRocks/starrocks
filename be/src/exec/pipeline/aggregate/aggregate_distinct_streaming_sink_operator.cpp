@@ -94,6 +94,20 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_preaggregati
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_limited_memory(const ChunkPtr& chunk,
+                                                                             const size_t chunk_size) {
+    if (_limited_mem_state.has_limited(*_aggregator)) {
+        RETURN_IF_ERROR(_push_chunk_by_force_streaming(chunk));
+        _aggregator->set_streaming_all_states(true);
+    } else {
+        RETURN_IF_ERROR(_push_chunk_by_auto(chunk, chunk_size));
+    }
+    return Status::OK();
+}
+
+>>>>>>> 95690a0cc5 ([BugFix] Fix mem limited streaming agg may hang (#30228))
 Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const ChunkPtr& chunk, const size_t chunk_size) {
     bool ht_needs_expansion = _aggregator->hash_set_variant().need_expand(chunk_size);
     size_t allocated_bytes = _aggregator->hash_set_variant().allocated_memory_usage(_aggregator->mem_pool());

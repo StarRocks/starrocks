@@ -70,6 +70,18 @@ void AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(Chunk
     }
 
     _aggregator->convert_hash_set_to_chunk(state->chunk_size(), chunk);
+<<<<<<< HEAD
+=======
+
+    if (_aggregator->is_streaming_all_states() && _aggregator->is_ht_eos()) {
+        if (!_aggregator->is_sink_complete()) {
+            RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr, false));
+        }
+        _aggregator->set_streaming_all_states(false);
+    }
+
+    return Status::OK();
+>>>>>>> 95690a0cc5 ([BugFix] Fix mem limited streaming agg may hang (#30228))
 }
 
 } // namespace starrocks::pipeline
