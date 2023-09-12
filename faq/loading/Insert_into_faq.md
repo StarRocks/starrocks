@@ -12,8 +12,11 @@
 
 您需要在 BE 配置文件 **be.conf** 中修改以下系统配置项，并重启集群使修改生效：
 
-- `streaming_load_rpc_max_alive_time_sec`: 流式导入 RPC 的超时时间，默认为 1200，单位为秒。
-- `tablet_writer_rpc_timeout_sec`：TabletWriter 的超时时长，默认为 600，单位为秒。
+`streaming_load_rpc_max_alive_time_sec`: 流式导入 RPC 的超时时间，默认为 1200，单位为秒。
+
+您也可以通过设置以下系统变量调整查询的超时时间：
+
+`query_timeout`：查询超时时间，单位为秒，默认为 `300`。
 
 ## 使用 INSERT INTO SELECT 语句导入大量数据时会执行失败 “execute timeout”。如何解决？
 
