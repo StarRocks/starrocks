@@ -523,6 +523,8 @@ Status SnappyStreamCompression::decompress(uint8_t* input, size_t input_len, siz
         }
     }
     return st;
+}
+
 class LzoStreamCompression : public StreamCompression {
 public:
     LzoStreamCompression() : StreamCompression(CompressionTypePB::LZO) {}
