@@ -3015,20 +3015,15 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s14_div_decimal128p38s14_eq_
 template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op>
 void test_decimal_fast_mul_help(const DecimalTestCaseArray& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
-<<<<<<< HEAD
-    test_vector_vector<LhsType, RhsType, ResultType, Op, false>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                                rhs_scale, result_precision, result_scale);
-    test_vector_const<LhsType, RhsType, ResultType, Op, false>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                               rhs_scale, result_precision, result_scale);
-    test_const_vector<LhsType, RhsType, ResultType, Op, false>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                               rhs_scale, result_precision, result_scale);
-    test_const_const<LhsType, RhsType, ResultType, Op, false>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                              rhs_scale, result_precision, result_scale);
-    test_nullable_vector_const<LhsType, RhsType, ResultType, Op, false>(
-=======
-#if defined(__x86_64__) && defined(__GNUC__)
     test_vector_vector<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419))
+            test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
+    test_vector_const<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
+            test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
+    test_const_vector<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
+            test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
+    test_const_const<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
+            test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
+    test_nullable_vector_const<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
     test_vector_const<LhsType, RhsType, ResultType, Op, OverflowMode::IGNORE>(
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);

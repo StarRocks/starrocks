@@ -270,13 +270,8 @@ struct TQueryOptions {
 
   100: optional i64 group_concat_max_len = 1024;
   102: optional bool enable_collect_table_level_scan_stats;
-<<<<<<< HEAD
-=======
-
-  103: optional i32 interleaving_group_size;
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
->>>>>>> 228c12035b ([Enhancement] Support overflow mode for decimal type (#30419))
 }
 
 
