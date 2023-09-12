@@ -18,9 +18,11 @@ import com.google.common.base.Strings;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -113,6 +115,22 @@ public class CatalogAnalyzer {
             }
 
             FeNameFormat.checkCatalogName(statement.getCatalogName());
+            return null;
+        }
+
+        @Override
+        public Void visitAlterCatalogStatement(AlterCatalogStmt statement, ConnectContext context) {
+            if (statement.getAlterClause() instanceof ModifyTablePropertiesClause) {
+                ModifyTablePropertiesClause modifyTablePropertiesClause =
+                        (ModifyTablePropertiesClause) statement.getAlterClause();
+                Map<String, String> properties = modifyTablePropertiesClause.getProperties();
+
+                for (Map.Entry<String, String> property : properties.entrySet()) {
+                    if (!property.getKey().equals("ranger.plugin.hive.service.name")) {
+                        throw new SemanticException("Not support alter catalog property " + property.getKey());
+                    }
+                }
+            }
             return null;
         }
     }

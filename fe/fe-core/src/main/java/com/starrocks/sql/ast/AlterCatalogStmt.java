@@ -11,37 +11,30 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+package com.starrocks.sql.ast;
 
-package com.starrocks.persist;
+import com.starrocks.sql.parser.NodePosition;
 
-import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
+public class AlterCatalogStmt extends DdlStmt {
+    private final String catalogName;
+    private final AlterClause alterClause;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-
-public class DropCatalogLog implements Writable {
-
-    @SerializedName(value = "catalogName")
-    private String catalogName;
-
-    public DropCatalogLog(String catalogName) {
+    public AlterCatalogStmt(String catalogName, AlterClause alterClause, NodePosition pos) {
+        super(pos);
         this.catalogName = catalogName;
+        this.alterClause = alterClause;
     }
 
     public String getCatalogName() {
         return catalogName;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
+    public AlterClause getAlterClause() {
+        return alterClause;
     }
 
-    public static DropCatalogLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), DropCatalogLog.class);
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAlterCatalogStatement(this, context);
     }
 }
