@@ -2,7 +2,7 @@
 
 This topic describes how to deploy and use a shared-data StarRocks cluster.
 
-The shared-data StarRocks cluster is specifically engineered for the cloud on the premise of separation of storage and compute. It allows data to be stored in object storage that is compatible with the S3 protocol (for example, AWS S3 and MinIO). You can achieve not only cheaper storage and better resource isolation, but elastic scalability for your cluster. The query performance of the shared-data StarRocks cluster aligns with that of a classic cluster (shared-nothing) when the local disk cache is hit.
+The shared-data StarRocks cluster is specifically engineered for the cloud on the premise of separation of storage and compute. It allows data to be stored in object storage that is compatible with the S3 protocol (for example, AWS S3 and MinIO). You can achieve not only cheaper storage and better resource isolation, but elastic scalability for your cluster. The query performance of the shared-data StarRocks cluster aligns with that of a shared-nothing StarRocks cluster when the local disk cache is hit.
 
 Compared to the classic StarRocks architecture, separation of storage and compute offers a wide range of benefits. By decoupling these components, StarRocks provides:
 
@@ -20,7 +20,7 @@ This feature is supported from v3.0.
 
 ## Deploy a shared-data StarRocks cluster
 
-The deployment of a shared-data StarRocks cluster is similar to that of a classic StarRocks cluster. The only difference is the parameters in the configuration files of FE and BE **fe.conf** and **be.conf**. This section only lists the FE and BE configuration items you need to add to the configuration files when you deploy a shared-data StarRocks cluster. For detailed instructions on deploying a StarRocks cluster, see [Deploy StarRocks](../deployment/deploy_manually.md).
+The deployment of a shared-data StarRocks cluster is similar to that of a shared-nothing StarRocks cluster. The only difference is the parameters in the configuration files of FE and BE **fe.conf** and **be.conf**. This section only lists the FE and BE configuration items you need to add to the configuration files when you deploy a shared-data StarRocks cluster. For detailed instructions on deploying a shared-nothing StarRocks cluster, see [Deploy StarRocks](../deployment/deploy_manually.md).
 
 ### Configure FE nodes for shared-data StarRocks
 
@@ -28,7 +28,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
 | **Configuration item**              | **Description**                                              |
 | ----------------------------------- | ------------------------------------------------------------ |
-| run_mode                            | The running mode of the StarRocks cluster. Valid values: `shared_data` and `shared_nothing` (Default). <br>`shared_data` indicates running StarRocks in shared-data mode. `shared_nothing` indicates running StarRocks in classic mode.<br />**CAUTION**<br />You cannot adopt the `shared_data` and `shared_nothing` modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.<br />DO NOT change `run_mode` after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a classic cluster to a shared-data cluster or vice versa is not supported. |
+| run_mode                            | The running mode of the StarRocks cluster. Valid values: `shared_data` and `shared_nothing` (Default). <br>`shared_data` indicates running StarRocks in shared-data mode. `shared_nothing` indicates running StarRocks in shared-nothing mode.<br />**CAUTION**<br />You cannot adopt the `shared_data` and `shared_nothing` modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.<br />DO NOT change `run_mode` after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a shared-nothing cluster to a shared-data cluster or vice versa is not supported. |
 | cloud_native_meta_port              | The cloud-native meta service RPC port. Default: `6090`.     |
 | cloud_native_storage_type           | The type of object storage you use. Valid value: `S3` (Default). |
 | aws_s3_path                         | The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it, for example, `testbucket/subpath`. |
