@@ -131,7 +131,7 @@ public class PaimonMetadataTest {
         Assert.assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());
         Assert.assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
         Assert.assertEquals(ScalarType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
-        Assert.assertFalse(paimonTable.getBaseSchema().get(1).isAllowNull());
+        Assert.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         Assert.assertEquals("paimon_catalog", paimonTable.getCatalogName());
         Assert.assertEquals("paimon_catalog.db1.tbl1.0", paimonTable.getUUID());
     }
