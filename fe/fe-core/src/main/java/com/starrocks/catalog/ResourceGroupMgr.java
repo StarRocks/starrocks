@@ -246,7 +246,7 @@ public class ResourceGroupMgr implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        List<ResourceGroup> resourceGroups = resourceGroupMap.values().stream().collect(Collectors.toList());
+        List<ResourceGroup> resourceGroups = new ArrayList<>(resourceGroupMap.values());
         SerializeData data = new SerializeData();
         data.resourceGroups = resourceGroups;
 

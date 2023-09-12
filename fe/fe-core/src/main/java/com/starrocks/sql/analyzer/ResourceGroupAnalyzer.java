@@ -142,8 +142,11 @@ public class ResourceGroupAnalyzer {
                 classifier.getRole() == null &&
                 (classifier.getQueryTypes() == null || classifier.getQueryTypes().isEmpty()) &&
                 classifier.getSourceIp() == null &&
-                classifier.getDatabases() == null) {
-            throw new SemanticException("At least one of ('user', 'role', 'query_type', 'source_ip') should be given");
+                classifier.getDatabases() == null &&
+                classifier.getPlanCpuCostRange() == null &&
+                classifier.getPlanMemCostRange() == null) {
+            throw new SemanticException("At least one of ('user', 'role', 'query_type', 'db', 'source_ip', " +
+                    "'plan_cpu_cost_range', 'plan_mem_cost_range') should be given");
         }
         return classifier;
     }
