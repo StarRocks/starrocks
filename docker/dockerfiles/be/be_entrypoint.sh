@@ -119,8 +119,8 @@ ret=$?
 if [[ $ret -ne 0 && "x$LOG_CONSOLE" != "x1" ]] ; then
     nol=50
     log_stderr "Last $nol lines of be.INFO ..."
-    tail -n 50 $STARROCKS_HOME/log/be.INFO
+    tail -n $nol $STARROCKS_HOME/log/be.INFO
     log_stderr "Last $nol lines of be.out ..."
-    tail -n 50 $STARROCKS_HOME/log/be.out
+    tail -n $nol $STARROCKS_HOME/log/be.out
 fi
 exit $ret
