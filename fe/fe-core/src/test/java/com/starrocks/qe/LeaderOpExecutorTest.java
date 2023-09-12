@@ -22,13 +22,13 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendServiceImpl;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
