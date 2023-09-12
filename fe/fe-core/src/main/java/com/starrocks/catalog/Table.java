@@ -318,6 +318,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return isOlapTable() || isCloudNativeTable();
     }
 
+    public boolean isExternalTableWithFileSystem() {
+        return isHiveTable() || isIcebergTable() || isHudiTable() || isDeltalakeTable() || isPaimonTable();
+    }
+
     public boolean isHiveTable() {
         return type == TableType.HIVE;
     }

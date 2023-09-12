@@ -176,6 +176,12 @@ public class HiveConnectorInternalMgr {
         return new ReentrantExecutor(baseExecutor, remoteFileConf.getRefreshMaxThreadNum());
     }
 
+    public Executor getRefreshOthersFeExecutor() {
+        Executor baseExecutor = Executors.newCachedThreadPool(
+                new ThreadFactoryBuilder().setNameFormat("refresh-others-fe-hive-metadata-cache-%d").build());
+        return new ReentrantExecutor(baseExecutor, remoteFileConf.getRefreshMaxThreadNum());
+    }
+
     public boolean isSearchRecursive() {
         return isRecursive;
     }
