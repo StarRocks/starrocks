@@ -91,7 +91,6 @@ public class AnalyzeMgrTest {
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
 
-
         AnalyzeMgr analyzeMgr = new AnalyzeMgr();
         AnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(100,
                 "hive0", "partitioned_db", "t1",
@@ -137,6 +136,43 @@ public class AnalyzeMgrTest {
         journalEntity.setData(removeExternalAnalyzeStatus);
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(0, GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeStatusMap().size());
+
+        // test analyze job
+        NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(123, 1234, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        analyzeMgr.addAnalyzeJob(nativeAnalyzeJob);
+
+        testImage = new UtFrameUtils.PseudoImage();
+        analyzeMgr.save(testImage.getDataOutputStream());
+        analyzeMgr.load(new SRMetaBlockReader(testImage.getDataInputStream()));
+        Assert.assertEquals(1, analyzeMgr.getAllAnalyzeJobList().size());
+        NativeAnalyzeJob analyzeJob = (NativeAnalyzeJob) analyzeMgr.getAllAnalyzeJobList().get(0);
+        Assert.assertEquals(123, analyzeJob.getDbId());
+        Assert.assertEquals(1234, analyzeJob.getTableId());
+
+        NativeAnalyzeJob nativeAnalyzeJob1 = (NativeAnalyzeJob) UtFrameUtils.PseudoJournalReplayer.
+                replayNextJournal(OperationType.OP_ADD_ANALYZER_JOB);
+        Assert.assertEquals(123, nativeAnalyzeJob1.getDbId());
+        Assert.assertEquals(1234, nativeAnalyzeJob1.getTableId());
+
+        journalEntity.setOpCode(OperationType.OP_ADD_ANALYZER_JOB);
+        journalEntity.setData(nativeAnalyzeJob);
+        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        Assert.assertEquals(1, GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList().size());
+
+        analyzeMgr.removeAnalyzeJob(analyzeMgr.getAllAnalyzeJobList().get(0).getId());
+        NativeAnalyzeJob nativeAnalyzeJob2 = (NativeAnalyzeJob) UtFrameUtils.PseudoJournalReplayer.
+                replayNextJournal(OperationType.OP_REMOVE_ANALYZER_JOB);
+        Assert.assertEquals(123, nativeAnalyzeJob2.getDbId());
+        Assert.assertEquals(1234, nativeAnalyzeJob2.getTableId());
+
+        journalEntity.setOpCode(OperationType.OP_REMOVE_ANALYZER_JOB);
+        journalEntity.setData(nativeAnalyzeJob);
+        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList().size());
     }
 
     @Test

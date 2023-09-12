@@ -139,6 +139,7 @@ public class HiveMetastoreApiConverter {
                         .collect(Collectors.toList()))
                 .setFullSchema(toFullSchemasForHiveTable(table))
                 .setTableLocation(toTableLocation(table.getSd(), table.getParameters()))
+                .setProperties(table.getParameters())
                 .setStorageFormat(HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name()))
                 .setCreateTime(table.getCreateTime());
         return tableBuilder.build();
@@ -248,7 +249,7 @@ public class HiveMetastoreApiConverter {
         Configuration configuration = new Configuration();
         if (catalogName != null) {
             CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
-            CloudConfiguration cloudConfiguration = connector.getCloudConfiguration();
+            CloudConfiguration cloudConfiguration = connector.getMetadata().getCloudConfiguration();
             HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
             configuration = hdfsEnvironment.getConfiguration();
         }

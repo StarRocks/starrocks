@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -26,14 +26,17 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
-import com.starrocks.sql.PlannerProfile;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
@@ -47,7 +50,6 @@ import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.BaseTable;
-import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
@@ -64,8 +66,10 @@ import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.TableScanUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -73,6 +77,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -90,6 +95,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private static final Logger LOG = LogManager.getLogger(IcebergMetadata.class);
     private final String catalogName;
+    private final HdfsEnvironment hdfsEnvironment;
     private final IcebergCatalog icebergCatalog;
     private final IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
 
@@ -97,8 +103,9 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<IcebergFilter, List<FileScanTask>> tasks = new ConcurrentHashMap<>();
 
-    public IcebergMetadata(String catalogName, IcebergCatalog icebergCatalog) {
+    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog) {
         this.catalogName = catalogName;
+        this.hdfsEnvironment = hdfsEnvironment;
         this.icebergCatalog = icebergCatalog;
         new IcebergMetricsReporter().setThreadLocalReporter();
     }
@@ -229,11 +236,13 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate, List<String> fieldNames) {
-        return getRemoteFileInfos((IcebergTable) table, snapshotId, predicate);
+                                                   long snapshotId, ScalarOperator predicate,
+                                                   List<String> fieldNames, long limit) {
+        return getRemoteFileInfos((IcebergTable) table, snapshotId, predicate, limit);
     }
 
-    private List<RemoteFileInfo> getRemoteFileInfos(IcebergTable table, long snapshotId, ScalarOperator predicate) {
+    private List<RemoteFileInfo> getRemoteFileInfos(IcebergTable table, long snapshotId,
+                                                    ScalarOperator predicate, long limit) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         IcebergFilter key = IcebergFilter.of(table.getRemoteDbName(), table.getRemoteTableName(), snapshotId, predicate);
 
@@ -251,23 +260,45 @@ public class IcebergMetadata implements ConnectorMetadata {
                 scan = scan.filter(icebergPredicate);
             }
 
-            CloseableIterable<CombinedScanTask> combinedScanTasks = scan.planTasks();
-            for (CombinedScanTask combinedScanTask : combinedScanTasks) {
-                for (FileScanTask fileScanTask : combinedScanTask.files()) {
-                    builder.add(fileScanTask);
+            CloseableIterable<FileScanTask> fileScanTaskIterable = TableScanUtil.splitFiles(
+                    scan.planFiles(), scan.targetSplitSize());
+            CloseableIterator<FileScanTask> fileScanTaskIterator = fileScanTaskIterable.iterator();
+            Iterator<FileScanTask> fileScanTasks;
+
+            // Under the condition of ensuring that the data is correct, we disabled the limit optimization when table has
+            // partition evolution because this may cause data diff.
+            boolean canPruneManifests = limit != -1 && !table.isV2Format() && onlyHasPartitionPredicate(table, predicate)
+                    && limit < Integer.MAX_VALUE && table.getNativeTable().spec().specId() == 0 && enablePruneManifest();
+
+            if (canPruneManifests) {
+                // After iceberg uses partition predicate plan files, each manifests entry must have at least one row of data.
+                fileScanTasks = Iterators.limit(fileScanTaskIterator, (int) limit);
+            } else {
+                fileScanTasks = fileScanTaskIterator;
+            }
+
+            long totalReadCount = 0;
+            while (fileScanTasks.hasNext()) {
+                FileScanTask scanTask = fileScanTasks.next();
+                builder.add(scanTask);
+                totalReadCount += scanTask.file().recordCount();
+                if (canPruneManifests && totalReadCount >= limit) {
+                    break;
                 }
             }
+
             try {
-                combinedScanTasks.close();
+                fileScanTaskIterable.close();
+                fileScanTaskIterator.close();
             } catch (IOException e) {
                 // Ignored
             }
 
-            IcebergMetricsReporter.lastReport().ifPresent(scanReportWithCounter -> {
-                PlannerProfile.addCustomProperties("Iceberg.Metadata.ScanMetrics." +
-                                scanReportWithCounter.getScanReport().tableName() + " / No_" + scanReportWithCounter.getCount(),
-                        scanReportWithCounter.getScanReport().scanMetrics().toString());
-            });
+            IcebergMetricsReporter.lastReport().ifPresent(scanReportWithCounter ->
+                    Tracers.record(Tracers.Module.EXTERNAL, "Iceberg.Metadata.ScanMetrics." +
+                                    scanReportWithCounter.getScanReport().tableName() + " / No_" +
+                                    scanReportWithCounter.getCount(),
+                            scanReportWithCounter.getScanReport().scanMetrics().toString()));
             tasks.put(key, builder.build());
         }
 
@@ -282,8 +313,9 @@ public class IcebergMetadata implements ConnectorMetadata {
                                          Table table,
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate) {
-        return statisticProvider.getTableStatistics((IcebergTable) table, predicate, columns);
+                                         ScalarOperator predicate,
+                                         long limit) {
+        return statisticProvider.getTableStatistics((IcebergTable) table, predicate, columns, limit);
     }
 
     @Override
@@ -400,6 +432,34 @@ public class IcebergMetadata implements ConnectorMetadata {
         return path;
     }
 
+    public static boolean onlyHasPartitionPredicate(Table table, ScalarOperator predicate) {
+        if (predicate == null) {
+            return true;
+        }
+
+        List<ColumnRefOperator> columnRefOperators = predicate.getColumnRefs();
+        List<String> partitionColNames = table.getPartitionColumnNames();
+        for (ColumnRefOperator c : columnRefOperators) {
+            if (!partitionColNames.contains(c.getName())) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private boolean enablePruneManifest() {
+        if (ConnectContext.get() == null) {
+            return false;
+        }
+
+        if (ConnectContext.get().getSessionVariable() == null) {
+            return false;
+        }
+
+        return ConnectContext.get().getSessionVariable().isEnablePruneIcebergManifest();
+    }
+
     @Override
     public void clear() {
         tasks.clear();
@@ -409,6 +469,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     interface BatchWrite {
         void addFile(DataFile file);
+
         void commit();
     }
 
@@ -494,5 +555,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         public int hashCode() {
             return Arrays.hashCode(values);
         }
+    }
+
+    @Override
+    public CloudConfiguration getCloudConfiguration() {
+        return hdfsEnvironment.getCloudConfiguration();
     }
 }

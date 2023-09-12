@@ -246,7 +246,7 @@ public class ResourceGroupMgr implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        List<ResourceGroup> resourceGroups = resourceGroupMap.values().stream().collect(Collectors.toList());
+        List<ResourceGroup> resourceGroups = new ArrayList<>(resourceGroupMap.values());
         SerializeData data = new SerializeData();
         data.resourceGroups = resourceGroups;
 
@@ -560,21 +560,24 @@ public class ResourceGroupMgr implements Writable {
         try {
             String user = getUnqualifiedUser(ctx);
             String remoteIp = ctx.getRemoteIP();
+            final double planCpuCost = ctx.getAuditEventBuilder().build().planCpuCosts;
+            final double planMemCost = ctx.getAuditEventBuilder().build().planMemCosts;
 
             // check short query first
             if (shortQueryResourceGroup != null) {
-                List<ResourceGroupClassifier> shortQueryClassifierList =
-                        shortQueryResourceGroup.classifiers.stream().filter(
-                                        f -> f.isSatisfied(user, activeRoles, queryType, remoteIp, databases))
-                                .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
-                                .collect(Collectors.toList());
+                List<ResourceGroupClassifier> shortQueryClassifierList = shortQueryResourceGroup.classifiers.stream()
+                        .filter(f -> f.isSatisfied(user, activeRoles, queryType, remoteIp, databases, planCpuCost, planMemCost))
+                        .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
+                        .collect(Collectors.toList());
                 if (!shortQueryClassifierList.isEmpty()) {
                     return shortQueryResourceGroup.toThrift();
                 }
             }
 
             List<ResourceGroupClassifier> classifierList =
-                    classifierMap.values().stream().filter(f -> f.isSatisfied(user, activeRoles, queryType, remoteIp, databases))
+                    classifierMap.values().stream()
+                            .filter(f -> f.isSatisfied(user, activeRoles, queryType, remoteIp, databases, planCpuCost,
+                                    planMemCost))
                             .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
                             .collect(Collectors.toList());
             if (classifierList.isEmpty()) {

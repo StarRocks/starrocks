@@ -17,28 +17,41 @@ package com.starrocks.connector.paimon;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.BinaryRowWriter;
+import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.predicate.Predicate;
+import org.apache.paimon.predicate.PredicateBuilder;
+import org.apache.paimon.reader.RecordReader;
+import org.apache.paimon.reader.RecordReaderIterator;
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ReadBuilder;
+import org.apache.paimon.table.system.SchemasTable;
+import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DateType;
+import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.IntType;
 import org.apache.paimon.types.RowType;
+import org.apache.paimon.types.TimestampType;
+import org.apache.paimon.utils.SerializationUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -55,7 +68,8 @@ public class PaimonMetadataTest {
 
     @Before
     public void setUp() {
-        this.metadata = new PaimonMetadata("paimon_catalog", paimonNativeCatalog,
+
+        this.metadata = new PaimonMetadata("paimon_catalog", new HdfsEnvironment(), paimonNativeCatalog,
                 "filesystem", null, "hdfs://127.0.0.1:9999/warehouse");
 
         BinaryRow row1 = new BinaryRow(2);
@@ -79,15 +93,23 @@ public class PaimonMetadataTest {
         List<DataFileMeta> meta2 = new ArrayList<>();
         meta2.add(new DataFileMeta("file3", 100, 400, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
                 1, 1, 1, DUMMY_LEVEL));
+        this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1).withDataFiles(meta1)
+                .isStreaming(false).build());
+        this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row2).withBucket(1).withDataFiles(meta2)
+                .isStreaming(false).build());
+    }
 
-        this.splits.add(new DataSplit(1L, row1, 1, meta1, false));
-        this.splits.add(new DataSplit(1L, row2, 1, meta2, false));
+    @Test
+    public void testRowCount() {
+        long rowCount = metadata.getRowCount(splits);
+        Assert.assertEquals(900, rowCount);
     }
 
     @Test
     public void testGetTable(@Mocked AbstractFileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
         List<DataField> fields = new ArrayList<>();
-        fields.add(new DataField(1, "col2", new IntType()));
+        fields.add(new DataField(1, "col2", new IntType(true)));
+        fields.add(new DataField(2, "col3", new DoubleType(false)));
         new Expectations() {
             {
                 paimonNativeCatalog.getTable((Identifier) any);
@@ -107,7 +129,11 @@ public class PaimonMetadataTest {
         Assert.assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
         Assert.assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());
+        Assert.assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
+        Assert.assertEquals(ScalarType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
+        Assert.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         Assert.assertEquals("paimon_catalog", paimonTable.getCatalogName());
+        Assert.assertEquals("paimon_catalog.db1.tbl1.0", paimonTable.getUUID());
     }
 
     @Test
@@ -159,16 +185,47 @@ public class PaimonMetadataTest {
         };
         PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
         List<String> requiredNames = Lists.newArrayList("f2", "dt");
-        List<RemoteFileInfo> result = metadata.getRemoteFileInfos(paimonTable, null, -1, null, requiredNames);
+        List<RemoteFileInfo> result = metadata.getRemoteFileInfos(paimonTable, null, -1, null, requiredNames, -1);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(2, result.get(0).getFiles().get(0).getPaimonSplitsInfo().getPaimonSplits().size());
     }
 
     @Test
-    public void testUUID(@Mocked AbstractFileStoreTable paimonNativeTable,
-                         @Mocked ReadBuilder readBuilder) {
-        PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
-        Assert.assertTrue(paimonTable.getUUID().startsWith("paimon_catalog.db1.tbl1"));
+    public void testGetCloudConfiguration() {
+        CloudConfiguration cc = metadata.getCloudConfiguration();
+        Assert.assertEquals(cc.getCloudType(), CloudType.DEFAULT);
+    }
+
+    @Test
+    public void testGetCreateTime(@Mocked SchemasTable schemasTable,
+                                  @Mocked ReadBuilder readBuilder,
+                                  @Mocked RecordReader<InternalRow> recordReader) throws Exception {
+        RowType rowType = new RowType(Arrays.asList(new DataField(0, "schema_id", new BigIntType(false)),
+                new DataField(1, "fields", SerializationUtils.newStringType(false)),
+                new DataField(2, "partition_keys", SerializationUtils.newStringType(false)),
+                new DataField(3, "primary_keys", SerializationUtils.newStringType(false)),
+                new DataField(4, "options", SerializationUtils.newStringType(false)),
+                new DataField(5, "comment", SerializationUtils.newStringType(true)),
+                new DataField(6, "update_time", new TimestampType(false, 3))));
+        RecordReaderIterator iterator = new RecordReaderIterator<>(recordReader);
+        PredicateBuilder predicateBuilder = new PredicateBuilder(rowType);
+        Predicate equal = predicateBuilder.equal(predicateBuilder.indexOf("schema_id"), 0);
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = schemasTable;
+                schemasTable.rowType();
+                result = rowType;
+                schemasTable.newReadBuilder().withProjection(new int[] {0, 6}).
+                        withFilter(equal).newRead().createReader(schemasTable.newScan().plan());
+                result = recordReader;
+                new RecordReaderIterator<>(recordReader);
+                result = iterator;
+            }
+        };
+
+        long creteTime = metadata.getTableCreateTime("db1", "tbl1");
+        Assert.assertEquals(0, creteTime);
     }
 }

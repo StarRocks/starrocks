@@ -116,6 +116,7 @@ import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
@@ -762,14 +763,19 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                AnalyzeJob analyzeJob = new AnalyzeJob(stmt.getDbId(),
-                        stmt.getTableId(),
-                        stmt.getColumnNames(),
-                        stmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL,
-                        StatsConstants.ScheduleType.SCHEDULE,
-                        stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
-                        LocalDateTime.MIN);
-
+                AnalyzeJob analyzeJob;
+                if (stmt.isNative()) {
+                    analyzeJob = new NativeAnalyzeJob(stmt.getDbId(),
+                            stmt.getTableId(),
+                            stmt.getColumnNames(),
+                            stmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL,
+                            StatsConstants.ScheduleType.SCHEDULE,
+                            stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
+                            LocalDateTime.MIN);
+                } else {
+                    // Todo: support external analyze job
+                    analyzeJob = null;
+                }
                 context.getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(analyzeJob);
 
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();

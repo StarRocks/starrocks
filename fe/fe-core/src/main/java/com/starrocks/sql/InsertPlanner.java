@@ -38,6 +38,8 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergTableSink;
@@ -131,7 +133,7 @@ public class InsertPlanner {
         //2. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan;
-        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("Transform")) {
+        try (Timer ignore = Tracers.watchScope("Transform")) {
             logicalPlan = new RelationTransformer(columnRefFactory, session).transform(queryRelation);
         }
 
@@ -161,7 +163,7 @@ public class InsertPlanner {
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(targetTable);
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
-        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("InsertPlanner")) {
+        try (Timer ignore = Tracers.watchScope("InsertPlanner")) {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(false);
             }
@@ -174,7 +176,7 @@ public class InsertPlanner {
             LOG.debug("property {}", requiredPropertySet);
             OptExpression optimizedPlan;
 
-            try (PlannerProfile.ScopedTimer ignore2 = PlannerProfile.getScopedTimer("Optimizer")) {
+            try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
                 optimizedPlan = optimizer.optimize(
                         session,
                         logicalPlan.getRoot(),
@@ -187,7 +189,7 @@ public class InsertPlanner {
             boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
                     || targetTable instanceof MysqlTable);
             ExecPlan execPlan;
-            try (PlannerProfile.ScopedTimer ignore3 = PlannerProfile.getScopedTimer("PlanBuilder")) {
+            try (Timer ignore3 = Tracers.watchScope("PlanBuilder")) {
                 execPlan = PlanFragmentBuilder.createPhysicalPlan(
                         optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
                         queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
@@ -252,7 +254,7 @@ public class InsertPlanner {
 
                 }
                 dataSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
-                        canUsePipeline, olapTable.writeQuorum(),
+                        olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
                         nullExprInAutoIncrement, enableAutomaticPartition);
                 if (olapTable.getAutomaticBucketSize() > 0) {

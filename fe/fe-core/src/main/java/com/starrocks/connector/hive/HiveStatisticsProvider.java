@@ -21,6 +21,7 @@ import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
@@ -275,6 +276,7 @@ public class HiveStatisticsProvider {
             Type type) {
         OptionalDouble min = partitionKeys.stream()
                 .map(partitionKey -> partitionKey.getKeys().get(index))
+                .filter(literalExpr -> !(literalExpr instanceof NullLiteral))
                 .map(literalExpr -> getValueFromLiteral(literalExpr, type))
                 .mapToDouble(x -> x)
                 .min();
@@ -288,6 +290,7 @@ public class HiveStatisticsProvider {
             Type type) {
         OptionalDouble max = partitionKeys.stream()
                 .map(partitionKey -> partitionKey.getKeys().get(index))
+                .filter(literalExpr -> !(literalExpr instanceof NullLiteral))
                 .map(literalExpr -> getValueFromLiteral(literalExpr, type))
                 .mapToDouble(x -> x)
                 .max();

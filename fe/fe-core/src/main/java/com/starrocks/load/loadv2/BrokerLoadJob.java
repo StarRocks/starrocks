@@ -365,7 +365,9 @@ public class BrokerLoadJob extends BulkLoadJob {
         // check data quality
         if (!checkDataQuality()) {
             cancelJobWithoutCheck(
-                    new FailMsg(FailMsg.CancelType.ETL_QUALITY_UNSATISFIED, DataQualityException.QUALITY_FAIL_MSG),
+                    new FailMsg(FailMsg.CancelType.ETL_QUALITY_UNSATISFIED,
+                            DataQualityException.QUALITY_FAIL_MSG +
+                                    ". You can find detailed error message from running `TrackingSQL`."),
                     true, true);
             return;
         }

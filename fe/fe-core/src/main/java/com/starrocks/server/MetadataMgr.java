@@ -387,28 +387,39 @@ public class MetadataMgr {
                                          Table table,
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate) {
+                                         ScalarOperator predicate,
+                                         long limit) {
         Statistics statistics = getTableStatisticsFromInternalStatistics(table, columns);
         if (statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
             Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
             return connectorMetadata.map(metadata ->
-                    metadata.getTableStatistics(session, table, columns, partitionKeys, predicate)).orElse(null);
+                    metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit)).orElse(null);
         } else {
             return statistics;
         }
     }
 
+    public Statistics getTableStatistics(OptimizerContext session,
+                                         String catalogName,
+                                         Table table,
+                                         Map<ColumnRefOperator, Column> columns,
+                                         List<PartitionKey> partitionKeys,
+                                         ScalarOperator predicate) {
+        return getTableStatistics(session, catalogName, table, columns, partitionKeys, predicate, -1);
+    }
+
     public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
-        return getRemoteFileInfos(catalogName, table, partitionKeys, -1, null, null);
+        return getRemoteFileInfos(catalogName, table, partitionKeys, -1, null, null, -1);
     }
 
     public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate, List<String> fieldNames) {
+                                                   long snapshotId, ScalarOperator predicate, List<String> fieldNames,
+                                                   long limit) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames)
+                connectorMetadata.get().getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames, limit)
                         .forEach(files::add);
             } catch (Exception e) {
                 LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", catalogName, table, e);

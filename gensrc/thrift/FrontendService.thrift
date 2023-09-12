@@ -700,11 +700,11 @@ struct TReportExecStatusParams {
 
   23: optional i64 unselected_rows
 
-  24: optional string rejected_record_path
+  24: optional i64 source_scan_bytes
 
   25: optional list<Types.TSinkCommitInfo> sink_commit_infos
 
-  26: optional i64 source_scan_bytes
+  27: optional string rejected_record_path
 }
 
 struct TReportAuditStatisticsParams {
@@ -788,6 +788,8 @@ struct TMasterOpResult {
     4: optional string state;
     // for query statement
     5: optional list<binary> channelBufferList;
+
+    6: optional string resource_group_name;
 }
 
 struct TIsMethodSupportedRequest {

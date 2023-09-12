@@ -97,7 +97,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
 
         public static QueryRewriteConsistencyMode defaultForExternalTable() {
-            return DISABLE;
+            return CHECKED;
         }
 
         public static QueryRewriteConsistencyMode parse(String str) {
@@ -150,6 +150,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // Only meaningful when enablePersistentIndex = true.
     // and it's null in SHARED NOTHGING
     TPersistentIndexType persistendIndexType;
+
+    private int primaryIndexCacheExpireSec = 0;
 
     /*
      * the default storage volume of this table.
@@ -245,6 +247,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
                 buildEnablePersistentIndex();
                 break;
+            case OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC:
+                buildPrimaryIndexCacheExpireSec();
+                break;
             case OperationType.OP_MODIFY_WRITE_QUORUM:
                 buildWriteQuorum();
                 break;
@@ -281,6 +286,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildAutoRefreshPartitionsLimit();
         buildExcludedTriggerTables();
         buildResourceGroup();
+        buildConstraint();
         return this;
     }
 
@@ -479,6 +485,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildPrimaryIndexCacheExpireSec() {
+        primaryIndexCacheExpireSec = Integer.parseInt(properties.getOrDefault(
+                PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, "0"));
+        return this;
+    }
+
     public TableProperty buildPersistentIndexType() {
         String type = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");
         if (type.equals("LOCAL")) {
@@ -501,15 +513,23 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
 
     public TableProperty buildConstraint() {
-        try {
-            uniqueConstraints = UniqueConstraint.parse(
-                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
-        } catch (SemanticException e) {
-            LOG.warn("Failed to parse unique constraint, ignore this unique constraint", e);
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+            try {
+                uniqueConstraints = UniqueConstraint.parse(
+                        properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
+            } catch (Exception e) {
+                LOG.warn("Failed to parse unique constraints, ignore this unique constraint", e);
+            }
         }
 
-        foreignKeyConstraints = ForeignKeyConstraint.parse(
-                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+            try {
+                foreignKeyConstraints = ForeignKeyConstraint.parse(
+                        properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
+            } catch (Exception e) {
+                LOG.warn("Failed to parse foreign key constraints, ignore this foreign key constraints", e);
+            }
+        }
         return this;
     }
 
@@ -615,6 +635,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public boolean enablePersistentIndex() {
         return enablePersistentIndex;
+    }
+
+    public int primaryIndexCacheExpireSec() {
+        return primaryIndexCacheExpireSec;
     }
 
     public String getPersistentIndexTypeString() {
@@ -739,6 +763,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildStorageCoolDownTTL();
         buildEnablePersistentIndex();
         buildPersistentIndexType();
+        buildPrimaryIndexCacheExpireSec();
         buildCompressionType();
         buildWriteQuorum();
         buildPartitionTTL();

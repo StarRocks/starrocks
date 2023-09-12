@@ -1402,7 +1402,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
             // meta from storage, and assuming that no thread will change the tablet state back
             // to 'RUNNING' from 'SHUTDOWN'.
             std::unique_lock l(dropped_tablet->get_header_lock());
-            dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+            CHECK(dropped_tablet->set_tablet_state(TABLET_SHUTDOWN).ok());
         }
 
         // Remove tablet meta from storage, crash the program if failed.
@@ -1417,7 +1417,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
         {
             // See comments above
             std::unique_lock l(dropped_tablet->get_header_lock());
-            dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+            CHECK(dropped_tablet->set_tablet_state(TABLET_SHUTDOWN).ok());
             dropped_tablet->save_meta();
         }
 

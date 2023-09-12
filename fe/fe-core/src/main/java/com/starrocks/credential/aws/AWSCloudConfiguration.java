@@ -22,10 +22,9 @@ import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.HashMap;
 import java.util.Map;
 
-public class AWSCloudConfiguration implements CloudConfiguration {
+public class AWSCloudConfiguration extends CloudConfiguration {
 
     private final AWSCloudCredential awsCloudCredential;
 
@@ -59,6 +58,7 @@ public class AWSCloudConfiguration implements CloudConfiguration {
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
+        super.applyToConfiguration(configuration);
         configuration.set("fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
         configuration.set("fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
         // Below storage using s3 compatible storage api
@@ -82,14 +82,13 @@ public class AWSCloudConfiguration implements CloudConfiguration {
 
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
+        super.toThrift(tCloudConfiguration);
         tCloudConfiguration.setCloud_type(TCloudType.AWS);
-
-        Map<String, String> properties = new HashMap<>();
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties_v2();
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
                 String.valueOf(enablePathStyleAccess));
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(enableSSL));
         awsCloudCredential.toThrift(properties);
-        tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
     @Override
@@ -103,9 +102,9 @@ public class AWSCloudConfiguration implements CloudConfiguration {
     }
 
     @Override
-    public String getCredentialString() {
-        return "AWSCloudConfiguration{" +
-                "awsCloudCredential=" + awsCloudCredential.getCredentialString() +
+    public String toConfString() {
+        return "AWSCloudConfiguration{" + getCommonFieldsString() +
+                ", cred=" + awsCloudCredential.toCredString() +
                 ", enablePathStyleAccess=" + enablePathStyleAccess +
                 ", enableSSL=" + enableSSL +
                 '}';

@@ -74,6 +74,8 @@ public:
 
     int64_t get_cache_expire_ms() const { return _cache_expire_ms; }
 
+    int64_t get_index_cache_expire_ms(const Tablet& tablet) const;
+
     Status get_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, int64_t version, DelVector* delvec,
                                int64_t* latest_version);
 

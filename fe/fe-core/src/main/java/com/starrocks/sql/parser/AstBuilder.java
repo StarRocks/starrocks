@@ -93,6 +93,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
@@ -1773,7 +1774,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitShowCreateRoutineLoadStatement(StarRocksParser.ShowCreateRoutineLoadStatementContext context) {
+    public ParseNode visitShowCreateRoutineLoadStatement(
+            StarRocksParser.ShowCreateRoutineLoadStatementContext context) {
         return new ShowCreateRoutineLoadStmt(createLabelName(context.db, context.name));
     }
 
@@ -3866,10 +3868,28 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         if (context.optimizerTrace() != null) {
-            queryStatement.setIsExplain(true, getTraceType(context.optimizerTrace()));
+            String module = "base";
+            if (context.optimizerTrace().identifier() != null) {
+                module = ((Identifier) visit(context.optimizerTrace().identifier())).getValue();
+            }
+            queryStatement.setIsTrace(getTraceMode(context.optimizerTrace()), module);
         }
 
         return queryStatement;
+    }
+
+    private Tracers.Mode getTraceMode(StarRocksParser.OptimizerTraceContext context) {
+        if (context.LOGS() != null) {
+            return Tracers.Mode.LOGS;
+        } else if (context.VALUES() != null) {
+            return Tracers.Mode.VARS;
+        } else if (context.TIMES() != null) {
+            return Tracers.Mode.TIMER;
+        } else if (context.ALL() != null) {
+            return Tracers.Mode.TIMING;
+        } else {
+            return Tracers.Mode.NONE;
+        }
     }
 
     @Override
@@ -6173,14 +6193,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return explainLevel;
     }
 
-    private static StatementBase.ExplainLevel getTraceType(StarRocksParser.OptimizerTraceContext context) {
-        if (context.REWRITE() != null) {
-            return StatementBase.ExplainLevel.REWRITE;
-        } else {
-            return StatementBase.ExplainLevel.OPTIMIZER;
-        }
-    }
-
     public static SetType getVariableType(StarRocksParser.VarTypeContext context) {
         if (context == null) {
             return SetType.SESSION;
@@ -6615,31 +6627,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         if (context.STRING() != null || context.TEXT() != null) {
             ScalarType type = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
-            type.setAssignedStrLenInColDefinition();
             return type;
         } else if (context.VARCHAR() != null) {
             ScalarType type = ScalarType.createVarcharType(length);
-            if (length != -1) {
-                type.setAssignedStrLenInColDefinition();
-            }
             return type;
         } else if (context.CHAR() != null) {
             ScalarType type = ScalarType.createCharType(length);
-            if (length != -1) {
-                type.setAssignedStrLenInColDefinition();
-            }
             return type;
         } else if (context.SIGNED() != null) {
             return Type.INT;
         } else if (context.HLL() != null) {
             ScalarType type = ScalarType.createHllType();
-            type.setAssignedStrLenInColDefinition();
             return type;
         } else if (context.BINARY() != null || context.VARBINARY() != null) {
             ScalarType type = ScalarType.createVarbinary(length);
-            if (length != -1) {
-                type.setAssignedStrLenInColDefinition();
-            }
             return type;
         } else {
             return ScalarType.createType(context.getChild(0).getText());

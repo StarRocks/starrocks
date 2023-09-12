@@ -343,8 +343,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         CreateReplicaTask createReplicaTask = new CreateReplicaTask(backendId, dbId, tableId, partitionId,
                                 shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0, Partition.PARTITION_INIT_VERSION,
                                 originKeysType, TStorageType.COLUMN, storageMedium, copiedShadowSchema, bfColumns, bfFpp,
-                                countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(),
-                                TTabletType.TABLET_TYPE_LAKE, table.getCompressionType(), copiedSortKeyIdxes);
+                                countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(), 
+                                table.primaryIndexCacheExpireSec(), TTabletType.TABLET_TYPE_LAKE, table.getCompressionType(), 
+                                copiedSortKeyIdxes);
 
                         Long baseTabletId = partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
                         assert baseTabletId != null;

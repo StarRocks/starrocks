@@ -31,6 +31,8 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     private final boolean isSample;
     private Map<String, String> properties;
 
+    private final boolean isNative;
+
     public CreateAnalyzeJobStmt(boolean isSample, Map<String, String> properties, NodePosition pos) {
         this(null, Lists.newArrayList(), isSample, properties, pos);
     }
@@ -48,6 +50,7 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
         this.columnNames = columnNames;
         this.isSample = isSample;
         this.properties = properties;
+        this.isNative = true;
     }
 
     public void setDbId(long dbId) {
@@ -84,6 +87,10 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
 
     public void setProperties(Map<String, String> properties) {
         this.properties = properties;
+    }
+
+    public boolean isNative() {
+        return isNative;
     }
 
     @Override

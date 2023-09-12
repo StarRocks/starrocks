@@ -396,7 +396,8 @@ void PlanFragmentExecutor::cancel() {
         _stream_load_contexts.resize(0);
     }
     _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
-    _runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
+    auto st = _runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
+    st.permit_unchecked_error();
 
     if (_is_runtime_filter_merge_node) {
         _runtime_state->exec_env()->runtime_filter_worker()->close_query(_query_id);

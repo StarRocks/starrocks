@@ -19,6 +19,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
@@ -64,7 +66,7 @@ public class StatementPlanner {
     public static ExecPlan plan(StatementBase stmt, ConnectContext session,
                                 TResultSinkType resultSinkType) {
         if (stmt instanceof QueryStatement) {
-            OptimizerTraceUtil.logQueryStatement(session, "after parse:\n%s", (QueryStatement) stmt);
+            OptimizerTraceUtil.logQueryStatement("after parse:\n%s", (QueryStatement) stmt);
         }
 
         Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
@@ -73,13 +75,13 @@ public class StatementPlanner {
         // 1. For all queries, we need db lock when analyze phase
         try {
             lock(dbs);
-            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Analyzer")) {
+            try (Timer ignored = Tracers.watchScope("Analyzer")) {
                 Analyzer.analyze(stmt, session);
             }
 
             Authorizer.check(stmt, session);
             if (stmt instanceof QueryStatement) {
-                OptimizerTraceUtil.logQueryStatement(session, "after analyze:\n%s", (QueryStatement) stmt);
+                OptimizerTraceUtil.logQueryStatement("after analyze:\n%s", (QueryStatement) stmt);
             }
 
             session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
@@ -135,12 +137,12 @@ public class StatementPlanner {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan;
 
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Transformer")) {
+        try (Timer ignored = Tracers.watchScope("Transformer")) {
             logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
         }
 
         OptExpression optimizedPlan;
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer")) {
+        try (Timer ignored = Tracers.watchScope("Optimizer")) {
             // 2. Optimize logical plan and build physical plan
             Optimizer optimizer = new Optimizer();
             optimizedPlan = optimizer.optimize(
@@ -150,7 +152,7 @@ public class StatementPlanner {
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
         }
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("ExecPlanBuild")) {
+        try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
             // 3. Build fragment exec plan
             /*
              * SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,
@@ -196,12 +198,12 @@ public class StatementPlanner {
             }
 
             LogicalPlan logicalPlan;
-            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Transformer")) {
+            try (Timer ignored = Tracers.watchScope("Transformer")) {
                 logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
             }
 
             OptExpression optimizedPlan;
-            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer")) {
+            try (Timer ignored = Tracers.watchScope("Optimizer")) {
                 // 2. Optimize logical plan and build physical plan
                 Optimizer optimizer = new Optimizer();
                 optimizedPlan = optimizer.optimize(
@@ -211,7 +213,7 @@ public class StatementPlanner {
                         new ColumnRefSet(logicalPlan.getOutputColumn()),
                         columnRefFactory);
             }
-            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("ExecPlanBuild")) {
+            try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
                 // 3. Build fragment exec plan
                 /*
                  * SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,

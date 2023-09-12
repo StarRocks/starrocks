@@ -21,37 +21,58 @@ import com.starrocks.credential.CloudConfigurationProvider;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB;
+import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB_CONTENT;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_DEPRECATED;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL_DEPRECATED;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USER_NAME;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD_DEPRECATED;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME_DEPRECATED;
 
 public class HDFSCloudConfigurationProvider implements CloudConfigurationProvider {
+
+    private static String getOrDefault(Map<String, String> prop, String... args) {
+        for (String k : args) {
+            String v = prop.get(k);
+            if (v != null) {
+                return v;
+            }
+        }
+        return "";
+    }
 
     @Override
     public CloudConfiguration build(Map<String, String> properties) {
         Preconditions.checkNotNull(properties);
-        Map<String, String> haConfigurations = new HashMap<>(properties);
-        haConfigurations.remove(HDFS_AUTHENTICATION);
-        haConfigurations.remove(HDFS_USER_NAME);
-        haConfigurations.remove(HDFS_PASSWORD);
-        haConfigurations.remove(HDFS_KERBEROS_PRINCIPAL);
-        haConfigurations.remove(HDFS_KERBEROS_KEYTAB);
-        haConfigurations.remove(HDFS_KERBEROS_KEYTAB_CONTENT);
+        Map<String, String> prop = new HashMap<>(properties);
+
+        String[] keys = {
+                HDFS_AUTHENTICATION, HDFS_USERNAME_DEPRECATED, HDFS_USERNAME, HDFS_PASSWORD_DEPRECATED, HDFS_PASSWORD,
+                HDFS_KERBEROS_PRINCIPAL_DEPRECATED, HDFS_KERBEROS_PRINCIPAL, HDFS_KERBEROS_KEYTAB_DEPRECATED,
+                HADOOP_KERBEROS_KEYTAB,
+                HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED, HADOOP_KERBEROS_KEYTAB_CONTENT
+        };
+        for (String k : keys) {
+            prop.remove(k);
+        }
+
         HDFSCloudCredential hdfsCloudCredential = new HDFSCloudCredential(
-                properties.getOrDefault(HDFS_AUTHENTICATION, ""),
-                properties.getOrDefault(HDFS_USER_NAME, ""),
-                properties.getOrDefault(HDFS_PASSWORD, ""),
-                properties.getOrDefault(HDFS_KERBEROS_PRINCIPAL, ""),
-                properties.getOrDefault(HDFS_KERBEROS_KEYTAB, ""),
-                properties.getOrDefault(HDFS_KERBEROS_KEYTAB_CONTENT, ""),
-                haConfigurations
+                getOrDefault(properties, HDFS_AUTHENTICATION),
+                getOrDefault(properties, HDFS_USERNAME, HDFS_USERNAME_DEPRECATED),
+                getOrDefault(properties, HDFS_PASSWORD, HDFS_PASSWORD_DEPRECATED),
+                getOrDefault(properties, HDFS_KERBEROS_PRINCIPAL, HDFS_KERBEROS_PRINCIPAL_DEPRECATED),
+                getOrDefault(properties, HADOOP_KERBEROS_KEYTAB, HDFS_KERBEROS_KEYTAB_DEPRECATED),
+                getOrDefault(properties, HADOOP_KERBEROS_KEYTAB_CONTENT, HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED),
+                prop
         );
         if (!hdfsCloudCredential.validate()) {
             return null;
         }
-        return new HDFSCloudConfiguration(hdfsCloudCredential);
+        HDFSCloudConfiguration conf = new HDFSCloudConfiguration(hdfsCloudCredential);
+        return conf;
     }
 }

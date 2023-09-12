@@ -10,6 +10,12 @@ shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/read_range_test
 
 Succeed: Total num: 1, size: 237,073. OK num: 1(upload 1 files).
 -- !result
+shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/page_index_big_page.parquet oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/page_index_big_page.parquet | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 1,261,651. OK num: 1(upload 1 files).
+-- !result
 CREATE EXTERNAL TABLE read_range_test (
     c0 int,
     c1 int,
@@ -19,6 +25,19 @@ CREATE EXTERNAL TABLE read_range_test (
 ENGINE=file
 PROPERTIES (
     "path" = "oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/read_range_test.parquet",
+    "format" = "parquet"
+);
+-- result:
+-- !result
+CREATE EXTERNAL TABLE read_range_big_page_test (
+    c0 int,
+    c1 int,
+    c2 string,
+    c3 array<int>
+)
+ENGINE=file
+PROPERTIES (
+    "path" = "oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/page_index_big_page.parquet",
     "format" = "parquet"
 );
 -- result:
@@ -93,6 +112,11 @@ select * from read_range_test where c0 < 3 or c0 > 19998;
 2	19999	2	[2,null,999]
 19999	2	99	[999,null,2]
 20000	1	None	None
+-- !result
+select * from read_range_big_page_test where c0 in (8193, 12289);
+-- result:
+8193	91808	93	[193,null,808]
+12289	87712	89	[289,null,712]
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 -- result:

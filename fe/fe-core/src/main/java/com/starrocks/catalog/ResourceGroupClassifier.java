@@ -16,25 +16,20 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TQueryType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.net.util.SubnetUtils;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-public class ResourceGroupClassifier implements Writable {
+public class ResourceGroupClassifier {
     public static final Pattern USER_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9_]{1,63}/?[.a-zA-Z0-9_-]{0,63}$");
     public static final Pattern USE_ROLE_PATTERN = Pattern.compile("^\\w+$");
     public static final ImmutableSet<String> SUPPORTED_QUERY_TYPES =
@@ -55,10 +50,11 @@ public class ResourceGroupClassifier implements Writable {
     @SerializedName(value = "databaseIds")
     private Set<Long> databaseIds;
 
-    public static ResourceGroupClassifier read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ResourceGroupClassifier.class);
-    }
+    @SerializedName(value = "planCpuCostRange")
+    private CostRange planCpuCostRange;
+
+    @SerializedName(value = "planMemCostRange")
+    private CostRange planMemCostRange;
 
     public long getResourceGroupId() {
         return resourceGroupId;
@@ -116,22 +112,38 @@ public class ResourceGroupClassifier implements Writable {
         return this.databaseIds;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
+    public void setPlanCpuCostRange(CostRange planCpuCostRange) {
+        this.planCpuCostRange = planCpuCostRange;
+    }
+
+    public CostRange getPlanCpuCostRange() {
+        return planCpuCostRange;
+    }
+
+    public void setPlanMemCostRange(CostRange planMemCostRange) {
+        this.planMemCostRange = planMemCostRange;
+    }
+
+    public CostRange getPlanMemCostRange() {
+        return planMemCostRange;
     }
 
     public boolean isSatisfied(String user, List<String> activeRoles, QueryType queryType, String sourceIp,
-                               Set<Long> dbIds) {
+                               Set<Long> dbIds, double planCpuCost, double planMemCost) {
         if (!isVisible(user, activeRoles, sourceIp)) {
             return false;
         }
         if (CollectionUtils.isNotEmpty(queryTypes) && !this.queryTypes.contains(queryType)) {
             return false;
         }
-        if (CollectionUtils.isNotEmpty(databaseIds)) {
-            return CollectionUtils.isNotEmpty(dbIds) && databaseIds.containsAll(dbIds);
+        if (CollectionUtils.isNotEmpty(databaseIds) && !(CollectionUtils.isNotEmpty(dbIds) && databaseIds.containsAll(dbIds))) {
+            return false;
+        }
+        if (planCpuCostRange != null && !planCpuCostRange.contains(planCpuCost)) {
+            return false;
+        }
+        if (planMemCostRange != null && !planMemCostRange.contains(planMemCost)) {
+            return false;
         }
 
         return true;
@@ -156,6 +168,12 @@ public class ResourceGroupClassifier implements Writable {
             w += 1;
         }
         if (role != null) {
+            w += 1;
+        }
+        if (planCpuCostRange != null) {
+            w += 1;
+        }
+        if (planMemCostRange != null) {
             w += 1;
         }
         if (queryTypes != null && !queryTypes.isEmpty()) {
@@ -201,6 +219,12 @@ public class ResourceGroupClassifier implements Writable {
         if (sourceIp != null) {
             classifiersStr.append(", source_ip=" + sourceIp);
         }
+        if (planCpuCostRange != null) {
+            classifiersStr.append(", ").append(ResourceGroup.PLAN_CPU_COST_RANGE).append("=").append(planCpuCostRange);
+        }
+        if (planMemCostRange != null) {
+            classifiersStr.append(", ").append(ResourceGroup.PLAN_MEM_COST_RANGE).append("=").append(planMemCostRange);
+        }
         classifiersStr.append(")");
         return classifiersStr.toString();
     }
@@ -220,9 +244,65 @@ public class ResourceGroupClassifier implements Writable {
         SYSTEM_OTHER;
 
         public static QueryType fromTQueryType(TQueryType type) {
-            return type == TQueryType.LOAD
-                    ? ResourceGroupClassifier.QueryType.INSERT
-                    : ResourceGroupClassifier.QueryType.SELECT;
+            return type == TQueryType.LOAD ? INSERT : SELECT;
+        }
+    }
+
+    /**
+     * The cost range.
+     * <p> Fow now it always includes the left endpoint {@link #min} and excludes the right endpoint {@link #max}.
+     * The pattern is {@code [min, max)}, where min and max are double (including infinity and -infinity) and min must be less
+     * than max.
+     */
+    public static class CostRange {
+        private static final String STR_RANGE_REGEX = "^\\s*\\[\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*$";
+        private static final Pattern STR_RANGE_PATTERN = Pattern.compile(STR_RANGE_REGEX, Pattern.CASE_INSENSITIVE);
+
+        public static final String FORMAT_STR_RANGE_MESSAGE = "the format must be '[min, max)' " +
+                "where min and max are finite double " +
+                "and min must be less than max";
+
+        @SerializedName(value = "min")
+        private final double min;
+        @SerializedName(value = "max")
+        private final double max;
+
+        private CostRange(double min, double max) {
+            this.min = min;
+            this.max = max;
+        }
+
+        public static CostRange fromString(String rangeStr) {
+            Matcher matcher = STR_RANGE_PATTERN.matcher(rangeStr);
+            if (!matcher.find()) {
+                return null;
+            }
+
+            try {
+                double min = Double.parseDouble(matcher.group(1));
+                double max = Double.parseDouble(matcher.group(2));
+
+                if (!Double.isFinite(min) || !Double.isFinite(max)) {
+                    return null;
+                }
+
+                if (min >= max) {
+                    return null;
+                }
+
+                return new CostRange(min, max);
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        public boolean contains(double value) {
+            return min <= value && value < max;
+        }
+
+        @Override
+        public String toString() {
+            return "[" + min + ", " + max + ")";
         }
     }
 }

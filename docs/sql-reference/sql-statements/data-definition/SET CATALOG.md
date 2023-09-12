@@ -4,6 +4,10 @@ Switches to a specified catalog in the current session.
 
 This command is supported from v3.0 onwards.
 
+> **NOTE**
+>
+> For a newly deployed StarRocks v3.1 cluster, you must have the USAGE privilege on the destination external catalog if you want to run [SET CATALOG](../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to switch to that catalog. You can use [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the required privileges. For a v3.1 cluster upgraded from an earlier version, you can run SET CATALOG with the inherited privilege.
+
 ## Syntax
 
 ```SQL

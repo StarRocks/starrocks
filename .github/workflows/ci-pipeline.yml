@@ -28,32 +28,13 @@ jobs:
       PASS: ${{ steps.check.outputs.pass }}
       THIRDPARTY: ${{ steps.thirdparty-checker.outputs.thirdparty }}
     steps:
-      - name: upload info
-        run: |
-          echo $PR_NUMBER > pr_num.txt
-          GITHUB_SHA=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.sha)
-          echo ${GITHUB_SHA} > head_sha.txt
-
-      - name: Upload the PR number
-        uses: actions/upload-artifact@v2
-        with:
-          name: pr_num
-          path: ./pr_num.txt
-          retention-days: 3
-
-      - name: Upload the PR HEAD REF
-        uses: actions/upload-artifact@v2
-        with:
-          name: head_sha
-          path: ./head_sha.txt
-          retention-days: 3
-
       - name: Check
         id: check
         if: >
-          !contains(github.event.pull_request.title, '(sync #') &&
+          (!contains(github.event.pull_request.title, '(sync #') &&
           !contains(github.event.pull_request.labels.*.name, 'sync') &&
-          (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
+          (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))) ||
+          contains(github.event.pull_request.labels.*.name, 'force-check')
         run: |
           echo "pass=true" >> $GITHUB_OUTPUT
 
@@ -419,6 +400,11 @@ jobs:
           sed -i 's#</tasks>#</target>#g' fe-core/pom.xml
           mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
 
+      - name: clean
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
   fe-ut:
     runs-on: [self-hosted, normal]
     needs: [fe-codestyle-check]
@@ -541,7 +527,7 @@ jobs:
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} 
+          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --with-gcov
 
       - name: build result
         run: |
@@ -741,13 +727,14 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Teardown
     needs: [ deploy, SQL-Tester, admit ]
-    if: always() && needs.deploy.outputs.deploy_conf_file != ''
+    if: always()
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
       CONF_FILE: ${{ needs.deploy.outputs.deploy_conf_file }}
     steps:
       - name: Backup SR Info
+        if: needs.deploy.outputs.deploy_conf_file != ''
         id: backup
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
@@ -775,24 +762,16 @@ jobs:
         if: always()
         run: |
           echo $PR_NUMBER > pr_num.txt
-          GITHUB_SHA=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.sha)
-          echo ${GITHUB_SHA} > head_sha.txt
 
       - name: Upload the PR number
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: pr_num
           path: ./pr_num.txt
           retention-days: 3
 
-      - name: Upload the PR HEAD REF
-        uses: actions/upload-artifact@v2
-        with:
-          name: head_sha
-          path: ./head_sha.txt
-          retention-days: 3
-
       - name: Clean
+        if: always()
         run: |
           rm -f $CONF_FILE
           rm -rf ${{ github.workspace }}/*

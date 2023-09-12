@@ -175,10 +175,10 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.createTable(null);
                 connectorMetadata.createDb("test_db");
                 connectorMetadata.dropDb("test_db", false);
-                connectorMetadata.getRemoteFileInfos(null, null, 0, null, null);
+                connectorMetadata.getRemoteFileInfos(null, null, 0, null, null, -1);
                 connectorMetadata.getPartitions(null, null);
                 connectorMetadata.getMaterializedViewIndex("test_db", "test_tbl");
-                connectorMetadata.getTableStatistics(null, null, null, null, null);
+                connectorMetadata.getTableStatistics(null, null, null, null, null, -1);
             }
         };
 
@@ -210,9 +210,9 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.createTable(null);
         catalogConnectorMetadata.createDb("test_db");
         catalogConnectorMetadata.dropDb("test_db", false);
-        catalogConnectorMetadata.getRemoteFileInfos(null, null, 0, null, null);
+        catalogConnectorMetadata.getRemoteFileInfos(null, null, 0, null, null, -1);
         catalogConnectorMetadata.getPartitions(null, null);
         catalogConnectorMetadata.getMaterializedViewIndex("test_db", "test_tbl");
-        catalogConnectorMetadata.getTableStatistics(null, null, null, null, null);
+        catalogConnectorMetadata.getTableStatistics(null, null, null, null, null, -1);
     }
 }

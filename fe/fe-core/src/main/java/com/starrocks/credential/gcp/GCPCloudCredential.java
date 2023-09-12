@@ -87,7 +87,7 @@ public class GCPCloudCredential implements CloudCredential {
     }
 
     @Override
-    public String getCredentialString() {
+    public String toCredString() {
         return "GCPCloudCredential{" +
                 "useComputeEngineServiceAccount=" + useComputeEngineServiceAccount +
                 ", serviceAccountEmail='" + serviceAccountEmail + '\'' +

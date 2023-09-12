@@ -138,10 +138,10 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
-import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.Backend;
@@ -833,6 +833,7 @@ public class JournalEntity implements Writable {
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
             case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
+            case OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC:
             case OperationType.OP_ALTER_TABLE_PROPERTIES:
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
                 data = ModifyTablePropertyOperationLog.read(in);
@@ -880,12 +881,12 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_ADD_ANALYZER_JOB: {
-                data = AnalyzeJob.read(in);
+                data = NativeAnalyzeJob.read(in);
                 isRead = true;
                 break;
             }
             case OperationType.OP_REMOVE_ANALYZER_JOB: {
-                data = AnalyzeJob.read(in);
+                data = NativeAnalyzeJob.read(in);
                 isRead = true;
                 break;
             }
