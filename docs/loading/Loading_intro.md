@@ -194,17 +194,9 @@ This parameter determines how long the records of completed (FINISHED or CANCELL
 
 The following belongs to the system configuration of BE, which can be modified by the BE configuration file (`be.conf)`.
 
-* `push_write_mbytes_per_sec`
-
-Write speed limit for a single Tablet on BE. The default value is 10, i.e. 10MB/s. The maximum write speed is usually 10-30MB/s, depending on the schema and the system. This parameter can be adjusted to control the import speed.
-
 * `write_buffer_size`
 
-Imported data is first written to a memory block on the BE, and then written to disk only if this memory block reaches its threshold (100MB by default). Too small a threshold may result in a large number of small files on the BE. This threshold can be increased to reduce the number of files. However, too large a threshold may lead to RPC timeouts, see the configuration note below.
-
-* `tablet_writer_rpc_timeout_sec
-
-The RPC timeout for sending a batch (1024 rows) is 600 seconds by default. Because this RPC may involve write operation of multiple memory blocks, it may lead to RPC timeouts (such as send batch fail errors).This can be avoided by adjusting the parameter appropriately. Also, if you adjust the `write_buffer_size` configuration, you need to adjust this parameter accordingly.
+Imported data is first written to a memory block on the BE, and then written to disk only if this memory block reaches its threshold (100MB by default). Too small a threshold may result in a large number of small files on the BE. This threshold can be increased to reduce the number of files. However, too large a threshold may lead to RPC timeouts, in which case you can adjust the value of this parameter based on your business needs.
 
 * `streaming_load_rpc_max_alive_time_sec`
 
@@ -218,7 +210,15 @@ These two parameters are maximum memory and maximum memory percentage, respectiv
 
 The percentage of the total memory limit for a BE is 30 by default. (The total memory limit `mem_limit` defaults to 80%, indicating the percentage to its physical memory). That is, assuming the physical memory is M, the default import memory limit is `M * 80% * 30%`.
 
-* `load_process_max_memory_limit_bytes`  is100GB by default.
+* `load_process_max_memory_limit_bytes`  is 100 GB by default.
+
+### System variable configurations
+
+You can configure the following [system variable](../reference/System_variable.md):
+
+* `query_timeout`
+
+  The query timeout duration. Unit: seconds. Value range: `1` to `259200`. Default value: `300`. This variable will act on all query statements in the current connection, as well as INSERT statements.
 
 ## Guidelines
 
