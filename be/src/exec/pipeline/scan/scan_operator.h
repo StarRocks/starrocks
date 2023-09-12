@@ -103,6 +103,7 @@ protected:
     virtual size_t num_buffered_chunks() const = 0;
     virtual size_t buffer_size() const = 0;
     virtual size_t buffer_capacity() const = 0;
+    virtual size_t buffer_memory_usage() const = 0;
     virtual size_t default_buffer_capacity() const = 0;
     virtual ChunkBufferTokenPtr pin_chunk(int num_chunks) = 0;
     virtual bool is_buffer_full() const = 0;
@@ -190,6 +191,7 @@ private:
     RuntimeProfile::Counter* _buffer_capacity_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_size_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_scan_task_queue_size_counter = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* _peak_buffer_memory_usage = nullptr;
     // The total number of the original tablets in this fragment instance.
     RuntimeProfile::Counter* _tablets_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_io_tasks_counter = nullptr;

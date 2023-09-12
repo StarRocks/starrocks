@@ -238,6 +238,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
                                                        _parent->_is_pipeline_level_shuffle ? driver_sequence : -1));
             _current_request_bytes += chunk_size;
             COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
+            COUNTER_SET(_parent->_pass_through_buffer_peak_mem_usage, _pass_through_context.total_bytes());
         } else {
             if (_parent->_is_pipeline_level_shuffle) {
                 _chunk_request->add_driver_sequences(driver_sequence);
@@ -441,6 +442,9 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
+    _pass_through_buffer_peak_mem_usage = _unique_metrics->AddHighWaterMarkCounter(
+            "PassThroughBufferPeakMemoryUsage", TUnit::BYTES,
+            RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
 
     for (auto& [_, channel] : _instance_id2channel) {
         RETURN_IF_ERROR(channel->init(state));
