@@ -73,15 +73,6 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
 }
 
 UpdateManager::~UpdateManager() {
-    if (_apply_thread_pool != nullptr) {
-        // DynamicCache may be still used by apply thread.
-        // Before deconstrut the DynamicCache, apply thread
-        // should be shutdown.
-        _apply_thread_pool->shutdown();
-    }
-    if (_get_pindex_thread_pool) {
-        _get_pindex_thread_pool->shutdown();
-    }
     clear_cache();
     if (_compaction_state_mem_tracker) {
         _compaction_state_mem_tracker.reset();
@@ -117,6 +108,15 @@ Status UpdateManager::init() {
     _persistent_index_compaction_mgr = std::make_unique<PersistentIndexCompactionManager>();
     RETURN_IF_ERROR(_persistent_index_compaction_mgr->init());
     return Status::OK();
+}
+
+void UpdateManager::stop() {
+    if (_get_pindex_thread_pool) {
+        _get_pindex_thread_pool->shutdown();
+    }
+    if (_apply_thread_pool) {
+        _apply_thread_pool->shutdown();
+    }
 }
 
 int64_t UpdateManager::get_index_cache_expire_ms(const Tablet& tablet) const {
