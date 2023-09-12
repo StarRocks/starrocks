@@ -77,6 +77,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
     if (status == STARROCKS_SUCCESS) {
         g_report_version.fetch_add(1, std::memory_order_relaxed);
         LOG(INFO) << alter_msg_head << "alter finished. signature: " << signature;
+        LOG(INFO) << alter_msg_head << "alter finished. signature: " << signature;
     }
 
     // Return result to fe
