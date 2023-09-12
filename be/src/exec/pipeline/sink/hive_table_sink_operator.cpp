@@ -96,6 +96,7 @@ Status HiveTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
             tableInfo.partition_location = _location;
             auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _common_metrics.get(),
                                                                       add_hive_commit_info, state, _driver_sequence);
+            RETURN_IF_ERROR(writer->init());
             _partition_writers.insert({HIVE_UNPARTITIONED_TABLE_LOCATION, std::move(writer)});
         }
 
@@ -132,6 +133,7 @@ Status HiveTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
                                                      _output_expr.begin() + _data_column_names.size());
             auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, data_col_exprs, _common_metrics.get(),
                                                                       add_hive_commit_info, state, _driver_sequence);
+            RETURN_IF_ERROR(writer->init());
             _partition_writers.insert({partition_location, std::move(writer)});
             _partition_writers[partition_location]->append_chunk(chunk.get(), state);
         } else {

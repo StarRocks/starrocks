@@ -39,14 +39,12 @@ Status IcebergDeleteFileIterator::init(FileSystem* fs, const std::string& timezo
     return Status::OK();
 }
 
-bool IcebergDeleteFileIterator::has_next() {
+Status IcebergDeleteFileIterator::has_next() {
     if (_file_reader) {
-        _file_reader->next_batch(&_batch);
-        if (_batch) {
-            return true;
-        }
+        RETURN_IF_ERROR(_file_reader->next_batch(&_batch));
+        return Status::OK();
     }
-    return false;
+    return Status::EndOfFile("");
 }
 
 std::shared_ptr<::arrow::RecordBatch> IcebergDeleteFileIterator::next() {

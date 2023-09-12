@@ -26,7 +26,7 @@ public:
     Status init(FileSystem* fs, const std::string& timezone, const std::string& file_path, int64_t file_length,
                 const std::vector<SlotDescriptor*>& src_slot_descriptors, bool position_delete);
 
-    bool has_next();
+    Status has_next();
 
     std::shared_ptr<::arrow::RecordBatch> next();
 

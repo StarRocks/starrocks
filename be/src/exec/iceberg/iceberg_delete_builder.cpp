@@ -39,10 +39,17 @@ Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const st
                                            int64_t file_length, std::set<int64_t>* need_skip_rowids) {
     std::vector<SlotDescriptor*> slot_descriptors{&(IcebergDeleteFileMeta::get_delete_file_path_slot()),
                                                   &(IcebergDeleteFileMeta::get_delete_file_pos_slot())};
-    std::unique_ptr<IcebergDeleteFileIterator> iter(new IcebergDeleteFileIterator());
+    auto iter = std::make_unique<IcebergDeleteFileIterator>();
     RETURN_IF_ERROR(iter->init(_fs, timezone, delete_file_path, file_length, slot_descriptors, true));
     std::shared_ptr<::arrow::RecordBatch> batch;
-    while (iter->has_next()) {
+
+    Status status;
+    while (true) {
+        status = iter->has_next();
+        if (!status.ok()) {
+            break;
+        }
+
         batch = iter->next();
         ::arrow::StringArray* file_path_array = static_cast<arrow::StringArray*>(batch->column(0).get());
         ::arrow::Int64Array* pos_array = static_cast<arrow::Int64Array*>(batch->column(1).get());
@@ -51,6 +58,12 @@ Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const st
                 need_skip_rowids->emplace(pos_array->Value(row));
             }
         }
+    }
+
+    // eof is expected, otherwise propagate error
+    if (!status.is_end_of_file()) {
+        LOG(WARNING) << status;
+        return status;
     }
     return Status::OK();
 }
