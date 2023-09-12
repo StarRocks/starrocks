@@ -1,6 +1,11 @@
 name: INSPECTION PIPELINE
 
 on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+
   schedule:
     - cron: "0 9 * * 1-5"
     - cron: "0 17 * * 1-5"
