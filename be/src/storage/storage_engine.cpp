@@ -898,8 +898,6 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
     }
     TRACE("found best tablet $0", best_tablet->get_tablet_info().tablet_id);
 
-    StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
-
     std::unique_ptr<MemTracker> mem_tracker =
             std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
     CumulativeCompaction cumulative_compaction(mem_tracker.get(), best_tablet);
@@ -940,8 +938,6 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir, std::pair<int3
         return Status::NotFound("there are no suitable tablets");
     }
     TRACE("found best tablet $0", best_tablet->get_tablet_info().tablet_id);
-
-    StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
 
     std::unique_ptr<MemTracker> mem_tracker =
             std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
@@ -1003,6 +999,7 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     int64_t duration_ns = 0;
     {
         StarRocksMetrics::instance()->update_compaction_request_total.increment(1);
+        StarRocksMetrics::instance()->running_update_compaction_task_num.increment(1);
         SCOPED_RAW_TIMER(&duration_ns);
 
         std::unique_ptr<MemTracker> mem_tracker =
@@ -1010,6 +1007,7 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
         res = best_tablet->updates()->compaction(mem_tracker.get());
     }
     StarRocksMetrics::instance()->update_compaction_duration_us.increment(duration_ns / 1000);
+    StarRocksMetrics::instance()->running_update_compaction_task_num.increment(-1);
     if (!res.ok()) {
         StarRocksMetrics::instance()->update_compaction_request_failed.increment(1);
         LOG(WARNING) << "failed to perform update compaction. res=" << res.to_string()
