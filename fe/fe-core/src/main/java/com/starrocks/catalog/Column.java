@@ -608,7 +608,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 return defaultExpr.getExpr();
             }
         }
-        return FeConstants.NULL_STRING;
+        return null;
     }
 
     public String toSqlWithoutAggregateTypeName() {
