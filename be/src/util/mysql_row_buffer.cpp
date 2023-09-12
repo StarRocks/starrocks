@@ -43,8 +43,8 @@
 
 #include "common/logging.h"
 #include "gutil/strings/fastmem.h"
-#include "util/mysql_global.h"
 #include "runtime/large_int_value.h"
+#include "util/mysql_global.h"
 
 namespace starrocks {
 
@@ -97,7 +97,7 @@ void MysqlRowBuffer::push_null() {
     }
 }
 
-template<typename T>
+template <typename T>
 void MysqlRowBuffer::push_number_binary_format(T data) {
     _field_pos++;
     if constexpr (std::is_same_v<T, float>) {

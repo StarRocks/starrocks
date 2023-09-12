@@ -94,9 +94,9 @@ private:
 
 class ResultSinkOperatorFactory final : public OperatorFactory {
 public:
-    ResultSinkOperatorFactory(int32_t id, TResultSinkType::type sink_type, bool is_binary_format, 
-                              TResultSinkFormatType::type format_type,
-                              std::vector<TExpr> t_output_expr, FragmentContext* const fragment_ctx)
+    ResultSinkOperatorFactory(int32_t id, TResultSinkType::type sink_type, bool is_binary_format,
+                              TResultSinkFormatType::type format_type, std::vector<TExpr> t_output_expr,
+                              FragmentContext* const fragment_ctx)
             : OperatorFactory(id, "result_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
               _sink_type(sink_type),
               _is_binary_format(is_binary_format),
@@ -112,9 +112,9 @@ public:
         // of increasing _num_result_sinkers to ResultSinkOperator::close is guaranteed by pipeline driver queue,
         // so it doesn't need memory barrier here.
         _increment_num_result_sinkers_no_barrier();
-        return std::make_shared<ResultSinkOperator>(this, _id, _plan_node_id, driver_sequence, _sink_type, _is_binary_format,
-                                                    _format_type, _output_expr_ctxs, _sender, _num_result_sinkers, _num_written_rows,
-                                                    _fragment_ctx);
+        return std::make_shared<ResultSinkOperator>(this, _id, _plan_node_id, driver_sequence, _sink_type,
+                                                    _is_binary_format, _format_type, _output_expr_ctxs, _sender,
+                                                    _num_result_sinkers, _num_written_rows, _fragment_ctx);
     }
 
     Status prepare(RuntimeState* state) override;

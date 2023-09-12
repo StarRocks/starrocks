@@ -100,7 +100,8 @@ Status ResultSink::prepare(RuntimeState* state) {
     // create writer based on sink type
     switch (_sink_type) {
     case TResultSinkType::MYSQL_PROTOCAL:
-        _writer.reset(new (std::nothrow) MysqlResultWriter(_sender.get(), _output_expr_ctxs, _is_binary_format, _profile));
+        _writer.reset(new (std::nothrow)
+                              MysqlResultWriter(_sender.get(), _output_expr_ctxs, _is_binary_format, _profile));
         break;
     case TResultSinkType::FILE:
         CHECK(_file_opts.get() != nullptr);

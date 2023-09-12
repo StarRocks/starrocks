@@ -48,8 +48,11 @@ namespace starrocks {
 
 MysqlResultWriter::MysqlResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
                                      bool is_binary_format, RuntimeProfile* parent_profile)
-        : _sinker(sinker), _output_expr_ctxs(output_expr_ctxs), _row_buffer(nullptr),
-        _is_binary_format(is_binary_format), _parent_profile(parent_profile) {}
+        : _sinker(sinker),
+          _output_expr_ctxs(output_expr_ctxs),
+          _row_buffer(nullptr),
+          _is_binary_format(is_binary_format),
+          _parent_profile(parent_profile) {}
 
 MysqlResultWriter::~MysqlResultWriter() {
     delete _row_buffer;
