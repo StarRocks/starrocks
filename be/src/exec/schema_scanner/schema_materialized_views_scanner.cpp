@@ -15,6 +15,7 @@
 #include "exec/schema_scanner/schema_materialized_views_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
+#include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 #include "types/logical_type.h"
 
@@ -74,7 +75,8 @@ Status SchemaMaterializedViewsScanner::start(RuntimeState* state) {
     }
 
     if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result));
+        int timeout_ms = state->query_options().query_timeout * 1000;
+        RETURN_IF_ERROR(SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result, timeout_ms));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
