@@ -16,13 +16,26 @@ jobs:
       github.repository == 'StarRocks/starrocks' &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport') && (
+      contains(github.event.pull_request.labels.*.name, '3.2') ||
       contains(github.event.pull_request.labels.*.name, '3.1') ||
       contains(github.event.pull_request.labels.*.name, '3.0') ||
-      contains(github.event.pull_request.labels.*.name, '2.5') ||
-      contains(github.event.pull_request.labels.*.name, '2.4') )
+      contains(github.event.pull_request.labels.*.name, '2.5') )
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
+      - name: backport branch-3.2
+        if: contains(github.event.pull_request.labels.*.name, '3.2')
+        uses: thollander/actions-comment-pull-request@v1
+        with:
+          message: |
+            @Mergifyio backport branch-3.2
+          GITHUB_TOKEN: ${{ secrets.PAT }}
+
+      - uses: actions-ecosystem/action-remove-labels@v1
+        if: contains(github.event.pull_request.labels.*.name, '3.2')
+        with:
+          labels: '3.2'
+
       - name: backport branch-3.1
         if: contains(github.event.pull_request.labels.*.name, '3.1')
         uses: thollander/actions-comment-pull-request@v1
@@ -61,19 +74,6 @@ jobs:
         if: contains(github.event.pull_request.labels.*.name, '2.5')
         with:
           labels: '2.5'
-
-      - name: backport branch-2.4
-        if: contains(github.event.pull_request.labels.*.name, '2.4')
-        uses: thollander/actions-comment-pull-request@v1
-        with:
-          message: |
-            @Mergifyio backport branch-2.4
-          GITHUB_TOKEN: ${{ secrets.PAT }}
-
-      - uses: actions-ecosystem/action-remove-labels@v1
-        if: contains(github.event.pull_request.labels.*.name, '2.4')
-        with:
-          labels: '2.4'
 
   thirdparty-update-image:
     runs-on: [self-hosted, normal]
