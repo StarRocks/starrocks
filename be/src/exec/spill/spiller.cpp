@@ -80,7 +80,7 @@ Status Spiller::prepare(RuntimeState* state) {
         _writer = std::make_unique<RawSpillerWriter>(this, state);
     }
 
-    RETURN_IF_ERROR(_writer->prepare(state));
+    _writer->prepare(state);
 
     _reader = std::make_unique<SpillerReader>(this);
 
@@ -94,15 +94,13 @@ Status Spiller::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status Spiller::set_partition(const std::vector<const SpillPartitionInfo*>& parititons) {
+void Spiller::set_partition(const std::vector<const SpillPartitionInfo*>& parititons) {
     DCHECK_GT(_opts.init_partition_nums, 0);
-    RETURN_IF_ERROR(down_cast<PartitionedSpillerWriter*>(_writer.get())->reset_partition(parititons));
-    return Status::OK();
+    down_cast<PartitionedSpillerWriter*>(_writer.get())->reset_partition(parititons);
 }
 
-Status Spiller::set_partition(RuntimeState* state, size_t num_partitions) {
-    RETURN_IF_ERROR(down_cast<PartitionedSpillerWriter*>(_writer.get())->reset_partition(state, num_partitions));
-    return Status::OK();
+void Spiller::set_partition(RuntimeState* state, size_t num_partitions) {
+    down_cast<PartitionedSpillerWriter*>(_writer.get())->reset_partition(state, num_partitions);
 }
 
 void Spiller::update_spilled_task_status(Status&& st) {
@@ -138,7 +136,7 @@ Status Spiller::_acquire_input_stream(RuntimeState* state) {
     std::shared_ptr<SpillInputStream> input_stream;
 
     RETURN_IF_ERROR(_writer->acquire_stream(&input_stream));
-    RETURN_IF_ERROR(_reader->set_stream(std::move(input_stream)));
+    _reader->set_stream(std::move(input_stream));
 
     return Status::OK();
 }

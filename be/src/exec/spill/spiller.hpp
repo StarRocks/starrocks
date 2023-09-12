@@ -116,7 +116,7 @@ Status RawSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chunk, TaskE
         DCHECK(_mem_table != nullptr);
     }
 
-    RETURN_IF_ERROR(_mem_table->append(chunk));
+    TRY_CATCH_BAD_ALLOC(_mem_table->append(chunk));
 
     if (_mem_table->is_full()) {
         return flush(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard));

@@ -43,17 +43,16 @@ public:
 
     virtual ~SpillerReader() = default;
 
-    Status set_stream(std::shared_ptr<SpillInputStream> stream) {
+    void set_stream(std::shared_ptr<SpillInputStream> stream) {
         std::lock_guard guard(_mutex);
         _stream = std::move(stream);
-        return Status::OK();
     }
 
     template <class TaskExecutor, class MemGuard>
     StatusOr<ChunkPtr> restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
 
     template <class TaskExecutor, class MemGuard>
-    Status trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    [[nodiscard]] Status trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
 
     bool has_output_data() { return _stream && _stream->is_ready(); }
 
@@ -83,7 +82,7 @@ public:
     virtual bool is_full() = 0;
     virtual bool has_pending_data() = 0;
 
-    virtual Status prepare(RuntimeState* state) = 0;
+    virtual void prepare(RuntimeState* state) = 0;
 
     virtual Status set_flush_all_call_back(FlushAllCallBack callback) = 0;
     // acquire input stream
@@ -152,7 +151,7 @@ public:
     template <class TaskExecutor, class MemGuard>
     Status flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
 
-    Status prepare(RuntimeState* state) override;
+    void prepare(RuntimeState* state) override;
 
     Status flush_task(RuntimeState* state, const MemTablePtr& mem_table);
 
@@ -212,7 +211,7 @@ public:
     static const constexpr auto max_partition_level = 6;
     PartitionedSpillerWriter(Spiller* spiller, RuntimeState* state);
 
-    Status prepare(RuntimeState* state) override;
+    void prepare(RuntimeState* state) override;
 
     bool is_full() override { return _running_flush_tasks != 0; }
 
@@ -239,9 +238,9 @@ public:
 
     Status get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) override;
 
-    Status reset_partition(const std::vector<const SpillPartitionInfo*>& partitions);
+    void reset_partition(const std::vector<const SpillPartitionInfo*>& partitions);
 
-    Status reset_partition(RuntimeState* state, size_t num_partitions);
+    void reset_partition(RuntimeState* state, size_t num_partitions);
 
     void cancel() override {}
 
@@ -287,9 +286,9 @@ public:
     int64_t mem_consumption() const { return _mem_tracker->consumption(); }
 
 private:
-    Status _init_with_partition_nums(RuntimeState* state, int num_partitions);
+    void _init_with_partition_nums(RuntimeState* state, int num_partitions);
     // prepare and acquire mem_table for each partition in _id_to_partitions
-    Status _prepare_partitions(RuntimeState* state);
+    void _prepare_partitions(RuntimeState* state);
 
     Status _spill_input_partitions(SerdeContext& context, const std::vector<SpilledPartition*>& spilling_partitions);
 
