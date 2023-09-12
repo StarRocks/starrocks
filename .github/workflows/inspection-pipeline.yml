@@ -1,14 +1,10 @@
 name: INSPECTION PIPELINE
 
 on:
-  pull_request:
-    types:
-      - opened
-      - synchronize
-
   schedule:
     - cron: "0 9 * * 1-5"
-    - cron: "0 17 * * 1-5"
+    - cron: "0 14 * * 1-5"
+    - cron: "0 19 * * 1-5"
   workflow_dispatch:
 
 concurrency:
