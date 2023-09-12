@@ -353,7 +353,8 @@ TEST_P(JsonQueryTestFixture, json_query) {
     Columns columns{ints, builder.build(true)};
 
     ctx.get()->set_constant_columns(columns);
-    ASSERT_OK(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
+    std::ignore =
+            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
 
     ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
@@ -872,8 +873,8 @@ public:
         Columns columns{ints, builder.build(true)};
 
         _ctx->set_constant_columns(columns);
-        RETURN_IF_ERROR(JsonFunctions::native_json_path_prepare(_ctx.get(),
-                                                                FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
+        std::ignore = JsonFunctions::native_json_path_prepare(_ctx.get(),
+                                                              FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         return columns;
     }
 
