@@ -1318,7 +1318,7 @@ public class ShowExecutor {
                 final String columnType = col.getType().canonicalName().toLowerCase();
                 final String isAllowNull = col.isAllowNull() ? "YES" : "NO";
                 final String isKey = col.isKey() ? "YES" : "NO";
-                String defaultValue = FeConstants.NULL_STRING;
+                String defaultValue = null;
                 if (!col.getType().isOnlyMetricType()) {
                     defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
                 }
