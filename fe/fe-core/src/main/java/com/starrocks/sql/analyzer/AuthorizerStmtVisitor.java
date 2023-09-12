@@ -55,6 +55,7 @@ import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -537,6 +538,13 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
         // `show catalogs` only show catalog that user has any privilege on, we will check it in
         // the execution logic, not here, see `handleShowCatalogs()` for details.
+        return null;
+    }
+
+    @Override
+    public Void visitAlterCatalogStatement(AlterCatalogStmt statement, ConnectContext context) {
+        Authorizer.checkCatalogAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), statement.getCatalogName(),
+                PrivilegeType.ALTER);
         return null;
     }
 

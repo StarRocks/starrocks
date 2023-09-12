@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterLoadStmt;
@@ -409,36 +410,6 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     }
 
     @Override
-    public Void visitCreateCatalogStatement(CreateCatalogStmt statement, ConnectContext context) {
-        CatalogAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitDropCatalogStatement(DropCatalogStmt statement, ConnectContext context) {
-        CatalogAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
-        CatalogAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
-        CatalogAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
-        CatalogAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
     public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
         DropStmtAnalyzer.analyze(statement, context);
         return null;
@@ -534,6 +505,44 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, ConnectContext session) {
         PauseRoutineLoadAnalyzer.analyze(statement, session);
+        return null;
+    }
+
+    // ---------------------------------------- Catalog Statement -------------------------------------------
+
+    @Override
+    public Void visitCreateCatalogStatement(CreateCatalogStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDropCatalogStatement(DropCatalogStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterCatalogStatement(AlterCatalogStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
         return null;
     }
 

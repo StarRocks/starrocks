@@ -322,6 +322,7 @@ public class OperationType {
 
     // drop catalog
     public static final short OP_DROP_CATALOG = 10061;
+
     // grant & revoke impersonate
     @Deprecated
     public static final short OP_GRANT_IMPERSONATE = 10062;
@@ -498,6 +499,9 @@ public class OperationType {
 
     // Primary key
     public static final short OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC = 13200;
+
+    // alter catalog
+    public static final short OP_ALTER_CATALOG = 13300;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds
