@@ -8,7 +8,7 @@ It is not recommended to insert data piece by piece to OLAP. It is usually inser
 
 You can solve this problem by changing the timeout duration for the Stream Load RPC. Change the following item in **be.conf** and restart the machines to allow the change to take effect:
 
-`streaming_load_rpc_max_alive_time_sec`: The RPC timeout for Stream Load. Unit: Seconds. Default: 
+`streaming_load_rpc_max_alive_time_sec`: The RPC timeout for Stream Load. Unit: Seconds. Default: `1200`.
 
 Or you can set the timeout duration for all queries using the following variable:
 
