@@ -1,8 +1,8 @@
--- name: test_spill_agg_with_empty_agg_operator
--- for issue: https://github.com/StarRocks/starrocks/issues/23491
+-- name: test_spill_agg
 set enable_spill=true;
 set spill_mode="auto";
 -- 
+-- for issue: https://github.com/StarRocks/starrocks/issues/23491
 CREATE TABLE t1 (
     k1 INT,
     k2 VARCHAR(20))
@@ -16,3 +16,18 @@ DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');
 insert into t1 values (1,"1");
 insert into t2 select sum(k1),k2 from t1 group by k2;
 select * from t2;
+--
+-- spill colocate bucket agg
+set spill_mode="force";
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+insert into t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  4096));
+insert into t0 select * from t0;
+insert into t0 select * from t0;
+
+select max(sl) from (select sum(c1) sl from t0 group by c0) tb;
+select avg(sl) from (select sum(c1) sl from t0 group by c0) tb;
+select count(sl) from (select sum(c1) sl from t0 group by c0) tb;
+select count(sl) from (select count(c1) sl from t0 group by c0) tb;
