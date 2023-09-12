@@ -39,10 +39,13 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        // will fail because of no alive backends
+        StatisticsMetaManager m = new StatisticsMetaManager();
+        m.createStatisticsTablesForTest();
+
         PlanTestBase.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
-        StatisticsMetaManager m = new StatisticsMetaManager();
         m.createStatisticsTablesForTest();
 
         starRocksAssert.withTable("CREATE TABLE `stat0` (\n" +
