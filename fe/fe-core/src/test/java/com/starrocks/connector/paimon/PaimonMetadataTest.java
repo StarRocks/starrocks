@@ -24,21 +24,30 @@ import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.BinaryRowWriter;
+import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.predicate.Predicate;
+import org.apache.paimon.predicate.PredicateBuilder;
+import org.apache.paimon.reader.RecordReader;
+import org.apache.paimon.reader.RecordReaderIterator;
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ReadBuilder;
+import org.apache.paimon.table.system.SchemasTable;
+import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.IntType;
 import org.apache.paimon.types.RowType;
+import org.apache.paimon.types.TimestampType;
+import org.apache.paimon.utils.SerializationUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -178,5 +187,37 @@ public class PaimonMetadataTest {
                          @Mocked ReadBuilder readBuilder) {
         PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
         Assert.assertTrue(paimonTable.getUUID().startsWith("paimon_catalog.db1.tbl1"));
+    }
+
+    @Test
+    public void testGetCreateTime(@Mocked SchemasTable schemasTable,
+                                  @Mocked ReadBuilder readBuilder,
+                                  @Mocked RecordReader<InternalRow> recordReader) throws Exception {
+        RowType rowType = new RowType(Arrays.asList(new DataField(0, "schema_id", new BigIntType(false)),
+                new DataField(1, "fields", SerializationUtils.newStringType(false)),
+                new DataField(2, "partition_keys", SerializationUtils.newStringType(false)),
+                new DataField(3, "primary_keys", SerializationUtils.newStringType(false)),
+                new DataField(4, "options", SerializationUtils.newStringType(false)),
+                new DataField(5, "comment", SerializationUtils.newStringType(true)),
+                new DataField(6, "update_time", new TimestampType(false, 3))));
+        RecordReaderIterator iterator = new RecordReaderIterator<>(recordReader);
+        PredicateBuilder predicateBuilder = new PredicateBuilder(rowType);
+        Predicate equal = predicateBuilder.equal(predicateBuilder.indexOf("schema_id"), 0);
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = schemasTable;
+                schemasTable.rowType();
+                result = rowType;
+                schemasTable.newReadBuilder().withProjection(new int[] {0, 6}).
+                        withFilter(equal).newRead().createReader(schemasTable.newScan().plan());
+                result = recordReader;
+                new RecordReaderIterator<>(recordReader);
+                result = iterator;
+            }
+        };
+
+        long creteTime = metadata.getTableCreateTime("db1", "tbl1");
+        Assert.assertEquals(0, creteTime);
     }
 }
