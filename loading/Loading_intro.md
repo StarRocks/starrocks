@@ -221,13 +221,30 @@ StarRocks目前的导入方式分为两种：同步和异步。
 
 ## 注意事项
 
-用户在向StarRocks导入数据时，一般会采用程序对接的方式。以下是导入数据时的一些注意事项：
+* `write_buffer_size`
 
-1. 选择合适的导入方式：根据数据量大小、导入频次、数据源所在位置选择导入方式。例如：如果原始数据存放在HDFS上，则使用Broker load导入。
-2. 确定导入方式的协议：如果选择了Broker Load导入方式，则外部系统需要能使用MySQL协议定期提交和查看导入作业。
-3. 确定导入方式的类型：导入方式分为同步或异步。如果是异步导入方式，外部系统在提交创建导入后，必须调用查看导入命令，根据查看导入命令的结果来判断导入是否成功。
-4. 制定Label生成策略：Label生成策略需满足对每一批次数据唯一且固定的原则。
-5. 保证Exactly-Once：外部系统需要保证数据导入的At-Least-Once，StarRocks的Label机制可以保证数据导入的At-Most-Once。这样整体上就可以保证数据导入的Exactly-Once。
+  BE 上内存块的大小阈值，默认阈值为 100 MB。导入的数据在 BE 上会先写入一个内存块，当内存块的大小达到这个阈值以后才会写回磁盘。如果阈值过小，可能会导致 BE 上存在大量的小文件，影响查询的性能，这时候可以适当提高这个阈值来减少文件数量。如果阈值过大，可能会导致远程过程调用（Remote Procedure Call，简称 RPC）超时，这时候可以适当地调整该参数的取值。
+
+* `streaming_load_rpc_max_alive_time_sec`
+
+  指定了 Writer 进程的等待超时时间，默认为 600 秒。在导入过程中，StarRocks 会为每个 Tablet 开启一个 Writer 进程，用于接收和写入数据。如果在参数指定时间内 Writer 进程没有收到任何数据，StarRocks 系统会自动销毁这个 Writer 进程。当系统处理速度较慢时，Writer 进程可能长时间接收不到下一批次数据，导致上报 "TabletWriter add batch with unknown id" 错误。这时候可适当调大这个参数的取值。
+
+* `load_process_max_memory_limit_bytes` 和 `load_process_max_memory_limit_percent`
+
+  用于导入的最大内存使用量和最大内存使用百分比，用来限制单个 BE 上所有导入作业的内存总和的使用上限。StarRocks 系统会在两个参数中取较小者，作为最终的使用上限。
+
+  * `load_process_max_memory_limit_bytes`：指定 BE 上最大内存使用量，默认为 100 GB。
+  * `load_process_max_memory_limit_percent`：指定 BE 上最大内存使用百分比，默认为 30%。该参数与 `mem_limit` 参数不同。`mem_limit` 参数指定的是 BE 进程内存上限，默认硬上限为 BE 所在机器内存的 90%，软上限为 BE 所在机器内存的 90% x 90%。
+
+    假设 BE 所在机器物理内存大小为 M，则用于导入的内存上限为：`M x 90% x 90% x 30%`。
+
+### 会话变量
+
+您可以设置如下[会话变量](../reference/System_variable.md)：
+
+- `query_timeout`
+
+  用于设置查询超时时间。单位：秒。取值范围：`1` ~ `259200`。默认值：`300`，相当于 5 分钟。该变量会作用于当前连接中所有的查询语句，以及 INSERT 语句。
 
 ## 常见问题
 
