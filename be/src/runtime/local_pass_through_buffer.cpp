@@ -24,11 +24,7 @@ namespace starrocks {
 // channel per [sender_id]
 class PassThroughSenderChannel {
 public:
-<<<<<<< HEAD
     PassThroughSenderChannel(std::atomic_int64_t& total_bytes) : _total_bytes(total_bytes) {}
-=======
-    PassThroughSenderChannel(std::atomic_int64_t& total_bytes): _total_bytes(total_bytes) {}
->>>>>>> 66c00061ac (preaggregate data before spilling)
 
     ~PassThroughSenderChannel() {
         if (_physical_bytes > 0) {

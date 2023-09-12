@@ -441,8 +441,6 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
 
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
     _uncompressed_bytes_counter = ADD_COUNTER(_unique_metrics, "UncompressedBytes", TUnit::BYTES);
-    _pass_through_buffer_peak_mem_bytes = _unique_metrics->AddHighWaterMarkCounter("PassThroughBufferPeakMemoryBytes", TUnit::BYTES,
-        RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
 
     _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");

@@ -65,8 +65,6 @@ public:
     void pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes);
     int64_t total_bytes() const;
 
-    int64_t total_bytes() const;
-
 private:
     // hold this chunk buffer to avoid early deallocation.
     PassThroughChunkBuffer* _chunk_buffer;
