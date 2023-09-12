@@ -162,6 +162,43 @@ The following table describes the parameters you need to configure in `Metastore
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
+<<<<<<< HEAD
+=======
+##### Tabular
+
+If you use Tabular as metastore, you must specify the metastore type as REST (`"iceberg.catalog.type" = "rest"`). Configure `MetastoreParams` as follows:
+
+```SQL
+"iceberg.catalog.type" = "rest",
+"iceberg.catalog.uri" = "<rest_server_api_endpoint>",
+"iceberg.catalog.credential" = "<credential>",
+"iceberg.catalog.warehouse" = "<identifier_or_path_to_warehouse>"
+```
+
+The following table describes the parameters you need to configure in `MetastoreParams`.
+
+| Parameter                  | Required | Description                                                         |
+| -------------------------- | -------- | ------------------------------------------------------------------- |
+| iceberg.catalog.type       | Yes      | The type of metastore that you use for your Iceberg cluster. Set the value to `rest`.           |
+| iceberg.catalog.uri        | Yes      | The URI of the Tabular service endpoint. Example: `https://api.tabular.io/ws`.      |
+| iceberg.catalog.credential | Yes      | The authentication information of the Tabular service.                                        |
+| iceberg.catalog.warehouse  | No       | The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`. |
+
+The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
+
+```SQL
+CREATE EXTERNAL CATALOG tabular
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.uri" = "https://api.tabular.io/ws",
+    "iceberg.catalog.credential" = "t-5Ii8e3FIbT9m0:aaaa-3bbbbbbbbbbbbbbbbbbb",
+    "iceberg.catalog.warehouse" = "sandbox"
+);
+```
+
+>>>>>>> ad7b7cdfe9 ([Doc] Correct syntax of Tabular credential (#30896))
 #### `StorageCredentialParams`
 
 A set of parameters about how StarRocks integrates with your storage system. This parameter set is optional.
