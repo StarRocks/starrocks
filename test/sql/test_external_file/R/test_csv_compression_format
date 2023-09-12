@@ -1,0 +1,58 @@
+-- name: testCSVSnappyFormat
+[UC]shell: snappy_prefix=echo "oss://${oss_bucket}/test_csv_compression/${uuid0}/snappy_format/"
+-- result:
+0
+oss://starrocks-env-s3-unit-test/test_csv_compression/41848e296c2a452d85c63c0b3bd14a2a/snappy_format/
+-- !result
+shell: ossutil64 mkdir ${snappy_prefix[1]} /dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+Error: invalid usage of "mkdir" command, reason: the command needs at most 1 argument, please try "help mkdir" for more information
+-- !result
+shell: ossutil64 cp --force ../be/test/exec/test_data/csv_scanner/decompress_test0.csv.snappy ${snappy_prefix[1]} | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 35. OK num: 1(upload 1 files).
+-- !result
+shell: ossutil64 cp --force ../be/test/exec/test_data/csv_scanner/decompress_test1.csv.snappy ${snappy_prefix[1]} | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 746,025. OK num: 1(upload 1 files).
+-- !result
+CREATE EXTERNAL TABLE test_csv_snappy_format
+(
+    a string,
+    b string
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "${snappy_prefix[1]}",
+    "format" = "text",
+    "column_separator" = ","
+);
+-- result:
+-- !result
+select * from test_csv_snappy_format where a = 'Alice';
+-- result:
+Alice	1
+-- !result
+select * from test_csv_snappy_format where a = 'Bob';
+-- result:
+Bob	2
+-- !result
+select * from test_csv_snappy_format where a = 'CharlieX';
+-- result:
+CharlieX	3
+-- !result
+select * from test_csv_snappy_format where a = '99999';
+-- result:
+99999	100000
+-- !result
+shell: ossutil64 rm -rf ${snappy_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
