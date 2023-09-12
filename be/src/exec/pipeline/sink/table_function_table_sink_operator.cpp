@@ -47,7 +47,7 @@ StatusOr<std::string> column_to_string(const TypeDescriptor& type_desc, const Co
         return datum.get_date().to_string();
     }
     case TYPE_DATETIME: {
-        return datum.get_timestamp().to_string();
+        return url_encode(datum.get_timestamp().to_string());
     }
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
