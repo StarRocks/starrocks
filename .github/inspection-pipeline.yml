@@ -1,6 +1,13 @@
 name: INSPECTION PIPELINE
 
 on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+
+    branches:
+      - main
   schedule:
     - cron: "0 9 * * 1-5"
     - cron: "0 17 * * 1-5"
@@ -66,7 +73,6 @@ jobs:
     runs-on: [self-hosted, normal]
     name: FE UT
     env:
-      CODE_PATH: ${{ github.workspace }}
       BRANCH: 'main'
       GH_TOKEN: ${{ secrets.PAT }}
     steps:
@@ -78,7 +84,6 @@ jobs:
       - name: BRANCH INFO
         id: branch
         run: |
-          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
           repo="${{ github.repository }}"
           bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
           echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
@@ -128,8 +133,8 @@ jobs:
         id: publish_report
         if: steps.download-ut-xml.outputs.size != '0'
         env:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.PAT }}
+          token: ${{ secrets.PAT }}
         with:
           check_name: 'FE UT Report'
           detailed_summary: true
