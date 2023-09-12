@@ -33,7 +33,6 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvFloatAndIntegerGuard<PT, 
     using StarRocksCppType = RunTimeCppType<PT>;
     using StarRocksColumnType = RunTimeColumnType<PT>;
     using ArrowType = ArrowTypeIdToType<AT>;
-    using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using ArrowBuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
     static inline arrow::Status convert(const ColumnPtr& column, arrow::MemoryPool* pool,
                                         std::shared_ptr<arrow::Array>& array) {
@@ -72,7 +71,6 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvDecimalGuard<PT, AT>> {
     using StarRocksCppType = RunTimeCppType<PT>;
     using StarRocksColumnType = RunTimeColumnType<PT>;
     using ArrowType = ArrowTypeIdToType<AT>;
-    using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using ArrowBuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
 
     static inline arrow::Decimal128 convert_datum(const StarRocksCppType& datum) {
@@ -149,7 +147,6 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvBinaryGuard<PT, AT>> {
     using StarRocksCppType = RunTimeCppType<PT>;
     using StarRocksColumnType = RunTimeColumnType<PT>;
     using ArrowType = ArrowTypeIdToType<AT>;
-    using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using ArrowBuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
 
     static inline std::string convert_datum(const StarRocksCppType& datum, [[maybe_unused]] int precision,
@@ -180,33 +177,51 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvBinaryGuard<PT, AT>> {
             const auto* nullable_column = down_cast<NullableColumn*>(column.get());
             const auto* data_column = down_cast<StarRocksColumnType*>(nullable_column->data_column().get());
             const auto* null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
-            const auto& data = data_column->get_data();
-            [[maybe_unused]] int precision = -1;
-            [[maybe_unused]] int scale = -1;
-            if constexpr (pt_is_decimal<PT>) {
-                precision = data_column->precision();
-                scale = data_column->scale();
-            }
             const auto num_rows = null_column->size();
-            for (auto i = 0; i < num_rows; ++i) {
-                if (nullable_column->is_null(i)) {
-                    ARROW_RETURN_NOT_OK(builder->AppendNull());
-                } else {
-                    ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], precision, scale)));
+            if constexpr (pt_is_string<PT>) {
+                const auto& data = data_column->get_proxy_data();
+                for (auto i = 0; i < num_rows; ++i) {
+                    if (nullable_column->is_null(i)) {
+                        ARROW_RETURN_NOT_OK(builder->AppendNull());
+                    } else {
+                        ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], -1, -1)));
+                    }
+                }
+            } else {
+                const auto& data = data_column->get_data();
+                [[maybe_unused]] int precision = -1;
+                [[maybe_unused]] int scale = -1;
+                if constexpr (pt_is_decimal<PT>) {
+                    precision = data_column->precision();
+                    scale = data_column->scale();
+                }
+                for (auto i = 0; i < num_rows; ++i) {
+                    if (nullable_column->is_null(i)) {
+                        ARROW_RETURN_NOT_OK(builder->AppendNull());
+                    } else {
+                        ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], precision, scale)));
+                    }
                 }
             }
         } else {
             const auto* data_column = down_cast<StarRocksColumnType*>(column.get());
-            const auto& data = data_column->get_data();
             const auto num_rows = column->size();
-            [[maybe_unused]] int precision = -1;
-            [[maybe_unused]] int scale = -1;
-            if constexpr (pt_is_decimal<PT>) {
-                precision = data_column->precision();
-                scale = data_column->scale();
-            }
-            for (auto i = 0; i < num_rows; ++i) {
-                ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], precision, scale)));
+            if constexpr (pt_is_string<PT>) {
+                const auto& data = data_column->get_proxy_data();
+                for (auto i = 0; i < num_rows; ++i) {
+                    ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], -1, -1)));
+                }
+            } else {
+                const auto& data = data_column->get_data();
+                [[maybe_unused]] int precision = -1;
+                [[maybe_unused]] int scale = -1;
+                if constexpr (pt_is_decimal<PT>) {
+                    precision = data_column->precision();
+                    scale = data_column->scale();
+                }
+                for (auto i = 0; i < num_rows; ++i) {
+                    ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], precision, scale)));
+                }
             }
         }
         return builder->Finish(&array);
@@ -295,7 +310,7 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& _ou
     std::vector<std::shared_ptr<arrow::Array>> arrays(result_num_column);
 
     for (auto i = 0; i < result_num_column; ++i) {
-        ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
+        ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk))
         Expr* expr = _output_expr_ctxs[i]->root();
         if (column->is_constant()) {
             column = vectorized::ColumnHelper::unfold_const_column(expr->type(), chunk->num_rows(), column);
