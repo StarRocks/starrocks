@@ -45,7 +45,7 @@ public class PaimonTable extends Table {
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
                        String catalogType, String metastoreUris, String warehousePath,
-                       org.apache.paimon.table.Table paimonNativeTable) {
+                       org.apache.paimon.table.Table paimonNativeTable, long createTime) {
         super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), tblName, TableType.PAIMON, schema);
         this.catalogName = catalogName;
         this.databaseName = dbName;
@@ -58,6 +58,7 @@ public class PaimonTable extends Table {
         this.paimonFieldNames = paimonNativeTable.rowType().getFields().stream()
                 .map(DataField::name)
                 .collect(Collectors.toList());
+        this.createTime = createTime;
     }
 
     public String getCatalogName() {
@@ -78,7 +79,7 @@ public class PaimonTable extends Table {
 
     @Override
     public String getUUID() {
-        return String.join(".", catalogName, databaseName, tableName);
+        return String.join(".", catalogName, databaseName, tableName, Long.toString(createTime));
     }
 
     @Override
