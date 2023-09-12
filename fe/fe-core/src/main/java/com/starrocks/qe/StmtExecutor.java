@@ -1912,6 +1912,8 @@ public class StmtExecutor {
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),
                             errMsg);
+                } else if (targetTable.isExternalTableWithFileSystem()) {
+                    // ignored
                 } else {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                             database.getId(), transactionId,
