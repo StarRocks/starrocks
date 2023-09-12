@@ -292,6 +292,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitAlterCatalogStatement(AlterCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ------------------------------------------- DML Statement -------------------------------------------------------
 
     public R visitInsertStatement(InsertStmt statement, C context) {

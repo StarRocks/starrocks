@@ -96,6 +96,7 @@ statement
     | dropExternalCatalogStatement
     | showCatalogsStatement
     | showCreateExternalCatalogStatement
+    | alterCatalogStatement
 
     // DML Statement
     | insertStatement
@@ -607,7 +608,7 @@ alterMaterializedViewStatement
     : ALTER MATERIALIZED VIEW mvName=qualifiedName (
         refreshSchemeDesc |
         tableRenameClause |
-        modifyTablePropertiesClause |
+        modifyPropertiesClause |
         swapTableClause )
     | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
     | ALTER MATERIALIZED VIEW qualifiedName applyMaskingPolicyClause
@@ -694,6 +695,9 @@ showCatalogsStatement
     : SHOW CATALOGS
     ;
 
+alterCatalogStatement
+    : ALTER CATALOG catalogName=identifierOrString modifyPropertiesClause
+    ;
 
 // ---------------------------------------- Warehouse Statement ---------------------------------------------------------
 
@@ -799,7 +803,7 @@ alterClause
     | dropIndexClause
     | tableRenameClause
     | swapTableClause
-    | modifyTablePropertiesClause
+    | modifyPropertiesClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
@@ -898,7 +902,7 @@ swapTableClause
     : SWAP WITH identifier
     ;
 
-modifyTablePropertiesClause
+modifyPropertiesClause
     : SET propertyList
     ;
 
