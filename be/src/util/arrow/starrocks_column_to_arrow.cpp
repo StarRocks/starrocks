@@ -294,11 +294,17 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& _ou
     int result_num_column = _output_expr_ctxs.size();
     std::vector<std::shared_ptr<arrow::Array>> arrays(result_num_column);
 
+    size_t num_rows = chunk->num_rows();
     for (auto i = 0; i < result_num_column; ++i) {
         ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
         Expr* expr = _output_expr_ctxs[i]->root();
         if (column->is_constant()) {
+<<<<<<< HEAD
             column = vectorized::ColumnHelper::unfold_const_column(expr->type(), chunk->num_rows(), column);
+=======
+            // Don't modify the column of src chunk, otherwise the memory statistics of query is invalid.
+            column = ColumnHelper::copy_and_unfold_const_column(expr->type(), column->is_nullable(), column, num_rows);
+>>>>>>> daf9a02d92 ([BugFix] Fix them mem statistics bug of MemoryScratchSink (#30751))
         }
         auto& array = arrays[i];
         ColumnToArrowArrayConverter converter(column, pool, expr->type().type, array);
@@ -307,7 +313,7 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& _ou
             return Status::InvalidArgument(arrow_st.ToString());
         }
     }
-    *result = arrow::RecordBatch::Make(schema, chunk->num_rows(), std::move(arrays));
+    *result = arrow::RecordBatch::Make(schema, num_rows, std::move(arrays));
     return Status::OK();
 }
 
@@ -321,10 +327,17 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDe
 
     std::vector<std::shared_ptr<arrow::Array>> arrays(slot_types.size());
 
+    size_t num_rows = chunk->num_rows();
     for (auto i = 0; i < slot_types.size(); ++i) {
         auto column = chunk->get_column_by_slot_id(slot_ids[i]);
         if (column->is_constant()) {
+<<<<<<< HEAD
             column = vectorized::ColumnHelper::unfold_const_column(*slot_types[i], chunk->num_rows(), column);
+=======
+            // Don't modify the column of src chunk, otherwise the memory statistics of query is invalid.
+            column =
+                    ColumnHelper::copy_and_unfold_const_column(*slot_types[i], column->is_nullable(), column, num_rows);
+>>>>>>> daf9a02d92 ([BugFix] Fix them mem statistics bug of MemoryScratchSink (#30751))
         }
         auto& array = arrays[i];
         ColumnToArrowArrayConverter converter(column, pool, slot_types[i]->type, array);
@@ -333,7 +346,7 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDe
             return Status::InvalidArgument(arrow_st.ToString());
         }
     }
-    *result = arrow::RecordBatch::Make(schema, chunk->num_rows(), std::move(arrays));
+    *result = arrow::RecordBatch::Make(schema, num_rows, std::move(arrays));
     return Status::OK();
 }
 } // namespace starrocks::vectorized

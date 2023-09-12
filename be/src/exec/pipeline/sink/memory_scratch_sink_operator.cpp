@@ -60,7 +60,14 @@ StatusOr<vectorized::ChunkPtr> MemoryScratchSinkOperator::pull_chunk(RuntimeStat
     return Status::InternalError("Shouldn't pull chunk from memory scratch sink operator");
 }
 
+<<<<<<< HEAD
 Status MemoryScratchSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+=======
+Status MemoryScratchSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    // Same as ResultSinkOperator, The memory of the output result set should not be counted in the query memory,
+    // otherwise it will cause memory statistics errors.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+>>>>>>> daf9a02d92 ([BugFix] Fix them mem statistics bug of MemoryScratchSink (#30751))
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return Status::OK();
     }

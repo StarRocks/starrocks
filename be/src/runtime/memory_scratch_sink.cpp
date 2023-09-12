@@ -28,11 +28,11 @@
 
 #include "common/logging.h"
 #include "exprs/expr.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
-#include "util/date_func.h"
 
 namespace starrocks {
 
@@ -83,7 +83,14 @@ Status MemoryScratchSink::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status MemoryScratchSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+=======
+Status MemoryScratchSink::send_chunk(RuntimeState* state, Chunk* chunk) {
+    // Same as ResultSinkOperator, The memory of the output result set should not be counted in the query memory,
+    // otherwise it will cause memory statistics errors.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+>>>>>>> daf9a02d92 ([BugFix] Fix them mem statistics bug of MemoryScratchSink (#30751))
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return Status::OK();
     }
