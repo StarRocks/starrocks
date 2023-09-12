@@ -46,7 +46,6 @@
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/query_statistics.h"
-#include "util/moodycamel/concurrentqueue.h"
 #include "util/runtime_profile.h"
 
 namespace google::protobuf {
@@ -138,7 +137,7 @@ private:
 
     StatusOr<std::unique_ptr<SerializeRes>> _serialize_result(TFetchDataResult*);
 
-    typedef moodycamel::ConcurrentQueue<std::unique_ptr<SerializeRes>> ResultQueue;
+    typedef std::list<std::unique_ptr<SerializeRes>> ResultQueue;
     // result's query id
     TUniqueId _fragment_id;
     std::atomic_bool _is_close;
