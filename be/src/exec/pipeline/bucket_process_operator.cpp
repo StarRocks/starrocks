@@ -50,6 +50,11 @@ Status BucketProcessSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
     if (!chunk->is_empty()) {
         RETURN_IF_ERROR(_ctx->sink->push_chunk(state, chunk));
     }
+    // short-circuit case. such as group by limit
+    if (_ctx->sink->is_finished()) {
+        _ctx->all_input_finishing = true;
+        return Status::OK();
+    }
     if (info.is_last_chunk()) {
         RETURN_IF_ERROR(_ctx->sink->set_finishing(state));
         _ctx->current_bucket_sink_finished = true;
