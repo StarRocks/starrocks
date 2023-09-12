@@ -147,24 +147,6 @@ public class HiveMetastoreTest {
     }
 
     @Test
-    public void testAlterPartition() {
-        HiveMetaClient client = new MockedHiveMetaClient();
-        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
-        HivePartition hivePartition = HivePartition.builder()
-                .setColumns(Lists.newArrayList(new Column("c1", Type.INT)))
-                .setStorageFormat(HiveStorageFormat.PARQUET)
-                .setDatabaseName("db")
-                .setTableName("table")
-                .setLocation("location")
-                .setValues(Lists.newArrayList("p1=1"))
-                .setParameters(new HashMap<>()).build();
-
-        HivePartitionStats hivePartitionStats = HivePartitionStats.empty();
-        HivePartitionWithStats hivePartitionWithStats = new HivePartitionWithStats("p1=1", hivePartition, hivePartitionStats);
-        metastore.alterPartition(hivePartitionWithStats);
-    }
-
-    @Test
     public void testGetPartitionByNames() {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");

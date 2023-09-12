@@ -196,14 +196,6 @@ public class HiveMetastore implements IHiveMetastore {
         client.dropPartition(dbName, tableName, partValues, deleteData);
     }
 
-    @Override
-    public void alterPartition(HivePartitionWithStats partition) {
-        String dbName = partition.getHivePartition().getDatabaseName();
-        String tableName = partition.getHivePartition().getTableName();
-        org.apache.hadoop.hive.metastore.api.Partition hivePartition = toMetastoreApiPartition(partition);
-        client.alterPartition(dbName, tableName, hivePartition);
-    }
-
     public HivePartitionStats getTableStatistics(String dbName, String tblName) {
         org.apache.hadoop.hive.metastore.api.Table table = client.getTable(dbName, tblName);
         HiveCommonStats commonStats = toHiveCommonStats(table.getParameters());
