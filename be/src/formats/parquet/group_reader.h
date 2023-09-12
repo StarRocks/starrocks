@@ -92,7 +92,8 @@ public:
     // we need load dict for dict_filter, so prepare should be after collec_io_range
     Status prepare();
     Status get_next(ChunkPtr* chunk, size_t* row_count) {
-        if (config::parquet_late_materialization_v2_enable) {
+        // TODO: new late materialization with read_range only deal with case enable late materialization
+        if (config::parquet_late_materialization_enable && config::parquet_late_materialization_v2_enable) {
             return _do_get_next_new(chunk, row_count);
         } else {
             return _do_get_next(chunk, row_count);
