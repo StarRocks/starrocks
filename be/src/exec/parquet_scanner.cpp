@@ -300,7 +300,8 @@ Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotD
     auto& type_desc = slot_desc->type();
     auto* raw_type_desc = pool.add(new TypeDescriptor());
     bool need_cast = false;
-    build_dest(arrow_type, &type_desc, slot_desc->is_nullable(), raw_type_desc, conv_func, need_cast, strict_mode);
+    RETURN_IF_ERROR(build_dest(arrow_type, &type_desc, slot_desc->is_nullable(), raw_type_desc, conv_func, need_cast,
+                               strict_mode));
     if (!need_cast) {
         *expr = pool.add(new ColumnRef(slot_desc));
         (*column) = ColumnHelper::create_column(type_desc, slot_desc->is_nullable());

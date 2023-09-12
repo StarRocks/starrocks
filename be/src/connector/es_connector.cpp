@@ -14,6 +14,7 @@
 
 #include "connector/es_connector.h"
 
+#include "common/logging.h"
 #include "exec/es/es_predicate.h"
 #include "exec/es/es_query_builder.h"
 #include "exec/es/es_scan_reader.h"
@@ -219,7 +220,7 @@ Status ESDataSource::_create_scanner() {
 
 void ESDataSource::close(RuntimeState* state) {
     if (_es_reader != nullptr) {
-        _es_reader->close();
+        WARN_IF_ERROR(_es_reader->close(), "close es reader failed");
     }
 }
 

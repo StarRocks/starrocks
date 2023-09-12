@@ -330,11 +330,11 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
         } else {
             ColumnPtr min_scr_column = converter->create_src_column();
             ret &= (min_scr_column->append_numbers(&min_value, sizeof(int32_t)) > 0);
-            converter->convert(min_scr_column, min_column->get());
+            RETURN_IF_ERROR(converter->convert(min_scr_column, min_column->get()));
 
             ColumnPtr max_scr_column = converter->create_src_column();
             ret &= (max_scr_column->append_numbers(&max_value, sizeof(int32_t)) > 0);
-            converter->convert(max_scr_column, max_column->get());
+            RETURN_IF_ERROR(converter->convert(max_scr_column, max_column->get()));
         }
         break;
     }
@@ -357,11 +357,11 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
         } else {
             ColumnPtr min_scr_column = converter->create_src_column();
             ret &= (min_scr_column->append_numbers(&min_value, sizeof(int64_t)) > 0);
-            converter->convert(min_scr_column, min_column->get());
+            RETURN_IF_ERROR(converter->convert(min_scr_column, min_column->get()));
 
             ColumnPtr max_scr_column = converter->create_src_column();
             ret &= (max_scr_column->append_numbers(&max_value, sizeof(int64_t)) > 0);
-            converter->convert(max_scr_column, max_column->get());
+            RETURN_IF_ERROR(converter->convert(max_scr_column, max_column->get()));
         }
         break;
     }
@@ -385,11 +385,11 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
         } else {
             ColumnPtr min_scr_column = converter->create_src_column();
             ret &= min_scr_column->append_strings(std::vector<Slice>{min_slice});
-            converter->convert(min_scr_column, min_column->get());
+            RETURN_IF_ERROR(converter->convert(min_scr_column, min_column->get()));
 
             ColumnPtr max_scr_column = converter->create_src_column();
             ret &= max_scr_column->append_strings(std::vector<Slice>{max_slice});
-            converter->convert(max_scr_column, max_column->get());
+            RETURN_IF_ERROR(converter->convert(max_scr_column, max_column->get()));
         }
         break;
     }
@@ -487,7 +487,7 @@ Status FileReader::_init_group_readers() {
             r->collect_io_ranges(&ranges, &end_offset);
             r->set_end_offset(end_offset);
         }
-        _sb_stream->set_io_ranges(ranges);
+        RETURN_IF_ERROR(_sb_stream->set_io_ranges(ranges));
         _group_reader_param.sb_stream = _sb_stream;
     }
 
