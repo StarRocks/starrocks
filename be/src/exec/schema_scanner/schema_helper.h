@@ -26,14 +26,14 @@ namespace starrocks {
 // this class is a helper for getting schema info from FE
 class SchemaHelper {
 public:
-    static Status get_db_names(const std::string& ip, const int32_t port, const TGetDbsParams& db_params,
-                               TGetDbsResult* db_result);
+    static Status get_db_names(const std::string& ip, const int32_t port, const TGetDbsParams& request,
+                               TGetDbsResult* result, const int timeout_ms);
 
     static Status get_table_names(const std::string& ip, const int32_t port, const TGetTablesParams& table_params,
-                                  TGetTablesResult* table_result);
+                                  TGetTablesResult* table_result, const int timeout_ms);
 
     static Status list_table_status(const std::string& ip, const int32_t port, const TGetTablesParams& table_params,
-                                    TListTableStatusResult* table_result);
+                                    TListTableStatusResult* table_result, const int timeout_ms);
 
     static Status list_materialized_view_status(const std::string& ip, const int32_t port,
                                                 const TGetTablesParams& request,
@@ -44,10 +44,10 @@ public:
                                   TListPipeFilesResult* res);
 
     static Status get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
-                                  TGetTablesInfoResponse* response);
+                                  TGetTablesInfoResponse* response, const int timeout_ms);
 
     static Status describe_table(const std::string& ip, const int32_t port, const TDescribeTableParams& desc_params,
-                                 TDescribeTableResult* desc_result);
+                                 TDescribeTableResult* desc_result, const int timeout_ms);
 
     static Status show_variables(const std::string& ip, const int32_t port, const TShowVariableRequest& var_params,
                                  TShowVariableResult* var_result);
