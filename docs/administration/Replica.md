@@ -290,7 +290,7 @@ Users can use the following command to check the status of a specific Tablet. Fo
   +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
   ```
 
-Above shows the database, table, partition, index and other information corresponding to the tablet. Users can copy the command in `DetailCmd` to check out the details
+Above shows the database, table, partition, index and other information corresponding to the tablet. Users can copy the command in `DetailCmd` to check out the details.
     `SHOW PROC '/dbs/29502391/29502428/partitions/29502427/29502428/29502553';`
 
   ```plaintext
