@@ -2,7 +2,7 @@
 
 本文介绍如何部署和使用 StarRocks 存算分离集群。
 
-StarRocks 存算分离集群采用了存储计算分离架构，特别为云存储设计。在存算分离的模式下，StarRocks 将数据存储在兼容 S3 协议的对象存储（例如 AWS S3、OSS 以及 MinIO）或 HDFS 中，而本地盘作为热数据缓存，用以加速查询。通过存储计算分离架构，您可以降低存储成本并且优化资源隔离。除此之外，集群的弹性扩展能力也得以加强。在查询命中缓存的情况下，存算分离集群的查询性能与普通集群性能一致。
+StarRocks 存算分离集群采用了存储计算分离架构，特别为云存储设计。在存算分离的模式下，StarRocks 将数据存储在兼容 S3 协议的对象存储（例如 AWS S3、OSS 以及 MinIO）或 HDFS 中，而本地盘作为热数据缓存，用以加速查询。通过存储计算分离架构，您可以降低存储成本并且优化资源隔离。除此之外，集群的弹性扩展能力也得以加强。在查询命中缓存的情况下，存算分离集群的查询性能与存算一体集群性能一致。
 
 相对存算一体架构，StarRocks 的存储计算分离架构提供以下优势：
 
@@ -20,7 +20,7 @@ StarRocks 存算分离集群架构如下：
 
 ## 部署 StarRocks 存算分离集群
 
-StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署方式类似。唯一不同的是 FE 和 BE 的配置文件 **fe.conf** 和 **be.conf** 中的配置项。本小节仅列出部署 StarRocks 存算分离集群时需要添加到配置文件中的 FE 和 BE 配置项。有关部署 StarRocks 集群的详细说明，请参阅 [部署 StarRocks](/deployment/deploy_manually.md)。
+StarRocks 存算分离集群的部署方式与存算一体集群的部署方式类似。唯一不同的是 FE 和 BE 的配置文件 **fe.conf** 和 **be.conf** 中的配置项。本小节仅列出部署 StarRocks 存算分离集群时需要添加到配置文件中的 FE 和 BE 配置项。有关部署 StarRocks 存算一体集群的详细说明，请参阅 [部署 StarRocks](/deployment/deploy_manually.md)。
 
 ### 配置存算分离集群 FE 节点
 
@@ -28,7 +28,7 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 
 | **配置项**                          | **描述**                                                     |
 | ----------------------------------- | ------------------------------------------------------------ |
-| run_mode                            | StarRocks 集群的运行模式。有效值：`shared_data` 和 `shared_nothing` (默认)。`shared_data` 表示在存算分离模式下运行 StarRocks。`shared_nothing` 表示以普通模式运行 StarRocks。<br />**注意**<br />StarRocks 集群不支持存算分离和普通模式混合部署。<br />请勿在集群部署完成后更改 `run_mode`，否则将导致集群无法再次启动。不支持从普通集群转换为存算分离集群，反之亦然。 |
+| run_mode                            | StarRocks 集群的运行模式。有效值：`shared_data` 和 `shared_nothing` (默认)。`shared_data` 表示在存算分离模式下运行 StarRocks。`shared_nothing` 表示在存算一体模式下运行 StarRocks。<br />**注意**<br />StarRocks 集群不支持存算分离和存算一体模式混合部署。<br />请勿在集群部署完成后更改 `run_mode`，否则将导致集群无法再次启动。不支持从存算一体集群转换为存算分离集群，反之亦然。 |
 | cloud_native_meta_port              | 云原生元数据服务监听端口。默认值：`6090`。                   |
 | cloud_native_storage_type           | 您使用的存储类型。有效值：`S3`（默认）和 `HDFS`。如果您将此项指定为 `S3`，则必须添加以 `aws_s3` 为前缀的配置项。如果将此项指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。 |
 | cloud_native_hdfs_url               | HDFS 存储的 URL，例如 `hdfs://127.0.0.1:9000/user/xxx/starrocks/`。 |

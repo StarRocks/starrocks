@@ -19,7 +19,7 @@
     + [环境配置](/deployment/environment_configurations.md)
     + [部署文件](/deployment/prepare_deployment_files.md)
   + 部署集群
-    + 经典模式部署
+    + 存算一体模式部署
       + [手动部署](/deployment/deploy_manually.md)
       + Kubernetes 部署
         + [使用 Operator 部署](/deployment/sr_operator.md)

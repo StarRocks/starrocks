@@ -1,6 +1,8 @@
 # 手动部署 StarRocks
 
-本文介绍如何手动部署 StarRocks。其他安装方式请参考[部署概览](../deployment/deployment_overview.md)。
+本文介绍如何手动部署 StarRocks 存算一体集群（BE 同时做数据存储和计算）。其他安装方式请参考[部署概览](../deployment/deployment_overview.md)。
+
+如果要部署存算分离集群，参见 [部署使用 StarRocks 存算分离集群](./deploy_shared_data.md)。
 
 ## 第一步：启动 Leader FE 节点
 

@@ -75,7 +75,7 @@ GRANT
    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
-##### Database 相关
+#### Database 相关
 
 ```SQL
 GRANT
@@ -86,7 +86,7 @@ GRANT
 
 *注意：需要执行 SET CATALOG 之后才能使用。
 
-##### Table 相关
+#### Table 相关
 
 ```SQL
 GRANT

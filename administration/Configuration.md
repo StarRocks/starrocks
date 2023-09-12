@@ -283,7 +283,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 | 配置项                               | 默认值          | 描述                                                         |
 | ----------------------------------- | -------------- | ------------------------------------------------------------ |
-| run_mode                            | shared_nothing | StarRocks 集群的运行模式。有效值：`shared_data` 和 `shared_nothing` (默认)。`shared_data` 表示在存算分离模式下运行 StarRocks。`shared_nothing` 表示以普通模式运行 StarRocks。<br />**注意**<br />StarRocks 集群不支持存算分离和普通模式混合部署。<br />请勿在集群部署完成后更改 `run_mode`，否则将导致集群无法再次启动。不支持从普通集群转换为存算分离集群，反之亦然。 |
+| run_mode                            | shared_nothing | StarRocks 集群的运行模式。有效值：`shared_data` 和 `shared_nothing` (默认)。`shared_data` 表示在存算分离模式下运行 StarRocks。`shared_nothing` 表示在存算一体模式下运行 StarRocks。<br />**注意**<br />StarRocks 集群不支持存算分离和存算一体模式混合部署。<br />请勿在集群部署完成后更改 `run_mode`，否则将导致集群无法再次启动。不支持从存算一体集群转换为存算分离集群，反之亦然。 |
 | cloud_native_meta_port              | 6090           | 云原生元数据服务监听端口。默认值：`6090`。                         |
 | cloud_native_storage_type           | S3             | 您使用的存储类型。有效值：`S3`（默认）和 `HDFS`。如果您将此项指定为 `S3`，则必须添加以 `aws_s3` 为前缀的配置项。如果将此项指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。 |
 | cloud_native_hdfs_url               | N/A            | HDFS 存储的 URL，例如 `hdfs://127.0.0.1:9000/user/xxx/starrocks/`。 |
