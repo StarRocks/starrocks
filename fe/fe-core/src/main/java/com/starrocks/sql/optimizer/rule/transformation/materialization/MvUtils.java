@@ -483,8 +483,9 @@ public class MvUtils {
         if (predicate == null) {
             return null;
         }
+        ScalarOperator cloned = predicate.clone();
         ScalarOperatorRewriter rewrite = new ScalarOperatorRewriter();
-        return rewrite.rewrite(predicate, ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
+        return rewrite.rewrite(cloned, ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
     }
 
     /**
@@ -498,8 +499,9 @@ public class MvUtils {
         if (predicate == null) {
             return null;
         }
+        ScalarOperator cloned = predicate.clone();
         ScalarOperatorRewriter rewrite = new ScalarOperatorRewriter();
-        return rewrite.rewrite(predicate, ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
+        return rewrite.rewrite(cloned, ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
     }
 
     public static ScalarOperator getCompensationPredicateForDisjunctive(ScalarOperator src, ScalarOperator target) {
@@ -935,9 +937,7 @@ public class MvUtils {
                 return;
             }
 
-            if (joinOperator.getOnPredicate() != null) {
-                onPredicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate().clone()));
-            }
+            onPredicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
         }
     }
 }
