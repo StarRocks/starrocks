@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "simd/simd.h"
+#include "util/prefetch.h"
 
 #define JOIN_HASH_MAP_TPP
 
@@ -947,13 +948,6 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
         }                                                                                                             \
         _probe_state->build_index.swap(new_order);                                                                    \
     }
-
-#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86)) /* _mm_prefetch() not defined outside of x86/x64 */
-#include <mmintrin.h> /* https://msdn.microsoft.com/fr-fr/library/84szxsww(v=vs.90).aspx */
-#define XXH_PREFETCH(ptr) _mm_prefetch((const char*)(ptr), _MM_HINT_T0)
-#elif defined(__GNUC__) && ((__GNUC__ >= 4) || ((__GNUC__ == 3) && (__GNUC_MINOR__ >= 1)))
-#define XXH_PREFETCH(ptr) __builtin_prefetch((ptr), 0 /* rw==read */, 3 /* locality */)
-#endif
 
 #define PREFETCH_AND_COWAIT(x, y) \
     XXH_PREFETCH(x);              \

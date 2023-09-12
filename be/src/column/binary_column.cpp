@@ -26,6 +26,7 @@
 #include "gutil/strings/fastmem.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
+#include "util/prefetch.h"
 #include "util/raw_container.h"
 
 namespace starrocks {
@@ -66,13 +67,21 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
     const auto& src_offsets = src_column.get_offset();
     const auto& src_bytes = src_column.get_bytes();
 
+    bool need_prefetch =
+            (size > SEQUENTIAL_DISTINCT * 2) && (src_offsets.back() > (1 << 22)) && src_offsets.size() > 64;
+
     size_t cur_row_count = _offsets.size() - 1;
     size_t cur_byte_size = _bytes.size();
 
     _offsets.resize(cur_row_count + size + 1);
+    std::vector<T> random_offsets(size);
     for (size_t i = 0; i < size; i++) {
+        if (need_prefetch && (SEQUENTIAL_DISTINCT + i < size)) {
+            SEQUENTIAL_PREFETCH(src_offsets.data() + indexes[from + i + SEQUENTIAL_DISTINCT])
+        }
         uint32_t row_idx = indexes[from + i];
         T str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
+        random_offsets[i] = src_offsets[row_idx];
         _offsets[cur_row_count + i + 1] = _offsets[cur_row_count + i] + str_size;
         cur_byte_size += str_size;
     }
@@ -80,10 +89,11 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
 
     auto* dest_bytes = _bytes.data();
     for (size_t i = 0; i < size; i++) {
-        uint32_t row_idx = indexes[from + i];
-        T str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
-        strings::memcpy_inlined(dest_bytes + _offsets[cur_row_count + i], src_bytes.data() + src_offsets[row_idx],
-                                str_size);
+        if (need_prefetch && (SEQUENTIAL_DISTINCT + i < size)) {
+            SEQUENTIAL_PREFETCH(src_bytes.data() + random_offsets[i + SEQUENTIAL_DISTINCT])
+        }
+        strings::memcpy_inlined(dest_bytes + _offsets[cur_row_count + i], src_bytes.data() + random_offsets[i],
+                                _offsets[cur_row_count + i + 1] - _offsets[cur_row_count + i]);
     }
 
     _slices_cache = false;
