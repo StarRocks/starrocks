@@ -280,8 +280,8 @@ void OperatorFactory::_prepare_runtime_in_filters(RuntimeState* state) {
 
         auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
         for (auto* filter : in_filters) {
-            filter->prepare(state);
-            filter->open(state);
+            WARN_IF_ERROR(filter->prepare(state), "prepare filter expression failed");
+            WARN_IF_ERROR(filter->open(state), "open filter expression failed");
             _runtime_in_filters.push_back(filter);
         }
     }
