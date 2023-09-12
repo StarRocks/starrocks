@@ -85,6 +85,16 @@ inline uint32_t decode_fixed32_le(const uint8_t* buf) {
 #endif
 }
 
+inline uint32_t decode_fixed32_be(const uint8_t* buf) {
+    uint32_t res;
+    memcpy(&res, buf, sizeof(res));
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+    return bswap_32(res);
+#else
+    return res;
+#endif
+}
+
 inline uint64_t decode_fixed64_le(const uint8_t* buf) {
     uint64_t res;
     memcpy(&res, buf, sizeof(res));
