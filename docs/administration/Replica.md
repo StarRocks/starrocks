@@ -290,7 +290,7 @@ Users can use the following command to check the status of a specific Tablet. Fo
   +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
   ```
 
-Above shows the database, table, partition, index and other information corresponding to the tablet. Users can copy the command in `DetailCmd` to check out the details 
+Above shows the database, table, partition, index and other information corresponding to the tablet. Users can copy the command in `DetailCmd` to check out the details.
     `SHOW PROC '/dbs/29502391/29502428/partitions/29502427/29502428/29502553';`
 
   ```plaintext
@@ -307,43 +307,42 @@ Above shows all replicas of the corresponding Tablet. The content shown here is 
 
 ### Scheduling tasks for replicas
 
-1. View the tasks that are waiting to be scheduled by `SHOW PROC '/cluster_balance/pending_tablets';`
+1. View the tasks that are waiting to be scheduled by using `SHOW PROC '/cluster_balance/pending_tablets';`
 
-  ```plaintext
-  +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
-  | TabletId | Type   | Status          | State   | OrigPrio | DynmPrio | SrcBe | SrcPath | DestBe | DestPath | Timeout | Create              | LstSched            | LstVisit            | Finished | Rate | FailedSched | FailedRunning | LstAdjPrio          | VisibleVer | VisibleVerHash      | CmtVer | CmtVerHash          | ErrMsg                        |
-  +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
-  | 4203036  | REPAIR | REPLICA_MISSING | PENDING | HIGH     | LOW      | -1    | -1      | -1     | -1       | 0       | 2019-02-21 15:00:20 | 2019-02-24 11:18:41 | 2019-02-24 11:18:41 | N/A      | N/A  | 2           | 0             | 2019-02-21 15:00:43 | 1          | 0                   | 2      | 0                   | unable to find source replica |
-  +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
-  ```
+     ```plaintext
+     +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
+     | TabletId | Type   | Status          | State   | OrigPrio | DynmPrio | SrcBe | SrcPath | DestBe | DestPath | Timeout | Create              | LstSched            | LstVisit            | Finished | Rate | FailedSched | FailedRunning | LstAdjPrio          | VisibleVer | VisibleVerHash      | CmtVer | CmtVerHash          | ErrMsg                        |
+     +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
+     | 4203036  | REPAIR | REPLICA_MISSING | PENDING | HIGH     | LOW      | -1    | -1      | -1     | -1       | 0       | 2019-02-21 15:00:20 | 2019-02-24 11:18:41 | 2019-02-24 11:18:41 | N/A      | N/A  | 2           | 0             | 2019-02-21 15:00:43 | 1          | 0                   | 2      | 0                   | unable to find source replica |
+     +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
+     ```
 
-  A breakdown of all the properties is as follows.
+      |   Field   | Description   |
+      |-----------|---------------|
+      | TabletId  | The ID of the tablet that is waiting for scheduling. |
+      | Type      | The type of task, either REPAIR or BALANCE. |
+      |  Status   | The current status of the Tablet, such as `REPLICA_MISSING`. |
+      |  State    |  The state of this scheduling task. Values: `PENDING`/`RUNNING`/`FINISHED`/`CANCELLED`/`TIMEOUT`/`UNEXPECTED`. |
+      | OrigPrio  | The initial priority. |
+      | DynmPrio  | The dynamic priority. |
+      | SrcBe     | The ID of the source BE node.|
+      | SrcPath   |  The path of the source BE node.|
+      |  DestBe   | The ID of the destination BE node.|
+      | DestPath  | The path of the destination BE node.|
+      | Timeout   | When the task is scheduled successfully, the timeout of the task is shown here in seconds.|
+      | Create    | The time when the task was created.|
+      | LstSched  | The time the task was last scheduled.|
+      | LstVisit   | The time the task was last accessed. "accessed" refers to scheduling, task execution reporting.|
+      | Finished  | The time when the task was finished.|
+      | Rate   |The data copy rate of the clone task|
+      | FailedSched |  The number of times the task scheduling failed|
+      | FailedRunning| The number of times the task failed to execute|
+      | LstAdjPrio | The time the task priority was last adjusted |
+      | CmtVer/CmtVerHash/VisibleVer/VisibleVerHash| Version information used to execute the clone task |
+      | ErrMsg |The error message when the task is scheduled and run|
 
-  * TabletId: The ID of the Tablet that is waiting for scheduling. A task for each Tablet
-  * Type: The type of task, either REPAIR or BALANCE
-  * Status: The current status of the Tablet, such as `REPLICA_MISSING`
-  * State: the state of this scheduling task, may be `PENDING`/`RUNNING`/`FINISHED`/`CANCELLED`/`TIMEOUT`/`UNEXPECTED`
-  * OrigPrio: The initial priority
-  * DynmPrio: The dynamic priority
-  * SrcBe: The ID of the source BE node
-  * SrcPath: The path of the source BE node
-  * DestBe: The ID of the destination BE node
-  * DestPath: The path of the destination BE node
-  * Timeout: When the task is scheduled successfully, the timeout of the task is shown here in seconds
-  * Create: The time when the task was created
-  * LstSched: The time the task was last scheduled
-  * LstVisit: The time the task was last accessed. Here " accessed " refers to scheduling, task execution reporting, etc.
-  * Finished: The time when the task was finished.
-  * Rate: The data copy rate of the clone task
-  * FailedSched: The number of times the task scheduling failed
-  * FailedRunning: The number of times the task failed to execute
-  * LstAdjPrio: The time the task priority was last adjusted
-  * CmtVer/CmtVerHash/VisibleVer/VisibleVerHash: Version information used to execute the clone task
-  * ErrMsg: The error message when the task is scheduled and run
+2. View the running tasks by using `SHOW PROC '/cluster_balance/running_tablets';`.
+   Same properties are used here. See `pending tablets` for details.
 
-2. View the running tasks  
-    `SHOW PROC '/cluster_balance/running_tablets';`  
-    Same properties are used here. See `pending tablets` for details.
-3. View the finished tasks  
-    `SHOW PROC '/cluster_balance/history_tablets';`  
-    By default, we only keep the last 1000 completed tasks. Same properties are used here. See `pending tablets` for details. If the `State` is `FINISHED`, that means the task is completed properly. Otherwise, check `ErrMsg` for the reason of a failed task.
+3. View the finished tasks by using `SHOW PROC '/cluster_balance/history_tablets';`.
+   By default, we only keep the last 1000 completed tasks. Same properties are used here. See `pending tablets` for details. If the `State` is `FINISHED`, that means the task is completed properly. Otherwise, check `ErrMsg` for the reason of a failed task.
