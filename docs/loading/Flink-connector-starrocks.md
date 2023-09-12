@@ -191,6 +191,7 @@ The Flink connector will buffer the data in memory, and flush them in batch to S
 is triggered is different between at-least-once and exactly-once.
 
 For at-least-once, the flush will be triggered when any of the following conditions are met:
+
 - the bytes of buffered rows reaches the limit `sink.buffer-flush.max-bytes`
 - the number of buffered rows reaches the limit `sink.buffer-flush.max-rows`. (Only valid for sink version V1)
 - the elapsed time since the last flush reaches the limit `sink.buffer-flush.interval-ms`
@@ -202,13 +203,13 @@ For exactly-once, the flush only happens when a checkpoint is triggered.
 
 The Flink connector provides the following metrics to monitor loading.
 
-| Name                     | Type    | Description                                                     |
+| Metric                     | Type    | Description                                                     |
 |--------------------------|---------|-----------------------------------------------------------------|
 | totalFlushBytes          | counter | successfully flushed bytes.                                     |
 | totalFlushRows           | counter | number of rows successfully flushed.                                      |
-| totalFlushSucceededTimes | counter | number of times that the data-batch been successfully flushed.  |
-| totalFlushFailedTimes    | counter | number of times that the flushing been failed.                  |
-| totalFilteredRows        | counter | number of rows filtered which is also included in totalFlushRows.    |
+| totalFlushSucceededTimes | counter | number of times that the data is successfully flushed.  |
+| totalFlushFailedTimes    | counter | number of times that the data fails to be flushed.                  |
+| totalFilteredRows        | counter | number of rows filtered, which is also included in totalFlushRows.    |
 
 ## Examples
 
@@ -545,7 +546,7 @@ takes effect only when the new value for `score` is has a greater or equal to th
     - Define the DDL including all of columns.
     - Set the option `sink.properties.merge_condition` to `score` to tell the connector to use the column `score`
     as the condition.
-    -  Set the option `sink.version` to `V1` which tells the connector to use Stream Load.
+    - Set the option `sink.version` to `V1` which tells the connector to use Stream Load.
 
     ```SQL
     CREATE TABLE `score_board` (
