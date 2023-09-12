@@ -385,6 +385,16 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
 }
 
 Status HdfsTextScanner::_build_hive_column_name_2_index() {
+    // For some table like file table, there is no hive_column_names at all.
+    // So we use slot order defined in table schema.
+    if (_scanner_params.hive_column_names->empty()) {
+        _materialize_slots_index_2_csv_column_index.resize(_scanner_params.materialize_slots.size());
+        for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
+            _materialize_slots_index_2_csv_column_index[i] = i;
+        }
+        return Status::OK();
+    }
+
     const bool case_sensitive = _scanner_params.case_sensitive;
 
     // The map's value is the position of column name in hive's table(Not in StarRocks' table)

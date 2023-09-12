@@ -36,6 +36,7 @@
 
 #include <bzlib.h>
 #include <lz4/lz4frame.h>
+#include <snappy/snappy.h>
 #include <zlib.h>
 #include <zstd/zstd.h>
 #include <zstd/zstd_errors.h>
@@ -44,8 +45,8 @@
 
 #include "fmt/compile.h"
 #include "gutil/strings/substitute.h"
+#include "util/coding.h"
 #include "util/compression/compression_context_pool_singletons.h"
-
 namespace starrocks {
 
 class GzipStreamCompression : public StreamCompression {
@@ -422,11 +423,111 @@ Status ZstandardStreamCompression::decompress(uint8_t* input, size_t input_len, 
     return Status::OK();
 }
 
+class SnappyStreamCompression : public StreamCompression {
+public:
+    SnappyStreamCompression() : StreamCompression(CompressionTypePB::SNAPPY) {}
+    ~SnappyStreamCompression() override = default;
+    std::string debug_info() override { return "SnappyStreamCompression"; }
+
+    Status decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output, size_t output_len,
+                      size_t* output_bytes_write, bool* stream_end) override;
+
+    Status init() override;
+
+private:
+    struct Context {
+        uint32_t block_length = 0;
+        uint32_t output_length = 0;
+
+        std::vector<char> buffer;
+        char* buffer_data;
+        size_t buffer_size = 0;
+        size_t buffer_used = 0;
+    };
+    Context _ctx;
+};
+
+Status SnappyStreamCompression::init() {
+    return Status::OK();
+}
+
+Status SnappyStreamCompression::decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
+                                           size_t output_len, size_t* output_bytes_write, bool* stream_end) {
+    *input_bytes_read = 0;
+    *output_bytes_write = 0;
+    *stream_end = false;
+
+    Context* ctx = &_ctx;
+    Status st = Status::OK();
+
+    // if there is any data in buffer? if not load.
+    if (ctx->buffer_used == ctx->buffer_size) {
+        // load block length if missing.
+        if (ctx->block_length == 0) {
+            if (input_len < 4) return st;
+            ctx->block_length = decode_fixed32_be(input);
+            input += 4;
+            input_len -= 4;
+            *input_bytes_read += 4;
+        }
+
+        // see if a compressed unit is ready.
+        if (input_len < 4) return st;
+        uint32_t compressed_len = decode_fixed32_be(input);
+        input += 4;
+        input_len -= 4;
+        if (input_len < compressed_len) {
+            return st;
+        }
+
+        *input_bytes_read += (compressed_len + 4);
+        input_len -= compressed_len;
+        size_t uncompressed_len = 0;
+        bool ok = snappy::GetUncompressedLength((const char*)input, compressed_len, &uncompressed_len);
+        if (!ok) {
+            return Status::InternalError("Snappy GetUncompressedLength failed because of data corruption");
+        }
+
+        // if output space is not large enough, then we have to allocate space.
+        if (uncompressed_len > output_len) {
+            ctx->buffer.reserve(uncompressed_len);
+            ctx->buffer_data = ctx->buffer.data();
+        } else {
+            ctx->buffer_data = (char*)output;
+        }
+        ok = snappy::RawUncompress((const char*)input, compressed_len, ctx->buffer_data);
+        if (!ok) {
+            return Status::InternalError("Snappy RawUncompress failed because of data corruption");
+        }
+        ctx->buffer_size = uncompressed_len;
+        ctx->buffer_used = 0;
+    }
+
+    output_len = std::min(output_len, ctx->buffer_size - ctx->buffer_used);
+    if (ctx->buffer_data != (char*)output) {
+        std::memcpy(output, ctx->buffer_data + ctx->buffer_used, output_len);
+    }
+    ctx->buffer_used += output_len;
+    ctx->output_length += output_len;
+    *output_bytes_write += output_len;
+    if (ctx->output_length == ctx->block_length) {
+        ctx->block_length = 0;
+        ctx->output_length = 0;
+        if (input_len == 0) {
+            *stream_end = true;
+        }
+    }
+    return st;
+}
+
 Status StreamCompression::create_decompressor(CompressionTypePB type,
                                               std::unique_ptr<StreamCompression>* decompressor) {
     switch (type) {
     case CompressionTypePB::NO_COMPRESSION:
         *decompressor = nullptr;
+        break;
+    case CompressionTypePB::SNAPPY:
+        *decompressor = std::make_unique<SnappyStreamCompression>();
         break;
     case CompressionTypePB::GZIP:
         *decompressor = std::make_unique<GzipStreamCompression>(false);
