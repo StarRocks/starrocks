@@ -239,9 +239,9 @@ size_t AggHashMapVariant::allocated_memory_usage(const MemPool* pool) const {
     });
 }
 
-void AggHashSetVariant::init(RuntimeState* state, Type type_, AggStatistics* agg_stat) {
-    type = type_;
-    switch (type_) {
+void AggHashSetVariant::init(RuntimeState* state, Type type, AggStatistics* agg_stat) {
+    _type = type;
+    switch (_type) {
 #define M(NAME)                                                                                                    \
     case Type::NAME:                                                                                               \
         hash_set_with_key = std::make_unique<detail::AggHashSetVariantTypeTraits<Type::NAME>::HashSetWithKeyType>( \
@@ -253,7 +253,7 @@ void AggHashSetVariant::init(RuntimeState* state, Type type_, AggStatistics* agg
 }
 
 #define CONVERT_TO_TWO_LEVEL_SET(DST, SRC)                                                                            \
-    if (type == AggHashSetVariant::Type::SRC) {                                                                       \
+    if (_type == AggHashSetVariant::Type::SRC) {                                                                      \
         auto dst = std::make_unique<detail::AggHashSetVariantTypeTraits<Type::DST>::HashSetWithKeyType>(              \
                 state->chunk_size());                                                                                 \
         std::visit(                                                                                                   \
@@ -265,7 +265,7 @@ void AggHashSetVariant::init(RuntimeState* state, Type type_, AggStatistics* agg
                     }                                                                                                 \
                 },                                                                                                    \
                 hash_set_with_key);                                                                                   \
-        type = AggHashSetVariant::Type::DST;                                                                          \
+        _type = AggHashSetVariant::Type::DST;                                                                         \
         hash_set_with_key = std::move(dst);                                                                           \
         return;                                                                                                       \
     }
