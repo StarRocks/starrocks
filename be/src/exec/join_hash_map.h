@@ -759,14 +759,15 @@ public:
     void create(const HashTableParam& param);
     void close();
 
-    Status build(RuntimeState* state);
-    Status reset_probe_state(RuntimeState* state);
-    Status probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos);
-    Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
+    [[nodiscard]] Status build(RuntimeState* state);
+    [[nodiscard]] Status reset_probe_state(RuntimeState* state);
+    [[nodiscard]] Status probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
+                               bool* eos);
+    [[nodiscard]] Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
     void append_chunk(RuntimeState* state, const ChunkPtr& chunk, const Columns& key_columns);
     // convert input column to spill schema order
-    StatusOr<ChunkPtr> convert_to_spill_schema(const ChunkPtr& chunk) const;
+    [[nodiscard]] StatusOr<ChunkPtr> convert_to_spill_schema(const ChunkPtr& chunk) const;
 
     const ChunkPtr& get_build_chunk() const { return _table_items->build_chunk; }
     Columns& get_key_columns() { return _table_items->key_columns; }
@@ -783,7 +784,7 @@ private:
     JoinHashMapType _choose_join_hash_map();
     static size_t _get_size_of_fixed_and_contiguous_type(LogicalType data_type);
 
-    Status _upgrade_key_columns_if_overflow();
+    [[nodiscard]] Status _upgrade_key_columns_if_overflow();
 
     void _remove_duplicate_index_for_left_outer_join(Filter* filter);
     void _remove_duplicate_index_for_left_semi_join(Filter* filter);
