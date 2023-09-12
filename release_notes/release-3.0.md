@@ -1,5 +1,34 @@
 # StarRocks version 3.0
 
+## 3.0.6
+
+发布日期：2023 年 9 月 12 日
+
+### 新增特性
+
+- 聚合函数 [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) 支持使用 DISTINCT 关键词和 ORDER BY 子句。[#28778](https://github.com/StarRocks/starrocks/pull/28778)
+- 分区中数据可以随着时间推移自动进行降冷操作。[#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
+
+### 功能优化
+
+- 对所有复合谓词以及 WHERE 子句中的表达式支持隐式转换，可通过[会话变量](../reference/System_variable.md) `enable_strict_type` 控制是否打开隐式转换（默认取值为 `false`）。[#21870](https://github.com/StarRocks/starrocks/pull/21870)
+- 统一 FE 和 BE 中 STRING 转换成 INT 的处理逻辑。[#29969](https://github.com/StarRocks/starrocks/pull/29969)
+
+### 问题修复
+
+修复了如下问题：
+
+- 如果 `enable_orc_late_materialization` 设置为 `true`，使用 Hive Catalog 查询 ORC 文件中 STRUCT 类型的数据时结果异常。[#27971](https://github.com/StarRocks/starrocks/pull/27971)
+- Hive Catalog 查询时，如果 WHERE 子句中使用分区列且包含 OR 条件，查询结果不正确。 [#28876](https://github.com/StarRocks/starrocks/pull/28876)
+- RESTful API `show_data` 对于云原生表的返回信息不正确。[#29473](https://github.com/StarRocks/starrocks/pull/29473)
+- 如果集群为[存算分离架构](../deployment/deploy_shared_data.md)，数据存储在 Azure Blob Storage 上，并且已经建表，则回滚到 3.0 时 FE 无法启动。 [#29433](https://github.com/StarRocks/starrocks/pull/29433)
+- 向用户赋予 Iceberg Catalog 下某表权限后，该用户查询该表时显示没有权限。[#29173](https://github.com/StarRocks/starrocks/pull/29173)
+- [BITMAP](../sql-reference/sql-statements/data-types/BITMAP.md) 和 [HLL](../sql-reference/sql-statements/data-types/HLL.md) 类型的列在 [SHOW FULL COLUMNS](../sql-reference/sql-statements/Administration/SHOW%20FULL%20COLUMNS.md) 查询结果中返回的 `Default` 字段值不正确。[#29510](https://github.com/StarRocks/starrocks/pull/29510)
+- 在线修改 FE 动态参数 `max_broker_load_job_concurrency` 不生效。[#29964](https://github.com/StarRocks/starrocks/pull/29964) [#29720](https://github.com/StarRocks/starrocks/pull/29720)
+- Refresh 物化视图，同时并发地修改物化视图的刷新策略，有概率会导致 FE 无法启动。[#29691](https://github.com/StarRocks/starrocks/pull/29691)
+- 执行 `select count(distinct(int+double)) from table_name` 会报错 `unknown error`。 [#30054](https://github.com/StarRocks/starrocks/pull/30054)
+- 主键模型表 Restore 之后，BE 重启后元数据发生错误，导致元数据不一致。[#30135](https://github.com/StarRocks/starrocks/pull/30135)
+
 ## 3.0.5
 
 发布日期：2023 年 8 月 16 日
