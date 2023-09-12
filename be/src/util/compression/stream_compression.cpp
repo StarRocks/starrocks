@@ -526,6 +526,9 @@ Status StreamCompression::create_decompressor(CompressionTypePB type,
     case CompressionTypePB::NO_COMPRESSION:
         *decompressor = nullptr;
         break;
+    case CompressionTypePB::SNAPPY:
+        *decompressor = std::make_unique<SnappyStreamCompression>();
+        break;
     case CompressionTypePB::GZIP:
         *decompressor = std::make_unique<GzipStreamCompression>(false);
         break;
@@ -540,9 +543,6 @@ Status StreamCompression::create_decompressor(CompressionTypePB type,
         break;
     case CompressionTypePB::ZSTD:
         *decompressor = std::make_unique<ZstandardStreamCompression>();
-        break;
-    case CompressionTypePB::SNAPPY:
-        *decompressor = std::make_unique<SnappyStreamCompression>();
         break;
     default:
         return Status::InternalError(fmt::format("Unknown compress type: {}", type));
