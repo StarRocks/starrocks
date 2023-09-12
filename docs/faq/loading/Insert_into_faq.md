@@ -10,7 +10,7 @@ You can solve this problem by changing the timeout duration for the Stream Load 
 
 `streaming_load_rpc_max_alive_time_sec`: The RPC timeout for Stream Load. Unit: Seconds. Default: `1200`.
 
-Or you can set the query timeout for all queries using the following variable:
+Or you can set the query timeout using the following variable:
 
 `query_timeout`: The timeout duration for queries. Its unit is seconds, and the default value is `300`.
 
