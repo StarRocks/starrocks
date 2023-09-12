@@ -283,6 +283,19 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const ChunkPtr& chunk
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status AggregateStreamingSinkOperator::_push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size) {
+    if (_limited_mem_state.has_limited(*_aggregator)) {
+        RETURN_IF_ERROR(_push_chunk_by_force_streaming(chunk));
+        _aggregator->set_streaming_all_states(true);
+    } else {
+        RETURN_IF_ERROR(_push_chunk_by_auto(chunk, chunk_size));
+    }
+    return Status::OK();
+}
+
+>>>>>>> 95690a0cc5 ([BugFix] Fix mem limited streaming agg may hang (#30228))
 Status AggregateStreamingSinkOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
     return _aggregator->reset_state(state, refill_chunks, this);

@@ -196,6 +196,10 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
     DCHECK(_stream->enable_prefetch());
     // if all is well and input stream enable prefetch and not eof
     if (!_stream->eof()) {
+        // make sure _running_restore_tasks < io_tasks_per_scan_operator to avoid scan overloaded
+        if (_stream->is_ready() && _running_restore_tasks >= config::io_tasks_per_scan_operator) {
+            return Status::OK();
+        }
         _running_restore_tasks++;
         auto query_ctx = state->query_ctx()->weak_from_this();
         auto restore_task = [this, state, guard, query_ctx, trace = TraceInfo(state)]() {

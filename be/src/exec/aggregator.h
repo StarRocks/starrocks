@@ -351,7 +351,9 @@ public:
     // to produce the final result that will be populated into the cache.
     // refill_chunk: partial-hit result of stale version.
     // refill_op: pre-cache agg operator, Aggregator's holder.
-    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks, pipeline::Operator* refill_op);
+    // reset_sink_complete: reset sink_complete state. sometimes if operator sink has complete we don't have to reset sink state
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks, pipeline::Operator* refill_op,
+                       bool reset_sink_complete = true);
 
     const AggregatorParamsPtr& params() const { return _params; }
 
@@ -406,6 +408,10 @@ protected:
     bool _needs_finalize;
     // Indicate whether data of the hash table has been taken out or reach limit
     bool _is_ht_eos = false;
+<<<<<<< HEAD
+=======
+    std::atomic_bool _streaming_all_states = false;
+>>>>>>> 95690a0cc5 ([BugFix] Fix mem limited streaming agg may hang (#30228))
     bool _is_only_group_by_columns = false;
     // At least one group by column is nullable
     bool _has_nullable_key = false;
@@ -503,7 +509,7 @@ protected:
         return _aggr_mode == AM_STREAMING_PRE_CACHE || _aggr_mode == AM_BLOCKING_PRE_CACHE || !_needs_finalize;
     }
 
-    Status _reset_state(RuntimeState* state);
+    Status _reset_state(RuntimeState* state, bool reset_sink_complete);
 
     // initial const columns for i'th FunctionContext.
     Status _evaluate_const_columns(int i);
