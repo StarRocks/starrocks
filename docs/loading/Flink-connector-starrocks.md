@@ -133,17 +133,12 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 
 ### Exactly Once
 
-<<<<<<< HEAD
-- Loading data into StarRocks tables needs INSERT privilege. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/account-management/GRANT) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
-
-- Since v2.4, StarRocks provides a Stream Load transaction interface. Since Flink connector version 1.2.4, the Sink is redesigned to implement exactly-once semantics based on transactional interfaces. Compared to the previous implementation based on non-transactional interfaces, the new implementation reduces memory usage and checkpoint overhead, thereby enhancing real-time performance and stability of loading. Starting from Flink connector version 1.2.4, the Sink implements transactional interfaces by default. To enable non-transactional interfaces, the `sink.version` needs to be configured as `V1`.
-=======
-- If you want sink to guarantee exactly-once semantics, we recommend you to upgrade StarRocks to 2.5 or later, and Flink connector to 1.2.4 or later
+- If you want sink to guarantee exactly-once semantics, we recommend you to upgrade StarRocks to 2.5 or later, and Flink connector to 1.2.4 or later.
+  
   - Since Flink connector 1.2.4, the exactly-once is redesigned based on [Stream Load transaction interface](https://docs.starrocks.io/en-us/latest/loading/Stream_Load_transaction_interface)
     provided by StarRocks since 2.4. Compared to the previous implementation based on non-transactional Stream Load non-transactional interface,
     the new implementation reduces memory usage and checkpoint overhead, thereby enhancing real-time performance and
     stability of loading.
->>>>>>> d62405e74d ([Doc] Add missing docs for the flink version 1.2.8 (#30814))
 
   - If the version of StarRocks is earlier than 2.4 or the version of Flink connector is earlier than 1.2.4, the sink
     will automatically choose the implementation based on Stream Load non-transactional interface.
