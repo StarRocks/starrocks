@@ -1,4 +1,4 @@
-# 使用 Spark Connector读取数据
+# 使用 Spark Connector 读取数据
 
 StarRocks 提供 Apache Spark™ Connector (StarRocks Connector for Apache Spark™)，支持通过 Spark 读取 StarRocks 中存储的数据。您可以使用 Spark 对读取到的数据进行复杂处理、机器学习等。
 
@@ -18,14 +18,17 @@ Spark Connector 支持三种数据读取方式：Spark SQL、Spark DataFrame 和
 
 | Spark Connector | Spark         | StarRocks   | Java | Scala |
 |---------------- | ------------- | ----------- | ---- | ----- |
+| 1.1.1           | 3.2, 3.3, 3.4 | 2.5 及以上   | 8    | 2.12  |
 | 1.1.0           | 3.2, 3.3, 3.4 | 2.5 及以上   | 8    | 2.12  |
 | 1.0.0           | 3.x           | 1.18 及以上  | 8    | 2.12  |
 | 1.0.0           | 2.x           | 1.18 及以上  | 8    | 2.11  |
 
 > **注意**
 >
+> - 了解不同版本的 Spark connector 之间的行为变化，请查看[升级 Spark connector](#升级-spark-connector)。
+> - 自 1.1.1 版本起，Spark connector 不再提供 MySQL JDBC 驱动程序，您需要将驱动程序手动放到 Spark 的类路径中。您可以在 [MySQL 官网](https://dev.mysql.com/downloads/connector/j/)或 [Maven 中央仓库](https://repo1.maven.org/maven2/mysql/mysql-connector-java/)上找到该驱动程序。
 > - 1.0.0 版本只支持读取 StarRocks，从 1.1.0 版本开始同时支持读写 StarRocks。
-> - 1.0.0 版本和 1.1.0 版本在参数和类型映射上存在差别，请参考 [Spark Connector 升级](#spark-connector-升级)。
+> - 1.0.0 版本和 1.1.0 版本在参数和类型映射上存在差别，请查看[升级 Spark connector](#升级-spark-connector)。
 > - 1.0.0 版本一般情况下不再增加新功能，条件允许请尽快升级 Spark Connector。
 
 ## 获取 Spark Connector
@@ -162,6 +165,7 @@ Spark Connector Jar 包的命名格式如下：
 | starrocks.deserialize.arrow.async    | false             | 是否支持把 Arrow 格式异步转换为 Spark Connector 迭代所需的 RowBatch。 |
 | starrocks.deserialize.queue.size     | 64                | 异步转换 Arrow 格式时内部处理队列的大小，当 `starrocks.deserialize.arrow.async` 为 `true` 时生效。 |
 | starrocks.filter.query               | 无                | 指定过滤条件。多个过滤条件用 `and` 连接。StarRocks 根据指定的过滤条件完成对待读取数据的过滤。 |
+| starrocks.timezone | JVM 默认时区|自 1.1.1 版本起支持。StarRocks 的时区。用于将 StarRocks 的 `DATETIME` 类型的值转换为 Spark 的 `TimestampType` 类型的值。默认为 `ZoneId#systemDefault()` 返回的 JVM 时区。格式可以是时区名称，例如 Asia/Shanghai，或时区偏移，例如 +08:00。|
 
 ### Spark SQL 和 Spark DataFrame 专有参数
 
@@ -237,6 +241,8 @@ Spark Connector 中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
 ## Spark Connector 升级
 
 ### 1.0.0 升级至 1.1.0
+
+- 自 1.1.1 版本开始，Spark connector 不再提供 MySQL 官方 JDBC 驱动程序 `mysql-connector-java`，因为该驱动程序使用 GPL 许可证，存在一些限制。然而，Spark连接器仍然需要 MySQL JDBC 驱动程序才能连接到 StarRocks 以获取表的元数据，因此您需要手动将驱动程序添加到 Spark 类路径中。您可以在 [MySQL 官网](https://dev.mysql.com/downloads/connector/j/) 或 [Maven 中央仓库](https://repo1.maven.org/maven2/mysql/mysql-connector-java/)上找到这个驱动程序。
 
 - 1.1.0 版本需要通过 JDBC 访问 StarRocks 以获取更详细的表信息，因此必须配置 `starrocks.fe.jdbc.url`。
 
