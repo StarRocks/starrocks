@@ -115,6 +115,12 @@ public class PaimonMetadataTest {
         Assert.assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
         Assert.assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());
+<<<<<<< HEAD
+=======
+        Assert.assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
+        Assert.assertEquals(ScalarType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
+        Assert.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
+>>>>>>> 96e938f385 ([BugFix]Fix paimon table column can not be nullable (#30716))
         Assert.assertEquals("paimon_catalog", paimonTable.getCatalogName());
     }
 

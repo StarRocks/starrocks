@@ -156,7 +156,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             String fieldName = field.name();
             DataType type = field.type();
             Type fieldType = ColumnTypeConverter.fromPaimonType(type);
-            Column column = new Column(fieldName, fieldType, type.isNullable());
+            Column column = new Column(fieldName, fieldType, true);
             fullSchema.add(column);
         }
         PaimonTable table = new PaimonTable(catalogName, dbName, tblName, fullSchema,
