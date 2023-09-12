@@ -1,6 +1,8 @@
 # Deploy StarRocks manually
 
-This topic describes how to manually deploy StarRocks. For other modes of installation, see [Deployment Overview](../deployment/deployment_overview.md).
+This topic describes how to manually deploy shared-nothing StarRocks (in which the BE is responsible for both storage and computing). For other modes of installation, see [Deployment Overview](../deployment/deployment_overview.md).
+
+To deploy a shared-data StarRocks cluster (decoupled storage and computing), see [Deploy and use shared-data StarRocks](../deployment/deploy_shared_data.md)
 
 ## Step 1: Start the Leader FE node
 
