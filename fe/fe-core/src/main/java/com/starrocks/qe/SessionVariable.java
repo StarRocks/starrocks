@@ -421,6 +421,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_GREEDY_MODE =
             "enable_materialized_view_rewrite_greedy_mode";
 
+    public static final String ENABLE_MATERIALIZED_VIEW_PLAN_CACHE = "enable_materialized_view_plan_cache";
+
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
     public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
@@ -1156,6 +1158,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // - Use the max plan tree to rewrite in view-delta mode to avoid too many rewrites.
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE_GREEDY_MODE)
     private boolean enableMaterializedViewRewriteGreedyMode = false;
+
+    // whether to use materialized view plan context cache to reduce mv rewrite time cost
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_PLAN_CACHE, flag = VariableMgr.INVISIBLE)
+    private boolean enableMaterializedViewPlanCache = true;
 
     @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryExcludingMVNames = "";
@@ -2239,6 +2245,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableMaterializedViewRewriteGreedyMode() {
         return this.enableMaterializedViewRewriteGreedyMode;
+    }
+
+    public void setEnableMaterializedViewPlanCache(boolean enableMaterializedViewPlanCache) {
+        this.enableMaterializedViewPlanCache = enableMaterializedViewPlanCache;
+    }
+
+    public boolean isEnableMaterializedViewPlanCache() {
+        return this.enableMaterializedViewPlanCache;
     }
 
     public String getQueryExcludingMVNames() {
