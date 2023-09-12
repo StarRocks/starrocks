@@ -115,6 +115,7 @@ import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -1550,9 +1551,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             checkMaterializedViewAsyncRefreshSchemeUnitIdentifier(asyncRefreshSchemeDesc);
         }
+
         ModifyTablePropertiesClause modifyTablePropertiesClause = null;
-        if (context.modifyTablePropertiesClause() != null) {
-            modifyTablePropertiesClause = (ModifyTablePropertiesClause) visit(context.modifyTablePropertiesClause());
+        if (context.modifyPropertiesClause() != null) {
+            modifyTablePropertiesClause = (ModifyTablePropertiesClause) visit(context.modifyPropertiesClause());
         }
         String status = null;
         if (context.statusDesc() != null) {
@@ -1630,6 +1632,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowCatalogsStatement(StarRocksParser.ShowCatalogsStatementContext context) {
         return new ShowCatalogsStmt(createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterCatalogStatement(StarRocksParser.AlterCatalogStatementContext context) {
+        String catalogName = ((Identifier) visit(context.catalogName)).getValue();
+        AlterClause alterClause = (AlterClause) visit(context.modifyPropertiesClause());
+        return new AlterCatalogStmt(catalogName, alterClause, createPos(context));
     }
 
     // ---------------------------------------- Warehouse Statement -----------------------------------------------------
@@ -3425,7 +3434,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitModifyTablePropertiesClause(StarRocksParser.ModifyTablePropertiesClauseContext context) {
+    public ParseNode visitModifyPropertiesClause(StarRocksParser.ModifyPropertiesClauseContext context) {
         Map<String, String> properties = new HashMap<>();
         List<Property> propertyList = visit(context.propertyList().property(), Property.class);
         for (Property property : propertyList) {
