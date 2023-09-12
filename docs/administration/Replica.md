@@ -339,7 +339,7 @@ Above shows all replicas of the corresponding Tablet. The content shown here is 
       | FailedRunning| The number of times the task failed to execute|
       | LstAdjPrio | The time the task priority was last adjusted |
       | CmtVer/CmtVerHash/VisibleVer/VisibleVerHash| Version information used to execute the clone task |
-   | ErrMsg |The error message when the task is scheduled and run|
+      | ErrMsg |The error message when the task is scheduled and run|
 
 2. View the running tasks by using `SHOW PROC '/cluster_balance/running_tablets';`.
    Same properties are used here. See `pending tablets` for details.
