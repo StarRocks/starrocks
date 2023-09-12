@@ -1,5 +1,32 @@
 # StarRocks version 3.0
 
+## 3.0.6
+
+Release date: September 12, 2023
+
+### New Features
+
+- The aggregate function group_concat() supports distinct and order by. [#28778](https://github.com/StarRocks/starrocks/pull/28778)
+- Data in partitions can be automatically cooled down over time. [#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
+
+### Improvements
+
+- Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](../reference/System_variable.md) `enable_strict_type`. The default value of this session variable is `false`.  [#21870](https://github.com/StarRocks/starrocks/pull/21870)
+- Unifies the logic between FE and BE in converting strings to integers. [#29969](https://github.com/StarRocks/starrocks/pull/29969)
+
+### Bug Fixes
+
+- If `enable_orc_late_materialization` is set to `true`, an unexpected result is returned when a Hive catalog is used to query struct-type data in ORC files. [#27971](https://github.com/StarRocks/starrocks/pull/27971)
+- During data queries through Hive Catalog, if a partitioning column and an OR operator are used in the WHERE clause, the query result is incorrect. [#28876](https://github.com/StarRocks/starrocks/pull/28876)
+- The values returned by the RESTful API action `show_data` for cloud-native tables are incorrect. [#29473](https://github.com/StarRocks/starrocks/pull/29473)
+- If the [shared-data cluster ](../deployment/deploy_shared_data.md) stores data in Azure Blob Storage and a table is created, the FE fails to start after the cluster is rolled back to version 3.0. [#29433](https://github.com/StarRocks/starrocks/pull/29433)
+- A user has no permission when querying a table in the Iceberg catalog even if the user is granted permission to that table. [#29173](https://github.com/StarRocks/starrocks/pull/29173)
+- Online modifying the FE dynamic parameter `max_broker_load_job_concurrency` does not take effect.
+- The `Default` field values returned by the [SHOW FULL COLUMNS](../sql-reference/sql-statements/Administration/SHOW%20FULL%20COLUMNS.md) statement for columns of the [BITMAP](../sql-reference/sql-statements/data-types/BITMAP.md) or [HLL](../sql-reference/sql-statements/data-types/HLL.md) data type are incorrect. [#29510](https://github.com/StarRocks/starrocks/pull/29510)
+- The FE may fail to start when a materialized view is refreshed and at the same time, the refresh strategy of the materialized view is modified. [#29964](https://github.com/StarRocks/starrocks/pull/29964) [#29720](https://github.com/StarRocks/starrocks/pull/29720)
+- The error `unknown error` is returned when `select count(distinct(int+double)) from table_name` is executed. [#29691](https://github.com/StarRocks/starrocks/pull/29691)
+- After a primary key model table is restored, a metadata error issue happens when a BE is restarted, which leads to metadata inconsistency. [#30135](https://github.com/StarRocks/starrocks/pull/30135)
+
 ## 3.0.5
 
 Release date: August 16, 2023
