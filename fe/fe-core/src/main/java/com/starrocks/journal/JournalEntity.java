@@ -77,6 +77,7 @@ import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AddSubPartitionsInfoV2;
+import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
@@ -961,6 +962,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DROP_CATALOG: {
                 data = DropCatalogLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ALTER_CATALOG: {
+                data = AlterCatalogLog.read(in);
                 isRead = true;
                 break;
             }

@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
@@ -22,18 +21,27 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Map;
 
-public class DropCatalogLog implements Writable {
+public class AlterCatalogLog implements Writable {
 
     @SerializedName(value = "catalogName")
     private String catalogName;
 
-    public DropCatalogLog(String catalogName) {
+    @SerializedName(value = "properties")
+    private Map<String, String> properties;
+
+    public AlterCatalogLog(String catalogName, Map<String, String> properties) {
         this.catalogName = catalogName;
+        this.properties = properties;
     }
 
     public String getCatalogName() {
         return catalogName;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     @Override
@@ -41,7 +49,7 @@ public class DropCatalogLog implements Writable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static DropCatalogLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), DropCatalogLog.class);
+    public static AlterCatalogLog read(DataInput in) throws IOException {
+        return GsonUtils.GSON.fromJson(Text.readString(in), AlterCatalogLog.class);
     }
 }
