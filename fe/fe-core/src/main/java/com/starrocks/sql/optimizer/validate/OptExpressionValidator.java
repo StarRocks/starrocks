@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -76,6 +77,11 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
 
     @Override
     public OptExpression visitLogicalLimit(OptExpression optExpression, Void context) {
+        LogicalLimitOperator limit = optExpression.getOp().cast();
+        if (limit.hasOffset() && limit.isLocal()) {
+            ErrorReport.reportValidateException(ErrorCode.ERR_PLAN_VALIDATE_ERROR,
+                    ErrorType.INTERNAL_ERROR, optExpression, "offset limit transfer error, must be gather operator");
+        }
         return commonValidate(optExpression);
     }
 
