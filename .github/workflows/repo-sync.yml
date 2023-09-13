@@ -1,4 +1,5 @@
 name: Repo Sync
+run-name: Repo Sync(#${{ inputs.PR_ID }} [${{ inputs.BRANCH }}])
 
 on:
 
@@ -141,7 +142,10 @@ jobs:
           BODY_FILE: /home/disk1/nas/body-${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
         run: |
-          gh pr create -B ${{ inputs.BRANCH }} -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"
+          info=`gh pr create -B ${{ inputs.BRANCH }} -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"`
+          echo $info
+          pr_url=`echo $info | tail -n 1`
+          echo pr_url=${pr_url} >> $GITHUB_OUTPUT
 
       # previous pr files' check pending
       - name: Create pending pull request
@@ -155,7 +159,10 @@ jobs:
           BODY: "Previous prs: ${{ steps.previous-check.outputs.CONFLICT_PRS }}"
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
         run: |
-          gh pr create -B ${{ inputs.BRANCH }} -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -b "${BODY}" -r "${REVIEWER}"
+          info=`gh pr create -B ${{ inputs.BRANCH }} -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -b "${BODY}" -r "${REVIEWER}"`
+          echo $info
+          pr_url=`echo $info | tail -n 1`
+          echo pr_url=${pr_url} >> $GITHUB_OUTPUT
 
       # Unexpected failure
       - name: Create Error pull request
@@ -175,7 +182,10 @@ jobs:
           BODY_FILE: /home/disk1/nas/body-${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
         run: |
-          gh pr create -B "${BASE}" -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"
+          info=`gh pr create -B "${BASE}" -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"`
+          echo $info
+          pr_url=`echo $info | tail -n 1`
+          echo pr_url=${pr_url} >> $GITHUB_OUTPUT
 
       - name: notify
         if: always()
