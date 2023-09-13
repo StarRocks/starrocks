@@ -328,7 +328,8 @@ public class ConnectProcessor {
                 .setAuthorizedUser(
                         ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
                 .setDb(ctx.getDatabase())
-                .setCatalog(ctx.getCurrentCatalog());
+                .setCatalog(ctx.getCurrentCatalog())
+                .setWarehouse(ctx.getCurrentWarehouseName());
         Tracers.register(ctx);
 
         // execute this query.

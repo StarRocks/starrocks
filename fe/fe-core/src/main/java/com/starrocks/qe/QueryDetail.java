@@ -312,4 +312,8 @@ public class QueryDetail implements Serializable {
     public void setWarehouse(String warehouse) {
         this.warehouse = warehouse;
     }
+
+    public String getWarehouse() {
+        return warehouse;
+    }
 }
