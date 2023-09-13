@@ -94,24 +94,6 @@ Directly download the corresponding version of the Spark connector JAR from the 
 
 ## Data type mapping between Spark and StarRocks
 
-<<<<<<< HEAD
-| Spark data type | StarRocks data type |
-| --------------- | ------------------- |
-| BooleanType     | BOOLEAN             |
-| ByteType        | TINYINT             |
-| ShortType       | SMALLINT            |
-| IntegerType     | INT                 |
-| LongType        | BIGINT              |
-| StringType      | LARGEINT            |
-| FloatType       | FLOAT               |
-| DoubleType      | DOUBLE              |
-| DecimalType     | DECIMAL             |
-| StringType      | CHAR                |
-| StringType      | VARCHAR             |
-| StringType      | STRING              |
-| DateType        | DATE                |
-| TimestampType   | DATETIME            |
-=======
 - The default data type mapping is as follows:
 
   | Spark data type | StarRocks data type                                          |
@@ -146,7 +128,6 @@ Directly download the corresponding version of the Spark connector JAR from the 
 - Since 1.1.1, the connector uses Stream Load interface by default rather than Stream Load transaction interface in version 1.1.0. If you still want to use Stream Load transaction interface, you
   can set the option `starrocks.write.max.retries` to `0`. Please see the description of `starrocks.write.enable.transaction-stream-load` and `starrocks.write.max.retries`
   for details.
->>>>>>> 1899b89c1c ([Doc] fix linting in data cache (#30942))
 
 ## Examples
 
