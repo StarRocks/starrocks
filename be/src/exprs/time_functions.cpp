@@ -646,6 +646,134 @@ DEFINE_UNARY_FN_WITH_IMPL(to_dateImpl, v) {
 }
 DEFINE_TIME_UNARY_FN(to_date, TYPE_DATETIME, TYPE_DATE);
 
+struct TeradataFormatState {
+    std::unique_ptr<TeradataFormat> formatter;
+};
+
+// to_tera_date
+Status TimeFunctions::to_tera_date_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    if (!context->is_notnull_constant_column(1)) {
+        return Status::NotSupported("The 2rd argument must be literal");
+    }
+    auto* state = new TeradataFormatState();
+    context->set_function_state(scope, state);
+    state->formatter = std::make_unique<TeradataFormat>();
+    auto format_col = context->get_constant_column(1);
+    auto format_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(format_col);
+    if (!state->formatter->prepare(format_str)) {
+        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str));
+    }
+    return Status::OK();
+}
+
+Status TimeFunctions::to_tera_date_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state = reinterpret_cast<TeradataFormatState*>(context->get_function_state(scope));
+        delete state;
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> TimeFunctions::to_tera_date(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    size_t size = columns[0]->size(); // minimum number of rows.
+    ColumnBuilder<TYPE_DATE> result(size);
+    auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+
+    auto state = reinterpret_cast<TeradataFormatState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (!state->formatter) {
+        return Status::InvalidArgument("invalid date format");
+    }
+
+    for (size_t i = 0; i < size; ++i) {
+        if (str_viewer.is_null(i)) {
+            result.append_null();
+        } else {
+            std::string_view str(str_viewer.value(i));
+
+            DateTimeValue date_time_value;
+            if (!state->formatter->parse(str, &date_time_value)) {
+                result.append_null();
+            } else {
+                TimestampValue ts = TimestampValue::create(
+                        date_time_value.year(), date_time_value.month(), date_time_value.day(), date_time_value.hour(),
+                        date_time_value.minute(), date_time_value.second(), date_time_value.microsecond());
+                result.append((DateValue)ts);
+            }
+        }
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+// to_tera_timestamp
+Status TimeFunctions::to_tera_timestamp_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    if (!context->is_notnull_constant_column(1)) {
+        return Status::NotSupported("The 2rd argument must be literal");
+    }
+    auto* state = new TeradataFormatState();
+    context->set_function_state(scope, state);
+    state->formatter = std::make_unique<TeradataFormat>();
+    auto format_col = context->get_constant_column(1);
+    auto format_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(format_col);
+    if (!state->formatter->prepare(format_str)) {
+        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str));
+    }
+    return Status::OK();
+}
+
+// to_tera_timestamp
+Status TimeFunctions::to_tera_timestamp_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state = reinterpret_cast<TeradataFormatState*>(context->get_function_state(scope));
+        delete state;
+    }
+    return Status::OK();
+}
+
+// to_tera_timestamp
+StatusOr<ColumnPtr> TimeFunctions::to_tera_timestamp(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    size_t size = columns[0]->size(); // minimum number of rows.
+    ColumnBuilder<TYPE_DATETIME> result(size);
+    auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+
+    auto state = reinterpret_cast<TeradataFormatState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (!state->formatter) {
+        return Status::InvalidArgument("invalid datetime format");
+    }
+
+    for (size_t i = 0; i < size; ++i) {
+        if (str_viewer.is_null(i)) {
+            result.append_null();
+        } else {
+            std::string_view str(str_viewer.value(i));
+
+            DateTimeValue date_time_value;
+            if (!state->formatter->parse(str, &date_time_value)) {
+                result.append_null();
+            } else {
+                TimestampValue ts = TimestampValue::create(
+                        date_time_value.year(), date_time_value.month(), date_time_value.day(), date_time_value.hour(),
+                        date_time_value.minute(), date_time_value.second(), date_time_value.microsecond());
+                result.append(ts);
+            }
+        }
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
 template <TimeUnit UNIT>
 TimestampValue timestamp_add(TimestampValue tsv, int count) {
     return tsv.add<UNIT>(count);
