@@ -97,8 +97,14 @@ The available metrics are:
 |starrocks_fe_query_resource_group_err|pcs|cumulative|The number of incorrect queries for each resource group|
 |starrocks_be_resource_group_cpu_limit_ratio|percentage|Instantaneous|Instantaneous value of resource group cpu quota ratio|
 |starrocks_be_resource_group_cpu_use_ratio|percentage|average|The ratio of CPU time used by the resource group to the CPU time of all resource groups|
+<<<<<<< HEAD
 |starrocks_be_resource_group_mem_limit_bytes|Byte|Instantaneous|Instantaneous value of resource group memory quota|
 |starrocks_be_resource_group_mem_allocated_bytes|Byte|Instantaneous|Instantaneous value of resource group memory usage|
+=======
+|starrocks_be_resource_group_mem_limit_bytes|byte|Instantaneous|Instantaneous value of resource group memory quota|
+|starrocks_be_resource_group_mem_allocated_bytes|byte|Instantaneous|Instantaneous value of resource group memory usage|
+|starrocks_be_pipe_prepare_pool_queue_len|count|Instantaneous|Instantaneous value of pipeline prepare thread pool task queue length|
+>>>>>>> bf941f05e5 ([Enhancement] extend configuration and metrics for pipe_prepare_pool (#30693))
 
 ## Monitoring Alarm Best Practices
 
