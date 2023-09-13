@@ -40,13 +40,14 @@ StarRocks 支持在 CentOS 7.9 和 Ubuntu 22.04 上部署。
 
 ## 软件
 
-您必须在服务器上安装 JDK 1.8.0 以运行 StarRocks。
+您必须在服务器上安装 JDK 8 以运行 StarRocks。v2.5 及以上版本建议安装 JDK 11。
 
-> **说明**
+> **注意**
 >
-> StarRocks 不支持 JRE。
+> - StarRocks 不支持 JRE。
+> - 如果您需要在 Ubuntu 22.04 上部署 StarRocks，则必须安装 JDK 11。
 
-按照以下步骤安装 JDK：
+按照以下步骤安装 JDK 8：
 
 1. 进入需要安装 JDK 的路径。
 2. 运行以下命令下载 JDK：
