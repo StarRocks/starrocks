@@ -191,6 +191,7 @@ The Flink connector will buffer the data in memory, and flush them in batch to S
 is triggered is different between at-least-once and exactly-once.
 
 For at-least-once, the flush will be triggered when any of the following conditions are met:
+
 - the bytes of buffered rows reaches the limit `sink.buffer-flush.max-bytes`
 - the number of buffered rows reaches the limit `sink.buffer-flush.max-rows`. (Only valid for sink version V1)
 - the elapsed time since the last flush reaches the limit `sink.buffer-flush.interval-ms`
@@ -545,7 +546,7 @@ takes effect only when the new value for `score` is has a greater or equal to th
     - Define the DDL including all of columns.
     - Set the option `sink.properties.merge_condition` to `score` to tell the connector to use the column `score`
     as the condition.
-    -  Set the option `sink.version` to `V1` which tells the connector to use Stream Load.
+    - Set the option `sink.version` to `V1` which tells the connector to use Stream Load.
 
     ```SQL
     CREATE TABLE `score_board` (
