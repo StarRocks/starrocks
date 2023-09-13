@@ -163,25 +163,15 @@ public:
         *data = 1 - get_scale_factor<CppType>(_precision);
     }
 
-    size_t size() const override {
-        return _delegate->size();
-    }
+    size_t size() const override { return _delegate->size(); }
 
-    int precision() const override {
-        return _precision;
-    }
+    int precision() const override { return _precision; }
 
-    int scale() const override {
-        return _scale;
-    }
+    int scale() const override { return _scale; }
 
-    LogicalType type() const override {
-        return TYPE;
-    }
+    LogicalType type() const override { return TYPE; }
 
-    std::string to_zone_map_string(const void* src) {
-        return _delegate->to_string(src);
-    }
+    std::string to_zone_map_string(const void* src) { return _delegate->to_string(src); }
 
 protected:
     int _datum_cmp_impl(const Datum& left, const Datum& right) const override {
