@@ -1087,7 +1087,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         // add this log so that we can track this stmt
-        LOG.info("receive forwarded stmt {} from FE: {}", params.getStmt_id(), clientAddr.getHostname());
+        LOG.info("receive forwarded stmt {} from FE: {}",
+                params.getStmt_id(), clientAddr != null ? clientAddr.getHostname() : "unknown");
         ConnectContext context = new ConnectContext(null);
         ConnectProcessor processor = new ConnectProcessor(context);
         TMasterOpResult result = processor.proxyExecute(params);
