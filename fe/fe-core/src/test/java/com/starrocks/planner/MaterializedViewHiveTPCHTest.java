@@ -27,14 +27,6 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
         PlanTestBase.beforeClass();
         MaterializedViewTestBase.setUp();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
-
-        new MockUp<PlanTestNoneDBBase>() {
-            @Mock
-            boolean isIgnoreExplicitColRefIds() {
-                return true;
-            }
-        };
-
         executeSqlFile("sql/materialized-view/tpch-hive/ddl_tpch_mv1.sql");
     }
 
