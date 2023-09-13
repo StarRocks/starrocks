@@ -1033,26 +1033,31 @@ public:
 
         uint32_t uncompressed_size = decode_fixed32_be((const uint8_t*)input_data);
         if (uncompressed_size != output->get_size()) {
-            return Status::InternalError("LzoBlockCompression check size failed");
+            return Status::InternalError(
+                    "LzoBlockCompression decompress failed: uncompress size and output size not match");
         }
 
         input_data += 4;
         input_size -= 4;
 
         while (uncompressed_size) {
-            DCHECK(input_size >= 4);
+            if (input_size < 4) {
+                return Status::InternalError("LzoBlockCompression decompress failed. input data not enough");
+            }
             uint32_t block_size = decode_fixed32_be((const uint8_t*)input_data);
             input_data += 4;
             input_size -= 4;
 
-            DCHECK(input_size >= block_size);
+            if (input_size < 4) {
+                return Status::InternalError("LzoBlockCompression decompress failed: input data not enough");
+            }
             try {
                 uint64_t read = orc::lzoDecompress(input_data, input_data + block_size, output_data, output_limit);
                 DCHECK(read <= uncompressed_size);
                 uncompressed_size -= read;
                 output_data += read;
             } catch (const std::runtime_error& e) {
-                return Status::InternalError("LzoBlockCompression decompress failed");
+                return Status::InternalError("LzoBlockCompression decompress failed: data corruption");
             }
 
             input_data += block_size;
