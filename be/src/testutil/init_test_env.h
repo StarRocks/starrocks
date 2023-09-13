@@ -38,6 +38,8 @@
 
 namespace starrocks {
 
+extern void shutdown_tracer();
+
 int init_test_env(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     if (getenv("STARROCKS_HOME") == nullptr) {
@@ -114,6 +116,8 @@ int init_test_env(int argc, char** argv) {
     exec_env->stop();
     exec_env->destroy();
     global_env->stop();
+
+    shutdown_tracer();
 
     shutdown_logging();
 
