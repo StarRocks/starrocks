@@ -852,7 +852,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             for (TupleId tupleId : getTupleIds()) {
                 for (SlotDescriptor slot : descTbl.getTupleDesc(tupleId).getSlots()) {
                     // TopN Filter only works in no-nullable column
-                    if (slot.getId().equals(slotRef.getSlotId()) && !slotRef.isNullable()) {
+                    if (slot.getId().equals(slotRef.getSlotId()) && (!slotRef.isNullable() || rfDesc.isNullLast())) {
                         return true;
                     }
                 }

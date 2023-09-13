@@ -92,4 +92,8 @@ public abstract class ScanNode extends PlanNode {
                 desc.getTable().getName()).add("keyRanges", "").addValue(
                 super.debugString()).toString();
     }
+
+    public boolean isOlapScanNode() {
+        return this instanceof OlapScanNode;
+    }
 }

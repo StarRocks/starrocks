@@ -155,6 +155,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         rf.setExprOrder(0);
         rf.setJoinMode(JoinNode.DistributionMode.BROADCAST);
         rf.setOnlyLocal(true);
+        rf.setSortInfo(getSortInfo());
         rf.setBuildExpr(orderBy);
         rf.setRuntimeFilterType(RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER);
 

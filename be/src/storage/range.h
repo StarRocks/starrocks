@@ -385,12 +385,12 @@ inline SparseRangeIterator SparseRangeIterator::intersection(const SparseRange& 
     DCHECK(std::is_sorted(rhs._ranges.begin(), rhs._ranges.end(),
                           [](const auto& l, const auto& r) { return l.begin() < r.begin(); }));
     if (!has_more()) {
-        return SparseRangeIterator<T>(result);
+        return SparseRangeIterator(result);
     }
 
     bool is_sorted = _range->is_sorted();
-    auto ranges = std::vector<Range<T>>(_range->_ranges.begin() + _index, _range->_ranges.end());
-    ranges[0] = Range<T>(_next_rowid, ranges[0].end());
+    auto ranges = std::vector<Range>(_range->_ranges.begin() + _index, _range->_ranges.end());
+    ranges[0] = Range(_next_rowid, ranges[0].end());
     if (!is_sorted) {
         std::reverse(ranges.begin(), ranges.end());
     }
