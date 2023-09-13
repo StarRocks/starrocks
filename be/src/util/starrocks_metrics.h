@@ -70,6 +70,7 @@ private:
 class StarRocksMetrics {
 public:
     // query execution
+    METRIC_DEFINE_INT_GAUGE(pipe_prepare_pool_queue_len, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(pipe_scan_executor_queuing, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(pipe_driver_overloaded, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(pipe_driver_schedule_count, MetricUnit::NOUNIT);
