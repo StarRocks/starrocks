@@ -14,24 +14,13 @@
 
 package com.starrocks.sql.plan;
 
-import com.google.common.collect.Lists;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterViewStmt;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 public class ViewPlanTest extends PlanTestBase {
     private static final AtomicInteger INDEX = new AtomicInteger(0);

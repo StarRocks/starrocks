@@ -163,7 +163,7 @@ public class View extends Table {
     }
 
     public synchronized List<TableName> getTableRefs() {
-        if (this.tableRefsCache.isEmpty() || this.status != ViewStatus.NORMAL) {
+        if (this.tableRefsCache.isEmpty()) {
             QueryStatement qs = getQueryStatement();
             Map<TableName, Table> allTables = AnalyzerUtils.collectAllTableAndView(qs);
             this.tableRefsCache = Lists.newArrayList(allTables.keySet());
