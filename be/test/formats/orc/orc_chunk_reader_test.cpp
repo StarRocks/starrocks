@@ -15,6 +15,7 @@
 #include "formats/orc/orc_chunk_reader.h"
 
 #include <gtest/gtest.h>
+#include <testutil/assert.h>
 
 #include <ctime>
 #include <filesystem>
@@ -208,17 +209,22 @@ static uint64_t get_hit_rows(OrcChunkReader* reader) {
 
 void check_schema(const std::string& path, const std::vector<std::pair<std::string, LogicalType>>& expected_schema) {
     OrcChunkReader reader;
+    std::cerr << "111" << std::endl;
     auto input_stream = orc::readLocalFile(path);
     reader.init(std::move(input_stream));
     std::vector<SlotDescriptor> schema;
+    std::cerr << "222" << std::endl;
 
-    auto st = reader.get_schema(&schema);
-    DCHECK(st.ok()) << st.get_error_msg();
+    std::cerr << "333" << std::endl;
+    EXPECT_OK(reader.get_schema(&schema));
+    std::cerr << "444" << std::endl;
 
     EXPECT_EQ(schema.size(), expected_schema.size());
     for (size_t i = 0; i < expected_schema.size(); ++i) {
+        std::cerr << schema[i].col_name() << std::endl;
         EXPECT_EQ(schema[i].col_name(), expected_schema[i].first);
         EXPECT_EQ(schema[i].type().type, expected_schema[i].second) << schema[i].col_name();
+        std::cerr << schema[i].col_name() << "  done" << std::endl;
     }
 }
 
@@ -2149,7 +2155,12 @@ TEST_F(OrcChunkReaderTest, get_file_schema) {
               {"col_binary", TYPE_VARBINARY},
               {"col_decimal", TYPE_DECIMAL128},
               {"col_timestamp", TYPE_DATETIME},
-              {"col_date", TYPE_DATE}}}};
+              {"col_date", TYPE_DATE}}},
+            {"./be/test/exec/test_data/orc_scanner/compound.orc",
+             {{"col_int", TYPE_INT},
+              {"col_list_int", TYPE_ARRAY},
+              {"col_map_int_double", TYPE_MAP},
+              {"col_struct_int_double", TYPE_STRUCT}}}};
 
     for (const auto& test_case : test_cases) {
         check_schema(test_case.first, test_case.second);
