@@ -133,9 +133,9 @@ Flink connector JAR 文件的命名格式如下：
 | DATE                              | DATE               |
 | TIMESTAMP_WITHOUT_TIME_ZONE(N)    | DATETIME           |
 | TIMESTAMP_WITH_LOCAL_TIME_ZONE(N) | DATETIME           |
-| ARRAY<T>                          | ARRAY<T>           |
-| MAP<KT,VT>                        | JSON STRING        |
-| ROW<arg T...>                     | JSON STRING        |
+| ARRAY&lt;T&gt;                    | ARRAY&lt;T&gt;     |
+| MAP&lt;KT,VT&gt;                  | JSON STRING        |
+| ROW&lt;arg T...&gt;               | JSON STRING        |
 
 ## 使用说明
 
