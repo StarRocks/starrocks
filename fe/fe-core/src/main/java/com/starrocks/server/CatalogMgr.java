@@ -48,8 +48,8 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.NativeAccessControl;
-import com.starrocks.privilege.ranger.hive.RangerHiveAccessControl;
+import com.starrocks.privilege.NativeAccessController;
+import com.starrocks.privilege.ranger.hive.RangerHiveAccessController;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -124,9 +124,9 @@ public class CatalogMgr {
             Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
             String serviceName = properties.get("ranger.plugin.hive.service.name");
             if (serviceName == null || serviceName.isEmpty()) {
-                Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+                Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
             } else {
-                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessControl(serviceName));
+                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
             }
 
             catalogs.put(catalogName, catalog);
@@ -175,9 +175,9 @@ public class CatalogMgr {
                 Map<String, String> properties = ((ModifyTablePropertiesClause) stmt.getAlterClause()).getProperties();
                 String serviceName = properties.get("ranger.plugin.hive.service.name");
                 if (serviceName.isEmpty()) {
-                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
                 } else {
-                    Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessControl(serviceName));
+                    Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
                 }
 
                 catalog.getConfig().put("ranger.plugin.hive.service.name", serviceName);
@@ -256,9 +256,9 @@ public class CatalogMgr {
         Map<String, String> properties = catalog.getConfig();
         String serviceName = properties.get("ranger.plugin.hive.service.name");
         if (serviceName == null || serviceName.isEmpty()) {
-            Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+            Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
         } else {
-            Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessControl(serviceName));
+            Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
         }
 
         writeLock();
@@ -297,9 +297,9 @@ public class CatalogMgr {
             Map<String, String> properties = log.getProperties();
             String serviceName = properties.get("ranger.plugin.hive.service.name");
             if (serviceName.isEmpty()) {
-                Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+                Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
             } else {
-                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessControl(serviceName));
+                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
             }
 
             Catalog catalog = catalogs.get(catalogName);
