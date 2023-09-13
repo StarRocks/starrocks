@@ -50,6 +50,10 @@
 #include "util/compression/compression_context_pool_singletons.h"
 #include "util/faststring.h"
 
+namespace orc {
+uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit);
+} // namespace orc
+
 namespace starrocks {
 
 // For LZ4F and ZSTD, if page's max compression len >= 10MB, then we will not
@@ -1005,6 +1009,42 @@ public:
 };
 #endif
 
+class LzoBlockCompression : public BlockCompressionCodec {
+public:
+    LzoBlockCompression() : BlockCompressionCodec(CompressionTypePB::LZO) {}
+
+    static const LzoBlockCompression* instance() {
+        static LzoBlockCompression s_instance;
+        return &s_instance;
+    }
+
+    ~LzoBlockCompression() override = default;
+
+    Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
+                    faststring* compressed_body1, raw::RawString* compressed_body2) const override {
+        return Status::NotSupported("LzoBlockCompression does not support compress. Support decompress only.");
+    }
+
+    Status decompress(const Slice& input, Slice* output) const override {
+        try {
+            VLOG_FILE << "input size = " << input.get_size() << ", output size = " << output->get_size();
+            (void)orc::lzoDecompress(input.get_data(), input.get_data() + input.get_size(), output->mutable_data(),
+                                     output->mutable_data() + output->get_size());
+        } catch (const std::runtime_error& e) {
+            return Status::InternalError("LzoBlockCompression decompress failed");
+        }
+        return Status::OK();
+    }
+
+    Status compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
+                    size_t uncompressed_size, faststring* compressed_body1,
+                    raw::RawString* compressed_body2) const override {
+        return Status::NotSupported("LzoBlockCompression does not support compress. Support decompress only.");
+    }
+
+    size_t max_compressed_len(size_t len) const override { return size_t(-1); }
+};
+
 Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec) {
     switch (type) {
     case CompressionTypePB::NO_COMPRESSION:
@@ -1034,6 +1074,9 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
         break;
     case CompressionTypePB::LZ4_HADOOP:
         *codec = Lz4HadoopBlockCompression::instance();
+        break;
+    case CompressionTypePB::LZO:
+        *codec = LzoBlockCompression::instance();
         break;
     default:
         return Status::NotFound(strings::Substitute("unknown compression type($0)", type));
