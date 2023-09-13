@@ -182,6 +182,32 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
     ADMIN SET FRONTEND CONFIG ("label_keep_max_num" = "1000");
   ```
 
+### Flush Policy
+
+The Flink connector will buffer the data in memory, and flush them in batch to StarRocks via Stream Load. How the flush
+is triggered is different between at-least-once and exactly-once.
+
+For at-least-once, the flush will be triggered when any of the following conditions are met:
+
+- the bytes of buffered rows reaches the limit `sink.buffer-flush.max-bytes`
+- the number of buffered rows reaches the limit `sink.buffer-flush.max-rows`. (Only valid for sink version V1)
+- the elapsed time since the last flush reaches the limit `sink.buffer-flush.interval-ms`
+- a checkpoint is triggered
+
+For exactly-once, the flush only happens when a checkpoint is triggered.
+
+### Monitoring load metrics
+
+The Flink connector provides the following metrics to monitor loading.
+
+| Metric                     | Type    | Description                                                     |
+|--------------------------|---------|-----------------------------------------------------------------|
+| totalFlushBytes          | counter | successfully flushed bytes.                                     |
+| totalFlushRows           | counter | number of rows successfully flushed.                                      |
+| totalFlushSucceededTimes | counter | number of times that the data is successfully flushed.  |
+| totalFlushFailedTimes    | counter | number of times that the data fails to be flushed.                  |
+| totalFilteredRows        | counter | number of rows filtered, which is also included in totalFlushRows.    |
+
 ## Examples
 
 The following examples show how to use the Flink connector to load data into a StarRocks table with Flink SQL or Flink DataStream.
