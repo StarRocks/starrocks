@@ -51,7 +51,7 @@ public:
     size_t estimated_memory_reserved(const ChunkPtr& chunk) override {
         if (chunk && !chunk->is_empty()) {
             if (_aggregator->hash_set_variant().need_expand(chunk->num_rows())) {
-                return chunk->memory_usage() + _aggregator->hash_set_memory_usage();
+                return chunk->memory_usage() + _aggregator->hash_set_memory_usage() * 2;
             }
             return chunk->memory_usage();
         }
@@ -59,13 +59,25 @@ public:
     }
 
 private:
-    Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
-    Status _spill_aggregated_data(RuntimeState* state);
+    Status _spill_all_data(RuntimeState* state, bool should_spill_hash_set);
 
-    std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state);
+    Status _try_to_spill_by_auto(RuntimeState* state, const ChunkPtr& chunk);
+
+    void _add_streaming_chunk(ChunkPtr chunk);
+
+    std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state, bool should_spill_hash_set);
+
+    std::queue<ChunkPtr> _streaming_chunks;
+    size_t _streaming_rows = 0;
+    size_t _streaming_bytes = 0;
+    int32_t _continuous_low_reduction_chunk_num = 0;
+    double _ht_low_reduction_threshold = 0.5;
+    int32_t _ht_low_reduction_chunk_limit = 5;
 
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
     bool _is_finished = false;
+
+    RuntimeProfile::Counter* _hash_set_spill_times = nullptr;
 };
 
 class SpillableAggregateDistinctBlockingSinkOperatorFactory final : public OperatorFactory {
