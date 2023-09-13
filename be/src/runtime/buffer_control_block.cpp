@@ -117,6 +117,10 @@ Status BufferControlBlock::add_batch(TFetchDataResult* result, bool need_free) {
     auto status_or_value = _serialize_result(result);
     RETURN_IF_ERROR(status_or_value.status());
     auto ser_res = std::move(status_or_value.value());
+    // should delete it outside in abnormal cases
+    if (need_free) {
+        delete result;
+    }
     std::unique_lock<std::mutex> l(_lock);
     while ((_batch_queue.size() > _buffer_limit || _buffer_bytes > _max_memory_usage) && !_is_cancelled) {
         _data_removal.wait(l);
@@ -127,10 +131,6 @@ Status BufferControlBlock::add_batch(TFetchDataResult* result, bool need_free) {
     }
 
     _process_batch_without_lock(ser_res);
-    // should delete it outside in abnormal cases
-    if (need_free) {
-        delete result;
-    }
     return Status::OK();
 }
 
@@ -263,10 +263,7 @@ Status BufferControlBlock::get_batch(TFetchDataResult* result) {
     auto copied_size = ser->attachment.copy_to(continuous_mem.data(), ser->attachment.size(), 0);
     DCHECK(copied_size == ser->attachment.size());
     uint32_t len = continuous_mem.size();
-    auto st = (deserialize_thrift_msg(continuous_mem.data(), &len, TProtocolType::BINARY, &result->result_batch));
-    if (!st.ok()) {
-        return st;
-    }
+    RETURN_IF_ERROR(deserialize_thrift_msg(continuous_mem.data(), &len, TProtocolType::BINARY, &result->result_batch));
     result->__set_packet_num(_packet_num);
     _packet_num++;
 
