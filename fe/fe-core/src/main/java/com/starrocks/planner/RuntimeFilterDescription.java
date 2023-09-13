@@ -74,6 +74,8 @@ public class RuntimeFilterDescription {
     // join's equal conjuncts size > 1.
     private final Map<Integer, List<Expr>> nodeIdToParitionByExprs = Maps.newHashMap();
 
+    private SortInfo sortInfo;
+
     public RuntimeFilterDescription(SessionVariable sv) {
         nodeIdToProbeExpr = new HashMap<>();
         mergeNodes = new ArrayList<>();
@@ -123,6 +125,14 @@ public class RuntimeFilterDescription {
         this.type = type;
     }
 
+    public SortInfo getSortInfo() {
+        return sortInfo;
+    }
+
+    public void setSortInfo(SortInfo sortInfo) {
+        this.sortInfo = sortInfo;
+    }
+
     public boolean canProbeUse(PlanNode node) {
         if (!canAcceptFilter(node)) {
             return false;
@@ -162,10 +172,24 @@ public class RuntimeFilterDescription {
 
     // return true if Node could accept the Filter
     public boolean canAcceptFilter(PlanNode node) {
-        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && !(node instanceof OlapScanNode)) {
+        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
+            if (node instanceof ScanNode) {
+                ScanNode scanNode = (ScanNode) node;
+                return scanNode.isOlapScanNode();
+            } else {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public boolean isNullLast() {
+        if (sortInfo != null) {
+            return !sortInfo.getNullsFirst().get(0);
+        } else {
             return false;
         }
-        return true;
     }
 
     public boolean isAscFilter() {
