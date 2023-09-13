@@ -1,0 +1,50 @@
+-- name: test_to_tera_date
+select to_tera_date(NULL, NULL);
+select to_tera_date(NULL, "yyyy");
+select to_tera_date("2020-02-02 00:00:00", "yyyy-mm-dd");
+select to_tera_date("1988","yyyy");
+select to_tera_date("1988/04/08","yyyy/mm/dd");
+select to_tera_date("1988/04/08","yyyy/mm/dd");
+select to_tera_date("04-08-1988","mm-dd-yyyy");
+select to_tera_date("04.1988,08","mm.yyyy,dd");
+select to_tera_date(";198804:08",";yyyymm:dd");
+
+select to_tera_timestamp(NULL, "yyyy/mm/dd");
+select to_tera_timestamp("1988/04/08","yyyy/mm/dd");
+select to_tera_timestamp("04-08-1988","mm-dd-yyyy");
+select to_tera_timestamp("04.1988,08","mm.yyyy,dd");
+select to_tera_timestamp(";198804:08",";yyyymm:dd");
+
+select to_tera_timestamp("1988/04/08 2","yyyy/mm/dd hh");
+select to_tera_timestamp("1988/04/08 14","yyyy/mm/dd hh24");
+select to_tera_timestamp("1988/04/08 14:15","yyyy/mm/dd hh24:mi");
+select to_tera_timestamp("1988/04/08 14:15:16","yyyy/mm/dd hh24:mi:ss");
+
+select to_tera_timestamp("1988/04/08 2:3:4","yyyy/mm/dd hh24:mi:ss");
+select to_tera_timestamp("1988/04/08 02:03:04","yyyy/mm/dd hh24:mi:ss");
+select to_tera_timestamp("1988/04/08 02 am:3:4","yyyy/mm/dd hh am:mi:ss");
+select to_tera_timestamp("1988/04/08 02 pm:3:4","yyyy/mm/dd hh pm:mi:ss");
+
+-- test_to_tera_date_bad_case
+select to_tera_date(";198804:08",";YYYYmm:dd");
+select to_tera_date("1988/04/08","yy/mm/dd");
+select to_tera_date("1988/04/08","xyz/mm/dd");
+select to_tera_timestamp("1988/04/0800 02 pm:3:4","yyyy/mm/dd hh am:mi:ss");
+select to_tera_timestamp("1988/04/08 02 pm:3:4","yyyy/mm/dd hh am:mi:ss");
+
+-- test_to_tera_date_from_table
+CREATE TABLE IF NOT EXISTS `to_tera_date_test` (
+  `d1` DATE,
+  `d2` VARCHAR(1024)
+)
+DISTRIBUTED BY HASH(`d1`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+
+INSERT INTO `to_tera_date_test`(d1, d2)
+VALUES ('2023-04-01', NULL),
+       ('2023-04-02', '2023-04-02 20:13:14'),
+       ('2023-04-03', '2023-04-03 20:13:14');
+select to_tera_date(d2, 'yyyy-mm-dd hh24:mi:ss') from to_tera_date_test order by d1;
+select to_tera_timestamp(d2, 'yyyy-mm-dd hh24:mi:ss') from to_tera_date_test order by d1;
