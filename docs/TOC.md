@@ -743,6 +743,8 @@
     + [Build Handbook](./developers/build-starrocks/handbook.md)
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
++ Ecosystem Release Notes
+  + [Kafka connector](./)
 + Release Notes
   + [v3.1](./release_notes/release-3.1.md)
   + [v3.0](./release_notes/release-3.0.md)
