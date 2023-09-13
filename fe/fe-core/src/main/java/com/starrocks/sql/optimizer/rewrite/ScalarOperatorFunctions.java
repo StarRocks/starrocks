@@ -91,6 +91,8 @@ import java.util.Map;
 import java.util.Set;
 
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
+import static com.starrocks.catalog.PrimitiveType.BITMAP;
+import static com.starrocks.catalog.PrimitiveType.BOOLEAN;
 import static com.starrocks.catalog.PrimitiveType.DATE;
 import static com.starrocks.catalog.PrimitiveType.DATETIME;
 import static com.starrocks.catalog.PrimitiveType.DECIMAL128;
@@ -98,8 +100,12 @@ import static com.starrocks.catalog.PrimitiveType.DECIMAL32;
 import static com.starrocks.catalog.PrimitiveType.DECIMAL64;
 import static com.starrocks.catalog.PrimitiveType.DECIMALV2;
 import static com.starrocks.catalog.PrimitiveType.DOUBLE;
+import static com.starrocks.catalog.PrimitiveType.FLOAT;
+import static com.starrocks.catalog.PrimitiveType.HLL;
 import static com.starrocks.catalog.PrimitiveType.INT;
+import static com.starrocks.catalog.PrimitiveType.JSON;
 import static com.starrocks.catalog.PrimitiveType.LARGEINT;
+import static com.starrocks.catalog.PrimitiveType.PERCENTILE;
 import static com.starrocks.catalog.PrimitiveType.SMALLINT;
 import static com.starrocks.catalog.PrimitiveType.TIME;
 import static com.starrocks.catalog.PrimitiveType.TINYINT;
@@ -1202,4 +1208,35 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(json);
     }
 
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "coalesce", argTypes = {BOOLEAN}, returnType = BOOLEAN),
+            @ConstantFunction(name = "coalesce", argTypes = {TINYINT}, returnType = TINYINT),
+            @ConstantFunction(name = "coalesce", argTypes = {SMALLINT}, returnType = SMALLINT),
+            @ConstantFunction(name = "coalesce", argTypes = {INT}, returnType = INT),
+            @ConstantFunction(name = "coalesce", argTypes = {BIGINT}, returnType = BIGINT),
+            @ConstantFunction(name = "coalesce", argTypes = {LARGEINT}, returnType = LARGEINT),
+            @ConstantFunction(name = "coalesce", argTypes = {FLOAT}, returnType = FLOAT),
+            @ConstantFunction(name = "coalesce", argTypes = {DOUBLE}, returnType = DOUBLE),
+            @ConstantFunction(name = "coalesce", argTypes = {DATETIME}, returnType = DATETIME),
+            @ConstantFunction(name = "coalesce", argTypes = {DATE}, returnType = DATE),
+            @ConstantFunction(name = "coalesce", argTypes = {DECIMALV2}, returnType = DECIMALV2),
+            @ConstantFunction(name = "coalesce", argTypes = {DECIMAL32}, returnType = DECIMAL32),
+            @ConstantFunction(name = "coalesce", argTypes = {DECIMAL64}, returnType = DECIMAL64),
+            @ConstantFunction(name = "coalesce", argTypes = {DECIMAL128}, returnType = DECIMAL128),
+            @ConstantFunction(name = "coalesce", argTypes = {VARCHAR}, returnType = VARCHAR),
+            @ConstantFunction(name = "coalesce", argTypes = {BITMAP}, returnType = BITMAP),
+            @ConstantFunction(name = "coalesce", argTypes = {PERCENTILE}, returnType = PERCENTILE),
+            @ConstantFunction(name = "coalesce", argTypes = {HLL}, returnType = HLL),
+            @ConstantFunction(name = "coalesce", argTypes = {TIME}, returnType = TIME),
+            @ConstantFunction(name = "coalesce", argTypes = {JSON}, returnType = JSON)
+    })
+    public static ConstantOperator coalesce(ConstantOperator... values) {
+        Preconditions.checkArgument(values.length > 0);
+        for (ConstantOperator value : values) {
+            if (!value.isNull()) {
+                return value;
+            }
+        }
+        return values[values.length - 1];
+    }
 }
