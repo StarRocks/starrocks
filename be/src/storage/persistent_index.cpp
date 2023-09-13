@@ -3362,6 +3362,9 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
     if (stat != nullptr) {
         stat->reload_meta_cost += watch.elapsed_time();
     }
+
+    LOG(INFO) << strings::Substitute("commit persistent index successfully, version: [$0,$1]", _version.major_number(),
+                                     _version.minor_number());
     return Status::OK();
 }
 
@@ -4416,7 +4419,8 @@ Status PersistentIndex::_merge_compaction_advance() {
     RETURN_IF_ERROR(writer->init(idx_file_path_tmp, _version, false));
     int merge_l1_start_idx = _l1_vec.size() - config::max_tmp_l1_num;
     int merge_l1_end_idx = _l1_vec.size();
-    LOG(INFO) << "merge compaction advance, start_idx: " << merge_l1_start_idx << " end_idx: " << merge_l1_end_idx;
+    LOG(INFO) << strings::Substitute("merge compaction advance, path: $0, start_idx: $1, end_idx: $2", _path,
+                                     merge_l1_start_idx, merge_l1_end_idx);
     // keep delete flag when older l1 or l2 exist
     bool keep_delete = (merge_l1_start_idx != 0) || !_l2_vec.empty();
 
