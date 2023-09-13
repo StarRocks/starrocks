@@ -47,6 +47,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TOverflowMode;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
@@ -317,6 +318,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ALLOW_DEFAULT_PARTITION = "allow_default_partition";
 
+    public static final String ENABLE_PRUNE_ICEBERG_MANIFEST = "enable_prune_iceberg_manifest";
+
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
     public static final String ENABLE_HIVE_METADATA_CACHE_WITH_INSERT = "enable_hive_metadata_cache_with_insert";
@@ -510,6 +513,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
 
     public static final String ENABLE_EXPR_PRUNE_PARTITION = "enable_expr_prune_partition";
+
+    public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1319,6 +1324,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_EXPR_PRUNE_PARTITION, flag = VariableMgr.INVISIBLE)
     private boolean enableExprPrunePartition = true;
 
+    @VariableMgr.VarAttr(name = AUDIT_EXECUTE_STMT)
+    private boolean auditExecuteStmt = false;
+
     private int exprChildrenLimit = -1;
 
     @VarAttr(name = CBO_PREDICATE_SUBFIELD_PATH, flag = VariableMgr.INVISIBLE)
@@ -1331,6 +1339,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public SessionVariable setHiveTempStagingDir(String hiveTempStagingDir) {
         this.hiveTempStagingDir = hiveTempStagingDir;
         return this;
+    }
+
+    @VarAttr(name = ENABLE_PRUNE_ICEBERG_MANIFEST)
+    private boolean enablePruneIcebergManifest = true;
+
+    public boolean isEnablePruneIcebergManifest() {
+        return enablePruneIcebergManifest;
+    }
+
+    public void setEnablePruneIcebergManifest(boolean enablePruneIcebergManifest) {
+        this.enablePruneIcebergManifest = enablePruneIcebergManifest;
     }
 
     public boolean isCboPredicateSubfieldPath() {
@@ -2521,6 +2540,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableExprPrunePartition = enableExprPrunePartition;
     }
 
+    public boolean isAuditExecuteStmt() {
+        return auditExecuteStmt;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -2543,6 +2566,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
         if (maxPushdownConditionsPerColumn > -1) {
             tResult.setMax_pushdown_conditions_per_column(maxPushdownConditionsPerColumn);
+        }
+
+        if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_IF_OVERFLOW)) {
+            tResult.setOverflow_mode(TOverflowMode.REPORT_ERROR);
         }
 
         tResult.setEnable_spill(enableSpill);

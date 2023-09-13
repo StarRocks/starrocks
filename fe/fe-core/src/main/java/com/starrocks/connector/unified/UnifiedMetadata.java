@@ -131,9 +131,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, long snapshotId,
-                                                   ScalarOperator predicate, List<String> fieldNames) {
+                                                   ScalarOperator predicate, List<String> fieldNames, long limit) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames);
+        return metadata.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames, limit);
     }
 
     @Override
@@ -144,9 +144,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
-                                         List<PartitionKey> partitionKeys, ScalarOperator predicate) {
+                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getTableStatistics(session, table, columns, partitionKeys, predicate);
+        return metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit);
     }
 
     @Override

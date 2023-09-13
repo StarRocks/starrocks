@@ -96,6 +96,7 @@ statement
     | dropExternalCatalogStatement
     | showCatalogsStatement
     | showCreateExternalCatalogStatement
+    | alterCatalogStatement
 
     // DML Statement
     | insertStatement
@@ -300,6 +301,11 @@ statement
     // FailPoint Statement
     | updateFailPointStatusStatement
     | showFailPointStatement
+
+    // prepare_stmt
+    | prepareStatement
+    | executeStatement
+    | deallocateStatement
 
     // Unsupported Statement
     | unsupportedStatement
@@ -624,7 +630,7 @@ alterMaterializedViewStatement
     : ALTER MATERIALIZED VIEW mvName=qualifiedName (
         refreshSchemeDesc |
         tableRenameClause |
-        modifyTablePropertiesClause |
+        modifyPropertiesClause |
         swapTableClause )
     | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
     | ALTER MATERIALIZED VIEW qualifiedName applyMaskingPolicyClause
@@ -711,6 +717,9 @@ showCatalogsStatement
     : SHOW CATALOGS
     ;
 
+alterCatalogStatement
+    : ALTER CATALOG catalogName=identifierOrString modifyPropertiesClause
+    ;
 
 // ---------------------------------------- Warehouse Statement ---------------------------------------------------------
 
@@ -828,7 +837,7 @@ alterClause
     | dropIndexClause
     | tableRenameClause
     | swapTableClause
-    | modifyTablePropertiesClause
+    | modifyPropertiesClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
@@ -927,7 +936,7 @@ swapTableClause
     : SWAP WITH identifier
     ;
 
-modifyTablePropertiesClause
+modifyPropertiesClause
     : SET propertyList
     ;
 
@@ -1009,7 +1018,7 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT (INTO | OVERWRITE) qualifiedName partitionNames?
+    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName | (FILES propertyList)) partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
@@ -2041,6 +2050,23 @@ tabletList
     : TABLET '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     ;
 
+prepareStatement
+    : PREPARE identifier FROM prepareSql
+    ;
+
+prepareSql
+    : statement
+    | SINGLE_QUOTED_TEXT
+    ;
+
+executeStatement
+    : EXECUTE identifier (USING  '@'identifierOrString (',' '@'identifierOrString)*)?
+    ;
+
+deallocateStatement
+    : (DEALLOCATE | DROP) PREPARE identifier
+    ;
+
 replicaList
     : REPLICA '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     ;
@@ -2177,6 +2203,7 @@ literalExpression
     | interval                                                                            #intervalLiteral
     | unitBoundary                                                                        #unitBoundaryLiteral
     | binary                                                                              #binaryLiteral
+    | PARAMETER                                                                           #Parameter
     ;
 
 functionCall
@@ -2594,7 +2621,7 @@ nonReserved
     | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
-    | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED
+    | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DEALLOCATE
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS

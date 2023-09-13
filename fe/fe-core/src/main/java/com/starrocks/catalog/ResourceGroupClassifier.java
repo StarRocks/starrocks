@@ -16,21 +16,11 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.DmlStmt;
-import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.TQueryType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.net.util.SubnetUtils;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -39,7 +29,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-public class ResourceGroupClassifier implements Writable {
+public class ResourceGroupClassifier {
     public static final Pattern USER_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9_]{1,63}/?[.a-zA-Z0-9_-]{0,63}$");
     public static final Pattern USE_ROLE_PATTERN = Pattern.compile("^\\w+$");
     public static final ImmutableSet<String> SUPPORTED_QUERY_TYPES =
@@ -65,11 +55,6 @@ public class ResourceGroupClassifier implements Writable {
 
     @SerializedName(value = "planMemCostRange")
     private CostRange planMemCostRange;
-
-    public static ResourceGroupClassifier read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ResourceGroupClassifier.class);
-    }
 
     public long getResourceGroupId() {
         return resourceGroupId;
@@ -131,14 +116,16 @@ public class ResourceGroupClassifier implements Writable {
         this.planCpuCostRange = planCpuCostRange;
     }
 
+    public CostRange getPlanCpuCostRange() {
+        return planCpuCostRange;
+    }
+
     public void setPlanMemCostRange(CostRange planMemCostRange) {
         this.planMemCostRange = planMemCostRange;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
+    public CostRange getPlanMemCostRange() {
+        return planMemCostRange;
     }
 
     public boolean isSatisfied(String user, List<String> activeRoles, QueryType queryType, String sourceIp,
@@ -259,20 +246,6 @@ public class ResourceGroupClassifier implements Writable {
         public static QueryType fromTQueryType(TQueryType type) {
             return type == TQueryType.LOAD ? INSERT : SELECT;
         }
-
-        public static QueryType fromStatement(StatementBase stmt) {
-            if (stmt instanceof QueryStatement) {
-                return SELECT;
-            }
-            if (stmt instanceof DmlStmt) {
-                return INSERT;
-            }
-            if (stmt instanceof LoadStmt) {
-                return INSERT;
-            }
-
-            return SELECT;
-        }
     }
 
     /**
@@ -286,13 +259,15 @@ public class ResourceGroupClassifier implements Writable {
         private static final Pattern STR_RANGE_PATTERN = Pattern.compile(STR_RANGE_REGEX, Pattern.CASE_INSENSITIVE);
 
         public static final String FORMAT_STR_RANGE_MESSAGE = "the format must be '[min, max)' " +
-                "where min and max are double (including infinity and -infinity) " +
+                "where min and max are finite double " +
                 "and min must be less than max";
 
+        @SerializedName(value = "min")
         private final double min;
+        @SerializedName(value = "max")
         private final double max;
 
-        public CostRange(double min, double max) {
+        private CostRange(double min, double max) {
             this.min = min;
             this.max = max;
         }
@@ -304,8 +279,12 @@ public class ResourceGroupClassifier implements Writable {
             }
 
             try {
-                double min = parseDoubleWithInfinity(matcher.group(1));
-                double max = parseDoubleWithInfinity(matcher.group(2));
+                double min = Double.parseDouble(matcher.group(1));
+                double max = Double.parseDouble(matcher.group(2));
+
+                if (!Double.isFinite(min) || !Double.isFinite(max)) {
+                    return null;
+                }
 
                 if (min >= max) {
                     return null;
@@ -324,16 +303,6 @@ public class ResourceGroupClassifier implements Writable {
         @Override
         public String toString() {
             return "[" + min + ", " + max + ")";
-        }
-
-        private static double parseDoubleWithInfinity(String input) {
-            if ("infinity".equalsIgnoreCase(input)) {
-                return Double.POSITIVE_INFINITY;
-            } else if ("-infinity".equalsIgnoreCase(input)) {
-                return Double.NEGATIVE_INFINITY;
-            } else {
-                return Double.parseDouble(input);
-            }
         }
     }
 }

@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
@@ -111,7 +112,7 @@ public class PaimonScanNode extends ScanNode {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                paimonTable.getCatalogName(), paimonTable, null, -1, predicate, fieldNames);
+                paimonTable.getCatalogName(), paimonTable, null, -1, predicate, fieldNames, -1);
         RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
         PaimonSplitsInfo splitsInfo = remoteFileDesc.getPaimonSplitsInfo();
         String predicateInfo = encodeObjectToString(splitsInfo.getPredicate());
@@ -142,7 +143,7 @@ public class PaimonScanNode extends ScanNode {
         hdfsScanRange.setUse_paimon_jni_reader(true);
         hdfsScanRange.setPaimon_split_info(encodeObjectToString(split));
         hdfsScanRange.setPaimon_predicate_info(predicateInfo);
-        long totalFileLength = split.files().stream().map(DataFileMeta::fileSize).reduce(0L, Long::sum);
+        long totalFileLength = getTotalFileLength(split);
         hdfsScanRange.setFile_length(totalFileLength);
 
         TScanRange scanRange = new TScanRange();
@@ -153,6 +154,11 @@ public class PaimonScanNode extends ScanNode {
         scanRangeLocations.addToLocations(scanRangeLocation);
 
         scanRangeLocationsList.add(scanRangeLocations);
+    }
+
+    long getTotalFileLength(DataSplit split) {
+        long totalFileLength = split.dataFiles().stream().map(DataFileMeta::fileSize).reduce(0L, Long::sum);
+        return totalFileLength;
     }
 
     private long nextPartitionId() {

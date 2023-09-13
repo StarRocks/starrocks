@@ -68,6 +68,7 @@ public class HiveMetadata implements ConnectorMetadata {
     private final HiveStatisticsProvider statisticsProvider;
     private final Optional<CacheUpdateProcessor> cacheUpdateProcessor;
     private Executor updateExecutor;
+    private Executor refreshOthersFeExecutor;
 
     public HiveMetadata(String catalogName,
                         HdfsEnvironment hdfsEnvironment,
@@ -75,7 +76,8 @@ public class HiveMetadata implements ConnectorMetadata {
                         RemoteFileOperations fileOperations,
                         HiveStatisticsProvider statisticsProvider,
                         Optional<CacheUpdateProcessor> cacheUpdateProcessor,
-                        Executor updateExecutor) {
+                        Executor updateExecutor,
+                        Executor refreshOthersFeExecutor) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
         this.hmsOps = hmsOps;
@@ -83,6 +85,7 @@ public class HiveMetadata implements ConnectorMetadata {
         this.statisticsProvider = statisticsProvider;
         this.cacheUpdateProcessor = cacheUpdateProcessor;
         this.updateExecutor = updateExecutor;
+        this.refreshOthersFeExecutor = refreshOthersFeExecutor;
     }
 
     @Override
@@ -174,7 +177,8 @@ public class HiveMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate, List<String> fieldNames) {
+                                                   long snapshotId, ScalarOperator predicate,
+                                                   List<String> fieldNames, long limit) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
 
@@ -221,7 +225,8 @@ public class HiveMetadata implements ConnectorMetadata {
                                          Table table,
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate) {
+                                         ScalarOperator predicate,
+                                         long limit) {
         Statistics statistics = null;
         List<ColumnRefOperator> columnRefOperators = Lists.newArrayList(columns.keySet());
         try {
@@ -298,7 +303,8 @@ public class HiveMetadata implements ConnectorMetadata {
             }
         }
 
-        HiveCommitter committer = new HiveCommitter(hmsOps, fileOps, updateExecutor, table, new Path(stagingDir));
+        HiveCommitter committer = new HiveCommitter(
+                hmsOps, fileOps, updateExecutor, refreshOthersFeExecutor, table, new Path(stagingDir));
         committer.commit(partitionUpdates);
     }
 

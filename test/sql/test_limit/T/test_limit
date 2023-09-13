@@ -64,8 +64,8 @@ select COUNT(*) from (select * from (select * from t0 limit 40, 2) x limit 1) xx
 select COUNT(*) from (select * from (select * from t0 limit 30, 10) x limit 2) xx;
 select COUNT(*) from (select * from (select * from t0 limit 30, 2) x limit 1) xx;
 select COUNT(*) from (select * from (select * from t0 limit 30, 2) x limit 5) xx;
-select COUNT(*) from (select * from (select * from t0 limit 30) x limit 10, 40) xx;
-select COUNT(*) from (select * from (select * from t0 limit 30) x limit 10, 10) xx;
+select COUNT(*) from (select * from (select * from t0 limit 20) x limit 10, 40) xx;
+select COUNT(*) from (select * from (select * from t0 limit 10) x limit 10, 10) xx;
 select COUNT(*) from (select * from (select * from t0 limit 30) x limit 50, 10) xx;
 
 select count(*) from (select * from TABLE(generate_series(1, 100000)) limit 50000, 10) x;
