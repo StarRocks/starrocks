@@ -1048,7 +1048,7 @@ public:
             input_data += 4;
             input_size -= 4;
 
-            if (input_size < 4) {
+            if (input_size < block_size) {
                 return Status::InternalError("LzoBlockCompression decompress failed: input data not enough");
             }
             try {
