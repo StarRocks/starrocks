@@ -731,7 +731,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |----25:EXCHANGE"));
     }
 
-
     @Test
     public void testMockQueryDump() {
         List<String> fileNames = mockCases();

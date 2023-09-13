@@ -1599,4 +1599,27 @@ public class ExpressionTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "3 <-> length[('2480.0'); args: VARCHAR; result: INT;");
     }
+
+    @Test
+    public void testCoalesce() throws Exception {
+        String sql = "select Coalesce(null, 1, 2, null)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 2> : 1");
+
+        sql = "select Coalesce(1, 2, null)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 2> : 1");
+    }
+
+    @Test
+    public void testCoalesceJoin() throws Exception {
+        String sql = "select * from t0 left outer join t1 on t0.v2 = t1.v5 where coalesce(t1.v6, 2) = 3";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 5: v5");
+    }
 }
