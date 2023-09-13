@@ -111,7 +111,7 @@ A query profile encompasses a mass of metrics that show the details of the query
 | ----------------- | --------------------------------------- |
 | IOTaskExecTime    | Total execution time for all I/O tasks. |
 | IOTaskWaitTime    | Total wait time for all I/O tasks.      |
-| MorselsCount      | Total number of the I/O tasks.          |
+| MorselsCount      | Total number of I/O tasks.              |
 
 #### Scan operator
 
