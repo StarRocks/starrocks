@@ -84,11 +84,13 @@ import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
+import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
@@ -876,6 +878,19 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitCancelCompactionStatement(CancelCompactionStmt statement, ConnectContext context) {
         CancelCompactionStmtAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    // ---------------------------------------- Prepare Statement -------------------------------------------
+    @Override
+    public Void visitPrepareStatement(PrepareStmt statement, ConnectContext context) {
+        new PrepareAnalyzer(context).analyze(statement);
+        return null;
+    }
+
+    @Override
+    public Void visitExecuteStatement(ExecuteStmt statement, ConnectContext context) {
+        new PrepareAnalyzer(context).analyze(statement);
         return null;
     }
 }

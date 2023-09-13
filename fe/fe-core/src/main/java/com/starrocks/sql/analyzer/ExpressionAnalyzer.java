@@ -49,6 +49,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
@@ -1805,6 +1806,11 @@ public class ExpressionAnalyzer {
             node.setFn(fn);
 
             node.setDictQueryExpr(dictQueryExpr);
+            return null;
+        }
+
+        @Override
+        public Void visitParameterExpr(Parameter node, Scope context) {
             return null;
         }
     }

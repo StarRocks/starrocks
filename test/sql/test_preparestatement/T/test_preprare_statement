@@ -1,0 +1,52 @@
+CREATE DATABASE IF NOT EXISTS demo;
+
+DROP TABLE IF EXISTS demo.prepare_stmt;
+CREATE TABLE IF NOT EXISTS demo.prepare_stmt (
+    k1 INT,
+    k2 TINYINT Default '20',
+    k3 BIGINT,
+    k4 SMALLINT  Default '4',
+    k5 varchar(10) Default 'k5',
+    v6 BOOLEAN,
+    v7 DATE Default '2000-02-02',
+    v8 VARCHAR(2048) Default 'row',
+    v9 DATETIME Default '2000-02-02 00:00:12',
+    v10 STRING NULL,
+    v11 Decimal(10,2) NULL)
+    PRIMARY KEY (k1, k2, k3, k4, k5)
+    DISTRIBUTED BY HASH(k1, k2, k3, k4, k5) BUCKETS 8 PROPERTIES("replication_num" = "1");
+
+PREPARE stmt1 FROM insert into demo.prepare_stmt values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+PREPARE stmt2 FROM select * from demo.prepare_stmt where k1 = ? and k2 = ?;
+PREPARE stmt3 FROM 'update demo.prepare_stmt set v8 = ?, v10 = ? where k1 = ? and k2 = ?';
+PREPARE stmt4 FROM 'select * from demo.prepare_stmt';
+PREPARE stmt5 FROM select * from demo.prepare_stmt;
+PREPARE stmt6 FROM select k1, k2 from demo.prepare_stmt order by ?, ? desc;
+
+
+set @i = 1;
+set @i2 = 2;
+set @v = '1';
+set @v2 = '2';
+set @b = true;
+set @t = '2021-02-01 00:00:12';
+
+execute stmt1 using @i, @i, @i, @i, @v, @b, @t, @v, @t, @v, @i;
+execute stmt1 using @i2, @i, @i, @i, @v, @b, @t, @v, @t, @v, @i;
+
+execute stmt2 using @i, @i;
+execute stmt2 using @i2, @i;
+
+execute stmt3 using @v2, @v2, @i, @i;
+
+execute stmt4;
+execute stmt5;
+execute stmt6 using @i, @v2;
+
+drop prepare stmt1;
+drop prepare stmt2;
+drop prepare stmt3;
+deallocate prepare stmt4; -- deallocate is alias
+drop prepare stmt5;
+
+DROP TABLE demo.prepare_stmt FORCE;
