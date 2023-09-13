@@ -216,14 +216,6 @@ Stream Load 不支持通过 SHOW LOAD 语句查看导入作业执行情况。
 
 Stream Load 不支持手动取消导入作业。如果导入作业发生超时或者导入错误，StarRocks 会自动取消该作业。
 
-## 导入数据流
-
-Stream Load 支持通过程序导入数据流，具体操作方法，请参见如下文档：
-
-- Flink 集成 Stream Load，请参见[使用 flink-connector-starrocks 导入至 StarRocks](../loading/Flink-connector-starrocks.md)。
-- Java 集成 Stream Load，请参见 [https://github.com/StarRocks/demo/MiscDemo/stream_load](https://github.com/StarRocks/demo/tree/master/MiscDemo/stream_load)。
-- Apache Spark™ 集成 Stream Load，请参见 [01_sparkStreaming2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/01_sparkStreaming2StarRocks.md)。
-
 ## 参数配置
 
 这里介绍使用 Stream Load 导入方式需要注意的一些系统参数配置。这些参数作用于所有 Stream Load 导入作业。
