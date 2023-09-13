@@ -21,8 +21,30 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import static java.lang.String.format;
 
 public class SemanticException extends StarRocksPlannerException {
+<<<<<<< HEAD
+=======
+
+    protected final String detailMsg;
+
+    protected final NodePosition pos;
+
+    protected boolean canNested = true;
+
+
+>>>>>>> 07f5efd001 ([Refactor] refactor error msg for high-order functions (#30766))
     public SemanticException(String formatString) {
         super(formatString, ErrorType.USER_ERROR);
+    }
+
+    public SemanticException(String detailMsg, NodePosition pos, boolean canNested) {
+        super(detailMsg, ErrorType.USER_ERROR);
+        this.detailMsg = detailMsg;
+        this.pos = pos;
+        this.canNested = canNested;
+    }
+
+    boolean canNested() {
+        return canNested;
     }
 
     public SemanticException(String formatString, Object... args) {
