@@ -23,6 +23,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.ExplainBuilder;
 import com.starrocks.sql.optimizer.Utils;
@@ -298,7 +299,8 @@ public class FragmentInstance {
 
         DataSink dataSink = fragment.getSink();
         int dop = fragment.getPipelineDop();
-        if (!(dataSink instanceof IcebergTableSink || dataSink instanceof HiveTableSink)) {
+        if (!(dataSink instanceof IcebergTableSink || dataSink instanceof HiveTableSink
+                || dataSink instanceof TableFunctionTableSink)) {
             return dop;
         } else {
             int sessionVarSinkDop = ConnectContext.get().getSessionVariable().getPipelineSinkDop();
