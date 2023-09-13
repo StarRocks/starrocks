@@ -231,7 +231,7 @@ public class AggregationAnalyzer {
                             arg.getFn() instanceof AggregateFunction, aggFunc);
                     return !aggFunc.isEmpty();
                 })) {
-                    throw new SemanticException(PARSER_ERROR_MSG.unsupportedNestAgg("window function"), expr.getPos());
+                    throw new SemanticException(PARSER_ERROR_MSG.unsupportedNestAgg("aggregation function"), expr.getPos());
                 }
 
                 if (expr.getChildren().stream().anyMatch(childExpr -> {
