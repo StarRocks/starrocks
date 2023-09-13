@@ -190,11 +190,20 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&_automatic_partition_pool));
 
     int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
-    if (num_prepare_threads <= 0) {
+    if (num_prepare_threads == 0) {
         num_prepare_threads = CpuInfo::num_cores();
+    } else if (num_prepare_threads < 0) {
+        // -n: means n * num_cpu_cores
+        num_prepare_threads = -num_prepare_threads * CpuInfo::num_cores();
     }
     _pipeline_prepare_pool =
             new PriorityThreadPool("pip_prepare", num_prepare_threads, config::pipeline_prepare_thread_pool_queue_size);
+    // register the metrics to monitor the task queue len
+    auto task_qlen_fun = [] {
+        auto pool = ExecEnv::GetInstance()->pipeline_prepare_pool();
+        return (pool == nullptr) ? 0U : pool->get_queue_size();
+    };
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_prepare_pool_queue_len, task_qlen_fun);
 
     int num_sink_io_threads = config::pipeline_sink_io_thread_pool_thread_num;
     if (num_sink_io_threads <= 0) {
