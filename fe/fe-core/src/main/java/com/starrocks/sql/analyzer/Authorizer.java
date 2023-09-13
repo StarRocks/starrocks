@@ -153,6 +153,7 @@ public class Authorizer {
             case MYSQL:
             case ELASTICSEARCH:
             case HIVE:
+            case HIVE_VIEW:
             case ICEBERG:
             case HUDI:
             case JDBC:

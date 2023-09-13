@@ -55,7 +55,7 @@ public:
     ~RollingAsyncParquetWriter() = default;
 
     Status append_chunk(Chunk* chunk, RuntimeState* state);
-    Status init_rolling_writer();
+    Status init();
     Status close(RuntimeState* state);
     bool writable() const { return _writer == nullptr || _writer->writable(); }
     bool closed();

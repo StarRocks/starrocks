@@ -982,12 +982,14 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_DROP_CATALOG: {
-                    DropCatalogLog dropCatalogLog =
-                            (DropCatalogLog) journal.getData();
+                    DropCatalogLog dropCatalogLog = (DropCatalogLog) journal.getData();
                     globalStateMgr.getCatalogMgr().replayDropCatalog(dropCatalogLog);
                     break;
                 }
-
+                case OperationType.OP_ALTER_CATALOG:
+                    AlterCatalogLog alterCatalogLog = (AlterCatalogLog) journal.getData();
+                    globalStateMgr.getCatalogMgr().replayAlterCatalog(alterCatalogLog);
+                    break;
                 case OperationType.OP_CREATE_INSERT_OVERWRITE: {
                     CreateInsertOverwriteJobLog jobInfo = (CreateInsertOverwriteJobLog) journal.getData();
                     globalStateMgr.getInsertOverwriteJobMgr().replayCreateInsertOverwrite(jobInfo);
@@ -1954,6 +1956,10 @@ public class EditLog {
 
     public void logDropCatalog(DropCatalogLog log) {
         logEdit(OperationType.OP_DROP_CATALOG, log);
+    }
+
+    public void logAlterCatalog(AlterCatalogLog log) {
+        logEdit(OperationType.OP_ALTER_CATALOG, log);
     }
 
     public void logCreateInsertOverwrite(CreateInsertOverwriteJobLog info) {
