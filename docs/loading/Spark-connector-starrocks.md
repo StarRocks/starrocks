@@ -111,27 +111,27 @@ Directly download the corresponding version of the Spark connector JAR from the 
 
 - The default data type mapping is as follows:
 
-| Spark data type | StarRocks data type                                          |
-| --------------- | ------------------------------------------------------------ |
-| BooleanType     | BOOLEAN                                                      |
-| ByteType        | TINYINT                                                      |
-| ShortType       | SMALLINT                                                     |
-| IntegerType     | INT                                                          |
-| LongType        | BIGINT                                                       |
-| StringType      | LARGEINT                                                     |
-| FloatType       | FLOAT                                                        |
-| DoubleType      | DOUBLE                                                       |
-| DecimalType     | DECIMAL                                                      |
-| StringType      | CHAR                                                         |
-| StringType      | VARCHAR                                                      |
-| StringType      | STRING                                                       |
-| DateType        | DATE                                                         |
-| TimestampType   | DATETIME                                                     |
-| ArrayType       | ARRAY <br> **NOTE:** <br> **Supported since version 1.1.1**. For detailed steps, see [Load data into columns of ARRAY type](#load-data-into-columns-of-array-type). |
+  | Spark data type | StarRocks data type                                          |
+  | --------------- | ------------------------------------------------------------ |
+  | BooleanType     | BOOLEAN                                                      |
+  | ByteType        | TINYINT                                                      |
+  | ShortType       | SMALLINT                                                     |
+  | IntegerType     | INT                                                          |
+  | LongType        | BIGINT                                                       |
+  | StringType      | LARGEINT                                                     |
+  | FloatType       | FLOAT                                                        |
+  | DoubleType      | DOUBLE                                                       |
+  | DecimalType     | DECIMAL                                                      |
+  | StringType      | CHAR                                                         |
+  | StringType      | VARCHAR                                                      |
+  | StringType      | STRING                                                       |
+  | DateType        | DATE                                                         |
+  | TimestampType   | DATETIME                                                     |
+  | ArrayType       | ARRAY <br> **NOTE:** <br> **Supported since version 1.1.1**. For detailed steps, see [Load data into columns of ARRAY type](#load-data-into-columns-of-array-type). |
 
 - You can also customize the data type mapping.
 
-  For example, a StarRocks table consists of the BITMAP and HLL data types, but Spark does not support the two data types. You need to customize the corresponding data types in Spark. For detailed steps, see load data into columns of [BITMAP](#load-data-into-columns-of-bitmap-type) and [HLL](#load-data-into-columns-of-hll-type) types. **BITMAP and HLL are supported since version 1.1.1**.
+  For example, a StarRocks table contains BITMAP and HLL columns, but Spark does not support the two data types. You need to customize the corresponding data types in Spark. For detailed steps, see load data into [BITMAP](#load-data-into-columns-of-bitmap-type) and [HLL](#load-data-into-columns-of-hll-type) columns. **BITMAP and HLL are supported since version 1.1.1**.
 
 ## Upgrade Spark connector
 
