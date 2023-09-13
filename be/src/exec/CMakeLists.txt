@@ -188,6 +188,7 @@ set(EXEC_FILES
     pipeline/scan/schema_scan_context.cpp
     pipeline/sink/iceberg_table_sink_operator.cpp
     pipeline/sink/hive_table_sink_operator.cpp
+    pipeline/sink/table_function_table_sink_operator.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp
