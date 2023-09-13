@@ -55,6 +55,7 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -1605,12 +1606,14 @@ public class StmtExecutor {
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+
         final Table targetTable;
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
             targetTable = ((InsertStmt) stmt).getTargetTable();
         } else {
             targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
         }
+
         if (isExplainAnalyze) {
             Preconditions.checkState(targetTable instanceof OlapTable,
                     "explain analyze only supports insert into olap native table");
@@ -1659,7 +1662,8 @@ public class StmtExecutor {
                                     sourceType,
                                     context.getSessionVariable().getQueryTimeoutS(),
                                     authenticateParams);
-        } else if (targetTable instanceof SystemTable || (targetTable.isIcebergTable() || targetTable.isHiveTable())) {
+        } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
+                || targetTable.isTableFunctionTable()) {
             // schema table and iceberg and hive table does not need txn
         } else {
             transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
@@ -1730,7 +1734,7 @@ public class StmtExecutor {
             }
 
             context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
-            if (!(targetTable.isIcebergTable() || targetTable.isHiveTable())) {
+            if (!(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isTableFunctionTable())) {
                 jobId = context.getGlobalStateMgr().getLoadMgr().registerLoadJob(
                         label,
                         database.getFullName(),
@@ -1828,8 +1832,8 @@ public class StmtExecutor {
                                 TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
                                         trackingSql
                         );
-                    } else if (targetTable instanceof SystemTable || (targetTable.isHiveTable() ||
-                            targetTable.isIcebergTable())) {
+                    } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() ||
+                            targetTable.isIcebergTable() || targetTable.isTableFunctionTable()) {
                         // schema table does not need txn
                     } else {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
@@ -1890,6 +1894,9 @@ public class StmtExecutor {
                 context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos);
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_HIVE_SINK_LABEL";
+            } else if (targetTable instanceof TableFunctionTable) {
+                txnStatus = TransactionStatus.VISIBLE;
+                label = "FAKE_TABLE_FUNCTION_TABLE_SINK_LABEL";
             } else {
                 if (isExplainAnalyze) {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr()
@@ -2012,12 +2019,14 @@ public class StmtExecutor {
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("{'label':'").append(label).append("', 'status':'").append(txnStatus.name());
-        sb.append("', 'txnId':'").append(transactionId).append("'");
-        if (!Strings.isNullOrEmpty(errMsg)) {
-            sb.append(", 'err':'").append(errMsg).append("'");
+        if (!label.startsWith("FAKE")) {
+            sb.append("{'label':'").append(label).append("', 'status':'").append(txnStatus.name());
+            sb.append("', 'txnId':'").append(transactionId).append("'");
+            if (!Strings.isNullOrEmpty(errMsg)) {
+                sb.append(", 'err':'").append(errMsg).append("'");
+            }
+            sb.append("}");
         }
-        sb.append("}");
 
         context.getState().setOk(loadedRows, filteredRows, sb.toString());
     }
