@@ -260,6 +260,17 @@ bool RuntimeState::use_page_cache() {
     return true;
 }
 
+bool RuntimeState::use_column_pool() const {
+    if (config::disable_column_pool) {
+        return false;
+    }
+
+    if (_query_options.__isset.use_column_pool) {
+        return _query_options.use_column_pool;
+    }
+    return true;
+}
+
 Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_allocation_size,
                                             const std::string* msg) {
     DCHECK_GE(failed_allocation_size, 0);
