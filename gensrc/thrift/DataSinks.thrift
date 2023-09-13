@@ -152,6 +152,7 @@ struct TResultSink {
     1: optional TResultSinkType type;
     2: optional TResultFileSinkOptions file_options;
     3: optional TResultSinkFormatType format;
+    4: optional bool is_binary_row;
 }
 
 struct TMysqlTableSink {
