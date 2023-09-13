@@ -52,6 +52,7 @@ COPY docker/dockerfiles/allin1/services/ $SR_HOME
 
 RUN cat be.conf >> $DEPLOYDIR/starrocks/be/conf/be.conf && \
     cat fe.conf >> $DEPLOYDIR/starrocks/fe/conf/fe.conf && \
-    mkdir -p $DEPLOYDIR/starrocks/fe/meta && mkdir -p $DEPLOYDIR/starrocks/be/storage && touch /.dockerenv
+    rm -f be.conf fe.conf && \
+    mkdir -p $DEPLOYDIR/starrocks/fe/meta $DEPLOYDIR/starrocks/be/storage && touch /.dockerenv
 
 CMD ./entrypoint.sh
