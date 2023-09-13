@@ -107,6 +107,15 @@ public class VariableExpr extends Expr {
     }
 
     @Override
+    public String toSqlImpl() {
+        String msg = setType.toString() + " " + name;
+        if (value != null) {
+            msg += " = " + value.toString();
+        }
+        return msg;
+    }
+
+    @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), name, setType, value, isNull);
     }
