@@ -139,6 +139,7 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
@@ -907,6 +908,16 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS: {
                 data = ExternalAnalyzeStatus.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB: {
+                data = ExternalAnalyzeJob.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB: {
+                data = ExternalAnalyzeJob.read(in);
                 isRead = true;
                 break;
             }

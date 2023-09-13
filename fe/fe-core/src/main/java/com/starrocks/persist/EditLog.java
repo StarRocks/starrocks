@@ -101,6 +101,7 @@ import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
@@ -933,6 +934,16 @@ public class EditLog {
                 case OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS: {
                     ExternalAnalyzeStatus analyzeStatus = (ExternalAnalyzeStatus) journal.getData();
                     globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeStatus(analyzeStatus);
+                    break;
+                }
+                case OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB: {
+                    ExternalAnalyzeJob externalAnalyzeJob = (ExternalAnalyzeJob) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayAddAnalyzeJob(externalAnalyzeJob);
+                    break;
+                }
+                case OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB: {
+                    ExternalAnalyzeJob externalAnalyzeJob = (ExternalAnalyzeJob) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeJob(externalAnalyzeJob);
                     break;
                 }
                 case OperationType.OP_ADD_BASIC_STATS_META: {
@@ -1903,12 +1914,16 @@ public class EditLog {
     public void logAddAnalyzeJob(AnalyzeJob job) {
         if (job.isNative()) {
             logEdit(OperationType.OP_ADD_ANALYZER_JOB, (NativeAnalyzeJob) job);
+        } else {
+            logEdit(OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB, (ExternalAnalyzeJob) job);
         }
     }
 
     public void logRemoveAnalyzeJob(AnalyzeJob job) {
         if (job.isNative()) {
             logEdit(OperationType.OP_REMOVE_ANALYZER_JOB, (NativeAnalyzeJob) job);
+        } else {
+            logEdit(OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB, (ExternalAnalyzeJob) job);
         }
     }
 
