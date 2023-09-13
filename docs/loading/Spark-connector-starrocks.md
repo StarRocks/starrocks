@@ -94,6 +94,7 @@ Directly download the corresponding version of the Spark connector JAR from the 
 
 ## Data type mapping between Spark and StarRocks
 
+<<<<<<< HEAD
 | Spark data type | StarRocks data type |
 | --------------- | ------------------- |
 | BooleanType     | BOOLEAN             |
@@ -110,6 +111,42 @@ Directly download the corresponding version of the Spark connector JAR from the 
 | StringType      | STRING              |
 | DateType        | DATE                |
 | TimestampType   | DATETIME            |
+=======
+- The default data type mapping is as follows:
+
+  | Spark data type | StarRocks data type                                          |
+  | --------------- | ------------------------------------------------------------ |
+  | BooleanType     | BOOLEAN                                                      |
+  | ByteType        | TINYINT                                                      |
+  | ShortType       | SMALLINT                                                     |
+  | IntegerType     | INT                                                          |
+  | LongType        | BIGINT                                                       |
+  | StringType      | LARGEINT                                                     |
+  | FloatType       | FLOAT                                                        |
+  | DoubleType      | DOUBLE                                                       |
+  | DecimalType     | DECIMAL                                                      |
+  | StringType      | CHAR                                                         |
+  | StringType      | VARCHAR                                                      |
+  | StringType      | STRING                                                       |
+  | DateType        | DATE                                                         |
+  | TimestampType   | DATETIME                                                     |
+  | ArrayType       | ARRAY <br> **NOTE:** <br> **Supported since version 1.1.1**. For detailed steps, see [Load data into columns of ARRAY type](#load-data-into-columns-of-array-type). |
+
+- You can also customize the data type mapping.
+
+  For example, a StarRocks table contains BITMAP and HLL columns, but Spark does not support the two data types. You need to customize the corresponding data types in Spark. For detailed steps, see load data into [BITMAP](#load-data-into-columns-of-bitmap-type) and [HLL](#load-data-into-columns-of-hll-type) columns. **BITMAP and HLL are supported since version 1.1.1**.
+
+## Upgrade Spark connector
+
+### Upgrade from version 1.1.0 to 1.1.1
+
+- Since 1.1.1, the Spark connector does not provide `mysql-connector-java` which is the official JDBC driver for MySQL, because of the limitations of the GPL license used by `mysql-connector-java`.
+  However, the Spark connector still needs the MySQL JDBC driver to connect to StarRocks for the table metadata, so you need to add the driver to the Spark classpath manually. You can find the
+  driver on [MySQL site](https://dev.mysql.com/downloads/connector/j/) or [Maven Central](https://repo1.maven.org/maven2/mysql/mysql-connector-java/).
+- Since 1.1.1, the connector uses Stream Load interface by default rather than Stream Load transaction interface in version 1.1.0. If you still want to use Stream Load transaction interface, you
+  can set the option `starrocks.write.max.retries` to `0`. Please see the description of `starrocks.write.enable.transaction-stream-load` and `starrocks.write.max.retries`
+  for details.
+>>>>>>> 1899b89c1c ([Doc] fix linting in data cache (#30942))
 
 ## Examples
 
