@@ -8,7 +8,7 @@ To optimize the query performance in these scenarios, StarRocks 2.5 provides the
 
 ## How it works
 
-StarRocks splits data in an external storage system into multiple blocks of the same size (1 MB by default), and caches the data on BEs. Block is the smallest unit of data cache, which is configurable.
+StarRocks splits data in an external storage system into multiple blocks of the same size, and caches the data on BEs. Block is the smallest unit of data cache, which is configurable.
 
 For example, if you set the block size to 1 MB and you want to query a Parquet file of 128 MB from Amazon S3, StarRocks splits the file into 128 blocks. The blocks are [0, 1 MB), [1 MB, 2 MB), [2 MB, 3 MB) ... [127 MB, 128 MB). StarRocks assigns a globally unique ID to each block, called a cache key. A cache key consists of the following three parts.
 
