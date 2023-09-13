@@ -2651,4 +2651,25 @@ TEST_F(HdfsScannerTest, TestParquetIcebergCaseSensitive) {
     scanner->close(_runtime_state);
 }
 
+TEST_F(HdfsScannerTest, TestParquetLZOFormat) {
+    SlotDesc parquet_descs[] = {{"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                {"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/lzo_compression.parquet";
+
+    _create_runtime_state("Asia/Shanghai");
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 100000);
+    scanner->close(_runtime_state);
+}
+
 } // namespace starrocks
