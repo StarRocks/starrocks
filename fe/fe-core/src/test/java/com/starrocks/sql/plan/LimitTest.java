@@ -632,9 +632,7 @@ public class LimitTest extends PlanTestBase {
                         "WHERE CAST(coalesce(true, true) AS BOOLEAN) < true\n" +
                         "LIMIT 157";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, ("11:SELECT\n" +
-                "  |  predicates: coalesce(TRUE, TRUE) < TRUE\n" +
-                "  |  limit: 157"));
+        assertContains(plan, ("EMPTYSET"));
     }
 
     @Test
