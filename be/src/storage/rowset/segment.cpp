@@ -121,7 +121,7 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
     }
 
     if (file_size < 12 + footer_length) {
-        return Status::Corruption(strings::Substitute("Bad · file $0: file size $1 < $2", read_file->filename(),
+        return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < $2", read_file->filename(),
                                                       file_size, 12 + footer_length));
     }
 
@@ -236,7 +236,6 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const Se
         }
         if (!_column_readers.at(column_unique_id)->segment_zone_map_filter(pair.second)) {
             // skip segment zonemap filter when this segment has column files link to it.
-            const TabletColumn& tablet_column = _tablet_schema->column(column_id);
             if (tablet_column.is_key() || _use_segment_zone_map_filter(read_options)) {
                 read_options.stats->segment_stats_filtered += _column_readers.at(column_unique_id)->num_rows();
                 return Status::EndOfFile(strings::Substitute("End of file $0, empty iterator", _fname));
