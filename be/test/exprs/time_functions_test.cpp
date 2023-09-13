@@ -469,7 +469,7 @@ TEST_P(ToTeraDateTestFixture, to_tera_date) {
                     .ok());
 }
 
-INSTANTIATE_TEST_SUITE_P(ToDateV2Test, ToDateV2TestFixture,
+INSTANTIATE_TEST_SUITE_P(ToDateV2Test, ToTeraDateTestFixture,
                          ::testing::Values(
                                  // clang-format: off
                                  TestTeradataForamtParam("1994-09-09", "yyyy-mm-dd", "1994-09-09"),
