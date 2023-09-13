@@ -47,9 +47,9 @@
 
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
+#include "util/coding.h"
 #include "util/compression/compression_context_pool_singletons.h"
 #include "util/faststring.h"
-
 namespace orc {
 uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit);
 } // namespace orc
@@ -1026,12 +1026,37 @@ public:
     }
 
     Status decompress(const Slice& input, Slice* output) const override {
-        try {
-            VLOG_FILE << "input size = " << input.get_size() << ", output size = " << output->get_size();
-            (void)orc::lzoDecompress(input.get_data(), input.get_data() + input.get_size(), output->mutable_data(),
-                                     output->mutable_data() + output->get_size());
-        } catch (const std::runtime_error& e) {
-            return Status::InternalError("LzoBlockCompression decompress failed");
+        const char* input_data = input.get_data();
+        size_t input_size = input.get_size();
+        char* output_data = output->mutable_data();
+        char* output_limit = output_data + output->get_size();
+
+        uint32_t uncompressed_size = decode_fixed32_be((const uint8_t*)input_data);
+        if (uncompressed_size != output->get_size()) {
+            return Status::InternalError("LzoBlockCompression check size failed");
+        }
+
+        input_data += 4;
+        input_size -= 4;
+
+        while (uncompressed_size) {
+            DCHECK(input_size >= 4);
+            uint32_t block_size = decode_fixed32_be((const uint8_t*)input_data);
+            input_data += 4;
+            input_size -= 4;
+
+            DCHECK(input_size >= block_size);
+            try {
+                uint64_t read = orc::lzoDecompress(input_data, input_data + block_size, output_data, output_limit);
+                DCHECK(read <= uncompressed_size);
+                uncompressed_size -= read;
+                output_data += read;
+            } catch (const std::runtime_error& e) {
+                return Status::InternalError("LzoBlockCompression decompress failed");
+            }
+
+            input_data += block_size;
+            input_size -= block_size;
         }
         return Status::OK();
     }
