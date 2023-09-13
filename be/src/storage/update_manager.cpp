@@ -556,4 +556,32 @@ void UpdateManager::on_rowset_cancel(Tablet* tablet, Rowset* rowset) {
     }
 }
 
+bool UpdateManager::TEST_update_state_exist(Tablet* tablet, Rowset* rowset) {
+    string rowset_unique_id = rowset->rowset_id().to_string();
+    if (rowset->is_column_mode_partial_update()) {
+        auto column_state_entry =
+                _update_column_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
+        if (column_state_entry != nullptr) {
+            _update_column_state_cache.remove(column_state_entry);
+            return true;
+        }
+    } else {
+        auto state_entry = _update_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
+        if (state_entry != nullptr) {
+            _update_state_cache.remove(state_entry);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool UpdateManager::TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry == nullptr) {
+        return expected_cnt == 0;
+    }
+    _index_cache.release(index_entry);
+    return index_entry->get_ref() == expected_cnt;
+}
+
 } // namespace starrocks
