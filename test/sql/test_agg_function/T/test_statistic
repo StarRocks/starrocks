@@ -1,0 +1,131 @@
+-- name: testCorr
+CREATE TABLE aggtest(
+                        no int,
+                        k decimal(10,2) ,
+                        v decimal(10,2))
+                        DUPLICATE KEY (no)
+                        DISTRIBUTED BY HASH (no)
+                        PROPERTIES (
+                        "replication_num" = "1",
+                        "storage_format" = "v2"
+                    );
+-- select empty table
+select CORR(k, v) FROM aggtest;        
+
+insert into aggtest values(1, 10, NULL);
+
+-- select without non-NULL pair
+select CORR(k, v) FROM aggtest;
+select CORR(k, v) over (partition by no) FROM aggtest;
+
+insert into aggtest values(2, 10, 11), (2, 20, 22), (2, 25, NULL), (2, 30, 35);
+
+-- without group by
+select abs(co - 0.9988445981121532)  / 0.9988445981121532 < 0.00001 from (select CORR(k, v)co FROM aggtest limit 1)result;
+-- one phase agg
+select abs(co - 0.9988445981121532)  / 0.9988445981121532 < 0.00001 from (select /*+ SET_VAR (new_planner_agg_stage='1') */CORR(k, v)co FROM aggtest group by no order by no limit 1,1)result;
+-- two phase agg with force_streaming
+select abs(co - 0.9988445981121532)  / 0.9988445981121532 < 0.00001 from (select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage='2') */CORR(k, v)co FROM aggtest group by no order by no limit 1,1)result;
+--  two phase agg with FORCE_PREAGGREGATION
+select abs(co - 0.9988445981121532)  / 0.9988445981121532 < 0.00001 from (select /*+ SET_VAR (streaming_preaggregation_mode = 'FORCE_PREAGGREGATION',new_planner_agg_stage='2') */CORR(k, v)co FROM aggtest group by no order by no limit 1,1)result;
+
+-- three phase agg
+-- [NULL,1] 
+select co is NULL,total = 1  from (select /*+ SET_VAR (new_planner_agg_stage='3')*/CORR(k, v)co, count(distinct k)total FROM aggtest group by no order by no limit 0,1)result;
+-- [0.9988445981121532,4]
+select abs(co - 0.9988445981121532)  / 0.9988445981121532 < 0.00001,total = 4  from (select /*+ SET_VAR (new_planner_agg_stage='3')*/CORR(k, v)co, count(distinct k)total FROM aggtest group by no order by no limit 1,1)result;
+
+-- four phase agg
+select abs(co - 0.9988445981121532)  / 0.9988445981121532 < 0.00001,total = 4  from (select /*+ SET_VAR (new_planner_agg_stage='3')*/CORR(k, v)co, count(distinct k)total FROM aggtest)result;
+
+-- window function
+select co is null from (select CORR(k, v) over (partition by no)co FROM aggtest order by co limit 0,1)result;
+select abs(co - 0.9988445981121532)  / 0.9988445981121532 < 0.00001 from (select CORR(k, v) over (partition by no)co FROM aggtest order by co limit 1,4)result;
+
+-- name: testCovarSamp
+CREATE TABLE aggtest(
+                        no int,
+                        k decimal(10,2) ,
+                        v decimal(10,2))
+                        DUPLICATE KEY (no)
+                        DISTRIBUTED BY HASH (no)
+                        PROPERTIES (
+                        "replication_num" = "1",
+                        "storage_format" = "v2"
+                    );
+-- select empty table
+select COVAR_SAMP(k, v)co FROM aggtest;        
+
+insert into aggtest values(1, 10, NULL);
+
+-- select without non-NULL pair
+select COVAR_SAMP(k, v)co FROM aggtest;
+select COVAR_SAMP(k, v) over (partition by no) FROM aggtest;
+
+insert into aggtest values(2, 10, 11), (2, 20, 22), (2, 25, NULL), (2, 30, 35);
+
+-- without group by
+select abs(co - 120)  / 120 < 0.00001 from (select COVAR_SAMP(k, v)co FROM aggtest limit 1)result;
+-- one phase agg
+select abs(co - 120)  / 120 < 0.00001 from (select /*+ SET_VAR (new_planner_agg_stage='1') */COVAR_SAMP(k, v)co FROM aggtest group by no order by no limit 1,1)result;
+-- two phase agg with force_streaming
+select abs(co - 120)  / 120 < 0.00001 from (select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage='2') */COVAR_SAMP(k, v)co FROM aggtest group by no order by no limit 1,1)result;
+--  two phase agg with FORCE_PREAGGREGATION
+select abs(co - 120)  / 120 < 0.00001 from (select /*+ SET_VAR (streaming_preaggregation_mode = 'FORCE_PREAGGREGATION',new_planner_agg_stage='2') */COVAR_SAMP(k, v)co FROM aggtest group by no order by no limit 1,1)result;
+
+-- three phase agg
+-- [NULL,1] 
+select co is NULL,total = 1  from (select /*+ SET_VAR (new_planner_agg_stage='3')*/COVAR_SAMP(k, v)co, count(distinct k)total FROM aggtest group by no order by no limit 0,1)result;
+-- [0.9988445981121532,4]
+select abs(co - 120)  / 120 < 0.00001,total = 4  from (select /*+ SET_VAR (new_planner_agg_stage='3')*/COVAR_SAMP(k, v)co, count(distinct k)total FROM aggtest group by no order by no limit 1,1)result;
+
+-- four phase agg
+select abs(co - 120)  / 120 < 0.00001,total = 4  from (select /*+ SET_VAR (new_planner_agg_stage='3')*/COVAR_SAMP(k, v)co, count(distinct k)total FROM aggtest)result;
+
+-- window function
+select co is null from (select COVAR_SAMP(k, v) over (partition by no)co FROM aggtest order by co  limit 0,1)result;
+select abs(co - 120)  / 120 < 0.00001 from (select COVAR_SAMP(k, v) over (partition by no)co FROM aggtest order by co limit 1,4)result;
+
+-- name: testCovarPop
+CREATE TABLE aggtest(
+                        no int,
+                        k decimal(10,2) ,
+                        v decimal(10,2))
+                        DUPLICATE KEY (no)
+                        DISTRIBUTED BY HASH (no)
+                        PROPERTIES (
+                        "replication_num" = "1",
+                        "storage_format" = "v2"
+                    );
+-- select empty table
+select covar_pop(k, v)co FROM aggtest;        
+
+insert into aggtest values(1, 10, NULL);
+
+-- select without non-NULL pair
+select covar_pop(k, v)co FROM aggtest;
+select covar_pop(k, v) over (partition by no) FROM aggtest;
+
+insert into aggtest values(2, 10, 11), (2, 20, 22), (2, 25, NULL), (2, 30, 35);
+
+-- without group by
+select abs(co - 80)  / 80 < 0.00001 from (select covar_pop(k, v)co FROM aggtest limit 1)result;
+-- one phase agg
+select abs(co - 80)  / 80 < 0.00001 from (select /*+ SET_VAR (new_planner_agg_stage='1') */covar_pop(k, v)co FROM aggtest group by no order by no limit 1,1)result;
+-- two phase agg with force_streaming
+select abs(co - 80)  / 80 < 0.00001 from (select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage='2') */covar_pop(k, v)co FROM aggtest group by no order by no limit 1,1)result;
+--  two phase agg with FORCE_PREAGGREGATION
+select abs(co - 80)  / 80 < 0.00001 from (select /*+ SET_VAR (streaming_preaggregation_mode = 'FORCE_PREAGGREGATION',new_planner_agg_stage='2') */covar_pop(k, v)co FROM aggtest group by no order by no limit 1,1)result;
+
+-- three phase agg
+-- [NULL,1] 
+select co is NULL,total = 1  from (select /*+ SET_VAR (new_planner_agg_stage='3')*/covar_pop(k, v)co, count(distinct k)total FROM aggtest group by no order by no limit 0,1)result;
+-- [0.9988445981121532,4]
+select abs(co - 80)  / 80 < 0.00001,total = 4  from (select /*+ SET_VAR (new_planner_agg_stage='3')*/covar_pop(k, v)co, count(distinct k)total FROM aggtest group by no order by no limit 1,1)result;
+
+-- four phase agg
+select abs(co - 80)  / 80 < 0.00001,total = 4  from (select /*+ SET_VAR (new_planner_agg_stage='3')*/covar_pop(k, v)co, count(distinct k)total FROM aggtest)result;
+
+-- window function
+select co is null from (select covar_pop(k, v) over (partition by no)co FROM aggtest order by co  limit 0,1)result;
+select abs(co - 80)  / 80 < 0.00001 from (select covar_pop(k, v) over (partition by no)co FROM aggtest order by co limit 1,4)result;

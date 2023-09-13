@@ -18,9 +18,13 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.TableName;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.Optional;
 
 import static com.starrocks.server.CatalogMgr.isInternalCatalog;
 
@@ -42,25 +46,52 @@ public class BaseTableInfo {
     @SerializedName(value = "tableIdentifier")
     private String tableIdentifier;
 
+    // table name must be set to be used in backup/restore
     @SerializedName(value = "tableName")
     private String tableName;
 
-    public BaseTableInfo(long dbId, String dbName, long tableId) {
+    public BaseTableInfo(long dbId, String dbName, String tableName, long tableId) {
         this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         this.dbId = dbId;
         this.dbName = dbName;
         this.tableId = tableId;
+        this.tableName = tableName;
     }
 
     public BaseTableInfo(long dbId, long tableId) {
-        this(dbId, null, tableId);
+        this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        this.dbId = dbId;
+        this.tableId = tableId;
+
+        Optional<ConnectorMetadata> connectorMetadata =
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            Database db = connectorMetadata.get().getDb(dbId);
+            if (db != null) {
+                this.dbName = db.getFullName();
+                Table table = db.getTable(tableId);
+                if (table != null) {
+                    this.tableName = table.getName();
+                }
+            }
+        }
     }
 
-    public BaseTableInfo(String catalogName, String dbName, String tableIdentifier) {
+    // used for external table
+    public BaseTableInfo(String catalogName, String dbName, String tableName, String tableIdentifier) {
         this.catalogName = catalogName;
         this.dbName = dbName;
+        this.tableName = tableName;
         this.tableIdentifier = tableIdentifier;
-        this.tableName = tableIdentifier.split(":")[0];
+    }
+
+    public static BaseTableInfo fromTableName(TableName name, Table table) {
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(name.getCatalog(), name.getDb());
+        if (isInternalCatalog(name.getCatalog())) {
+            return new BaseTableInfo(database.getId(), database.getFullName(), table.getName(), table.getId());
+        } else {
+            return new BaseTableInfo(name.getCatalog(), name.getDb(), table.getName(), table.getTableIdentifier());
+        }
     }
 
     public String getTableInfoStr() {
@@ -110,27 +141,54 @@ public class BaseTableInfo {
 
     public Table getTable() {
         if (isInternalCatalog(catalogName)) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            if (db == null) {
-                return null;
-            } else {
-                return db.getTable(tableId);
+            Table table = getTableById();
+            if (table == null) {
+                table = getTableByName();
             }
+            return table;
         } else {
             if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
                 LOG.warn("catalog {} not exist", catalogName);
                 return null;
             }
-            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+            Table table = getTableByName();
             if (table == null) {
                 LOG.warn("table {}.{}.{} not exist", catalogName, dbName, tableName);
                 return null;
             }
-            if (table.getTableIdentifier().equals(tableIdentifier)) {
+
+            if (tableIdentifier == null) {
+                this.tableIdentifier = table.getTableIdentifier();
+                return table;
+            }
+
+            if (tableIdentifier != null && table.getTableIdentifier().equals(tableIdentifier)) {
                 return table;
             }
             return null;
         }
+    }
+
+    public Table getTableById() {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            return null;
+        } else {
+            return db.getTable(tableId);
+        }
+    }
+
+    public Table getTableByName() {
+        if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+            LOG.warn("catalog {} not exist", catalogName);
+            return null;
+        }
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        if (table == null) {
+            LOG.warn("table {}.{}.{} not exist", catalogName, dbName, tableName);
+            return null;
+        }
+        return table;
     }
 
     public Database getDb() {

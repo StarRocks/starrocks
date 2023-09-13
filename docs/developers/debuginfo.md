@@ -4,9 +4,9 @@
 
 From v2.5 onwards, the debuginfo file of BE is stripped from the StarRocks installation package to reduce the size and space usage of the installation package. You can see two packages at [StarRocks website](https://www.starrocks.io/download/community).
 
-![debuginfo](../assets/debug-en.png)
+![debuginfo](../assets/debug_info.png)
 
-In this figure, `StarRocks-2.5.1.tar.gz` is the installation package, you can click **Download** to download this package. `StarRocks-2.5.1.debuginfo.tar.gz` is the debuginfo package, you can click this package to download it.
+In this figure, you can click `Get Debug Symbol files` to download the debuginfo package. `StarRocks-2.5.10.tar.gz` is the installation package and you can click **Download** to download this package.
 
 This change does not affect your download behavior or use of StarRocks. You can download only the installation package for cluster deployment and upgrade. The debuginfo package is only for developers to debug programs using GDB.
 

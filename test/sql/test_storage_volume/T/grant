@@ -1,0 +1,7 @@
+-- name: testGrant
+CREATE USER rose IDENTIFIED BY '123456';
+CREATE STORAGE VOLUME storage_volume_grant type = s3 LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="endpoint", "aws.s3.region"="us-west-2", "aws.s3.use_aws_sdk_default_behavior" = "true", "enabled"="false");
+GRANT USAGE on storage volume storage_volume_grant to user rose;
+show grants for user rose;
+drop storage volume storage_volume_grant;
+drop user rose;

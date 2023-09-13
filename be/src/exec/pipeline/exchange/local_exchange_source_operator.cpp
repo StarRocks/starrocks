@@ -27,30 +27,31 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk) {
         return Status::OK();
     }
     size_t memory_usage = chunk->memory_usage();
-    _memory_manager->update_memory_usage(memory_usage);
+    size_t num_rows = chunk->num_rows();
     _local_memory_usage += memory_usage;
     _full_chunk_queue.emplace(std::move(chunk));
+    _memory_manager->update_memory_usage(memory_usage, num_rows);
 
     return Status::OK();
 }
 
 // Used for PartitionExchanger.
 // Only enqueue the partition chunk information here, and merge chunk in pull_chunk().
-Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, std::shared_ptr<std::vector<uint32_t>> indexes,
+Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes,
                                               uint32_t from, uint32_t size, size_t memory_usage) {
     std::lock_guard<std::mutex> l(_chunk_lock);
     if (_is_finished) {
         return Status::OK();
     }
-    _memory_manager->update_memory_usage(memory_usage);
     _partition_chunk_queue.emplace(std::move(chunk), std::move(indexes), from, size, memory_usage);
     _partition_rows_num += size;
     _local_memory_usage += memory_usage;
+    _memory_manager->update_memory_usage(memory_usage, size);
 
     return Status::OK();
 }
 
-Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, std::shared_ptr<std::vector<uint32_t>> indexes,
+Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes,
                                               uint32_t from, uint32_t size, Columns& partition_columns,
                                               const std::vector<ExprContext*>& partition_expr_ctxs,
                                               size_t memory_usage) {
@@ -86,7 +87,7 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, std::shared_ptr<st
     }
 
     _local_memory_usage += memory_usage;
-    _memory_manager->update_memory_usage(memory_usage);
+    _memory_manager->update_memory_usage(memory_usage, size);
 
     return Status::OK();
 }
@@ -120,7 +121,7 @@ Status LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
     // clear _key_partition_pending_chunks
     { [[maybe_unused]] typeof(_partitions) tmp = std::move(_partitions); }
     // Subtract the number of rows of buffered chunks from row_count of _memory_manager and make it unblocked.
-    _memory_manager->update_memory_usage(-_local_memory_usage);
+    _memory_manager->update_memory_usage(-_local_memory_usage, -_partition_rows_num);
     _partition_rows_num = 0;
     _local_memory_usage = 0;
     return Status::OK();
@@ -136,6 +137,19 @@ StatusOr<ChunkPtr> LocalExchangeSourceOperator::pull_chunk(RuntimeState* state) 
     return std::move(chunk);
 }
 
+const size_t min_local_memory_limit = 1LL * 1024 * 1024;
+
+void LocalExchangeSourceOperator::enter_release_memory_mode() {
+    // limit the memory limit to a very small value so that the upstream will not write new data until all the data has been pushed to the downstream operators
+    _local_memory_limit = min_local_memory_limit;
+    size_t max_memory_usage = min_local_memory_limit * _memory_manager->get_max_input_dop();
+    _memory_manager->update_max_memory_usage(max_memory_usage);
+}
+
+void LocalExchangeSourceOperator::set_execute_mode(int performance_level) {
+    enter_release_memory_mode();
+}
+
 ChunkPtr LocalExchangeSourceOperator::_pull_passthrough_chunk(RuntimeState* state) {
     std::lock_guard<std::mutex> l(_chunk_lock);
 
@@ -143,7 +157,8 @@ ChunkPtr LocalExchangeSourceOperator::_pull_passthrough_chunk(RuntimeState* stat
         ChunkPtr chunk = std::move(_full_chunk_queue.front());
         _full_chunk_queue.pop();
         size_t memory_usage = chunk->memory_usage();
-        _memory_manager->update_memory_usage(-memory_usage);
+        size_t num_rows = chunk->num_rows();
+        _memory_manager->update_memory_usage(-memory_usage, -num_rows);
         _local_memory_usage -= memory_usage;
         return chunk;
     }
@@ -153,7 +168,7 @@ ChunkPtr LocalExchangeSourceOperator::_pull_passthrough_chunk(RuntimeState* stat
 
 ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeState* state) {
     std::vector<PartitionChunk> selected_partition_chunks;
-    size_t rows_num = 0;
+    size_t num_rows = 0;
     size_t memory_usage = 0;
     // Lock during pop partition chunks from queue.
     {
@@ -162,22 +177,22 @@ ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeState* state) {
         DCHECK(!_partition_chunk_queue.empty());
 
         while (!_partition_chunk_queue.empty() &&
-               rows_num + _partition_chunk_queue.front().size <= state->chunk_size()) {
-            rows_num += _partition_chunk_queue.front().size;
+               num_rows + _partition_chunk_queue.front().size <= state->chunk_size()) {
+            num_rows += _partition_chunk_queue.front().size;
             memory_usage += _partition_chunk_queue.front().memory_usage;
             selected_partition_chunks.emplace_back(std::move(_partition_chunk_queue.front()));
             _partition_chunk_queue.pop();
         }
-        _partition_rows_num -= rows_num;
+        _partition_rows_num -= num_rows;
         _local_memory_usage -= memory_usage;
-        _memory_manager->update_memory_usage(-memory_usage);
+        _memory_manager->update_memory_usage(-memory_usage, -num_rows);
     }
     if (selected_partition_chunks.empty()) {
         throw std::runtime_error("local exchange gets empty shuffled chunk.");
     }
     // Unlock during merging partition chunks into a full chunk.
     ChunkPtr chunk = selected_partition_chunks[0].chunk->clone_empty_with_slot();
-    chunk->reserve(rows_num);
+    chunk->reserve(num_rows);
     for (const auto& partition_chunk : selected_partition_chunks) {
         chunk->append_selective(*partition_chunk.chunk, partition_chunk.indexes->data(), partition_chunk.from,
                                 partition_chunk.size);
@@ -187,7 +202,7 @@ ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeState* state) {
 
 ChunkPtr LocalExchangeSourceOperator::_pull_key_partition_chunk(RuntimeState* state) {
     std::vector<PartitionChunk> selected_partition_chunks;
-    size_t rows_num = 0;
+    size_t num_rows = 0;
     size_t memory_usage = 0;
 
     {
@@ -198,23 +213,23 @@ ChunkPtr LocalExchangeSourceOperator::_pull_key_partition_chunk(RuntimeState* st
         DCHECK(!pendingPartitionChunks.partition_chunk_queue.empty());
 
         while (!pendingPartitionChunks.partition_chunk_queue.empty() &&
-               rows_num + pendingPartitionChunks.partition_chunk_queue.front().size <= state->chunk_size()) {
-            rows_num += pendingPartitionChunks.partition_chunk_queue.front().size;
+               num_rows + pendingPartitionChunks.partition_chunk_queue.front().size <= state->chunk_size()) {
+            num_rows += pendingPartitionChunks.partition_chunk_queue.front().size;
             memory_usage += pendingPartitionChunks.partition_chunk_queue.front().memory_usage;
 
             selected_partition_chunks.emplace_back(std::move(pendingPartitionChunks.partition_chunk_queue.front()));
             pendingPartitionChunks.partition_chunk_queue.pop();
         }
 
-        pendingPartitionChunks.partition_row_nums -= rows_num;
+        pendingPartitionChunks.partition_row_nums -= num_rows;
         pendingPartitionChunks.memory_usage -= memory_usage;
         _local_memory_usage -= memory_usage;
-        _memory_manager->update_memory_usage(-memory_usage);
+        _memory_manager->update_memory_usage(-memory_usage, -num_rows);
     }
 
     // Unlock during merging partition chunks into a full chunk.
     ChunkPtr chunk = selected_partition_chunks[0].chunk->clone_empty_with_slot();
-    chunk->reserve(rows_num);
+    chunk->reserve(num_rows);
     for (const auto& partition_chunk : selected_partition_chunks) {
         chunk->append_selective(*partition_chunk.chunk, partition_chunk.indexes->data(), partition_chunk.from,
                                 partition_chunk.size);

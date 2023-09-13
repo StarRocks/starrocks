@@ -43,7 +43,7 @@ public class HiveViewPlanTest extends PlanTestBase {
 
     @Test
     public void testHive2() throws Exception {
-        String sql = "select * from hive0.tpch.customer_view where c_custkey = 1";
+        String sql = "select * from hive0.tpch.customer_nation_view where c_custkey = 1";
         String sqlPlan = getFragmentPlan(sql);
         assertContains(sqlPlan, "1:HdfsScanNode\n" +
                         "     TABLE: customer",
@@ -53,8 +53,8 @@ public class HiveViewPlanTest extends PlanTestBase {
 
     @Test
     public void testHive3() throws Exception {
-        String sql = "select o_orderkey, o_custkey, c_name, c_address, n_name from orders join hive0.tpch.customer_view " +
-                "on orders.o_custkey = customer_view.c_custkey";
+        String sql = "select o_orderkey, o_custkey, c_name, c_address, n_name from orders join hive0.tpch.customer_nation_view " +
+                "on orders.o_custkey = customer_nation_view.c_custkey";
         String sqlPlan = getFragmentPlan(sql);
         assertContains(sqlPlan, "4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
@@ -64,7 +64,6 @@ public class HiveViewPlanTest extends PlanTestBase {
                         "  |  join op: INNER JOIN (BROADCAST)\n" +
                         "  |  colocate: false, reason: \n" +
                         "  |  equal join conjunct: 19: n_nationkey = 14: c_nationkey");
-        System.out.println(sqlPlan);
     }
 
     @Test
@@ -77,5 +76,14 @@ public class HiveViewPlanTest extends PlanTestBase {
         expectedException.expect(StarRocksPlannerException.class);
         expectedException.expectMessage("Failed to parse view-definition statement of view");
         hiveView.getQueryStatementWithSRParser();
+    }
+
+    @Test
+    public void testQueryHiveViewWithTrinoSQLDialect() throws Exception {
+        String sql = "select * from hive0.tpch.customer_alias_view where c_custkey = 1";
+        connectContext.getSessionVariable().setSqlDialect("trino");
+        String sqlPlan = getFragmentPlan(sql);
+        assertContains(sqlPlan, "0:HdfsScanNode\n" +
+                "     TABLE: customer");
     }
 }

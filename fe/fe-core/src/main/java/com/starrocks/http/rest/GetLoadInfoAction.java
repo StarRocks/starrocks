@@ -40,11 +40,11 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.http.UnauthorizedException;
 import com.starrocks.load.Load;
-import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 
 // Get load information of one load job
@@ -61,7 +61,7 @@ public class GetLoadInfoAction extends RestBaseAction {
 
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response)
-            throws DdlException {
+            throws DdlException, AccessDeniedException {
         Load.JobInfo info = new Load.JobInfo(request.getSingleParameter(DB_KEY),
                 request.getSingleParameter(LABEL_KEY));
         if (Strings.isNullOrEmpty(info.dbName)) {
@@ -76,13 +76,13 @@ public class GetLoadInfoAction extends RestBaseAction {
         }
 
         if (info.tblNames.isEmpty()) {
-            if (!PrivilegeActions.checkActionInDb(ConnectContext.get(), info.dbName, PrivilegeType.INSERT)) {
-                throw new UnauthorizedException(
-                        "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
-            }
+            Authorizer.checkActionInDb(ConnectContext.get().getCurrentUserIdentity(),
+                    ConnectContext.get().getCurrentRoleIds(), info.dbName, PrivilegeType.INSERT);
         } else {
             for (String tblName : info.tblNames) {
-                checkTableAction(ConnectContext.get(), info.dbName, tblName, PrivilegeType.INSERT);
+                Authorizer.checkTableAction(
+                        ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
+                        info.dbName, tblName, PrivilegeType.INSERT);
             }
         }
         globalStateMgr.getLoadMgr().getLoadJobInfo(info);

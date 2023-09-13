@@ -28,6 +28,8 @@ LakeMetaScanNode::LakeMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, con
 }
 
 Status LakeMetaScanNode::open(RuntimeState* state) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
+
     if (!_is_init) {
         return Status::InternalError("Open before Init.");
     }
@@ -54,6 +56,8 @@ Status LakeMetaScanNode::open(RuntimeState* state) {
 }
 
 Status LakeMetaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
+
     DCHECK(state != nullptr && chunk != nullptr && eos != nullptr);
     RETURN_IF_CANCELLED(state);
 

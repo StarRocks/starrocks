@@ -2,7 +2,7 @@
 
 ## Description
 
-Removes input from lhs and return as a result set.
+Removes `input` from the Bitmap value `lhs` and returns a result set.
 
 ## Syntax
 

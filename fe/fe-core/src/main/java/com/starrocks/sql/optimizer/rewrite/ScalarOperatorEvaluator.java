@@ -20,6 +20,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
@@ -28,6 +29,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -93,8 +96,24 @@ public enum ScalarOperatorEvaluator {
             }
 
             FunctionSignature signature = new FunctionSignature(name, argTypes, returnType);
-            mapBuilder.put(signature, new FunctionInvoker(method, signature));
+            mapBuilder.put(signature, new FunctionInvoker(method, signature, annotation.isMetaFunction(),
+                    annotation.isMonotonic()));
         }
+    }
+
+    public Function getMetaFunction(FunctionName name, Type[] args) {
+        String nameStr = name.getFunction().toUpperCase();
+        // NOTE: only support VARCHAR as return type
+        FunctionSignature signature = new FunctionSignature(nameStr, Lists.newArrayList(args), Type.VARCHAR);
+        FunctionInvoker invoker = functions.get(signature);
+        if (invoker == null || !invoker.isMetaFunction) {
+            return null;
+        }
+        return new Function(name, Lists.newArrayList(args), Type.VARCHAR, false);
+    }
+
+    public ScalarOperator evaluation(CallOperator root) {
+        return evaluation(root, false);
     }
 
     /**
@@ -103,7 +122,7 @@ public enum ScalarOperatorEvaluator {
      * @param root CallOperator root
      * @return ConstantOperator if the CallOperator is effect (All child constant/FE builtin function support/....)
      */
-    public ScalarOperator evaluation(CallOperator root) {
+    public ScalarOperator evaluation(CallOperator root, boolean needMonotonic) {
         if (ConnectContext.get() != null
                 && ConnectContext.get().getSessionVariable().isDisableFunctionFoldConstants()) {
             return root;
@@ -156,6 +175,10 @@ public enum ScalarOperatorEvaluator {
 
         FunctionInvoker invoker = functions.get(signature);
 
+        if (needMonotonic && !invoker.isMonotonic) {
+            return root;
+        }
+
         try {
             ConstantOperator operator = invoker.invoke(root.getChildren());
 
@@ -169,18 +192,25 @@ public enum ScalarOperatorEvaluator {
             return operator;
         } catch (AnalysisException e) {
             LOG.debug("failed to invoke", e);
+            if (invoker.isMetaFunction) {
+                throw new StarRocksPlannerException(ErrorType.USER_ERROR, e.getMessage());
+            }
         }
-
         return root;
     }
 
     private static class FunctionInvoker {
+        private final boolean isMetaFunction;
+
+        private final boolean isMonotonic;
         private final Method method;
         private final FunctionSignature signature;
 
-        public FunctionInvoker(Method method, FunctionSignature signature) {
+        public FunctionInvoker(Method method, FunctionSignature signature, boolean isMetaFunction, boolean isMonotonic) {
             this.method = method;
             this.signature = signature;
+            this.isMetaFunction = isMetaFunction;
+            this.isMonotonic = isMonotonic;
         }
 
         public Method getMethod() {
@@ -209,12 +239,12 @@ public enum ScalarOperatorEvaluator {
                 if (argType.isArray()) {
                     Preconditions.checkArgument(method.getParameterTypes().length == index + 1);
                     final List<ConstantOperator> variableArgs = Lists.newArrayList();
-                    Set<Type> checkSet = Sets.newHashSet();
+                    Set<PrimitiveType> checkSet = Sets.newHashSet();
 
                     for (int variableArgIndex = index; variableArgIndex < args.size(); variableArgIndex++) {
                         ConstantOperator arg = (ConstantOperator) args.get(variableArgIndex);
                         variableArgs.add(arg);
-                        checkSet.add(arg.getType());
+                        checkSet.add(arg.getType().getPrimitiveType());
                     }
 
                     // Array data must keep same kinds

@@ -51,9 +51,9 @@ void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
     build_ht_timer = ADD_TIMER(runtime_profile, "BuildHashTableTime");
     build_runtime_filter_timer = ADD_TIMER(runtime_profile, "RuntimeFilterBuildTime");
     build_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "BuildConjunctEvaluateTime");
-    build_buckets_counter =
-            ADD_COUNTER_SKIP_MERGE(runtime_profile, "BuildBuckets", TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE);
+    build_buckets_counter = ADD_COUNTER(runtime_profile, "BuildBuckets", TUnit::UNIT);
     runtime_filter_num = ADD_COUNTER(runtime_profile, "RuntimeFilterNum", TUnit::UNIT);
+    build_keys_per_bucket = ADD_COUNTER(runtime_profile, "BuildKeysPerBucket%", TUnit::UNIT);
 }
 
 HashJoiner::HashJoiner(const HashJoinerParam& param)
@@ -115,6 +115,7 @@ Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_
     return Status::OK();
 }
 
+// it is ok that prepare_builder is done whether before this or not
 Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_profile) {
     if (_runtime_state == nullptr) {
         _runtime_state = state;
@@ -123,6 +124,15 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
     runtime_profile->add_info_string("DistributionMode", to_string(_hash_join_node.distribution_mode));
     runtime_profile->add_info_string("JoinType", to_string(_join_type));
     _probe_metrics->prepare(runtime_profile);
+
+    auto& hash_table = _hash_join_builder->hash_table();
+    hash_table.set_probe_profile(probe_metrics().search_ht_timer, probe_metrics().output_probe_column_timer,
+                                 probe_metrics().output_tuple_column_timer, probe_metrics().output_build_column_timer);
+
+    _hash_table_param.search_ht_timer = probe_metrics().search_ht_timer;
+    _hash_table_param.output_build_column_timer = probe_metrics().output_build_column_timer;
+    _hash_table_param.output_probe_column_timer = probe_metrics().output_probe_column_timer;
+    _hash_table_param.output_tuple_column_timer = probe_metrics().output_tuple_column_timer;
 
     return Status::OK();
 }
@@ -135,10 +145,6 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     param->row_desc = &_row_descriptor;
     param->build_row_desc = &_build_row_descriptor;
     param->probe_row_desc = &_probe_row_descriptor;
-    param->search_ht_timer = probe_metrics().search_ht_timer;
-    param->output_build_column_timer = probe_metrics().output_build_column_timer;
-    param->output_probe_column_timer = probe_metrics().output_probe_column_timer;
-    param->output_tuple_column_timer = probe_metrics().output_tuple_column_timer;
     param->output_slots = _output_slots;
     std::set<SlotId> predicate_slots;
     for (ExprContext* expr_context : _conjunct_ctxs) {
@@ -179,7 +185,7 @@ Status HashJoiner::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk
 Status HashJoiner::append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk) {
     update_build_rows(chunk->num_rows());
     auto io_executor = spill_channel()->io_executor();
-    RETURN_IF_ERROR(spiller()->spill(state, chunk, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
+    RETURN_IF_ERROR(spiller()->spill(state, chunk, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller())));
     return Status::OK();
 }
 
@@ -188,8 +194,8 @@ Status HashJoiner::append_spill_task(RuntimeState* state, std::function<StatusOr
     while (!spiller()->is_full()) {
         auto chunk_st = spill_task();
         if (chunk_st.ok()) {
-            RETURN_IF_ERROR(
-                    spiller()->spill(state, chunk_st.value(), io_executor(), RESOURCE_TLS_MEMTRACER_GUARD(state)));
+            RETURN_IF_ERROR(spiller()->spill(state, chunk_st.value(), io_executor(),
+                                             TRACKER_WITH_SPILLER_GUARD(state, spiller())));
         } else if (chunk_st.status().is_end_of_file()) {
             return Status::OK();
         } else {
@@ -206,6 +212,7 @@ Status HashJoiner::build_ht(RuntimeState* state) {
         RETURN_IF_ERROR(_hash_join_builder->build(state));
         size_t bucket_size = _hash_join_builder->hash_table().get_bucket_size();
         COUNTER_SET(build_metrics().build_buckets_counter, static_cast<int64_t>(bucket_size));
+        COUNTER_SET(build_metrics().build_keys_per_bucket, static_cast<int64_t>(100 * avg_keys_per_bucket()));
     }
 
     return Status::OK();
@@ -314,7 +321,7 @@ void HashJoiner::reference_hash_table(HashJoiner* src_join_builder) {
     _hash_table_param = src_join_builder->hash_table_param();
     hash_table = src_join_builder->_hash_join_builder->hash_table().clone_readable_table();
     hash_table.set_probe_profile(probe_metrics().search_ht_timer, probe_metrics().output_probe_column_timer,
-                                 probe_metrics().output_tuple_column_timer);
+                                 probe_metrics().output_tuple_column_timer, probe_metrics().output_build_column_timer);
 
     // _hash_table_build_rows is root truth, it used to by _short_circuit_break().
     _hash_table_build_rows = src_join_builder->_hash_table_build_rows;
@@ -341,14 +348,9 @@ void HashJoiner::decr_prober(RuntimeState* state) {
     }
 }
 
-size_t HashJoiner::avg_keys_perf_bucket() const {
+float HashJoiner::avg_keys_per_bucket() const {
     const auto& hash_table = _hash_join_builder->hash_table();
-    size_t used_bucket_count = hash_table.get_used_bucket_count();
-    if (used_bucket_count == 0) {
-        return 0;
-    }
-    size_t count = hash_table.get_row_count() / used_bucket_count;
-    return count;
+    return hash_table.get_keys_per_bucket();
 }
 
 Status HashJoiner::reset_probe(starrocks::RuntimeState* state) {
@@ -515,7 +517,7 @@ Status HashJoiner::_create_runtime_in_filters(RuntimeState* state) {
     size_t ht_row_count = get_ht_row_count();
     auto& ht = _hash_join_builder->hash_table();
 
-    if (ht_row_count > 1024) {
+    if (ht_row_count > config::max_pushdown_conditions_per_column) {
         return Status::OK();
     }
 

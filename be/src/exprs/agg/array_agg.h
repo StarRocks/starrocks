@@ -16,6 +16,7 @@
 
 #include "column/array_column.h"
 #include "column/column_helper.h"
+#include "column/hash_set.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "exec/sorting/sorting.h"
@@ -24,25 +25,84 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
-template <LogicalType LT>
+template <LogicalType PT, bool is_distinct, typename MyHashSet = std::set<int>>
 struct ArrayAggAggregateState {
-    using ColumnType = RunTimeColumnType<LT>;
+    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<PT>;
+    using KeyType = typename SliceHashSet::key_type;
+    void update(MemPool* mem_pool, const ColumnType& column, size_t offset, size_t count) {
+        if constexpr (is_distinct) {
+            if constexpr (lt_is_string<PT>) {
+                for (int i = 0; i < count; i++) {
+                    auto raw_key = column.get_slice(offset + i);
+                    KeyType key(raw_key);
+                    set.template lazy_emplace(key, [&](const auto& ctor) {
+                        uint8_t* pos = mem_pool->allocate(key.size);
+                        assert(pos != nullptr);
+                        memcpy(pos, key.data, key.size);
+                        ctor(pos, key.size, key.hash);
+                    });
+                }
+            } else {
+                for (int i = 0; i < count; i++) {
+                    set.emplace(column.get_data()[offset + i]);
+                }
+            }
+        } else {
+            data_column.append(column, offset, count);
+        }
+    }
 
-    void update(const ColumnType& column, size_t offset, size_t count) { data_column.append(column, offset, count); }
+    void append_null() {
+        if constexpr (is_distinct) {
+            null_count = 1;
+        } else {
+            null_count++;
+        }
+    }
+    void append_null(size_t count) {
+        if constexpr (is_distinct) {
+            if (count > 0) {
+                null_count = 1;
+            }
+        } else {
+            null_count += count;
+        }
+    }
 
-    void append_null() { null_count++; }
-    void append_null(size_t count) { null_count += count; }
+    ColumnType* get_data_column() {
+        auto size = set.size();
+        if (data_column.size() > 0 || size == 0) {
+            return &data_column;
+        }
+        data_column.get_data().reserve(size);
+        if constexpr (is_distinct) {
+            if constexpr (lt_is_string<PT>) {
+                for (auto& key : set) {
+                    data_column.append(Slice(key.data, key.size));
+                }
+            } else {
+                for (auto& key : set) {
+                    data_column.append(key);
+                }
+            }
+        }
+        return &data_column;
+    }
 
     ColumnType data_column; // Aggregated elements for array_agg
     size_t null_count = 0;
+    MyHashSet set;
 };
 
-template <LogicalType LT>
+template <LogicalType LT, bool is_distinct, typename MyHashSet = std::set<int>>
 class ArrayAggAggregateFunction
-        : public AggregateFunctionBatchHelper<ArrayAggAggregateState<LT>, ArrayAggAggregateFunction<LT>> {
+        : public AggregateFunctionBatchHelper<ArrayAggAggregateState<LT, is_distinct, MyHashSet>,
+                                              ArrayAggAggregateFunction<LT, is_distinct, MyHashSet>> {
 public:
     using InputColumnType = RunTimeColumnType<LT>;
 
@@ -50,7 +110,7 @@ public:
                 size_t row_num) const override {
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
         // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
-        this->data(state).update(column, row_num, 1);
+        this->data(state).update(ctx->mem_pool(), column, row_num, 1);
     }
 
     void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const override {
@@ -66,14 +126,15 @@ public:
         size_t element_null_count = array_element.null_count(offset_size.first, offset_size.second);
         DCHECK_LE(element_null_count, offset_size.second);
 
-        this->data(state).update(*element_data_column, offset_size.first, offset_size.second - element_null_count);
+        this->data(state).update(ctx->mem_pool(), *element_data_column, offset_size.first,
+                                 offset_size.second - element_null_count);
         this->data(state).append_null(element_null_count);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        auto& state_impl = this->data(state);
+        auto& state_impl = this->data(const_cast<AggDataPtr>(state));
         auto* column = down_cast<ArrayColumn*>(to);
-        column->append_array_element(state_impl.data_column, state_impl.null_count);
+        column->append_array_element(*(state_impl.get_data_column()), state_impl.null_count);
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -92,7 +153,7 @@ public:
         }
     }
 
-    std::string get_name() const override { return "array_agg"; }
+    std::string get_name() const override { return is_distinct ? "array_agg_distinct" : "array_agg"; }
 };
 
 // input columns result in intermediate result: struct{array[col0], array[col1], array[col2]... array[coln]}
@@ -101,14 +162,13 @@ struct ArrayAggAggregateStateV2 {
     void update(FunctionContext* ctx, const Column& column, size_t index, size_t offset, size_t count) {
         (*data_columns)[index]->append(column, offset, count);
     }
-    void update_nulls(FunctionContext* ctx, size_t index, size_t count) {
-        DCHECK((*data_columns)[index]->is_nullable());
-        (*data_columns)[index]->append_nulls(count);
-    }
+    void update_nulls(FunctionContext* ctx, size_t index, size_t count) { (*data_columns)[index]->append_nulls(count); }
 
     // release the trailing N-1 order-by columns
     void release_order_by_columns() const {
-        DCHECK(data_columns != nullptr);
+        if (data_columns == nullptr) {
+            return;
+        }
         for (auto i = 1; i < data_columns->size(); ++i) {
             data_columns->at(i).reset();
         }
@@ -121,13 +181,12 @@ struct ArrayAggAggregateStateV2 {
                 col.reset();
             }
             data_columns->clear();
-            delete data_columns;
-            data_columns = nullptr;
+            data_columns.reset(nullptr);
         }
     }
     // using pointer rather than vector to avoid variadic size
     // array_agg(a order by b, c, d), the a,b,c,d are put into data_columns in order.
-    Columns* data_columns = nullptr;
+    std::unique_ptr<Columns> data_columns = nullptr;
 };
 
 class ArrayAggAggregateFunctionV2
@@ -136,11 +195,10 @@ public:
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
         auto num = ctx->get_num_args();
         auto* state = new (ptr) ArrayAggAggregateStateV2;
-        state->data_columns = new Columns;
+        state->data_columns = std::make_unique<Columns>();
         for (auto i = 0; i < num; ++i) {
             state->data_columns->emplace_back(ctx->create_column(*ctx->get_arg_type(i), true));
         }
-        DCHECK(ctx->get_is_asc_order().size() == ctx->get_nulls_first().size());
         DCHECK(state->data_columns->size() == ctx->get_is_asc_order().size() + 1);
     }
 
@@ -155,9 +213,11 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        DCHECK_EQ(ctx->get_num_args(), this->data(state).data_columns->size());
         for (auto i = 0; i < ctx->get_num_args(); ++i) {
-            DCHECK(columns[i]->size() > row_num);
+            if (UNLIKELY(columns[i]->size() <= row_num)) {
+                ctx->set_error(std::string(get_name() + "'s update row number overflow").c_str(), false);
+                return;
+            }
             // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
             if ((columns[i]->is_nullable() && columns[i]->is_null(row_num)) || columns[i]->only_null()) {
                 this->data(state).update_nulls(ctx, i, 1);
@@ -212,7 +272,18 @@ public:
 
     // finalize each state->column to a [nullable] array
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        DCHECK(to->is_nullable() || to->is_array());
+        auto defer = DeferOp([&]() {
+            if (ctx->has_error() && to != nullptr) {
+                to->append_default();
+            }
+        });
+        if (UNLIKELY(!ColumnHelper::get_data_column(to)->is_array())) {
+            ctx->set_error(std::string("The output column of " + get_name() +
+                                       " finalize_to_column() is not array, but is " + to->get_name())
+                                   .c_str(),
+                           false);
+            return;
+        }
         auto& state_impl = this->data(state);
         auto elem_size = (*state_impl.data_columns)[0]->size();
         auto res = (*state_impl.data_columns)[0];
@@ -226,10 +297,43 @@ public:
             // release order-by columns early
             order_by_columns.clear();
             state_impl.release_order_by_columns();
-            DCHECK(ctx->state()->cancelled_ref() || st.ok());
+            if (UNLIKELY(ctx->state()->cancelled_ref())) {
+                ctx->set_error("array_agg detects cancelled.", false);
+                return;
+            }
+            if (UNLIKELY(!st.ok())) {
+                ctx->set_error(st.to_string().c_str(), false);
+                return;
+            }
             materialize_column_by_permutation(tmp.get(), {(*state_impl.data_columns)[0]}, perm);
             res = ColumnPtr(std::move(tmp));
         }
+        // further remove duplicated values
+        // TODO(fzh) optimize N*N
+        if (ctx->get_is_distinct()) {
+            bool is_duplicated = false;
+            Filter filter(elem_size, 1);
+            phmap::flat_hash_set<uint32_t> sets;
+            std::vector<uint32_t> hash(elem_size, 0);
+            res->fnv_hash(hash.data(), 0, elem_size);
+            for (auto row_id = 0; row_id < elem_size; row_id++) {
+                if (!sets.contains(hash[row_id])) {
+                    sets.emplace(hash[row_id]);
+                    continue;
+                }
+                for (auto next_id = 0; next_id < row_id; next_id++) {
+                    if (hash[row_id] == hash[next_id] && res->equals(next_id, *res, row_id)) {
+                        is_duplicated = true;
+                        filter[row_id] = 0;
+                        break;
+                    }
+                }
+            }
+            if (is_duplicated) {
+                elem_size = res->filter(filter);
+            }
+        }
+
         auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(to));
         if (to->is_nullable()) {
             down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);

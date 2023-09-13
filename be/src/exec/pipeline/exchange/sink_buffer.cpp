@@ -48,6 +48,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             _num_finished_rpcs[instance_id.lo] = 0;
             _num_in_flight_rpcs[instance_id.lo] = 0;
             _network_times[instance_id.lo] = TimeTrace{};
+            _eos_query_stats[instance_id.lo] = std::make_shared<QueryStatistics>();
             _mutexes[instance_id.lo] = std::make_unique<Mutex>();
 
             PUniqueId finst_id;
@@ -133,11 +134,6 @@ bool SinkBuffer::is_finished() const {
 }
 
 void SinkBuffer::update_profile(RuntimeProfile* profile) {
-    bool flag = false;
-    if (!_is_profile_updated.compare_exchange_strong(flag, true)) {
-        return;
-    }
-
     auto* rpc_count = ADD_COUNTER(profile, "RpcCount", TUnit::UNIT);
     auto* rpc_avg_timer = ADD_TIMER(profile, "RpcAvgTime");
     auto* network_timer = ADD_TIMER(profile, "NetworkTime");
@@ -153,7 +149,7 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     // WaitTime consists two parts
     // 1. buffer full time
     // 2. pending finish time
-    COUNTER_UPDATE(wait_timer, _full_time);
+    COUNTER_SET(wait_timer, _full_time);
     COUNTER_UPDATE(wait_timer, MonotonicNanos() - _pending_timestamp);
 
     auto* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
@@ -235,6 +231,31 @@ void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_
     }
 }
 
+void SinkBuffer::_try_to_merge_query_statistics(TransmitChunkInfo& request) {
+    if (!request.params->has_query_statistics()) {
+        return;
+    }
+    auto& query_statistics = request.params->query_statistics();
+    bool need_merge = false;
+    if (query_statistics.scan_rows() > 0 || query_statistics.scan_bytes() > 0 || query_statistics.cpu_cost_ns() > 0) {
+        need_merge = true;
+    }
+    if (!need_merge && query_statistics.stats_items_size() > 0) {
+        for (int i = 0; i < query_statistics.stats_items_size(); i++) {
+            const auto& stats_item = query_statistics.stats_items(i);
+            if (stats_item.scan_rows() > 0 || stats_item.scan_bytes()) {
+                need_merge = true;
+                break;
+            }
+        }
+    }
+    if (need_merge) {
+        auto& instance_id = request.fragment_instance_id;
+        _eos_query_stats[instance_id.lo]->merge_pb(query_statistics);
+        request.params->clear_query_statistics();
+    }
+}
+
 Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works) {
     std::lock_guard<Mutex> l(*_mutexes[instance_id.lo]);
     pre_works();
@@ -299,6 +320,8 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             // eos is the last packet to send to finish the input stream of the corresponding of
             // ExchangeSourceOperator and eos is sent exactly-once.
             if (_num_sinkers[instance_id.lo] > 1) {
+                // to reduce uncessary rpc requests, we merge all query statistics in eos requests into one and send it through the last eos request
+                _try_to_merge_query_statistics(request);
                 if (request.params->chunks_size() == 0) {
                     continue;
                 } else {
@@ -312,6 +335,11 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     need_wait = true;
                     return Status::OK();
                 }
+                // this is the last eos query, set query stats
+                _eos_query_stats[instance_id.lo]->merge_pb(request.params->query_statistics());
+                request.params->clear_query_statistics();
+                _eos_query_stats[instance_id.lo]->to_pb(request.params->mutable_query_statistics());
+                _eos_query_stats[instance_id.lo]->clear();
             }
         }
 
@@ -368,7 +396,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,
         // so decrease the memory usage of attachment from instance_mem_tracker immediately before sending the request.
         _mem_tracker->release(request.attachment_physical_bytes);
-        ExecEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
+        GlobalEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
 
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
@@ -416,7 +444,7 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         if (!res.ok()) {
             return res.status();
         }
-        res.value()->transmit_chunk_via_http(&closure->cntl, NULL, &closure->result, closure);
+        res.value()->transmit_chunk_via_http(&closure->cntl, nullptr, &closure->result, closure);
     } else {
         closure->cntl.request_attachment().append(request.attachment);
         request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);

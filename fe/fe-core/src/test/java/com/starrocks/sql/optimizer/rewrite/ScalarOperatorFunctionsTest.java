@@ -297,7 +297,7 @@ public class ScalarOperatorFunctionsTest {
                 ScalarOperatorFunctions.dateFormat(ConstantOperator.createDate(LocalDateTime.of(2001, 1, 9, 13, 4, 5)),
                                 ConstantOperator.createVarchar("%Y-%m-%d"))
                         .getVarchar());
-        assertEquals("000123", ScalarOperatorFunctions
+        assertEquals("123000", ScalarOperatorFunctions
                 .dateFormat(ConstantOperator.createDate(LocalDateTime.of(2022, 3, 13, 0, 0, 0, 123000000)),
                         ConstantOperator.createVarchar("%f")).getVarchar());
 
@@ -1261,7 +1261,7 @@ public class ScalarOperatorFunctionsTest {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setThreadLocalInfo();
         ctx.setStartTime();
-        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime() / 1000 * 1000)
+        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime())
                 .atZone(ZoneOffset.UTC).toLocalDateTime();
         assertEquals(expected, ScalarOperatorFunctions.utcTimestamp().getDatetime());
     }
@@ -1271,7 +1271,7 @@ public class ScalarOperatorFunctionsTest {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setThreadLocalInfo();
         ctx.setStartTime();
-        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime() / 1000 * 1000)
+        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime())
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         assertEquals(expected, ScalarOperatorFunctions.now().getDatetime());
     }

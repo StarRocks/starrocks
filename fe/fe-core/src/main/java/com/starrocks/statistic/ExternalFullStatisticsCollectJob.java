@@ -29,6 +29,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.hive.HiveMetaClient;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
@@ -62,17 +65,19 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             ", cast($countNullFunction as BIGINT)" + // BIGINT
             ", $maxFunction" + // VARCHAR
             ", $minFunction " + // VARCHAR
-            " FROM `$catalogName`.`$dbName`.`$tableName`";
+            " FROM `$catalogName`.`$dbName`.`$tableName` where $partitionPredicate";
 
     private final String catalogName;
+    private final List<String> partitionNames;
     private final List<String> sqlBuffer = Lists.newArrayList();
     private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
 
-    public ExternalFullStatisticsCollectJob(String catalogName, Database db, Table table, List<String> columns,
-                                    StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
-                                    Map<String, String> properties) {
+    public ExternalFullStatisticsCollectJob(String catalogName, Database db, Table table, List<String> partitionNames,
+                                            List<String> columns, StatsConstants.AnalyzeType type,
+                                            StatsConstants.ScheduleType scheduleType, Map<String, String> properties) {
         super(db, table, columns, type, scheduleType, properties);
         this.catalogName = catalogName;
+        this.partitionNames = partitionNames;
     }
 
     @Override
@@ -107,16 +112,18 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         flushInsertStatisticsData(context, true);
     }
 
-    private List<List<String>> buildCollectSQLList(int parallelism) {
+    protected List<List<String>> buildCollectSQLList(int parallelism) {
         List<String> totalQuerySQL = new ArrayList<>();
-        for (String columnName : columns) {
-            totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, columnName));
+        for (String partitionName : partitionNames) {
+            for (String columnName : columns) {
+                totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partitionName, columnName));
+            }
         }
 
         return Lists.partition(totalQuerySQL, parallelism);
     }
 
-    private String buildBatchCollectFullStatisticSQL(Table table, String columnName) {
+    private String buildBatchCollectFullStatisticSQL(Table table, String partitionName, String columnName) {
         StringBuilder builder = new StringBuilder();
         VelocityContext context = new VelocityContext();
         Column column = table.getColumn(columnName);
@@ -124,9 +131,17 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         String columnNameStr = StringEscapeUtils.escapeSql(columnName);
         String quoteColumnName = StatisticUtils.quoting(columnName);
 
+        String nullValue;
+        if (table.isIcebergTable()) {
+            nullValue = IcebergApiConverter.PARTITION_NULL_VALUE;
+        } else {
+            nullValue = HiveMetaClient.PARTITION_NULL_VALUE;
+        }
+
         context.put("version", StatsConstants.STATISTIC_EXTERNAL_VERSION);
         // all table now, partition later
-        context.put("partitionNameStr", "All");
+        context.put("partitionNameStr", PartitionUtil.normalizePartitionName(partitionName,
+                table.getPartitionColumnNames(), nullValue));
         context.put("columnNameStr", columnNameStr);
         context.put("dataSize", fullAnalyzeGetDataSize(column));
         context.put("dbName", db.getOriginName());
@@ -143,6 +158,24 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             context.put("countNullFunction", "COUNT(1) - COUNT(" + quoteColumnName + ")");
             context.put("maxFunction", getMinMaxFunction(column, quoteColumnName, true));
             context.put("minFunction", getMinMaxFunction(column, quoteColumnName, false));
+        }
+
+        if (table.isUnPartitioned()) {
+            context.put("partitionPredicate", "1=1");
+        } else {
+            List<String> partitionColumnNames = table.getPartitionColumnNames();
+            List<String> partitionValues = PartitionUtil.toPartitionValues(partitionName);
+            List<String> partitionPredicate = Lists.newArrayList();
+            for (int i = 0; i < partitionColumnNames.size(); i++) {
+                String partitionColumnName = partitionColumnNames.get(i);
+                String partitionValue = partitionValues.get(i);
+                if (partitionValue.equals(nullValue)) {
+                    partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " IS NULL");
+                } else {
+                    partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " = '" + partitionValue + "'");
+                }
+            }
+            context.put("partitionPredicate", Joiner.on(" AND ").join(partitionPredicate));
         }
 
         builder.append(build(context, BATCH_FULL_STATISTIC_TEMPLATE));

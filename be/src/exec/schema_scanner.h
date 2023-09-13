@@ -34,6 +34,7 @@ namespace starrocks {
 
 // scanner parameter from frontend
 struct SchemaScannerParam {
+    const std::string* catalog{nullptr};
     const std::string* db{nullptr};
     const std::string* table{nullptr};
     const std::string* wild{nullptr};

@@ -12,9 +12,8 @@ The following table compares the asynchronous materialized views (ASYNC MVs) in 
 
 |                       | **Single-table aggregation** | **Multi-table join** | **Query rewrite** | **Refresh strategy** | **Base table** |
 | --------------------- | ---------------------------- | -------------------- | ----------------- | -------------------- | -------------- |
-| **ASYNC MVs in v2.5** | Yes | Yes | Yes | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from:<ul><li>Default catalog</li><li>External catalogs</li><li>Existing materialized views</li></ul> |
-| **ASYNC MVs in v2.4** | Yes | Yes | No | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from the default catalog |
-| **SYNC MV (Rollup)**  | Limited choices of [aggregate functions](#correspondence-of-aggregate-operators) | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
+| **ASYNC MV** | Yes | Yes | Yes | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from:<ul><li>Default catalog</li><li>External catalogs (v2.5)</li><li>Existing materialized views (v2.5)</li><li>Existing views (v3.1)</li></ul> |
+| **SYNC MV (Rollup)**  | Limited choices of [aggregate functions](#correspondence-of-aggregate-functions) | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
 
 ## Basic concepts
 
@@ -32,7 +31,7 @@ The following table compares the asynchronous materialized views (ASYNC MVs) in 
 
   Query rewrite means that when executing a query on base tables with materialized views built on, the system automatically judges whether the pre-computed results in the materialized view can be reused for the query. If they can be reused, the system will load the data directly from the relevant materialized view to avoid the time- and resource-consuming computations or joins.
 
-  Synchronous materialized views support query rewrite based on some of the aggregate operators. For more information, see [Correspondence of aggregate operators](#correspondence-of-aggregate-operators).
+  Synchronous materialized views support query rewrite based on some of the aggregate operators. For more information, see [Correspondence of aggregate functions](#correspondence-of-aggregate-functions).
 
 ## Preparation
 
@@ -178,7 +177,7 @@ RollupIndexName: store_amt
 
 The `RollupIndexName` section indicates the name of the synchronous materialized view, and `State` section indicates if the building is completed.
 
-## Query a synchronous materialized view
+## Query a synchronous materialized view directly
 
 Because a synchronous materialized view is essentially an index of the base table rather than a physical table, you can only query a synchronous materialized view using the hint `[_SYNC_MV_]`:
 
@@ -201,7 +200,7 @@ MySQL > SELECT * FROM store_amt [_SYNC_MV_];
 >
 > Currently, StarRocks automatically generates names for columns in a synchronous materialized view even if you have specified aliases for them.
 
-## Query with the synchronous materialized view
+## Rewrite and accelerate queries with the synchronous materialized view
 
 The synchronous materialized view you created contains the complete set of pre-computed results in accordance with the query statement. Subsequent queries use the data within it. You can run the same query to test the query time as you did in the preparation.
 
@@ -381,7 +380,7 @@ SELECT k3, k2, k1
 FROM tableA
 ```
 
-## Correspondence of aggregate operators
+## Correspondence of aggregate functions
 
 When a query is executed with a synchronous materialized view, the original query statement will be automatically rewritten and used to query the intermediate results stored in the synchronous materialized view. The following table shows the correspondence between the aggregate function in the original query and the aggregate function used to construct the synchronous materialized view. You can select the corresponding aggregate function to build a synchronous materialized view according to your business scenario.
 

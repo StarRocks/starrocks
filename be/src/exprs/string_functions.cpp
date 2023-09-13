@@ -15,12 +15,21 @@
 #include "exprs/string_functions.h"
 
 #include <hs/hs.h>
+#ifdef __x86_64__
+#include <immintrin.h>
+#include <mmintrin.h>
+#endif
 #include <re2/re2.h>
 
 #include <algorithm>
+#include <cctype>
+#include <iomanip>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
+#include <string>
 
+#include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -42,6 +51,7 @@
 #include "util/raw_container.h"
 #include "util/sm3.h"
 #include "util/utf8.h"
+#include "util/utf8_encoding.h"
 
 namespace starrocks {
 // A regex to match any regex pattern is equivalent to a substring search.
@@ -383,53 +393,6 @@ Status StringFunctions::concat_close(FunctionContext* context, FunctionContext::
         delete state;
     }
     return Status::OK();
-}
-
-// Modify from https://github.com/lemire/fastvalidate-utf-8/blob/master/include/simdasciicheck.h
-static inline bool validate_ascii_fast(const char* src, size_t len) {
-#ifdef __AVX2__
-    size_t i = 0;
-    __m256i has_error = _mm256_setzero_si256();
-    if (len >= 32) {
-        for (; i <= len - 32; i += 32) {
-            __m256i current_bytes = _mm256_loadu_si256((const __m256i*)(src + i));
-            has_error = _mm256_or_si256(has_error, current_bytes);
-        }
-    }
-    int error_mask = _mm256_movemask_epi8(has_error);
-
-    char tail_has_error = 0;
-    for (; i < len; i++) {
-        tail_has_error |= src[i];
-    }
-    error_mask |= (tail_has_error & 0x80);
-
-    return !error_mask;
-#elif defined(__SSE2__)
-    size_t i = 0;
-    __m128i has_error = _mm_setzero_si128();
-    if (len >= 16) {
-        for (; i <= len - 16; i += 16) {
-            __m128i current_bytes = _mm_loadu_si128((const __m128i*)(src + i));
-            has_error = _mm_or_si128(has_error, current_bytes);
-        }
-    }
-    int error_mask = _mm_movemask_epi8(has_error);
-
-    char tail_has_error = 0;
-    for (; i < len; i++) {
-        tail_has_error |= src[i];
-    }
-    error_mask |= (tail_has_error & 0x80);
-
-    return !error_mask;
-#else
-    char tail_has_error = 0;
-    for (size_t i = 0; i < len; i++) {
-        tail_has_error |= src[i];
-    }
-    return !(tail_has_error & 0x80);
-#endif
 }
 
 static inline void column_builder_null_op(NullableBinaryColumnBuilder* builder, size_t i) {
@@ -1039,6 +1002,400 @@ StatusOr<ColumnPtr> StringFunctions::repeat(FunctionContext* context, const Colu
         return repeat_not_const(columns);
     }
 }
+
+// ------------------------------------------------------------------------------------
+// Methods for TRANSLATE.
+// ------------------------------------------------------------------------------------
+
+struct TranslateState {
+    using ASCII_MAP = char[0xff];
+    using UTF8_MAP = phmap::flat_hash_map<EncodedUtf8Char, EncodedUtf8Char, EncodedUtf8CharHash>;
+
+    static constexpr int SRC_STR_INDEX = 0;
+    static constexpr int FROM_STR_INDEX = 1;
+    static constexpr int TO_STR_INDEX = 2;
+
+    // The bytes not less than 0b1111'1000 will never occur in a UTF-8 character.
+    static constexpr char UNINIT_ASCII = 0b1111'1001;
+    static constexpr char DELETED_ASCII = 0b1111'1111;
+
+    bool is_from_and_to_const = false;
+
+    bool is_ascii_map = false;
+    ASCII_MAP ascii_map; // effective when is_ascii_map is true.
+    UTF8_MAP utf8_map;   // effective when is_ascii_map is false.
+
+    void clear_ascii_map() { std::memset(ascii_map, UNINIT_ASCII, sizeof(ascii_map)); }
+
+    void clear_utf8_map() { utf8_map.clear(); }
+};
+
+/**
+ * Build the translate map.
+ * - If all the characters in `from_str` and `to_str`, it will set `dst_state.is_ascii_map` to true and store the map
+ *   to `dst_state.ascii_map`.
+ * - Otherwise, it will set `dst_state.is_ascii_map` to false and store the map to `dst_state.utf8_map`.
+ * @param from_str the from string.
+ * @param to_str the to string.
+ * @param dst_state the destination state to store map.
+ */
+static inline void build_translate_map(const Slice& from_str, const Slice& to_str, TranslateState* dst_state) {
+    std::vector<EncodedUtf8Char> encoded_from_values;
+    encode_utf8_chars(from_str, &encoded_from_values);
+
+    std::vector<EncodedUtf8Char> encoded_to_values;
+    encode_utf8_chars(to_str, &encoded_to_values);
+
+    const bool is_ascii_map = encoded_from_values.size() == from_str.size && encoded_to_values.size() == to_str.size;
+    dst_state->is_ascii_map = is_ascii_map;
+    if (is_ascii_map) {
+        dst_state->clear_ascii_map();
+
+        size_t common_size = std::min(to_str.size, from_str.size);
+        int i = 0;
+        for (; i < common_size; i++) {
+            auto& v = dst_state->ascii_map[static_cast<uint8_t>(from_str[i])];
+            if (v == TranslateState::UNINIT_ASCII) {
+                v = to_str[i];
+            }
+        }
+        for (; i < from_str.size; i++) {
+            auto& v = dst_state->ascii_map[static_cast<uint8_t>(from_str[i])];
+            if (v == TranslateState::UNINIT_ASCII) {
+                v = TranslateState::DELETED_ASCII;
+            }
+        }
+    } else {
+        dst_state->clear_utf8_map();
+
+        size_t common_size = std::min(encoded_to_values.size(), encoded_from_values.size());
+        int i = 0;
+        for (; i < common_size; i++) {
+            dst_state->utf8_map.emplace(encoded_from_values[i], encoded_to_values[i]);
+        }
+        for (; i < encoded_from_values.size(); i++) {
+            dst_state->utf8_map.emplace(encoded_from_values[i], EncodedUtf8Char{});
+        }
+    }
+}
+
+/**
+ * Translate a string by the UTF-8 map.
+ *
+ * @param src_encoded_values the string to translate, which has already been encoded.
+ * @param utf8_map the UTF-8 map.
+ * @param dst the destination to store the translated chars. The caller must guarantee there is enough room.
+ * @return [is_null, num_bytes].
+ * - `is_null` will be true, if the number of translated chars exceeds `OLAP_STRING_MAX_LENGTH`.
+ * - `num_bytes`: the number of translated chars.
+ */
+static inline std::pair<bool, size_t> translate_string_with_utf8_map(
+        const std::vector<EncodedUtf8Char>& src_encoded_values, const TranslateState::UTF8_MAP& utf8_map,
+        uint8_t* dst) {
+    size_t num_bytes = 0;
+    Slice dst_utf_char;
+    for (const auto& src_encoded_value : src_encoded_values) {
+        auto it = utf8_map.find(src_encoded_value);
+        if (it == utf8_map.end()) {
+            dst_utf_char = Slice(src_encoded_value);
+        } else if (!it->second.is_empty()) {
+            dst_utf_char = Slice(it->second);
+        } else {
+            continue;
+        }
+
+        if (num_bytes + dst_utf_char.size > OLAP_STRING_MAX_LENGTH) {
+            return {true, 0};
+        }
+        strings::memcpy_inlined(dst + num_bytes, dst_utf_char.data, dst_utf_char.size);
+        num_bytes += dst_utf_char.size;
+    }
+
+    return {false, num_bytes};
+}
+
+/**
+ * Translate a string by the ASCII map.
+ *
+ * @param src the string to translate.
+ * @param ascii_map the ASCII map.
+ * @param dst the destination to store the translated chars. The caller must guarantee there is enough room.
+ * @return the number of translated chars.
+ */
+static inline size_t translate_string_with_ascii_map(const Slice& src, const TranslateState::ASCII_MAP& ascii_map,
+                                                     uint8_t* dst) {
+    uint8_t* const dst_begin = dst;
+    for (int i = 0; i < src.size; i++) {
+        char v = ascii_map[static_cast<uint8_t>(src[i])];
+        if (v == TranslateState::UNINIT_ASCII) {
+            *(dst++) = src[i];
+        } else if (v != TranslateState::DELETED_ASCII) {
+            *(dst++) = v;
+        }
+    }
+
+    return dst - dst_begin;
+}
+
+Status StringFunctions::translate_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = new TranslateState();
+    context->set_function_state(FunctionContext::FRAGMENT_LOCAL, state);
+
+    // const null case is handled by non_const implementation.
+    if (!context->is_notnull_constant_column(TranslateState::FROM_STR_INDEX) ||
+        !context->is_notnull_constant_column(TranslateState::TO_STR_INDEX)) {
+        return Status::OK();
+    }
+    state->is_from_and_to_const = true;
+
+    const auto from_str_col = context->get_constant_column(TranslateState::FROM_STR_INDEX);
+    const Slice from_str = ColumnHelper::get_const_value<TYPE_CHAR>(from_str_col);
+
+    const auto to_str_col = context->get_constant_column(TranslateState::TO_STR_INDEX);
+    const Slice to_str = ColumnHelper::get_const_value<TYPE_CHAR>(to_str_col);
+
+    build_translate_map(from_str, to_str, state);
+
+    return Status::OK();
+}
+
+Status StringFunctions::translate_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto state = (TranslateState*)(context->get_function_state(scope));
+        delete state;
+    }
+    return Status::OK();
+}
+
+/**
+ * Translate strings of `src_column` with the constant ASCII map.
+ *
+ * The `src_column` can be a non-constant column.
+ * The `from_string` and `to_string` column must be constant columns and only contain ASCII characters,
+ * to make all the rows able to use the same ASCII map, which is stored in `state`.
+ *
+ * @param columns the input columns, including `SRC_STR_INDEX`, `FROM_STR_INDEX`, `TO_STR_INDEX`.
+ * @param src the source column, which may be de-wrapped from NullableColumn.
+ * @param state stores the ASCII map.
+ * @return The translated column, which is a non-nullable BinaryColumn.
+ */
+static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(const Columns& columns, BinaryColumn* src,
+                                                                       const TranslateState* state) {
+    DCHECK(state->is_from_and_to_const);
+    DCHECK(state->is_ascii_map);
+
+    auto dst = BinaryColumn::create();
+    auto& dst_offsets = dst->get_offset();
+    auto& dst_bytes = dst->get_bytes();
+    const auto& src_offsets = src->get_offset();
+
+    const size_t num_rows = src->size();
+    if (num_rows == 0) {
+        return dst;
+    }
+
+    const int num_src_bytes = src_offsets.back();
+    dst_bytes.resize(num_src_bytes);
+    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets[0] = 0;
+
+    uint8_t* dst_begin = dst_bytes.data();
+    size_t dst_offset = 0;
+
+    const auto& ascii_map = state->ascii_map;
+    for (int i = 0; i < num_rows; i++) {
+        const Slice s = src->get_slice(i);
+        size_t num_row_bytes = translate_string_with_ascii_map(s, ascii_map, dst_begin + dst_offset);
+        dst_offset += num_row_bytes;
+        dst_offsets[i + 1] = dst_offset;
+    }
+
+    dst_bytes.resize(dst_offset);
+
+    return dst;
+}
+
+/**
+ * Translate strings of `src_column` with the constant UTF-8 map.
+ *
+ * The `src_column` can be a non-constant column.
+ * The `from_string` and `to_string` column must be constant columns and contain non-ASCII characters,
+ * to make all the rows able to use the same UTF-8 map, which is stored in `state`.
+ *
+ * @param columns the input columns, including `SRC_STR_INDEX`, `FROM_STR_INDEX`, `TO_STR_INDEX`.
+ * @param src the source column, which may be de-wrapped from NullableColumn.
+ * @param state stores the UTF-8 map.
+ * @return the translated column, which may be a nullable BinaryColumn.
+ *  The row will be null, if it exceeds OLAP_STRING_MAX_LENGTH after translated.
+ */
+static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Columns& columns, BinaryColumn* src,
+                                                                      const TranslateState* state) {
+    DCHECK(state->is_from_and_to_const);
+    DCHECK(!state->is_ascii_map);
+
+    NullableBinaryColumnBuilder builder;
+    auto& dst_offsets = builder.data_column()->get_offset();
+    auto& dst_bytes = builder.data_column()->get_bytes();
+    auto& dst_nulls = builder.get_null_data();
+
+    const size_t num_rows = src->size();
+    if (num_rows == 0) {
+        return builder.build(ColumnHelper::is_all_const(columns));
+    }
+
+    const auto& src_offsets = src->get_offset();
+    const int num_src_bytes = src_offsets.back();
+    // The `dst_bytes` can be at most four times larger than `src_bytes`, as in the worst-case scenario, each
+    // `src_bytes` corresponds to a one-byte UTF-8 character, while each dst_bytes is replaced by a four-byte
+    // UTF-8 character.
+    dst_bytes.reserve(std::min<size_t>(16ULL, num_src_bytes * 4));
+    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets[0] = 0;
+    dst_nulls.resize(num_rows);
+
+    bool has_null = false;
+    size_t dst_offset = 0;
+    std::vector<EncodedUtf8Char> src_encoded_values;
+
+    const auto& utf8_map = state->utf8_map;
+    for (int i = 0; i < num_rows; i++) {
+        const Slice s = src->get_slice(i);
+
+        src_encoded_values.clear();
+        src_encoded_values.reserve(s.size);
+        encode_utf8_chars(s, &src_encoded_values);
+
+        dst_bytes.resize(dst_offset + std::min<size_t>(s.size * 4, OLAP_STRING_MAX_LENGTH));
+        uint8_t* dst_begin = dst_bytes.data() + dst_offset;
+
+        const auto [is_null, num_row_bytes] = translate_string_with_utf8_map(src_encoded_values, utf8_map, dst_begin);
+        if (is_null) {
+            has_null = true;
+            dst_offsets[i + 1] = dst_offset;
+            dst_nulls[i] = 1;
+        } else {
+            dst_offset += num_row_bytes;
+            dst_offsets[i + 1] = dst_offset;
+        }
+    }
+
+    dst_bytes.resize(dst_offset);
+    builder.set_has_null(has_null);
+
+    RETURN_COLUMN(builder.build(ColumnHelper::is_all_const(columns)), "translate");
+}
+
+/**
+ * Translate strings of `src_column` with the maps different between the source strings.
+ *
+ * The `src_column`, `from_string`, `to_string` can be non-constant columns.
+ *
+ * @param columns the input columns, including `SRC_STR_INDEX`, `FROM_STR_INDEX`, `TO_STR_INDEX`.
+ * @param state useless, `state` is useful only for the constant `from_string`, `to_string` for now.
+ * @return the translated column, which may be a nullable BinaryColumn.
+ *  The row will be null, if it exceeds OLAP_STRING_MAX_LENGTH after translated.
+ */
+ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const TranslateState* state) {
+    DCHECK(state == nullptr || !state->is_from_and_to_const);
+
+    ColumnViewer<TYPE_VARCHAR> src_viewer(columns[TranslateState::SRC_STR_INDEX]);
+    ColumnViewer<TYPE_VARCHAR> from_viewer(columns[TranslateState::FROM_STR_INDEX]);
+    ColumnViewer<TYPE_VARCHAR> to_viewer(columns[TranslateState::TO_STR_INDEX]);
+
+    NullableBinaryColumnBuilder builder;
+    auto& dst_offsets = builder.data_column()->get_offset();
+    auto& dst_bytes = builder.data_column()->get_bytes();
+    auto& dst_nulls = builder.get_null_data();
+
+    const size_t num_rows = columns[TranslateState::SRC_STR_INDEX]->size();
+    if (num_rows == 0) {
+        return builder.build(ColumnHelper::is_all_const(columns));
+    }
+
+    const auto& src_offsets = src_viewer.column()->get_offset();
+    const int num_src_bytes = src_offsets.back();
+    dst_bytes.reserve(std::min<size_t>(16ULL, num_src_bytes * 4));
+    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets[0] = 0;
+    dst_nulls.resize(num_rows);
+
+    bool has_null = false;
+    size_t dst_offset = 0;
+    std::vector<EncodedUtf8Char> src_encoded_values;
+    TranslateState local_state;
+
+    for (int i = 0; i < num_rows; i++) {
+        if (src_viewer.is_null(i) || from_viewer.is_null(i) || to_viewer.is_null(i)) {
+            has_null = true;
+            dst_offsets[i + 1] = dst_offset;
+            dst_nulls[i] = 1;
+            continue;
+        }
+
+        const Slice src = src_viewer.value(i);
+        const Slice from_str = from_viewer.value(i);
+        const Slice to_str = to_viewer.value(i);
+
+        build_translate_map(from_str, to_str, &local_state);
+        if (local_state.is_ascii_map) {
+            dst_bytes.resize(dst_offset + src.size);
+            size_t num_row_bytes =
+                    translate_string_with_ascii_map(src, local_state.ascii_map, dst_bytes.data() + dst_offset);
+            dst_offset += num_row_bytes;
+            dst_offsets[i + 1] = dst_offset;
+        } else {
+            src_encoded_values.clear();
+            src_encoded_values.reserve(src.size);
+            encode_utf8_chars(src, &src_encoded_values);
+
+            dst_bytes.resize(dst_offset + std::min<size_t>(src.size * 4, OLAP_STRING_MAX_LENGTH));
+            uint8_t* dst_begin = dst_bytes.data() + dst_offset;
+
+            const auto [is_null, num_row_bytes] =
+                    translate_string_with_utf8_map(src_encoded_values, local_state.utf8_map, dst_begin);
+            if (is_null) {
+                has_null = true;
+                dst_offsets[i + 1] = dst_offset;
+                dst_nulls[i] = 1;
+            } else {
+                dst_offset += num_row_bytes;
+                dst_offsets[i + 1] = dst_offset;
+            }
+        }
+    }
+
+    dst_bytes.resize(dst_offset);
+    builder.set_has_null(has_null);
+
+    RETURN_COLUMN(builder.build(ColumnHelper::is_all_const(columns)), "translate");
+}
+
+StatusOr<ColumnPtr> StringFunctions::translate(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto state = (TranslateState*)context->get_function_state(FunctionContext::FRAGMENT_LOCAL);
+    if (state != nullptr) {
+        if (state->is_from_and_to_const) {
+            if (state->is_ascii_map) {
+                return string_func_const(translate_with_ascii_const_nonnull_from_and_to, columns, state);
+            } else {
+                return string_func_const(translate_with_utf8_const_nonnull_from_and_to, columns, state);
+            }
+        } else {
+            return translate_with_non_const_from_or_to(columns, state);
+        }
+    } else {
+        return translate_with_non_const_from_or_to(columns, nullptr);
+    }
+}
+
+// ------------------------------------------------------------------------------------
+// Methods for PAD.
+// ------------------------------------------------------------------------------------
 
 Status StringFunctions::pad_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
@@ -2011,68 +2368,227 @@ StatusOr<ColumnPtr> StringFunctions::hex_int(FunctionContext* context, const sta
     return VectorizedStringStrictUnaryFunction<hex_intImpl>::evaluate<TYPE_BIGINT, TYPE_VARCHAR>(columns[0]);
 }
 
+static constexpr char const* alphabet = "0123456789ABCDEF";
 DEFINE_STRING_UNARY_FN_WITH_IMPL(hex_stringImpl, str) {
-    std::stringstream ss;
-    ss << std::hex << std::uppercase << std::setfill('0');
-    for (int i = 0; i < str.size; ++i) {
-        // setw is not sticky. stringstream only converts integral values,
-        // so a cast to int is required, but only convert the least significant byte to hex.
-        ss << std::setw(2) << (static_cast<int32_t>(str.data[i]) & 0xFF);
+    std::string s;
+    raw::stl_string_resize_uninitialized(&s, str.size << 1);
+    auto* p = s.data();
+    const auto* q = str.data;
+    const auto* end = str.data + str.size;
+    while (q != end) {
+        int ci = static_cast<unsigned char>(*q++);
+        *p++ = alphabet[ci >> 4];
+        *p++ = alphabet[ci & 0xf];
     }
-    return ss.str();
+    return s;
 }
 
 StatusOr<ColumnPtr> StringFunctions::hex_string(FunctionContext* context, const starrocks::Columns& columns) {
     return VectorizedStringStrictUnaryFunction<hex_stringImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
 }
 
-DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
+#ifdef __AVX2__
+static inline bool hexdigit_4chars(char ch0, char ch1, char ch2, char ch3, char* ret0, char* ret1) {
+    const auto bs = _mm256_set_epi64x(0x6660'4640'392f'0000, 0x6660'4640'392f'0000, 0x6660'4640'392f'0000,
+                                      0x6660'4640'392f'0000);
+    auto chs = _mm256_set_epi8(ch3, ch3, ch3, ch3, ch3, ch3, '\1', '\1', ch2, ch2, ch2, ch2, ch2, ch2, '\1', '\1', ch1,
+                               ch1, ch1, ch1, ch1, ch1, '\1', '\1', ch0, ch0, ch0, ch0, ch0, ch0, '\1', '\1');
+
+    auto x = _mm256_sub_epi8(bs, chs);
+    // mask         legal  bits  range
+    // 11111111   N  6    'z' < ch
+    // 01111111   Y  5    'a' <= ch <= 'z'
+    // 00111111   N  4    'a' < ch < 'Z'
+    // 00011111   Y  3    'Z' <= ch <= 'A'
+    // 00001111   N  2    '9' < ch < 'A'
+    // 00000111   Y  1    '0' <= ch <= '9'
+    // 00000011   N  0     ch < '0'
+    auto mask = _mm256_movemask_epi8(x);
+    // if bits == 0x1; then t = -1;otherwise t = 9;
+    // ch in 0..9; 1st byte is ('0' - 1 - ch), so obtain (ch - '0') from -1 - ('0' - 1 - ch)
+    // ch in A..F; 3st byte is ('A' - 1 - ch), so obtain (ch - 'A' + 10) from -9 - ('A' - 1 - ch)
+    // ch in a..f; 5st byte is ('a' - 1 - ch), so obtain (ch - 'a' + 10) from -9 - ('a' - 1 - ch)
+
+    // process ch0
+#define PROCESS_CHAR(i, stmt)                                                                           \
+    do {                                                                                                \
+        auto mask0 = mask & 0xff;                                                                       \
+        auto bits = 30 - __builtin_clz(mask0);                                                          \
+        if ((bits & 0x1) == 0) {                                                                        \
+            return false;                                                                               \
+        }                                                                                               \
+        auto t = (10 & (0xff << ((bits == 0b1) << 3))) - 1;                                             \
+        auto bytes_vec = (__v32qi)_mm256_srli_epi64(_mm256_permute4x64_epi64(x, (i)), (bits + 1) << 3); \
+        auto delta = bytes_vec[0];                                                                      \
+        stmt;                                                                                           \
+    } while (0);
+
+    // process ch0
+    PROCESS_CHAR(0, *ret0 = static_cast<char>((t - delta) << 4));
+    // process ch1
+    mask >>= 8;
+    PROCESS_CHAR(1, *ret0 += static_cast<char>(t - delta));
+    // process ch2
+    mask >>= 8;
+    PROCESS_CHAR(2, *ret1 = static_cast<char>((t - delta) << 4));
+    // process ch3
+    mask >>= 8;
+    PROCESS_CHAR(3, *ret1 += static_cast<char>(t - delta));
+    return true;
+}
+
+static inline std::string unhex_4chars(Slice s) {
+    const auto sz = s.size;
+    if (sz == 0 || (sz & 0x1)) {
+        return {};
+    }
+    std::string ret;
+    raw::stl_string_resize_uninitialized(&ret, sz >> 1);
+    const auto* q = s.data;
+    const auto* end = s.data + sz;
+    auto* p = ret.data();
+    for (; q + 3 < end; q += 4, p += 2) {
+        if (!hexdigit_4chars(q[0], q[1], q[2], q[3], &p[0], &p[1])) {
+            return {};
+        }
+    }
+    if (q == end) {
+        return ret;
+    }
+    char dummy;
+    if (!hexdigit_4chars(q[0], q[1], '0', '0', &p[0], &dummy)) {
+        return {};
+    }
+    return ret;
+}
+#endif
+
+static inline char hexdigit_1char(char ch) {
+    if (int value = ch - '0'; value >= 0 && value <= ('9' - '0')) {
+        return value;
+    } else if (int value = ch - 'A'; value >= 0 && value <= ('F' - 'A')) {
+        return value + 10;
+    } else if (int value = ch - 'a'; value >= 0 && value <= ('f' - 'a')) {
+        return value + 10;
+    } else {
+        return 0xff;
+    }
+}
+
+static inline std::string unhex_1char(Slice str) {
     // For uneven number of chars return empty string like Hive does.
-    if (str.size == 0 || str.size % 2 != 0) {
+    if (str.size == 0 || (str.size & 0x1)) {
         return {};
     }
 
-    size_t result_len = str.size / 2;
-    std::vector<char> result;
-    result.resize(result_len);
-    int res_index = 0;
-    int s_index = 0;
-    while (s_index < str.size) {
-        char c = 0;
-
+    std::string ret;
+    raw::stl_string_resize_uninitialized(&ret, str.size >> 1);
+    const auto* q = str.data;
+    const auto* end = str.data + str.size;
+    char* p = ret.data();
+    while (q < end) {
         // first half of byte
-        char check_char = str.data[s_index];
-        if (int value = check_char - '0'; value >= 0 && value <= ('9' - '0')) {
-            c += value * 16;
-        } else if (int value = check_char - 'A'; value >= 0 && value <= ('F' - 'A')) {
-            c += (value + 10) * 16;
-        } else if (int value = check_char - 'a'; value >= 0 && value <= ('f' - 'a')) {
-            c += (value + 10) * 16;
-        } else {
+        char ch0 = hexdigit_1char(*q++);
+        if ((ch0 & 0xff) == 0xff) {
             return {};
         }
-
-        // second half of byte
-        check_char = str.data[s_index + 1];
-        if (int value = check_char - '0'; value >= 0 && value <= ('9' - '0')) {
-            c += value;
-        } else if (int value = check_char - 'A'; value >= 0 && value <= ('F' - 'A')) {
-            c += (value + 10);
-        } else if (int value = check_char - 'a'; value >= 0 && value <= ('f' - 'a')) {
-            c += (value + 10);
-        } else {
+        char ch1 = hexdigit_1char(*q++);
+        if ((ch1 & 0xff) == 0xff) {
             return {};
         }
-
-        result[res_index] = c;
-        ++res_index;
-        s_index += 2;
+        *p++ = static_cast<char>((ch0 << 4) + ch1);
     }
-    return {result.data(), result_len};
+    return ret;
+}
+
+DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
+#ifdef __AVX2__
+    return unhex_4chars(str);
+#else
+    return unhex_1char(str);
+#endif
 }
 
 StatusOr<ColumnPtr> StringFunctions::unhex(FunctionContext* context, const starrocks::Columns& columns) {
     return VectorizedStringStrictUnaryFunction<unhexImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
+}
+
+DEFINE_STRING_UNARY_FN_WITH_IMPL(url_encodeImpl, str) {
+    return StringFunctions::url_encode_func(str.to_string());
+}
+
+std::string StringFunctions::url_encode_func(const std::string& value) {
+    std::string escaped;
+    raw::stl_string_resize_uninitialized(&escaped, value.size() * 3);
+    char* p = escaped.data();
+    for (auto c : value) {
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            *p++ = c;
+            continue;
+        }
+        int ci = static_cast<unsigned char>(c);
+        *p++ = '%';
+        *p++ = alphabet[ci >> 4];
+        *p++ = alphabet[ci & 0xf];
+    }
+    escaped.resize(p - escaped.data());
+    return escaped;
+}
+
+StatusOr<ColumnPtr> StringFunctions::url_encode(FunctionContext* context, const starrocks::Columns& columns) {
+    return VectorizedStringStrictUnaryFunction<url_encodeImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
+}
+
+DEFINE_STRING_UNARY_FN_WITH_IMPL(url_decodeImpl, str) {
+    return StringFunctions::url_decode_func(str.to_string());
+}
+
+static Status url_decode_slice(const char* value, size_t len, std::string* to) {
+    to->clear();
+    to->reserve(len);
+    for (size_t i = 0; i < len; i++) {
+        if (value[i] == '%') {
+            char l = value[i + 1];
+            char r = value[i + 2];
+            if ((l < 'A' || l > 'F') && (l < '0' || l > '9')) {
+                return Status::RuntimeError(
+                        strings::Substitute("decode string contains illegal hex chars: $0$1", l, r));
+            }
+            if ((r < 'A' || r > 'F') && (r < '0' || r > '9')) {
+                return Status::RuntimeError(
+                        strings::Substitute("decode string contains illegal hex chars: $0$1", l, r));
+            }
+            // if l in 'A'..'F', then l-'A' > 0; otherwise l-'A' < 0; we arithmetic shift right 8 bit
+            // yields mask, so all bits of mask are 0 if l in 'A'..'F', all bits are 1 if l in '0'..'9'
+            auto mask = (l - 'A') >> 8;
+            // so mask is all zeros, we choose l - '0'; otherwise we choose l - 'A' + 10; the result is the
+            // just the value that '0..9','A'..'F' represent in hexadecimal.
+            auto ch = ((l - 'A' + 10) & (~mask)) + ((l - '0') & mask);
+            // use the same way get the value of r in hexadecimal
+            mask = (r - 'A') >> 8;
+            // finally, high*16 + low is the value the string represent.
+            ch = (ch << 4) + ((r - 'A' + 10) & (~mask)) + ((r - '0') & mask);
+            to->push_back(ch);
+            i = i + 2;
+        } else {
+            to->push_back(value[i]);
+        }
+    }
+    return Status::OK();
+}
+
+std::string StringFunctions::url_decode_func(const std::string& value) {
+    std::string ret;
+    auto status = url_decode_slice(value.data(), value.size(), &ret);
+    if (status.ok()) {
+        return ret;
+    } else {
+        throw std::runtime_error(status.get_error_msg());
+    }
+}
+
+StatusOr<ColumnPtr> StringFunctions::url_decode(FunctionContext* context, const starrocks::Columns& columns) {
+    return VectorizedStringStrictUnaryFunction<url_decodeImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(sm3Impl, str) {
@@ -2601,7 +3117,7 @@ Status StringFunctions::regexp_extract_prepare(FunctionContext* context, Functio
 
     state->options = std::make_unique<re2::RE2::Options>();
     state->options->set_log_errors(false);
-    state->options->set_longest_match(true);
+    state->options->set_longest_match(false);
     state->options->set_dot_nl(true);
 
     // go row regex
@@ -2769,6 +3285,7 @@ static ColumnPtr regexp_extract_const(re2::RE2* const_re, const Columns& columns
 }
 
 StatusOr<ColumnPtr> StringFunctions::regexp_extract(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
     auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     if (state->const_pattern) {
@@ -2778,6 +3295,210 @@ StatusOr<ColumnPtr> StringFunctions::regexp_extract(FunctionContext* context, co
 
     re2::RE2::Options* options = state->options.get();
     return regexp_extract_general(context, options, columns);
+}
+
+static ColumnPtr regexp_extract_all_general(FunctionContext* context, re2::RE2::Options* options,
+                                            const Columns& columns) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto group_viewer = ColumnViewer<TYPE_BIGINT>(columns[2]);
+
+    auto size = columns[0]->size();
+
+    auto str_col = BinaryColumn::create();
+    auto offset_col = UInt32Column::create();
+    auto nl_col = NullColumn::create();
+    offset_col->append(0);
+    uint32_t index = 0;
+
+    for (int row = 0; row < size; ++row) {
+        if (content_viewer.is_null(row) || ptn_viewer.is_null(row)) {
+            offset_col->append(index);
+            nl_col->append(1);
+            continue;
+        }
+
+        std::string ptn_value = ptn_viewer.value(row).to_string();
+        re2::RE2 local_re(ptn_value, *options);
+        if (!local_re.ok()) {
+            context->set_error(strings::Substitute("Invalid regex: $0", ptn_value).c_str());
+            offset_col->append(index);
+            nl_col->append(1);
+            continue;
+        }
+
+        nl_col->append(0);
+        auto group = group_viewer.value(row);
+        if (group < 0) {
+            offset_col->append(index);
+            continue;
+        }
+
+        int max_matches = 1 + local_re.NumberOfCapturingGroups();
+        if (group >= max_matches) {
+            offset_col->append(index);
+            continue;
+        }
+
+        auto str_value = content_viewer.value(row);
+        re2::StringPiece str_sp(str_value.get_data(), str_value.get_size());
+
+        re2::StringPiece find[group];
+        const RE2::Arg* args[group];
+        RE2::Arg argv[group];
+
+        for (size_t i = 0; i < group; i++) {
+            argv[i] = &find[i];
+            args[i] = &argv[i];
+        }
+        while (re2::RE2::FindAndConsumeN(&str_sp, local_re, args, group)) {
+            str_col->append(Slice(find[group - 1].data(), find[group - 1].size()));
+            index += 1;
+        }
+        offset_col->append(index);
+    }
+
+    auto array =
+            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
+    return NullableColumn::create(array, nl_col);
+}
+
+static ColumnPtr regexp_extract_all_const_pattern(re2::RE2* const_re, const Columns& columns) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto group_viewer = ColumnViewer<TYPE_BIGINT>(columns[2]);
+
+    auto size = ColumnHelper::is_all_const(columns) ? 1 : columns[0]->size();
+
+    auto str_col = BinaryColumn::create();
+    auto offset_col = UInt32Column::create();
+    auto nl_col = NullColumn::create();
+    offset_col->append(0);
+    uint32_t index = 0;
+
+    for (int row = 0; row < size; ++row) {
+        if (content_viewer.is_null(row)) {
+            offset_col->append(index);
+            nl_col->append(1);
+            continue;
+        }
+
+        nl_col->append(0);
+        auto group = group_viewer.value(row);
+        if (group < 0) {
+            offset_col->append(index);
+            continue;
+        }
+
+        int max_matches = 1 + const_re->NumberOfCapturingGroups();
+        if (group >= max_matches) {
+            offset_col->append(index);
+            continue;
+        }
+
+        auto str_value = content_viewer.value(row);
+        re2::StringPiece str_sp(str_value.get_data(), str_value.get_size());
+
+        re2::StringPiece find[group];
+        const RE2::Arg* args[group];
+        RE2::Arg argv[group];
+
+        for (size_t i = 0; i < group; i++) {
+            argv[i] = &find[i];
+            args[i] = &argv[i];
+        }
+        while (re2::RE2::FindAndConsumeN(&str_sp, *const_re, args, group)) {
+            str_col->append(Slice(find[group - 1].data(), find[group - 1].size()));
+            index += 1;
+        }
+        offset_col->append(index);
+    }
+
+    auto array =
+            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
+    if (ColumnHelper::is_all_const(columns)) {
+        return ConstColumn::create(array, columns[0]->size());
+    }
+    return NullableColumn::create(array, nl_col);
+}
+
+static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& columns) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto group = ColumnHelper::get_const_value<TYPE_BIGINT>(columns[2]);
+
+    auto size = ColumnHelper::is_all_const(columns) ? 1 : columns[0]->size();
+
+    auto str_col = BinaryColumn::create();
+    auto offset_col = UInt32Column::create();
+    offset_col->append(0);
+
+    NullColumnPtr nl_col;
+    if (columns[0]->is_nullable()) {
+        auto x = down_cast<NullableColumn*>(columns[0].get())->null_column();
+        nl_col = ColumnHelper::as_column<NullColumn>(x->clone_shared());
+    } else {
+        nl_col = NullColumn::create(size, 0);
+    }
+
+    uint64_t index = 0;
+    int max_matches = 1 + const_re->NumberOfCapturingGroups();
+    if (group < 0 || group >= max_matches) {
+        offset_col->append_value_multiple_times(&index, size);
+        auto array = ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(0, 0)), offset_col);
+
+        if (ColumnHelper::is_all_const(columns)) {
+            return ConstColumn::create(array, columns[0]->size());
+        }
+        return NullableColumn::create(array, nl_col);
+    }
+
+    re2::StringPiece find[group];
+    const RE2::Arg* args[group];
+    RE2::Arg argv[group];
+
+    for (size_t i = 0; i < group; i++) {
+        argv[i] = &find[i];
+        args[i] = &argv[i];
+    }
+    for (int row = 0; row < size; ++row) {
+        if (content_viewer.is_null(row)) {
+            offset_col->append(index);
+            continue;
+        }
+
+        auto str_value = content_viewer.value(row);
+        re2::StringPiece str_sp(str_value.get_data(), str_value.get_size());
+        while (re2::RE2::FindAndConsumeN(&str_sp, *const_re, args, group)) {
+            str_col->append(Slice(find[group - 1].data(), find[group - 1].size()));
+
+            index += 1;
+        }
+        offset_col->append(index);
+    }
+
+    auto array =
+            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
+
+    if (ColumnHelper::is_all_const(columns)) {
+        return ConstColumn::create(array, columns[0]->size());
+    }
+    return NullableColumn::create(array, nl_col);
+}
+
+StatusOr<ColumnPtr> StringFunctions::regexp_extract_all(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+
+    if (state->const_pattern) {
+        re2::RE2* const_re = state->get_or_prepare_regex();
+        if (columns[2]->is_constant()) {
+            return regexp_extract_all_const(const_re, columns);
+        } else {
+            return regexp_extract_all_const_pattern(const_re, columns);
+        }
+    }
+
+    re2::RE2::Options* options = state->options.get();
+    return regexp_extract_all_general(context, options, columns);
 }
 
 static ColumnPtr regexp_replace_general(FunctionContext* context, re2::RE2::Options* options, const Columns& columns) {
@@ -2867,7 +3588,6 @@ static StatusOr<ColumnPtr> regexp_replace_use_hyperscan(StringFunctionsState* st
             continue;
         }
         match_info_chain.info_chain.clear();
-        match_info_chain.last_to = 0;
 
         auto rpl_value = rpl_viewer.value(row);
 
@@ -2885,10 +3605,9 @@ static StatusOr<ColumnPtr> regexp_replace_use_hyperscan(StringFunctionsState* st
                         value->info_chain.emplace_back(MatchInfo{.from = from, .to = to});
                     } else if (value->info_chain.back().from == from) {
                         value->info_chain.back().to = to;
-                    } else {
+                    } else if (value->info_chain.back().to <= from) {
                         value->info_chain.emplace_back(MatchInfo{.from = from, .to = to});
                     }
-                    value->last_to = to;
                     return 0;
                 },
                 &match_info_chain);
@@ -3242,6 +3961,210 @@ StatusOr<ColumnPtr> StringFunctions::parse_url(FunctionContext* context, const s
     }
 
     return parse_url_general(context, columns);
+}
+static bool seek_param_key_in_query_params(const StringValue& query_params, const StringValue& param_key,
+                                           std::string* param_value) {
+    const StringSearch param_search(&param_key);
+    auto pos = param_search.search(&query_params);
+    auto* begin = query_params.ptr;
+    auto* end = query_params.ptr + query_params.len;
+    auto* p_prev_char = begin + pos - 1;
+    auto* p_next_char = begin + pos + param_key.len;
+    // NOT FOUND
+    // case 1: just not found
+    // case 2: suffix found, seek "k1" in "abck1=2", prev char must be '&' if it exists
+    // case 3: prefix found, seek "k1" in "k1abc=2", next char must be '=' or '&' if it exists
+    if (pos < 0 || (p_prev_char >= begin && *p_prev_char != '&') ||
+        (p_next_char < end && *p_next_char != '=' && *p_next_char != '&')) {
+        return false;
+    }
+    // no value; return empty string
+    if (p_next_char >= end || *p_next_char == '&') {
+        *param_value = "";
+        return true;
+    }
+    // skip '='
+    ++p_next_char;
+    auto* p = p_next_char;
+    // seek '&', the value is string between '=' and '&' if '&' exists, otherwise is remaining string following '='
+    while (p < end && *p != '&') ++p;
+    auto status = url_decode_slice(p_next_char, p - p_next_char, param_value);
+    return status.ok();
+}
+
+static bool seek_param_key_in_url(const Slice& url, const Slice& param_key, std::string* param_value) {
+    StringValue query_params;
+    if (!UrlParser::parse_url(StringValue::from_slice(url), UrlParser::UrlPart::QUERY, &query_params)) {
+        return false;
+    }
+    return seek_param_key_in_query_params(query_params, StringValue::from_slice(param_key), param_value);
+}
+
+static StatusOr<ColumnPtr> url_extract_parameter_const_param_key(const starrocks::Columns& columns,
+                                                                 const std::string& param_key) {
+    auto url_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto num_rows = columns[0]->size();
+    Slice param_key_str(param_key);
+    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    std::string param_value;
+    for (auto i = 0; i < num_rows; ++i) {
+        if (url_viewer.is_null(i)) {
+            result.append_null();
+            continue;
+        }
+        auto url = url_viewer.value(i);
+        auto found = seek_param_key_in_url(url, param_key_str, &param_value);
+        if (!found) {
+            result.append_null();
+        } else {
+            result.append(param_value);
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+static StatusOr<ColumnPtr> url_extract_parameter_general(const starrocks::Columns& columns) {
+    auto url_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto param_key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto num_rows = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    std::string param_value;
+    for (auto i = 0; i < num_rows; ++i) {
+        if (url_viewer.is_null(i) || param_key_viewer.is_null(i)) {
+            result.append_null();
+            continue;
+        }
+        auto url = url_viewer.value(i);
+        auto param_key = param_key_viewer.value(i);
+        bool ill_formed = param_key.size == 0 || std::any_of(param_key.data, param_key.data + param_key.size, isspace);
+        if (ill_formed) {
+            result.append_null();
+            continue;
+        }
+        auto found = seek_param_key_in_url(url, param_key, &param_value);
+        if (!found) {
+            result.append_null();
+        } else {
+            result.append(param_value);
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+static StatusOr<ColumnPtr> url_extract_parameter_const_query_params(const starrocks::Columns& columns,
+                                                                    const std::string& query_params) {
+    auto param_key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto num_rows = columns[1]->size();
+    StringValue query_params_str(query_params);
+    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    std::string param_value;
+    for (auto i = 0; i < num_rows; ++i) {
+        if (param_key_viewer.is_null(i)) {
+            result.append_null();
+            continue;
+        }
+        auto param_key = param_key_viewer.value(i);
+        bool ill_formed = param_key.size == 0 || std::any_of(param_key.data, param_key.data + param_key.size, isspace);
+        if (ill_formed) {
+            result.append_null();
+            continue;
+        }
+        auto found = seek_param_key_in_query_params(query_params_str, StringValue::from_slice(param_key), &param_value);
+        if (!found) {
+            result.append_null();
+        } else {
+            result.append(param_value);
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+Status StringFunctions::url_extract_parameter_prepare(starrocks::FunctionContext* context,
+                                                      FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = new UrlExtractParameterState();
+    context->set_function_state(scope, state);
+    auto url_is_const = context->is_constant_column(0);
+    auto param_is_const = context->is_constant_column(1);
+    auto url_is_null = url_is_const && !context->is_notnull_constant_column(0);
+    auto param_is_null = param_is_const && !context->is_notnull_constant_column(1);
+
+    if (url_is_null || param_is_null) {
+        state->opt_const_result = "";
+        state->result_is_null = true;
+        return Status::OK();
+    }
+
+    if (!url_is_const && !param_is_const) {
+        return Status::OK();
+    }
+
+    bool ill_formed = false;
+    if (param_is_const) {
+        auto param_key_column = context->get_constant_column(1);
+        auto param_key = ColumnHelper::get_const_value<TYPE_VARCHAR>(param_key_column);
+        state->opt_const_param_key = param_key.to_string();
+        ill_formed |= param_key.empty() || std::any_of(param_key.data, param_key.data + param_key.size, isspace);
+    }
+
+    if (url_is_const) {
+        auto url_column = context->get_constant_column(0);
+        auto url = ColumnHelper::get_const_value<TYPE_VARCHAR>(url_column);
+        StringValue query_params;
+        auto parse_success =
+                UrlParser::parse_url(StringValue::from_slice(url), UrlParser::UrlPart::QUERY, &query_params);
+        state->opt_const_query_params = query_params.to_string();
+        ill_formed |= !parse_success || query_params.len == 0;
+    }
+
+    // result is const null is either url or param_key is ill-formed
+    if (ill_formed) {
+        state->opt_const_result = "";
+        state->result_is_null = true;
+        return Status::OK();
+    }
+
+    if (state->opt_const_query_params.has_value() && state->opt_const_param_key.has_value()) {
+        StringValue query_params(state->opt_const_query_params.value());
+        StringValue param_key(state->opt_const_param_key.value());
+        std::string result;
+        state->result_is_null = !seek_param_key_in_query_params(query_params, param_key, &result);
+        state->opt_const_result = std::move(result);
+    }
+    return Status::OK();
+}
+
+Status StringFunctions::url_extract_parameter_close(starrocks::FunctionContext* context,
+                                                    FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state = reinterpret_cast<UrlExtractParameterState*>(context->get_function_state(scope));
+        delete state;
+    }
+    return Status::OK();
+}
+StatusOr<ColumnPtr> StringFunctions::url_extract_parameter(starrocks::FunctionContext* context,
+                                                           const starrocks::Columns& columns) {
+    DCHECK_EQ(columns.size(), 2);
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    auto* state =
+            reinterpret_cast<UrlExtractParameterState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto num_rows = columns[0]->size();
+    if (state->opt_const_result.has_value()) {
+        if (state->result_is_null) {
+            return ColumnHelper::create_const_null_column(num_rows);
+        } else {
+            return ColumnHelper::create_const_column<TYPE_VARCHAR>(state->opt_const_result.value(), num_rows);
+        }
+    } else if (state->opt_const_param_key.has_value()) {
+        return url_extract_parameter_const_param_key(columns, state->opt_const_param_key.value());
+    } else if (state->opt_const_query_params.has_value()) {
+        return url_extract_parameter_const_query_params(columns, state->opt_const_query_params.value());
+    } else {
+        return url_extract_parameter_general(columns);
+    }
 }
 
 } // namespace starrocks

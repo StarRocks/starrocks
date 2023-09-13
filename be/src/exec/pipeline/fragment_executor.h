@@ -99,7 +99,7 @@ public:
     Status execute(ExecEnv* exec_env);
 
 private:
-    void _fail_cleanup();
+    void _fail_cleanup(bool fragment_has_registed);
     int32_t _calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const;
     int _calc_delivery_expired_seconds(const UnifiedExecPlanFragmentParams& request) const;
     int _calc_query_expired_seconds(const UnifiedExecPlanFragmentParams& request) const;

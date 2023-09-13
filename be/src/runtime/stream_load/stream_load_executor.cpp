@@ -36,8 +36,11 @@
 
 #include <fmt/format.h>
 
+#include <string_view>
+
 #include "agent/master_info.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
@@ -45,6 +48,7 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/stream_load_context.h"
+#include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
@@ -55,8 +59,13 @@ namespace starrocks {
 TLoadTxnBeginResult k_stream_load_begin_result;
 TLoadTxnCommitResult k_stream_load_commit_result;
 TLoadTxnRollbackResult k_stream_load_rollback_result;
-Status k_stream_load_plan_status;
 #endif
+
+static Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, StreamLoadContext* ctx);
+static StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::string_view db,
+                                                         std::string_view table, int64_t txn_id);
+static bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::string_view table, int64_t txn_id,
+                                   int64_t deadline);
 
 Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
     StarRocksMetrics::instance()->txn_exec_plan_total.increment(1);
@@ -95,7 +104,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                     }
 
                     if (status.ok()) {
-                        StarRocksMetrics::instance()->stream_receive_bytes_total.increment(ctx->receive_bytes);
+                        StarRocksMetrics::instance()->stream_receive_bytes_total.increment(ctx->total_receive_bytes);
                         StarRocksMetrics::instance()->stream_load_rows_total.increment(ctx->number_loaded_rows);
                     }
                 } else {
@@ -142,7 +151,9 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
         return st;
     }
 #else
-    ctx->promise.set_value(k_stream_load_plan_status);
+    Status status;
+    TEST_SYNC_POINT_CALLBACK("StreamLoadExecutor::execute_plan_fragment:1", &status);
+    ctx->promise.set_value(status);
 #endif
     return Status::OK();
 }
@@ -181,6 +192,7 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
     }
     ctx->txn_id = result.txnId;
     ctx->need_rollback = true;
+    ctx->load_deadline_sec = UnixSeconds() + result.timeout;
 
     return Status::OK();
 }
@@ -197,22 +209,31 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     request.commitInfos = std::move(ctx->commit_infos);
     request.failInfos = std::move(ctx->fail_infos);
     request.__isset.commitInfos = true;
-    request.__set_thrift_rpc_timeout_ms(config::txn_commit_rpc_timeout_ms);
+    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
+    if (ctx->timeout_second != -1) {
+        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
+        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
+    }
+    request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
 
     // set attachment if has
     TTxnCommitAttachment attachment;
     if (collect_load_stat(ctx, &attachment)) {
-        request.txnCommitAttachment = attachment;
+        request.txnCommitAttachment = std::move(attachment);
         request.__isset.txnCommitAttachment = true;
     }
 
+    return commit_txn_internal(request, rpc_timeout_ms, ctx);
+}
+
+Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, StreamLoadContext* ctx) {
     TNetworkAddress master_addr = get_master_address();
     TLoadTxnCommitResult result;
 #ifndef BE_TEST
     auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
             [&request, &result](FrontendServiceConnection& client) { client->loadTxnCommit(result, request); },
-            config::txn_commit_rpc_timeout_ms);
+            rpc_timeout_ms);
     if (st.is_thrift_rpc_error()) {
         return Status::ServiceUnavailable(fmt::format(
                 "Commit transaction fail cause {}, Transaction status unknown, you can retry with same label.",
@@ -223,19 +244,59 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
 #else
     result = k_stream_load_commit_result;
 #endif
-    // Return if this transaction is committed successful; otherwise, we need try
-    // to rollback this transaction.
     Status status(result.status);
-    if (!status.ok()) {
-        LOG(WARNING) << "commit transaction failed, errmsg=" << status.get_error_msg() << ctx->brief();
-        if (status.code() == TStatusCode::PUBLISH_TIMEOUT) {
-            ctx->need_rollback = false;
-        }
+    if (status.ok()) {
+        ctx->need_rollback = false;
+        return status;
+    } else if (status.code() == TStatusCode::PUBLISH_TIMEOUT) {
+        ctx->need_rollback = false;
+        bool visible =
+                wait_txn_visible_until(ctx->auth, request.db, request.tbl, request.txnId, ctx->load_deadline_sec);
+        return visible ? Status::OK() : status;
+    } else {
+        ctx->need_rollback = true;
         return status;
     }
-    // commit success, set need_rollback to false
-    ctx->need_rollback = false;
-    return Status::OK();
+}
+
+StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::string_view db, std::string_view table,
+                                                  int64_t txn_id) {
+    TNetworkAddress master_addr = get_master_address();
+    TGetLoadTxnStatusRequest request;
+    TGetLoadTxnStatusResult result;
+
+    set_request_auth(&request, auth);
+    request.db = db;
+    request.tbl = table;
+    request.txnId = txn_id;
+
+    auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            master_addr.hostname, master_addr.port,
+            [&request, &result](FrontendServiceConnection& client) { client->getLoadTxnStatus(result, request); },
+            config::txn_commit_rpc_timeout_ms);
+    if (!st.ok()) {
+        return st;
+    } else {
+        return result.status;
+    }
+}
+
+bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::string_view table, int64_t txn_id,
+                            int64_t deadline) {
+    while (deadline > UnixSeconds()) {
+        sleep(std::min((int64_t)config::get_txn_status_internal_sec, deadline - UnixSeconds()));
+        auto status_or = get_txn_status(auth, db, table, txn_id);
+        if (!status_or.ok()) {
+            return false;
+        } else if (status_or.value() == TTransactionStatus::VISIBLE) {
+            return true;
+        } else if (status_or.value() == TTransactionStatus::COMMITTED) {
+            continue;
+        } else {
+            return false;
+        }
+    }
+    return false;
 }
 
 Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
@@ -250,7 +311,12 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     request.commitInfos = std::move(ctx->commit_infos);
     request.failInfos = std::move(ctx->fail_infos);
     request.__isset.commitInfos = true;
-    request.__set_thrift_rpc_timeout_ms(config::txn_commit_rpc_timeout_ms);
+    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
+    if (ctx->timeout_second != -1) {
+        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
+        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
+    }
+    request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
 
     // set attachment if has
     TTxnCommitAttachment attachment;
@@ -265,7 +331,7 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
             [&request, &result](FrontendServiceConnection& client) { client->loadTxnPrepare(result, request); },
-            config::txn_commit_rpc_timeout_ms));
+            rpc_timeout_ms));
 #else
     result = k_stream_load_commit_result;
 #endif

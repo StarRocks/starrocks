@@ -1,0 +1,12 @@
+-- name: test_insert_empty
+create database test_insert_empty;
+use test_insert_empty;
+create table t1(k int, v int not null);
+create table t2(k int, v int not null) primary key(k) distributed by hash(k);
+insert into t2 select * from t1;
+select * from information_schema.loads where database_name='test_insert_empty' and label like 'insert%';
+update t2 set v=1 where k=1;
+select * from information_schema.loads where database_name='test_insert_empty' and label like 'update%';
+delete from t2 where k=1;
+select * from information_schema.loads where database_name='test_insert_empty' and label like 'delete%';
+

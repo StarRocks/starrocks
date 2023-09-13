@@ -1,0 +1,127 @@
+-- name: test_limit
+ CREATE TABLE `t0` (
+  `region` varchar(128) NOT NULL COMMENT "",
+  `order_date` date NOT NULL COMMENT "",
+  `income` decimal(7, 0) NOT NULL COMMENT "",
+  `ship_mode` int NOT NULL COMMENT "",
+  `ship_code` int) ENGINE=OLAP
+DUPLICATE KEY(`region`, `order_date`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`region`, `order_date`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO `t0` (`region`, `order_date`, `income`, `ship_mode`, `ship_code`) VALUES
+('USA', '2022-01-01', 12345, 50, 1),
+('CHINA', '2022-01-02', 54321, 51, 4),
+('JAPAN', '2022-01-03', 67890, 610, 6),
+('UK', '2022-01-04', 98765, 75, 2),
+('AUS', '2022-01-01', 23456, 25, 18),
+('AFRICA', '2022-01-02', 87654, 125, 7),
+('USA', '2022-01-03', 54321, 75, null),
+('CHINA', '2022-01-04', 12345, 100, 3),
+('JAPAN', '2022-01-01', 67890, 64, 10),
+('UK', '2022-01-02', 54321, 25, 5),
+('AUS', '2022-01-03', 98765, 150, 15),
+('AFRICA', '2022-01-04', 23456, 75, null),
+('USA', '2022-01-01', 87654, 125, 2),
+('CHINA', '2022-01-02', 54321, 175, 12),
+('JAPAN', '2022-01-03', 12345, 100, 3),
+('UK', '2022-01-04', 67890, 50, 10),
+('AUS', '2022-01-01', 54321, 25, 5),
+('AFRICA', '2022-01-02', 98765, 150, 15),
+('USA', '2022-01-03', 23456, 75, 18),
+('CHINA', '2022-01-04', 87654, 125, 7),
+('JAPAN', '2022-01-01', 54321, 175, 12),
+('UK', '2022-01-02', 12345, 86, 3),
+('AUS', '2022-01-03', 67890, 50, 10),
+('AFRICA', '2022-01-04', 54321, 25, 95),
+('USA', '2022-01-01', 98765, 150, 55),
+('CHINA', '2022-01-02', 23456, 75, 88),
+('JAPAN', '2022-01-03', 87654, 125, 67),
+('UK', '2022-01-04', 54321, 82, 72),
+('AUS', '2022-01-01', 12345, 90, 35),
+('AFRICA', '2022-01-02', 67890, 50, 100),
+('USA', '2022-01-03', 54321, 25, 5),
+('CHINA', '2022-01-04', 98765, 150, 15),
+('JAPAN', '2022-01-01', 23456, 75, null);
+-- result:
+-- !result
+select count(*) from (select * from t0 limit 10, 20) xx;
+-- result:
+20
+-- !result
+select count(*) from (select * from t0 limit 20, 20) xx;
+-- result:
+13
+-- !result
+select count(*) from (select * from t0 limit 50, 20) xx;
+-- result:
+0
+-- !result
+select COUNT(*) from (select * from (select * from t0 limit 10) x limit 10, 20) xx;
+-- result:
+0
+-- !result
+select COUNT(*) from (select * from (select * from t0 limit 10, 10) x limit 1, 2) xx;
+-- result:
+2
+-- !result
+select COUNT(*) from (select * from (select * from t0 limit 10, 50) x limit 10, 30) xx;
+-- result:
+13
+-- !result
+select COUNT(*) from (select * from (select * from t0 limit 50, 1) x limit 1, 1) xx;
+-- result:
+0
+-- !result
+select COUNT(*) from (select * from (select * from t0 limit 40, 10) x limit 2) xx;
+-- result:
+0
+-- !result
+select COUNT(*) from (select * from (select * from t0 limit 40, 2) x limit 1) xx;
+-- result:
+0
+-- !result
+select COUNT(*) from (select * from (select * from t0 limit 30, 10) x limit 2) xx;
+-- result:
+2
+-- !result
+select COUNT(*) from (select * from (select * from t0 limit 30, 2) x limit 1) xx;
+-- result:
+1
+-- !result
+select COUNT(*) from (select * from (select * from t0 limit 30, 2) x limit 5) xx;
+-- result:
+2
+-- !result
+select COUNT(*) from (select * from (select * from t0 limit 20) x limit 10, 40) xx;
+-- result:
+10
+-- !result
+select COUNT(*) from (select * from (select * from t0 limit 10) x limit 10, 10) xx;
+-- result:
+0
+-- !result
+select COUNT(*) from (select * from (select * from t0 limit 30) x limit 50, 10) xx;
+-- result:
+0
+-- !result
+select count(*) from (select * from TABLE(generate_series(1, 100000)) limit 50000, 10) x;
+-- result:
+10
+-- !result
+select count(*) from (select * from TABLE(generate_series(1, 100000)) limit 90000, 20000) x;
+-- result:
+10000
+-- !result
+select count(*) from (select * from TABLE(generate_series(1, 100000)) limit 1, 1000) x;
+-- result:
+1000
+-- !result

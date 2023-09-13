@@ -1,3 +1,17 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #pragma once
 
 #include "util/runtime_profile.h"
@@ -20,6 +34,9 @@ struct AggStatistics {
         rows_returned_counter = ADD_COUNTER(runtime_profile, "RowsReturned", TUnit::UNIT);
         state_destroy_timer = ADD_TIMER(runtime_profile, "StateDestroy");
         allocate_state_timer = ADD_TIMER(runtime_profile, "StateAllocate");
+
+        chunk_buffer_peak_memory = ADD_PEAK_COUNTER(runtime_profile, "ChunkBufferPeakMem", TUnit::BYTES);
+        chunk_buffer_peak_size = ADD_PEAK_COUNTER(runtime_profile, "ChunkBufferPeakSize", TUnit::UNIT);
     }
 
     // timer for build hash table and compute aggregate function
@@ -50,5 +67,8 @@ struct AggStatistics {
     RuntimeProfile::Counter* expr_release_timer{};
     RuntimeProfile::Counter* state_destroy_timer{};
     RuntimeProfile::Counter* allocate_state_timer{};
+
+    RuntimeProfile::HighWaterMarkCounter* chunk_buffer_peak_memory{};
+    RuntimeProfile::HighWaterMarkCounter* chunk_buffer_peak_size{};
 };
 } // namespace starrocks

@@ -62,11 +62,9 @@ source $STARROCKS_HOME/bin/common.sh
 export_shared_envvars
 if [ ${RUN_BE} -eq 1 ] ; then
     export_env_from_conf $STARROCKS_HOME/conf/be.conf
-    export_mem_limit_from_conf $STARROCKS_HOME/conf/be.conf
 fi
 if [ ${RUN_CN} -eq 1 ]; then
     export_env_from_conf $STARROCKS_HOME/conf/cn.conf
-    export_mem_limit_from_conf $STARROCKS_HOME/conf/cn.conf
 fi
 
 if [ $? -ne 0 ]; then
@@ -91,7 +89,8 @@ if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
 fi
 
 if [ "$JAVA_HOME" = "" ]; then
-    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jvm/$jvm_arch/server:$STARROCKS_HOME/lib/jvm/$jvm_arch:$LD_LIBRARY_PATH
+    echo "[WARNING] JAVA_HOME env not set. Functions or features that requires jni will not work at all."
+    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
 else
     java_version=$(jdk_version)
     if [[ $java_version -gt 8 ]]; then

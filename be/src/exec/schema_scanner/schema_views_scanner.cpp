@@ -15,8 +15,8 @@
 #include "exec/schema_scanner/schema_views_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
+#include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
-#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -35,7 +35,8 @@ SchemaScanner::ColumnDesc SchemaViewsScanner::_s_tbls_columns[] = {
 };
 
 SchemaViewsScanner::SchemaViewsScanner()
-        : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
+        : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)),
+          _timeout_ms(config::thrift_rpc_timeout_ms) {}
 
 SchemaViewsScanner::~SchemaViewsScanner() = default;
 
@@ -58,8 +59,9 @@ Status SchemaViewsScanner::start(RuntimeState* state) {
         }
     }
 
+    _timeout_ms = state->query_options().query_timeout * 1000;
     if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result));
+        RETURN_IF_ERROR(SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result, _timeout_ms));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
@@ -198,7 +200,8 @@ Status SchemaViewsScanner::get_new_table() {
     table_params.__set_type(TTableType::VIEW);
 
     if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::list_table_status(*(_param->ip), _param->port, table_params, &_table_result));
+        RETURN_IF_ERROR(SchemaHelper::list_table_status(*(_param->ip), _param->port, table_params, &_table_result,
+                                                        _timeout_ms));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }

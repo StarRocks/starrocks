@@ -46,11 +46,12 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpAuthManager;
 import com.starrocks.http.HttpAuthManager.SessionValue;
-import com.starrocks.http.UnauthorizedException;
 import com.starrocks.http.rest.RestBaseResult;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
@@ -177,7 +178,7 @@ public class WebBaseAction extends BaseAction {
             UserIdentity currentUser = checkPassword(authInfo);
             if (needAdmin()) {
                 checkUserOwnsAdminRole(currentUser);
-                checkActionOnSystem(currentUser, PrivilegeType.NODE);
+                Authorizer.checkSystemAction(currentUser, null, PrivilegeType.NODE);
             }
             request.setAuthorized(true);
             SessionValue value = new SessionValue();
@@ -195,7 +196,7 @@ public class WebBaseAction extends BaseAction {
             ctx.setThreadLocalInfo();
 
             return true;
-        } catch (UnauthorizedException e) {
+        } catch (AccessDeniedException e) {
             response.appendContent("Authentication Failed. <br/> " + e.getMessage());
             writeAuthResponse(request, response);
             return false;
@@ -215,9 +216,9 @@ public class WebBaseAction extends BaseAction {
 
             try {
                 checkUserOwnsAdminRole(sessionValue.currentUser);
-                checkActionOnSystem(sessionValue.currentUser, PrivilegeType.NODE);
+                Authorizer.checkSystemAction(sessionValue.currentUser, null, PrivilegeType.NODE);
                 authorized = true;
-            } catch (UnauthorizedException e) {
+            } catch (AccessDeniedException e) {
                 // ignore
             }
 

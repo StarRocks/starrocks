@@ -21,22 +21,16 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeFormatterBuilder;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class HudiScannerUtils {
-    private static final DateTimeFormatter DATETIME_FORMATTER;
+    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     public static final Map<String, String> HIVE_TYPE_MAPPING = new HashMap<>();
     public static Map<ColumnType.TypeValue, TimeUnit> TIMESTAMP_UNIT_MAPPING = new HashMap<>();
 
     static {
-        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
-        // Date and time parts
-        builder.append(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        DATETIME_FORMATTER = builder.toFormatter();
-
         HIVE_TYPE_MAPPING.put("timestamp-micros", "timestamp");
         HIVE_TYPE_MAPPING.put("timestamp-millis", "timestamp");
 

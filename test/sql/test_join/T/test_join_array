@@ -112,58 +112,15 @@ select i_0 from array_test s where not exists (select 1 from array_test t where 
 
 
 select d_1 from array_test s where d_1 in  (select i_0 from array_test t) order by 1;
-select d_1 from array_test s where d_1 in  (select s_1 from array_test t) order by 1;
-select d_1 from array_test s where d_1 in  (select i_1 from array_test t) order by 1;
-select d_1 from array_test s where d_1 in  (select d_1 from array_test t) order by 1;
-select d_1 from array_test s where d_1 in  (select d_2 from array_test t) order by 1;
-select i_0 from array_test s where i_0 in  (select as_1 from array_test t) order by 1;
-select i_0 from array_test s where i_0 in  (select aas_1 from array_test t) order by 1;
-select i_0 from array_test s where i_0 in  (select aad_1 from array_test t) order by 1;
-
-select ai_1 from array_test s where ai_1 in  (select ai_1 from array_test t) order by 1;
-select ai_1 from array_test s where ai_1 in  (select as_1 from array_test t) order by 1;
-
-select pk from array_test s where pk in  (select aad_1 from array_test t) order by 1;
-
 select d_1 from array_test s where d_1 not in  (select i_0 from array_test t) order by 1;
-select d_1 from array_test s where d_1 not in  (select s_1 from array_test t) order by 1;
-select d_1 from array_test s where d_1 not in  (select i_1 from array_test t) order by 1;
-select d_1 from array_test s where d_1 not in  (select d_1 from array_test t) order by 1;
-select d_1 from array_test s where d_1 not in  (select d_2 from array_test t) order by 1;
-select d_1 from array_test s where d_1 not in  (select d_3 from array_test t) order by 1;
-select i_0 from array_test s where i_0 not in  (select as_1 from array_test t) order by 1;
-select i_0 from array_test s where i_0 not in  (select aas_1 from array_test t) order by 1;
-select i_0 from array_test s where i_0 not in  (select aad_1 from array_test t) order by 1;
-
 select ai_1 from array_test s where ai_1 not in  (select ai_1 from array_test t) order by 1;
-select ai_1 from array_test s where ai_1 not in  (select as_1 from array_test t) order by 1;
 select aas_1 from array_test s where aas_1 not in  (select aas_1 from array_test t) order by 1;
-select aas_1 from array_test s where aas_1 not in  (select aad_1 from array_test t) order by 1;
-
 select pk from array_test s where pk not in  (select i_0 from array_test t) order by 1;
-select pk from array_test s where pk not in  (select s_1 from array_test t) order by 1;
-select pk from array_test s where pk not in  (select i_1 from array_test t) order by 1;
-
 select d_1 in  (select ai_1 from array_test t) from array_test s order by 1;
-select d_1 in  (select as_1 from array_test t) from array_test s order by 1;
-
-
 select ai_1 in  (select ai_1 from array_test t)  from array_test s order by 1;
-select ai_1 in  (select as_1 from array_test t)  from array_test s order by 1;
-select aas_1 in  (select aas_1 from array_test t) from array_test s order by 1;
 select aas_1 in  (select aad_1 from array_test t)  from array_test s order by 1;
-
-select pk in  (select i_0 from array_test t) from array_test s order by 1;
-
-select d_1 not in  (select i_0 from array_test t) from array_test s order by 1;
-select d_1 not in  (select s_1 from array_test t) from array_test s  order by 1;
-select d_1 not in  (select i_1 from array_test t) from array_test s order by 1;
-select d_1 not in  (select d_1 from array_test t) from array_test s order by 1;
 select d_1 not in  (select d_2 from array_test t) from array_test s order by 1;
 select i_0 not in  (select as_1 from array_test t)  from array_test s order by 1;
-select i_0 not in  (select aas_1 from array_test t) from array_test s order by 1;
-select i_0 not in  (select aad_1 from array_test t) from array_test s order by 1;
-
 select ai_1 not in  (select ai_1 from array_test t)  from array_test s order by 1;
 select ai_1 not in  (select as_1 from array_test t)  from array_test s order by 1;
 select aas_1 not in  (select aas_1 from array_test t) from array_test s order by 1;

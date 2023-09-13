@@ -15,6 +15,7 @@
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
@@ -29,11 +30,13 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.PredicateUtils;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
-import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
@@ -108,10 +111,21 @@ public class IcebergScanNode extends ScanNode {
         if (catalogName == null) {
             return;
         }
-        IcebergConnector connector = (IcebergConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
-                getConnector(catalogName);
-        if (connector != null) {
-            cloudConfiguration = connector.getCloudConfiguration();
+
+        // Hard coding here
+        // Try to get tabular signed temporary credential
+        CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForTabular(srIcebergTable.getNativeTable().io().properties());
+        if (tabularTempCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            // If we get CloudConfiguration succeed from iceberg FileIO's properties, we just using it.
+            cloudConfiguration = tabularTempCloudConfiguration;
+        } else {
+            CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            Preconditions.checkState(connector != null,
+                    String.format("connector of catalog %s should not be null", catalogName));
+            cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+            Preconditions.checkState(cloudConfiguration != null,
+                    String.format("cloudConfiguration of catalog %s should not be null", catalogName));
         }
     }
 
@@ -139,24 +153,7 @@ public class IcebergScanNode extends ScanNode {
                 .collect(Collectors.toMap(Column::getName, item -> item));
         for (String eqName : appendEqualityColumns) {
             if (nameToColumns.containsKey(eqName)) {
-                Column column = nameToColumns.get(eqName);
-                Field field;
-                TableName tableName = desc.getRef().getName();
-                if (referenceTable.getFullSchema().contains(column)) {
-                    field = new Field(column.getName(), column.getType(), tableName,
-                            new SlotRef(tableName, column.getName(), column.getName()), true);
-                } else {
-                    field = new Field(column.getName(), column.getType(), tableName,
-                            new SlotRef(tableName, column.getName(), column.getName()), false);
-                }
-                ColumnRefOperator columnRef = columnRefFactory.create(field.getName(),
-                        field.getType(), column.isAllowNull());
-                SlotDescriptor slotDescriptor =
-                        context.getDescTbl().addSlotDescriptor(desc, new SlotId(columnRef.getId()));
-                slotDescriptor.setColumn(column);
-                slotDescriptor.setIsNullable(column.isAllowNull());
-                slotDescriptor.setIsMaterialized(true);
-                context.getColRefToExpr().put(columnRef, new SlotRef(columnRef.toString(), slotDescriptor));
+                throw new StarRocksConnectorException("Iceberg equality delete is not supported");
             }
         }
     }
@@ -202,7 +199,7 @@ public class IcebergScanNode extends ScanNode {
         long snapshotId = snapshot.get().snapshotId();
 
         List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                catalogName, srIcebergTable, null, snapshotId, predicate, null);
+                catalogName, srIcebergTable, null, snapshotId, predicate, null, -1);
 
         if (splits.isEmpty()) {
             LOG.warn("There is no scan tasks after planFies on {}.{} and predicate: [{}]",
@@ -237,6 +234,8 @@ public class IcebergScanNode extends ScanNode {
             // For iceberg table we do not need partition id
             hdfsScanRange.setPartition_id(-1);
             hdfsScanRange.setFile_length(file.fileSizeInBytes());
+            // Iceberg data file cannot be overwritten
+            hdfsScanRange.setModification_time(0);
             hdfsScanRange.setFile_format(IcebergApiConverter.getHdfsFileFormat(file.format()).toThrift());
 
             hdfsScanRange.setDelete_files(task.deletes().stream().map(source -> {
@@ -367,24 +366,13 @@ public class IcebergScanNode extends ScanNode {
 
         msg.hdfs_scan_node.setTable_name(srIcebergTable.getRemoteTableName());
 
-        // Try to get tabular signed temporary credential
-        CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
-                buildCloudConfigurationForTabular(srIcebergTable.getNativeTable().io().properties());
-        if (tabularTempCloudConfiguration.getCloudType() == CloudType.AWS) {
-            // If we build CloudConfiguration succeed, means we can use tabular signed temp credentials
-            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
-            tabularTempCloudConfiguration.toThrift(tCloudConfiguration);
-            msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
-        } else if (cloudConfiguration != null) {
+        if (cloudConfiguration != null) {
             TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
             cloudConfiguration.toThrift(tCloudConfiguration);
             msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
         }
-    }
-
-    @Override
-    public boolean canUsePipeLine() {
-        return true;
+        msg.hdfs_scan_node.setCan_use_any_column(canUseAnyColumn);
+        msg.hdfs_scan_node.setCan_use_min_max_count_opt(canUseMinMaxCountOpt);
     }
 
     @Override

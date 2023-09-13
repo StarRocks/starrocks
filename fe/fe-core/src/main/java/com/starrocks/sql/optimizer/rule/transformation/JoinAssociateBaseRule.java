@@ -36,12 +36,17 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.validate.InputDependenciesChecker;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 
 public abstract class JoinAssociateBaseRule extends TransformationRule {
+
+    private static final Logger LOGGER = LogManager.getLogger(JoinAssociateBaseRule.class);
 
     protected static final List<int[]> ASSOCIATE_MODE = ImmutableList
             .of(new int[] {0, 0}, new int[] {0, 1}, new int[] {1, -1});
@@ -55,11 +60,15 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
 
     protected final int[] newBotJoinRightChildLoc;
 
-    protected JoinAssociateBaseRule(RuleType type, Pattern pattern, List<int[]> mode) {
+    // indicate whether the botJoin is inner/cross join.
+    protected final boolean isInnerMode;
+
+    protected JoinAssociateBaseRule(RuleType type, Pattern pattern, List<int[]> mode, boolean isInnerMode) {
         super(type, pattern);
         this.newTopJoinChildLoc = mode.get(0);
         this.newBotJoinLeftChildLoc = mode.get(1);
         this.newBotJoinRightChildLoc = mode.get(2);
+        this.isInnerMode = isInnerMode;
     }
 
     public abstract ScalarOperator rewriteNewTopOnCondition(JoinOperator topJoinType, ProjectionSplitter splitter,
@@ -69,6 +78,8 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
 
     public abstract OptExpression createNewTopJoinExpr(LogicalJoinOperator newTopJoin, OptExpression newTopJoinChild,
                                                        OptExpression newBotJoinExpr);
+
+    public abstract int createTransformMask(boolean isTop);
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
@@ -151,13 +162,12 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         }
 
         LogicalJoinOperator newBotJoin = newBottomJoinBuilder.setJoinType(newBotJoinType)
-                .setRowOutputInfo(newBotJoinRowInfo)
                 .setPredicate(newBotPredicate)
                 .setOnPredicate(newBotOnCondition)
                 .setProjection(newBotJoinProjection)
+                .setTransformMask(createTransformMask(false))
                 .build();
         OptExpression newBotJoinExpr = OptExpression.create(newBotJoin, newBotJoinLeftChild, newBotJoinRightChild);
-
         Projection newTopJoinProjection = null;
 
         if (needProject(input.getRowOutputInfo(), newTopJoinChild, newBotJoinExpr)) {
@@ -166,14 +176,19 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
 
         LogicalJoinOperator newTopJoin = newTopJoinBuilder.withOperator(topJoin)
                 .setJoinType(newTopJoinType)
-                .setRowOutputInfo(input.getRowOutputInfo())
                 .setProjection(newTopJoinProjection)
                 .setOnPredicate(newTopOnCondition)
                 .setPredicate(newTopPredicate)
+                .setTransformMask(topJoin.getTransformMask() | createTransformMask(true))
                 .build();
 
         OptExpression newTopJoinExpr = createNewTopJoinExpr(newTopJoin, newTopJoinChild, newBotJoinExpr);
-
+        try {
+            InputDependenciesChecker.getInstance().validate(newTopJoinExpr, context.getTaskContext());
+        } catch (Exception e) {
+            LOGGER.debug("The transformation result is invalid.", e);
+            return Lists.newArrayList();
+        }
         return Lists.newArrayList(newTopJoinExpr);
     }
 

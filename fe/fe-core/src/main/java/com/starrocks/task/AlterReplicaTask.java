@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -53,6 +54,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAlterMaterializedViewParam;
 import com.starrocks.thrift.TAlterTabletMaterializedColumnReq;
 import com.starrocks.thrift.TAlterTabletReqV2;
+import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TTabletType;
@@ -61,6 +63,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -72,6 +76,7 @@ import java.util.Map;
  * The new replica can be a rollup replica, or a shadow replica of schema change.
  */
 public class AlterReplicaTask extends AgentTask implements Runnable {
+
     private static final Logger LOG = LogManager.getLogger(AlterReplicaTask.class);
 
     private final long baseTabletId;
@@ -84,37 +89,39 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     private final TTabletType tabletType;
     private final long txnId;
     private final Map<String, Expr> defineExprs;
-    private final TAlterTabletMaterializedColumnReq materializedColumnReq;
+    private final TAlterTabletMaterializedColumnReq generatedColumnReq;
+    private List<Column> baseSchemaColumns;
 
     public static AlterReplicaTask alterLocalTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
                                                     long rollupTabletId, long baseTabletId, long newReplicaId, int newSchemaHash,
                                                     int baseSchemaHash, long version, long jobId,
-                                                    TAlterTabletMaterializedColumnReq materializedColumnReq) {
+                                                    TAlterTabletMaterializedColumnReq generatedColumnReq,
+                                                    List<Column> baseSchemaColumns) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
-                null, TTabletType.TABLET_TYPE_DISK, 0, materializedColumnReq);
+                null, TTabletType.TABLET_TYPE_DISK, 0, generatedColumnReq, baseSchemaColumns);
     }
 
     public static AlterReplicaTask alterLakeTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
-                                                   long rollupTabletId, long baseTabletId, long version, long jobId, long txnId) {
+            long rollupTabletId, long baseTabletId, long version, long jobId, long txnId) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, -1, -1, -1, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
-                null, TTabletType.TABLET_TYPE_LAKE, txnId, null);
+                null, TTabletType.TABLET_TYPE_LAKE, txnId, null, Collections.emptyList());
     }
 
     public static AlterReplicaTask rollupLocalTablet(long backendId, long dbId, long tableId, long partitionId,
-                                                     long rollupIndexId, long rollupTabletId, long baseTabletId,
-                                                     long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
-                                                     long jobId, Map<String, Expr> defineExprs) {
+            long rollupIndexId, long rollupTabletId, long baseTabletId,
+            long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
+            long jobId, Map<String, Expr> defineExprs) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.ROLLUP,
-                defineExprs, TTabletType.TABLET_TYPE_DISK, 0, null);
+                defineExprs, TTabletType.TABLET_TYPE_DISK, 0, null, Collections.emptyList());
     }
 
     private AlterReplicaTask(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId, long rollupTabletId,
                              long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
                              long jobId, AlterJobV2.JobType jobType, Map<String, Expr> defineExprs, TTabletType tabletType,
-                             long txnId, TAlterTabletMaterializedColumnReq materializedColumnReq) {
+                             long txnId, TAlterTabletMaterializedColumnReq generatedColumnReq, List<Column> baseSchemaColumns) {
         super(null, backendId, TTaskType.ALTER, dbId, tableId, partitionId, rollupIndexId, rollupTabletId);
 
         this.baseTabletId = baseTabletId;
@@ -132,7 +139,8 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         this.tabletType = tabletType;
         this.txnId = txnId;
 
-        this.materializedColumnReq = materializedColumnReq;
+        this.generatedColumnReq = generatedColumnReq;
+        this.baseSchemaColumns = baseSchemaColumns;
     }
 
     public long getBaseTabletId() {
@@ -176,15 +184,15 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 req.addToMaterialized_view_params(mvParam);
             }
         }
-        req.setMaterialized_column_req(materializedColumnReq);
+        req.setMaterialized_column_req(generatedColumnReq);
 
-        // TODO: merge `materializedColumnReq`'s query options into this later.
+        // TODO: merge `generatedColumnReq`'s query options into this later.
         if (defineExprs != null && defineExprs.size() > 0) {
             // we need this thing, otherwise some expr evalution will fail in BE
             TQueryGlobals queryGlobals = new TQueryGlobals();
             SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
             queryGlobals.setNow_string(dateFormat.format(new Date()));
-            queryGlobals.setTimestamp_ms(new Date().getTime());
+            queryGlobals.setTimestamp_ms(System.currentTimeMillis());
             queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
             TQueryOptions queryOptions = new TQueryOptions();
             req.setQuery_globals(queryGlobals);
@@ -194,6 +202,14 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         req.setTablet_type(tabletType);
         req.setTxn_id(txnId);
         req.setJob_id(jobId);
+
+        if (baseSchemaColumns != null) {
+            List<TColumn> columns = new ArrayList<TColumn>();
+            for (Column column : baseSchemaColumns) {
+                columns.add(column.toThrift());
+            }
+            req.setColumns(columns);
+        }
         return req;
     }
 
@@ -215,7 +231,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
      *      So the replica's version should be larger than X. So we don't need to modify the replica version
      *      because its already looks like normal.
      * Case 3:
-     *      There are new load jobs after alter task, and their version and LFV is smaller or equal to X. 
+     *      There are new load jobs after alter task, and their version and LFV is smaller or equal to X.
      *      And because alter request report success, it means that we can increase replica's version to X.
      */
     public void handleFinishAlterTask() throws Exception {

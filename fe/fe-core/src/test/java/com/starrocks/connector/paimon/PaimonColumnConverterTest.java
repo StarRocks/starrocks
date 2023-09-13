@@ -20,7 +20,9 @@ import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
 import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.BigIntType;
+import org.apache.paimon.types.BinaryType;
 import org.apache.paimon.types.BooleanType;
+import org.apache.paimon.types.CharType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.DecimalType;
@@ -42,7 +44,22 @@ import java.util.List;
 public class PaimonColumnConverterTest {
 
     @Test
-    public void testConvertString() {
+    public void testConvertBinary() {
+        BinaryType paimonType = new BinaryType();
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assert.assertEquals(result, Type.VARBINARY);
+    }
+
+    @Test
+    public void testConvertChar() {
+        CharType paimonType = new CharType(10);
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Type srType = ScalarType.createCharType(10);
+        Assert.assertEquals(result, srType);
+    }
+
+    @Test
+    public void testConvertVarchar() {
         VarCharType paimonType = new VarCharType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
         Type srType = ScalarType.createDefaultExternalTableString();
@@ -57,10 +74,48 @@ public class PaimonColumnConverterTest {
     }
 
     @Test
+    public void testConvertDecimal() {
+        int precision = 9;
+        int scale = 5;
+        DecimalType paimonType = new DecimalType(precision, scale);
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Type srType = ScalarType.createUnifiedDecimalType(precision, scale);
+        Assert.assertEquals(result, srType);
+    }
+
+    @Test
+    public void testConvertTinyInt() {
+        TinyIntType paimonType = new TinyIntType();
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assert.assertEquals(result, Type.TINYINT);
+    }
+
+    @Test
+    public void testConvertSmallint() {
+        SmallIntType paimonType = new SmallIntType();
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assert.assertEquals(result, Type.SMALLINT);
+    }
+
+    @Test
     public void testConvertInt() {
         IntType paimonType = new IntType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
         Assert.assertEquals(result, Type.INT);
+    }
+
+    @Test
+    public void testConvertBigint() {
+        BigIntType paimonType = new BigIntType();
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assert.assertEquals(result, Type.BIGINT);
+    }
+
+    @Test
+    public void testConvertFlout() {
+        FloatType paimonType = new FloatType();
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assert.assertEquals(result, Type.FLOAT);
     }
 
     @Test
@@ -82,16 +137,6 @@ public class PaimonColumnConverterTest {
         TimestampType paimonType = new TimestampType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
         Assert.assertEquals(result, Type.DATETIME);
-    }
-
-    @Test
-    public void testConvertDecimal() {
-        int precision = 9;
-        int scale = 5;
-        DecimalType paimonType = new DecimalType(precision, scale);
-        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Type srType = ScalarType.createUnifiedDecimalType(precision, scale);
-        Assert.assertEquals(result, srType);
     }
 
     @Test
@@ -117,7 +162,7 @@ public class PaimonColumnConverterTest {
     public void testConvertStruct() {
         List<DataField> fields =
                 Arrays.asList(
-                        new DataField(0, "f0", new TinyIntType()),
+                        new DataField(0, "f0", new BinaryType()),
                         new DataField(1, "f1", new BigIntType()),
                         new DataField(2, "f2", new FloatType()));
         RowType paimonType = new RowType(fields);
@@ -125,7 +170,7 @@ public class PaimonColumnConverterTest {
         Assert.assertTrue(result instanceof StructType);
         StructType srType = (StructType) result;
         Assert.assertEquals(3, srType.getFields().size());
-        Assert.assertEquals(Type.TINYINT, srType.getField("f0").getType());
+        Assert.assertEquals(Type.VARBINARY, srType.getField("f0").getType());
         Assert.assertEquals(Type.BIGINT, srType.getField("f1").getType());
         Assert.assertEquals(Type.FLOAT, srType.getField("f2").getType());
     }

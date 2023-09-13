@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -43,9 +44,9 @@ public class StatisticsCollectJobFactory {
     private StatisticsCollectJobFactory() {
     }
 
-    public static List<StatisticsCollectJob> buildStatisticsCollectJob(AnalyzeJob analyzeJob) {
+    public static List<StatisticsCollectJob> buildStatisticsCollectJob(NativeAnalyzeJob nativeAnalyzeJob) {
         List<StatisticsCollectJob> statsJobs = Lists.newArrayList();
-        if (StatsConstants.DEFAULT_ALL_ID == analyzeJob.getDbId()) {
+        if (StatsConstants.DEFAULT_ALL_ID == nativeAnalyzeJob.getDbId()) {
             // all database
             List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
 
@@ -56,27 +57,27 @@ public class StatisticsCollectJobFactory {
                 }
 
                 for (Table table : db.getTables()) {
-                    createJob(statsJobs, analyzeJob, db, table, null);
+                    createJob(statsJobs, nativeAnalyzeJob, db, table, null);
                 }
             }
-        } else if (StatsConstants.DEFAULT_ALL_ID == analyzeJob.getTableId()
-                && StatsConstants.DEFAULT_ALL_ID != analyzeJob.getDbId()) {
+        } else if (StatsConstants.DEFAULT_ALL_ID == nativeAnalyzeJob.getTableId()
+                && StatsConstants.DEFAULT_ALL_ID != nativeAnalyzeJob.getDbId()) {
             // all table
-            Database db = GlobalStateMgr.getCurrentState().getDb(analyzeJob.getDbId());
+            Database db = GlobalStateMgr.getCurrentState().getDb(nativeAnalyzeJob.getDbId());
             if (null == db) {
                 return Collections.emptyList();
             }
 
             for (Table table : db.getTables()) {
-                createJob(statsJobs, analyzeJob, db, table, null);
+                createJob(statsJobs, nativeAnalyzeJob, db, table, null);
             }
         } else {
             // database or table is null mean database/table has been dropped
-            Database db = GlobalStateMgr.getCurrentState().getDb(analyzeJob.getDbId());
+            Database db = GlobalStateMgr.getCurrentState().getDb(nativeAnalyzeJob.getDbId());
             if (db == null) {
                 return Collections.emptyList();
             }
-            createJob(statsJobs, analyzeJob, db, db.getTable(analyzeJob.getTableId()), analyzeJob.getColumns());
+            createJob(statsJobs, nativeAnalyzeJob, db, db.getTable(nativeAnalyzeJob.getTableId()), nativeAnalyzeJob.getColumns());
         }
 
         return statsJobs;
@@ -114,11 +115,20 @@ public class StatisticsCollectJobFactory {
         if (columns == null || columns.isEmpty()) {
             columns = StatisticUtils.getCollectibleColumns(table);
         }
-        return new ExternalFullStatisticsCollectJob(catalogName, db, table, columns,
+
+        List<String> partitionNames;
+        if (!table.isUnPartitioned()) {
+            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    listPartitionNames(catalogName, db.getFullName(), table.getName());
+        } else {
+            partitionNames = ImmutableList.of(table.getName());
+        }
+
+        return new ExternalFullStatisticsCollectJob(catalogName, db, table, partitionNames, columns,
                 analyzeType, scheduleType, properties);
     }
 
-    private static void createJob(List<StatisticsCollectJob> allTableJobMap, AnalyzeJob job,
+    private static void createJob(List<StatisticsCollectJob> allTableJobMap, NativeAnalyzeJob job,
                                   Database db, Table table, List<String> columns) {
         if (table == null || !(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
             return;
@@ -220,7 +230,7 @@ public class StatisticsCollectJobFactory {
         }
     }
 
-    private static void createSampleStatsJob(List<StatisticsCollectJob> allTableJobMap, AnalyzeJob job, Database db,
+    private static void createSampleStatsJob(List<StatisticsCollectJob> allTableJobMap, NativeAnalyzeJob job, Database db,
                                              Table table, List<String> columns) {
         StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, null, columns,
                 StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(), job.getProperties());
@@ -228,7 +238,7 @@ public class StatisticsCollectJobFactory {
     }
 
     private static void createFullStatsJob(List<StatisticsCollectJob> allTableJobMap,
-                                           AnalyzeJob job, LocalDateTime statsLastUpdateTime,
+                                           NativeAnalyzeJob job, LocalDateTime statsLastUpdateTime,
                                            Database db, Table table, List<String> columns) {
         StatsConstants.AnalyzeType analyzeType;
         List<Partition> partitionList = new ArrayList<>();

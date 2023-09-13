@@ -1,7 +1,7 @@
 -- name: testExternalParquetDictNullPredicate
 
-shell: ossutil64 mkdir oss://${oss_bucket}/test_external_file/dict_with_null_value >/dev/null || echo "exit 0" >/dev/null
-shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/dict_with_null_value.parquet oss://${oss_bucket}/test_external_file/dict_with_null_value/dict_with_null_value.parquet | grep -Pv "(average|elapsed)"
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/dict_with_null_value.parquet oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/dict_with_null_value.parquet | grep -Pv "(average|elapsed)"
 
 -- MySQL [tpch_100g_zhangyan_parquet_lz4]> select c_mktsegment from customer_with_nulls3;
 -- +--------------+
@@ -53,7 +53,7 @@ CREATE EXTERNAL TABLE tpch_customer_null
 ENGINE=file
 PROPERTIES 
 (
-    "path" = "oss://${oss_bucket}/test_external_file/dict_with_null_value/",
+    "path" = "oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/",
     "format" = "parquet"
 );
 
@@ -68,3 +68,5 @@ select count(*) from tpch_customer_null where coalesce(c_mktsegment, 'BUILDING')
 select count(*) from tpch_customer_null where c_mktsegment is null;
 
 select count(*) from tpch_customer_null where c_mktsegment is not null;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

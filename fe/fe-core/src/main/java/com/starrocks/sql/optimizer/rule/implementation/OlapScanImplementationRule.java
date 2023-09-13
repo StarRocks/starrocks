@@ -34,19 +34,9 @@ public class OlapScanImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalOlapScanOperator scan = (LogicalOlapScanOperator) input.getOp();
-        PhysicalOlapScanOperator physicalOlapScan = new PhysicalOlapScanOperator(
-                scan.getTable(),
-                scan.getColRefToColumnMetaMap(),
-                scan.getDistributionSpec(),
-                scan.getLimit(),
-                scan.getPredicate(),
-                scan.getSelectedIndexId(),
-                scan.getSelectedPartitionId(),
-                scan.getSelectedTabletId(),
-                scan.getPrunedPartitionPredicates(),
-                scan.getProjection(),
-                scan.isUsePkIndex());
+        PhysicalOlapScanOperator physicalOlapScan = new PhysicalOlapScanOperator(scan);
 
+        physicalOlapScan.setSalt(scan.getSalt());
         physicalOlapScan.setColumnAccessPaths(scan.getColumnAccessPaths());
         OptExpression result = new OptExpression(physicalOlapScan);
         return Lists.newArrayList(result);

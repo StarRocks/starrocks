@@ -20,11 +20,17 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
@@ -52,7 +58,9 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
         @Override
         public Void visit(OptExpression optExpression, Void context) {
             Operator operator = optExpression.getOp();
-            if (optExpression.arity() == 1) {
+            if (optExpression.arity() == 0) {
+                checkOptWithoutChild(optExpression);
+            } else if (optExpression.arity() == 1) {
                 checkOptExprWithOneChild(optExpression);
             } else if (operator instanceof LogicalJoinOperator || operator instanceof PhysicalJoinOperator) {
                 checkJoinOpt(optExpression);
@@ -66,8 +74,34 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
             return context;
         }
 
+        private void checkOptWithoutChild(OptExpression optExpression) {
+            RowOutputInfo rowOutputInfo = optExpression.getRowOutputInfo();
+            Operator operator = optExpression.getOp();
+            if (operator instanceof LogicalScanOperator || operator instanceof PhysicalScanOperator
+                    || operator instanceof LogicalValuesOperator || operator instanceof PhysicalValuesOperator) {
+                ColumnRefSet inputCols = ColumnRefSet.createByIds(rowOutputInfo.getOriginalColOutputInfo().keySet());
+                ColumnRefSet usedCols = new ColumnRefSet();
+                for (ColumnOutputInfo col : rowOutputInfo.getColumnOutputInfo()) {
+                    usedCols.union(col.getUsedColumns());
+                }
+                for (ColumnOutputInfo col : rowOutputInfo.getCommonColInfo()) {
+                    usedCols.union(col.getUsedColumns());
+                }
+
+                for (ColumnOutputInfo col : rowOutputInfo.getCommonColInfo()) {
+                    usedCols.except(col.getColumnRef().getUsedColumns());
+                }
+                checkInputCols(inputCols, usedCols, optExpression);
+            }
+        }
+
         private void checkOptExprWithOneChild(OptExpression optExpression) {
             visit(optExpression.inputAt(0), null);
+            // LogicalCteConsumer's input col actually is from LogicalCteProducer not from its input
+            // So we skip check it
+            if (optExpression.getOp() instanceof LogicalCTEConsumeOperator) {
+                return;
+            }
             ColumnRefSet inputCols = optExpression.inputAt(0).getRowOutputInfo().getOutputColumnRefSet();
             ColumnRefSet usedCols = optExpression.getRowOutputInfo().getUsedColumnRefSet();
             checkInputCols(inputCols, usedCols, optExpression);
@@ -82,6 +116,23 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
                 inputCols.union(input.getRowOutputInfo().getOutputColumnRefSet());
             }
             ColumnRefSet usedCols = optExpression.getRowOutputInfo().getUsedColumnRefSet();
+            if (optExpression.getOp() instanceof LogicalJoinOperator) {
+                LogicalJoinOperator joinOperator = optExpression.getOp().cast();
+                if (joinOperator.getOnPredicate() != null) {
+                    usedCols.union(joinOperator.getOnPredicate().getUsedColumns());
+                }
+                if (joinOperator.getPredicate() != null) {
+                    usedCols.union(joinOperator.getPredicate().getUsedColumns());
+                }
+            } else {
+                PhysicalJoinOperator joinOperator = optExpression.getOp().cast();
+                if (joinOperator.getOnPredicate() != null) {
+                    usedCols.union(joinOperator.getOnPredicate().getUsedColumns());
+                }
+                if (joinOperator.getPredicate() != null) {
+                    usedCols.union(joinOperator.getPredicate().getUsedColumns());
+                }
+            }
             checkInputCols(inputCols, usedCols, optExpression);
         }
 
@@ -118,7 +169,7 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
             missedCols.except(inputCols);
             if (!missedCols.isEmpty()) {
                 String message = String.format("Invalid plan:%s%s%s The required cols %s cannot obtain from input cols %s.",
-                        System.lineSeparator(), optExpr.explain(), PREFIX, missedCols, inputCols);
+                        System.lineSeparator(), optExpr.debugString(), PREFIX, missedCols, inputCols);
                 throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
             }
         }
@@ -127,7 +178,7 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
             if (!outputCol.getType().isFullyCompatible(inputCol.getType())) {
                 String message = String.format("Invalid plan:%s%s%s Type of output col %s is not fully compatible with " +
                                 "type of input col %s.",
-                        System.lineSeparator(), optExpression.explain(), PREFIX, outputCol, inputCol);
+                        System.lineSeparator(), optExpression.debugString(), PREFIX, outputCol, inputCol);
                 throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
             }
         }
@@ -135,7 +186,7 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
         private void checkChildNumberOfSet(int inputSize, int requiredSize, OptExpression optExpression) {
             if (inputSize != requiredSize) {
                 String message = String.format("Invalid plan:%s%s%s. The required number of children is %d but found %d.",
-                        System.lineSeparator(), optExpression.explain(), PREFIX, requiredSize, inputSize);
+                        System.lineSeparator(), optExpression.debugString(), PREFIX, requiredSize, inputSize);
                 throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
             }
         }

@@ -17,6 +17,7 @@
 #include <climits>
 
 #include "exec/schema_scanner/schema_helper.h"
+#include "gutil/strings/substitute.h"
 #include "http/http_client.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
@@ -75,7 +76,7 @@ Status SchemaLoadTrackingLogsScanner::fill_chunk(ChunkPtr* chunk) {
         auto& info = _result.trackingLoads[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
             if (slot_id < 1 || slot_id > 5) {
-                return Status::InternalError(fmt::format("invalid slot id:{}}", slot_id));
+                return Status::InternalError(strings::Substitute("invalid slot id: $0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
             switch (slot_id) {
@@ -107,7 +108,8 @@ Status SchemaLoadTrackingLogsScanner::fill_chunk(ChunkPtr* chunk) {
                                   [&ss, last = _tracking_msg_vec.end() - 1](const auto& s) {
                                       ss << s << (s == *last ? "" : "\n");
                                   });
-                    Slice msg = Slice(ss.str());
+                    std::string tmp_str = ss.str();
+                    Slice msg = Slice(tmp_str);
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&msg);
                 } else {
                     down_cast<NullableColumn*>(column.get())->append_nulls(1);

@@ -22,7 +22,6 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
-import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import org.apache.commons.collections4.CollectionUtils;
@@ -100,12 +99,6 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
                 new PhysicalPropertySet(new DistributionProperty(rightDistribution));
 
         return Lists.newArrayList(leftRequiredPropertySet, rightRequiredPropertySet);
-    }
-
-    protected PhysicalPropertySet createLimitGatherProperty(long limit) {
-        DistributionSpec distributionSpec = DistributionSpec.createGatherDistributionSpec(limit);
-        DistributionProperty distributionProperty = new DistributionProperty(distributionSpec);
-        return new PhysicalPropertySet(distributionProperty, SortProperty.EMPTY);
     }
 
     protected PhysicalPropertySet createPropertySetByDistribution(DistributionSpec distributionSpec) {

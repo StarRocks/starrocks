@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/bthreads/shared_mutex.h"
-
 #include <bthread/bthread.h>
 #include <gtest/gtest.h>
 
 #include <shared_mutex>
+
+#include "util/bthreads/bthread_shared_mutex.h"
 
 namespace starrocks {
 

@@ -16,12 +16,14 @@ package com.starrocks.connector.parser.trino;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.MapExpr;
 
 import java.util.Collections;
@@ -54,6 +56,27 @@ public class ComplexFunctionCallTransformer {
             }
             Expr rightChild = new StringLiteral("$.[" + ((IntLiteral) args[1]).getValue() + "]");
             return new FunctionCallExpr("json_query", ImmutableList.of(leftChild, rightChild));
+        } else if (functionName.equalsIgnoreCase("md5")) {
+            Expr child = args[0];
+            return new FunctionCallExpr("md5", ImmutableList.of(new FunctionCallExpr("from_binary",
+                    ImmutableList.of(child, new StringLiteral("utf8")))));
+        } else if (functionName.equalsIgnoreCase("sha256")) {
+            Expr child = args[0];
+            return new FunctionCallExpr("sha2", ImmutableList.of(new FunctionCallExpr("from_binary",
+                    ImmutableList.of(child, new StringLiteral("utf8"))), new IntLiteral(256)));
+        } else if (functionName.equalsIgnoreCase("last_day_of_month")) {
+            Expr child = args[0];
+            return new FunctionCallExpr("last_day", ImmutableList.of(child, new StringLiteral("month")));
+        } else if (functionName.equalsIgnoreCase("date_diff")) {
+            if (args.length != 3) {
+                throw new SemanticException("date_diff function must have 3 arguments");
+            }
+            return new FunctionCallExpr("date_diff", ImmutableList.of(args[0], args[2], args[1]));
+        } else if (functionName.equalsIgnoreCase("element_at")) {
+            if (args.length != 2) {
+                throw new SemanticException("element_at function must have 2 arguments");
+            }
+            return new CollectionElementExpr(args[0], args[1]);
         }
         return null;
     }

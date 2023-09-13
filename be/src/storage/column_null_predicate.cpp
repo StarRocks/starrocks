@@ -68,10 +68,10 @@ public:
         return min.is_null();
     }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         if (iter->has_null_bitmap()) {
-            range->add(Range(iter->bitmap_nums() - 1, iter->bitmap_nums()));
+            range->add(Range<>(iter->bitmap_nums() - 1, iter->bitmap_nums()));
         }
         return Status::OK();
     }
@@ -139,7 +139,7 @@ public:
         return !max.is_null();
     }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return Status::Cancelled("not null predicate not support bitmap index");
     }
 

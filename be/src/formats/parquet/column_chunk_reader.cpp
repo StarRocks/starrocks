@@ -20,7 +20,6 @@
 #include "exec/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/encoding.h"
-#include "formats/parquet/page_reader.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "gutil/strings/substitute.h"
@@ -50,7 +49,7 @@ Status ColumnChunkReader::init(int chunk_size) {
     _page_reader = std::make_unique<PageReader>(_opts.file->stream().get(), start_offset, size, num_values);
 
     // seek to the first page
-    _page_reader->seek_to_offset(start_offset);
+    RETURN_IF_ERROR(_page_reader->seek_to_offset(start_offset));
 
     auto compress_type = convert_compression_codec(metadata().codec);
     RETURN_IF_ERROR(get_block_compression_codec(compress_type, &_compress_codec));
@@ -81,15 +80,20 @@ Status ColumnChunkReader::skip_page() {
     if (_page_parse_state != PAGE_HEADER_PARSED) {
         return Status::InternalError("Page header has not been parsed before skiping page data");
     }
-    const auto& header = *_page_reader->current_header();
-    uint32_t compressed_size = header.compressed_page_size;
-    uint32_t uncompressed_size = header.uncompressed_page_size;
-    size_t size = _compress_codec != nullptr ? compressed_size : uncompressed_size;
-    RETURN_IF_ERROR(_page_reader->skip_bytes(size));
-    _opts.stats->skip_read_rows += _num_values;
+    uint64_t next_header_pos = _page_reader->get_next_header_pos();
+    RETURN_IF_ERROR(_page_reader->seek_to_offset(next_header_pos));
+    _opts.stats->page_skip += 1;
 
     _page_parse_state = PAGE_DATA_PARSED;
     return Status::OK();
+}
+
+Status ColumnChunkReader::next_page() {
+    if (_page_parse_state != PAGE_DATA_PARSED) {
+        _opts.stats->page_skip += 1;
+    }
+    _page_parse_state = PAGE_DATA_PARSED;
+    return _page_reader->next_page();
 }
 
 Status ColumnChunkReader::_parse_page_header() {
@@ -105,6 +109,9 @@ Status ColumnChunkReader::_parse_page_header() {
     if (_page_reader->current_header()->type == tparquet::PageType::DATA_PAGE) {
         const auto& header = *_page_reader->current_header();
         _num_values = header.data_page_header.num_values;
+        _opts.stats->has_page_statistics |=
+                (header.data_page_header.__isset.statistics && (header.data_page_header.statistics.__isset.min_value ||
+                                                                header.data_page_header.statistics.__isset.min));
     }
 
     _page_parse_state = PAGE_HEADER_PARSED;
@@ -142,7 +149,7 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
     auto ret = _page_reader->peek(read_size);
     if (ret.ok() && ret.value().size() == read_size) {
         // peek dos not advance offset.
-        _page_reader->skip_bytes(read_size);
+        RETURN_IF_ERROR(_page_reader->skip_bytes(read_size));
         read_data = Slice(ret.value().data(), read_size);
     } else {
         read_buffer.reserve(read_size);
@@ -204,7 +211,7 @@ Status ColumnChunkReader::_parse_data_page() {
     }
 
     _cur_decoder->set_type_length(_type_length);
-    _cur_decoder->set_data(_data);
+    RETURN_IF_ERROR(_cur_decoder->set_data(_data));
 
     _page_parse_state = PAGE_DATA_PARSED;
     return Status::OK();
@@ -236,7 +243,7 @@ Status ColumnChunkReader::_parse_dict_page() {
     const EncodingInfo* code_info = nullptr;
     RETURN_IF_ERROR(EncodingInfo::get(metadata().type, dict_encoding, &code_info));
     RETURN_IF_ERROR(code_info->create_decoder(&dict_decoder));
-    dict_decoder->set_data(_data);
+    RETURN_IF_ERROR(dict_decoder->set_data(_data));
     dict_decoder->set_type_length(_type_length);
 
     // initialize decoder

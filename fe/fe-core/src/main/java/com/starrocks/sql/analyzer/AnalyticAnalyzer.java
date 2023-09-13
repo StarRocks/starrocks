@@ -19,8 +19,6 @@ import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.catalog.AggregateFunction;
@@ -28,8 +26,11 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.ExprUtil;
 
 import java.math.BigDecimal;
+
+import static com.starrocks.catalog.FunctionSet.STATISTIC_FUNCTIONS;
 
 public class AnalyticAnalyzer {
     public static void verifyAnalyticExpression(AnalyticExpr analyticExpr) {
@@ -84,7 +85,7 @@ public class AnalyticAnalyzer {
 
         if (isOffsetFn(analyticFunction.getFn()) && analyticFunction.getChildren().size() > 1) {
             Expr offset = analyticFunction.getChild(1);
-            if (!isPositiveConstantInteger(offset)) {
+            if (!ExprUtil.isPositiveConstantInteger(offset)) {
                 throw new SemanticException(
                         "The offset parameter of LEAD/LAG must be a constant positive integer: " +
                                 analyticFunction.toSql(), analyticFunction.getPos());
@@ -122,39 +123,28 @@ public class AnalyticAnalyzer {
 
         if (isNtileFn(analyticFunction.getFn())) {
             Expr numBuckets = analyticFunction.getChild(0);
-            if (!isPositiveConstantInteger(numBuckets)) {
+            if (!ExprUtil.isPositiveConstantInteger(numBuckets)) {
                 throw new SemanticException(
                         "The num_buckets parameter of NTILE must be a constant positive integer: " +
                                 analyticFunction.toSql(), numBuckets.getPos());
             }
         }
 
+        if (isStatisticFn(analyticFunction.getFn()) && (!analyticExpr.getOrderByElements().isEmpty())) {
+            throw new SemanticException("order by not allowed with '" + analyticFunction.toSql() + "'",
+                    analyticExpr.getPos());
+        }
+
         if (analyticExpr.getWindow() != null) {
-            if ((isRankingFn(analyticFunction.getFn()) || isCumeFn(analyticFunction.getFn()) || 
-                    isOffsetFn(analyticFunction.getFn()) || isHllAggFn(analyticFunction.getFn()))) {
+            if ((isRankingFn(analyticFunction.getFn()) || isCumeFn(analyticFunction.getFn()) ||
+                    isOffsetFn(analyticFunction.getFn()) || isHllAggFn(analyticFunction.getFn())) ||
+                    isStatisticFn(analyticFunction.getFn())) {
                 throw new SemanticException("Windowing clause not allowed with '" + analyticFunction.toSql() + "'",
                         analyticExpr.getPos());
             }
 
             verifyWindowFrame(analyticExpr);
         }
-    }
-
-    private static boolean isPositiveConstantInteger(Expr expr) {
-        if (!expr.isConstant()) {
-            return false;
-        }
-
-        double value = 0;
-        if (expr instanceof IntLiteral) {
-            IntLiteral intl = (IntLiteral) expr;
-            value = intl.getDoubleValue();
-        } else if (expr instanceof LargeIntLiteral) {
-            LargeIntLiteral intl = (LargeIntLiteral) expr;
-            value = intl.getDoubleValue();
-        }
-
-        return value > 0;
     }
 
     private static void verifyWindowFrame(AnalyticExpr analyticExpr) {
@@ -272,7 +262,8 @@ public class AnalyticAnalyzer {
                     isPos = false;
                 }
             } catch (AnalysisException exc) {
-                throw new SemanticException("Couldn't evaluate PRECEDING/FOLLOWING expression: " + exc.getMessage(), e.getPos());
+                throw new SemanticException("Couldn't evaluate PRECEDING/FOLLOWING expression: " + exc.getMessage(),
+                        e.getPos());
             }
         }
 
@@ -366,6 +357,10 @@ public class AnalyticAnalyzer {
         }
 
         return fn.functionName().equalsIgnoreCase(AnalyticExpr.NTILE);
+    }
+
+    private static boolean isStatisticFn(Function fn) {
+        return STATISTIC_FUNCTIONS.contains(fn.functionName().toLowerCase());
     }
 
     private static boolean isHllAggFn(Function fn) {

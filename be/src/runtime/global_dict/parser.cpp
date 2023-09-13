@@ -84,7 +84,9 @@ public:
             }
         } else if (input->is_nullable()) {
             // is nullable
-            const auto* null_column = down_cast<NullableColumn*>(input.get());
+            auto* null_column = down_cast<NullableColumn*>(input.get());
+            // fill data to 0 if input value is null
+            null_column->fill_null_with_default();
             const auto* data_column = down_cast<LowCardDictColumn*>(null_column->data_column().get());
             // we could use data_column to avoid check null
             // because 0 in LowCardDictColumn means null

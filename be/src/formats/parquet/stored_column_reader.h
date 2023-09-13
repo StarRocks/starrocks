@@ -61,6 +61,8 @@ public:
         return do_read_records(num_rows, content_type, dst);
     }
 
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type, Column* dst);
+
     // This function can only be called after calling read_values. This function returns the
     // levels for last read_values.
     virtual void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) = 0;
@@ -72,10 +74,10 @@ public:
         return _reader->get_dict_values(dict_codes, nulls, column);
     }
 
-    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, const NullableColumn& nulls,
-                                  std::vector<int32_t>* dict_codes) {
-        return _reader->get_dict_codes(dict_values, nulls, dict_codes);
-    }
+    static size_t get_level_to_decode_batch_size(size_t row, size_t num_values_left_in_cur_page, size_t decoded,
+                                                 size_t parsed);
+
+    static size_t count_not_null(level_t* def_levels, size_t num_parsed_levels, level_t max_def_level);
 
 protected:
     virtual bool page_selected(size_t num_values);
@@ -84,18 +86,45 @@ protected:
 
     Status next_page(size_t records_to_read, ColumnContentType content_type, size_t* records_read, Column* dst);
 
+    virtual Status _next_page();
+    virtual bool _cur_page_selected(size_t row_readed, const Filter* filter, size_t to_read);
+
     void update_read_context(size_t records_read);
+
+    // for RequiredColumn, there is no need to get levels.
+    // for RepeatedColumn, there is no possible to get default levels.
+    // for OptionalColumn, we will override it.
+    virtual void append_default_levels(size_t row_nums) {}
 
     std::unique_ptr<ColumnChunkReader> _reader;
     size_t _num_values_left_in_cur_page = 0;
     size_t _num_values_skip_in_cur_page = 0;
     const ColumnReaderOptions& _opts;
+    bool _cur_page_loaded = false;
+    uint64_t _read_cursor = _opts.first_row_index;
 
 private:
     Status _next_selected_page(size_t records_to_read, ColumnContentType content_type, size_t* records_to_skip,
                                Column* dst);
 
     Status _lazy_load_page_rows(size_t batch_size, ColumnContentType content_type, Column* dst);
+
+    Status _skip(uint64_t row_to_skip);
+    Status _read(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type, Column* dst);
+
+    // input is target row, this function will convert row to values bases on _num_values_left_in_cur_page,
+    // only convert in the current page, the return is the num of values that will be used and
+    // the input target row pointer is changed to the result row that can be dealt in current page.
+    virtual StatusOr<size_t> _convert_row_to_value(size_t* row);
+    // to skip values bases no levels we need to collect_not_null_values when decoding levels,
+    // for required column, we don't need levels information,
+    // for optional column, we collect levels information lazily,
+    // for repeated column, we collect levels information after _convert_row_to_value which had decoded the levels.
+    virtual void _collect_not_null_values(size_t num_levels, bool lazy_flag) {}
+
+    virtual Status _lazy_skip_values(uint64_t begin) = 0;
+    virtual Status _read_values_on_levels(size_t num_values, starrocks::parquet::ColumnContentType content_type,
+                                          starrocks::Column* dst, bool append_default) = 0;
 };
 
 } // namespace starrocks::parquet

@@ -48,7 +48,7 @@ public class LocalWarehouse extends Warehouse {
     @Override
     public void getProcNodeData(BaseProcResult result) {
         result.addRow(Lists.newArrayList(String.valueOf(this.getId()),
-                this.getFullName(),
+                this.getName(),
                 this.getState().toString(),
                 String.valueOf(1L)));
     }

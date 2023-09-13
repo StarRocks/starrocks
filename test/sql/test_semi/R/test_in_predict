@@ -1,0 +1,862 @@
+-- name: test_in_predict
+drop table if exists sc2;
+-- result:
+-- !result
+CREATE TABLE `sc2` (
+  `v1` bigint(20) NULL COMMENT "",
+  `js` json NULL,
+  `array1` ARRAY<INT> NULL,
+  `array2` ARRAY<MAP<INT, INT>> NULL,
+  `array3` ARRAY<STRUCT<a INT, b INT>> NULL,
+  `map1` MAP<INT, INT> NULL,
+  `map2` MAP<INT, ARRAY<INT>> NULL,
+  `map3` MAP<INT, STRUCT<c INT, b INT>> NULL,
+  `st1` STRUCT<s1 int, s2 ARRAY<INT>, s3 MAP<INT, INT>, s4 Struct<e INT, f INT>>
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into sc2 values (0, null, null, null, null, null, null, null, null);
+-- result:
+-- !result
+insert into sc2 values (2, json_object("a", null), [1,3,2], [map{null:null}], [row(1, 2)], map{2:null}, map{2:[2,3,4], 1:[1,2,3]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,3], map{2:2, 1:1}, null));
+-- result:
+-- !result
+insert into sc2 values (3, json_object("a", 1,'b',2), [1,2,3], [],               [row(1, 2)], map{2:20, 1:null, 3:30}, map{2:[3,2,4], 1:[1,2,3]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,3], map{1:1, 2:2}, row(3, 2)));
+-- result:
+-- !result
+insert into sc2 values (4, json_object("a", 1,null,null), [1,2,3], [map{2:20, null:10}],       [row(1, 3)], map{}, map{2:[3,2,4], 1:[1,2,3]}, map{2:row(2,4), 1:row(1,null)}, row(1, null, map{1:1, 2:2}, row(1, 2)));
+-- result:
+-- !result
+insert into sc2 values (5, json_object("a", 1,'b',null), [1,2,3], [null],       [row(1, 2)], map{1:10, 2:20, null:40}, map{1:[1,2,3], 2:[2,3,4]}, map{}, row(1, [], map{1:1, 2:null}, row(null, 2)));
+-- result:
+-- !result
+insert into sc2 values (6, json_object("a", 1,'b',3), [1,3,2], [map{}],       [row(1, 2)], map{1:10, 2:20, 4:40}, map{1:[2,1,3], 2:[2,3,4]}, map{1:row(2,3), 2:row(2,3)}, row(1, [null], map{}, row(1, 2)));
+-- result:
+-- !result
+insert into sc2 values (7, json_object("a", 1, 'b',4), [2,1,3], [map{1:10, 3:30, 2:20}], [], map{}, map{1:[2,1,3], 2:[2,4,3]}, map{1:row(2,3), 2:row(2,4)}, row(1, [1,2,3], map{2:null}, row(1, 2)));
+-- result:
+-- !result
+insert into sc2 values (8, json_object("a", 1, 'c', null), [2,1,3], [map{1:10, 3:30, 2:20}], [null], map{2:20, 1:10, 3:30}, map{1:[1,2,3], null:[2,4,3]}, map{null:row(2,4)}, row(1, null, map{2:2, 3:3, 1:1}, row(1, 2)));
+-- result:
+-- !result
+insert into sc2 values (9, json_object("a", 1), [],      [map{1:10, 3:30, 2:20}], [row(1, 2),null], map{1:10, 2:20, 3:30}, map{1:[1,2,3], 2:[2,4,3]}, map{1:row(1,3), 2:row(2,4)}, row(1, [1,2,3], map{2:2, 3:3, 1:1}, null));
+-- result:
+-- !result
+insert into sc2 values (10, json_object("a"), [1,2,null], [map{2:20, 1:10, null:30}], [row(1, 2)], map{1:10, 4:40}, map{2:[2,null,4], 1:[1,2,null]}, map{null:null}, row(1, [2,1,null], map{2:2, 1:1}, row(null, 2)));
+-- result:
+-- !result
+insert into sc2 values (11, json_object("", 2), [2,1,null], [map{2:20, 1:10, null:30}], [row(1, null)], map{}, map{2:[2,null,4], 1:[1,2,null]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,null], null, row(null, 2)));
+-- result:
+-- !result
+insert into sc2 values (12, json_object(), [1,2],  [map{2:20, 1:10, null:30}], [row(1, 2)], map{2:20, 1:10, null:30}, map{2:[2,null,4], 1:[1,2,null]}, map{2:row(2,4), 1:row(1,2)}, row(1, [null], map{null:2, 1:1}, row(null, 2)));
+-- result:
+-- !result
+insert into sc2 values (13, null, [],     [map{2:20, 1:10}],       [row(1, 2)], map{2:20, 1:10, null:30}, map{2:[null,2,4], 1:[1,2,null]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,null], map{1:1, 2:2}, row(null, 2)));
+-- result:
+-- !result
+select js in (json_object(),json_object('a',1)) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+0
+0
+0
+0
+0
+0
+0
+1
+1
+-- !result
+select js not in (json_object(),json_object('a',1)) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+0
+0
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_object() in (js,json_object('a',1)) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+0
+0
+0
+0
+0
+0
+0
+0
+1
+-- !result
+select json_object() not in (js,json_object('a',1)) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+0
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select js in (null,json_object('a',1)) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+1
+-- !result
+select js not in (null) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select null in (js,json_object('a',1)) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select null not in (js, json_object('a',3)) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select js in (1,3,json_object('a',2)) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+0
+0
+0
+0
+0
+0
+0
+0
+0
+-- !result
+select js not in (2,3) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select js in (1,3,v1,json_object('a',11)) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+0
+0
+0
+0
+0
+0
+0
+0
+0
+-- !result
+select js not in (2,3,v1) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select js in (json_object("a", 1),json_object("ab", 12, 'bc',4),json_object("ab", 14),json_object("ac", 15, '6b',46)) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+0
+0
+0
+0
+0
+0
+0
+0
+1
+-- !result
+select js not in (json_object("a", 1),json_object("ab", 13, 'b',4) ) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+0
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select js not in (select js from sc2 where v1>3) from sc2;
+-- result:
+E: (1064, 'Getting analyzing error at line 1, column 7. Detail message: In predicate of JSON does not support subquery.')
+-- !result
+select js in (select js from sc2 where v1>3) from sc2;
+-- result:
+E: (1064, 'Getting analyzing error at line 1, column 7. Detail message: In predicate of JSON does not support subquery.')
+-- !result
+select array1 in ([],[1]) from sc2 order by v1;
+-- result:
+None
+0
+0
+0
+0
+0
+0
+0
+1
+0
+0
+0
+1
+-- !result
+select array1 not in ([],[1]) from sc2 order by v1;
+-- result:
+None
+1
+1
+1
+1
+1
+1
+1
+0
+1
+1
+1
+0
+-- !result
+select array1 in ([null],[]) from sc2 order by v1;
+-- result:
+None
+0
+0
+0
+0
+0
+0
+0
+1
+0
+0
+0
+1
+-- !result
+select array1 not in ([null],[3]) from sc2 order by v1;
+-- result:
+None
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select array1 in ([1,null,2],[]) from sc2 order by v1;
+-- result:
+None
+None
+0
+0
+0
+None
+0
+0
+1
+None
+0
+0
+1
+-- !result
+select array1 not in ([1,null,2],[]) from sc2 order by v1;
+-- result:
+None
+None
+1
+1
+1
+None
+1
+1
+0
+None
+1
+1
+0
+-- !result
+select [] in (array1), [] not in (array1), [null] in (array1), [null] not in (array1),[] in (array2), [] not in (array2), [null] in (array2), [null] not in (array2),[] in (array3), [] not in (array3), [null] in (array3), [null] not in (array3) from sc2 order by 1;
+-- result:
+None	None	None	None	None	None	None	None	None	None	None	None
+0	1	0	1	0	1	None	1	0	1	None	1
+0	1	0	1	1	0	0	1	0	1	None	1
+0	1	0	1	0	1	None	1	0	1	None	1
+0	1	0	1	0	1	None	1	0	1	None	1
+0	1	0	1	0	1	None	0	0	1	None	1
+0	1	0	1	0	1	None	1	0	1	None	1
+0	1	0	1	0	1	None	1	1	0	0	1
+0	1	0	1	0	1	None	1	0	1	None	0
+0	1	0	1	0	1	None	1	0	1	None	1
+0	1	0	1	0	1	None	1	0	1	None	1
+1	0	0	1	0	1	None	1	0	1	0	1
+1	0	0	1	0	1	None	1	0	1	None	1
+-- !result
+select array2 in ([],[map{}]),  array2 in ([null],[map{1:3}]), array2 in ([map{1:10, 3:30, 2:20}], [map{}])  from sc2 order by 1;
+-- result:
+None	None	None
+None	None	None
+0	None	0
+0	None	1
+0	None	None
+0	None	0
+0	None	0
+0	None	1
+0	None	1
+0	None	None
+0	None	None
+1	0	0
+1	None	1
+-- !result
+select array2 not in ([],[map{}]),  array2 not in ([null],[map{1:3}]), array2 not in ([map{1:10, 3:30, 2:20}], [map{3:3}])  from sc2 order by 1;
+-- result:
+None	None	None
+None	None	None
+0	1	1
+0	None	1
+1	None	None
+1	None	1
+1	None	0
+1	None	None
+1	None	1
+1	None	0
+1	None	0
+1	None	None
+1	None	None
+-- !result
+select array3 in ([]), array3 not in ([]), array3 in ([null]), array3 not in ([null]), array3 in ([row(1, 2)], [null]), array3 not in ([row(1, 2)], [null]) from sc2 order by 1;
+-- result:
+None	None	None	None	None	None
+0	1	None	1	1	0
+0	1	None	1	1	0
+0	1	None	1	None	1
+0	1	0	1	0	1
+0	1	None	1	1	0
+0	1	None	1	1	0
+0	1	None	1	1	0
+0	1	None	1	1	0
+0	1	None	0	None	0
+0	1	None	1	None	1
+0	1	None	1	1	0
+1	0	0	1	0	1
+-- !result
+select array1 in (null), array1 not in (null), array2 in (null), array2 not in (null), array3 in (null), array3 not in (null) from sc2 order by 1;
+-- result:
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+-- !result
+select null in (array1), null not in (array1), null in (array2), null not in (array2), null in (array3), null not in (array3) from sc2 order by 1;
+-- result:
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+-- !result
+select array1 in () from sc2 order by 1;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 18. Detail message: No viable statement for input 'in ()'.")
+-- !result
+select array1 in (['a']) from sc2 order by 1;
+-- result:
+None
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+-- !result
+select array1 not in () from sc2 order by 1;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 22. Detail message: No viable statement for input 'not in ()'.")
+-- !result
+select array1 not in (['2']) from sc2 order by 1;
+-- result:
+None
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select array2 in (map{}) from sc2 order by 1;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 14 to line 1, column 23. Detail message: The input types (array<map<int(11),int(11)>>,map<NULL_TYPE,NULL_TYPE>) of in predict are not compatible.')
+-- !result
+select array2 not in (row(2,3)) from sc2 order by 1;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 14 to line 1, column 30. Detail message: The input types (array<map<int(11),int(11)>>,struct<col1 tinyint(4), col2 tinyint(4)>) of in predict are not compatible.')
+-- !result
+select array3 in (33,1) from sc2 order by 1;
+-- result:
+E: (1064, 'Getting analyzing error at line 1, column 7. Detail message: in predicate type array<struct<a int(11), b int(11)>> with type double is invalid.')
+-- !result
+select array3 not in (2,3) from sc2 order by 1;
+-- result:
+E: (1064, 'Getting analyzing error at line 1, column 7. Detail message: in predicate type array<struct<a int(11), b int(11)>> with type double is invalid.')
+-- !result
+select map1 in (map{}), map1 not in (map{}), map2 in (map{}), map2 not in (map{}), map3 in (map{}), map3 not in (map{}) from sc2 order by 1;
+-- result:
+None	None	None	None	None	None
+0	1	0	1	0	1
+0	1	0	1	0	1
+0	1	0	1	0	1
+0	1	0	1	0	1
+0	1	0	1	0	1
+0	1	0	1	1	0
+0	1	0	1	0	1
+0	1	0	1	0	1
+0	1	0	1	0	1
+1	0	0	1	0	1
+1	0	0	1	0	1
+1	0	0	1	0	1
+-- !result
+select map1 in (null), map1 not in (null), map2 in (null), map2 not in (null), map3 in (null), map3 not in (null) from sc2 order by 1;
+-- result:
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+-- !result
+select null in (map1), null not in (map1), null in (map2), null not in (map2), null in (map3), null not in (map3) from sc2 order by 1;
+-- result:
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	None	None
+-- !result
+select map{} in (map1), map() not in (map1), map() in (map2), map() not in (map2), map() in (map3), map() not in (map3) from sc2 order by 1;
+-- result:
+None	None	None	None	None	None
+0	1	0	1	0	1
+0	1	0	1	0	1
+0	1	0	1	0	1
+0	1	0	1	0	1
+0	1	0	1	0	1
+0	1	0	1	1	0
+0	1	0	1	0	1
+0	1	0	1	0	1
+0	1	0	1	0	1
+1	0	0	1	0	1
+1	0	0	1	0	1
+1	0	0	1	0	1
+-- !result
+select map1 in (map{1:10, 2:20, 4:40}, map{}), map2 in (map{2:[2,3,4], 1:[1,2,3]}, map{2:[2,3,4], 1:[1,22,3]}), map3 not in (map{2:row(2,4), 1:row(1,2)},map{2:row(2,4), 1:row(1,22)}) from sc2 order by 1;
+-- result:
+None	None	None
+None	1	1
+0	0	0
+0	0	1
+0	None	1
+0	0	0
+0	1	0
+0	0	1
+0	None	0
+1	0	None
+1	0	1
+1	0	1
+1	None	0
+-- !result
+select map2 not in (map{2:[2,3,4], 1:[1,2,3]},null), map3 in (map{2:row(2,4), 1:row(1,2)}, null) from sc2 order by 1;
+-- result:
+None	1
+None	None
+None	None
+None	None
+None	None
+None	1
+None	1
+None	None
+None	None
+None	None
+None	1
+0	1
+0	None
+-- !result
+select map2 in (map{1:[1,2,null],2:[2,4,null]},map{2:[2,3,4], 1:[1,2,3]}) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+None
+None
+0
+0
+0
+0
+0
+1
+1
+-- !result
+select map2 not in (map{1:[1,2,null],2:[2,4,null]},map{2:[2,3,4], 1:[1,2,3]}) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+None
+None
+0
+0
+1
+1
+1
+1
+1
+-- !result
+select map1 in (map{'a':'b'}) from sc2 order by 1;
+-- result:
+None
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+-- !result
+select map1 not in (map{'a':3}) from sc2 order by 1;
+-- result:
+None
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select map2 in (map{'2':[3]}) from sc2 order by 1;
+-- result:
+None
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+-- !result
+select map2 not in (map{'a':map{}}) from sc2 order by 1;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 34. Detail message: The input types (map<int(11),array<int(11)>>,map<varchar,map<NULL_TYPE,NULL_TYPE>>) of in predict are not compatible.')
+-- !result
+select map3 in ([map{}]) from sc2 order by 1;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 23. Detail message: The input types (map<int(11),struct<c int(11), b int(11)>>,array<map<NULL_TYPE,NULL_TYPE>>) of in predict are not compatible.')
+-- !result
+select map3 not in (map{null:2}) from sc2 order by 1;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 31. Detail message: The input types (map<int(11),struct<c int(11), b int(11)>>,map<NULL_TYPE,tinyint(4)>) of in predict are not compatible.')
+-- !result
+select map1 in (2,3) from sc2 order by 1;
+-- result:
+E: (1064, 'Getting analyzing error at line 1, column 7. Detail message: in predicate type map<int(11),int(11)> with type double is invalid.')
+-- !result
+select map2 not in (3) from sc2 order by 1;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 21. Detail message: The input types (map<int(11),array<int(11)>>,tinyint(4)) of in predict are not compatible.')
+-- !result
+select st1 in (null), st1 not in (null) from sc2 order by 1;
+-- result:
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+-- !result
+select null in (st1), null not in (st1) from sc2 order by 1;
+-- result:
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+-- !result
+select st1 in (row(null, null)), st1 not in (row(null,null)) from sc2 order by 1;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 11 to line 1, column 30. Detail message: The input types (struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>>,struct<col1 boolean, col2 boolean>) of in predict are not compatible.')
+-- !result
+select row(null,null) in (st1), row(null,null) not in (st1) from sc2 order by 1;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 22 to line 1, column 29. Detail message: The input types (struct<col1 boolean, col2 boolean>,struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>>) of in predict are not compatible.')
+-- !result
+select st1 in (row(null)), st1 not in (row(null)) from sc2 order by 1;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 11 to line 1, column 24. Detail message: The input types (struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>>,struct<col1 boolean>) of in predict are not compatible.')
+-- !result
+select row(null) in (st1), row(null) not in (st1) from sc2 order by 1;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 17 to line 1, column 24. Detail message: The input types (struct<col1 boolean>,struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>>) of in predict are not compatible.')
+-- !result
+select st1 in (row(1, [2,1,3], map{1:1, 2:2}, row(3, 2)), row(12, [2,null,3], map{11:1, 2:2}, row(31, 2))) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+None
+0
+0
+0
+0
+0
+0
+0
+1
+-- !result
+select st1 not in (row(1, [2,1,3], map{1:1, 2:2}, row(3, 2)), row(12, [2,null,3], map{11:1, 2:2}, row(31, 2))) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+None
+0
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select st1 in (row(1, [2,1,null], map{1:1, 2:2}, row(1, 2)),row(1, [2,1,3], map{1:1, 2:2}, row(3, 2))) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+None
+None
+0
+0
+0
+0
+0
+0
+1
+-- !result
+select st1 not in (row(1, [2,1,3], map{1:1, 2:2}, row(1, 2)),row(1, [2,1,3], map{1:1, 2:2}, row(3, 2))) from sc2 order by 1;
+-- result:
+None
+None
+None
+None
+None
+None
+0
+1
+1
+1
+1
+1
+1
+-- !result
+select st1 in (map{}) from sc2 order by 1;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 11 to line 1, column 20. Detail message: The input types (struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>>,map<NULL_TYPE,NULL_TYPE>) of in predict are not compatible.')
+-- !result
+select st1 not in (map{}) from sc2 order by 1;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 11 to line 1, column 24. Detail message: The input types (struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>>,map<NULL_TYPE,NULL_TYPE>) of in predict are not compatible.')
+-- !result

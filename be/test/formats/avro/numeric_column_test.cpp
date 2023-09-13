@@ -41,6 +41,7 @@ struct AvroHelper {
     avro_schema_t schema = NULL;
     avro_value_iface_t* iface = NULL;
     avro_value_t avro_val;
+    std::string schema_text;
 };
 
 static void init_avro_value(std::string schema_path, AvroHelper& avro_helper) {

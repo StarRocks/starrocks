@@ -46,7 +46,7 @@ public:
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
@@ -129,8 +129,7 @@ private:
     // hash table doesn't have reserved data
     bool _ht_has_remain = false;
     // right table have not output data for right outer join/right semi join/right anti join/full outer join
-    bool _right_table_has_remain = false;
-    bool _build_eos = false;
+    bool _right_table_has_remain = true;
     bool _probe_eos = false; // probe table scan finished;
     size_t _runtime_join_filter_pushdown_limit = 1024000;
 

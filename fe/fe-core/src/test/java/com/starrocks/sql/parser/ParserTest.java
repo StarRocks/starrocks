@@ -319,7 +319,7 @@ class ParserTest {
         sqls.add("revoke export on DATABASE db1 from test");
         sqls.add("ALTER SYSTEM MODIFY BACKEND HOST '1' to '1'");
         sqls.add("SHOW COMPUTE NODES");
-        sqls.add("trace optimizer select 1");
+        sqls.add("trace times select 1");
         sqls.add("select anti from t1 left anti join t2 on true");
         sqls.add("select anti, semi from t1 left semi join t2 on true");
         sqls.add("select * from tbl1 MINUS select * from tbl2");
@@ -393,6 +393,8 @@ class ParserTest {
                 "PROPERTIES (\n" +
                 " \"replication_num\" = \"1\"\n" +
                 ");", "the most similar input is {<EOF>, ';'}"));
+        arguments.add(Arguments.of("create MATERIALIZED VIEW  as select * from (t1 join t2);",
+                "the most similar input is {a legal identifier}."));
         return arguments.stream();
     }
 

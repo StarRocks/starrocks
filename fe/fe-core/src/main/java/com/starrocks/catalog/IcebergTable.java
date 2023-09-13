@@ -154,6 +154,10 @@ public class IcebergTable extends Table {
         return indexes;
     }
 
+    public boolean isV2Format() {
+        return ((BaseTable) getNativeTable()).operations().current().formatVersion() > 1;
+    }
+
     public boolean isUnPartitioned() {
         return getPartitionColumns().size() == 0;
     }
@@ -277,7 +281,6 @@ public class IcebergTable extends Table {
         return Objects.equal(catalogName, otherTable.getCatalogName()) &&
                 Objects.equal(remoteDbName, otherTable.remoteDbName) &&
                 Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
-
     }
 
     public static Builder builder() {

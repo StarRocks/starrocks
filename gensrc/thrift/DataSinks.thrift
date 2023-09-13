@@ -52,14 +52,22 @@ enum TDataSinkType {
     MEMORY_SCRATCH_SINK,
     MULTI_CAST_DATA_STREAM_SINK,
     SCHEMA_TABLE_SINK,
-    ICEBERG_TABLE_SINK
+    ICEBERG_TABLE_SINK,
+    HIVE_TABLE_SINK,
+    TABLE_FUNCTION_TABLE_SINK
 }
 
 enum TResultSinkType {
     MYSQL_PROTOCAL,
     FILE,
     STATISTIC,
-    VARIABLE
+    VARIABLE,
+    HTTP_PROTOCAL
+}
+
+enum TResultSinkFormatType {
+    JSON,
+    OTHERS
 }
 
 struct TParquetOptions {
@@ -144,6 +152,8 @@ struct TMultiCastDataStreamSink {
 struct TResultSink {
     1: optional TResultSinkType type;
     2: optional TResultFileSinkOptions file_options;
+    3: optional TResultSinkFormatType format;
+    4: optional bool is_binary_row;
 }
 
 struct TMysqlTableSink {
@@ -203,6 +213,9 @@ struct TOlapTableSink {
     24: optional i32 auto_increment_slot_id
     25: optional Types.TPartialUpdateMode partial_update_mode
     26: optional string label
+    // enable colocated for sync mv 
+    27: optional bool enable_colocate_mv_index 
+    28: optional i64 automatic_bucket_size
 }
 
 struct TSchemaTableSink {
@@ -219,6 +232,21 @@ struct TIcebergTableSink {
     6: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
+struct THiveTableSink {
+    1: optional string staging_dir
+    2: optional string file_format
+    3: optional list<string> data_column_names
+    4: optional list<string> partition_column_names
+    5: optional Types.TCompressionType compression_type
+    6: optional bool is_static_partition_sink
+    7: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+}
+
+struct TTableFunctionTableSink {
+    1: optional Descriptors.TTableFunctionTable target_table
+    2: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+}
+
 struct TDataSink {
   1: required TDataSinkType type
   2: optional TDataStreamSink stream_sink
@@ -230,4 +258,6 @@ struct TDataSink {
   9: optional TMultiCastDataStreamSink multi_cast_stream_sink
   10: optional TSchemaTableSink schema_table_sink
   11: optional TIcebergTableSink iceberg_table_sink
+  12: optional THiveTableSink hive_table_sink
+  13: optional TTableFunctionTableSink table_function_table_sink
 }

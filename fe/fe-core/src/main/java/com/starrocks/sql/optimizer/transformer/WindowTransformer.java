@@ -37,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -120,7 +121,6 @@ public class WindowTransformer {
                     firstType = callExpr.getFn().getArgs()[0];
                 }
 
-
                 if (callExpr.getChildren().size() == 1) {
                     callExpr.addChild(new IntLiteral("1", Type.BIGINT));
                     callExpr.addChild(NullLiteral.create(firstType));
@@ -151,6 +151,11 @@ public class WindowTransformer {
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
+        } else if (AnalyticExpr.isApproxTopKFn(callExpr.getFn())) {
+            Preconditions.checkState(CollectionUtils.isEmpty(orderByElements),
+                    "Unexpected order by clause for approx_top_k()");
+            Preconditions.checkState(windowFrame == null, "Unexpected window set for approx_top_k()");
+            windowFrame = AnalyticWindow.DEFAULT_UNBOUNDED_WINDOW;
         }
 
         // Reverse the ordering and window for windows ending with UNBOUNDED FOLLOWING,
@@ -187,6 +192,12 @@ public class WindowTransformer {
         // Set the default window.
         if (!orderByElements.isEmpty() && windowFrame == null) {
             windowFrame = AnalyticWindow.DEFAULT_WINDOW;
+        }
+
+        // Check if range window has order by clause
+        if (windowFrame != null
+                && AnalyticWindow.Type.RANGE.equals(windowFrame.getType())) {
+            Preconditions.checkState(!orderByElements.isEmpty(), "Range window frame requires order by columns");
         }
 
         // Change first_value/last_value RANGE windows to ROWS

@@ -54,9 +54,11 @@ public class ThriftServer {
                 .clientTimeout(Config.thrift_client_timeout_ms)
                 .backlog(Config.thrift_backlog_num);
 
+        TBinaryProtocol.Factory factory =
+                new TBinaryProtocol.Factory(Config.thrift_rpc_strict_mode, true, Config.thrift_rpc_max_body_size, -1);
         SRTThreadPoolServer.Args serverArgs =
                 new SRTThreadPoolServer.Args(new TServerSocket(socketTransportArgs)).protocolFactory(
-                        new TBinaryProtocol.Factory()).processor(processor);
+                        factory).processor(processor);
         ThreadPoolExecutor threadPoolExecutor = ThreadPoolManager
                 .newDaemonFixedThreadPool(Config.thrift_server_max_worker_threads,
                         Config.thrift_server_queue_size,

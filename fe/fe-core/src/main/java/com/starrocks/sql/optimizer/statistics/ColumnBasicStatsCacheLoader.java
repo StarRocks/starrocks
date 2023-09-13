@@ -44,6 +44,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
+import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
 public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCacheKey, Optional<ColumnStatistic>> {
@@ -135,10 +136,16 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
         if (column == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_FIELD_ERROR, statisticData.columnName);
         }
+        return buildColumnStatistics(statisticData, DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName(),
+                column);
+    }
 
+    public static ColumnStatistic buildColumnStatistics(TStatisticData statisticData, String catalog, String db,
+                                                 String table, Column column) {
         ColumnStatistic.Builder builder = ColumnStatistic.builder();
         double minValue = Double.NEGATIVE_INFINITY;
         double maxValue = Double.POSITIVE_INFINITY;
+        double distinctValues = statisticData.countDistinct;
         try {
             if (column.getPrimitiveType().isCharFamily()) {
                 // do nothing
@@ -167,13 +174,24 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                 }
             }
         } catch (Exception e) {
-            LOG.warn("convert TStatisticData to ColumnStatistics failed, db : {}, table : {}, column : {}, errMsg : {}",
-                    db.getFullName(), table.getName(), column.getName(), e.getMessage());
+            LOG.warn("convert TStatisticData to ColumnStatistics failed, catalog: {}, db : {}, table : {}, " +
+                            "column : {}, errMsg : {}", catalog, db, table, column.getName(), e.getMessage());
+        }
+
+        if (minValue > maxValue) {
+            LOG.warn("Min: {}, Max: {} values abnormal for catalog : {}, db : {}, table : {}, column : {}",
+                    minValue, maxValue, catalog, db, table, column.getName());
+            minValue = Double.NEGATIVE_INFINITY;
+            maxValue = Double.POSITIVE_INFINITY;
+        }
+
+        if (distinctValues <= 0) {
+            distinctValues = 1;
         }
 
         return builder.setMinValue(minValue).
                 setMaxValue(maxValue).
-                setDistinctValuesCount(statisticData.countDistinct).
+                setDistinctValuesCount(distinctValues).
                 setAverageRowSize(statisticData.dataSize / Math.max(statisticData.rowCount, 1)).
                 setNullsFraction(statisticData.nullCount * 1.0 / Math.max(statisticData.rowCount, 1)).build();
     }

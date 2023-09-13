@@ -80,6 +80,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     @SerializedName("e")
     private boolean enabled;
 
+    public static String CREDENTIAL_MASK = "******";
+
     public StorageVolume(String id, String name, String svt, List<String> locations,
                          Map<String, String> params, boolean enabled, String comment) {
         this.id = id;
@@ -88,12 +90,14 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.locations = new ArrayList<>(locations);
         this.comment = comment;
         this.enabled = enabled;
-        preprocessAuthenticationIfNeeded(params);
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
-        if (!isValidCloudConfiguration()) {
-            throw new SemanticException("Storage params is not valid");
-        }
         this.params = new HashMap<>(params);
+        Map<String, String> configurationParams = new HashMap<>(params);
+        preprocessAuthenticationIfNeeded(configurationParams);
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams);
+        if (!isValidCloudConfiguration()) {
+            Gson gson = new Gson();
+            throw new SemanticException("Storage params is not valid " + gson.toJson(params));
+        }
     }
 
     public StorageVolume(StorageVolume sv) {
@@ -112,7 +116,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         newParams.putAll(params);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams);
         if (!isValidCloudConfiguration()) {
-            throw new SemanticException("Storage params is not valid");
+            Gson gson = new Gson();
+            throw new SemanticException("Storage params is not valid " + gson.toJson(newParams));
         }
         this.params = newParams;
     }
@@ -171,14 +176,23 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         }
     }
 
+    public static void addMaskForCredential(Map<String, String> params) {
+        params.computeIfPresent(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.AWS_S3_SECRET_KEY, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, (key, value) -> CREDENTIAL_MASK);
+    }
+
     public void getProcNodeData(BaseProcResult result) {
         Gson gson = new Gson();
+        Map<String, String> p = new HashMap<>(params);
+        addMaskForCredential(p);
         result.addRow(Lists.newArrayList(name,
                 String.valueOf(svt.name()),
                 String.valueOf(GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                         .getDefaultStorageVolumeId().equals(id)),
                 String.valueOf(Strings.join(locations, ", ")),
-                String.valueOf(gson.toJson(params)),
+                String.valueOf(gson.toJson(p)),
                 String.valueOf(enabled),
                 String.valueOf(comment)));
     }
@@ -236,6 +250,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 return params;
             case HDFS:
                 // TODO
+                return params;
             case AZBLOB:
                 AzBlobFileStoreInfo azBlobFileStoreInfo = fsInfo.getAzblobFsInfo();
                 params.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, azBlobFileStoreInfo.getEndpoint());

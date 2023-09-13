@@ -36,6 +36,11 @@ Status AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state)
 
     _is_finished = true;
 
+    // skip processing if cancelled
+    if (state->is_cancelled()) {
+        return Status::OK();
+    }
+
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
 
     // If hash set is empty, we don't need to return value

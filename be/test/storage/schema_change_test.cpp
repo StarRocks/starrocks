@@ -62,7 +62,7 @@ protected:
         request->tablet_schema.columns.push_back(c);
     }
 
-    void CreateSrcTablet(TTabletId tablet_id, TKeysType::type type = TKeysType::DUP_KEYS) {
+    void CreateSrcTablet(TTabletId tablet_id, TKeysType::type type = TKeysType::DUP_KEYS, int64_t* version = nullptr) {
         StorageEngine* engine = StorageEngine::instance();
         TCreateTabletReq create_tablet_req;
         SetCreateTabletReq(&create_tablet_req, tablet_id, type);
@@ -93,9 +93,13 @@ protected:
         writer_context.tablet_id = tablet->tablet_id();
         writer_context.tablet_schema_hash = tablet->schema_hash();
         writer_context.rowset_path_prefix = tablet->schema_hash_path();
-        writer_context.tablet_schema = &(tablet->tablet_schema());
+        writer_context.tablet_schema = tablet->tablet_schema();
         writer_context.rowset_state = VISIBLE;
-        writer_context.version = Version(3, 3);
+        if (version == nullptr) {
+            writer_context.version = Version(3, 3);
+        } else {
+            writer_context.version = Version(*version, *version);
+        }
         std::unique_ptr<RowsetWriter> rowset_writer;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
         CHECK_OK(rowset_writer->add_chunk(*base_chunk));
@@ -263,7 +267,7 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
     ASSERT_TRUE(st.ok());
 
     int dst_value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
-    EXPECT_EQ(dst_value, dst_datum.get_uint24());
+    EXPECT_EQ(dst_value, (int)dst_datum.get_uint24());
 }
 
 TEST_F(SchemaChangeTest, convert_date_to_datetime) {
@@ -332,15 +336,15 @@ TEST_F(SchemaChangeTest, convert_int_to_date) {
     ASSERT_TRUE(st.ok());
 
     int dst_value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
-    EXPECT_EQ(dst_value, dst_datum.get_uint24());
+    EXPECT_EQ(dst_value, (int)dst_datum.get_uint24());
 }
 
 TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
     auto src_tablet_schema = SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false);
     auto dst_tablet_schema = SetTabletSchema("BitmapColumn", "OBJECT", "BITMAP_UNION", 8, false, false);
 
-    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*src_tablet_schema), 4096);
-    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*dst_tablet_schema), 4096);
+    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
+    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
     ColumnPtr& src_col = src_chunk->get_column_by_index(0);
     ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
     Field f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
@@ -363,8 +367,8 @@ TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
     auto src_tablet_schema = SetTabletSchema("IntColumn", "VARCHAR", "REPLACE", 255, false, false);
     auto dst_tablet_schema = SetTabletSchema("HLLColumn", "HLL", "HLL_UNION", 8, false, false);
 
-    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*src_tablet_schema), 4096);
-    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*dst_tablet_schema), 4096);
+    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
+    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
     ColumnPtr& src_col = src_chunk->get_column_by_index(0);
     ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
     Field f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
@@ -389,8 +393,8 @@ TEST_F(SchemaChangeTest, convert_int_to_count) {
     auto src_tablet_schema = SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false);
     auto dst_tablet_schema = SetTabletSchema("CountColumn", "BIGINT", "SUM", 8, false, false);
 
-    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*src_tablet_schema), 4096);
-    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*dst_tablet_schema), 4096);
+    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
+    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
     ColumnPtr& src_col = src_chunk->get_column_by_index(0);
     ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
     Field f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
@@ -450,7 +454,7 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     writer_context.tablet_id = new_tablet->tablet_id();
     writer_context.tablet_schema_hash = new_tablet->schema_hash();
     writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
-    writer_context.tablet_schema = &(new_tablet->tablet_schema());
+    writer_context.tablet_schema = new_tablet->tablet_schema();
     writer_context.rowset_state = VISIBLE;
     writer_context.version = Version(3, 3);
     std::unique_ptr<RowsetWriter> rowset_writer;
@@ -512,7 +516,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
     writer_context.tablet_id = new_tablet->tablet_id();
     writer_context.tablet_schema_hash = new_tablet->schema_hash();
     writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
-    writer_context.tablet_schema = &(new_tablet->tablet_schema());
+    writer_context.tablet_schema = new_tablet->tablet_schema();
     writer_context.rowset_state = VISIBLE;
     writer_context.version = Version(3, 3);
     std::unique_ptr<RowsetWriter> rowset_writer;
@@ -571,7 +575,7 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     writer_context.tablet_id = new_tablet->tablet_id();
     writer_context.tablet_schema_hash = new_tablet->schema_hash();
     writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
-    writer_context.tablet_schema = &(new_tablet->tablet_schema());
+    writer_context.tablet_schema = new_tablet->tablet_schema();
     writer_context.rowset_state = VISIBLE;
     writer_context.version = Version(3, 3);
     std::unique_ptr<RowsetWriter> rowset_writer;
@@ -619,7 +623,7 @@ TEST_F(SchemaChangeTest, convert_json_to_varchar) {
     ASSERT_EQ(dst_column->get_slice(0), json_str);
 }
 
-TEST_F(SchemaChangeTest, schema_change_with_materialized_column) {
+TEST_F(SchemaChangeTest, schema_change_with_materialized_column_old_style) {
     CreateSrcTablet(1301);
     StorageEngine* engine = StorageEngine::instance();
     TCreateTabletReq create_tablet_req;
@@ -670,7 +674,7 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column) {
     st = ctx->open(chunk_changer.get_runtime_state());
     DCHECK(st.ok()) << st.get_error_msg();
 
-    chunk_changer.get_mc_exprs()->insert({3, ctx});
+    chunk_changer.get_gc_exprs()->insert({3, ctx});
 
     _sc_procedure = new (std::nothrow) SchemaChangeDirectly(&chunk_changer);
     Version version(3, 3);
@@ -694,7 +698,7 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column) {
     writer_context.tablet_id = new_tablet->tablet_id();
     writer_context.tablet_schema_hash = new_tablet->schema_hash();
     writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
-    writer_context.tablet_schema = &(new_tablet->tablet_schema());
+    writer_context.tablet_schema = new_tablet->tablet_schema();
     writer_context.rowset_state = VISIBLE;
     writer_context.version = Version(3, 3);
     std::unique_ptr<RowsetWriter> rowset_writer;
@@ -705,6 +709,71 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column) {
     delete tablet_rowset_reader;
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1101);
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1102);
+}
+
+TEST_F(SchemaChangeTest, schema_change_with_materialized_column_optimization) {
+    int64_t version = 2;
+    CreateSrcTablet(1401, TKeysType::DUP_KEYS, &version);
+    StorageEngine* engine = StorageEngine::instance();
+    TCreateTabletReq create_tablet_req;
+    SetCreateTabletReq(&create_tablet_req, 1402, TKeysType::DUP_KEYS);
+    AddColumn(&create_tablet_req, "k1", TPrimitiveType::INT, true);
+    AddColumn(&create_tablet_req, "k2", TPrimitiveType::INT, true);
+    AddColumn(&create_tablet_req, "v1", TPrimitiveType::INT, false);
+    AddColumn(&create_tablet_req, "v2", TPrimitiveType::INT, false);
+    AddColumn(&create_tablet_req, "newcol", TPrimitiveType::INT, false);
+
+    create_tablet_req.tablet_schema.columns.back().__set_is_allow_null(true);
+    Status res = engine->create_tablet(create_tablet_req);
+    ASSERT_TRUE(res.ok()) << res.to_string();
+    TabletSharedPtr new_tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
+    TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1401);
+    new_tablet->set_tablet_state(TABLET_NOTREADY);
+
+    TAlterTabletReqV2 request;
+    TAlterTabletMaterializedColumnReq mc_request;
+
+    std::vector<TExprNode> nodes;
+
+    TExprNode node;
+    node.node_type = TExprNodeType::SLOT_REF;
+    node.type = gen_type_desc(TPrimitiveType::INT);
+    node.num_children = 0;
+    TSlotRef t_slot_ref = TSlotRef();
+    t_slot_ref.slot_id = 0;
+    t_slot_ref.tuple_id = 0;
+    node.__set_slot_ref(t_slot_ref);
+    node.is_nullable = true;
+    nodes.emplace_back(node);
+
+    TExpr t_expr;
+    t_expr.nodes = nodes;
+
+    std::map<int32_t, starrocks::TExpr> m_expr;
+    m_expr.insert({4, t_expr});
+
+    mc_request.__set_query_globals(TQueryGlobals());
+    mc_request.__set_query_options(TQueryOptions());
+    mc_request.__set_mc_exprs(m_expr);
+
+    request.__set_base_schema_hash(base_tablet->schema_hash());
+    request.__set_new_schema_hash(new_tablet->schema_hash());
+    request.__set_base_tablet_id(1401);
+    request.__set_new_tablet_id(1402);
+    request.__set_alter_version(base_tablet->max_version().second);
+    request.__set_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    request.__set_materialized_column_req(mc_request);
+    request.__set_txn_id(99);
+    request.__set_job_id(999);
+
+    std::string alter_msg_header = strings::Substitute("[Alter Job:$0, tablet:$1]: ", 999, 1401);
+    SchemaChangeHandler handler;
+    handler.set_alter_msg_header(alter_msg_header);
+    res = handler.process_alter_tablet_v2(request);
+    ASSERT_TRUE(res.ok()) << res.to_string();
+
+    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1401);
+    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1402);
 }
 
 } // namespace starrocks

@@ -14,11 +14,17 @@
 
 #include "storage/lake/lake_primary_index.h"
 
+#include <bvar/bvar.h>
+
 #include "storage/chunk_helper.h"
+#include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/tablet.h"
 #include "storage/primary_key_encoder.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
+
+static bvar::LatencyRecorder g_load_pk_index_latency("lake_load_pk_index");
 
 Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
                                    const MetaFileBuilder* builder) {
@@ -28,6 +34,7 @@ Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadat
     }
     _status = _do_lake_load(tablet, metadata, base_version, builder);
     _loaded = true;
+    TRACE("end load pk index");
     if (!_status.ok()) {
         LOG(WARNING) << "load LakePrimaryIndex error: " << _status << " tablet:" << _tablet_id;
     }
@@ -44,13 +51,51 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
     MonotonicStopWatch watch;
     watch.start();
     // 1. create and set key column schema
-    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
+    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
     vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
     for (auto i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = ChunkHelper::convert_schema(*tablet_schema, pk_columns);
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
     _set_schema(pkey_schema);
+
+    // load persistent index if enable persistent index meta
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+
+    if (tablet->get_enable_persistent_index(base_version) && (fix_size <= 128)) {
+        DCHECK(_persistent_index == nullptr);
+
+        // Even if `enable_persistent_index` is enabled,
+        // it may not take effect because `storage_root_path` is not set
+        if (StorageEngine::instance()->is_lake_persistent_index_dir_inited()) {
+            auto persistent_index_type = tablet->get_persistent_index_type(base_version);
+            if (persistent_index_type.ok()) {
+                switch (persistent_index_type.value()) {
+                case PersistentIndexTypePB::LOCAL: {
+                    std::string path = strings::Substitute(
+                            "$0/$1/",
+                            StorageEngine::instance()->get_persistent_index_store()->get_persistent_index_path(),
+                            tablet->id());
+
+                    RETURN_IF_ERROR(
+                            StorageEngine::instance()->get_persistent_index_store()->create_dir_if_path_not_exists(
+                                    path));
+                    _persistent_index = std::make_unique<LakeLocalPersistentIndex>(path, this);
+                    return ((LakeLocalPersistentIndex*)_persistent_index.get())
+                            ->load_from_lake_tablet(tablet, metadata, base_version, builder);
+                }
+                default:
+                    LOG(WARNING) << "only support LOCAL lake_persistend_index_type for now";
+                    return Status::InternalError("only support LOCAL lake_persistend_index_type for now");
+                }
+            }
+
+        } else {
+            LOG(WARNING) << "lake tablet persistent_index will not take effect, for storage_root_path is not set";
+            return Status::InternalError(
+                    "lake tablet persistent_index will not take effect, for storage_root_path is not set");
+        }
+    }
 
     OlapReaderStatistics stats;
     std::unique_ptr<Column> pk_column;
@@ -111,9 +156,10 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
     }
     _tablet_id = tablet->id();
     _data_version = base_version;
-    if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
-        LOG(INFO) << "LakePrimaryIndex load cost(ms): " << watch.elapsed_time() / 1000000;
-    }
+    auto cost_ns = watch.elapsed_time();
+    g_load_pk_index_latency << cost_ns / 1000;
+    LOG_IF(INFO, cost_ns >= /*10ms=*/10 * 1000 * 1000)
+            << "LakePrimaryIndex load cost(ms): " << watch.elapsed_time() / 1000000;
     return Status::OK();
 }
 

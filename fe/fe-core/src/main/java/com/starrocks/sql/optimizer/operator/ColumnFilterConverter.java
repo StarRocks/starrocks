@@ -147,19 +147,16 @@ public class ColumnFilterConverter {
             return;
         }
 
-        // rewrite invalid date cast expr to NullLiteral
-        ScalarOperator rewritePredicate = rewriteInvalidDateCast(predicate);
-
-        if (!rewritePredicate.isConstant()) {
+        if (predicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {
             return;
         }
 
-        rewritePredicate.accept(COLUMN_FILTER_VISITOR, result);
+        predicate.accept(COLUMN_FILTER_VISITOR, result);
     }
 
     public static void convertColumnFilter(ScalarOperator predicate, Map<String, PartitionColumnFilter> result,
                                            Table table) {
-        if (predicate.getChildren().size() <= 0) {
+        if (CollectionUtils.isEmpty(predicate.getChildren())) {
             return;
         }
 
@@ -172,14 +169,11 @@ public class ColumnFilterConverter {
             return;
         }
 
-        // rewrite invalid date cast expr to NullLiteral
-        ScalarOperator rewritePredicate = rewriteInvalidDateCast(predicate);
-
-        if (rewritePredicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {
+        if (predicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {
             return;
         }
 
-        rewritePredicate.accept(COLUMN_FILTER_VISITOR, result);
+        predicate.accept(COLUMN_FILTER_VISITOR, result);
     }
 
     // Replace the predicate of the query with the predicate of the partition expression and evaluate.
@@ -194,7 +188,9 @@ public class ColumnFilterConverter {
         Expr predicateExpr = firstPartitionExpr.clone();
 
         // only support binary predicate
-        if (predicate instanceof BinaryPredicateOperator && predicate.getChildren().size() == 2) {
+        if (predicate instanceof BinaryPredicateOperator
+                && predicate.getChild(0) instanceof ColumnRefOperator
+                && predicate.getChild(1) instanceof ConstantOperator) {
             List<ScalarOperator> argument = predicate.getChildren();
             ColumnRefOperator columnRef = (ColumnRefOperator) argument.get(0);
             ConstantOperator constant = (ConstantOperator) argument.get(1);
@@ -305,31 +301,6 @@ public class ColumnFilterConverter {
                 (Objects.equals(exprTimeArg, callTimeArg) ||
                         (TIME_MAP.containsKey(exprTimeArg) && TIME_MAP.containsKey(callTimeArg) &&
                                 TIME_MAP.get(exprTimeArg) > TIME_MAP.get(callTimeArg)));
-    }
-
-    // only rewrite cast invalid date value to null like cast('abc' as date)
-    private static ScalarOperator rewriteInvalidDateCast(ScalarOperator scalarOperator) {
-        ScalarOperator copy = scalarOperator.clone();
-        List<ScalarOperator> children = copy.getChildren();
-
-        for (int i = 1; i < children.size(); i++) {
-            ScalarOperator child = children.get(i);
-            if (child instanceof CastOperator) {
-                CastOperator cast = (CastOperator) child;
-                Type toType = cast.getType();
-                if (cast.getChildren().size() == 1
-                        && cast.getChildren().get(0).isConstantRef()
-                        && toType.isDateType()) {
-                    ConstantOperator value = (ConstantOperator) cast.getChildren().get(0);
-                    try {
-                        value.castTo(toType);
-                    } catch (Exception e) {
-                        children.set(i, ConstantOperator.createNull(toType));
-                    }
-                }
-            }
-        }
-        return copy;
     }
 
     private static class ColumnFilterVisitor

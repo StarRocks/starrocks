@@ -10,27 +10,27 @@ import io.airbyte.commons.json.Jsons;
 import io.airbyte.integrations.base.JavaBaseConstants;
 import io.airbyte.integrations.destination.StandardNameTransformer;
 import io.airbyte.integrations.standardtest.destination.DestinationAcceptanceTest;
+import java.io.IOException;
+import java.nio.file.Paths;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.nio.file.Paths;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-
 
 public class StarrocksDestinationAcceptanceTest extends DestinationAcceptanceTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(StarrocksDestinationAcceptanceTest.class);
 
-    private static final StandardNameTransformer NAME_RESOLVER = new StandardNameTransformer();
+    private static final StandardNameTransformer namingResolver = new StandardNameTransformer();
 
     private JsonNode configJson;
 
@@ -80,7 +80,7 @@ public class StarrocksDestinationAcceptanceTest extends DestinationAcceptanceTes
         // TODO Implement this method to retrieve records which written to the destination by the connector.
         // Records returned from this method will be compared against records provided to the connector
         // to verify they were written correctly
-        final String tableName = NAME_RESOLVER.getIdentifier(streamName);
+        final String tableName = namingResolver.getIdentifier(streamName);
 
         String query = String.format(
                 "SELECT * FROM %s.%s ORDER BY %s ASC;", configJson.get("database").asText(), tableName,

@@ -16,7 +16,7 @@
 package com.starrocks.sql.optimizer;
 
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MaterializedView.MVRewriteContextCache;
+import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -24,21 +24,22 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 
 public class MaterializedViewOptimizer {
-    public MVRewriteContextCache optimize(MaterializedView mv,
-                                          ConnectContext connectContext) {
+    public MvPlanContext optimize(MaterializedView mv,
+                                  ConnectContext connectContext,
+                                  OptimizerConfig optimizerConfig) {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         String mvSql = mv.getViewDefineSql();
         Pair<OptExpression, LogicalPlan> plans =
-                MvUtils.getRuleOptimizedLogicalPlan(mv, mvSql, columnRefFactory, connectContext);
+                MvUtils.getRuleOptimizedLogicalPlan(mv, mvSql, columnRefFactory, connectContext, optimizerConfig);
         if (plans == null) {
             return null;
         }
         OptExpression mvPlan = plans.first;
         if (!MvUtils.isValidMVPlan(mvPlan)) {
-            return new MVRewriteContextCache();
+            return new MvPlanContext();
         }
-        MVRewriteContextCache mvRewriteContext =
-                new MVRewriteContextCache(mvPlan, plans.second.getOutputColumn(), columnRefFactory);
+        MvPlanContext mvRewriteContext =
+                new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory);
         return mvRewriteContext;
     }
 }

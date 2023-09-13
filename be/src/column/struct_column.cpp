@@ -54,6 +54,15 @@ size_t StructColumn::byte_size() const {
     return total_size;
 }
 
+size_t StructColumn::byte_size(size_t from, size_t size) const {
+    DCHECK_LE(from + size, this->size()) << "Range error";
+    size_t total_size = 0;
+    for (const auto& column : _fields) {
+        total_size += column->byte_size(from, size);
+    }
+    return total_size;
+}
+
 size_t StructColumn::byte_size(size_t idx) const {
     size_t total_size = 0;
     for (const auto& column : _fields) {
@@ -142,14 +151,13 @@ void StructColumn::fill_default(const Filter& filter) {
     }
 }
 
-Status StructColumn::update_rows(const Column& src, const uint32_t* indexes) {
+void StructColumn::update_rows(const Column& src, const uint32_t* indexes) {
     DCHECK(src.is_struct());
     const auto& src_column = down_cast<const StructColumn&>(src);
     DCHECK_EQ(_fields.size(), src_column._fields.size());
     for (size_t i = 0; i < _fields.size(); i++) {
-        RETURN_IF_ERROR(_fields[i]->update_rows(*src_column._fields[i], indexes));
+        _fields[i]->update_rows(*src_column._fields[i], indexes);
     }
-    return Status::OK();
 }
 
 void StructColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
@@ -476,7 +484,7 @@ Columns& StructColumn::fields_column() {
     return _fields;
 }
 
-ColumnPtr StructColumn::field_column(const std::string& field_name) {
+ColumnPtr StructColumn::field_column(const std::string& field_name) const {
     for (size_t i = 0; i < _field_names.size(); i++) {
         if (field_name == _field_names[i]) {
             return _fields[i];
@@ -484,6 +492,16 @@ ColumnPtr StructColumn::field_column(const std::string& field_name) {
     }
     DCHECK(false) << "Struct subfield name: " << field_name << " not found!";
     return nullptr;
+}
+
+ColumnPtr& StructColumn::field_column(const std::string& field_name) {
+    for (size_t i = 0; i < _field_names.size(); i++) {
+        if (field_name == _field_names[i]) {
+            return _fields[i];
+        }
+    }
+    DCHECK(false) << "Struct subfield name: " << field_name << " not found!";
+    return _fields[0];
 }
 
 Status StructColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {

@@ -109,6 +109,11 @@ void PipelineDriverPoller::run_internal() {
                         remove_blocked_driver(_local_blocked_drivers, driver_it);
                         ready_drivers.emplace_back(driver);
                     }
+                } else if (driver->need_report_exec_state()) {
+                    // If the runtime profile is enabled, the driver should be rescheduled after the timeout for triggering
+                    // the profile report prcessing.
+                    remove_blocked_driver(_local_blocked_drivers, driver_it);
+                    ready_drivers.emplace_back(driver);
                 } else if (driver->pending_finish()) {
                     if (driver->is_still_pending_finish()) {
                         ++driver_it;
@@ -139,7 +144,7 @@ void PipelineDriverPoller::run_internal() {
                 } else if (driver->is_finished()) {
                     remove_blocked_driver(_local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);
-                } else if (driver->is_not_blocked() || driver->need_report_exec_state()) {
+                } else if (driver->is_not_blocked()) {
                     driver->set_driver_state(DriverState::READY);
                     remove_blocked_driver(_local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);

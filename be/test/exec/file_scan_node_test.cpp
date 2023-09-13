@@ -153,8 +153,9 @@ DescriptorTbl* FileScanNodeTest::_create_table_desc(const std::vector<TypeDescri
     tuple_desc_builder.build(&desc_tbl_builder);
 
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(_runtime_state.get(), _pool, desc_tbl_builder.desc_tbl(), &tbl, config::vector_chunk_size);
-
+    CHECK(DescriptorTbl::create(_runtime_state.get(), _pool, desc_tbl_builder.desc_tbl(), &tbl,
+                                config::vector_chunk_size)
+                  .ok());
     _runtime_state->set_desc_tbl(tbl);
     return tbl;
 }
@@ -192,8 +193,7 @@ TEST_F(FileScanNodeTest, CSVBasic) {
     ASSERT_FALSE(eos);
     ASSERT_EQ(chunk->num_rows(), 3);
 
-    status = file_scan_node->close(_runtime_state.get());
-    ASSERT_TRUE(status.ok());
+    file_scan_node->close(_runtime_state.get());
 }
 
 } // namespace starrocks

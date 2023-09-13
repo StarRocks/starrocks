@@ -78,6 +78,8 @@ public:
     // Get max continuous version from 0
     int64_t max_continuous_version() const { return _max_continuous_version; }
 
+    void update_max_continuous_version();
+
     int64_t min_readable_version() const { return _min_readable_version; }
 
 private:
@@ -210,6 +212,8 @@ public:
 
     // Get max continuous version from 0
     int64_t get_max_continuous_version() const;
+
+    void update_max_continuous_version();
 
     int64_t get_min_readable_version() const;
 

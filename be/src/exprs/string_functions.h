@@ -55,7 +55,6 @@ struct MatchInfo {
 
 struct MatchInfoChain {
     std::vector<MatchInfo> info_chain;
-    unsigned long long last_to = 0;
 };
 
 class StringFunctions {
@@ -302,6 +301,13 @@ public:
      */
     DEFINE_VECTORIZED_FN(split_part);
 
+    /**
+     * @param: [string_value, delimiter, field]
+     * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(substring_index);
+
     // regex method
     static Status regexp_extract_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status regexp_replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
@@ -313,6 +319,14 @@ public:
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(regexp_extract);
+
+    /**
+     * return all match sub-string
+     * @param: [string_value, pattern_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: Array<BinaryColumn>
+     */
+    DEFINE_VECTORIZED_FN(regexp_extract_all);
 
     /**
      * @param: [string_value, pattern_value, replace_value]
@@ -329,6 +343,15 @@ public:
     DEFINE_VECTORIZED_FN(replace);
     static Status replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status replace_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /**
+     * @param: [string_value, from_value, to_value]
+     * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(translate);
+    static Status translate_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status translate_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [DOUBLE]
@@ -371,6 +394,10 @@ public:
 
     static Status sub_str_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
+    static Status url_extract_parameter_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    static Status url_extract_parameter_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
     static Status sub_str_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     static Status left_or_right_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
@@ -393,6 +420,8 @@ public:
    * @return: BinaryColumn
    */
     DEFINE_VECTORIZED_FN(parse_url);
+
+    DEFINE_VECTORIZED_FN(url_extract_parameter);
 
     /**
      * @param: [BigIntColumn]
@@ -431,6 +460,26 @@ public:
      */
     DEFINE_VECTORIZED_FN(strcmp);
 
+    /**
+     * params are one strings. Returns string for url encode string,
+     *
+     * @param: [string_value]
+     * @paramType: [StringColumn]
+     * @return: StringColumn
+     */
+    DEFINE_VECTORIZED_FN(url_encode);
+    static std::string url_encode_func(const std::string& value);
+
+    /**
+     * params are one strings. Returns string for url decode string,
+     *
+     * @param: [string_value]
+     * @paramType: [StringColumn]
+     * @return: StringColumn
+     */
+    DEFINE_VECTORIZED_FN(url_decode);
+    static std::string url_decode_func(const std::string& value);
+
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
 private:
@@ -461,6 +510,14 @@ private:
         bool const_pattern{false};
         std::unique_ptr<UrlParser::UrlPart> url_part;
         ParseUrlState() : url_part() {}
+    };
+
+    struct UrlExtractParameterState {
+        std::optional<std::string> opt_const_result;
+        bool result_is_null{false};
+        std::optional<std::string> opt_const_param_key;
+        std::optional<std::string> opt_const_query_params;
+        UrlExtractParameterState() = default;
     };
 
     static StatusOr<ColumnPtr> parse_url_general(FunctionContext* context, const starrocks::Columns& columns);

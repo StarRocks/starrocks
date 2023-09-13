@@ -427,6 +427,7 @@ public:
      * @return the information about that stripe
      */
     virtual ORC_UNIQUE_PTR<StripeInformation> getStripe(uint64_t stripeIndex) const = 0;
+    virtual const orc::proto::StripeInformation& getStripeInOrcFormat(uint64_t stripeIndex) const = 0;
 
     /**
      * Get the number of stripe statistics in the file.

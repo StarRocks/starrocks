@@ -28,6 +28,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"
+#include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
@@ -123,6 +124,8 @@ private:
     // And we just pick the maximum accumulated_network_time among all destination
     int64_t _network_time();
 
+    void _try_to_merge_query_statistics(TransmitChunkInfo& request);
+
     FragmentContext* _fragment_ctx;
     MemTracker* const _mem_tracker;
     const int32_t _brpc_timeout_ms;
@@ -154,6 +157,7 @@ private:
     phmap::flat_hash_map<int64_t, int32_t> _num_finished_rpcs;
     phmap::flat_hash_map<int64_t, int32_t> _num_in_flight_rpcs;
     phmap::flat_hash_map<int64_t, TimeTrace> _network_times;
+    phmap::flat_hash_map<int64_t, std::shared_ptr<QueryStatistics>> _eos_query_stats;
     phmap::flat_hash_map<int64_t, std::unique_ptr<Mutex>> _mutexes;
 
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
@@ -173,7 +177,6 @@ private:
     std::atomic<int64_t> _rpc_cumulative_time = 0;
 
     // RuntimeProfile counters
-    std::atomic_bool _is_profile_updated = false;
     std::atomic<int64_t> _bytes_enqueued = 0;
     std::atomic<int64_t> _request_enqueued = 0;
     std::atomic<int64_t> _bytes_sent = 0;

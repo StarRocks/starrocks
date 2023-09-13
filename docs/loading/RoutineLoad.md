@@ -1,5 +1,7 @@
 # Continuously load data from Apache Kafka®
 
+import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+
 This topic introduces how to create a Routine Load job to stream Kafka messages (events) into StarRocks, and familiarizes you with some basic concepts about Routine Load.
 
 To continuously load messages of a stream into StarRocks, you can store the message stream in a Kafka topic, and create a Routine Load job to consume the messages. The Routine Load job persists in StarRocks, generates a series of load tasks to consume the messages in all or part of the partitions in the topic, and loads the messages into StarRocks.
@@ -8,9 +10,7 @@ A Routine Load job supports exactly-once delivery semantics to guarantee the dat
 
 Routine Load supports data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
 
-> **NOTICE**
->
-> You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+<InsertPrivNote />
 
 ## Supported data formats
 
@@ -288,7 +288,7 @@ Since v3.0.1, StarRocks supports loading Avro data by using Routine Load.
 
 #### Prepare a dataset
 
-**Avro schema**
+##### Avro schema
 
 1. Create the following  Avro schema file `avro_schema.avsc`:
 
@@ -308,7 +308,7 @@ Since v3.0.1, StarRocks supports loading Avro data by using Routine Load.
 
 2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/cloud/current/get-started/schema-registry.html#create-a-schema).
 
-**Avro data**
+##### Avro data
 
 Prepare the Avro data and send it to the Kafka topic `topic_0`.
 
@@ -381,7 +381,7 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
 The data type mapping between the Avro data fields you want to load and the StarRocks table columns is as follows:
 
-**Primitive types**
+##### Primitive types
 
 | Avro    | StarRocks |
 | ------- | --------- |
@@ -394,7 +394,7 @@ The data type mapping between the Avro data fields you want to load and the Star
 | bytes   | STRING    |
 | string  | STRING    |
 
-**Complex types**
+##### Complex types
 
 | Avro           | StarRocks                                                    |
 | -------------- | ------------------------------------------------------------ |

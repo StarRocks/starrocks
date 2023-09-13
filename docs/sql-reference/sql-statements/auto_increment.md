@@ -31,7 +31,7 @@ PROPERTIES("replicated_storage" = "true");
 
 ### Assign values for `AUTO_INCREMENT` column
 
-**Assign values implicitly**
+#### Assign values implicitly
 
 When you load data into a StarRocks table, you do not need to specify the values for the `AUTO_INCREMENT` column. StarRocks automatically assigns unique integer values for that column and inserts them into the table.
 
@@ -97,7 +97,7 @@ mysql > SELECT * FROM test_tbl1 ORDER BY id;
 6 rows in set (0.01 sec)
 ```
 
-**Specify values explicitly**
+#### Specify values explicitly
 
 You can also explicitly specify the values for the `AUTO_INCREMENT` column and insert them into the table.
 
@@ -387,7 +387,7 @@ This feature can be used to build a dictionary table for quickly computing disti
   - There is a load job for partial updates, which includes multiple UPSERT and DELETE operations on the same data row. If a certain UPSERT operation is executed after the DELETE operation, the UPSERT operation may not take effect.
 
 - Adding the `AUTO_INCREMENT` attribute by using ALTER TABLE is not supported.
-- Currently, StarRocks's shared-data mode does not support the `AUTO_INCREMENT` attribute.
+- Since version 3.1, StarRocks's shared-data mode supports the `AUTO_INCREMENT` attribute.
 - StarRocks does not support specifying the starting value and step size for the `AUTO_INCREMENT` column.
 
 ## Keywords

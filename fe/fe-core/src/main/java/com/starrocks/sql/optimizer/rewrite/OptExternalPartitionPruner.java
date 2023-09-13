@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.base.Preconditions;
@@ -58,7 +57,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeMap;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.PartitionUtil.createPartitionKey;
@@ -67,7 +67,13 @@ import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 public class OptExternalPartitionPruner {
     private static final Logger LOG = LogManager.getLogger(OptExternalPartitionPruner.class);
 
-    public static LogicalScanOperator prunePartitions(OptimizerContext context, LogicalScanOperator logicalScanOperator) {
+    public static LogicalScanOperator prunePartitions(OptimizerContext context,
+                                                      LogicalScanOperator logicalScanOperator) {
+        return prunePartitionsImpl(context, logicalScanOperator);
+    }
+
+    public static LogicalScanOperator prunePartitionsImpl(OptimizerContext context,
+            LogicalScanOperator logicalScanOperator) {
         if (logicalScanOperator instanceof LogicalEsScanOperator) {
             LogicalEsScanOperator operator = (LogicalEsScanOperator) logicalScanOperator;
             EsTablePartitions esTablePartitions = operator.getEsTablePartitions();
@@ -93,18 +99,17 @@ public class OptExternalPartitionPruner {
                 }
             }
             if (LOG.isDebugEnabled()) {
-                LOG.debug("partition prune finished, unpartitioned index [{}], "
-                                + "partitioned index [{}]",
-                        String.join(",", unPartitionedIndices),
-                        String.join(",", partitionedIndices));
+                LOG.debug("partition prune finished, unpartitioned index [{}], " + "partitioned index [{}]",
+                        String.join(",", unPartitionedIndices), String.join(",", partitionedIndices));
             }
         } else {
             // partitionColumnName -> (LiteralExpr -> partition ids)
             // no null partitions in this map, used by ListPartitionPruner
-            Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = Maps.newHashMap();
+            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap =
+                    Maps.newConcurrentMap();
             // Store partitions with null partition values separately, used by ListPartitionPruner
             // partitionColumnName -> null partitionIds
-            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = Maps.newHashMap();
+            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = Maps.newConcurrentMap();
 
             try {
                 initPartitionInfo(logicalScanOperator, context, columnToPartitionValuesMap, columnToNullPartitions);
@@ -144,15 +149,14 @@ public class OptExternalPartitionPruner {
 
     // get equivalence predicate which column ref is partition column
     public static List<Optional<ScalarOperator>> getEffectivePartitionPredicate(LogicalScanOperator operator,
-                                                                                 List<Column> partitionColumns,
-                                                                                 ScalarOperator predicate) {
+            List<Column> partitionColumns, ScalarOperator predicate) {
         if (partitionColumns.isEmpty()) {
             return Lists.newArrayList();
         }
 
         List<ScalarOperator> equalPredicates = getColumnEQConstantPredicates(predicate);
-        Map<ColumnRefOperator, ScalarOperator> equalPredicateMap = equalPredicates.stream().
-                collect(Collectors.toMap(rangePredicate -> rangePredicate.getChild(0).cast(),
+        Map<ColumnRefOperator, ScalarOperator> equalPredicateMap = equalPredicates.stream().collect(
+                Collectors.toMap(rangePredicate -> rangePredicate.getChild(0).cast(),
                         rangePredicate -> rangePredicate));
 
         List<Optional<ScalarOperator>> effectivePartitionPredicate = Lists.newArrayList();
@@ -182,11 +186,9 @@ public class OptExternalPartitionPruner {
         return partitionValues;
     }
 
-
     private static void initPartitionInfo(LogicalScanOperator operator, OptimizerContext context,
-                                          Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
-                                          Map<ColumnRefOperator, Set<Long>> columnToNullPartitions)
-            throws AnalysisException {
+            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
         Table table = operator.getTable();
         // RemoteScanPartitionPruneRule may be run multiple times, such like after MaterializedViewRewriter rewrite，
         // the predicates of scan operator may changed, it need to re-compute the ScanOperatorPredicates.
@@ -197,13 +199,16 @@ public class OptExternalPartitionPruner {
             List<ColumnRefOperator> partitionColumnRefOperators = new ArrayList<>();
             for (Column column : partitionColumns) {
                 ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
-                columnToPartitionValuesMap.put(partitionColumnRefOperator, new TreeMap<>());
-                columnToNullPartitions.put(partitionColumnRefOperator, Sets.newHashSet());
+                columnToPartitionValuesMap.put(partitionColumnRefOperator, new ConcurrentSkipListMap<>());
+                columnToNullPartitions.put(partitionColumnRefOperator, Sets.newConcurrentHashSet());
                 partitionColumnRefOperators.add(partitionColumnRefOperator);
             }
 
-            context.getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(),
-                    hmsTable.getTableName()).setPartitionNames(new ArrayList<>());
+            if (context.getDumpInfo() != null) {
+                context.getDumpInfo()
+                        .getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(), hmsTable.getTableName())
+                        .setPartitionNames(new ArrayList<>());
+            }
 
             Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
             if (!hmsTable.isUnPartitioned()) {
@@ -214,24 +219,30 @@ public class OptExternalPartitionPruner {
                         getEffectivePartitionPredicate(operator, partitionColumns, operator.getPredicate());
                 if (effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)) {
                     List<Optional<String>> partitionValues = getPartitionValue(effectivePartitionPredicate);
-                    partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNamesByValue(
-                            hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName(), partitionValues);
+                    partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .listPartitionNamesByValue(hmsTable.getCatalogName(), hmsTable.getDbName(),
+                                    hmsTable.getTableName(), partitionValues);
                 } else {
-                    partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                            hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName());
+                    partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(),
+                                    hmsTable.getTableName());
                 }
 
-                long partitionId = 0;
+                List<PartitionKey> keys = new ArrayList<>();
                 for (String partName : partitionNames) {
                     List<String> values = toPartitionValues(partName);
                     PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table.getType());
-                    partitionKeys.put(partitionKey, partitionId++);
+                    keys.add(partitionKey);
+                }
+                List<Long> ids = table.allocatePartitionIdByKey(keys);
+                for (int i = 0; i < keys.size(); i++) {
+                    partitionKeys.put(keys.get(i), ids.get(i));
                 }
             } else {
                 partitionKeys.put(new PartitionKey(), 0L);
             }
 
-            for (Map.Entry<PartitionKey, Long> entry : partitionKeys.entrySet()) {
+            partitionKeys.entrySet().stream().parallel().forEach(entry -> {
                 PartitionKey key = entry.getKey();
                 long partitionId = entry.getValue();
                 List<LiteralExpr> literals = key.getKeys();
@@ -244,22 +255,27 @@ public class OptExternalPartitionPruner {
                     }
 
                     Set<Long> partitions = columnToPartitionValuesMap.get(columnRefOperator)
-                            .computeIfAbsent(literal, k -> Sets.newHashSet());
+                            .computeIfAbsent(literal, k -> Sets.newConcurrentHashSet());
                     partitions.add(partitionId);
                 }
+            });
+
+            for (Map.Entry<PartitionKey, Long> entry : partitionKeys.entrySet()) {
+                PartitionKey key = entry.getKey();
+                long partitionId = entry.getValue();
                 operator.getScanOperatorPredicates().getIdToPartitionKey().put(partitionId, key);
             }
         }
-        LOG.debug("Table: {}, partition values map: {}, null partition map: {}",
-                table.getName(), columnToPartitionValuesMap, columnToNullPartitions);
+        LOG.debug("Table: {}, partition values map: {}, null partition map: {}", table.getName(),
+                columnToPartitionValuesMap, columnToNullPartitions);
     }
 
     private static void classifyConjuncts(LogicalScanOperator operator,
-                                          Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap)
+            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap)
             throws AnalysisException {
         for (ScalarOperator scalarOperator : Utils.extractConjuncts(operator.getPredicate())) {
             List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(scalarOperator);
-            if (!columnRefOperatorList.retainAll(columnToPartitionValuesMap.keySet())) {
+            if (!columnRefOperatorList.isEmpty() && !columnRefOperatorList.retainAll(columnToPartitionValuesMap.keySet())) {
                 operator.getScanOperatorPredicates().getPartitionConjuncts().add(scalarOperator);
             } else {
                 operator.getScanOperatorPredicates().getNonPartitionConjuncts().add(scalarOperator);
@@ -268,8 +284,8 @@ public class OptExternalPartitionPruner {
     }
 
     private static void computePartitionInfo(LogicalScanOperator operator,
-                                             Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
-                                             Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
+            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
         Table table = operator.getTable();
         if (table instanceof HiveMetaStoreTable) {
             ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
@@ -295,7 +311,7 @@ public class OptExternalPartitionPruner {
      * @throws AnalysisException
      */
     private static Collection<Long> partitionPrune(PartitionInfo partitionInfo,
-                                                   Map<String, PartitionColumnFilter> columnFilters) throws AnalysisException {
+            Map<String, PartitionColumnFilter> columnFilters) throws AnalysisException {
         if (partitionInfo == null) {
             return null;
         }
@@ -305,8 +321,8 @@ public class OptExternalPartitionPruner {
             case EXPR_RANGE: {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getIdToRange(false);
-                partitionPruner = new RangePartitionPruner(keyRangeById, rangePartitionInfo.getPartitionColumns(),
-                        columnFilters);
+                partitionPruner =
+                        new RangePartitionPruner(keyRangeById, rangePartitionInfo.getPartitionColumns(), columnFilters);
                 return partitionPruner.prune();
             }
             default: {
@@ -319,8 +335,8 @@ public class OptExternalPartitionPruner {
             throws AnalysisException {
         ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
         for (ScalarOperator scalarOperator : scanOperatorPredicates.getNonPartitionConjuncts()) {
-            if (isSupportedMinMaxConjuncts(scalarOperator)) {
-                addMinMaxConjuncts(scalarOperator, operator, context);
+            if (isSupportedMinMaxConjuncts(operator, scalarOperator)) {
+                addMinMaxConjuncts(scalarOperator, operator);
             }
         }
     }
@@ -329,11 +345,14 @@ public class OptExternalPartitionPruner {
      * Only conjuncts of the form <column> <op> <constant> and <column> in <constant> are supported,
      * and <op> must be one of LT, LE, GE, GT, or EQ.
      */
-    private static boolean isSupportedMinMaxConjuncts(ScalarOperator operator) {
+    private static boolean isSupportedMinMaxConjuncts(LogicalScanOperator scanOperator, ScalarOperator operator) {
         if (operator instanceof BinaryPredicateOperator) {
             ScalarOperator leftChild = operator.getChild(0);
             ScalarOperator rightChild = operator.getChild(1);
             if (!(leftChild.isColumnRef()) || !(rightChild.isConstantRef())) {
+                return false;
+            }
+            if (!scanOperator.getColRefToColumnMetaMap().containsKey((ColumnRefOperator) leftChild)) {
                 return false;
             }
             return !((ConstantOperator) rightChild).isNull();
@@ -344,28 +363,29 @@ public class OptExternalPartitionPruner {
             if (((InPredicateOperator) operator).isNotIn()) {
                 return false;
             }
-            return ((InPredicateOperator) operator).allValuesMatch(ScalarOperator::isConstantRef)
-                    && !((InPredicateOperator) operator).hasAnyNullValues();
+            if (!scanOperator.getColRefToColumnMetaMap().containsKey((ColumnRefOperator) operator.getChild(0))) {
+                return false;
+            }
+            return ((InPredicateOperator) operator).allValuesMatch(ScalarOperator::isConstantRef) &&
+                    !((InPredicateOperator) operator).hasAnyNullValues();
         } else {
             return false;
         }
     }
 
-    private static void addMinMaxConjuncts(ScalarOperator scalarOperator, LogicalScanOperator operator,
-                                           OptimizerContext context) throws AnalysisException {
+    private static void addMinMaxConjuncts(ScalarOperator scalarOperator, LogicalScanOperator operator)
+            throws AnalysisException {
         List<ScalarOperator> minMaxConjuncts = operator.getScanOperatorPredicates().getMinMaxConjuncts();
         if (scalarOperator instanceof BinaryPredicateOperator) {
             BinaryPredicateOperator binaryPredicateOperator = (BinaryPredicateOperator) scalarOperator;
             ScalarOperator leftChild = binaryPredicateOperator.getChild(0);
             ScalarOperator rightChild = binaryPredicateOperator.getChild(1);
             if (binaryPredicateOperator.getBinaryType().isEqual()) {
-                minMaxConjuncts.add(buildMinMaxConjunct(BinaryType.LE,
-                        leftChild, rightChild, operator, context));
-                minMaxConjuncts.add(buildMinMaxConjunct(BinaryType.GE,
-                        leftChild, rightChild, operator, context));
+                minMaxConjuncts.add(buildMinMaxConjunct(BinaryType.LE, leftChild, rightChild, operator));
+                minMaxConjuncts.add(buildMinMaxConjunct(BinaryType.GE, leftChild, rightChild, operator));
             } else if (binaryPredicateOperator.getBinaryType().isRange()) {
-                minMaxConjuncts.add(buildMinMaxConjunct(binaryPredicateOperator.getBinaryType(),
-                        leftChild, rightChild, operator, context));
+                minMaxConjuncts.add(
+                        buildMinMaxConjunct(binaryPredicateOperator.getBinaryType(), leftChild, rightChild, operator));
             }
         } else if (scalarOperator instanceof InPredicateOperator) {
             InPredicateOperator inPredicateOperator = (InPredicateOperator) scalarOperator;
@@ -382,22 +402,21 @@ public class OptExternalPartitionPruner {
             }
             Preconditions.checkState(min != null);
 
-            BinaryPredicateOperator minBound = buildMinMaxConjunct(BinaryType.GE,
-                    inPredicateOperator.getChild(0), min, operator, context);
-            BinaryPredicateOperator maxBound = buildMinMaxConjunct(BinaryType.LE,
-                    inPredicateOperator.getChild(0), max, operator, context);
+            BinaryPredicateOperator minBound =
+                    buildMinMaxConjunct(BinaryType.GE, inPredicateOperator.getChild(0), min, operator);
+            BinaryPredicateOperator maxBound =
+                    buildMinMaxConjunct(BinaryType.LE, inPredicateOperator.getChild(0), max, operator);
             minMaxConjuncts.add(minBound);
             minMaxConjuncts.add(maxBound);
         }
     }
 
-    private static BinaryPredicateOperator buildMinMaxConjunct(BinaryType type,
-                                                               ScalarOperator left, ScalarOperator right,
-                                                               LogicalScanOperator operator,
-                                                               OptimizerContext context) throws AnalysisException {
+    private static BinaryPredicateOperator buildMinMaxConjunct(BinaryType type, ScalarOperator left,
+            ScalarOperator right, LogicalScanOperator operator) throws AnalysisException {
         ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
-        ColumnRefOperator newColumnRef = context.getColumnRefFactory().create(left, left.getType(), left.isNullable());
-        scanOperatorPredicates.getMinMaxColumnRefMap().put(newColumnRef, operator.getColRefToColumnMetaMap().get(left));
-        return new BinaryPredicateOperator(type, newColumnRef, right);
+        ColumnRefOperator columnRefOperator = (ColumnRefOperator) left;
+        scanOperatorPredicates.getMinMaxColumnRefMap().putIfAbsent(columnRefOperator,
+                operator.getColRefToColumnMetaMap().get(columnRefOperator));
+        return new BinaryPredicateOperator(type, columnRefOperator, right);
     }
 }

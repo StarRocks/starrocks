@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.delta;
 
+import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.starrocks.common.util.Util;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.ReentrantExecutor;
 import com.starrocks.connector.hive.CachingHiveMetastore;
 import com.starrocks.connector.hive.CachingHiveMetastoreConf;
@@ -28,6 +30,8 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static com.starrocks.connector.delta.DeltaLakeConnector.HIVE_METASTORE_URIS;
+
 public class DeltaLakeInternalMgr {
     private final String catalogName;
     private final Map<String, String> properties;
@@ -35,6 +39,7 @@ public class DeltaLakeInternalMgr {
     private final boolean enableMetastoreCache;
     private final CachingHiveMetastoreConf hmsConf;
     private ExecutorService refreshHiveMetastoreExecutor;
+    private MetastoreType metastoreType = MetastoreType.HMS;
 
     public DeltaLakeInternalMgr(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
@@ -42,11 +47,14 @@ public class DeltaLakeInternalMgr {
         this.enableMetastoreCache = Boolean.parseBoolean(properties.getOrDefault("enable_metastore_cache", "false"));
         this.hmsConf = new CachingHiveMetastoreConf(properties, "delta lake");
         this.hdfsEnvironment = hdfsEnvironment;
+        String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
+                "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
+        Util.validateMetastoreUris(hiveMetastoreUris);
     }
 
     public IHiveMetastore createHiveMetastore() {
         // TODO(stephen): Abstract the creator class to construct hive meta client
-        HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(properties);
+        HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(hdfsEnvironment, properties);
         IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName);
         IHiveMetastore baseHiveMetastore;
         if (!enableMetastoreCache) {
@@ -78,5 +86,9 @@ public class DeltaLakeInternalMgr {
 
     public HdfsEnvironment getHdfsEnvironment() {
         return this.hdfsEnvironment;
+    }
+
+    public MetastoreType getMetastoreType() {
+        return metastoreType;
     }
 }

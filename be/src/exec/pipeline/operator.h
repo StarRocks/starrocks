@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/runtime_filter_types.h"
@@ -43,7 +45,8 @@ class Operator {
     friend class StreamPipelineDriver;
 
 public:
-    Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, int32_t driver_sequence);
+    Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
+             int32_t driver_sequence);
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work
@@ -91,6 +94,9 @@ public:
     // Whether we could pull chunk from this operator
     virtual bool has_output() const = 0;
 
+    // return true if operator should ignore eos chunk
+    virtual bool ignore_empty_eos() const { return true; }
+
     // Whether we could push chunk to this operator
     virtual bool need_input() const = 0;
 
@@ -131,6 +137,10 @@ public:
     // 3. operators decorated by MultilaneOperator except case 2: e.g. ProjectOperator, Chunk AccumulateOperator and etc.
     virtual Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) { return Status::OK(); }
 
+    // Some operator's metrics are updated in the finishing stage, which is not suitable to the runtime profile mechanism.
+    // So we add this function for manual updation of metrics when reporting the runtime profile.
+    virtual void update_metrics(RuntimeState* state) {}
+
     virtual size_t output_amplification_factor() const { return 1; }
     enum class OutputAmplificationType { ADD, MAX };
     virtual OutputAmplificationType intra_pipeline_amplification_type() const { return OutputAmplificationType::MAX; }
@@ -170,16 +180,8 @@ public:
     // equal to ExecNode::eval_join_runtime_filters, is used to apply bloom-filters to Operators.
     void eval_runtime_bloom_filters(Chunk* chunk);
 
-    // 1. (-∞, s_pseudo_plan_node_id_upper_bound] is for operator which is not in the query's plan
-    // for example, LocalExchangeSinkOperator, LocalExchangeSourceOperator
-    // 2. (s_pseudo_plan_node_id_upper_bound, -1] is for operator which is in the query's plan
-    // for example, ResultSink
-    static const int32_t s_pseudo_plan_node_id_for_memory_scratch_sink;
-    static const int32_t s_pseudo_plan_node_id_for_export_sink;
-    static const int32_t s_pseudo_plan_node_id_for_olap_table_sink;
-    static const int32_t s_pseudo_plan_node_id_for_result_sink;
-    static const int32_t s_pseudo_plan_node_id_for_iceberg_table_sink;
-    static const int32_t s_pseudo_plan_node_id_upper_bound;
+    // Pseudo plan_node_id for final sink, such as result_sink, table_sink
+    static const int32_t s_pseudo_plan_node_id_for_final_sink;
 
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
     RuntimeProfile* common_metrics() { return _common_metrics.get(); }
@@ -225,9 +227,14 @@ public:
 
     // Adjusts the execution mode of the operator (will only be called by the OperatorMemoryResourceManager component)
     virtual void set_execute_mode(int performance_level) {}
+    // @TODO(silverbullet233): for an operator, the way to reclaim memory is either spill
+    // or push the buffer data to the downstream operator.
+    // Maybe we don’t need to have the concepts of spillable and releasable, and we can use reclaimable instead.
+    // Later, we need to refactor here.
     virtual bool spillable() const { return false; }
     // Operator can free memory/buffer early
     virtual bool releaseable() const { return false; }
+    virtual void enter_release_memory_mode() {}
     spill::OperatorMemoryResourceManager& mem_resource_manager() { return _mem_resource_manager; }
 
     // the memory that can be freed by the current operator
@@ -251,6 +258,11 @@ public:
 
     // memory to be reserved before executing set_finishing
     virtual size_t estimated_memory_reserved() { return 0; }
+
+    // if return true it means the operator has child operators
+    virtual bool is_combinatorial_operator() const { return false; }
+    //
+    virtual void for_each_child_operator(const std::function<void(Operator*)>& apply) {}
 
 protected:
     OperatorFactory* _factory;

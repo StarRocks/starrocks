@@ -17,7 +17,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.parser.NodePosition;
 
-public class IncrementalRefreshSchemeDesc extends RefreshSchemeDesc {
+public class IncrementalRefreshSchemeDesc extends RefreshSchemeClause {
 
     public IncrementalRefreshSchemeDesc(MaterializedView.RefreshMoment moment, NodePosition pos) {
         super(MaterializedView.RefreshType.INCREMENTAL, pos, moment);

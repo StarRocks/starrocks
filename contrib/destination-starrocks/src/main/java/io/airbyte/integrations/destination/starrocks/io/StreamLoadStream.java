@@ -135,8 +135,8 @@ public class StreamLoadStream extends InputStream {
         if (recordIter.hasNext()) {
             AirbyteRecordMessage record = recordIter.next();
             return String.format(CsvFormat.LINE_PATTERN,
-                    UUID.randomUUID(),
                     record.getEmittedAt(),
+                    UUID.randomUUID(),
                     Jsons.serialize(record.getData())).getBytes(StandardCharsets.UTF_8);
         } else {
             endStream = true;

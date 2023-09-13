@@ -141,6 +141,7 @@ public class DeleteAnalyzer {
     public static void analyze(DeleteStmt deleteStatement, ConnectContext session) {
         TableName tableName = deleteStatement.getTableName();
         MetaUtils.normalizationTableName(session, tableName);
+        MetaUtils.checkNotSupportCatalog(tableName.getCatalog(), "DELETE");
         MetaUtils.getDatabase(session, tableName);
         Table table = MetaUtils.getTable(session, tableName);
 

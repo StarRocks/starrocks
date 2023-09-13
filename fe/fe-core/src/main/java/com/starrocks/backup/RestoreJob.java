@@ -60,15 +60,16 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
@@ -456,8 +457,8 @@ public class RestoreJob extends AbstractJob {
                     continue;
                 }
 
-                if (!tbl.isOlapOrCloudNativeTable()) {
-                    status = new Status(ErrCode.COMMON_ERROR, "Only support retore OLAP table: " + tbl.getName());
+                if (!tbl.isNativeTableOrMaterializedView()) {
+                    status = new Status(ErrCode.COMMON_ERROR, "Only support restore OLAP table: " + tbl.getName());
                     return;
                 }
 
@@ -495,7 +496,7 @@ public class RestoreJob extends AbstractJob {
 
                     tblInfo.checkAndRecoverAutoIncrementId(localTbl);
                     // table already exist, check schema
-                    if (!localTbl.isOlapOrCloudNativeTable()) {
+                    if (!localTbl.isNativeTableOrMaterializedView()) {
                         status = new Status(ErrCode.COMMON_ERROR,
                                 "Only support retore olap table: " + localTbl.getName());
                         return;
@@ -513,9 +514,34 @@ public class RestoreJob extends AbstractJob {
                     if (localOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames, true)
                             != remoteOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames, true) ||
                                 localOlapTbl.getBaseSchema().size() != remoteOlapTbl.getBaseSchema().size()) {
+                        List<Pair<Integer, String>> localCheckSumList = localOlapTbl.getSignatureSequence(
+                                BackupHandler.SIGNATURE_VERSION, intersectPartNames);
+                        List<Pair<Integer, String>> remoteCheckSumList = remoteOlapTbl.getSignatureSequence(
+                                BackupHandler.SIGNATURE_VERSION, intersectPartNames);
+                        
+                        String errMsg = "";
+                        if (localCheckSumList.size() == remoteCheckSumList.size()) {
+                            for (int i = 0; i < localCheckSumList.size(); ++i) {
+                                int localCheckSum = ((Integer) localCheckSumList.get(i).first).intValue();
+                                int remoteCheckSum = ((Integer) remoteCheckSumList.get(i).first).intValue();
+                                if (localCheckSum != remoteCheckSum) {
+                                    errMsg = ((String) localCheckSumList.get(i).second);
+                                    break;
+                                }
+                            }
+                        }
+
                         status = new Status(ErrCode.COMMON_ERROR,
                                 "Table " + jobInfo.getAliasByOriginNameIfSet(tblInfo.name)
-                                        + " already exist but with different schema");
+                                        + " already exist but with different schema, errMsg: "
+                                        + errMsg);
+                        return;
+                    }
+
+                    if (localOlapTbl.getKeysType() != remoteOlapTbl.getKeysType()) {
+                        status = new Status(ErrCode.COMMON_ERROR,
+                                "Table " + jobInfo.getAliasByOriginNameIfSet(tblInfo.name)
+                                        + " already exist but with different key type");
                         return;
                     }
 
@@ -526,7 +552,9 @@ public class RestoreJob extends AbstractJob {
                         if (!localColumn.equals(remoteColumn)) {
                             status = new Status(ErrCode.COMMON_ERROR,
                                     "Table " + jobInfo.getAliasByOriginNameIfSet(tblInfo.name)
-                                            + " already exist but with different schema");
+                                            + " already exist but with different schema, column: " + localColumn.getName()
+                                            + " in existed table is different from the column in backup snapshot, column: "
+                                            + remoteColumn.getName());
                             return;
                         }
                     }
@@ -820,6 +848,7 @@ public class RestoreJob extends AbstractJob {
     protected void createReplicas(OlapTable localTbl, Partition restorePart) {
         Set<String> bfColumns = localTbl.getCopiedBfColumns();
         double bfFpp = localTbl.getBfFpp();
+        // TODO(meegoo): support sub partition
         for (MaterializedIndex restoredIdx : restorePart.getMaterializedIndices(IndexExtState.VISIBLE)) {
             MaterializedIndexMeta indexMeta = localTbl.getIndexMetaByIndexId(restoredIdx.getId());
             TabletMeta tabletMeta = new TabletMeta(dbId, localTbl.getId(), restorePart.getId(),
@@ -838,6 +867,7 @@ public class RestoreJob extends AbstractJob {
                             localTbl.getCopiedIndexes(),
                             localTbl.isInMemory(),
                             localTbl.enablePersistentIndex(),
+                            localTbl.primaryIndexCacheExpireSec(),
                             localTbl.getPartitionInfo().getTabletType(restorePart.getId()),
                             localTbl.getCompressionType(), indexMeta.getSortKeyIdxes());
                     task.setInRestoreMode(true);
@@ -1259,7 +1289,7 @@ public class RestoreJob extends AbstractJob {
                 Map<Long, Long> map = restoredVersionInfo.rowMap().get(tblId);
                 for (Map.Entry<Long, Long> entry : map.entrySet()) {
                     long partId = entry.getKey();
-                    Partition part = olapTbl.getPartition(partId);
+                    PhysicalPartition part = olapTbl.getPhysicalPartition(partId);
                     if (part == null) {
                         continue;
                     }
@@ -1294,20 +1324,46 @@ public class RestoreJob extends AbstractJob {
 
             globalStateMgr.getEditLog().logRestoreJob(this);
 
-            // register table in DynamicPartitionScheduler after restore job finished
             db.readLock();
             try {
                 for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                     Table tbl = db.getTable(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
                     if (tbl == null) {
+                        LOG.warn("skip post actions after restore success, table name does not existed: %s",
+                                tblInfo.name);
                         continue;
                     }
-                    if (tbl.getType() != TableType.OLAP) {
+                    if (!tbl.isNativeTableOrMaterializedView()) {
                         continue;
                     }
-                    DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), (OlapTable) tbl);
-                    DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), (OlapTable) tbl);
+                    LOG.info("do post actions for table : {}", tbl.getName());
+
+                    // only for olap table
+                    if (tbl.isOlapTable()) {
+                        try {
+                            // register table in DynamicPartitionScheduler after restore job finished
+                            DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), (OlapTable) tbl);
+                        } catch (Exception e) {
+                            // no throw exceptions
+                            LOG.warn(String.format("register table %s for dynamic partition scheduler failed: ",
+                                    tbl.getName()), e);
+                        }
+                    }
+
+                    if (tbl.isMaterializedView()) {
+                        // rebuild materialized view after restore job finished
+                        MaterializedView mv = (MaterializedView) tbl;
+                        try {
+                            mv.doAfterRestore(db);
+                        } catch (Exception e) {
+                            // no throw exceptions
+                            LOG.warn(String.format("rebuild materialized view %s failed: ", mv.getName()), e);
+                        }
+                    }
                 }
+            } catch (Exception e) {
+                LOG.warn("Do post actions after restore success failed: ", e);
+                throw e;
             } finally {
                 db.readUnlock();
             }
@@ -1317,7 +1373,7 @@ public class RestoreJob extends AbstractJob {
         return Status.OK;
     }
 
-    protected void updateTablets(MaterializedIndex idx, Partition part) {
+    protected void updateTablets(MaterializedIndex idx, PhysicalPartition part) {
         for (Tablet tablet : idx.getTablets()) {
             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                 if (!replica.checkVersionCatchUp(part.getVisibleVersion(), false)) {
@@ -1493,7 +1549,7 @@ public class RestoreJob extends AbstractJob {
                 continue;
             }
 
-            if (!tbl.isOlapOrCloudNativeTable()) {
+            if (!tbl.isNativeTableOrMaterializedView()) {
                 continue;
             }
 

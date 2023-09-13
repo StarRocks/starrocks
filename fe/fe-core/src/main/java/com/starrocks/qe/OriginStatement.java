@@ -44,6 +44,10 @@ public class OriginStatement implements Writable {
         this.idx = idx;
     }
 
+    public OriginStatement(String singleOriginStmt) {
+        this(singleOriginStmt, 0);
+    }
+
     public static OriginStatement read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, OriginStatement.class);

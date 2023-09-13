@@ -18,8 +18,12 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -48,7 +52,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 public class OptOlapPartitionPruner {
@@ -207,7 +212,7 @@ public class OptOlapPartitionPruner {
         return Pair.create(Utils.compoundAnd(scanPredicates), prunedPartitionPredicates);
     }
 
-    private static void putValueMapItem(TreeMap<LiteralExpr, Set<Long>> partitionValueToIds,
+    private static void putValueMapItem(ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueToIds,
                                         Long partitionId,
                                         LiteralExpr value) {
         Set<Long> partitionIdSet = partitionValueToIds.get(value);
@@ -221,7 +226,8 @@ public class OptOlapPartitionPruner {
     private static List<Long> listPartitionPrune(OlapTable olapTable, ListPartitionInfo listPartitionInfo,
                                                  LogicalOlapScanOperator operator) {
 
-        Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = new HashMap<>();
+        Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap =
+                Maps.newConcurrentMap();
         Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = new HashMap<>();
 
         // Currently queries either specify a temporary partition, or do not. There is no situation
@@ -249,13 +255,16 @@ public class OptOlapPartitionPruner {
         }
 
         if (literalExprValuesMap != null && literalExprValuesMap.size() > 0) {
-            TreeMap<LiteralExpr, Set<Long>> partitionValueToIds = new TreeMap<>();
+            ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueToIds = new ConcurrentSkipListMap<>();
             for (Map.Entry<Long, List<LiteralExpr>> entry : literalExprValuesMap.entrySet()) {
                 Long partitionId = entry.getKey();
                 if (!partitionIds.contains(partitionId)) {
                     continue;
                 }
                 List<LiteralExpr> values = entry.getValue();
+                if (values == null || values.isEmpty()) {
+                    continue;
+                }
                 values.forEach(value ->
                         putValueMapItem(partitionValueToIds, partitionId, value));
             }
@@ -271,13 +280,16 @@ public class OptOlapPartitionPruner {
         if (multiLiteralExprValues != null && multiLiteralExprValues.size() > 0) {
             List<Column> columnList = listPartitionInfo.getPartitionColumns();
             for (int i = 0; i < columnList.size(); i++) {
-                TreeMap<LiteralExpr, Set<Long>> partitionValueToIds = new TreeMap<>();
+                ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueToIds = new ConcurrentSkipListMap<>();
                 for (Map.Entry<Long, List<List<LiteralExpr>>> entry : multiLiteralExprValues.entrySet()) {
                     Long partitionId = entry.getKey();
                     if (!partitionIds.contains(partitionId)) {
                         continue;
                     }
                     List<List<LiteralExpr>> multiValues = entry.getValue();
+                    if (multiValues == null || multiValues.isEmpty()) {
+                        continue;
+                    }
                     for (List<LiteralExpr> values : multiValues) {
                         LiteralExpr value = values.get(i);
                         putValueMapItem(partitionValueToIds, partitionId, value);
@@ -325,7 +337,7 @@ public class OptOlapPartitionPruner {
                 partitionInfo.getPartitionColumns(), operator.getColumnFilters());
         try {
             return partitionPruner.prune();
-        } catch (AnalysisException e) {
+        } catch (Exception e) {
             LOG.warn("PartitionPrune Failed. ", e);
         }
         return null;
@@ -333,22 +345,29 @@ public class OptOlapPartitionPruner {
 
     private static boolean isNeedFurtherPrune(List<Long> candidatePartitions, LogicalOlapScanOperator olapScanOperator,
                                               PartitionInfo partitionInfo) {
-        boolean probeResult = true;
-        if (candidatePartitions.isEmpty()) {
-            probeResult = false;
-        } else if (!partitionInfo.isRangePartition()) {
-            probeResult = false;
-        } else if (((RangePartitionInfo) partitionInfo).getPartitionColumns().size() > 1) {
-            probeResult = false;
-        } else if (((RangePartitionInfo) partitionInfo).getIdToRange(true)
-                .containsKey(candidatePartitions.get(0))) {
-            // it's a temp partition list, no need to do the further prune
-            probeResult = false;
-        } else if (olapScanOperator.getPredicate() == null) {
-            probeResult = false;
+        if (candidatePartitions.isEmpty()
+                || olapScanOperator.getPredicate() == null) {
+            return false;
         }
 
-        return probeResult;
+        // only support RANGE and EXPR_RANGE
+        // EXPR_RANGE_V2 type like partition by RANGE(cast(substring(col, 3)) as int)) is unsupported
+        if (partitionInfo.getType() == PartitionType.RANGE) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            return rangePartitionInfo.getPartitionColumns().size() == 1
+                    && !rangePartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
+        } else if (partitionInfo.getType() == PartitionType.EXPR_RANGE) {
+            ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            List<Expr> partitionExpr = exprPartitionInfo.getPartitionExprs();
+            if (partitionExpr.size() == 1 && partitionExpr.get(0) instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr.get(0);
+                String functionName = functionCallExpr.getFnName().getFunction();
+                return (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)
+                        || FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName))
+                        && !exprPartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
+            }
+        }
+        return false;
     }
 
     private static boolean containsNullValue(Column column, PartitionKey minRange) {

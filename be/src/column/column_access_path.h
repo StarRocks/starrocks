@@ -49,13 +49,23 @@ public:
 
     std::vector<std::unique_ptr<ColumnAccessPath>>& children() { return _children; }
 
-    bool is_key() { return _type == TAccessPathType::type::KEY; }
+    bool is_key() const { return _type == TAccessPathType::type::KEY; }
 
-    bool is_offset() { return _type == TAccessPathType::type::OFFSET; }
+    bool is_offset() const { return _type == TAccessPathType::type::OFFSET; }
+
+    bool is_field() const { return _type == TAccessPathType::type::FIELD; }
+
+    bool is_all() const { return _type == TAccessPathType::type::ALL; }
+
+    bool is_index() const { return _type == TAccessPathType::type::INDEX; }
+
+    bool is_from_predicate() const { return _from_predicate; }
 
     // segement may have different column schema(because schema change),
     // we need copy one and set the offset of schema, to help column reader find column access path
-    StatusOr<std::unique_ptr<ColumnAccessPath>> convert_by_index(const Field* filed, uint32_t index);
+    StatusOr<std::unique_ptr<ColumnAccessPath>> convert_by_index(const Field* field, uint32_t index);
+
+    const std::string to_string() const;
 
 private:
     TAccessPathType::type _type;
@@ -65,12 +75,19 @@ private:
     // column index in storage
     // the root index is the offset of table schema
     // the FIELD index is the offset of struct schema
-    // it's unused for MAP/JSON now
+    // it's unused for MAP/JSON/ARRAY now
     uint32_t _column_index;
+
+    bool _from_predicate;
 
     std::vector<std::unique_ptr<ColumnAccessPath>> _children;
 };
 
 using ColumnAccessPathPtr = std::unique_ptr<ColumnAccessPath>;
+
+inline std::ostream& operator<<(std::ostream& out, const ColumnAccessPath& val) {
+    out << val.to_string();
+    return out;
+}
 
 } // namespace starrocks

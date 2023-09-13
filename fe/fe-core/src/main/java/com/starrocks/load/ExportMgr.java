@@ -39,6 +39,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -52,9 +53,10 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.common.MetaUtils;
@@ -221,13 +223,20 @@ public class ExportMgr {
                     if (db == null) {
                         continue;
                     }
-                    if (!PrivilegeActions.checkAnyActionOnOrInDb(ConnectContext.get(), db.getFullName())) {
+
+                    try {
+                        Authorizer.checkAnyActionOnOrInDb(ConnectContext.get().getCurrentUserIdentity(),
+                                ConnectContext.get().getCurrentRoleIds(),
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                db.getFullName());
+                    } catch (AccessDeniedException e) {
                         continue;
                     }
                 } else {
-                    if (!PrivilegeActions.checkAnyActionOnTable(ConnectContext.get(),
-                            tableName.getDb(),
-                            tableName.getTbl())) {
+                    try {
+                        Authorizer.checkAnyActionOnTable(ConnectContext.get().getCurrentUserIdentity(),
+                                ConnectContext.get().getCurrentRoleIds(), tableName);
+                    } catch (AccessDeniedException e) {
                         continue;
                     }
                 }

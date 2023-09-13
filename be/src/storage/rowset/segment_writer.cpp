@@ -47,6 +47,7 @@
 #include "storage/rowset/page_io.h"
 #include "storage/seek_tuple.h"
 #include "storage/short_key_index.h"
+#include "types/logical_type.h"
 #include "util/crc32c.h"
 #include "util/faststring.h"
 #include "util/json.h"
@@ -56,9 +57,12 @@ namespace starrocks {
 const char* const k_segment_magic = "D0R1";
 const uint32_t k_segment_magic_length = 4;
 
-SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segment_id,
-                             const TabletSchema* tablet_schema, SegmentWriterOptions opts)
-        : _segment_id(segment_id), _tablet_schema(tablet_schema), _opts(std::move(opts)), _wfile(std::move(wfile)) {
+SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
+                             SegmentWriterOptions opts)
+        : _segment_id(segment_id),
+          _tablet_schema(std::move(tablet_schema)),
+          _opts(std::move(opts)),
+          _wfile(std::move(wfile)) {
     CHECK_NOTNULL(_wfile.get());
 }
 
@@ -173,7 +177,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         if (column.type() == LogicalType::TYPE_VARCHAR && _opts.global_dicts != nullptr) {
             auto iter = _opts.global_dicts->find(column.name().data());
             if (iter != _opts.global_dicts->end()) {
-                opts.global_dict = &iter->second;
+                opts.global_dict = &iter->second.dict;
                 _global_dict_columns_valid_info[iter->first] = true;
             }
         }
@@ -260,10 +264,10 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         RETURN_IF_ERROR(column_writer->write_bloom_filter_index());
         *index_size += _wfile->size() - index_offset;
 
-        // global dict
-        if (!column_writer->is_global_dict_valid()) {
-            std::string col_name(_tablet_schema->columns()[column_index].name().data(),
-                                 _tablet_schema->columns()[column_index].name().size());
+        // check global dict valid
+        const auto& column = _tablet_schema->column(column_index);
+        if (!column_writer->is_global_dict_valid() && is_string_type(column.type())) {
+            std::string col_name(column.name());
             _global_dict_columns_valid_info[col_name] = false;
         }
 

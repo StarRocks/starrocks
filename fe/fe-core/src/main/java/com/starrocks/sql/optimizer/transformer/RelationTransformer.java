@@ -52,6 +52,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
@@ -453,6 +454,11 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     }
 
     @Override
+    public LogicalPlan visitFileTableFunction(FileTableFunctionRelation node, ExpressionMapping context) {
+        return visitTable(node, context);
+    }
+
+    @Override
     public LogicalPlan visitTable(TableRelation node, ExpressionMapping context) {
         ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
         ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
@@ -495,6 +501,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                         .setPartitionNames(node.getPartitionNames())
                         .setSelectedTabletId(Lists.newArrayList())
                         .setHintsTabletIds(node.getTabletIds())
+                        .setHintsReplicaIds(node.getReplicaIds())
                         .setHasTableHints(node.hasTableHints())
                         .setUsePkIndex(node.isUsePkIndex())
                         .build();

@@ -137,9 +137,9 @@ Status ConvertedSchemaChange::init() {
     _read_params.fill_data_cache = false;
 
     ASSIGN_OR_RETURN(auto base_tablet_schema, _base_tablet->get_schema());
-    _base_schema = ChunkHelper::convert_schema(*base_tablet_schema, _chunk_changer->get_selected_column_indexes());
+    _base_schema = ChunkHelper::convert_schema(base_tablet_schema, _chunk_changer->get_selected_column_indexes());
     ASSIGN_OR_RETURN(_new_tablet_schema, _new_tablet->get_schema());
-    _new_schema = ChunkHelper::convert_schema(*_new_tablet_schema);
+    _new_schema = ChunkHelper::convert_schema(_new_tablet_schema);
 
     _base_chunk = ChunkHelper::new_chunk(_base_schema, config::vector_chunk_size);
     _new_chunk = ChunkHelper::new_chunk(_new_schema, config::vector_chunk_size);
@@ -183,7 +183,7 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
             return Status::InternalError("failed to convert chunk data");
         }
 
-        ChunkHelper::padding_char_columns(_char_field_indexes, _new_schema, *_new_tablet_schema, _new_chunk.get());
+        ChunkHelper::padding_char_columns(_char_field_indexes, _new_schema, _new_tablet_schema, _new_chunk.get());
         RETURN_IF_ERROR(writer->write(*_new_chunk));
     }
 
@@ -224,7 +224,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     RETURN_IF_ERROR(reader->open(_read_params));
 
     // create writer
-    auto writer = DeltaWriter::create(_tablet_manager, _new_tablet->id(), _txn_id, _max_buffer_size,
+    auto writer = DeltaWriter::create(_tablet_manager, _new_tablet->id(), _txn_id, _max_buffer_size, 0,
                                       CurrentThread::mem_tracker());
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
@@ -259,7 +259,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
             return Status::InternalError("failed to convert chunk data");
         }
 
-        ChunkHelper::padding_char_columns(_char_field_indexes, _new_schema, *_new_tablet_schema, _new_chunk.get());
+        ChunkHelper::padding_char_columns(_char_field_indexes, _new_schema, _new_tablet_schema, _new_chunk.get());
         RETURN_IF_ERROR(writer->write(*_new_chunk, _selective->data(), _new_chunk->num_rows()));
     }
 
@@ -304,12 +304,12 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
     SchemaChangeParams sc_params;
     sc_params.base_tablet = &base_tablet;
     sc_params.new_tablet = &new_tablet;
-    sc_params.chunk_changer = std::make_unique<ChunkChanger>(*new_schema);
+    sc_params.chunk_changer = std::make_unique<ChunkChanger>(new_schema);
     sc_params.version = alter_version;
     sc_params.txn_id = request.txn_id;
 
     SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map);
-    RETURN_IF_ERROR(SchemaChangeUtils::parse_request(*base_schema, *new_schema, sc_params.chunk_changer.get(),
+    RETURN_IF_ERROR(SchemaChangeUtils::parse_request(base_schema, new_schema, sc_params.chunk_changer.get(),
                                                      sc_params.materialized_params_map, has_delete_predicates,
                                                      &sc_params.sc_sorting, &sc_params.sc_directly, nullptr));
 

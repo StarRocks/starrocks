@@ -15,11 +15,18 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.Catalog;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
+import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.HashMap;
+import java.util.Map;
+
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeCreateTableLikeTest {
@@ -54,5 +61,25 @@ public class AnalyzeCreateTableLikeTest {
     @Test
     public void testCreateIfNotExists() {
         analyzeSuccess("create table if not exists t2 like t1");
+    }
+
+    @Test
+    public void testNotExistCatalog() {
+        analyzeFail("CREATE TABLE test.table2 LIKE ice.db1.t0", "Catalog ice is not found");
+    }
+
+    @Test
+    public void testCreateTableLikeIcebergTable() {
+        CatalogMgr catalogMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getCatalogMgr();
+        Map<String, String> config = new HashMap<>();
+        config.put("type", "iceberg");
+        new Expectations(catalogMgr) {
+            {
+                catalogMgr.getCatalogByName("ice");
+                result = new Catalog(1111, "ice", config, "");
+            }
+        };
+
+        analyzeFail("CREATE TABLE test.table2 LIKE ice.db1.t0", "Table of iceberg catalog doesn't support [CREATE TABLE LIKE]");
     }
 }

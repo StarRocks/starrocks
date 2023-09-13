@@ -54,6 +54,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/compound_predicate.h"
 #include "exprs/condition_expr.h"
+#include "exprs/dict_query_expr.h"
 #include "exprs/dictmapping_expr.h"
 #include "exprs/function_call_expr.h"
 #include "exprs/in_predicate.h"
@@ -70,6 +71,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
+#include "util/failpoint/fail_point.h"
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
@@ -261,6 +263,7 @@ Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNo
 
 Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks::TExprNode& texpr_node,
                                     starrocks::Expr** expr, RuntimeState* state) {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
     switch (texpr_node.node_type) {
     case TExprNodeType::BOOL_LITERAL:
     case TExprNodeType::INT_LITERAL:
@@ -385,6 +388,9 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::CLONE_EXPR:
         *expr = pool->add(new CloneExpr(texpr_node));
         break;
+    case TExprNodeType::DICT_QUERY_EXPR:
+        *expr = pool->add(new DictQueryExpr(texpr_node));
+        break;
     case TExprNodeType::ARRAY_SLICE_EXPR:
     case TExprNodeType::AGG_EXPR:
     case TExprNodeType::TABLE_FUNCTION_EXPR:
@@ -433,6 +439,7 @@ Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state)
 }
 
 Status Expr::prepare(RuntimeState* state, ExprContext* context) {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(randome_error);
     DCHECK(_type.type != TYPE_UNKNOWN);
     for (auto& i : _children) {
         RETURN_IF_ERROR(i->prepare(state, context));
@@ -448,6 +455,7 @@ Status Expr::open(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
 }
 
 Status Expr::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
     DCHECK(_type.type != TYPE_UNKNOWN);
     for (auto& i : _children) {
         RETURN_IF_ERROR(i->open(state, context, scope));
@@ -576,6 +584,16 @@ int Expr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
 
     for (auto i : _children) {
         n += i->get_slot_ids(slot_ids);
+    }
+
+    return n;
+}
+
+int Expr::get_subfields(std::vector<std::vector<std::string>>* subfields) const {
+    int n = 0;
+
+    for (auto i : _children) {
+        n += i->get_subfields(subfields);
     }
 
     return n;

@@ -23,9 +23,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 public class SqlUtil {
-    private SqlUtil() {
-    }
-
     public static Connection createJDBCConnection(JsonNode config) throws ClassNotFoundException, SQLException {
         String dbUrl = String.format(StarRocksConstants.PATTERN_JDBC_URL,
                 config.get(StarRocksConstants.KEY_FE_HOST).asText(),
@@ -77,11 +74,11 @@ public class SqlUtil {
 
     public static void createTableIfNotExist(Connection conn, String tableName) throws SQLException {
         String sql = "CREATE TABLE IF NOT EXISTS " + tableName + " ( \n"
-                + "`" + JavaBaseConstants.COLUMN_NAME_AB_ID + "` varchar(40),\n"
                 + "`" + JavaBaseConstants.COLUMN_NAME_EMITTED_AT + "` BIGINT,\n"
+                + "`" + JavaBaseConstants.COLUMN_NAME_AB_ID + "` varchar(40),\n"
                 + "`" + JavaBaseConstants.COLUMN_NAME_DATA + "` String)\n"
-                + "DUPLICATE KEY(`" + JavaBaseConstants.COLUMN_NAME_AB_ID + "`,`"
-                + JavaBaseConstants.COLUMN_NAME_EMITTED_AT + "`) \n"
+                + "DUPLICATE KEY(`" + JavaBaseConstants.COLUMN_NAME_EMITTED_AT + "`,`"
+                + JavaBaseConstants.COLUMN_NAME_AB_ID + "`) \n"
                 + "DISTRIBUTED BY HASH(`" + JavaBaseConstants.COLUMN_NAME_AB_ID + "`) BUCKETS 16 \n"
                 + "PROPERTIES ( \n"
                 + "\"replication_num\" = \"1\" \n"

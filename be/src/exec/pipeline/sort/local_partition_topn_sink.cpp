@@ -21,7 +21,7 @@ namespace starrocks::pipeline {
 LocalPartitionTopnSinkOperator::LocalPartitionTopnSinkOperator(OperatorFactory* factory, int32_t id,
                                                                int32_t plan_node_id, int32_t driver_sequence,
                                                                LocalPartitionTopnContext* partition_topn_ctx)
-        : Operator(factory, id, "local_partition_topn_sink", plan_node_id, driver_sequence),
+        : Operator(factory, id, "local_partition_topn_sink", plan_node_id, false, driver_sequence),
           _partition_topn_ctx(partition_topn_ctx) {}
 
 Status LocalPartitionTopnSinkOperator::prepare(RuntimeState* state) {

@@ -52,6 +52,8 @@ public:
         if (_opened) return Status::OK();
 
         _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
+        ADD_TIMER(_runtime_profile, "IOTaskWaitTime");
+        ADD_TIMER(_runtime_profile, "IOTaskExecTime");
         SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->open(state));
         _opened = true;
@@ -197,8 +199,8 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
     auto operators = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 
     if (_data_source_provider->insert_local_exchange_operator()) {
-        operators = context->maybe_interpolate_local_passthrough_exchange(context->fragment_context()->runtime_state(),
-                                                                          operators, context->degree_of_parallelism());
+        operators = context->maybe_interpolate_local_passthrough_exchange(
+                context->fragment_context()->runtime_state(), id(), operators, context->degree_of_parallelism());
     }
     return operators;
 }
@@ -223,7 +225,7 @@ Status ConnectorScanNode::open(RuntimeState* state) {
 
 Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
     for (TScanRangeParams& scan_range : _scan_ranges) {
-        _create_and_init_scanner(state, scan_range.scan_range);
+        RETURN_IF_ERROR(_create_and_init_scanner(state, scan_range.scan_range));
     }
     _num_scanners = _pending_scanners.size();
     if (_num_scanners == 0) {
@@ -260,7 +262,7 @@ Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, TScanRan
     data_source->set_runtime_profile(_runtime_profile.get());
     data_source->update_has_any_predicate();
     ConnectorScanner* scanner = _pool->add(new ConnectorScanner(std::move(data_source), _runtime_profile.get()));
-    scanner->init(state);
+    RETURN_IF_ERROR(scanner->init(state));
     _push_pending_scanner(scanner);
     return Status::OK();
 }
@@ -564,9 +566,9 @@ void ConnectorScanNode::_fill_chunk_pool(int count) {
     }
 }
 
-Status ConnectorScanNode::close(RuntimeState* state) {
+void ConnectorScanNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
     _closed = true;
     _update_status(Status::Cancelled("closed"));
@@ -576,8 +578,7 @@ Status ConnectorScanNode::close(RuntimeState* state) {
     }
     _close_pending_scanners();
     _data_source_provider->close(state);
-    RETURN_IF_ERROR(ScanNode::close(state));
-    return Status::OK();
+    ScanNode::close(state);
 }
 
 Status ConnectorScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {

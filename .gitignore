@@ -41,6 +41,7 @@ dependency-reduced-pom.xml
 test/conf/
 test/conf/sr.conf
 test/nosetests.xml
+test/common/data
 tags
 .tags
 .cache

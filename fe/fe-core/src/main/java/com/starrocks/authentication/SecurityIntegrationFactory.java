@@ -14,16 +14,18 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.common.DdlException;
+
 import java.util.Map;
 
 public class SecurityIntegrationFactory {
     public static SecurityIntegration createSecurityIntegration(String name, Map<String, String> propertyMap)
-            throws AuthenticationException {
+            throws DdlException {
         String type = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY);
         if (type.equals(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
             return new LDAPSecurityIntegration(name, propertyMap);
         } else {
-            throw new AuthenticationException("unsupported '" + type + "' type security integration");
+            throw new DdlException("unsupported '" + type + "' type security integration");
         }
 
     }

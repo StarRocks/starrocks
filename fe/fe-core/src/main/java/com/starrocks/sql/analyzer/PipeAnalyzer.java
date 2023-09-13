@@ -18,10 +18,14 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
+import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.OrderByPair;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.load.pipe.FilePipeSource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.VariableMgr;
@@ -29,27 +33,35 @@ import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.pipe.AlterPipeSetProperty;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class PipeAnalyzer {
 
+    public static final String TASK_VARIABLES_PREFIX = "TASK.";
     public static final String PROPERTY_AUTO_INGEST = "auto_ingest";
     public static final String PROPERTY_POLL_INTERVAL = "poll_interval";
     public static final String PROPERTY_BATCH_SIZE = "batch_size";
+    public static final String PROPERTY_BATCH_FILES = "batch_files";
 
-    private static final ImmutableSet<String> SUPPORTED_PROPERTIES =
+    public static final ImmutableSet<String> SUPPORTED_PROPERTIES =
             new ImmutableSortedSet.Builder<String>(String.CASE_INSENSITIVE_ORDER)
                     .add(PROPERTY_AUTO_INGEST)
                     .add(PROPERTY_POLL_INTERVAL)
                     .add(PROPERTY_BATCH_SIZE)
+                    .add(PROPERTY_BATCH_FILES)
                     .build();
 
     private static void analyzePipeName(PipeName pipeName, ConnectContext context) {
@@ -71,6 +83,14 @@ public class PipeAnalyzer {
             return;
         }
         for (String propertyName : properties.keySet()) {
+            if (propertyName.toUpperCase().startsWith(TASK_VARIABLES_PREFIX)) {
+                // Task execution variable
+                String taskVariableName = StringUtils.removeStartIgnoreCase(propertyName, TASK_VARIABLES_PREFIX);
+                if (!VariableMgr.containsVariable(taskVariableName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, propertyName);
+                }
+                continue;
+            }
             if (!SUPPORTED_PROPERTIES.contains(propertyName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, propertyName);
             }
@@ -89,15 +109,26 @@ public class PipeAnalyzer {
                     break;
                 }
                 case PROPERTY_BATCH_SIZE: {
+                    long value = -1;
+                    try {
+                        value = ParseUtil.parseDataVolumeStr(valueStr);
+                    } catch (Exception ignored) {
+                    }
+                    if (value < 0) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                                PROPERTY_BATCH_SIZE + " should in [0, +oo)");
+                    }
+                    break;
+                }
+                case PROPERTY_BATCH_FILES: {
                     int value = -1;
                     try {
                         value = Integer.parseInt(valueStr);
                     } catch (NumberFormatException ignored) {
                     }
-                    if (value < 0) {
-                        ErrorReport.reportSemanticException(
-                                ErrorCode.ERR_INVALID_PARAMETER,
-                                PROPERTY_BATCH_SIZE + " should in [0, +oo)");
+                    if (value < 1 || value > 1024) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                                PROPERTY_BATCH_FILES + " should in [1, 1024]");
                     }
                     break;
                 }
@@ -163,10 +194,29 @@ public class PipeAnalyzer {
             }
             stmt.setDbName(context.getDatabase());
         }
+
+        // Analyze order by
+        if (CollectionUtils.isNotEmpty(stmt.getOrderBy())) {
+            List<OrderByPair> orderByPairs = new ArrayList<>();
+            for (OrderByElement element : stmt.getOrderBy()) {
+                if (!(element.getExpr() instanceof SlotRef)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "only support order by specific column");
+                }
+                SlotRef slot = (SlotRef) element.getExpr();
+                int index = ShowPipeStmt.findSlotIndex(slot.getColumnName());
+                orderByPairs.add(new OrderByPair(index, !element.getIsAsc()));
+            }
+            stmt.setOrderByPairs(orderByPairs);
+        }
     }
 
     public static void analyze(AlterPipeStmt stmt, ConnectContext context) {
         analyzePipeName(stmt.getPipeName(), context);
+        if (stmt.getAlterPipeClause() instanceof AlterPipeSetProperty) {
+            AlterPipeSetProperty setProperty = (AlterPipeSetProperty) stmt.getAlterPipeClause();
+            analyzeProperties(setProperty.getProperties());
+        }
     }
 
     public static void analyze(DescPipeStmt stmt, ConnectContext context) {

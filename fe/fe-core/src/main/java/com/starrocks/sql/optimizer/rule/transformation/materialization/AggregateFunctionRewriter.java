@@ -192,12 +192,11 @@ public class AggregateFunctionRewriter {
             newAggFunc = Lists.newArrayList(newColRef);
         }
 
-        CallOperator bitmapCountOp = new CallOperator(FunctionSet.BITMAP_COUNT,
+        return new CallOperator(FunctionSet.BITMAP_COUNT,
                 aggFunc.getType(),
                 newAggFunc,
-                Expr.getBuiltinFunction(FunctionSet.BITMAP_COUNT, new Type[] {Type.BITMAP},
+                Expr.getBuiltinFunction(FunctionSet.BITMAP_COUNT, new Type[] { Type.BITMAP },
                         IS_IDENTICAL));
-        return bitmapCountOp;
     }
 
     private CallOperator rewriteApproxCount(CallOperator aggFunc) {
@@ -214,7 +213,8 @@ public class AggregateFunctionRewriter {
             aggChild = Lists.newArrayList(hllHashOp);
         }
 
-        // rewrite approx_count_distinct to hll_union_agg(hll_union(hll_hash(x)))
+        // Rewrite approx_count_distinct to hll_cardinality(hll_union(hll_hash(x))).
+        // For approx_count_distinct and ndv, just used for mv rewrite.
         CallOperator hllUnionOp = new CallOperator(FunctionSet.HLL_UNION,
                 Type.HLL,
                 aggChild,
@@ -228,12 +228,11 @@ public class AggregateFunctionRewriter {
             newAggFunc = newColRef;
         }
 
-        CallOperator hllUnionAggOp = new CallOperator(FunctionSet.HLL_CARDINALITY,
+        return new CallOperator(FunctionSet.HLL_CARDINALITY,
                 aggFunc.getType(),
                 Lists.newArrayList(newAggFunc),
-                Expr.getBuiltinFunction(FunctionSet.HLL_CARDINALITY, new Type[] {Type.HLL},
+                Expr.getBuiltinFunction(FunctionSet.HLL_CARDINALITY, new Type[] { Type.HLL },
                         IS_IDENTICAL));
-        return hllUnionAggOp;
     }
 
     private CallOperator rewritePercentile(CallOperator aggFunc) {
@@ -264,12 +263,11 @@ public class AggregateFunctionRewriter {
             newAggFunc = newColRef;
         }
 
-        CallOperator percentileApproxRaw = new CallOperator(FunctionSet.PERCENTILE_APPROX_RAW,
+        return new CallOperator(FunctionSet.PERCENTILE_APPROX_RAW,
                 Type.DOUBLE, Lists.newArrayList(newAggFunc, aggFunc.getChild(1)),
                 Expr.getBuiltinFunction(
                         FunctionSet.PERCENTILE_APPROX_RAW,
-                        new Type[] {Type.PERCENTILE, Type.DOUBLE},
+                        new Type[] { Type.PERCENTILE, Type.DOUBLE },
                         Function.CompareMode.IS_IDENTICAL));
-        return percentileApproxRaw;
     }
 }

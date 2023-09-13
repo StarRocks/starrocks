@@ -501,6 +501,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                     throw new AnalysisException("repeat setting of where predicate");
                 }
                 importWhereStmt = (ImportWhereStmt) parseNode;
+                if (importWhereStmt.isContainSubquery()) {
+                    throw new AnalysisException("the predicate cannot contain subqueries");
+                }
             } else if (parseNode instanceof PartitionNames) {
                 // check partition names
                 if (partitionNames != null) {

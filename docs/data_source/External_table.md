@@ -1,4 +1,4 @@
-# External table
+# (To be deprecated) External table
 
 StarRocks supports access to other data sources by using external tables. External tables are created based on data tables that are stored in other data sources. StarRocks only stores the metadata of the data tables. You can use external tables to directly query data in other data sources. StarRocks supports the following data sources: MySQL, StarRocks, Elasticsearch, Apache Hive™, Apache Iceberg, and Apache Hudi. **Currently, you can only write data from another StarRocks cluster into the current StarRocks cluster. You cannot read data from it. For data sources other than StarRocks, you can only read data from these data sources.**
 
@@ -110,7 +110,7 @@ The following limits apply when you use a StarRocks external table:
 * The syntax of creating an external table is the same as creating a normal table, but the column names and other information in the external table must be the same as the destination table.
 * The external table synchronizes table metadata from the destination table every 10 seconds. If a DDL operation is performed on the destination table, there may be a delay for data synchronization between the two tables.
 
-## Elasticsearch external table
+## (Deprecated) Elasticsearch external table
 
 StarRocks and Elasticsearch are two popular analytics systems. StarRocks is performant in large-scale distributed computing. Elasticsearch is ideal for full-text search. StarRocks combined with Elasticsearch can deliver a more complete OLAP solution.
 

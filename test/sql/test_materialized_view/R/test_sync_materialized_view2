@@ -1,4 +1,4 @@
--- name: test_sync_materialized_view
+-- name: test_sync_materialized_view2
 create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');
 -- result:
 -- !result
@@ -103,7 +103,7 @@ drop materialized view same_column_ref_mv1;
 create materialized view user_tags_percential_mv2
 as select case when user_id != 0 then user_id + 1 else 0 end as col1, time, percentile_union(percentile_hash(cast(tag_id as bigint))) from user_tags group by col1, time;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The materialized view currently does not support multi-slot-refs expr: {}.')
+E: (1064, 'Getting analyzing error. Detail message: The materialized view currently does not support multi-slot-refs expr: {}. Please use Asynchronous Materialized View instead')
 -- !result
 drop table if exists tbl1;
 -- result:

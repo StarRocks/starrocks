@@ -50,7 +50,10 @@ public:
 
     bool is_null(size_t index) const override { return _data->is_null(0); }
 
-    bool only_null() const override { return _data->is_null(0); }
+    bool only_null() const override {
+        DCHECK(_data->is_nullable() ? _size == 0 || _data->is_null(0) : true);
+        return _data->is_nullable();
+    }
 
     bool has_null() const override { return _data->has_null(); }
 
@@ -75,7 +78,12 @@ public:
 
     void reserve(size_t n) override {}
 
-    void resize(size_t n) override { _size = n; }
+    void resize(size_t n) override {
+        if (_size == 0) {
+            _data->resize(1);
+        }
+        _size = n;
+    }
 
     // This method resize the underlying data column,
     // Because when sometimes(agg functions), we want to handle const column as normal data column
@@ -125,13 +133,23 @@ public:
         }
     }
 
-    void append_default() override { _size++; }
+    void append_default() override {
+        if (_size == 0) {
+            _data->append_default(1);
+        }
+        _size++;
+    }
 
-    void append_default(size_t count) override { _size += count; }
+    void append_default(size_t count) override {
+        if (_size == 0) {
+            _data->append_default(1);
+        }
+        _size += count;
+    }
 
     void fill_default(const Filter& filter) override;
 
-    Status update_rows(const Column& src, const uint32_t* indexes) override;
+    void update_rows(const Column& src, const uint32_t* indexes) override;
 
     uint32_t serialize(size_t idx, uint8_t* pos) override { return _data->serialize(0, pos); }
 

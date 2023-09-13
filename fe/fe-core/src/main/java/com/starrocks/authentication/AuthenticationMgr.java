@@ -121,7 +121,7 @@ public class AuthenticationMgr {
     private boolean isLoaded = false;
 
     @SerializedName("sim")
-    private Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
+    protected Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
 
     public AuthenticationMgr() {
         // default plugin
@@ -221,6 +221,59 @@ public class AuthenticationMgr {
         }
     }
 
+    private UserIdentity checkPasswordForNative(
+            String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
+        Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
+                getBestMatchedUserIdentity(remoteUser, remoteHost);
+        if (matchedUserIdentity == null) {
+            LOG.debug("cannot find user {}@{}", remoteUser, remoteHost);
+        } else {
+            try {
+                AuthenticationProvider provider =
+                        AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
+                provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
+                        matchedUserIdentity.getValue());
+                return matchedUserIdentity.getKey();
+            } catch (AuthenticationException e) {
+                LOG.debug("failed to authenticate for native, user: {}@{}, error: {}",
+                        remoteUser, remoteHost, e.getMessage());
+            }
+        }
+
+        return null;
+    }
+
+    protected UserIdentity checkPasswordForNonNative(
+            String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString, String authMechanism) {
+        SecurityIntegration securityIntegration =
+                nameToSecurityIntegrationMap.getOrDefault(authMechanism, null);
+        if (securityIntegration == null) {
+            LOG.info("'{}' authentication mechanism not found", authMechanism);
+        } else {
+            try {
+                AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
+                UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
+                userAuthenticationInfo.extraInfo.put(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name(),
+                        securityIntegration);
+                provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
+                        userAuthenticationInfo);
+                // the ephemeral user is identified as 'username'@'auth_mechanism'
+                UserIdentity authenticatedUser = UserIdentity.createEphemeralUserIdent(remoteUser, authMechanism);
+                ConnectContext currentContext = ConnectContext.get();
+                if (currentContext != null) {
+                    currentContext.setCurrentRoleIds(new HashSet<>(
+                            Collections.singletonList(PrivilegeBuiltinConstants.ROOT_ROLE_ID)));
+                }
+                return authenticatedUser;
+            } catch (AuthenticationException e) {
+                LOG.debug("failed to authenticate, user: {}@{}, security integration: {}, error: {}",
+                        remoteUser, remoteHost, securityIntegration, e.getMessage());
+            }
+        }
+
+        return null;
+    }
+
     public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
         String[] authChain = Config.authentication_chain;
         UserIdentity authenticatedUser = null;
@@ -230,47 +283,10 @@ public class AuthenticationMgr {
             }
 
             if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
-                Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
-                        getBestMatchedUserIdentity(remoteUser, remoteHost);
-                if (matchedUserIdentity == null) {
-                    LOG.debug("cannot find user {}@{}", remoteUser, remoteHost);
-                } else {
-                    try {
-                        AuthenticationProvider provider =
-                                AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
-                        provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
-                                matchedUserIdentity.getValue());
-                        authenticatedUser = matchedUserIdentity.getKey();
-                    } catch (AuthenticationException e) {
-                        LOG.debug("failed to authenticate for native, user: {}@{}, error: {}",
-                                remoteUser, remoteHost, e.getMessage());
-                    }
-                }
+                authenticatedUser = checkPasswordForNative(remoteUser, remoteHost, remotePasswd, randomString);
             } else {
-                SecurityIntegration securityIntegration =
-                        nameToSecurityIntegrationMap.getOrDefault(authMechanism, null);
-                if (securityIntegration == null) {
-                    LOG.info("'{}' authentication mechanism not found", authMechanism);
-                } else {
-                    try {
-                        AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
-                        UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
-                        userAuthenticationInfo.extraInfo.put(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name(),
-                                securityIntegration);
-                        provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
-                                userAuthenticationInfo);
-                        // the ephemeral user is identified as 'username'@'auth_mechanism'
-                        authenticatedUser = UserIdentity.createEphemeralUserIdent(remoteUser, authMechanism);
-                        ConnectContext currentContext = ConnectContext.get();
-                        if (currentContext != null) {
-                            currentContext.setCurrentRoleIds(new HashSet<>(
-                                    Collections.singletonList(PrivilegeBuiltinConstants.ROOT_ROLE_ID)));
-                        }
-                    } catch (AuthenticationException e) {
-                        LOG.debug("failed to authenticate, user: {}@{}, security integration: {}, error: {}",
-                                remoteUser, remoteHost, securityIntegration, e.getMessage());
-                    }
-                }
+                authenticatedUser = checkPasswordForNonNative(
+                        remoteUser, remoteHost, remotePasswd, randomString, authMechanism);
             }
         }
 
@@ -313,7 +329,8 @@ public class AuthenticationMgr {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             AuthorizationMgr authorizationManager = globalStateMgr.getAuthorizationMgr();
             // init user privilege
-            UserPrivilegeCollectionV2 collection = authorizationManager.onCreateUser(userIdentity, stmt.getDefaultRoles());
+            UserPrivilegeCollectionV2 collection =
+                    authorizationManager.onCreateUser(userIdentity, stmt.getDefaultRoles());
 
             short pluginId = authorizationManager.getProviderPluginId();
             short pluginVersion = authorizationManager.getProviderPluginVersion();
@@ -327,7 +344,8 @@ public class AuthenticationMgr {
         }
     }
 
-    public void alterUser(UserIdentity userIdentity, UserAuthenticationInfo userAuthenticationInfo) throws DdlException {
+    public void alterUser(UserIdentity userIdentity, UserAuthenticationInfo userAuthenticationInfo)
+            throws DdlException {
         writeLock();
         try {
             if (!userToAuthenticationInfo.containsKey(userIdentity)) {
@@ -367,11 +385,16 @@ public class AuthenticationMgr {
     }
 
     public void createSecurityIntegration(String name, Map<String, String> propertyMap) throws DdlException {
+        createSecurityIntegration(name, propertyMap, false);
+
+    }
+
+    public void createSecurityIntegration(String name, Map<String, String> propertyMap, boolean isReplay) throws DdlException {
         SecurityIntegration securityIntegration;
         try {
             securityIntegration =
                     SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
-        } catch (AuthenticationException e) {
+        } catch (DdlException e) {
             throw new DdlException("failed to create security integration, error: " + e.getMessage(), e);
         }
         nameToSecurityIntegrationMap.put(name, securityIntegration);
@@ -379,20 +402,39 @@ public class AuthenticationMgr {
         LOG.info("finished to create security integration '{}'", securityIntegration.toString());
     }
 
-    public void alterSecurityIntegration(String name, Map<String, String> propertyMap) {
-        // TODO(yiming): 'type' cannot be changed
+    public void alterSecurityIntegration(String name, Map<String, String> alterProps,
+                                         boolean isReplay) throws DdlException {
+        throw new DdlException("unsupported operation");
+    }
+
+    public void dropSecurityIntegration(String name, boolean isReplay) throws DdlException {
+        throw new DdlException("unsupported operation");
     }
 
     public SecurityIntegration getSecurityIntegration(String name) {
         return nameToSecurityIntegrationMap.get(name);
     }
 
+    public Set<SecurityIntegration> getAllSecurityIntegrations() {
+        return new HashSet<>(nameToSecurityIntegrationMap.values());
+    }
+
     public void replayCreateSecurityIntegration(String name, Map<String, String> propertyMap)
-            throws AuthenticationException {
+            throws DdlException {
         // using concurrent hash map and COW, we don't need lock protection here
         SecurityIntegration securityIntegration =
                 SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
         nameToSecurityIntegrationMap.put(name, securityIntegration);
+    }
+
+    public void replayAlterSecurityIntegration(String name, Map<String, String> alterProps)
+            throws DdlException {
+        throw new DdlException("unsupported operation");
+    }
+
+    public void replayDropSecurityIntegration(String name)
+            throws DdlException {
+        throw new DdlException("unsupported operation");
     }
 
     public void replayUpdateUserProperty(UserPropertyInfo info) throws DdlException {
@@ -478,7 +520,8 @@ public class AuthenticationMgr {
     }
 
     private void updateUserNoLock(
-            UserIdentity userIdentity, UserAuthenticationInfo info, boolean shouldExists) throws AuthenticationException {
+            UserIdentity userIdentity, UserAuthenticationInfo info, boolean shouldExists)
+            throws AuthenticationException {
         if (userToAuthenticationInfo.containsKey(userIdentity)) {
             if (!shouldExists) {
                 throw new AuthenticationException("user " + userIdentity.getQualifiedUser() + " already exists");

@@ -79,6 +79,7 @@ private:
 };
 
 using TabletAndRowsets = std::tuple<TabletSharedPtr, std::vector<RowsetSharedPtr>, RowsetsAcqRelPtr>;
+using TabletAndScore = std::pair<TabletSharedPtr, double>;
 
 enum TabletDropFlag {
     kMoveFilesToTrash = 0,
@@ -171,6 +172,7 @@ public:
 
     void register_clone_tablet(int64_t tablet_id);
     void unregister_clone_tablet(int64_t tablet_id);
+    bool check_clone_tablet(int64_t tablet_id);
 
     size_t shutdown_tablets() const {
         std::shared_lock l(_shutdown_tablets_lock);
@@ -191,6 +193,8 @@ public:
 
     void get_tablets_basic_infos(int64_t table_id, int64_t partition_id, int64_t tablet_id,
                                  std::vector<TabletBasicInfo>& tablet_infos);
+
+    std::vector<TabletAndScore> pick_tablets_to_do_pk_index_major_compaction();
 
 private:
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;

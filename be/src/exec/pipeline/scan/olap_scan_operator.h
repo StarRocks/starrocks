@@ -61,6 +61,8 @@ public:
     void do_close(RuntimeState* state) override;
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
 
+    int64_t get_scan_table_id() const override;
+
 protected:
     void attach_chunk_source(int32_t source_index) override;
     void detach_chunk_source(int32_t source_index) override;
@@ -69,6 +71,7 @@ protected:
     size_t num_buffered_chunks() const override;
     size_t buffer_size() const override;
     size_t buffer_capacity() const override;
+    size_t buffer_memory_usage() const override;
     size_t default_buffer_capacity() const override;
     ChunkBufferTokenPtr pin_chunk(int num_chunks) override;
     bool is_buffer_full() const override;

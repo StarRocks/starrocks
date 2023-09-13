@@ -134,6 +134,10 @@ public abstract class AlterJobV2 implements Writable {
         return jobState;
     }
 
+    public void setJobState(JobState jobState) {
+        this.jobState = jobState;
+    }
+
     public JobType getType() {
         return type;
     }
@@ -166,6 +170,10 @@ public abstract class AlterJobV2 implements Writable {
         return finishedTimeMs;
     }
 
+    public void setFinishedTimeMs(long finishedTimeMs) {
+        this.finishedTimeMs = finishedTimeMs;
+    }
+
     /**
      * The keyword 'synchronized' only protects 2 methods:
      * run() and cancel()
@@ -183,21 +191,27 @@ public abstract class AlterJobV2 implements Writable {
         }
 
         try {
-            switch (jobState) {
-                case PENDING:
-                    runPendingJob();
+            while (true) {
+                JobState prevState = jobState;
+                switch (prevState) {
+                    case PENDING:
+                        runPendingJob();
+                        break;
+                    case WAITING_TXN:
+                        runWaitingTxnJob();
+                        break;
+                    case RUNNING:
+                        runRunningJob();
+                        break;
+                    case FINISHED_REWRITING:
+                        runFinishedRewritingJob();
+                        break;
+                    default:
+                        break;
+                }
+                if (jobState == prevState) {
                     break;
-                case WAITING_TXN:
-                    runWaitingTxnJob();
-                    break;
-                case RUNNING:
-                    runRunningJob();
-                    break;
-                case FINISHED_REWRITING:
-                    runFinishedRewritingJob();
-                    break;
-                default:
-                    break;
+                } // else: handle the new state
             }
         } catch (AlterCancelException e) {
             cancelImpl(e.getMessage());

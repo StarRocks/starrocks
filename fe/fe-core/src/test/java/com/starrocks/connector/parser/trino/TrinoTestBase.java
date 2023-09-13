@@ -103,7 +103,8 @@ public class TrinoTestBase {
                 "  `tg` bigint(20) NULL COMMENT \"\",\n" +
                 "  `th` datetime NULL COMMENT \"\",\n" +
                 "  `ti` date NULL COMMENT \"\",\n" +
-                "  `tj` decimal(9, 3) NULL COMMENT \"\"\n" +
+                "  `tj` decimal(9, 3) NULL COMMENT \"\",\n" +
+                "  `tk` varbinary NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`ta`)\n" +
                 "COMMENT \"OLAP\"\n" +
@@ -317,7 +318,7 @@ public class TrinoTestBase {
     }
 
     public String getExplain(String sql) throws Exception {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
 
         List<StatementBase> statements =
                 com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
@@ -331,7 +332,7 @@ public class TrinoTestBase {
 
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
 
         List<StatementBase> statements =
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable());

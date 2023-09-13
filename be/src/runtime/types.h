@@ -301,6 +301,8 @@ struct TypeDescriptor {
     /// Returns the size of a slot for this type.
     int get_slot_size() const;
 
+    size_t get_flat_size() const;
+
     static inline int get_decimal_byte_size(int precision) {
         DCHECK_GT(precision, 0);
         if (precision <= MAX_DECIMAL4_PRECISION) {

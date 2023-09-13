@@ -66,8 +66,8 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
@@ -137,6 +137,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     @SerializedName("p")
     protected boolean partialUpdate = false;
+    @SerializedName("pum")
     protected String partialUpdateMode = "row";
     @SerializedName("pr")
     protected int priority = LoadPriority.NORMAL_VALUE;
@@ -1190,6 +1191,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         state = info.getState();
         transactionId = info.getTransactionId();
         loadStartTimestamp = info.getLoadStartTimestamp();
+    }
+    
+    public boolean hasTxn() {
+        return true;
     }
 
     public static class LoadJobStateUpdateInfo implements Writable {

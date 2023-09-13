@@ -20,13 +20,14 @@ package com.starrocks.fs.hdfs;
 import com.amazonaws.util.AwsHostNameUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
-import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
+import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.thrift.TBrokerFD;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -57,7 +58,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-
 
 class ConfigurationWrap extends Configuration {
     private static final Logger LOG = LogManager.getLogger(ConfigurationWrap.class);
@@ -450,7 +450,7 @@ public class HdfsFsManager {
                     "for load without broker. For broker load with broker, you can set namenode HA in the load_properties");
         }
 
-        if (!authentication.equals("")) {
+        if (!authentication.equals("") && !authentication.equals("simple")) {
             LOG.warn("Invalid load_properties, kerberos should be set in hdfs/core-site.xml for broker " +
                     "load without broker. For broker load with broker, you can set namenode HA in the load_properties");
             throw new UserException("invalid load_properties, kerberos should be set in hdfs/core-site.xml " +
@@ -615,7 +615,7 @@ public class HdfsFsManager {
     public HdfsFs getAzureFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
         // Put path into fileProperties, so that we can get storage account in AzureStorageCloudConfiguration
-        loadProperties.put(AzureCloudConfigurationFactory.AZURE_PATH_KEY, path);
+        loadProperties.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, path);
 
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
@@ -645,7 +645,7 @@ public class HdfsFsManager {
         WildcardURI pathUri = new WildcardURI(path);
 
         String host = pathUri.getUri().getScheme() + "://" + pathUri.getUri().getHost();
-        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.getCredentialString());
+        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.toConfString());
 
         cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
         HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
@@ -866,7 +866,7 @@ public class HdfsFsManager {
      * <p>
      * file system handle is cached, the identity is endpoint + bucket + accessKey_secretKey
      */
-    public HdfsFs getUniversalFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
+    public HdfsFs getUniversalFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
 
         String disableCacheHDFS = loadProperties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
@@ -1097,7 +1097,7 @@ public class HdfsFsManager {
      * for tos
      */
     public HdfsFs getTOSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
-        throws UserException {
+            throws UserException {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
@@ -1175,10 +1175,26 @@ public class HdfsFsManager {
             fileSystem.getLock().unlock();
         }
     }
-    
+
     public void getTProperties(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
         getFileSystem(path, loadProperties, tProperties);
+    }
+
+    public List<FileStatus> listFileMeta(String path, Map<String, String> properties) throws UserException {
+        WildcardURI pathUri = new WildcardURI(path);
+        HdfsFs fileSystem = getFileSystem(path, properties, null);
+        Path pathPattern = new Path(pathUri.getPath());
+        try {
+            FileStatus[] files = fileSystem.getDFSFileSystem().globStatus(pathPattern);
+            return Lists.newArrayList(files);
+        } catch (FileNotFoundException e) {
+            LOG.info("file not found: " + path, e);
+            throw new UserException("file not found: " + path, e);
+        } catch (Exception e) {
+            LOG.error("errors while get file status ", e);
+            throw new UserException("listPath failed", e);
+        }
     }
 
     public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties)
@@ -1214,11 +1230,16 @@ public class HdfsFsManager {
                 resultFileStatus.add(brokerFileStatus);
             }
         } catch (FileNotFoundException e) {
-            LOG.info("file not found: " + e.getMessage());
-            throw new UserException("file not found: " + e.getMessage());
+            LOG.info("file not found: " + path, e);
+            throw new UserException("file not found: " + path, e);
+        } catch (IllegalArgumentException e) {
+            LOG.error("The arguments of blob store(S3/Azure) may be wrong. You can check " +
+                    "the arguments like region, IAM, instance profile and so on.");
+            throw new UserException("The arguments of blob store(S3/Azure) may be wrong. " +
+                    "You can check the arguments like region, IAM, instance profile and so on.", e);
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
-            throw new UserException("unknown error when get file status: " + e.getMessage());
+            throw new UserException("listPath failed", e);
         }
         return resultFileStatus;
     }
@@ -1242,13 +1263,11 @@ public class HdfsFsManager {
         boolean srcAuthorityNull = (srcPathUri.getAuthority() == null);
         boolean destAuthorityNull = (destPathUri.getAuthority() == null);
         if (srcAuthorityNull != destAuthorityNull) {
-            throw new UserException("Different authority info between srcPath: " + srcPath +
-                                    " and destPath: " + destPath);
+            throw new UserException("Different authority info between srcPath: " + srcPath + " and destPath: " + destPath);
         }
         if (!srcAuthorityNull && !destAuthorityNull &&
                 !srcPathUri.getAuthority().trim().equals(destPathUri.getAuthority().trim())) {
-            throw new UserException(
-                "only allow rename in same file system");
+            throw new UserException("only allow rename in same file system");
 
         }
 

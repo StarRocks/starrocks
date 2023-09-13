@@ -23,7 +23,6 @@
 #include <utility>
 #include <vector>
 
-#include "common/object_pool.h"
 #include "common/status.h"
 #include "common/tracer.h"
 #include "exec/data_sink.h"
@@ -32,7 +31,6 @@
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/mem_tracker.h"
-#include "util/bitmap.h"
 #include "util/compression/block_compression.h"
 #include "util/raw_container.h"
 #include "util/ref_count_closure.h"
@@ -41,13 +39,8 @@
 
 namespace starrocks {
 
-class Bitmap;
 class MemTracker;
-class RuntimeProfile;
-class RowDescriptor;
 class TupleDescriptor;
-class ExprContext;
-class TExpr;
 
 namespace stream_load {
 
@@ -102,6 +95,9 @@ struct TabletSinkProfile {
     RuntimeProfile::Counter* alloc_auto_increment_timer = nullptr;
     RuntimeProfile::Counter* server_wait_flush_timer = nullptr;
 };
+
+// map index_id to TabletBEMap(map tablet_id to backend id)
+using IndexIdToTabletBEMap = std::unordered_map<int64_t, std::unordered_map<int64_t, std::vector<int64_t>>>;
 
 class NodeChannel {
 public:
@@ -161,6 +157,10 @@ public:
 
     bool is_incremental() const { return _is_incremental; }
 
+    std::set<int64_t> immutable_partition_ids() { return _immutable_partition_ids; }
+    bool has_immutable_partition() { return !_immutable_partition_ids.empty(); }
+    void reset_immutable_partition_ids() { _immutable_partition_ids.clear(); }
+
 private:
     Status _wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure);
     Status _wait_all_prev_request();
@@ -208,6 +208,10 @@ private:
 
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
     std::vector<TTabletFailInfo> _tablet_fail_infos;
+    struct {
+        std::unordered_set<std::string> invalid_dict_cache_column_set;
+        std::unordered_map<std::string, int64_t> valid_dict_cache_column_set;
+    } _valid_dict_cache_info;
 
     AddBatchCounter _add_batch_counter;
     int64_t _serialize_batch_ns = 0;
@@ -234,6 +238,8 @@ private:
     WriteQuorumTypePB _write_quorum_type = WriteQuorumTypePB::MAJORITY;
 
     bool _is_incremental;
+
+    std::set<int64_t> _immutable_partition_ids;
 };
 
 class IndexChannel {
@@ -273,6 +279,8 @@ public:
 
     bool has_incremental_node_channel() const { return _has_incremental_node_channel; }
 
+    int64_t index_id() const { return _index_id; }
+
 private:
     friend class OlapTableSink;
     friend class TabletSinkSender;
@@ -281,8 +289,6 @@ private:
 
     // BeId -> channel
     std::unordered_map<int64_t, std::unique_ptr<NodeChannel>> _node_channels;
-    // map tablet_id to backend id
-    std::unordered_map<int64_t, std::vector<int64_t>> _tablet_to_be;
     // map be_id to tablet num
     std::unordered_map<int64_t, int64_t> _be_to_tablet_num;
     // BeId

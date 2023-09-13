@@ -322,7 +322,7 @@ void BinaryColumnBase<T>::fill_default(const Filter& filter) {
 }
 
 template <typename T>
-Status BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
+void BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
     size_t replace_num = src.size();
     bool need_resize = false;
@@ -360,8 +360,6 @@ Status BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* index
         }
         swap_column(*new_binary_column);
     }
-
-    return Status::OK();
 }
 
 template <typename T>
@@ -689,6 +687,10 @@ StatusOr<ColumnPtr> BinaryColumnBase<T>::upgrade_if_overflow() {
                 base += Column::MAX_CAPACITY_LIMIT;
                 start = mid;
             }
+
+            // NOTE(yanz): in BinaryColumnBase, we have an invariant that `_offsets.back == _bytes.size()`;  
+            // and since _bytes has been moved to new_column, we have to clear _offset to keep the invariant.
+            _offsets.clear();
             return new_column;
         } else {
             return nullptr;

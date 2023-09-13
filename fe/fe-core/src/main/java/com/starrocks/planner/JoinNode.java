@@ -327,6 +327,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         return joinOp;
     }
 
+    public List<BinaryPredicate> getEqJoinConjuncts() {
+        return eqJoinConjuncts;
+    }
+
     public DistributionMode getDistrMode() {
         return distrMode;
     }
@@ -483,11 +487,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                     return TJoinDistributionMode.NONE;
             }
         }
-    }
-
-    @Override
-    public boolean canUsePipeLine() {
-        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 
     @Override

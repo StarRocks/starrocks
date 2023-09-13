@@ -194,11 +194,14 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     // foreign key constraint for mv rewrite
     protected List<ForeignKeyConstraint> foreignKeyConstraints;
 
+    protected Map<PartitionKey, Long> partitionKeyToId;
+
     public Table(TableType type) {
         this.type = type;
         this.fullSchema = Lists.newArrayList();
         this.nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
+        this.partitionKeyToId = Maps.newHashMap();
     }
 
     public Table(long id, String tableName, TableType type, List<Column> fullSchema) {
@@ -221,6 +224,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         }
         this.createTime = Instant.now().getEpochSecond();
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
+        this.partitionKeyToId = Maps.newHashMap();
     }
 
     public void setTypeRead(boolean isTypeRead) {
@@ -282,6 +286,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.VIEW;
     }
 
+    public boolean isHiveView() {
+        return type == TableType.HIVE_VIEW;
+    }
+
     public boolean isOlapTableOrMaterializedView() {
         return isOlapTable() || isOlapMaterializedView();
     }
@@ -310,6 +318,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return isOlapTable() || isCloudNativeTable();
     }
 
+    public boolean isExternalTableWithFileSystem() {
+        return isHiveTable() || isIcebergTable() || isHudiTable() || isDeltalakeTable() || isPaimonTable();
+    }
+
     public boolean isHiveTable() {
         return type == TableType.HIVE;
     }
@@ -328,6 +340,14 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public boolean isPaimonTable() {
         return type == TableType.PAIMON;
+    }
+
+    public boolean isJDBCTable() {
+        return type == TableType.JDBC;
+    }
+
+    public boolean isTableFunctionTable() {
+        return type == TableType.TABLE_FUNCTION;
     }
 
     // for create table
@@ -523,6 +543,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return Collections.emptyList();
     }
 
+    public PhysicalPartition getPhysicalPartition(long partitionId) {
+        return null;
+    }
+
     public Set<String> getDistributionColumnNames() {
         return Collections.emptySet();
     }
@@ -626,8 +650,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             }
         }
 
-        OlapTable olapTable = (OlapTable) this;
-        return !isLocalBalance || olapTable.getKeysType() != KeysType.PRIMARY_KEYS;
+        return true;
     }
 
     public boolean hasAutoIncrementColumn() {
@@ -713,7 +736,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return false;
     }
 
-
     public boolean supportInsert() {
         return false;
     }
@@ -737,5 +759,20 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public List<ForeignKeyConstraint> getForeignKeyConstraints() {
         return this.foreignKeyConstraints;
+    }
+
+    public synchronized List<Long> allocatePartitionIdByKey(List<PartitionKey> keys) {
+        long size = partitionKeyToId.size();
+        List<Long> ret = new ArrayList<>();
+        for (PartitionKey key : keys) {
+            Long v = partitionKeyToId.get(key);
+            if (v == null) {
+                partitionKeyToId.put(key, size);
+                v = size;
+                size += 1;
+            }
+            ret.add(v);
+        }
+        return ret;
     }
 }

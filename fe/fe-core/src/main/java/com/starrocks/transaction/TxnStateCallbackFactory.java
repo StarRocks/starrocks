@@ -49,4 +49,8 @@ public class TxnStateCallbackFactory {
     public synchronized TxnStateChangeCallback getCallback(long id) {
         return callbacks.get(id);
     }
+
+    public synchronized long getCallBackCnt() {
+        return callbacks.size();
+    }
 }

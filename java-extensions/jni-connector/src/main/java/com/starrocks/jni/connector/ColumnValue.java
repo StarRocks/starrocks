@@ -29,7 +29,7 @@ public interface ColumnValue {
 
     double getDouble();
 
-    String getString();
+    String getString(ColumnType.TypeValue type);
     String getTimestamp(ColumnType.TypeValue type);
     byte[] getBytes();
 
@@ -38,4 +38,6 @@ public interface ColumnValue {
     void unpackMap(List<ColumnValue> keys, List<ColumnValue> values);
 
     void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values);
+
+    byte getByte();
 }

@@ -61,7 +61,7 @@ size_t ArrayColumn::byte_size(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
     return _elements->byte_size(_offsets->get_data()[from],
                                 _offsets->get_data()[from + size] - _offsets->get_data()[from]) +
-           _offsets->Column::byte_size(from, size);
+           _offsets->byte_size(from, size);
 }
 
 size_t ArrayColumn::byte_size(size_t idx) const {
@@ -170,7 +170,7 @@ void ArrayColumn::fill_default(const Filter& filter) {
     update_rows(*default_column, indexes.data());
 }
 
-Status ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
+void ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& array_column = down_cast<const ArrayColumn&>(src);
 
     const UInt32Column& src_offsets = array_column.offsets();
@@ -193,7 +193,7 @@ Status ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
                 element_idxes.emplace_back(element_offset + j);
             }
         }
-        RETURN_IF_ERROR(_elements->update_rows(array_column.elements(), element_idxes.data()));
+        _elements->update_rows(array_column.elements(), element_idxes.data());
     } else {
         MutableColumnPtr new_array_column = clone_empty();
         size_t idx_begin = 0;
@@ -209,8 +209,6 @@ Status ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
         }
         swap_column(*new_array_column.get());
     }
-
-    return Status::OK();
 }
 
 void ArrayColumn::remove_first_n_values(size_t count) {
@@ -587,12 +585,14 @@ std::string ArrayColumn::debug_item(size_t idx) const {
 
 std::string ArrayColumn::debug_string() const {
     std::stringstream ss;
+    ss << "[";
     for (size_t i = 0; i < size(); ++i) {
         if (i > 0) {
             ss << ", ";
         }
         ss << debug_item(i);
     }
+    ss << "]";
     return ss.str();
 }
 

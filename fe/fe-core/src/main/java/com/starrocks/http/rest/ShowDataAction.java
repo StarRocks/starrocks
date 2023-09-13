@@ -37,7 +37,6 @@ package com.starrocks.http.rest;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -65,17 +64,19 @@ public class ShowDataAction extends RestBaseAction {
     public long getDataSizeOfDatabase(Database db) {
         long totalSize = 0;
         db.readLock();
-        // sort by table name
-        List<Table> tables = db.getTables();
-        for (Table table : tables) {
-            if (table.getType() != TableType.OLAP) {
-                continue;
-            }
-
-            long tableSize = ((OlapTable) table).getDataSize();
-            totalSize += tableSize;
-        } // end for tables
-        db.readUnlock();
+        try {
+            // sort by table name
+            List<Table> tables = db.getTables();
+            for (Table table : tables) {
+                if (!table.isNativeTableOrMaterializedView()) {
+                    continue;
+                }
+                long tableSize = ((OlapTable) table).getDataSize();
+                totalSize += tableSize;
+            } // end for tables
+        } finally {
+            db.readUnlock();
+        }
         return totalSize;
     }
 

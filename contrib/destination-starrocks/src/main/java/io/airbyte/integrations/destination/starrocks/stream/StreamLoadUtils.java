@@ -21,6 +21,7 @@ import org.apache.http.impl.client.DefaultRedirectStrategy;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicHeader;
+import io.airbyte.integrations.destination.starrocks.StarRocksConstants;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -78,6 +79,8 @@ public class StreamLoadUtils {
         headers.put("timeout", "600");
         headers.put(HttpHeaders.AUTHORIZATION, StreamLoadUtils.getBasicAuthHeader(user, pwd));
         headers.put(HttpHeaders.EXPECT, "100-continue");
+        headers.put("column_separator", StarRocksConstants.CsvFormat.COLUMN_DELIMITER);
+        headers.put("row_delimiter", StarRocksConstants.CsvFormat.LINE_DELIMITER);
         return headers.entrySet().stream()
                 .map(entry -> new BasicHeader(entry.getKey(), entry.getValue()))
                 .toArray(Header[]::new);

@@ -16,6 +16,8 @@
 
 #include <orc/OrcFile.hh>
 
+#include "common/compiler_util.h"
+
 namespace starrocks {
 
 class OrcMemoryPoolImpl : public orc::MemoryPool {
@@ -23,8 +25,13 @@ public:
     ~OrcMemoryPoolImpl() override = default;
 
     char* malloc(uint64_t size) override {
+        // Return nullptr if size is 0, otherwise debug-enabled jemalloc would fail non-zero size assertion.
+        // See https://github.com/jemalloc/jemalloc/issues/2514
+        if (UNLIKELY(size == 0)) {
+            return nullptr;
+        }
         auto p = static_cast<char*>(std::malloc(size));
-        if (p == nullptr) {
+        if (UNLIKELY(p == nullptr)) {
             LOG(WARNING) << "malloc failed, size=" << size;
             throw std::bad_alloc();
         }

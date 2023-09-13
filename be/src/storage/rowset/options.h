@@ -41,6 +41,7 @@
 namespace starrocks {
 
 class FileSystem;
+class RandomAccessFile;
 
 static const uint32_t DEFAULT_PAGE_SIZE = 1024 * 1024; // default size: 1M
 
@@ -56,10 +57,10 @@ public:
     bool use_page_cache = false;
     bool kept_in_memory = false;
     // for lake tablet
-    bool skip_fill_local_cache = false;
-    std::string file_name = "";
+    bool skip_fill_data_cache = false;
+
+    RandomAccessFile* read_file = nullptr;
     OlapReaderStatistics* stats = nullptr;
-    FileSystem* fs = nullptr;
 };
 
 } // namespace starrocks

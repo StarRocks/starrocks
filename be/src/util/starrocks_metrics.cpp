@@ -37,7 +37,6 @@
 #include <unistd.h>
 
 #include "fs/fs.h"
-#include "util/debug_util.h"
 #include "util/system_metrics.h"
 
 namespace starrocks {
@@ -73,6 +72,8 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(column_partial_update_apply_duration_us);
     REGISTER_STARROCKS_METRIC(delta_column_group_get_total);
     REGISTER_STARROCKS_METRIC(delta_column_group_get_hit_cache);
+    REGISTER_STARROCKS_METRIC(delta_column_group_get_non_pk_total);
+    REGISTER_STARROCKS_METRIC(delta_column_group_get_non_pk_hit_cache);
 
     // push request
     _metrics.register_metric("push_requests_total", MetricLabels().add("status", "SUCCESS"),
@@ -115,6 +116,8 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_ENGINE_REQUEST_METRIC(base_compaction, failed, base_compaction_request_failed);
     REGISTER_ENGINE_REQUEST_METRIC(cumulative_compaction, total, cumulative_compaction_request_total);
     REGISTER_ENGINE_REQUEST_METRIC(cumulative_compaction, failed, cumulative_compaction_request_failed);
+    REGISTER_ENGINE_REQUEST_METRIC(update_compaction, total, update_compaction_request_total);
+    REGISTER_ENGINE_REQUEST_METRIC(update_compaction, failed, update_compaction_request_failed);
 
     REGISTER_ENGINE_REQUEST_METRIC(publish, total, publish_task_request_total);
     REGISTER_ENGINE_REQUEST_METRIC(publish, failed, publish_task_failed_total);
@@ -173,19 +176,23 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(tablet_cumulative_max_compaction_score);
     REGISTER_STARROCKS_METRIC(tablet_base_max_compaction_score);
     REGISTER_STARROCKS_METRIC(tablet_update_max_compaction_score);
+    REGISTER_STARROCKS_METRIC(wait_cumulative_compaction_task_num);
+    REGISTER_STARROCKS_METRIC(wait_base_compaction_task_num);
+    REGISTER_STARROCKS_METRIC(running_cumulative_compaction_task_num);
+    REGISTER_STARROCKS_METRIC(running_base_compaction_task_num);
+    REGISTER_STARROCKS_METRIC(running_update_compaction_task_num);
+    REGISTER_STARROCKS_METRIC(cumulative_compaction_task_cost_time_ms);
+    REGISTER_STARROCKS_METRIC(base_compaction_task_cost_time_ms);
+    REGISTER_STARROCKS_METRIC(update_compaction_task_cost_time_ns);
+    REGISTER_STARROCKS_METRIC(base_compaction_task_byte_per_second);
+    REGISTER_STARROCKS_METRIC(cumulative_compaction_task_byte_per_second);
+    REGISTER_STARROCKS_METRIC(update_compaction_task_byte_per_second);
 
     REGISTER_STARROCKS_METRIC(push_request_write_bytes_per_second);
     REGISTER_STARROCKS_METRIC(query_scan_bytes_per_second);
     REGISTER_STARROCKS_METRIC(max_disk_io_util_percent);
     REGISTER_STARROCKS_METRIC(max_network_send_bytes_rate);
     REGISTER_STARROCKS_METRIC(max_network_receive_bytes_rate);
-
-#ifndef USE_JEMALLOC
-    REGISTER_STARROCKS_METRIC(tcmalloc_total_bytes_reserved);
-    REGISTER_STARROCKS_METRIC(tcmalloc_pageheap_unmapped_bytes);
-    REGISTER_STARROCKS_METRIC(tcmalloc_bytes_in_use);
-#else
-#endif
 
     _metrics.register_hook(_s_hook_name, [this] { _update(); });
 

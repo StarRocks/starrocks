@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.analysis;
 
 import com.google.common.base.Joiner;
@@ -31,7 +30,7 @@ public class SubfieldExpr extends Expr {
 
     // We use fieldNames to extract subfield column from children[0],
     // children[0] must be an StructType.
-    private final List<String> fieldNames;
+    private List<String> fieldNames;
 
     // Only used in parser, in parser, we can't determine column's type
     public SubfieldExpr(Expr child, List<String> fieldNames) {
@@ -55,12 +54,16 @@ public class SubfieldExpr extends Expr {
         }
         children.add(child);
         this.type = type;
-        this.fieldNames = fieldNames.stream().map(String::toLowerCase).collect(ImmutableList.toImmutableList());
+        this.fieldNames = ImmutableList.copyOf(fieldNames);
     }
 
     public SubfieldExpr(SubfieldExpr other) {
         super(other);
         fieldNames = other.fieldNames;
+    }
+
+    public void setFieldNames(List<String> fieldNames) {
+        this.fieldNames = ImmutableList.copyOf(fieldNames);
     }
 
     public List<String> getFieldNames() {
@@ -90,5 +93,10 @@ public class SubfieldExpr extends Expr {
     @Override
     public Expr clone() {
         return new SubfieldExpr(this);
+    }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        return children.get(0).isSelfMonotonic();
     }
 }

@@ -32,7 +32,7 @@ public class MetricTypeTest extends PlanTestBase {
                         "PREAGGREGATION: OFF. Reason: Aggregate Operator not match: COUNT <--> BITMAP_UNION");
 
         starRocksAssert.query("select group_concat(id2) from test.bitmap_table;")
-                .analysisError("No matching function with signature: group_concat(bitmap).");
+                .analysisError("No matching function with signature: group_concat(bitmap");
 
         starRocksAssert.query("select sum(id2) from test.bitmap_table;").analysisError(
                 "No matching function with signature: sum(bitmap).");
@@ -61,7 +61,7 @@ public class MetricTypeTest extends PlanTestBase {
                 "PREAGGREGATION: OFF. Reason: Aggregate Operator not match: COUNT <--> HLL_UNION");
 
         starRocksAssert.query("select group_concat(id2) from test.hll_table;")
-                .analysisError("No matching function with signature: group_concat(hll).");
+                .analysisError("No matching function with signature: group_concat(hll");
 
         starRocksAssert.query("select sum(id2) from test.hll_table;")
                 .analysisError("No matching function with signature: sum(hll).");

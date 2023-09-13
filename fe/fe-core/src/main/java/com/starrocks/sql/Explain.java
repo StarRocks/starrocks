@@ -74,6 +74,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -819,6 +820,11 @@ public class Explain {
             sb.append("BETWEEN ");
             sb.append(predicate.getChild(1)).append(" AND ").append(predicate.getChild(2));
             return sb.toString();
+        }
+
+        @Override
+        public String visitCloneOperator(CloneOperator operator, Void context) {
+            return "CLONE(" + print(operator.getChild(0)) + ")";
         }
 
         @Override

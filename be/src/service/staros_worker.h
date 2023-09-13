@@ -78,7 +78,7 @@ private:
 
     static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
 
-    static CacheKey get_cache_key(std::string_view scheme, const Configuration& conf);
+    static std::string get_cache_key(std::string_view scheme, const Configuration& conf);
 
     static absl::StatusOr<staros::starlet::fslib::Configuration> build_conf_from_shard_info(const ShardInfo& info);
 

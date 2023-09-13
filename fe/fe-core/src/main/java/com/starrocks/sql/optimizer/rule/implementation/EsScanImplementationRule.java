@@ -34,14 +34,7 @@ public class EsScanImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalEsScanOperator logical = (LogicalEsScanOperator) input.getOp();
-        PhysicalEsScanOperator physical = new PhysicalEsScanOperator(
-                logical.getTable(),
-                logical.getColRefToColumnMetaMap(),
-                logical.getSelectedIndex(),
-                logical.getLimit(),
-                logical.getPredicate(),
-                logical.getProjection());
-
+        PhysicalEsScanOperator physical = new PhysicalEsScanOperator(logical);
         OptExpression result = new OptExpression(physical);
         return Lists.newArrayList(result);
     }

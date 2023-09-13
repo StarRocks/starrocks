@@ -52,7 +52,9 @@ void TableFunctionNodeTest::SetUp() {
         t_desc_table.slotDescriptors.push_back(slot_desc);
     }
 
-    DescriptorTbl::create(&_runtime_state, &_object_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size);
+    ASSERT_TRUE(
+            DescriptorTbl::create(&_runtime_state, &_object_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size)
+                    .ok());
     _runtime_state.set_desc_tbl(_desc_tbl);
 
     _tnode.node_id = 1;
@@ -65,6 +67,6 @@ void TableFunctionNodeTest::SetUp() {
 
 TEST_F(TableFunctionNodeTest, close_after_not_init) {
     TableFunctionNode table_function_node(&_object_pool, _tnode, *_desc_tbl);
-    ASSERT_TRUE(table_function_node.close(&_runtime_state).ok());
+    table_function_node.close(&_runtime_state);
 }
 } // namespace starrocks

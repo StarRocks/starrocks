@@ -25,7 +25,7 @@ HashJoinBuildOperator::HashJoinBuildOperator(OperatorFactory* factory, int32_t i
                                              int32_t plan_node_id, int32_t driver_sequence, HashJoinerPtr join_builder,
                                              PartialRuntimeFilterMerger* partial_rf_merger,
                                              const TJoinDistributionMode::type distribution_mode)
-        : Operator(factory, id, name, plan_node_id, driver_sequence),
+        : Operator(factory, id, name, plan_node_id, false, driver_sequence),
           _join_builder(std::move(join_builder)),
           _partial_rf_merger(partial_rf_merger),
           _distribution_mode(distribution_mode) {}
@@ -63,17 +63,13 @@ StatusOr<ChunkPtr> HashJoinBuildOperator::pull_chunk(RuntimeState* state) {
 }
 
 size_t HashJoinBuildOperator::output_amplification_factor() const {
-    if (_avg_keys_perf_bucket > 0) {
-        return _avg_keys_perf_bucket;
+    if (_avg_keys_per_bucket > 0) {
+        return _avg_keys_per_bucket;
     }
+    _avg_keys_per_bucket = _join_builder->avg_keys_per_bucket();
+    _avg_keys_per_bucket = std::max<size_t>(_avg_keys_per_bucket, 1);
 
-    _avg_keys_perf_bucket = _join_builder->avg_keys_perf_bucket();
-    _avg_keys_perf_bucket = std::max<size_t>(_avg_keys_perf_bucket, 1);
-
-    auto* counter = ADD_COUNTER(_unique_metrics, "AvgKeysPerBuckets", TUnit::UNIT);
-    COUNTER_SET(counter, static_cast<int64_t>(_avg_keys_perf_bucket));
-
-    return _avg_keys_perf_bucket;
+    return _avg_keys_per_bucket;
 }
 
 Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {

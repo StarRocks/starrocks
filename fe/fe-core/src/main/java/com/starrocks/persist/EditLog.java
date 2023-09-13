@@ -34,6 +34,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
@@ -93,13 +94,16 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.Backend;
@@ -283,6 +287,13 @@ public class EditLog {
                     }
                     break;
                 }
+                case OperationType.OP_ADD_SUB_PARTITIONS_V2: {
+                    AddSubPartitionsInfoV2 infos = (AddSubPartitionsInfoV2) journal.getData();
+                    for (PhysicalPartitionPersistInfoV2 info : infos.getAddSubPartitionInfos()) {
+                        globalStateMgr.replayAddSubPartition(info);
+                    }
+                    break;
+                }
                 case OperationType.OP_DROP_PARTITION: {
                     DropPartitionInfo info = (DropPartitionInfo) journal.getData();
                     LOG.info("Begin to unprotect drop partition. db = " + info.getDbId()
@@ -364,7 +375,7 @@ public class EditLog {
                 }
                 case OperationType.OP_MODIFY_VIEW_DEF: {
                     AlterViewInfo info = (AlterViewInfo) journal.getData();
-                    globalStateMgr.getAlterJobMgr().replayModifyViewDef(info);
+                    globalStateMgr.getAlterJobMgr().alterView(info);
                     break;
                 }
                 case OperationType.OP_RENAME_PARTITION:
@@ -827,9 +838,11 @@ public class EditLog {
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
+                case OperationType.OP_MODIFY_BUCKET_SIZE:
                 case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
+                case OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC:
                 case OperationType.OP_ALTER_TABLE_PROPERTIES:
                 case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
@@ -893,13 +906,13 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_ADD_ANALYZER_JOB: {
-                    AnalyzeJob analyzeJob = (AnalyzeJob) journal.getData();
-                    globalStateMgr.getAnalyzeMgr().replayAddAnalyzeJob(analyzeJob);
+                    NativeAnalyzeJob nativeAnalyzeJob = (NativeAnalyzeJob) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayAddAnalyzeJob(nativeAnalyzeJob);
                     break;
                 }
                 case OperationType.OP_REMOVE_ANALYZER_JOB: {
-                    AnalyzeJob analyzeJob = (AnalyzeJob) journal.getData();
-                    globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeJob(analyzeJob);
+                    NativeAnalyzeJob nativeAnalyzeJob = (NativeAnalyzeJob) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeJob(nativeAnalyzeJob);
                     break;
                 }
                 case OperationType.OP_ADD_ANALYZE_STATUS: {
@@ -909,6 +922,16 @@ public class EditLog {
                 }
                 case OperationType.OP_REMOVE_ANALYZE_STATUS: {
                     NativeAnalyzeStatus analyzeStatus = (NativeAnalyzeStatus) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeStatus(analyzeStatus);
+                    break;
+                }
+                case OperationType.OP_ADD_EXTERNAL_ANALYZE_STATUS: {
+                    ExternalAnalyzeStatus analyzeStatus = (ExternalAnalyzeStatus) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+                    break;
+                }
+                case OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS: {
+                    ExternalAnalyzeStatus analyzeStatus = (ExternalAnalyzeStatus) journal.getData();
                     globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeStatus(analyzeStatus);
                     break;
                 }
@@ -959,12 +982,14 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_DROP_CATALOG: {
-                    DropCatalogLog dropCatalogLog =
-                            (DropCatalogLog) journal.getData();
+                    DropCatalogLog dropCatalogLog = (DropCatalogLog) journal.getData();
                     globalStateMgr.getCatalogMgr().replayDropCatalog(dropCatalogLog);
                     break;
                 }
-
+                case OperationType.OP_ALTER_CATALOG:
+                    AlterCatalogLog alterCatalogLog = (AlterCatalogLog) journal.getData();
+                    globalStateMgr.getCatalogMgr().replayAlterCatalog(alterCatalogLog);
+                    break;
                 case OperationType.OP_CREATE_INSERT_OVERWRITE: {
                     CreateInsertOverwriteJobLog jobInfo = (CreateInsertOverwriteJobLog) journal.getData();
                     globalStateMgr.getInsertOverwriteJobMgr().replayCreateInsertOverwrite(jobInfo);
@@ -1053,6 +1078,11 @@ public class EditLog {
                     MaterializedViewMgr.getInstance().replayEpoch(epoch);
                     break;
                 }
+                case OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS: {
+                    final TableAddOrDropColumnsInfo info = (TableAddOrDropColumnsInfo) journal.getData();
+                    globalStateMgr.getSchemaChangeHandler().replayModifyTableAddOrDropColumns(info);
+                    break;
+                }
                 case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME: {
                     SetDefaultStorageVolumeLog log = (SetDefaultStorageVolumeLog) journal.getData();
                     globalStateMgr.getStorageVolumeMgr().replaySetDefaultStorageVolume(log);
@@ -1107,6 +1137,12 @@ public class EditLog {
      * submit log in queue and return immediately
      */
     private Future<Boolean> submitLog(short op, Writable writable, long maxWaitIntervalMs) {
+        // do not check whether global state mgr is leader in non shared nothing mode,
+        // because starmgr state change happens before global state mgr state change,
+        // it will write log before global state mgr becomes leader
+        Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
+                                 GlobalStateMgr.getCurrentState().isLeader(),
+                "Current node is not leader, submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
         // 1. serialized
@@ -1194,13 +1230,9 @@ public class EditLog {
     }
 
     public void logCreateDb(Database db, String storageVolumeId) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            CreateDbInfo createDbInfo = new CreateDbInfo(db.getId(), db.getFullName());
-            createDbInfo.setStorageVolumeId(storageVolumeId);
-            logJsonObject(OperationType.OP_CREATE_DB_V2, createDbInfo);
-        } else {
-            logEdit(OperationType.OP_CREATE_DB, db);
-        }
+        CreateDbInfo createDbInfo = new CreateDbInfo(db.getId(), db.getFullName());
+        createDbInfo.setStorageVolumeId(storageVolumeId);
+        logJsonObject(OperationType.OP_CREATE_DB_V2, createDbInfo);
     }
 
     public void logDropDb(DropDbInfo dropDbInfo) {
@@ -1228,11 +1260,7 @@ public class EditLog {
     }
 
     public void logCreateTable(CreateTableInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_CREATE_TABLE_V2, info);
-        } else {
-            logEdit(OperationType.OP_CREATE_TABLE, info);
-        }
+        logJsonObject(OperationType.OP_CREATE_TABLE_V2, info);
     }
 
     public void logResourceGroupOp(ResourceGroupOpEntry op) {
@@ -1265,6 +1293,10 @@ public class EditLog {
 
     public void logAddPartitions(AddPartitionsInfoV2 info) {
         logEdit(OperationType.OP_ADD_PARTITIONS_V2, info);
+    }
+
+    public void logAddSubPartitions(AddSubPartitionsInfoV2 info) {
+        logEdit(OperationType.OP_ADD_SUB_PARTITIONS_V2, info);
     }
 
     public void logDropPartition(DropPartitionInfo info) {
@@ -1818,12 +1850,20 @@ public class EditLog {
         logEdit(OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX, info);
     }
 
+    public void logModifyPrimaryIndexCacheExpireSec(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC, info);
+    }
+
     public void logModifyWriteQuorum(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_WRITE_QUORUM, info);
     }
 
     public void logModifyReplicatedStorage(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_REPLICATED_STORAGE, info);
+    }
+
+    public void logModifyBucketSize(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_BUCKET_SIZE, info);
     }
 
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {
@@ -1863,22 +1903,30 @@ public class EditLog {
     }
 
     public void logAddAnalyzeJob(AnalyzeJob job) {
-        logEdit(OperationType.OP_ADD_ANALYZER_JOB, job);
+        if (job.isNative()) {
+            logEdit(OperationType.OP_ADD_ANALYZER_JOB, (NativeAnalyzeJob) job);
+        }
     }
 
     public void logRemoveAnalyzeJob(AnalyzeJob job) {
-        logEdit(OperationType.OP_REMOVE_ANALYZER_JOB, job);
+        if (job.isNative()) {
+            logEdit(OperationType.OP_REMOVE_ANALYZER_JOB, (NativeAnalyzeJob) job);
+        }
     }
 
     public void logAddAnalyzeStatus(AnalyzeStatus status) {
         if (status.isNative()) {
             logEdit(OperationType.OP_ADD_ANALYZE_STATUS, (NativeAnalyzeStatus) status);
+        } else {
+            logEdit(OperationType.OP_ADD_EXTERNAL_ANALYZE_STATUS, (ExternalAnalyzeStatus) status);
         }
     }
 
     public void logRemoveAnalyzeStatus(AnalyzeStatus status) {
         if (status.isNative()) {
             logEdit(OperationType.OP_REMOVE_ANALYZE_STATUS, (NativeAnalyzeStatus) status);
+        } else {
+            logEdit(OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS, (ExternalAnalyzeStatus) status);
         }
     }
 
@@ -1908,6 +1956,10 @@ public class EditLog {
 
     public void logDropCatalog(DropCatalogLog log) {
         logEdit(OperationType.OP_DROP_CATALOG, log);
+    }
+
+    public void logAlterCatalog(AlterCatalogLog log) {
+        logEdit(OperationType.OP_ALTER_CATALOG, log);
     }
 
     public void logCreateInsertOverwrite(CreateInsertOverwriteJobLog info) {
@@ -2036,6 +2088,10 @@ public class EditLog {
 
     private void logJsonObject(short op, Object obj) {
         logEdit(op, out -> Text.writeString(out, GsonUtils.GSON.toJson(obj)));
+    }
+
+    public void logModifyTableAddOrDropColumns(TableAddOrDropColumnsInfo info) {
+        logEdit(OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS, info);
     }
 
     public void logAlterTask(Task changedTask) {

@@ -330,7 +330,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         // }
 
         // limit node in Memo means that the limit cannot be merged into other nodes.
-        requiredProperties.add(Lists.newArrayList(createLimitGatherProperty(node.getLimit())));
+        requiredProperties.add(Lists.newArrayList(createGatherPropertySet()));
         return null;
     }
 

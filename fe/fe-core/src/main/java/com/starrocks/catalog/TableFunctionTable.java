@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
+import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
@@ -45,6 +45,9 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
+import org.apache.commons.collections4.ListUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
@@ -52,8 +55,15 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
+import javax.annotation.Nullable;
+
+import static com.google.common.base.Verify.verify;
+import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 
 public class TableFunctionTable extends Table {
+
+    private static final Logger LOG = LogManager.getLogger(TableFunctionTable.class);
 
     public static final String FAKE_PATH = "fake://";
     public static final String PROPERTY_PATH = "path";
@@ -61,7 +71,11 @@ public class TableFunctionTable extends Table {
 
     private String path;
     private String format;
-    private Map<String, String> properties;
+    private String compressionType;
+    private final Map<String, String> properties;
+    @Nullable
+    private List<Integer> partitionColumnIDs;
+    private boolean writeSingleFile;
 
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
@@ -84,6 +98,27 @@ public class TableFunctionTable extends Table {
         }
     }
 
+    // Ctor for unload data via table function
+    public TableFunctionTable(String path, String format, String compressionType, List<Column> columns,
+                              @Nullable List<Integer> partitionColumnIDs, boolean writeSingleFile,
+                              Map<String, String> properties) {
+        super(TableType.TABLE_FUNCTION);
+        verify(!Strings.isNullOrEmpty(path), "path is null or empty");
+        verify(!(partitionColumnIDs != null && writeSingleFile));
+        this.path = path;
+        this.format = format;
+        this.compressionType = compressionType;
+        this.partitionColumnIDs = partitionColumnIDs;
+        this.writeSingleFile = writeSingleFile;
+        this.properties = properties;
+        super.setNewFullSchema(columns);
+    }
+
+    @Override
+    public boolean supportInsert() {
+        return true;
+    }
+
     public List<TBrokerFileStatus> fileList() {
         return fileStatuses;
     }
@@ -95,20 +130,26 @@ public class TableFunctionTable extends Table {
 
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
-        TTableFunctionTable tTbl = new TTableFunctionTable();
-        tTbl.setPath(path);
-
-        List<TColumn> tColumns = Lists.newArrayList();
-
-        for (Column column : getBaseSchema()) {
-            tColumns.add(column.toThrift());
-        }
-        tTbl.setColumns(tColumns);
-
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.TABLE_FUNCTION_TABLE, fullSchema.size(),
                 0, "_table_function_table", "_table_function_db");
-        tTableDescriptor.setTableFunctionTable(tTbl);
+
+        TTableFunctionTable tTableFunctionTable = this.toTTableFunctionTable();
+        tTableDescriptor.setTableFunctionTable(tTableFunctionTable);
         return tTableDescriptor;
+    }
+
+    public TTableFunctionTable toTTableFunctionTable() {
+        TTableFunctionTable tTableFunctionTable = new TTableFunctionTable();
+        List<TColumn> tColumns = getFullSchema().stream().map(Column::toThrift).collect(Collectors.toList());
+        tTableFunctionTable.setPath(path);
+        tTableFunctionTable.setColumns(tColumns);
+        tTableFunctionTable.setFile_format(format);
+        tTableFunctionTable.setWrite_single_file(writeSingleFile);
+        tTableFunctionTable.setCompression_type(PARQUET_COMPRESSION_TYPE_MAP.get(compressionType));
+        if (partitionColumnIDs != null) {
+            tTableFunctionTable.setPartition_column_ids(partitionColumnIDs);
+        }
+        return tTableFunctionTable;
     }
 
     public String getFormat() {
@@ -145,9 +186,13 @@ public class TableFunctionTable extends Table {
             if (path.startsWith("fake://")) {
                 return;
             }
-            HdfsUtil.parseFile(path, new BrokerDesc(properties), fileStatuses);
+            List<String> pieces = Splitter.on(",").trimResults().omitEmptyStrings().splitToList(path);
+            for (String piece : ListUtils.emptyIfNull(pieces)) {
+                HdfsUtil.parseFile(piece, new BrokerDesc(properties), fileStatuses);
+            }
         } catch (UserException e) {
-            throw new DdlException("failed to parse files: " + e.getMessage());
+            LOG.error("parse files error", e);
+            throw new DdlException("failed to parse files", e);
         }
 
         if (fileStatuses.isEmpty()) {
@@ -231,11 +276,10 @@ public class TableFunctionTable extends Table {
             result = future.get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new DdlException("failed to get file schema: " + e.getMessage());
+            throw new DdlException("failed to get file schema", e);
         } catch (Exception e) {
-            throw new DdlException("failed to get file schema: " + e.getMessage());
+            throw new DdlException("failed to get file schema", e);
         }
-
 
         List<Column> columns = new ArrayList<>();
         for (PSlotDescriptor slot : result.schema) {
@@ -267,5 +311,17 @@ public class TableFunctionTable extends Table {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    @Override
+    public List<String> getPartitionColumnNames() {
+        if (partitionColumnIDs == null) {
+            return new ArrayList<>();
+        }
+        return partitionColumnIDs.stream().map(id -> fullSchema.get(id).getName()).collect(Collectors.toList());
+    }
+
+    public boolean isWriteSingleFile() {
+        return writeSingleFile;
     }
 }

@@ -43,7 +43,7 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
 FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* pool,
                                                  const FunctionContext::TypeDesc& return_type,
                                                  const std::vector<FunctionContext::TypeDesc>& arg_types,
-                                                 const std::vector<bool>& is_asc_order,
+                                                 bool is_distinct, const std::vector<bool>& is_asc_order,
                                                  const std::vector<bool>& nulls_first) {
     auto* ctx = new FunctionContext();
     ctx->_state = state;
@@ -51,6 +51,7 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
     ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
+    ctx->_is_distinct = is_distinct;
     ctx->_is_asc_order = is_asc_order;
     ctx->_nulls_first = nulls_first;
     return ctx;
@@ -153,6 +154,10 @@ const char* FunctionContext::error_msg() const {
     } else {
         return nullptr;
     }
+}
+
+bool FunctionContext::error_if_overflow() const {
+    return _state != nullptr && _state->error_if_overflow();
 }
 
 void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {

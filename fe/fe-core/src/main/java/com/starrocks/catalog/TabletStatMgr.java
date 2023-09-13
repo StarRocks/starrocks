@@ -51,6 +51,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -107,14 +108,16 @@ public class TabletStatMgr extends FrontendDaemon {
 
                     OlapTable olapTable = (OlapTable) table;
                     for (Partition partition : olapTable.getAllPartitions()) {
-                        long version = partition.getVisibleVersion();
-                        for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                            long indexRowCount = 0L;
-                            for (Tablet tablet : index.getTablets()) {
-                                indexRowCount += tablet.getRowCount(version);
-                            } // end for tablets
-                            index.setRowCount(indexRowCount);
-                        } // end for indices
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            long version = physicalPartition.getVisibleVersion();
+                            for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                                long indexRowCount = 0L;
+                                for (Tablet tablet : index.getTablets()) {
+                                    indexRowCount += tablet.getRowCount(version);
+                                } // end for tablets
+                                index.setRowCount(indexRowCount);
+                            } // end for indices
+                        } // end for physical partitions
                     } // end for partitions
                     LOG.debug("finished to set row num for table: {} in database: {}",
                             table.getName(), db.getFullName());
@@ -215,7 +218,7 @@ public class TabletStatMgr extends FrontendDaemon {
         Map<Long, Long> partitionToVersion = Maps.newHashMap();
         db.readLock();
         try {
-            for (Partition partition : table.getPartitions()) {
+            for (PhysicalPartition partition : table.getPhysicalPartitions()) {
                 long partitionId = partition.getId();
                 long version = partition.getVisibleVersion();
                 // partition init version is 1
@@ -252,14 +255,14 @@ public class TabletStatMgr extends FrontendDaemon {
         long start = System.currentTimeMillis();
         try {
             for (Map.Entry<Long, List<TabletInfo>> entry : beToTabletInfos.entrySet()) {
-                Backend backend = systemInfoService.getBackend(entry.getKey());
-                if (backend == null) {
+                ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
+                if (node == null) {
                     continue;
                 }
                 TabletStatRequest request = new TabletStatRequest();
                 request.tabletInfos = entry.getValue();
 
-                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                 Future<TabletStatResponse> responseFuture = lakeService.getTabletStats(request);
                 responseList.add(responseFuture);
             }
@@ -286,7 +289,7 @@ public class TabletStatMgr extends FrontendDaemon {
         // update tablet stats
         db.writeLock();
         try {
-            for (Partition partition : table.getPartitions()) {
+            for (PhysicalPartition partition : table.getPhysicalPartitions()) {
                 long partitionId = partition.getId();
                 if (!partitionToVersion.containsKey(partitionId)) {
                     continue;

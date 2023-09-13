@@ -77,8 +77,12 @@ static int tablet_tablet_state(Tablet& tablet) {
     return static_cast<int>(tablet.tablet_state());
 }
 
+static std::string tablet_set_tablet_state(Tablet& tablet, int state) {
+    return tablet.set_tablet_state(static_cast<TabletState>(state)).to_string();
+}
+
 static const TabletSchema& tablet_tablet_schema(Tablet& tablet) {
-    return tablet.tablet_schema();
+    return tablet.unsafe_tablet_schema_ref();
 }
 
 static uint64_t tablet_tablet_id(Tablet& tablet) {
@@ -93,12 +97,12 @@ static DataDir* tablet_data_dir(Tablet& tablet) {
     return tablet.data_dir();
 }
 
-static uint64_t get_major(EditVersion& self) {
-    return self.major();
+static uint64_t get_major_number(EditVersion& self) {
+    return self.major_number();
 }
 
-static uint64_t get_minor(EditVersion& self) {
-    return self.minor();
+static uint64_t get_minor_number(EditVersion& self) {
+    return self.minor_number();
 }
 
 static void bind_common(ForeignModule& m) {
@@ -189,16 +193,41 @@ void bind_exec_env(ForeignModule& m) {
         // uncomment this to enable executing shell commands
         // cls.funcStaticExt<&exec_whitelist>("exec");
         cls.funcStaticExt<&list_stack_trace_of_long_wait_mutex>("list_stack_trace_of_long_wait_mutex");
-        REG_METHOD(ExecEnv, process_mem_tracker);
-        REG_METHOD(ExecEnv, query_pool_mem_tracker);
-        REG_METHOD(ExecEnv, load_mem_tracker);
-        REG_METHOD(ExecEnv, metadata_mem_tracker);
-        REG_METHOD(ExecEnv, tablet_metadata_mem_tracker);
-        REG_METHOD(ExecEnv, rowset_metadata_mem_tracker);
-        REG_METHOD(ExecEnv, segment_metadata_mem_tracker);
-        REG_METHOD(ExecEnv, compaction_mem_tracker);
-        REG_METHOD(ExecEnv, update_mem_tracker);
-        REG_METHOD(ExecEnv, clone_mem_tracker);
+    }
+    {
+        auto& cls = m.klass<GlobalEnv>("GlobalEnv");
+        REG_STATIC_METHOD(GlobalEnv, GetInstance);
+
+        // level 0
+        REG_METHOD(GlobalEnv, process_mem_tracker);
+
+        // level 1
+        REG_METHOD(GlobalEnv, query_pool_mem_tracker);
+        REG_METHOD(GlobalEnv, load_mem_tracker);
+        REG_METHOD(GlobalEnv, metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, compaction_mem_tracker);
+        REG_METHOD(GlobalEnv, schema_change_mem_tracker);
+        REG_METHOD(GlobalEnv, column_pool_mem_tracker);
+        REG_METHOD(GlobalEnv, page_cache_mem_tracker);
+        REG_METHOD(GlobalEnv, update_mem_tracker);
+        REG_METHOD(GlobalEnv, chunk_allocator_mem_tracker);
+        REG_METHOD(GlobalEnv, clone_mem_tracker);
+        REG_METHOD(GlobalEnv, consistency_mem_tracker);
+
+        // level 2
+        REG_METHOD(GlobalEnv, tablet_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, rowset_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, segment_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, column_metadata_mem_tracker);
+
+        // level 3
+        REG_METHOD(GlobalEnv, tablet_schema_mem_tracker);
+        REG_METHOD(GlobalEnv, column_zonemap_index_mem_tracker);
+        REG_METHOD(GlobalEnv, ordinal_index_mem_tracker);
+        REG_METHOD(GlobalEnv, bitmap_index_mem_tracker);
+        REG_METHOD(GlobalEnv, bloom_filter_index_mem_tracker);
+        REG_METHOD(GlobalEnv, segment_zonemap_mem_tracker);
+        REG_METHOD(GlobalEnv, short_key_index_mem_tracker);
     }
 }
 
@@ -336,6 +365,7 @@ public:
             cls.funcExt<tablet_data_dir>("data_dir");
             cls.funcExt<tablet_keys_type_int>("keys_type_as_int");
             cls.funcExt<tablet_tablet_state>("tablet_state_as_int");
+            cls.funcExt<tablet_set_tablet_state>("set_tablet_state_as_int");
             REG_METHOD(Tablet, tablet_footprint);
             REG_METHOD(Tablet, num_rows);
             REG_METHOD(Tablet, version_count);
@@ -370,8 +400,8 @@ public:
         }
         {
             auto& cls = m.klass<EditVersion>("EditVersion");
-            cls.funcExt<&get_major>("major");
-            cls.funcExt<&get_minor>("minor");
+            cls.funcExt<&get_major_number>("major_number");
+            cls.funcExt<&get_minor_number>("minor_number");
             cls.func<&EditVersion::to_string>("toString");
         }
         {
@@ -391,7 +421,7 @@ public:
         {
             auto& cls = m.klass<Rowset>("Rowset");
             REG_METHOD(Rowset, rowset_id_str);
-            REG_METHOD(Rowset, schema);
+            REG_METHOD(Rowset, schema_ref);
             REG_METHOD(Rowset, start_version);
             REG_METHOD(Rowset, end_version);
             REG_METHOD(Rowset, creation_time);
@@ -465,7 +495,7 @@ Status execute_script(const std::string& script, std::string& output) {
     bind_common(m);
     bind_exec_env(m);
     StorageEngineRef::bind(m);
-    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, StorageEngine)");
+    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, GlobalEnv, StorageEngine)");
     try {
         vm.runFromSource("main", script);
     } catch (const std::exception& e) {

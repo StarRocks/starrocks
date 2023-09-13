@@ -158,6 +158,7 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper:
             ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, std::move(fields)));
 }
 
+// for UT only
 arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper::make_schema(
         const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs,
         const std::vector<FileColumnId>& file_column_ids) {
@@ -259,7 +260,8 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
                                                                 file_column_id.children[i])); // use optional as default
             fields.push_back(std::move(child));
         }
-        return ::parquet::schema::GroupNode::Make(name, rep_type, fields);
+        return ::parquet::schema::GroupNode::Make(name, rep_type, fields, ::parquet::ConvertedType::NONE,
+                                                  file_column_id.field_id);
     }
     case TYPE_ARRAY: {
         DCHECK(type_desc.children.size() == 1);
@@ -282,7 +284,7 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
                                                   file_column_id.field_id);
     }
     default: {
-        return arrow::Status::TypeError(fmt::format("Type {} is not supported", type_desc.debug_string()));
+        return arrow::Status::TypeError(fmt::format("Doesn't support to write {} type data", type_desc.debug_string()));
     }
     }
 }
@@ -334,7 +336,7 @@ Status FileWriterBase::write(Chunk* chunk) {
     }
 
     _generate_chunk_writer();
-    _chunk_writer->write(chunk);
+    RETURN_IF_ERROR(_chunk_writer->write(chunk));
 
     if (_chunk_writer->estimated_buffered_bytes() > _max_row_group_size && !is_last_row_group()) {
         RETURN_IF_ERROR(_flush_row_group());
@@ -377,11 +379,7 @@ Status SyncFileWriter::_flush_row_group() {
             _chunk_writer->close();
         } catch (const ::parquet::ParquetStatusException& e) {
             _chunk_writer.reset();
-
-            // this is to avoid calling ParquetFileWriter.Close which incurs segfault
             _closed = true;
-            _writer.release();
-
             auto st = Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what()));
             LOG(WARNING) << st;
             return st;
@@ -435,7 +433,12 @@ Status AsyncFileWriter::_flush_row_group() {
     bool ok = _executor_pool->try_offer([&]() {
         SCOPED_TIMER(_io_timer);
         if (_chunk_writer != nullptr) {
-            _chunk_writer->close();
+            try {
+                _chunk_writer->close();
+            } catch (const ::parquet::ParquetStatusException& e) {
+                LOG(WARNING) << "flush row group error: " << e.what();
+                set_io_status(Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what())));
+            }
             _chunk_writer = nullptr;
         }
         {
@@ -467,25 +470,37 @@ Status AsyncFileWriter::close(RuntimeState* state,
             auto lock = std::unique_lock(_m);
             _cv.wait(lock, [&] { return !_rg_writer_closing; });
         }
-        _writer->Close();
+
+        DeferOp defer([&]() {
+            // set closed to true anyway
+            _closed.store(true);
+        });
+
+        try {
+            _writer->Close();
+        } catch (const ::parquet::ParquetStatusException& e) {
+            LOG(WARNING) << "close writer error: " << e.what();
+            set_io_status(Status::IOError(fmt::format("{}: {}", "close writer error", e.what())));
+        }
         _chunk_writer = nullptr;
+
         _file_metadata = _writer->metadata();
         auto st = _outstream->Close();
         if (!st.ok()) {
-            return Status::InternalError("Close outstream failed");
+            LOG(WARNING) << "close output stream error: " << st.message();
+            set_io_status(Status::IOError(fmt::format("{}: {}", "close output stream error", st.message())));
         }
 
         if (cb != nullptr) {
             cb(this, state);
         }
-        _closed.store(true);
-        return Status::OK();
     });
 
-    if (ret) {
-        return Status::OK();
+    if (!ret) {
+        return Status::InternalError("Submit close file task error");
     }
-    return Status::InternalError("Submit close file error");
+
+    return Status::OK();
 }
 
 } // namespace starrocks::parquet

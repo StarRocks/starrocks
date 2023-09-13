@@ -44,8 +44,6 @@ import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -56,7 +54,6 @@ import java.util.Objects;
  * Most predicates with two operands..
  */
 public class BinaryPredicate extends Predicate implements Writable {
-    private static final Logger LOG = LogManager.getLogger(BinaryPredicate.class);
 
     public static final com.google.common.base.Predicate<BinaryPredicate> IS_RANGE_PREDICATE =
             arg -> arg.getOp() == BinaryType.LT

@@ -52,7 +52,7 @@ public class SafeModeChecker extends FrontendDaemon {
             if (be.isAlive()) {
                 for (DiskInfo diskInfo : be.getDisks().values()) {
                     double safeModeCheckDiskCapacity = Math.min(
-                            0.9 * diskInfo.getTotalCapacityB(), 53687091200L);
+                            0.1 * diskInfo.getTotalCapacityB(), 53687091200L);
                     if (diskInfo.getAvailableCapacityB() < safeModeCheckDiskCapacity) {
                         if (!GlobalStateMgr.getCurrentState().isSafeMode()) {
                             String warnMsg = String.format(

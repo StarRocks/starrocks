@@ -17,19 +17,29 @@ package com.starrocks.connector.iceberg;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TSinkCommitInfo;
+import com.starrocks.utframe.StarRocksAssert;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -42,6 +52,7 @@ import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
 import org.junit.Assert;
@@ -56,11 +67,13 @@ import java.util.Locale;
 import java.util.Map;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+import static com.starrocks.catalog.Type.STRING;
 import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
 
 public class IcebergMetadataTest extends TableTestBase {
     private static final String CATALOG_NAME = "IcebergCatalog";
+    private static final HdfsEnvironment HDFS_ENVIRONMENT = new HdfsEnvironment();
 
     @Test
     public void testListDatabaseNames(@Mocked IcebergCatalog icebergCatalog) {
@@ -72,7 +85,7 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog);
         List<String> expectResult = Lists.newArrayList("db1", "db2");
         Assert.assertEquals(expectResult, metadata.listDbNames());
     }
@@ -89,11 +102,26 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
         Database expectResult = new Database(0, db);
         Assert.assertEquals(expectResult, metadata.getDb(db));
     }
 
+    @Test
+    public void testGetNotExistDB(@Mocked IcebergHiveCatalog icebergHiveCatalog) {
+        String db = "db";
+
+        new Expectations() {
+            {
+                icebergHiveCatalog.getDB(db);
+                result = new NoSuchNamespaceException("database not found");
+                minTimes = 0;
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        Assert.assertNull(metadata.getDb(db));
+    }
 
     @Test
     public void testListTableNames(@Mocked IcebergHiveCatalog icebergHiveCatalog) {
@@ -109,7 +137,7 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
         List<String> expectResult = Lists.newArrayList("tbl1", "tbl2");
         Assert.assertEquals(expectResult, metadata.listTableNames(db1));
     }
@@ -126,7 +154,7 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
         Table actual = metadata.getTable("db", "tbl");
         Assert.assertEquals("tbl", actual.getName());
         Assert.assertEquals(ICEBERG, actual.getType());
@@ -146,13 +174,13 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
         Assert.assertNull(metadata.getTable("db", "tbl2"));
     }
 
     @Test(expected = AlreadyExistsException.class)
     public void testCreateDuplicatedDb(@Mocked IcebergHiveCatalog icebergHiveCatalog) throws AlreadyExistsException {
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
         new Expectations() {
             {
                 icebergHiveCatalog.listAllDatabases();
@@ -167,7 +195,7 @@ public class IcebergMetadataTest extends TableTestBase {
     @Test(expected = IllegalArgumentException.class)
     public void testCreateDbWithErrorConfig() throws AlreadyExistsException {
         IcebergHiveCatalog hiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), new HashMap<>());
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, hiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, hiveCatalog);
 
         new Expectations(hiveCatalog) {
             {
@@ -186,7 +214,7 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
 
         new Expectations(icebergHiveCatalog) {
             {
@@ -211,7 +239,7 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
 
         new Expectations(icebergHiveCatalog) {
             {
@@ -237,7 +265,7 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
         List<TableIdentifier> mockTables = new ArrayList<>();
         mockTables.add(TableIdentifier.of("table1"));
         mockTables.add(TableIdentifier.of("table2"));
@@ -266,7 +294,7 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         Config.hive_meta_store_timeout_s = 1;
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
 
         new Expectations(icebergHiveCatalog) {
             {
@@ -323,7 +351,7 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
 
         new Expectations(icebergHiveCatalog) {
             {
@@ -354,7 +382,7 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
                 "iceberg_table", Lists.newArrayList(), table, Maps.newHashMap());
 
@@ -440,7 +468,7 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
                 "iceberg_table", Lists.newArrayList(), table, Maps.newHashMap());
 
@@ -468,7 +496,6 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-
         File fakeFile = temp.newFile();
         fakeFile.createNewFile();
         Assert.assertTrue(fakeFile.exists());
@@ -494,5 +521,53 @@ public class IcebergMetadataTest extends TableTestBase {
                 "commit failed",
                 () -> metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo)));
         Assert.assertFalse(fakeFile.exists());
+    }
+
+    @Test
+    public void testGetRemoteFile() throws IOException {
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
+                "iceberg_table", Lists.newArrayList(), table, Maps.newHashMap());
+
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable(anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(icebergTable) {
+            {
+                icebergTable.getPartitionColumns();
+                result = new Column("data", Type.VARBINARY);
+                minTimes = 0;
+            }
+        };
+        table.newAppend().appendFile(FILE_A).commit();
+        table.newAppend().appendFile(FILE_B).commit();
+        table.refresh();
+
+        long snapshotId = table.currentSnapshot().snapshotId();
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE,
+                new ColumnRefOperator(1, STRING, "data", true), ConstantOperator.createVarchar("0"));
+        List<RemoteFileInfo> res = metadata.getRemoteFileInfos(
+                icebergTable, null, snapshotId, predicate, Lists.newArrayList(), 1);
+
+        StarRocksAssert starRocksAssert = new StarRocksAssert();
+        starRocksAssert.getCtx().getSessionVariable().setEnablePruneIcebergManifest(true);
+        table.refresh();
+        snapshotId = table.currentSnapshot().snapshotId();
+        predicate = new BinaryPredicateOperator(BinaryType.EQ,
+                new ColumnRefOperator(1, STRING, "data", true), ConstantOperator.createVarchar("16"));
+        res = metadata.getRemoteFileInfos(
+                icebergTable, null, snapshotId, predicate, Lists.newArrayList(), 1);
+        Assert.assertEquals(1, res.get(0).getFiles().get(0).getIcebergScanTasks().size());
     }
 }

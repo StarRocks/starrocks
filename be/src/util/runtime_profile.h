@@ -73,6 +73,9 @@ inline unsigned long long operator"" _ms(unsigned long long x) {
     (profile)->add_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type))
 #define ADD_TIMER(profile, name) \
     (profile)->add_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS))
+#define ADD_PEAK_COUNTER(profile, name, type) \
+    (profile)->AddHighWaterMarkCounter(       \
+            name, type, RuntimeProfile::Counter::create_strategy(type, TCounterMergeType::SKIP_FIRST_MERGE))
 #define ADD_CHILD_COUNTER(profile, name, type, parent) \
     (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type), parent)
 #define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, merge_type, parent) \
@@ -395,6 +398,10 @@ public:
 
     // Gets the counter object with 'name'.  Returns NULL if there is no counter with
     // that name.
+    std::pair<Counter*, std::string> get_counter_pair(const std::string& name);
+
+    // Gets the counter object with 'name'.  Returns NULL if there is no counter with
+    // that name.
     Counter* get_counter(const std::string& name);
 
     // Adds all counters with 'name' that are registered either in this or
@@ -402,7 +409,7 @@ public:
     void get_counters(const std::string& name, std::vector<Counter*>* counters);
 
     // Copy all but the bucket counters from src profile
-    void copy_all_counters_from(RuntimeProfile* src_profile);
+    void copy_all_counters_from(RuntimeProfile* src_profile, const std::string& attached_counter_name = ROOT_COUNTER);
 
     // Remove the counter object with 'name', and it will remove all the child counters recursively
     void remove_counter(const std::string& name);
@@ -415,7 +422,7 @@ public:
 
     // Adds a string to the runtime profile.  If a value already exists for 'key',
     // the value will be updated.
-    void add_info_string(const std::string& key, const std::string& value);
+    void add_info_string(const std::string& key, const std::string& value = "");
 
     // Creates and returns a new EventSequence (owned by the runtime
     // profile) - unless a timer with the same 'key' already exists, in
@@ -586,7 +593,8 @@ public:
     // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
     // The merged result will be stored in the first profile
-    static RuntimeProfile* merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles);
+    static RuntimeProfile* merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles,
+                                                     bool require_identical = true);
 
 private:
     static const std::unordered_set<std::string> NON_MERGE_COUNTER_NAMES;

@@ -24,8 +24,10 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class KeyColumnUsageSystemTable {
-    public static SystemTable create() {
-        return new SystemTable(SystemId.KEY_COLUMN_USAGE_ID,
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.KEY_COLUMN_USAGE_ID,
                 "key_column_usage",
                 Table.TableType.SCHEMA,
                 builder()

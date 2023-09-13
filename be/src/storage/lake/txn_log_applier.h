@@ -35,6 +35,8 @@ public:
     virtual Status apply(const TxnLogPB& tnx_log) = 0;
 
     virtual Status finish() = 0;
+
+    virtual std::shared_ptr<std::vector<std::string>> trash_files() = 0;
 };
 
 std::unique_ptr<TxnLogApplier> new_txn_log_applier(Tablet tablet, TabletMetadataPtr metadata, int64_t new_version);

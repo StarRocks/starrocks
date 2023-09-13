@@ -27,17 +27,17 @@ group by
 order by
     value desc ;
 [result]
-TOP-N (order by [[: sum DESC NULLS LAST]])
-    TOP-N (order by [[: sum DESC NULLS LAST]])
-        INNER JOIN (join-predicate [cast(: sum as double) > cast(: expr as double)] post-join-predicate [null])
-            AGGREGATE ([GLOBAL] aggregate [{: sum=sum(: expr)}] group by [[: ps_partkey]] having [null]
-                EXCHANGE SHUFFLE[]
-                    SCAN (mv[partsupp_mv] columns[: n_name, : ps_partkey, : ps_partvalue] predicate[: n_name = PERU])
+TOP-N (order by [[18: sum DESC NULLS LAST]])
+    TOP-N (order by [[18: sum DESC NULLS LAST]])
+        INNER JOIN (join-predicate [cast(18: sum as double) > cast(37: expr as double)] post-join-predicate [null])
+            AGGREGATE ([GLOBAL] aggregate [{18: sum=sum(17: expr)}] group by [[1: ps_partkey]] having [null]
+                EXCHANGE SHUFFLE[1]
+                    SCAN (mv[partsupp_mv] columns[39: n_name, 43: ps_partkey, 53: ps_partvalue] predicate[39: n_name = PERU])
             EXCHANGE BROADCAST
-                ASSERT LE
-                    AGGREGATE ([GLOBAL] aggregate [{: sum=sum(: sum)}] group by [[]] having [null]
+                ASSERT LE 1
+                    AGGREGATE ([GLOBAL] aggregate [{36: sum=sum(36: sum)}] group by [[]] having [null]
                         EXCHANGE GATHER
-                            AGGREGATE ([LOCAL] aggregate [{: sum=sum(: expr)}] group by [[]] having [null]
-                                SCAN (mv[partsupp_mv] columns[: n_name, : ps_partvalue] predicate[: n_name = PERU])
+                            AGGREGATE ([LOCAL] aggregate [{36: sum=sum(35: expr)}] group by [[]] having [null]
+                                SCAN (mv[partsupp_mv] columns[114: n_name, 128: ps_partvalue] predicate[114: n_name = PERU])
 [end]
 

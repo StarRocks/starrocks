@@ -60,7 +60,7 @@ public class DebugUtil {
     public static long TERABYTE = 1024 * GIGABYTE;
 
     public static Pair<Double, String> getUint(long value) {
-        Double doubleValue = Double.valueOf(value);
+        double doubleValue = (double) value;
         String unit = "";
         if (value >= BILLION) {
             unit = "B";
@@ -72,8 +72,7 @@ public class DebugUtil {
             unit = "K";
             doubleValue /= THOUSAND;
         }
-        Pair<Double, String> returnValue = Pair.create(doubleValue, unit);
-        return returnValue;
+        return Pair.create(doubleValue, unit);
     }
 
     // Print the value (timestamp in ms) to builder
@@ -121,28 +120,24 @@ public class DebugUtil {
     }
 
     public static Pair<Double, String> getByteUint(long value) {
-        Double doubleValue = Double.valueOf(value);
-        String unit = "";
-        if (value == 0) {
-            // nothing
-            unit = "";
-        } else if (value > TERABYTE) {
+        double doubleValue = (double) value;
+        String unit;
+        if (value >= TERABYTE) {
             unit = "TB";
             doubleValue /= TERABYTE;
-        } else if (value > GIGABYTE) {
+        } else if (value >= GIGABYTE) {
             unit = "GB";
             doubleValue /= GIGABYTE;
-        } else if (value > MEGABYTE) {
+        } else if (value >= MEGABYTE) {
             unit = "MB";
             doubleValue /= MEGABYTE;
-        } else if (value > KILOBYTE) {
+        } else if (value >= KILOBYTE) {
             unit = "KB";
             doubleValue /= KILOBYTE;
         } else {
             unit = "B";
         }
-        Pair<Double, String> returnValue = Pair.create(doubleValue, unit);
-        return returnValue;
+        return Pair.create(doubleValue, unit);
     }
 
     public static String printId(final TUniqueId id) {

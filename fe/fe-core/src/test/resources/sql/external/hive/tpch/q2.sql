@@ -296,7 +296,7 @@ OutPut Exchange Id: 14
 12:HdfsScanNode
 TABLE: part
 NON-PARTITION PREDICATES: 6: p_size = 12, 5: p_type LIKE '%COPPER'
-MIN/MAX PREDICATES: 53: p_size <= 12, 54: p_size >= 12
+MIN/MAX PREDICATES: 6: p_size <= 12, 6: p_size >= 12
 partitions=1/1
 avgRowSize=62.0
 cardinality: 100000
@@ -329,7 +329,7 @@ OutPut Exchange Id: 10
 |  * s_phone-->[-Infinity, Infinity, 0.0, 15.0, 200000.0] ESTIMATE
 |  * s_acctbal-->[-998.22, 9999.72, 0.0, 8.0, 200000.0] ESTIMATE
 |  * s_comment-->[-Infinity, Infinity, 0.0, 101.0, 200000.0] ESTIMATE
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 8:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -342,12 +342,12 @@ OutPut Exchange Id: 10
 |  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 200000.0] ESTIMATE
 |  * s_address-->[-Infinity, Infinity, 0.0, 40.0, 200000.0] ESTIMATE
-|  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
 |  * s_phone-->[-Infinity, Infinity, 0.0, 15.0, 200000.0] ESTIMATE
 |  * s_acctbal-->[-998.22, 9999.72, 0.0, 8.0, 200000.0] ESTIMATE
 |  * s_comment-->[-Infinity, Infinity, 0.0, 101.0, 200000.0] ESTIMATE
-|  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * n_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----7:EXCHANGE
 |       distribution type: BROADCAST
@@ -431,7 +431,7 @@ OutPut Exchange Id: 04
 2:HdfsScanNode
 TABLE: region
 NON-PARTITION PREDICATES: 27: r_name = 'AMERICA'
-MIN/MAX PREDICATES: 51: r_name <= 'AMERICA', 52: r_name >= 'AMERICA'
+MIN/MAX PREDICATES: 27: r_name <= 'AMERICA', 27: r_name >= 'AMERICA'
 partitions=1/1
 avgRowSize=10.8
 cardinality: 1

@@ -22,10 +22,9 @@ import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.HashMap;
 import java.util.Map;
 
-public class AWSCloudConfiguration implements CloudConfiguration {
+public class AWSCloudConfiguration extends CloudConfiguration {
 
     private final AWSCloudCredential awsCloudCredential;
 
@@ -41,8 +40,16 @@ public class AWSCloudConfiguration implements CloudConfiguration {
         this.enablePathStyleAccess = enablePathStyleAccess;
     }
 
+    public boolean getEnablePathStyleAccess() {
+        return this.enablePathStyleAccess;
+    }
+
     public void setEnableSSL(boolean enableSSL) {
         this.enableSSL = enableSSL;
+    }
+
+    public boolean getEnableSSL() {
+        return this.enableSSL;
     }
 
     public AWSCloudCredential getAWSCloudCredential() {
@@ -51,6 +58,7 @@ public class AWSCloudConfiguration implements CloudConfiguration {
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
+        super.applyToConfiguration(configuration);
         configuration.set("fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
         configuration.set("fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
         // Below storage using s3 compatible storage api
@@ -60,6 +68,13 @@ public class AWSCloudConfiguration implements CloudConfiguration {
         configuration.set("fs.tos.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
         configuration.set("fs.cosn.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
 
+        // By default, S3AFileSystem will need 4 minutes to timeout when endpoint is unreachable,
+        // after change, it will need 30 seconds.
+        // Default value is 7.
+        configuration.set("fs.s3a.retry.limit", "3");
+        // Default value is 20
+        configuration.set("fs.s3a.attempts.maximum", "5");
+
         configuration.set("fs.s3a.path.style.access", String.valueOf(enablePathStyleAccess));
         configuration.set("fs.s3a.connection.ssl.enabled", String.valueOf(enableSSL));
         awsCloudCredential.applyToConfiguration(configuration);
@@ -67,14 +82,13 @@ public class AWSCloudConfiguration implements CloudConfiguration {
 
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
+        super.toThrift(tCloudConfiguration);
         tCloudConfiguration.setCloud_type(TCloudType.AWS);
-
-        Map<String, String> properties = new HashMap<>();
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties_v2();
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
                 String.valueOf(enablePathStyleAccess));
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(enableSSL));
         awsCloudCredential.toThrift(properties);
-        tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
     @Override
@@ -88,9 +102,9 @@ public class AWSCloudConfiguration implements CloudConfiguration {
     }
 
     @Override
-    public String getCredentialString() {
-        return "AWSCloudConfiguration{" +
-                "awsCloudCredential=" + awsCloudCredential +
+    public String toConfString() {
+        return "AWSCloudConfiguration{" + getCommonFieldsString() +
+                ", cred=" + awsCloudCredential.toCredString() +
                 ", enablePathStyleAccess=" + enablePathStyleAccess +
                 ", enableSSL=" + enableSSL +
                 '}';

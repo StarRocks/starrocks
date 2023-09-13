@@ -43,7 +43,7 @@ import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.ShardDeleter;
+import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
@@ -827,7 +827,7 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
-        new MockUp<ShardDeleter>() {
+        new MockUp<StarMgrMetaSyncer>() {
             @Mock
             public void dropTabletAndDeleteShard(List<Long> shardIds, StarOSAgent starOSAgent) {
                 // nothing to do

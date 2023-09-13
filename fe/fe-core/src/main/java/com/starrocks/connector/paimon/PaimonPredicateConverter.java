@@ -170,10 +170,8 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
         int idx = fieldNames.indexOf(columnName);
         if (operator.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
             if (operator.getChild(1).getType().isStringType()) {
-                String literal = (String) getLiteral(operator.getChild(1));
-                if (literal != null && literal.length() > 1 &&
-                        literal.indexOf("%") == literal.length() - 1 &&
-                        literal.charAt(0) != '%') {
+                String literal = ((BinaryString) getLiteral(operator.getChild(1))).toString();
+                if (literal.length() > 1 && literal.indexOf("%") == literal.length() - 1 && literal.charAt(0) != '%') {
                     return builder.startsWith(idx, BinaryString.fromString(literal.substring(0, literal.length() - 1)));
                 }
             }
@@ -213,7 +211,7 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
             case HLL:
             case VARCHAR:
             case CHAR:
-                return constValue.getVarchar();
+                return BinaryString.fromString(constValue.getVarchar());
             case DATE:
                 LocalDate localDate = constValue.getDate().toLocalDate();
                 LocalDate epochDay = Instant.ofEpochSecond(0).atOffset(ZoneOffset.UTC).toLocalDate();

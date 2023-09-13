@@ -217,7 +217,7 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
 }
 
 Status ChunksSorter::done(RuntimeState* state) {
-    TRY_CATCH_BAD_ALLOC(do_done(state));
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(do_done(state)));
     return Status::OK();
 }
 

@@ -116,6 +116,10 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         this.topNType = topNType;
     }
 
+    public boolean isUseTopN() {
+        return useTopN;
+    }
+
     public long getOffset() {
         return offset;
     }
@@ -336,11 +340,6 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                     + outputSmap.debugString());
             LOG.debug("sort input exprs: " + Expr.debugString(resolvedTupleExprs));
         }
-    }
-
-    @Override
-    public boolean canUsePipeLine() {
-        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 
     @Override

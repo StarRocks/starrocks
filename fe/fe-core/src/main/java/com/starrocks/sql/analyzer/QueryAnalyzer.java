@@ -47,6 +47,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.privilege.ranger.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -284,12 +285,14 @@ public class QueryAnalyzer {
                 }
 
                 Table table = resolveTable(tableRelation);
+                Relation r;
                 if (table instanceof View) {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
-                    return viewRelation;
+
+                    r = viewRelation;
                 } else if (table instanceof HiveView) {
                     HiveView hiveView = (HiveView) table;
                     QueryStatement queryStatement = hiveView.getQueryStatement();
@@ -297,7 +300,8 @@ public class QueryAnalyzer {
                     view.setInlineViewDefWithSqlMode(hiveView.getInlineViewDef(), 0);
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
-                    return viewRelation;
+
+                    r = viewRelation;
                 } else {
                     if (tableRelation.getTemporalClause() != null) {
                         if (table.getType() != Table.TableType.MYSQL) {
@@ -309,10 +313,24 @@ public class QueryAnalyzer {
 
                     if (table.isSupported()) {
                         tableRelation.setTable(table);
-                        return tableRelation;
+                        r = tableRelation;
                     } else {
                         throw unsupportedException("Unsupported scan table type: " + table.getType());
                     }
+                }
+
+                if (r.isPolicyRewritten()) {
+                    return r;
+                }
+                assert tableName != null;
+                QueryStatement policyRewriteQuery = SecurityPolicyRewriteRule.buildView(session, r, tableName);
+                if (policyRewriteQuery == null) {
+                    return r;
+                } else {
+                    r.setPolicyRewritten(true);
+                    SubqueryRelation subqueryRelation = new SubqueryRelation(policyRewriteQuery);
+                    subqueryRelation.setAlias(tableName);
+                    return subqueryRelation;
                 }
             } else {
                 if (relation.getResolveTableName() != null) {
@@ -347,17 +365,14 @@ public class QueryAnalyzer {
             } else {
                 List<Column> fullSchema = node.isBinlogQuery()
                         ? appendBinlogMetaColumns(table.getFullSchema()) : table.getFullSchema();
-                List<Column> baseSchema = node.isBinlogQuery()
-                        ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema();
+                Set<Column> baseSchema = new HashSet<>(node.isBinlogQuery()
+                        ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema());
                 for (Column column : fullSchema) {
-                    Field field;
-                    if (baseSchema.contains(column)) {
-                        field = new Field(column.getName(), column.getType(), tableName,
-                                new SlotRef(tableName, column.getName(), column.getName()), true, column.isAllowNull());
-                    } else {
-                        field = new Field(column.getName(), column.getType(), tableName,
-                                new SlotRef(tableName, column.getName(), column.getName()), false, column.isAllowNull());
-                    }
+                    // TODO: avoid analyze visible or not each time, cache it in schema
+                    boolean visible = baseSchema.contains(column);
+                    SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                    Field field = new Field(column.getName(), column.getType(), tableName, slot, visible,
+                            column.isAllowNull());
                     columns.put(field, column);
                     fields.add(field);
                 }
@@ -365,21 +380,23 @@ public class QueryAnalyzer {
 
             node.setColumns(columns.build());
             String dbName = node.getName().getDb();
+            if (session.getDumpInfo() != null) {
+                session.getDumpInfo().addTable(dbName, table);
 
-            session.getDumpInfo().addTable(dbName, table);
-            if (table.isHiveTable()) {
-                HiveTable hiveTable = (HiveTable) table;
-                Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().
-                        getResource(hiveTable.getResourceName());
-                if (resource != null) {
-                    session.getDumpInfo().addResource(resource);
+                if (table.isHiveTable()) {
+                    HiveTable hiveTable = (HiveTable) table;
+                    session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
+                            hiveTable.getTableName());
+                    HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
+                            hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
+                    hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
+                    hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
+                    Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().
+                            getResource(hiveTable.getResourceName());
+                    if (resource != null) {
+                        session.getDumpInfo().addResource(resource);
+                    }
                 }
-                session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
-                        hiveTable.getTableName());
-                HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
-                        hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
-                hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
-                hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
             }
 
             Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
@@ -387,8 +404,8 @@ public class QueryAnalyzer {
 
             Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
             for (Column column : table.getBaseSchema()) {
-                if (column.materializedColumnExpr() != null) {
-                    Expr materializedExpression = column.materializedColumnExpr();
+                if (column.generatedColumnExpr() != null) {
+                    Expr materializedExpression = column.generatedColumnExpr();
                     ExpressionAnalyzer.analyzeExpression(materializedExpression, new AnalyzeState(), scope, session);
                     SlotRef slotRef = new SlotRef(null, column.getName());
                     ExpressionAnalyzer.analyzeExpression(slotRef, new AnalyzeState(), scope, session);
@@ -661,6 +678,10 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
+            if (node.getView().isInvalid()) {
+                throw new SemanticException("View " + node.getName() + " need re-build, " + node.getView().getReason());
+            }
+
             Scope queryOutputScope;
             try {
                 queryOutputScope = process(node.getQueryStatement(), scope);
@@ -686,8 +707,32 @@ public class QueryAnalyzer {
                 fields.add(field);
             }
 
-            String dbName = node.getName().getDb();
-            session.getDumpInfo().addView(dbName, view);
+            // check view schema
+            Map<String, Column> columns = node.getView().getColumns().stream()
+                    .collect(Collectors.toMap(c -> c.getName().toLowerCase(), c -> c));
+
+            for (Field field : fields) {
+                String name = field.getName().toLowerCase();
+                if (!columns.containsKey(name)) {
+                    throw new SemanticException(
+                            "Found undefined column[%s] from View[%s]'s query, " +
+                                    "please check the source table has been modified", field.getName(),
+                            node.getName().toSql());
+                }
+
+                Column column = columns.get(name);
+                if (!column.getType().matchesType(field.getType())) {
+                    throw new SemanticException("The type of column[%s] on View[%s] is different with query, " +
+                            "please check the source table has been modified", column.getName(),
+                            node.getName().toSql());
+                }
+            }
+
+            if (session.getDumpInfo() != null) {
+                String dbName = node.getName().getDb();
+                session.getDumpInfo().addView(dbName, view);
+            }
+
             Scope viewScope = new Scope(RelationId.of(node), new RelationFields(fields));
             node.setScope(viewScope);
             return viewScope;
@@ -942,7 +987,7 @@ public class QueryAnalyzer {
         try {
             return new TableFunctionTable(properties);
         } catch (DdlException e) {
-            throw new SemanticException(e.getMessage());
+            throw new StorageAccessException(e);
         }
     }
 

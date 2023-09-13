@@ -17,6 +17,7 @@
 #include "column/chunk.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/http_result_writer.h"
 #include "runtime/mysql_result_writer.h"
 #include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
@@ -26,21 +27,26 @@
 
 namespace starrocks::pipeline {
 Status ResultSinkOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
+    RETURN_IF_ERROR(Operator::prepare(state));
 
     // Create profile
     _profile = std::make_unique<RuntimeProfile>("result sink");
+    _unique_metrics->add_child(_profile.get(), true, nullptr);
 
     // Create writer based on sink type
     switch (_sink_type) {
     case TResultSinkType::MYSQL_PROTOCAL:
-        _writer = std::make_shared<MysqlResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
+        _writer = std::make_shared<MysqlResultWriter>(_sender.get(), _output_expr_ctxs, _is_binary_format,
+                                                      _profile.get());
         break;
     case TResultSinkType::STATISTIC:
         _writer = std::make_shared<StatisticResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
         break;
     case TResultSinkType::VARIABLE:
         _writer = std::make_shared<VariableResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
+        break;
+    case TResultSinkType::HTTP_PROTOCAL:
+        _writer = std::make_shared<HttpResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get(), _format_type);
         break;
     default:
         return Status::InternalError("Unknown result sink type");
@@ -77,8 +83,9 @@ void ResultSinkOperator::close(RuntimeState* state) {
             _sender->close(final_status);
         }
 
-        state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
-                                                        state->fragment_instance_id());
+        st = state->exec_env()->result_mgr()->cancel_at_time(
+                time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
+        st.permit_unchecked_error();
     }
 
     Operator::close(state);

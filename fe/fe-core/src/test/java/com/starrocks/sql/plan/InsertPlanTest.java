@@ -42,7 +42,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.stream.Stream;
 
-
 public class InsertPlanTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -177,11 +176,11 @@ public class InsertPlanTest extends PlanTestBase {
 
         explainString = getInsertExecPlan("insert into test_insert_mv_count(v1) values(1)");
         Assert.assertTrue(explainString.contains("OUTPUT EXPRS:1: column_0 | 2: expr | 3: expr | 4: if"));
-        Assert.assertTrue(explainString.contains(
+        Assert.assertTrue(explainString, explainString.contains(
                 "  |  <slot 1> : 1: column_0\n" +
                         "  |  <slot 2> : NULL\n" +
                         "  |  <slot 3> : NULL\n" +
-                        "  |  <slot 4> : if(NULL IS NULL, 0, 1)"));
+                        "  |  <slot 4> : 0"));
 
         explainString = getInsertExecPlan("insert into test_insert_mv_count(v3,v1) values(3,1)");
 
@@ -190,16 +189,16 @@ public class InsertPlanTest extends PlanTestBase {
                 "  |  <slot 1> : 1: column_0\n" +
                         "  |  <slot 2> : 2: column_1\n" +
                         "  |  <slot 3> : NULL\n" +
-                        "  |  <slot 4> : if(NULL IS NULL, 0, 1)"));
+                        "  |  <slot 4> : 0"));
 
         explainString = getInsertExecPlan("insert into test_insert_mv_count select 1,2,3");
         Assert.assertTrue(explainString.contains("OUTPUT EXPRS:6: v1 | 7: v2 | 8: v3 | 5: if"));
         Assert.assertTrue(explainString.contains(
                 "1:Project\n" +
-                        "  |  <slot 5> : if(2 IS NULL, 0, 1)\n" +
-                        "  |  <slot 6> : CAST(1 AS BIGINT)\n" +
-                        "  |  <slot 7> : CAST(2 AS BIGINT)\n" +
-                        "  |  <slot 8> : CAST(3 AS BIGINT)"));
+                        "  |  <slot 5> : 1\n" +
+                        "  |  <slot 6> : 1\n" +
+                        "  |  <slot 7> : 2\n" +
+                        "  |  <slot 8> : 3"));
 
         starRocksAssert.dropTable("test_insert_mv_count");
     }
@@ -250,7 +249,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  1:Project\n" +
                         "  |  <slot 1> : 1: v1\n" +
                         "  |  <slot 6> : to_bitmap(1: v1)\n" +
-                        "  |  <slot 7> : CAST(2 AS BIGINT)\n" +
+                        "  |  <slot 7> : 2\n" +
                         "  |  <slot 8> : NULL\n"));
 
         explainString = getInsertExecPlan("insert into ti2 select * from ti2");
@@ -368,7 +367,7 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     public static String getInsertExecPlan(String originStmt) throws Exception {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode())
                         .get(0);
@@ -741,7 +740,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "    RANDOM\n" +
                 "\n" +
                 "  1:Project\n" +
-                "  |  <slot 7> : CAST(1 AS BIGINT)\n" +
+                "  |  <slot 7> : 1\n" +
                 "  |  <slot 8> : NULL\n" +
                 "  |  <slot 9> : NULL"));
     }
@@ -862,8 +861,8 @@ public class InsertPlanTest extends PlanTestBase {
                 "    RANDOM\n" +
                 "\n" +
                 "  1:Project\n" +
-                "  |  <slot 4> : CAST(1 AS INT)\n" +
-                "  |  <slot 5> : CAST(2 AS INT)\n" +
+                "  |  <slot 4> : 1\n" +
+                "  |  <slot 5> : 2\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +

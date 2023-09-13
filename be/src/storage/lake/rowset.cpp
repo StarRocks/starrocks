@@ -51,6 +51,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.global_dictmaps = options.global_dictmaps;
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
     seg_options.runtime_range_pruner = options.runtime_range_pruner;
+    seg_options.tablet_schema = options.tablet_schema;
     seg_options.fill_data_cache = options.fill_data_cache;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
@@ -195,18 +196,27 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
+    return segments(fill_cache, fill_cache);
+}
+
+StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_data_cache, bool fill_metadata_cache) {
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, fill_cache));
+    RETURN_IF_ERROR(load_segments(&segments, fill_data_cache, fill_metadata_cache));
     return segments;
 }
 
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache) {
+    return load_segments(segments, fill_cache, fill_cache);
+}
+
+Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_data_cache, bool fill_metadata_cache) {
     size_t footer_size_hint = 16 * 1024;
     uint32_t seg_id = 0;
     bool ignore_lost_segment = config::experimental_lake_ignore_lost_segment;
     segments->reserve(_rowset_metadata->segments().size());
     for (const auto& seg_name : _rowset_metadata->segments()) {
-        auto segment_or = _tablet->load_segment(seg_name, seg_id++, &footer_size_hint, fill_cache);
+        auto segment_or =
+                _tablet->load_segment(seg_name, seg_id++, &footer_size_hint, fill_data_cache, fill_metadata_cache);
         if (segment_or.ok()) {
             segments->emplace_back(std::move(segment_or.value()));
         } else if (segment_or.status().is_not_found() && ignore_lost_segment) {

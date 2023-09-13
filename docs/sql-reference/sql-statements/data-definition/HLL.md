@@ -4,19 +4,19 @@
 
 HLL enables the development of programmes based on the HyperLogLog algorithm. It is used to store intermediate results of the HyperLogLog calculation process. It can only be used as the value column type of the table. HLL reduces the amount of data through aggregation to speed up the query process. There may be a 1% deviation in the estimated results.
 
-HLL column is generated based on the imported data or data from other columns. When data is imported, the hll_hash() function specifies which column will be used to generated the HLL column. HLL is often used to replace COUNT DISTINCT and quickly calculate unique views (UVs) with rollup.
+HLL column is generated based on the imported data or data from other columns. When data is imported, the [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md) function specifies which column will be used to generated the HLL column. HLL is often used to replace COUNT DISTINCT and quickly calculate unique views (UVs) with rollup.
 
 Related functions:
 
-HLL_UNION_AGG(hll): This function is an aggregate function used to estimate the cardinality of all data that meet the conditions. This can also be used to analyze functions. It only supports default window and does not support window clause.
+[HLL_UNION_AGG(hll)](../../sql-functions/aggregate-functions/hll_union_agg.md): This function is an aggregate function used to estimate the cardinality of all data that meet the conditions. This can also be used to analyze functions. It only supports default window and does not support window clause.
 
-HLL_RAW_AGG(hll): This function is an aggregate function used to aggregate fields of hll type and returns with hll type.
+[HLL_RAW_AGG(hll)](../../sql-functions/aggregate-functions/hll_raw_agg.md): This function is an aggregate function used to aggregate fields of hll type and returns with hll type.
 
 HLL_CARDINALITY(hll): This function is used to estimate the cardinality of a single hll column.
 
-HLL_HASH(column_name): This generates HLL column type and is used for inserts or imports. See the instructions for the use of imports.
+[HLL_HASH(column_name)](../../sql-functions/aggregate-functions/hll_hash.md): This generates HLL column type and is used for inserts or imports. See the instructions for the use of imports.
 
-EMPTY_HLL(): This generates empty HLL column and is used to fill in default values during inserts or imports. See the instructions for the use of imports.
+[HLL_EMPTY](../../sql-functions/aggregate-functions/hll_empty.md): This generates empty HLL column and is used to fill in default values during inserts or imports. See the instructions for the use of imports.
 
 ## Examples
 

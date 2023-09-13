@@ -202,10 +202,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Projection projection = node.getProjection();
         if (projection != null) {
             Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
-            for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
-                ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
-                statisticsBuilder.addColumnStatistic(columnRefOperator,
-                        ExpressionStatisticCalculator.calculate(mapOperator, statisticsBuilder.build()));
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
+                statisticsBuilder.addColumnStatistic(entry.getKey(),
+                        ExpressionStatisticCalculator.calculate(entry.getValue(), statisticsBuilder.build()));
             }
 
         }
@@ -287,7 +286,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (context.getStatistics() == null) {
             String catalogName = ((IcebergTable) table).getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, colRefToColumnMetaMap, null, node.getPredicate());
+                    optimizerContext, catalogName, table, colRefToColumnMetaMap, null, node.getPredicate(), node.getLimit());
             context.setStatistics(stats);
         }
 
@@ -520,7 +519,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             String partitionColumn = olapTable.getPartitionColumnNames().get(0);
             ColumnStatistic partitionColumnStatistic =
                     GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
-            optimizerContext.getDumpInfo().addTableStatistics(olapTable, partitionColumn, partitionColumnStatistic);
+
+            if (optimizerContext.getDumpInfo() != null) {
+                optimizerContext.getDumpInfo().addTableStatistics(olapTable, partitionColumn, partitionColumnStatistic);
+            }
 
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             if (partitionInfo instanceof RangePartitionInfo) {
@@ -546,13 +548,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 if (minLiteral instanceof DateLiteral) {
                     DateLiteral minDateLiteral = (DateLiteral) minLiteral;
                     DateLiteral maxDateLiteral;
-                    try {
-                        maxDateLiteral = maxLiteral instanceof MaxLiteral ? new DateLiteral(Type.DATE, true) :
-                                (DateLiteral) maxLiteral;
-                    } catch (AnalysisException e) {
-                        LOG.warn("get max date literal failed, msg : " + e.getMessage());
-                        return null;
-                    }
+                    maxDateLiteral = maxLiteral instanceof MaxLiteral ? new DateLiteral(Type.DATE, true) :
+                            (DateLiteral) maxLiteral;
                     min = Utils.getLongFromDateTime(minDateLiteral.toLocalDateTime());
                     max = Utils.getLongFromDateTime(maxDateLiteral.toLocalDateTime());
                 } else {
@@ -576,7 +573,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalProject(PhysicalProjectOperator node, ExpressionContext context) {
-        Preconditions.checkState(node.getCommonSubOperatorMap().isEmpty());
         return computeProjectNode(context, node.getColumnRefMap());
     }
 
@@ -1301,14 +1297,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeCTEConsume(Operator node, ExpressionContext context, int cteId,
                                    Map<ColumnRefOperator, ColumnRefOperator> columnRefMap) {
-        Optional<Statistics> produceStatisticsOp = optimizerContext.getCteContext().getCTEStatistics(cteId);
-
-        // The statistics of producer and children are equal theoretically, but statistics of children
-        // plan maybe more accurate in actually
-        if (!produceStatisticsOp.isPresent() && (context.getChildrenStatistics().isEmpty() ||
-                context.getChildrenStatistics().stream().anyMatch(Objects::isNull))) {
-            Preconditions.checkState(false, "Impossible cte statistics");
-        }
 
         if (!context.getChildrenStatistics().isEmpty() && context.getChildStatistics(0) != null) {
             //  use the statistics of children first
@@ -1316,7 +1304,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             Projection projection = node.getProjection();
             if (projection != null) {
                 Statistics.Builder statisticsBuilder = Statistics.buildFrom(context.getStatistics());
-                Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
                 for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
                     ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
                     statisticsBuilder.addColumnStatistic(columnRefOperator,
@@ -1328,7 +1315,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
 
         // None children, may force CTE, use the statistics of producer
-        Preconditions.checkState(produceStatisticsOp.isPresent());
+        Optional<Statistics> produceStatisticsOp = optimizerContext.getCteContext().getCTEStatistics(cteId);
+        Preconditions.checkState(produceStatisticsOp.isPresent(),
+                "cannot obtain cte statistics for %s", node);
         Statistics produceStatistics = produceStatisticsOp.get();
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator ref : columnRefMap.keySet()) {

@@ -294,6 +294,7 @@ public class BackupJobInfo implements Writable {
             tableInfo.name = tbl.getName();
             jobInfo.tables.put(tableInfo.name, tableInfo);
             // partitions
+            // TODO(meegoo): support sub partition
             for (Partition partition : olapTbl.getPartitions()) {
                 BackupPartitionInfo partitionInfo = new BackupPartitionInfo();
                 partitionInfo.id = partition.getId();

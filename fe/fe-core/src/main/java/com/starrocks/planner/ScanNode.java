@@ -42,7 +42,6 @@ import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
-import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Collections;
 import java.util.List;
@@ -57,6 +56,8 @@ public abstract class ScanNode extends PlanNode {
     protected Map<String, PartitionColumnFilter> columnFilters;
     protected String sortColumn = null;
     protected List<ColumnAccessPath> columnAccessPaths;
+    protected boolean canUseAnyColumn;
+    protected boolean canUseMinMaxCountOpt;
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -69,6 +70,26 @@ public abstract class ScanNode extends PlanNode {
 
     public void setColumnAccessPaths(List<ColumnAccessPath> columnAccessPaths) {
         this.columnAccessPaths = columnAccessPaths;
+    }
+
+    public void setCanUseAnyColumn(boolean canUseAnyColumn) {
+        this.canUseAnyColumn = canUseAnyColumn;
+    }
+
+    public void setCanUseMinMaxCountOpt(boolean canUseMinMaxCountOpt) {
+        this.canUseMinMaxCountOpt = canUseMinMaxCountOpt;
+    }
+
+    public boolean getCanUseAnyColumn() {
+        return canUseAnyColumn;
+    }
+
+    public boolean getCanUseMinMaxCountOpt() {
+        return canUseMinMaxCountOpt;
+    }
+
+    public String getTableName() {
+        return desc.getTable().getName();
     }
 
     /**
@@ -100,13 +121,22 @@ public abstract class ScanNode extends PlanNode {
     }
 
     protected String explainColumnAccessPath(String prefix) {
-        if (CollectionUtils.isEmpty(columnAccessPaths)) {
-            return "";
+        String result = "";
+        if (columnAccessPaths.stream().anyMatch(c -> !c.isFromPredicate())) {
+            result += prefix + "ColumnAccessPath: [" + columnAccessPaths.stream()
+                    .filter(c -> !c.isFromPredicate())
+                    .map(ColumnAccessPath::explain)
+                    .sorted()
+                    .collect(Collectors.joining(", ")) + "]\n";
         }
-
-        return prefix + "ColumnAccessPath: [" +
-                columnAccessPaths.stream().map(ColumnAccessPath::explain).collect(Collectors.joining(", ")) +
-                "]\n";
+        if (columnAccessPaths.stream().anyMatch(ColumnAccessPath::isFromPredicate)) {
+            result += prefix + "PredicateAccessPath: [" + columnAccessPaths.stream()
+                    .filter(ColumnAccessPath::isFromPredicate)
+                    .map(ColumnAccessPath::explain)
+                    .sorted()
+                    .collect(Collectors.joining(", ")) + "]\n";
+        }
+        return result;
     }
 
     protected List<TColumnAccessPath> columnAccessPathToThrift() {

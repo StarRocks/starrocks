@@ -110,7 +110,7 @@ static void dump_trace_info() {
         wt = write(STDERR_FILENO, buffer, res);
         // dump memory usage
         // copy trackers
-        auto& trackers = ExecEnv::GetInstance()->mem_trackers();
+        auto& trackers = GlobalEnv::GetInstance()->mem_trackers();
         for (const auto& tracker : trackers) {
             if (tracker) {
                 size_t len = tracker->debug_string(buffer, sizeof(buffer));

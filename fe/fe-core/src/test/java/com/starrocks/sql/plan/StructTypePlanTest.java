@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
@@ -88,7 +87,7 @@ public class StructTypePlanTest extends PlanTestBase {
     @Test
     public void testSelectArrayStruct() throws Exception {
         String sql = "select c1.b[10].a from test";
-        assertVerbosePlanContains(sql, "[/c1/b]");
+        assertVerbosePlanContains(sql, "ColumnAccessPath: [/c1/b/INDEX/a]");
     }
 
     @Test
@@ -106,7 +105,7 @@ public class StructTypePlanTest extends PlanTestBase {
         assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11), b int(11)>]");
 
         sql = "select count(c1.b[10].a) from test";
-        assertVerbosePlanContains(sql, "[/c1/b]");
+        assertVerbosePlanContains(sql, "[/c1/b/INDEX/a]");
 
         sql = "select count(c3.c.b) from test group by c1.a, c2.b";
         assertVerbosePlanContains(sql, "[/c1/a, /c2/b, /c3/c/b]");
@@ -134,7 +133,8 @@ public class StructTypePlanTest extends PlanTestBase {
     public void testSubQuery() throws Exception {
         String sql = "select c2.a from (select c1, c2 from test) t";
         assertVerbosePlanContains(sql, "[/c2/a]");
-        sql = "select t1.a, rn from (select c3.c as t1, row_number() over (partition by c0 order by c2.a) as rn from test) as t";
+        sql = "select t1.a, rn from (select c3.c as t1, row_number() over" +
+                " (partition by c0 order by c2.a) as rn from test) as t";
         assertVerbosePlanContains(sql, "[/c2/a, /c3/c/a]");
     }
 
@@ -197,5 +197,15 @@ public class StructTypePlanTest extends PlanTestBase {
         assertContains(plan, "cast(row[(NULL, NULL, NULL); args: BOOLEAN,BOOLEAN,BOOLEAN; " +
                 "result: struct<col1 boolean, col2 boolean, col3 boolean>; args nullable: true; result nullable: true] " +
                 "as struct<a int(11), b map<int(11),int(11)>, c array<int(11)>>)");
+    }
+
+    @Test
+    public void testCastArrayIndex() throws Exception {
+        String sql = "select c1.b[cast('  111   ' as bigint)] from test";
+        String plan = getVerboseExplain(sql);
+        assertCContains(plan, "1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  5 <-> 2: c1.b[111]",
+                "Pruned type: 2 <-> [struct<a int(11), b array<struct<a int(11), b int(11)>>>]");
     }
 }

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "column/datum.h"
 #include "exec/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "runtime/runtime_state.h"
@@ -30,9 +31,13 @@ public:
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
-    Status fill_chunk(ChunkPtr* chunk);
+    Status _fill_chunk(ChunkPtr* chunk);
+    DatumArray _build_row();
+    Status _list_pipe_files();
 
-    size_t _cur_idx{0};
+    size_t _cur_row = 0;
+    bool _fetched = false;
+    TListPipeFilesResult _pipe_files_result;
     static SchemaScanner::ColumnDesc _s_columns[];
 };
 

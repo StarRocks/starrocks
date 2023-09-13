@@ -1,17 +1,16 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//   http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.load.pipe;
 
@@ -23,7 +22,10 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.pipe.AlterPipeClause;
+import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.AlterPipePauseResume;
+import com.starrocks.sql.ast.pipe.AlterPipeSetProperty;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
@@ -31,10 +33,11 @@ import com.starrocks.sql.ast.pipe.PipeName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -45,9 +48,9 @@ public class PipeManager {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     @SerializedName(value = "pipes")
-    private Map<PipeId, Pipe> pipeMap = new HashMap<>();
+    private Map<PipeId, Pipe> pipeMap = new ConcurrentHashMap<>();
     @SerializedName(value = "nameToId")
-    private Map<Pair<Long, String>, PipeId> nameToId = new HashMap<>();
+    private Map<Pair<Long, String>, PipeId> nameToId = new ConcurrentHashMap<>();
 
     private final PipeRepo repo;
 
@@ -80,6 +83,7 @@ public class PipeManager {
     }
 
     public void dropPipe(DropPipeStmt stmt) throws DdlException {
+        Pipe pipe = null;
         try {
             lock.writeLock().lock();
             Pair<Long, String> dbAndName = resolvePipeNameUnlock(stmt.getPipeName());
@@ -90,13 +94,17 @@ public class PipeManager {
                 }
                 ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PIPE, stmt.getPipeName());
             }
-            Pipe pipe = pipeMap.get(nameToId.get(dbAndName));
+            pipe = pipeMap.get(nameToId.get(dbAndName));
 
-            pipe.pause();
+            pipe.suspend();
+            pipe.destroy();
             removePipe(pipe);
 
             // persistence
             repo.deletePipe(pipe);
+        } catch (Throwable e) {
+            LOG.error("drop pipe {} failed", pipe, e);
+            throw e;
         } finally {
             lock.writeLock().unlock();
         }
@@ -114,11 +122,14 @@ public class PipeManager {
             for (PipeId id : removed) {
                 Pipe pipe = pipeMap.get(id);
                 if (pipe != null) {
-                    pipe.pause();
+                    pipe.suspend();
+                    pipe.destroy();
                     pipeMap.remove(id);
                 }
             }
             LOG.info("drop pipes in database " + dbName + ": " + removed);
+        } catch (Throwable e) {
+            LOG.error("drop pipes in database {}/{} failed", dbName, dbId, e);
         } finally {
             lock.writeLock().unlock();
         }
@@ -126,17 +137,27 @@ public class PipeManager {
 
     public void alterPipe(AlterPipeStmt stmt) throws DdlException {
         LOG.info("alter pipe " + stmt.toString());
-        AlterPipePauseResume alterClause = (AlterPipePauseResume) stmt.getAlterPipeClause();
+        AlterPipeClause alterClause = stmt.getAlterPipeClause();
         try {
             lock.writeLock().lock();
             Pair<Long, String> dbAndName = resolvePipeNameUnlock(stmt.getPipeName());
             PipeId pipeId = nameToId.get(dbAndName);
             DdlException.requireNotNull("pipe-" + dbAndName.second, pipeId);
             Pipe pipe = pipeMap.get(pipeId);
-            if (alterClause.isPause()) {
-                pipe.pause();
-            } else if (alterClause.isResume()) {
-                pipe.resume();
+            if (alterClause instanceof AlterPipePauseResume) {
+                AlterPipePauseResume pauseResume = (AlterPipePauseResume) alterClause;
+                if (pauseResume.isSuspend()) {
+                    pipe.suspend();
+                } else if (pauseResume.isResume()) {
+                    pipe.resume();
+                }
+            } else if (alterClause instanceof AlterPipeClauseRetry) {
+                AlterPipeClauseRetry retry = (AlterPipeClauseRetry) alterClause;
+                pipe.retry(retry);
+            } else if (alterClause instanceof AlterPipeSetProperty) {
+                AlterPipeSetProperty setProperty = (AlterPipeSetProperty) alterClause;
+                pipe.processProperties(setProperty.getProperties());
+                LOG.info("alter pipe {} properties {}", pipe, setProperty.getProperties());
             }
 
             // persistence
@@ -180,6 +201,15 @@ public class PipeManager {
         }
     }
 
+    public List<Pipe> getAllPipes() {
+        try {
+            lock.readLock().lock();
+            return new ArrayList<>(pipeMap.values());
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public PipeRepo getRepo() {
         return repo;
     }
@@ -189,6 +219,19 @@ public class PipeManager {
         try {
             lock.readLock().lock();
             return Pair.create(GsonUtils.GSON.toJson(this), pipeMap.size());
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public String getPipesOfDb(long dbId) {
+        try {
+            lock.readLock().lock();
+            List<Pipe> pipes = pipeMap.entrySet().stream()
+                    .filter(x -> x.getKey().getDbId() == dbId)
+                    .map(Map.Entry::getValue)
+                    .collect(Collectors.toList());
+            return GsonUtils.GSON.toJson(pipes);
         } finally {
             lock.readLock().unlock();
         }
@@ -214,8 +257,28 @@ public class PipeManager {
         }
     }
 
+    public void clear() {
+        try {
+            lock.writeLock().lock();
+            pipeMap.clear();
+            nameToId.clear();
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
     public Map<PipeId, Pipe> getPipesUnlock() {
         return pipeMap;
+    }
+
+    public Optional<Pipe> mayGetPipe(long id) {
+        // TODO: optimize performance
+        try {
+            lock.readLock().lock();
+            return pipeMap.values().stream().filter(x -> x.getId() == id).findAny();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     public Optional<Pipe> mayGetPipe(PipeName name) {

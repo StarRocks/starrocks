@@ -451,18 +451,23 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
                 newPredicate = Utils.compoundAnd(predicates);
                 if (context.hasEncoded) {
+                    // TODO: maybe have to implement a clone method to create a physical node.
                     PhysicalOlapScanOperator newOlapScan =
                             new PhysicalOlapScanOperator(scanOperator.getTable(), newColRefToColumnMetaMap,
                                     scanOperator.getDistributionSpec(), scanOperator.getLimit(), newPredicate,
                                     scanOperator.getSelectedIndexId(), scanOperator.getSelectedPartitionId(),
-                                    scanOperator.getSelectedTabletId(), scanOperator.getPrunedPartitionPredicates(),
+                                    scanOperator.getSelectedTabletId(), scanOperator.getHintsReplicaId(),
+                                    scanOperator.getPrunedPartitionPredicates(),
                                     scanOperator.getProjection(), scanOperator.isUsePkIndex());
+                    newOlapScan.setCanUseAnyColumn(scanOperator.getCanUseAnyColumn());
+                    newOlapScan.setCanUseMinMaxCountOpt(scanOperator.getCanUseMinMaxCountOpt());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
                     newOlapScan.setGlobalDicts(globalDicts);
                     // set output columns because of the projection is not encoded but the colRefToColumnMetaMap has encoded.
                     // There need to set right output columns
                     newOlapScan.setOutputColumns(newOutputColumns);
                     newOlapScan.setNeedSortedByKeyPerTablet(scanOperator.needSortedByKeyPerTablet());
+                    newOlapScan.setNeedOutputChunkByBucket(scanOperator.needOutputChunkByBucket());
 
                     OptExpression result = new OptExpression(newOlapScan);
                     result.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
@@ -740,7 +745,9 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     new PhysicalHashAggregateOperator(aggOperator.getType(), newGroupBys, newPartitionsBy, newAggMap,
                             aggOperator.getSingleDistinctFunctionPos(), aggOperator.isSplit(), aggOperator.getLimit(),
                             aggOperator.getPredicate(), aggOperator.getProjection());
+            newHashAggregator.setMergedLocalAgg(aggOperator.isMergedLocalAgg());
             newHashAggregator.setUseSortAgg(aggOperator.isUseSortAgg());
+            newHashAggregator.setUsePerBucketOptmize(aggOperator.isUsePerBucketOptmize());
             return newHashAggregator;
         }
 

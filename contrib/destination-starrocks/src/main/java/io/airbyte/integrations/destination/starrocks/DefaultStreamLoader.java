@@ -19,11 +19,11 @@ import io.airbyte.integrations.destination.starrocks.exception.StreamLoadFailExc
 import io.airbyte.integrations.destination.starrocks.http.StreamLoadEntity;
 import io.airbyte.integrations.destination.starrocks.stream.StreamLoadUtils;
 import io.airbyte.protocol.models.v0.AirbyteRecordMessage;
+
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHost;
 import org.apache.http.HttpStatus;
-import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPut;
@@ -38,8 +38,12 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import javax.net.ssl.SSLContext;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import javax.net.ssl.SSLContext;
 
 public class DefaultStreamLoader implements StreamLoader {
 
@@ -76,7 +80,6 @@ public class DefaultStreamLoader implements StreamLoader {
                         return true;
                     }
                 });
-
     }
 
     @Override
@@ -93,11 +96,17 @@ public class DefaultStreamLoader implements StreamLoader {
             throw new IOException("Could not find an available fe host.");
         }
 
-        String sendUrl = String.format("http://%s:%d%s", host, properties.getHttpPort(), loadUrlPath);
-        String label = StreamLoadUtils.label(loadTable);
+        int port = properties.getHttpPort();
+        String scheme = "http";
+        // check if port for appropriate url scheme
+        if (properties.getSSL()) {
+            scheme = "https";
+        }
 
+        String sendUrl = String.format("%s://%s:%d%s", scheme, host, port, loadUrlPath);
+        String label = StreamLoadUtils.label(loadTable);
         HttpPut httpPut = new HttpPut(sendUrl);
-        httpPut.setConfig(RequestConfig.custom().setExpectContinueEnabled(true).setRedirectsEnabled(true).build());
+
         httpPut.setEntity(new StreamLoadEntity(records));
         httpPut.setHeaders(defaultHeaders);
         httpPut.addHeader("label", label);
@@ -105,11 +114,13 @@ public class DefaultStreamLoader implements StreamLoader {
         LOG.info("Stream loading, label : {}, database : {}, table : {}, request : {}",
                 label, database, loadTable, httpPut);
 
-        try (CloseableHttpClient client = clientBuilder.build()) {
+        String responseBody = null;
+
+        try (CloseableHttpClient client = HttpClients.createDefault();) {
             long startNanoTime = System.nanoTime();
-            String responseBody;
             try (CloseableHttpResponse response = client.execute(httpPut)) {
-                responseBody = EntityUtils.toString(response.getEntity());
+                HttpEntity responseEntity = response.getEntity();
+                responseBody = EntityUtils.toString(responseEntity);
             }
             StreamLoadResponse streamLoadResponse = new StreamLoadResponse();
             StreamLoadResponse.StreamLoadResponseBody streamLoadBody
@@ -147,11 +158,11 @@ public class DefaultStreamLoader implements StreamLoader {
         } catch (StreamLoadFailException e) {
             throw e;
         }  catch (Exception e) {
+            LOG.error("error response from stream load: \n" + responseBody);
             String errorMsg = String.format("Stream load failed because of unknown exception, db: %s, table: %s, " +
                     "label: %s", database, loadTable, label);
             throw new StreamLoadFailException(errorMsg, e);
         }
-
     }
 
     protected String getAvailableHost() {

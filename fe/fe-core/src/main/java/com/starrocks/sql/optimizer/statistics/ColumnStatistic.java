@@ -140,11 +140,25 @@ public class ColumnStatistic {
         String typeString = endIndex == columnStatistic.length() - 1 ? "" : columnStatistic.substring(endIndex + 2);
 
         String[] valueArray = valueString.split(",");
-        Preconditions.checkState(valueArray.length == 5);
+        Preconditions.checkState(valueArray.length == 5,
+                "statistic value: %s is illegal", valueString);
 
-        Builder builder = new Builder(Double.parseDouble(valueArray[0]), Double.parseDouble(valueArray[1]),
+        double minValue = Double.parseDouble(valueArray[0]);
+        double maxValue = Double.parseDouble(valueArray[1]);
+        double distinctValues = Double.parseDouble(valueArray[4]);
+
+        if (minValue > maxValue) {
+            minValue = Double.NEGATIVE_INFINITY;
+            maxValue = Double.POSITIVE_INFINITY;
+        }
+
+        if (distinctValues <= 0) {
+            distinctValues = 1;
+        }
+
+        Builder builder = new Builder(minValue, maxValue,
                 Double.parseDouble(valueArray[2]), Double.parseDouble(valueArray[3]),
-                Double.parseDouble(valueArray[4]));
+                distinctValues);
         if (!typeString.isEmpty()) {
             builder.setType(StatisticType.valueOf(typeString));
         } else if (builder.build().isUnknownValue()) {

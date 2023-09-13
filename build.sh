@@ -66,7 +66,7 @@ if [[ $OSTYPE == darwin* ]] ; then
     PARALLEL=$(sysctl -n hw.ncpu)
     # We know for sure that build-thirdparty.sh will fail on darwin platform, so just skip the step.
 else
-    if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/datasketches/hll.hpp ]]; then
+    if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/include/llvm/InitializePasses.h ]]; then
         echo "Thirdparty libraries need to be build ..."
         ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
     fi
@@ -87,6 +87,7 @@ Usage: $0 <options>
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
+     --without-java-ext build Backend without java-extensions(default with java-extensions)
      -j                 build Backend parallel
 
   Eg.
@@ -112,6 +113,7 @@ OPTS=$(getopt \
   -l 'with-bench' \
   -l 'with-clang-tidy' \
   -l 'without-gcov' \
+  -l 'without-java-ext' \
   -l 'use-staros' \
   -o 'j:' \
   -l 'help' \
@@ -132,6 +134,7 @@ WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
 USE_STAROS=OFF
+BUILD_JAVA_EXT=ON
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -178,8 +181,8 @@ if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
 	ENABLE_QUERY_DEBUG_TRACE=OFF
 fi
 
-if [[ -z ${USE_JEMALLOC} ]]; then
-    USE_JEMALLOC=ON
+if [[ -z ${ENABLE_FAULT_INJECTION} ]]; then
+    ENABLE_FAULT_INJECTION=OFF
 fi
 
 HELP=0
@@ -216,6 +219,7 @@ else
             --use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
+            --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -251,7 +255,8 @@ echo "Get params:
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
     WITH_CACHELIB       -- $WITH_CACHELIB
-    USE_JEMALLOC        -- $USE_JEMALLOC
+    ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
+    BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
 "
 
 check_tool()
@@ -331,13 +336,13 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
-                  -DUSE_JEMALLOC=$USE_JEMALLOC                          \
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DWITH_CACHELIB=${WITH_CACHELIB}                      \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DWITH_STARCACHE=${USE_STAROS}                        \
+                  -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
 
     time ${BUILD_SYSTEM} -j${PARALLEL}
@@ -347,14 +352,18 @@ if [ ${BUILD_BE} -eq 1 ] ; then
 
     ${BUILD_SYSTEM} install
 
-    # Build JDBC Bridge
-    echo "Build Java Extensions"
-    cd ${STARROCKS_HOME}/java-extensions
-    if [ ${CLEAN} -eq 1 ]; then
-        ${MVN_CMD} clean
+    # Build Java Extensions
+    if [ ${BUILD_JAVA_EXT} = "ON" ]; then
+        echo "Build Java Extensions"
+        cd ${STARROCKS_HOME}/java-extensions
+        if [ ${CLEAN} -eq 1 ]; then
+            ${MVN_CMD} clean
+        fi
+        ${MVN_CMD} package -DskipTests
+        cd ${STARROCKS_HOME}
+    else
+        echo "Skip Building Java Extensions"
     fi
-    ${MVN_CMD} package -DskipTests
-    cd ${STARROCKS_HOME}
 fi
 
 cd ${STARROCKS_HOME}
@@ -397,6 +406,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/bin/show_fe_version.sh ${STARROCKS_OUTPUT}/fe/bin/
         cp -r -p ${STARROCKS_HOME}/bin/common.sh ${STARROCKS_OUTPUT}/fe/bin/
         cp -r -p ${STARROCKS_HOME}/conf/fe.conf ${STARROCKS_OUTPUT}/fe/conf/
+        cp -r -p ${STARROCKS_HOME}/conf/udf_security.policy ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/fe/conf/
         rm -rf ${STARROCKS_OUTPUT}/fe/lib/*
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
@@ -422,11 +432,11 @@ if [ ${BUILD_BE} -eq 1 ]; then
     install -d ${STARROCKS_OUTPUT}/be/bin  \
                ${STARROCKS_OUTPUT}/be/conf \
                ${STARROCKS_OUTPUT}/be/lib/hadoop \
-               ${STARROCKS_OUTPUT}/be/lib/jvm \
                ${STARROCKS_OUTPUT}/be/www  \
 
     cp -r -p ${STARROCKS_HOME}/be/output/bin/* ${STARROCKS_OUTPUT}/be/bin/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/be.conf ${STARROCKS_OUTPUT}/be/conf/
+    cp -r -p ${STARROCKS_HOME}/be/output/conf/udf_security.policy ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/be_test.conf ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/cn.conf ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/be/conf/
@@ -434,7 +444,8 @@ if [ ${BUILD_BE} -eq 1 ]; then
     if [ "${BUILD_TYPE}" == "ASAN" ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
-    cp -r -p ${STARROCKS_HOME}/be/output/lib/* ${STARROCKS_OUTPUT}/be/lib/
+    cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
+    cp -r -p ${STARROCKS_HOME}/be/output/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
     if [ "${ibuildtype}" == "release" ] ; then
@@ -475,12 +486,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
     fi
 
-    # note: do not use oracle jdk to avoid commercial dispute
-    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/open_jdk/jre/lib/aarch64 ${STARROCKS_OUTPUT}/be/lib/jvm/
-    else
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/open_jdk/jre/lib/amd64 ${STARROCKS_OUTPUT}/be/lib/jvm/
-    fi
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/

@@ -28,6 +28,7 @@ struct MergeConfig {
 // heap based rowset merger used for updatable tablet's compaction
 
 Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<RowsetSharedPtr>& rowsets,
-                                RowsetWriter* writer, const MergeConfig& cfg);
+                                RowsetWriter* writer, const MergeConfig& cfg,
+                                const starrocks::TabletSchemaCSPtr& cur_tablet_schema = nullptr);
 
 } // namespace starrocks

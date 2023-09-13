@@ -18,12 +18,16 @@ import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -35,6 +39,8 @@ import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.storagevolume.StorageVolume;
 
+import java.io.DataInput;
+import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -47,12 +53,14 @@ import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public abstract class StorageVolumeMgr implements GsonPostProcessable {
+public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable {
     private static final String ENABLED = "enabled";
 
     public static final String DEFAULT = "default";
 
     public static final String LOCAL = "local";
+
+    public static final String BUILTIN_STORAGE_VOLUME = "builtin_storage_volume";
 
     @SerializedName("defaultSVId")
     protected String defaultStorageVolumeId = "";
@@ -106,22 +114,28 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public void removeStorageVolume(DropStorageVolumeStmt stmt) throws DdlException, AnalysisException {
+    public void removeStorageVolume(DropStorageVolumeStmt stmt) throws DdlException, MetaNotFoundException {
         removeStorageVolume(stmt.getName());
     }
 
-    public void removeStorageVolume(String name) throws DdlException {
+    public void removeStorageVolume(String name) throws DdlException, MetaNotFoundException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(name);
-            Preconditions.checkState(sv != null,
-                    "Storage volume '%s' does not exist", name);
+            if (sv == null) {
+                throw new MetaNotFoundException(String.format("Storage volume '%s' does not exist", name));
+            }
             Preconditions.checkState(!defaultStorageVolumeId.equals(sv.getId()),
                     "default storage volume can not be removed");
-            Set<Long> dbs = storageVolumeToDbs.get(sv.getId());
-            Set<Long> tables = storageVolumeToTables.get(sv.getId());
-            Preconditions.checkState(dbs == null && tables == null,
+            Set<Long> dbs = storageVolumeToDbs.getOrDefault(sv.getId(), new HashSet<>());
+            Set<Long> tables = storageVolumeToTables.getOrDefault(sv.getId(), new HashSet<>());
+            if (name.equals(BUILTIN_STORAGE_VOLUME)) {
+                List<List<Long>> bindings = getBindingsOfBuiltinStorageVolume();
+                dbs.addAll(bindings.get(0));
+                tables.addAll(bindings.get(1));
+            }
+            Preconditions.checkState(dbs.isEmpty() && tables.isEmpty(),
                     "Storage volume '%s' is referenced by dbs or tables, dbs: %s, tables: %s",
-                    name, dbs != null ? dbs.toString() : "[]", tables != null ? tables.toString() : "[]");
+                    name, dbs.toString(), tables.toString());
             removeInternalNoLock(sv);
         }
     }
@@ -161,15 +175,15 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) throws AnalysisException {
+    public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) {
         setDefaultStorageVolume(stmt.getName());
     }
 
-    public void setDefaultStorageVolume(String svKey) {
+    public void setDefaultStorageVolume(String svName) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            StorageVolume sv = getStorageVolumeByName(svKey);
-            Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svKey);
-            Preconditions.checkState(sv.getEnabled(), "Storage volume '%s' is disabled", svKey);
+            StorageVolume sv = getStorageVolumeByName(svName);
+            Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svName);
+            Preconditions.checkState(sv.getEnabled(), "Storage volume '%s' is disabled", svName);
             SetDefaultStorageVolumeLog log = new SetDefaultStorageVolumeLog(sv.getId());
             GlobalStateMgr.getCurrentState().getEditLog().logSetDefaultStorageVolume(log);
             this.defaultStorageVolumeId = sv.getId();
@@ -180,9 +194,9 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         return defaultStorageVolumeId;
     }
 
-    public boolean exists(String svKey) throws DdlException {
+    public boolean exists(String svName) throws DdlException {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            StorageVolume sv = getStorageVolumeByName(svKey);
+            StorageVolume sv = getStorageVolumeByName(svName);
             return sv != null;
         }
     }
@@ -197,82 +211,6 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         return enabled;
     }
 
-    // In replay phase, the check of storage volume existence can be skipped.
-    // Because it has been checked when creating db.
-    private boolean bindDbToStorageVolume(String svId, long dbId, boolean isReplay) {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (!isReplay && !storageVolumeToDbs.containsKey(svId) && getStorageVolume(svId) == null) {
-                return false;
-            }
-            Set<Long> dbs = storageVolumeToDbs.getOrDefault(svId, new HashSet<>());
-            dbs.add(dbId);
-            storageVolumeToDbs.put(svId, dbs);
-            dbToStorageVolume.put(dbId, svId);
-            return true;
-        }
-    }
-
-    public boolean bindDbToStorageVolume(String svId, long dbId) {
-        return bindDbToStorageVolume(svId, dbId, false);
-    }
-
-    public void replayBindDbToStorageVolume(String svId, long dbId) {
-        bindDbToStorageVolume(svId, dbId, true);
-    }
-
-    public void unbindDbToStorageVolume(long dbId) {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (!dbToStorageVolume.containsKey(dbId)) {
-                return;
-            }
-            String svId = dbToStorageVolume.remove(dbId);
-            Set<Long> dbs = storageVolumeToDbs.get(svId);
-            dbs.remove(dbId);
-            if (dbs.isEmpty()) {
-                storageVolumeToDbs.remove(svId);
-            }
-        }
-    }
-
-    public boolean bindTableToStorageVolume(String svId, long tableId) {
-        return bindTableToStorageVolume(svId, tableId, false);
-    }
-
-    public void replayBindTableToStorageVolume(String svId, long tableId) {
-        bindTableToStorageVolume(svId, tableId, true);
-    }
-
-    // In replay phase, the check of storage volume existence can be skipped.
-    // Because it has been checked when creating table.
-    private boolean bindTableToStorageVolume(String svId, long tableId, boolean isReplay) {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (!isReplay && !storageVolumeToDbs.containsKey(svId) &&
-                    !storageVolumeToTables.containsKey(svId) &&
-                    getStorageVolume(svId) == null) {
-                return false;
-            }
-        }
-        Set<Long> tables = storageVolumeToTables.getOrDefault(svId, new HashSet<>());
-        tables.add(tableId);
-        storageVolumeToTables.put(svId, tables);
-        tableToStorageVolume.put(tableId, svId);
-        return true;
-    }
-
-    public void unbindTableToStorageVolume(long tableId) {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (!tableToStorageVolume.containsKey(tableId)) {
-                return;
-            }
-            String svId = tableToStorageVolume.remove(tableId);
-            Set<Long> tables = storageVolumeToTables.get(svId);
-            tables.remove(tableId);
-            if (tables.isEmpty()) {
-                storageVolumeToTables.remove(svId);
-            }
-        }
-    }
-
     public String getStorageVolumeIdOfTable(long tableId) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return tableToStorageVolume.get(tableId);
@@ -285,9 +223,37 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
+    public String getStorageVolumeNameOfTable(long tableId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            String svId = getStorageVolumeIdOfTable(tableId);
+            // If sv id is null, the table is upgraded from old version.
+            // Builtin storage volume will be returned.
+            return svId != null ? getStorageVolume(svId).getName() : BUILTIN_STORAGE_VOLUME;
+        }
+    }
+
+    public String getStorageVolumeNameOfDb(long dbId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            String svId = getStorageVolumeIdOfDb(dbId);
+            // If sv id is null, the db is upgraded from old version.
+            // Builtin storage volume will be returned.
+            return svId != null ? getStorageVolume(svId).getName() : BUILTIN_STORAGE_VOLUME;
+        }
+    }
+
     public StorageVolume getDefaultStorageVolume() {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return getStorageVolume(getDefaultStorageVolumeId());
+        }
+    }
+
+    public String getStorageVolumeName(String svId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            StorageVolume sv = getStorageVolume(svId);
+            if (sv == null) {
+                return "";
+            }
+            return getStorageVolume(svId).getName();
         }
     }
 
@@ -326,6 +292,8 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         this.storageVolumeToDbs = data.storageVolumeToDbs;
         this.storageVolumeToTables = data.storageVolumeToTables;
         this.defaultStorageVolumeId = data.defaultStorageVolumeId;
+        this.dbToStorageVolume = data.dbToStorageVolume;
+        this.tableToStorageVolume = data.tableToStorageVolume;
     }
 
     @Override
@@ -335,7 +303,6 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
                 dbToStorageVolume.put(dbId, entry.getKey());
             }
         }
-
         for (Map.Entry<String, Set<Long>> entry : storageVolumeToTables.entrySet()) {
             for (Long tableId : entry.getValue()) {
                 tableToStorageVolume.put(tableId, entry.getKey());
@@ -343,9 +310,29 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public abstract StorageVolume getStorageVolumeByName(String svKey);
+    public long saveStorageVolumes(DataOutputStream dos, long checksum) throws IOException {
+        write(dos);
+        return checksum;
+    }
 
-    public abstract StorageVolume getStorageVolume(String storageVolumeId);
+    public void load(DataInput in) throws IOException {
+        String json = Text.readString(in);
+        StorageVolumeMgr data = GsonUtils.GSON.fromJson(json, StorageVolumeMgr.class);
+        this.storageVolumeToDbs = data.storageVolumeToDbs;
+        this.storageVolumeToTables = data.storageVolumeToTables;
+        this.defaultStorageVolumeId = data.defaultStorageVolumeId;
+        this.dbToStorageVolume = data.dbToStorageVolume;
+        this.tableToStorageVolume = data.tableToStorageVolume;
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+    }
+
+    public abstract StorageVolume getStorageVolumeByName(String svName);
+
+    public abstract StorageVolume getStorageVolume(String svId);
 
     public abstract List<String> listStorageVolumeNames() throws DdlException;
 
@@ -356,4 +343,22 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
     protected abstract void updateInternalNoLock(StorageVolume sv) throws DdlException;
 
     protected abstract void removeInternalNoLock(StorageVolume sv) throws DdlException;
+
+    public abstract boolean bindDbToStorageVolume(String svName, long dbId) throws DdlException;
+
+    public abstract void replayBindDbToStorageVolume(String svId, long dbId);
+
+    public abstract void unbindDbToStorageVolume(long dbId);
+
+    public abstract boolean bindTableToStorageVolume(String svName, long dbId, long tableId) throws DdlException;
+
+    public abstract void replayBindTableToStorageVolume(String svId, long tableId);
+
+    public abstract void unbindTableToStorageVolume(long tableId);
+
+    public abstract String createBuiltinStorageVolume() throws DdlException, AlreadyExistsException;
+
+    public abstract void validateStorageVolumeConfig() throws InvalidConfException;
+
+    protected abstract List<List<Long>> getBindingsOfBuiltinStorageVolume();
 }

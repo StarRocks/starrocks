@@ -35,7 +35,7 @@ class ExportSinkOperator final : public Operator {
 public:
     ExportSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                        std::shared_ptr<ExportSinkIOBuffer> export_sink_buffer)
-            : Operator(factory, id, "export_sink", plan_node_id, driver_sequence),
+            : Operator(factory, id, "export_sink", plan_node_id, false, driver_sequence),
               _export_sink_buffer(std::move(std::move(export_sink_buffer))) {}
 
     ~ExportSinkOperator() override = default;
@@ -68,7 +68,7 @@ class ExportSinkOperatorFactory final : public OperatorFactory {
 public:
     ExportSinkOperatorFactory(int32_t id, const TExportSink& t_export_sink, std::vector<TExpr> t_output_expr,
                               int32_t num_sinkers, FragmentContext* fragment_ctx)
-            : OperatorFactory(id, "export_sink", Operator::s_pseudo_plan_node_id_for_export_sink),
+            : OperatorFactory(id, "export_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
               _t_export_sink(t_export_sink),
               _t_output_expr(std::move(std::move(t_output_expr))),
               _num_sinkers(num_sinkers),

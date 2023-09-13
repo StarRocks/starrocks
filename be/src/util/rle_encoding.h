@@ -190,7 +190,7 @@ public:
 
     // Reserve 'num_bytes' bytes for a plain encoded header, set each
     // byte with 'val': this is used for the RLE-encoded data blocks in
-    // order to be able to able to store the initial ordinal position
+    // order to be able to store the initial ordinal position
     // and number of elements. This is a part of RleEncoder in order to
     // maintain the correct offset in 'buffer'.
     void Reserve(int num_bytes, uint8_t val);
@@ -275,12 +275,18 @@ inline bool RleDecoder<T>::ReadHeader() {
         bool is_literal = indicator_value & 1;
         if (is_literal) {
             literal_count_ = (indicator_value >> 1) * 8;
-            DCHECK_GT(literal_count_, 0);
+            if (PREDICT_FALSE(literal_count_ == 0)) {
+                return false;
+            }
         } else {
             repeat_count_ = indicator_value >> 1;
-            DCHECK_GT(repeat_count_, 0);
+            if (PREDICT_FALSE(repeat_count_ == 0)) {
+                return false;
+            }
             result = bit_reader_.GetAligned<T>(BitUtil::Ceil(bit_width_, 8), reinterpret_cast<T*>(&current_value_));
-            DCHECK(result);
+            if (PREDICT_FALSE(!result)) {
+                return false;
+            }
         }
     }
     return true;
@@ -400,7 +406,7 @@ inline size_t RleDecoder<T>::Skip(size_t to_skip) {
             to_skip -= nskip;
             for (; nskip > 0; nskip--) {
                 T value = 0;
-                bool result = bit_reader_.GetValue(bit_width_, &value);
+                result = bit_reader_.GetValue(bit_width_, &value);
                 DCHECK(result);
                 if (value != 0) {
                     set_count++;
@@ -701,6 +707,10 @@ public:
     // Returns the number of consumed values or 0 if an error occurred.
     int32_t GetBatch(T* values, int32_t batch_num);
 
+    // Like GetBatch but the values are then decoded using the provided dictionary
+    template <typename TV>
+    int GetBatchWithDict(const TV* dictionary, int32_t dictionary_length, TV* values, int32_t batch_num);
+
 private:
     // Called when both 'literal_count_' and 'repeat_count_' have been exhausted.
     // Sets either 'literal_count_' or 'repeat_count_' to the size of the next literal
@@ -858,6 +868,7 @@ inline bool RleBatchDecoder<T>::FillLiteralBuffer() {
 
 template <typename T>
 inline int32_t RleBatchDecoder<T>::GetBatch(T* values, int32_t batch_num) {
+    DCHECK_GE(bit_width_, 0);
     int32_t num_consumed = 0;
     while (num_consumed < batch_num) {
         // Add RLE encoded values by repeating the current value this number of times.
@@ -880,6 +891,70 @@ inline int32_t RleBatchDecoder<T>::GetBatch(T* values, int32_t batch_num) {
         int32_t num_literals_to_set = std::min(num_literals, batch_num - num_consumed);
         if (!GetLiteralValues(num_literals_to_set, values + num_consumed)) {
             return 0;
+        }
+        num_consumed += num_literals_to_set;
+    }
+    return num_consumed;
+}
+
+template <typename T>
+static inline bool IndexInRange(T idx, int32_t dictionary_length) {
+    return idx >= 0 && idx < dictionary_length;
+}
+
+template <typename T>
+static inline bool IndicesInRange(const T* values, int32_t length, int32_t dictionary_length) {
+    T min_index = std::numeric_limits<T>::max();
+    T max_index = std::numeric_limits<T>::min();
+    for (int x = 0; x < length; x++) {
+        min_index = std::min(values[x], min_index);
+        max_index = std::max(values[x], max_index);
+    }
+
+    return IndexInRange(min_index, dictionary_length) && IndexInRange(max_index, dictionary_length);
+}
+
+template <typename T>
+template <typename TV>
+inline int RleBatchDecoder<T>::GetBatchWithDict(const TV* dictionary, int32_t dictionary_length, TV* values,
+                                                int32_t batch_num) {
+    DCHECK_GE(bit_width_, 0);
+    int32_t num_consumed = 0;
+    while (num_consumed < batch_num) {
+        // Add RLE encoded values by repeating the current value this number of times.
+        int32_t num_repeats = NextNumRepeats();
+        if (num_repeats > 0) {
+            int32_t num_repeats_to_set = std::min(num_repeats, batch_num - num_consumed);
+            T repeated_value = GetRepeatedValue(num_repeats_to_set);
+            if (UNLIKELY(!IndexInRange(repeated_value, dictionary_length))) {
+                return -1;
+            }
+            TV value = dictionary[repeated_value];
+            for (int i = 0; i < num_repeats_to_set; ++i) {
+                values[num_consumed + i] = value;
+            }
+            num_consumed += num_repeats_to_set;
+            continue;
+        }
+
+        // Add remaining literal values, if any.
+        int32_t num_literals = NextNumLiterals();
+        if (num_literals == 0) {
+            break;
+        }
+        const int kBufferSize = 1024;
+        T indices[kBufferSize];
+
+        int32_t num_literals_to_set = std::min(num_literals, batch_num - num_consumed);
+        num_literals_to_set = std::min(num_literals_to_set, kBufferSize);
+        if (!GetLiteralValues(num_literals_to_set, indices)) {
+            return 0;
+        }
+        if (UNLIKELY(!IndicesInRange(indices, num_literals_to_set, dictionary_length))) {
+            return -1;
+        }
+        for (int i = 0; i < num_literals_to_set; ++i) {
+            values[num_consumed + i] = dictionary[indices[i]];
         }
         num_consumed += num_literals_to_set;
     }

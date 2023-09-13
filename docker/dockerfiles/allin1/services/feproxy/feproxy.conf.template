@@ -1,0 +1,67 @@
+user root;
+worker_processes 4;
+pid {{feproxyhome}}/nginx.pid;
+include /usr/share/nginx/modules/*.conf;
+
+events {
+    worker_connections 256;
+}
+
+error_log {{feproxyhome}}/log/error.log info;
+
+http {
+    sendfile            on;
+    tcp_nopush          on;
+    tcp_nodelay         on;
+    keepalive_timeout   65;
+    types_hash_max_size 2048;
+    client_max_body_size 0;
+    ignore_invalid_headers off;
+    underscores_in_headers on;
+
+    access_log {{feproxyhome}}/log/access.log;
+    include             /etc/nginx/mime.types;
+    default_type        application/octet-stream;
+    server {
+        listen 8080;
+        server_name starrocks-allin1.localdomain;
+        location / {
+            proxy_pass http://127.0.0.1:{{fewebport}};
+            proxy_set_header Expect $http_expect;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_intercept_errors on;
+            error_page 307 = @handle_redirect;
+        }
+        location /api/transaction/load {
+            proxy_pass http://127.0.0.1:{{fewebport}};
+            proxy_pass_request_body off;
+            proxy_set_header Expect $http_expect;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_intercept_errors on;
+            error_page 307 = @handle_redirect;
+        }
+        location ~ ^/api/.*/.*/_stream_load$ {
+            proxy_pass http://127.0.0.1:{{fewebport}};
+            proxy_pass_request_body off;
+            proxy_set_header Expect $http_expect;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_intercept_errors on;
+            error_page 307 = @handle_redirect;
+        }
+        location @handle_redirect {
+            set $redirect_uri '$upstream_http_location';
+            proxy_pass $redirect_uri;
+            proxy_set_header Expect $http_expect;
+            proxy_pass_request_body on;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+    }
+}

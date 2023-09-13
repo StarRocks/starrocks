@@ -16,15 +16,6 @@ pull_request_rules:
         add_users: 
           - "{{author}}"
 
-  - name: assign backport PRs with the pr author
-    conditions:
-      - merged
-    actions:
-      backport:
-        bot_account: "{{author}}"
-        assignees: 
-          - "{{author}}"
-  
   - name: close pr when conflict
     conditions:
       - label=conflicts

@@ -47,6 +47,7 @@ import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
+import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
@@ -63,6 +64,8 @@ import com.starrocks.proto.PTabletWriterOpenRequest;
 import com.starrocks.proto.PTabletWriterOpenResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
+import com.starrocks.proto.PUpdateFailPointStatusRequest;
+import com.starrocks.proto.PUpdateFailPointStatusResponse;
 import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
@@ -82,6 +85,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PGetFileSchemaRequest;
+import com.starrocks.rpc.PListFailPointRequest;
 import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
@@ -228,6 +232,8 @@ public class PseudoBackend {
     private AtomicLong nextRowsetId = new AtomicLong(0);
 
     private Random random;
+
+    private AtomicLong numSchemaScan = new AtomicLong(0);
 
     private static ThreadLocal<PseudoBackend> currentBackend = new ThreadLocal<>();
 
@@ -453,6 +459,10 @@ public class PseudoBackend {
 
     public float getPublishFailureRate() {
         return publishFailureRate;
+    }
+
+    public long getNumSchemaScan() {
+        return numSchemaScan.get();
     }
 
     private void reportTablets() {
@@ -1023,6 +1033,16 @@ public class PseudoBackend {
             }
             return CompletableFuture.completedFuture(result);
         }
+
+        @Override
+        public Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(PUpdateFailPointStatusRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request) {
+            return null;
+        }
     }
 
     private class PseudoLakeService implements LakeService {
@@ -1139,8 +1159,11 @@ public class PseudoBackend {
                                 .collect(Collectors.toList());
                         numTabletScan += scanRanges.size();
                         runOlapScan(planNode, scanRanges);
-                        System.out.printf("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan);
+                        LOG.info(String.format("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan));
                     }
+                } else if (planNode.node_type == TPlanNodeType.SCHEMA_SCAN_NODE) {
+                    numSchemaScan.incrementAndGet();
+                    sb.append(" SchemaScanNode:" + planNode.schema_scan_node.table_name);
                 }
             }
             if (numTabletScan > 0) {
@@ -1203,12 +1226,15 @@ public class PseudoBackend {
                                 .collect(Collectors.toList());
                         numTabletScan += scanRanges.size();
                         runOlapScan(planNode, scanRanges);
-                        System.out.printf("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan);
+                        LOG.info(String.format("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan));
                     }
+                } else if (planNode.node_type == TPlanNodeType.SCHEMA_SCAN_NODE) {
+                    numSchemaScan.incrementAndGet();
+                    sb.append(" SchemaScanNode:" + planNode.schema_scan_node.table_name);
                 }
             }
             if (allScans != numTabletScan) {
-                System.out.printf("not all scanrange used: all:%d used:%d\n", allScans, numTabletScan);
+                LOG.info(String.format(" not all scanrange used: all:%d used:%d\n", allScans, numTabletScan));
             }
             if (numTabletScan > 0) {
                 scansByQueryId.computeIfAbsent(DebugUtil.printId(commonParams.params.query_id), k -> new AtomicInteger(0))

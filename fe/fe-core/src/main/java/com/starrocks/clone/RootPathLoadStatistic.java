@@ -34,19 +34,28 @@
 
 package com.starrocks.clone;
 
+import com.google.gson.JsonObject;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.clone.BackendLoadStatistic.Classification;
 import com.starrocks.clone.BalanceStatus.ErrCode;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TStorageMedium;
 
 public class RootPathLoadStatistic implements Comparable<RootPathLoadStatistic> {
 
+    @SerializedName(value = "beId")
     private long beId;
+    @SerializedName(value = "path")
     private String path;
+    @SerializedName(value = "pathHash")
     private Long pathHash;
+    @SerializedName(value = "storageMedium")
     private TStorageMedium storageMedium;
+    @SerializedName(value = "total")
     private long capacityB;
+    @SerializedName(value = "used")
     private long usedCapacityB;
     private DiskState diskState;
 
@@ -132,5 +141,9 @@ public class RootPathLoadStatistic implements Comparable<RootPathLoadStatistic> 
         sb.append(", medium: ").append(storageMedium).append(", used: ").append(usedCapacityB);
         sb.append(", total: ").append(capacityB);
         return sb.toString();
+    }
+
+    public JsonObject toJson() {
+        return (JsonObject) GsonUtils.GSON.toJsonTree(this);
     }
 }

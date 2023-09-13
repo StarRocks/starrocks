@@ -14,14 +14,18 @@
 
 package com.starrocks.credential.hdfs;
 
-import autovalue.shaded.com.google.common.common.base.Preconditions;
+import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
+import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 
-public class HDFSCloudConfiguration implements CloudConfiguration {
+import java.util.Map;
+
+public class HDFSCloudConfiguration extends CloudConfiguration {
+
     private final HDFSCloudCredential hdfsCloudCredential;
 
     public HDFSCloudConfiguration(HDFSCloudCredential hdfsCloudCredential) {
@@ -35,17 +39,22 @@ public class HDFSCloudConfiguration implements CloudConfiguration {
 
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
-        // TODO
+        super.toThrift(tCloudConfiguration);
+        tCloudConfiguration.setCloud_type(TCloudType.HDFS);
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties_v2();
+        hdfsCloudCredential.toThrift(properties);
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
-        // TODO
+        super.applyToConfiguration(configuration);
+        hdfsCloudCredential.applyToConfiguration(configuration);
     }
 
     @Override
-    public String getCredentialString() {
-        return hdfsCloudCredential.getCredentialString();
+    public String toConfString() {
+        return String.format("HDFSCloudConfiguration{%s, cred=%s}", getCommonFieldsString(),
+                hdfsCloudCredential.toCredString());
     }
 
     @Override

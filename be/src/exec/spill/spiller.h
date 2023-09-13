@@ -43,10 +43,6 @@ namespace starrocks::spill {
 
 // some metrics for spill
 struct SpillProcessMetrics {
-private:
-    // For profile
-    std::shared_ptr<RuntimeProfile> _spiller_metrics;
-
 public:
     SpillProcessMetrics() = default;
     SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes);
@@ -80,6 +76,10 @@ public:
     RuntimeProfile::HighWaterMarkCounter* mem_table_peak_memory_usage = nullptr;
     // peak memory usage of input stream
     RuntimeProfile::HighWaterMarkCounter* input_stream_peak_memory_usage = nullptr;
+    // time spent to sort chunk before flush
+    RuntimeProfile::Counter* sort_chunk_timer = nullptr;
+    // time spent to materialize chunk by permutation
+    RuntimeProfile::Counter* materialize_chunk_timer = nullptr;
 
     // time spent to shuffle data to the corresponding partition, only used in join operator
     RuntimeProfile::Counter* shuffle_timer = nullptr;
@@ -91,10 +91,18 @@ public:
     RuntimeProfile::Counter* restore_from_mem_table_rows = nullptr;
     // peak memory usage of partition writer, only used in join operator
     RuntimeProfile::HighWaterMarkCounter* partition_writer_peak_memory_usage = nullptr;
+
+    // the number of blocks created
+    RuntimeProfile::Counter* block_count = nullptr;
+    // spill task/ restore task
+    RuntimeProfile::Counter* flush_io_task_count = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* peak_flush_io_task_count = nullptr;
+    RuntimeProfile::Counter* restore_io_task_count = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* peak_restore_io_task_count = nullptr;
 };
 
 // major spill interfaces
-class Spiller {
+class Spiller : public std::enable_shared_from_this<Spiller> {
 public:
     Spiller(SpilledOptions opts, const std::shared_ptr<SpillerFactory>& factory)
             : _opts(std::move(opts)), _parent(factory) {}
@@ -142,6 +150,8 @@ public:
     Status set_flush_all_call_back(const FlushAllCallBack& callback, RuntimeState* state, IOTaskExecutor& executor,
                                    const MemGuard& guard) {
         auto flush_call_back = [this, callback, state, &executor, guard]() {
+            auto defer = DeferOp([&]() { guard.scoped_end(); });
+            RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
             RETURN_IF_ERROR(callback());
             if (!_is_cancel && spilled()) {
                 RETURN_IF_ERROR(_acquire_input_stream(state));
@@ -192,6 +202,8 @@ public:
     const std::shared_ptr<spill::Serde>& serde() { return _serde; }
     BlockManager* block_manager() { return _block_manager; }
     const ChunkBuilder& chunk_builder() { return _chunk_builder; }
+
+    Status reset_state(RuntimeState* state);
 
 private:
     Status _acquire_input_stream(RuntimeState* state);

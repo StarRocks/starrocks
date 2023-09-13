@@ -59,9 +59,12 @@ Status SegmentFlushToken::submit(brpc::Controller* cntl, const PTabletWriterAddS
                     tablet_info->set_node_id(writer->node_id());
                     const auto& rowset_global_dict_columns_valid_info =
                             writer->committed_rowset_writer()->global_dict_columns_valid_info();
+                    const auto* rowset_global_dicts = writer->committed_rowset_writer()->rowset_global_dicts();
                     for (const auto& item : rowset_global_dict_columns_valid_info) {
-                        if (item.second) {
+                        if (item.second && rowset_global_dicts != nullptr &&
+                            rowset_global_dicts->find(item.first) != rowset_global_dicts->end()) {
                             tablet_info->add_valid_dict_cache_columns(item.first);
+                            tablet_info->add_valid_dict_collected_version(rowset_global_dicts->at(item.first).version);
                         } else {
                             tablet_info->add_invalid_dict_cache_columns(item.first);
                         }

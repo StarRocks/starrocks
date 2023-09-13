@@ -257,6 +257,12 @@ public class RoutineLoadJobTest {
     }
 
     @Test
+    public void testPartialUpdateMode(@Mocked GlobalStateMgr globalStateMgr) {
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        Assert.assertEquals(routineLoadJob.getPartialUpdateMode(), "row");
+    }
+
+    @Test
     public void testUpdateTotalMoreThanBatch() {
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);

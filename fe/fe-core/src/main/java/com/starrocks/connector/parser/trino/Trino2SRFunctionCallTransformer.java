@@ -79,6 +79,7 @@ public class Trino2SRFunctionCallTransformer {
         registerBitwiseFunctionTransformer();
         registerUnicodeFunctionTransformer();
         registerMapFunctionTransformer();
+        registerBinaryFunctionTransformer();
         // todo: support more function transform
     }
 
@@ -144,11 +145,11 @@ public class Trino2SRFunctionCallTransformer {
                 ImmutableList.of(Expr.class, Expr.class));
 
         // day_of_week -> dayofweek
-        registerFunctionTransformer("day_of_week", 1, "dayofweek",
+        registerFunctionTransformer("day_of_week", 1, "dayofweek_iso",
                 ImmutableList.of(Expr.class));
 
         // dow -> dayofweek
-        registerFunctionTransformer("dow", 1, "dayofweek",
+        registerFunctionTransformer("dow", 1, "dayofweek_iso",
                 ImmutableList.of(Expr.class));
 
         // day_of_month -> dayofmonth
@@ -162,6 +163,18 @@ public class Trino2SRFunctionCallTransformer {
         // doy -> dayofyear
         registerFunctionTransformer("doy", 1, "dayofyear",
                 ImmutableList.of(Expr.class));
+
+        // week_of_year -> week_iso
+        registerFunctionTransformer("week_of_year", 1, "week_iso",
+                ImmutableList.of(Expr.class));
+
+        // week -> week_iso
+        registerFunctionTransformer("week", 1, "week_iso",
+                ImmutableList.of(Expr.class));
+
+        // format_datetime -> jodatime_format
+        registerFunctionTransformer("format_datetime", 2, "jodatime_format",
+                ImmutableList.of(Expr.class, Expr.class));
     }
 
     private static void registerStringFunctionTransformer() {
@@ -241,6 +254,11 @@ public class Trino2SRFunctionCallTransformer {
         // map(array, array) -> map_from_arrays
         registerFunctionTransformer("map", 2, "map_from_arrays",
                 ImmutableList.of(Expr.class, Expr.class));
+    }
+
+    private static void registerBinaryFunctionTransformer() {
+        // to_hex -> hex
+        registerFunctionTransformer("to_hex", 1, "hex", ImmutableList.of(Expr.class));
     }
 
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,

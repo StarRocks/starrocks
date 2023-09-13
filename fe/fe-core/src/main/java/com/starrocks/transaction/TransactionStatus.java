@@ -54,6 +54,10 @@ public enum TransactionStatus {
         }
     }
 
+    public boolean isFailed() {
+        return this == UNKNOWN || this == ABORTED;
+    }
+
     public boolean isFinalStatus() {
         return this == TransactionStatus.VISIBLE || this == TransactionStatus.ABORTED;
     }

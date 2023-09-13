@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -35,18 +33,9 @@ public class PaimonScanImplementationRule extends ImplementationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        OptExpression result = null;
         LogicalPaimonScanOperator scan = (LogicalPaimonScanOperator) input.getOp();
-        if (scan.getTable().getType() == Table.TableType.PAIMON) {
-            PhysicalPaimonScanOperator physicalPaimonScan = new PhysicalPaimonScanOperator(scan.getTable(),
-                    scan.getColRefToColumnMetaMap(),
-                    scan.getScanOperatorPredicates(),
-                    scan.getLimit(),
-                    scan.getPredicate(),
-                    scan.getProjection());
-
-            result = new OptExpression(physicalPaimonScan);
-        }
+        PhysicalPaimonScanOperator physicalPaimonScan = new PhysicalPaimonScanOperator(scan);
+        OptExpression result = new OptExpression(physicalPaimonScan);
         return Lists.newArrayList(result);
     }
 }

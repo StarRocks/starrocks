@@ -22,7 +22,7 @@ public interface StarRocksConstants {
     String DEFAULT_USER = "root";
     String KEY_PWD = "password";
     String DEFAULT_PWD = "";
-    String KEY_FE_HOST = "fe_host";
+    String KEY_FE_HOST = "host";
     String KEY_FE_HTTP_PORT = "http_port";
     int DEFAULT_FE_HTTP_PORT = 8030;
     String KEY_FE_QUERY_PORT = "query_port";
@@ -30,6 +30,8 @@ public interface StarRocksConstants {
     String KEY_DB = "database";
     String DEFAULT_DB = "airbyte";
     String KEY_TABLE = "table";
+    String KEY_SSL = "ssl";
+
 
     //jdbc
     String JDBC_DRIVER = "com.mysql.jdbc.Driver";
@@ -65,13 +67,15 @@ public interface StarRocksConstants {
 
     //csv
     interface CsvFormat {
-        String LINE_DELIMITER = "\n";
-        byte[] LINE_DELIMITER_BYTE = LINE_DELIMITER.getBytes(StandardCharsets.UTF_8);
+        String LINE_DELIMITER = "\\x02";
+        byte[] LINE_DELIMITER_BYTE = StarRocksDelimiterParser.parse(LINE_DELIMITER).getBytes(StandardCharsets.UTF_8);
 
-        String COLUMN_DELIMITER = "\t";
-        byte[] COLUMN_DELIMITER_BYTE = COLUMN_DELIMITER.getBytes(StandardCharsets.UTF_8);
+        String COLUMN_DELIMITER = "\\x01";
+        byte[] COLUMN_DELIMITER_BYTE = StarRocksDelimiterParser.parse(COLUMN_DELIMITER).getBytes(StandardCharsets.UTF_8);
 
-        String LINE_PATTERN = "%s" + COLUMN_DELIMITER + "%d" + COLUMN_DELIMITER + "%s" + LINE_DELIMITER;
+        String LINE_PATTERN = "%d" + StarRocksDelimiterParser.parse(COLUMN_DELIMITER)
+            + "%s" + StarRocksDelimiterParser.parse(COLUMN_DELIMITER)
+            + "%s" + StarRocksDelimiterParser.parse(LINE_DELIMITER);
     }
 
 }

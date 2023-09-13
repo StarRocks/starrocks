@@ -32,6 +32,9 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     if (progress == nullptr) {
         return Status::InvalidArgument("progress is null");
     }
+
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
+
     ASSIGN_OR_RETURN(auto tablet_schema, _tablet->get_schema());
     int64_t total_num_rows = 0;
     for (auto& rowset : _input_rowsets) {
@@ -42,7 +45,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
 
     VLOG(3) << "Start horizontal compaction. tablet: " << _tablet->id() << ", reader chunk size: " << chunk_size;
 
-    Schema schema = ChunkHelper::convert_schema(*tablet_schema);
+    Schema schema = ChunkHelper::convert_schema(tablet_schema);
     TabletReader reader(*_tablet, _version, schema, _input_rowsets);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
@@ -75,12 +78,12 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
         } else if (!st.ok()) {
             return st;
         }
-        ChunkHelper::padding_char_columns(char_field_indexes, schema, *tablet_schema, chunk.get());
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet_schema, chunk.get());
         RETURN_IF_ERROR(writer->write(*chunk));
         chunk->reset();
 
         progress->update(100 * reader.stats().raw_rows_read / total_num_rows);
-        VLOG_EVERY_N(3, 1000) << "Tablet: << " << _tablet->id() << ", compaction progress: " << progress->value();
+        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet->id() << ", compaction progress: " << progress->value();
     }
     // Adjust the progress here for 2 reasons:
     // 1. For primary key, due to the existence of the delete vector, the rows read may be less than "total_num_rows"

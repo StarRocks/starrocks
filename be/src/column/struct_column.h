@@ -27,7 +27,14 @@ public:
     using Container = Buffer<std::string>;
 
     // Used to construct an unnamed struct
-    StructColumn(Columns fields) : _fields(std::move(fields)) {}
+    StructColumn(Columns fields) : _fields(std::move(fields)) {
+        DCHECK(_fields.size() > 0);
+        for (auto& f : fields) {
+            DCHECK(f->is_nullable());
+            DCHECK_EQ(f->size(), size());
+            f->check_or_die();
+        }
+    }
 
     StructColumn(Columns fields, std::vector<std::string> field_names)
             : _fields(std::move(fields)), _field_names(std::move(field_names)) {
@@ -37,6 +44,12 @@ public:
 
         // fields and field_names must have the same size.
         DCHECK(_fields.size() == _field_names.size());
+
+        for (auto& f : fields) {
+            DCHECK(f->is_nullable());
+            DCHECK_EQ(f->size(), size());
+            f->check_or_die();
+        }
     }
 
     StructColumn(const StructColumn& rhs) {
@@ -69,6 +82,8 @@ public:
 
     size_t byte_size(size_t idx) const override;
 
+    size_t byte_size(size_t from, size_t size) const override;
+
     void reserve(size_t n) override;
 
     void resize(size_t n) override;
@@ -89,7 +104,7 @@ public:
 
     void fill_default(const Filter& filter) override;
 
-    Status update_rows(const Column& src, const uint32_t* indexes) override;
+    void update_rows(const Column& src, const uint32_t* indexes) override;
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
@@ -165,7 +180,9 @@ public:
 
     Columns& fields_column();
 
-    ColumnPtr field_column(const std::string& field_name);
+    ColumnPtr field_column(const std::string& field_name) const;
+
+    ColumnPtr& field_column(const std::string& field_name);
 
     const std::vector<std::string>& field_names() const { return _field_names; }
 

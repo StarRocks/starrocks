@@ -49,7 +49,6 @@
 #include "common/statusor.h"
 #include "config.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/tablet_sink_colocate_sender.h"
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
@@ -62,7 +61,6 @@
 #include "simd/simd.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "types/hll.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
 #include "util/defer_op.h"
@@ -119,6 +117,9 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     if (table_sink.__isset.label) {
         state->set_load_label(table_sink.label);
     }
+    if (table_sink.__isset.automatic_bucket_size) {
+        _automatic_bucket_size = table_sink.automatic_bucket_size;
+    }
 
     // profile must add to state's object pool
     _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
@@ -162,6 +163,10 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         _automatic_partition_token =
                 state->exec_env()->automatic_partition_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     }
+    // init _colocate_mv_index: Only use colocate mv when both FE/BE's config are set true.
+    if (table_sink.__isset.enable_colocate_mv_index) {
+        _colocate_mv_index = table_sink.enable_colocate_mv_index && config::enable_load_colocate_mv;
+    }
 
     return Status::OK();
 }
@@ -173,6 +178,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _profile->add_info_string("IndexNum", fmt::format("{}", _schema->indexes().size()));
     _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
     _profile->add_info_string("AutomaticPartition", fmt::format("{}", _enable_automatic_partition));
+    _profile->add_info_string("AutomaticBucketSize", fmt::format("{}", _automatic_bucket_size));
     _ts_profile->alloc_auto_increment_timer = ADD_TIMER(_profile, "AllocAutoIncrementTime");
 
     SCOPED_TIMER(_profile->total_time_counter());
@@ -234,9 +240,11 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 
     _load_mem_limit = state->get_load_mem_limit();
 
+    // map index_id to TabletBEMap(map tablet_id to backend id)
+    IndexIdToTabletBEMap index_id_to_tablet_be_map;
     // open all channels
-    RETURN_IF_ERROR(_init_node_channels(state));
-    VLOG(2) << "colocate_mv_index:" << (_colocate_mv_index ? "1" : "0");
+    RETURN_IF_ERROR(_init_node_channels(state, index_id_to_tablet_be_map));
+
     std::vector<IndexChannel*> index_channels;
     for (const auto& channel : _channels) {
         index_channels.emplace_back(channel.get());
@@ -245,27 +253,29 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     for (auto& it : _node_channels) {
         node_channels[it.first] = it.second.get();
     }
+
     if (_colocate_mv_index) {
         _tablet_sink_sender = std::make_unique<TabletSinkColocateSender>(
-                _load_id, _txn_id, _location, _vectorized_partition, std::move(index_channels),
-                std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage, _write_quorum_type,
-                _num_repicas);
+                _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
+                std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
+                _write_quorum_type, _num_repicas);
 
     } else {
-        _tablet_sink_sender = std::make_unique<TabletSinkSender>(_load_id, _txn_id, _location, _vectorized_partition,
-                                                                 std::move(index_channels), std::move(node_channels),
-                                                                 _output_expr_ctxs, _enable_replicated_storage,
-                                                                 _write_quorum_type, _num_repicas);
+        _tablet_sink_sender = std::make_unique<TabletSinkSender>(
+                _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
+                std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
+                _write_quorum_type, _num_repicas);
     }
     return Status::OK();
 }
 
-Status OlapTableSink::_init_node_channels(RuntimeState* state) {
+Status OlapTableSink::_init_node_channels(RuntimeState* state, IndexIdToTabletBEMap& index_id_to_tablet_be_map) {
     const auto& partitions = _vectorized_partition->get_partitions();
     for (int i = 0; i < _schema->indexes().size(); ++i) {
         // collect all tablets belong to this rollup
         std::vector<PTabletWithPartition> tablets;
         auto* index = _schema->indexes()[i];
+        std::unordered_map<int64_t, std::vector<int64_t>> tablet_to_be;
         for (auto& [id, part] : partitions) {
             for (auto tablet : part->indexes[i].tablets) {
                 PTabletWithPartition tablet_info;
@@ -278,6 +288,8 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state) {
                     auto msg = fmt::format("Failed to find tablet {} location info", tablet);
                     return Status::NotFound(msg);
                 }
+                tablet_to_be.emplace(tablet, location->node_ids);
+
                 auto node_ids_size = location->node_ids.size();
                 for (size_t i = 0; i < node_ids_size; ++i) {
                     auto& node_id = location->node_ids[i];
@@ -311,6 +323,8 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state) {
                 tablets.emplace_back(std::move(tablet_info));
             }
         }
+        index_id_to_tablet_be_map.emplace(index->index_id, std::move(tablet_to_be));
+
         auto channel = std::make_unique<IndexChannel>(this, index->index_id);
         RETURN_IF_ERROR(channel->init(state, tablets, false));
         _channels.emplace_back(std::move(channel));
@@ -382,8 +396,61 @@ Status OlapTableSink::_automatic_create_partition() {
     return Status(result.status);
 }
 
+Status OlapTableSink::_update_immutable_partition(const std::set<int64_t>& partition_ids) {
+    std::set<int64_t> partition_ids_to_be_updated;
+    for (auto partition_id : partition_ids) {
+        if (!_immutable_partition_ids.contains(partition_id)) {
+            _immutable_partition_ids.insert(partition_id);
+            partition_ids_to_be_updated.insert(partition_id);
+        }
+    }
+
+    if (partition_ids_to_be_updated.empty()) {
+        return Status::OK();
+    }
+
+    TImmutablePartitionRequest request;
+    TImmutablePartitionResult result;
+    request.__set_txn_id(_txn_id);
+    request.__set_db_id(_vectorized_partition->db_id());
+    request.__set_table_id(_vectorized_partition->table_id());
+    request.__isset.partition_ids = true;
+    for (auto partition_id : partition_ids_to_be_updated) {
+        request.partition_ids.push_back(partition_id);
+    }
+
+    RETURN_IF_ERROR(_vectorized_partition->remove_partitions(request.partition_ids));
+
+    LOG(INFO) << "immutable partition rpc begin request " << request;
+    TNetworkAddress master_addr = get_master_address();
+    auto timeout_ms = _runtime_state->query_options().query_timeout * 1000 / 2;
+    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+            master_addr.hostname, master_addr.port,
+            [&request, &result](FrontendServiceConnection& client) {
+                client->updateImmutablePartition(result, request);
+            },
+            timeout_ms));
+    LOG(INFO) << "immutable partition rpc end response " << result;
+    if (result.status.status_code == TStatusCode::OK) {
+        // add new created partitions
+        RETURN_IF_ERROR(_vectorized_partition->add_partitions(result.partitions));
+
+        // add new tablet locations
+        _location->add_locations(result.tablets);
+
+        // update new node info
+        _nodes_info->add_nodes(result.nodes);
+
+        // incremental open node channel
+        RETURN_IF_ERROR(_incremental_open_node_channel(result.partitions));
+    }
+
+    return Status(result.status);
+}
+
 Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTablePartition>& partitions) {
     std::map<int64_t, std::vector<PTabletWithPartition>> index_tablets_map;
+    IndexIdToTabletBEMap index_tablet_bes_map;
     for (auto& t_part : partitions) {
         for (auto& index : t_part.indexes) {
             std::vector<PTabletWithPartition> tablets;
@@ -396,7 +463,7 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
 
                 auto* location = _location->find_tablet(tablet);
                 if (location == nullptr) {
-                    auto msg = fmt::format("Failed to find tablet {} location info", tablet);
+                    auto msg = fmt::format("Failed to find tablet {} location info in incremental open", tablet);
                     return Status::NotFound(msg);
                 }
 
@@ -409,6 +476,8 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
                     replica->set_host(node_info->host);
                     replica->set_port(node_info->brpc_port);
                     replica->set_node_id(node_id);
+
+                    index_tablet_bes_map[index.index_id][tablet].emplace_back(node_id);
                 }
 
                 index_tablets_map[index.index_id].emplace_back(std::move(tablet_info));
@@ -417,8 +486,21 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
     }
 
     for (auto& channel : _channels) {
+        int64_t index_id = channel->index_id();
         // initialize index channel
-        RETURN_IF_ERROR(channel->init(_runtime_state, index_tablets_map[channel->_index_id], true));
+        RETURN_IF_ERROR(channel->init(_runtime_state, index_tablets_map[index_id], true));
+
+        // add into index_id_to_tablet_be_map
+        auto* index_id_to_tablet_be_map = _tablet_sink_sender->index_id_to_tablet_be_map();
+        if (index_id_to_tablet_be_map->find(index_id) == index_id_to_tablet_be_map->end()) {
+            LOG(WARNING) << "Incremental tablet open failed, index_id=" << index_id
+                         << " not found in index_id_to_tablet_be_map";
+            return Status::InternalError(
+                    "Incremental tablet open failed, index_id not found in index_id_to_tablet_be_map");
+        }
+        for (auto& [tablet_id, bes] : index_tablet_bes_map[index_id]) {
+            (*index_id_to_tablet_be_map)[index_id].emplace(tablet_id, std::move(bes));
+        }
 
         // incremental open new partition's tablet on storage side
         channel->for_each_node_channel([](NodeChannel* ch) { ch->try_incremental_open(); });
@@ -493,6 +575,12 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
         {
             uint32_t num_rows_after_validate = SIMD::count_nonzero(_validate_selection);
             std::vector<int> invalid_row_indexs;
+
+            // automatic bucket
+            std::set<int64_t> immutable_partition_ids;
+            if (_tablet_sink_sender->get_immutable_partition_ids(&immutable_partition_ids)) {
+                _update_immutable_partition(immutable_partition_ids);
+            }
 
             // _enable_automatic_partition is true means destination table using automatic partition
             // _has_automatic_partition is true means last send_chunk already create partition in nonblocking mode
@@ -616,6 +704,8 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
     ColumnPtr& data_col = std::dynamic_pointer_cast<NullableColumn>(col)->data_column();
     std::vector<uint8_t> filter(std::dynamic_pointer_cast<NullableColumn>(col)->immutable_null_column_data());
 
+    std::vector<uint8_t> init_filter(chunk->num_rows(), 0);
+
     if (_keys_type == TKeysType::PRIMARY_KEYS && _output_tuple_desc->slots().back()->col_name() == "__op") {
         size_t op_column_id = chunk->num_columns() - 1;
         ColumnPtr& op_col = chunk->get_column_by_index(op_column_id);
@@ -624,9 +714,24 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
 
         for (size_t i = 0; i < row; ++i) {
             if (ops[i] == TOpType::DELETE) {
-                filter[i] = 0;
+                // Just init when user do not specify the column value
+                if (filter[i] != 0) {
+                    init_filter[i] = 1;
+                    filter[i] = 0;
+                }
             }
         }
+    }
+
+    // In many cases, it is safe if the auto increment column value is un-inited for the deleted row
+    // Because, this row will be deleteed any way. We don't care about the value any more.
+    // But if auto increment column is the key, the value of increment column will decide which row
+    // will be deleteed and it is matter in this case.
+    // Here we just set 0 value in this case.
+    uint32 del_rows = SIMD::count_nonzero(init_filter);
+    if (del_rows != 0) {
+        RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(data_col))
+                                ->fill_range(std::vector<int64_t>(del_rows, 0), init_filter));
     }
 
     uint32_t null_rows = SIMD::count_nonzero(filter);
@@ -866,6 +971,9 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         case TYPE_CHAR:
         case TYPE_VARCHAR:
         case TYPE_VARBINARY: {
+            if (!config::enable_check_string_lengths) {
+                continue;
+            }
             uint32_t len = desc->type().len;
             Column* data_column = ColumnHelper::get_data_column(column);
             auto* binary = down_cast<BinaryColumn*>(data_column);

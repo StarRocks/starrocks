@@ -1,12 +1,5 @@
 -- name: test_pipe_basic
-show pipes;
--- result:
-E: (1064, 'Getting analyzing error. Detail message: No database selected.')
--- !result
 create database db_${uuid0};
--- result:
--- !result
-create database db_${uuid1};
 -- result:
 -- !result
 use db_${uuid0};
@@ -15,65 +8,84 @@ use db_${uuid0};
 show pipes;
 -- result:
 -- !result
-show pipes from db_${uuid1};
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp --force ./sql/test_pipe/data/col_not_null.parquet oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 1,617. OK num: 1(upload 1 files).
+-- !result
+create table t1 
+properties('replication_num' = '1')
+as select * from files('path' = 'oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet', 'format'='parquet');
 -- result:
 -- !result
-create table t1 (id int, name string) duplicate key(id) properties('replication_num' = '1');
+desc t1;
 -- result:
+col_int	int	YES	true	None	
+col_map	varchar(1048576)	YES	true	None	
+col_struct	varchar(1048576)	YES	false	None	
 -- !result
-create pipe p1 as 
+select count(*) from t1;
+-- result:
+3
+-- !result
+create pipe p1 properties('auto_ingest'='false') as 
     insert into t1 
-    select * from table('path' = 'fake://file.parquet', 'format'='parquet');
+    select * from files('path' = 'oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet', 'format'='parquet');
 -- result:
 -- !result
-[UC]show pipes;
--- result:
-269428	269437	p1	db_7bed7a380f2a11eeabf0c9d28a9636a8.t1	RUNNING	0	0	0
--- !result
-[UC]desc pipe p1;
--- result:
-269428	269437	p1	FILE	db_7bed7a380f2a11eeabf0c9d28a9636a8.t1	FILE_SOURCE(path=fake://file.parquet)	insert into t1 
-    select * from table('path' = 'fake://file.parquet', 'format'='parquet');
--- !result
-alter pipe p1 pause;
+alter pipe p1 suspend;
 -- result:
 -- !result
-[UC]show pipes;
+select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
 -- result:
-269428	269437	p1	db_7bed7a380f2a11eeabf0c9d28a9636a8.t1	PAUSED	0	0	0
+p1	SUSPEND
+-- !result
+select pipe_name, file_name, file_size, load_state
+    from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+-- result:
 -- !result
 alter pipe p1 resume;
 -- result:
 -- !result
-[UC]show pipes;
+function: wait_for_pipe_finish('db_${uuid0}', 'p1')
 -- result:
-269428	269437	p1	db_7bed7a380f2a11eeabf0c9d28a9636a8.t1	RUNNING	0	0	0
+None
 -- !result
-use db_${uuid1};
+select count(*) from t1;
 -- result:
+6
 -- !result
-[UC]show pipes from db_${uuid0};
+select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
 -- result:
-269428	269437	p1	db_7bed7a380f2a11eeabf0c9d28a9636a8.t1	RUNNING	0	0	0
+p1	FINISHED
 -- !result
-use db_${uuid0};
+select pipe_name, 
+        split(parse_url(file_name, 'FILE'), '/')[4], 
+        file_size, load_state
+    from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
 -- result:
+p1	col_not_null.parquet	1617	FINISHED
 -- !result
 drop pipe p1;
 -- result:
 -- !result
-show pipes;
+select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
 -- result:
 -- !result
-drop database db_${uuid0};
--- result:
--- !result
-create database db_${uuid0};
--- result:
--- !result
-use db_${uuid0};
--- result:
--- !result
-show pipes;
+select pipe_name, 
+        split(parse_url(file_name, 'FILE'), '/')[4], 
+        file_size, load_state
+    from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
 -- result:
 -- !result

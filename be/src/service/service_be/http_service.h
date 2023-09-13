@@ -53,6 +53,8 @@ public:
     ~HttpServiceBE();
 
     Status start();
+    void stop();
+    void join();
 
 private:
     ExecEnv* _env;

@@ -254,7 +254,7 @@ TEST(ObjectColumnTest, Percentile_test_swap_column) {
     ASSERT_TRUE(column1->is_object());
 
     std::vector<uint32_t> idx = {1};
-    ASSERT_TRUE(column->update_rows(*column1.get(), idx.data()).ok());
+    column->update_rows(*column1.get(), idx.data());
 
     percentile = ColumnHelper::cast_to<TYPE_PERCENTILE>(column);
     ASSERT_EQ(1, percentile->get_object(0)->quantile(1));

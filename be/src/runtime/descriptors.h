@@ -96,6 +96,7 @@ public:
     TypeDescriptor& type() { return _type; }
     TupleId parent() const { return _parent; }
     bool is_materialized() const { return _is_materialized; }
+    bool is_output_column() const { return _is_output_column; }
     bool is_nullable() const { return _null_indicator_offset.bit_mask != 0; }
 
     int slot_size() const { return _slot_size; }
@@ -105,6 +106,10 @@ public:
     void to_protobuf(PSlotDescriptor* pslot) const;
 
     std::string debug_string() const;
+
+    int32_t col_unique_id() const { return _col_unique_id; }
+
+    SlotDescriptor(const TSlotDescriptor& tdesc);
 
 private:
     friend class DescriptorTbl;
@@ -118,6 +123,7 @@ private:
     const TupleId _parent;
     const NullIndicatorOffset _null_indicator_offset;
     const std::string _col_name;
+    const int32_t _col_unique_id;
 
     // the idx of the slot in the tuple descriptor (0-based).
     // this is provided by the FE
@@ -127,8 +133,11 @@ private:
     const int _slot_size;
 
     const bool _is_materialized;
+    const bool _is_output_column;
 
-    SlotDescriptor(const TSlotDescriptor& tdesc);
+    // @todo: replace _null_indicator_offset when remove _null_indicator_offset
+    const bool _is_nullable;
+
     SlotDescriptor(const PSlotDescriptor& pdesc);
 };
 

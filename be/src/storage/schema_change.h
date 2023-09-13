@@ -43,6 +43,7 @@
 #include "gen_cpp/AgentService_types.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_handler.h"
+#include "storage/delta_column_group.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/schema_change_utils.h"
@@ -72,7 +73,8 @@ public:
     virtual ~SchemaChange() = default;
 
     virtual Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
-                           TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
+                           TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
+                           TabletSchemaCSPtr base_tablet_schema = nullptr) = 0;
     void set_alter_msg_header(std::string msg) { _alter_msg_header = msg; }
     std::string alter_msg_header() { return _alter_msg_header; }
 
@@ -85,7 +87,13 @@ public:
     ~LinkedSchemaChange() override = default;
 
     Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
+                   TabletSchemaCSPtr base_tablet_schema = nullptr) override;
+
+    static Status generate_delta_column_group_and_cols(const Tablet* new_tablet, const Tablet* base_tablet,
+                                                       const RowsetSharedPtr& src_rowset, RowsetId rid, int64_t version,
+                                                       ChunkChanger* chunk_changer, DeltaColumnGroupList& dcgs,
+                                                       std::vector<int> last_dcg_counts);
 
 private:
     ChunkChanger* _chunk_changer = nullptr;
@@ -99,7 +107,8 @@ public:
     ~SchemaChangeDirectly() override = default;
 
     Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
+                   TabletSchemaCSPtr base_tablet_schema = nullptr) override;
 
 private:
     ChunkChanger* _chunk_changer = nullptr;
@@ -113,7 +122,8 @@ public:
     ~SchemaChangeWithSorting() override = default;
 
     Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
+                   TabletSchemaCSPtr base_tablet_schema = nullptr) override;
 
     static Status _internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
                                     TabletSharedPtr tablet);
@@ -140,6 +150,7 @@ private:
         TabletSharedPtr new_tablet;
         std::vector<std::unique_ptr<TabletReader>> rowset_readers;
         Version version;
+        TabletSchemaCSPtr base_tablet_schema = nullptr;
         MaterializedViewParamMap materialized_params_map;
         std::vector<RowsetSharedPtr> rowsets_to_change;
         bool sc_sorting = false;

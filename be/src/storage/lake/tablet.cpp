@@ -16,6 +16,7 @@
 
 #include "column/schema.h"
 #include "fs/fs.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/general_tablet_writer.h"
@@ -42,6 +43,26 @@ StatusOr<TabletMetadataPtr> Tablet::get_metadata(int64_t version) {
 
 Status Tablet::delete_metadata(int64_t version) {
     return _mgr->delete_tablet_metadata(_id, version);
+}
+
+bool Tablet::get_enable_persistent_index(int64_t version) {
+    auto tablet_metadata = _mgr->get_tablet_metadata(_id, version);
+    if (!tablet_metadata.ok()) {
+        LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << _id << ", version: " << version
+                     << ", error: " << tablet_metadata.status();
+        return false;
+    }
+    return (*tablet_metadata)->enable_persistent_index();
+}
+
+StatusOr<PersistentIndexTypePB> Tablet::get_persistent_index_type(int64_t version) {
+    auto tablet_metadata = _mgr->get_tablet_metadata(_id, version);
+    if (!tablet_metadata.ok()) {
+        LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << _id << ", version: " << version
+                     << ", error: " << tablet_metadata.status();
+        return Status::InternalError("get tablet metadata failed");
+    }
+    return (*tablet_metadata)->persistent_index_type();
 }
 
 Status Tablet::put_txn_log(const TxnLog& log) {
@@ -128,7 +149,7 @@ StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(const TabletMetadata& metad
 }
 
 StatusOr<SegmentPtr> Tablet::load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
-                                          bool fill_cache) {
+                                          bool fill_data_cache, bool fill_metadata_cache) {
     auto location = segment_location(segment_name);
     auto segment = _mgr->lookup_segment(location);
     if (segment != nullptr) {
@@ -137,8 +158,8 @@ StatusOr<SegmentPtr> Tablet::load_segment(std::string_view segment_name, int seg
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
     ASSIGN_OR_RETURN(segment, Segment::open(fs, location, seg_id, std::move(tablet_schema), footer_size_hint, nullptr,
-                                            !fill_cache));
-    if (fill_cache) {
+                                            !fill_data_cache));
+    if (fill_metadata_cache) {
         _mgr->cache_segment(location, segment);
     }
     return segment;
@@ -197,6 +218,19 @@ StatusOr<bool> Tablet::has_delete_predicates(int64_t version) {
         }
     }
     return false;
+}
+
+int64_t Tablet::data_size() {
+    int64_t size = 0;
+    if (_version_hint > 0) {
+        auto metadata = get_metadata(_version_hint);
+        if (metadata.ok()) {
+            for (const auto& rowset : metadata.value()->rowsets()) {
+                size += rowset.data_size();
+            }
+        }
+    }
+    return size;
 }
 
 } // namespace starrocks::lake

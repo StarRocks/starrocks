@@ -132,7 +132,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.runtime_state = params.runtime_state;
     rs_opts.profile = params.profile;
     rs_opts.use_page_cache = params.use_page_cache;
-    rs_opts.tablet_schema = _tablet_schema.get();
+    rs_opts.tablet_schema = _tablet_schema;
     rs_opts.global_dictmaps = params.global_dictmaps;
     rs_opts.unused_output_column_ids = params.unused_output_column_ids;
     rs_opts.runtime_range_pruner = params.runtime_range_pruner;
@@ -158,7 +158,7 @@ Status TabletReader::init_predicates(const TabletReaderParams& params) {
 }
 
 Status TabletReader::init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
-    PredicateParser pred_parser(*_tablet_schema);
+    PredicateParser pred_parser(_tablet_schema);
     ASSIGN_OR_RETURN(auto tablet_metadata, enhance_error_prompt(_tablet.get_metadata(_version)));
 
     for (int index = 0, size = tablet_metadata->rowsets_size(); index < size; ++index) {

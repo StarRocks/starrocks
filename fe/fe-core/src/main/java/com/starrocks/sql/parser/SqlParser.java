@@ -22,6 +22,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
 import io.trino.sql.parser.ParsingException;
 import io.trino.sql.parser.StatementSplitter;
@@ -42,6 +43,7 @@ import org.apache.commons.text.similarity.JaroWinklerDistance;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -100,9 +102,15 @@ public class SqlParser {
         List<StarRocksParser.SingleStatementContext> singleStatementContexts =
                 parser.sqlStatements().singleStatement();
         for (int idx = 0; idx < singleStatementContexts.size(); ++idx) {
-            StatementBase statement = (StatementBase) new AstBuilder(sessionVariable.getSqlMode())
-                    .visitSingleStatement(singleStatementContexts.get(idx));
-            statement.setOrigStmt(new OriginStatement(sql, idx));
+            AstBuilder astBuilder = new AstBuilder(sessionVariable.getSqlMode());
+            StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(singleStatementContexts.get(idx));
+            if (astBuilder.getParameters() != null && astBuilder.getParameters().size() != 0
+                    && !(statement instanceof PrepareStmt)) {
+                // for prepare stm1 from  '', here statement is inner statement
+                statement = new PrepareStmt("", statement, astBuilder.getParameters());
+            } else {
+                statement.setOrigStmt(new OriginStatement(sql, idx));
+            }
             statements.add(statement);
         }
         if (ConnectContext.get() != null) {
@@ -128,6 +136,14 @@ public class SqlParser {
     @Deprecated
     public static StatementBase parseFirstStatement(String originSql, long sqlMode) {
         return parse(originSql, sqlMode).get(0);
+    }
+
+    public static StatementBase parseSingleStatement(String originSql, long sqlMode) {
+        List<StatementBase> statements = parse(originSql, sqlMode);
+        if (statements.size() > 1) {
+            throw new ParsingException("only single statement is supported");
+        }
+        return statements.get(0);
     }
 
     public static StatementBase parseOneWithStarRocksDialect(String originSql, SessionVariable sessionVariable) {
@@ -241,22 +257,23 @@ public class SqlParser {
                         }
                     }
                 }
-                String upperToken = StringUtils.upperCase(token);
-                Collections.sort(words, Comparator.comparingDouble(s -> jaroWinklerDistance.apply(s, upperToken)));
-                int limit = Math.min(5, words.size());
-                result.addAll(words.subList(0, limit));
-                result.addAll(symbols);
+
                 // if there exists an expect word in nonReserved words, there should be a legal identifier.
-                if (result.contains("'ACCESS'")) {
-                    result.clear();
+                if (words.contains("'ACCESS'")) {
                     result.add("a legal identifier");
+                } else {
+                    String upperToken = StringUtils.upperCase(token);
+                    Collections.sort(words, Comparator.comparingDouble(s -> jaroWinklerDistance.apply(s, upperToken)));
+                    int limit = Math.min(5, words.size());
+                    result.addAll(words.subList(0, limit));
+                    result.addAll(symbols);
                 }
 
                 result.forEach(joiner::add);
                 return joiner.toString();
             }
 
-            private void addToken(Vocabulary vocabulary, int a, List<String> symbols, List<String> words) {
+            private void addToken(Vocabulary vocabulary, int a, Collection<String> symbols, Collection<String> words) {
                 if (a == Token.EOF) {
                     symbols.add(EOF);
                 } else if (a == Token.EPSILON) {

@@ -44,6 +44,7 @@
 #include "util/bit_util.h"
 #include "util/cpu_info.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 #include "util/spinlock.h"
 #include "util/starrocks_metrics.h"
@@ -146,6 +147,7 @@ MemChunkAllocator::MemChunkAllocator(MemTracker* mem_tracker, size_t reserve_lim
 }
 
 bool MemChunkAllocator::allocate(size_t size, MemChunk* chunk) {
+    FAIL_POINT_TRIGGER_RETURN(random_error, false);
     bool ret = true;
 #ifndef BE_TEST
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);

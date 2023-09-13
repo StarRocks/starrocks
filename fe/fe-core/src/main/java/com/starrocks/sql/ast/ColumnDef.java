@@ -134,7 +134,7 @@ public class ColumnDef implements ParseNode {
     private boolean isAllowNullImplicit = false;
     private Boolean isAllowNull;
     private Boolean isAutoIncrement;
-    private Expr materializedColumnExpr;
+    private Expr generatedColumnExpr;
     private DefaultValueDef defaultValueDef;
     private final String comment;
 
@@ -158,14 +158,14 @@ public class ColumnDef implements ParseNode {
 
     public ColumnDef(String name, TypeDef typeDef, String charsetName, boolean isKey, AggregateType aggregateType,
                      Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement,
-                     Expr materializedColumnExpr, String comment) {
+                     Expr generatedColumnExpr, String comment) {
         this(name, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef, isAutoIncrement,
-                materializedColumnExpr, comment, NodePosition.ZERO);
+                generatedColumnExpr, comment, NodePosition.ZERO);
     }
 
     public ColumnDef(String name, TypeDef typeDef, String charsetName, boolean isKey, AggregateType aggregateType,
                      Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement, 
-                     Expr materializedColumnExpr, String comment, NodePosition pos) {
+                     Expr generatedColumnExpr, String comment, NodePosition pos) {
         this.pos = pos;
         this.name = name;
         this.typeDef = typeDef;
@@ -189,7 +189,7 @@ public class ColumnDef implements ParseNode {
         } else {
             this.isAutoIncrement = true;
         }
-        this.materializedColumnExpr = materializedColumnExpr;
+        this.generatedColumnExpr = generatedColumnExpr;
         this.comment = comment;
     }
 
@@ -205,12 +205,12 @@ public class ColumnDef implements ParseNode {
         return isAutoIncrement;
     }
 
-    public boolean isMaterializedColumn() {
-        return materializedColumnExpr != null;
+    public boolean isGeneratedColumn() {
+        return generatedColumnExpr != null;
     }
 
-    public Expr materializedColumnExpr() {
-        return materializedColumnExpr;
+    public Expr generatedColumnExpr() {
+        return generatedColumnExpr.clone();
     }
 
     // The columns will obey NULL constraint if not specified. The primary key column should abide by the NOT NULL constraint default to be compatible with ANSI.
@@ -289,7 +289,7 @@ public class ColumnDef implements ParseNode {
         if (typeDef.getType().isScalarType()) {
             final ScalarType targetType = (ScalarType) typeDef.getType();
             if (targetType.getPrimitiveType().isStringType()) {
-                if (!targetType.isAssignedStrLenInColDefinition()) {
+                if (targetType.getLength() <= 0) {
                     targetType.setLength(1);
                 }
             } else {
@@ -492,8 +492,8 @@ public class ColumnDef implements ParseNode {
             sb.append("AUTO_INCREMENT ");
         }
 
-        if (isMaterializedColumn()) {
-            sb.append("AS " + materializedColumnExpr.toSql() + " ");
+        if (isGeneratedColumn()) {
+            sb.append("AS " + generatedColumnExpr.toSql() + " ");
         }
 
         if (defaultValueDef.isSet) {
@@ -510,9 +510,10 @@ public class ColumnDef implements ParseNode {
     }
 
     public Column toColumn() {
-        Column col = new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValueDef, comment);
+        Column col = new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValueDef, comment,
+                Column.COLUMN_UNIQUE_ID_INIT_VALUE);
         col.setIsAutoIncrement(isAutoIncrement);
-        col.setMaterializedColumnExpr(materializedColumnExpr);
+        col.setGeneratedColumnExpr(generatedColumnExpr);
         return col;
     }
 

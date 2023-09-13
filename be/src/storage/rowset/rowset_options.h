@@ -23,6 +23,7 @@
 #include "storage/olap_common.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/seek_range.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 class Conditions;
@@ -57,7 +58,7 @@ public:
 
     const DeletePredicates* delete_predicates = nullptr;
 
-    const TabletSchema* tablet_schema = nullptr;
+    TabletSchemaCSPtr tablet_schema = nullptr;
 
     bool is_primary_keys = false;
     int64_t version = 0;
@@ -77,7 +78,7 @@ public:
 
     OlapRuntimeScanRangePruner runtime_range_pruner;
 
-    std::unordered_map<uint32_t, ColumnAccessPathPtr>* column_access_paths = nullptr;
+    std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 };
 
 } // namespace starrocks

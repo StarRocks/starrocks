@@ -38,6 +38,7 @@ add_library(Storage STATIC
     metadata_util.cpp
     kv_store.cpp
     local_tablet_reader.cpp
+    publish_version_manager.cpp
     olap_common.cpp
     olap_server.cpp
     options.cpp
@@ -81,6 +82,7 @@ add_library(Storage STATIC
     rowset/default_value_column_iterator.cpp
     rowset/dictcode_column_iterator.cpp
     rowset/encoding_info.cpp
+    rowset/fill_subfield_iterator.cpp
     rowset/scalar_column_iterator.cpp
     rowset/index_page.cpp
     rowset/indexed_column_reader.cpp
@@ -170,6 +172,7 @@ add_library(Storage STATIC
     lake/async_delta_writer.cpp
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
+    lake/compaction_task.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
     lake/vacuum.cpp
@@ -196,4 +199,5 @@ add_library(Storage STATIC
     binlog_reader.cpp
     lake/update_compaction_state.cpp
     lake/txn_log_applier.cpp
-)
+    lake/lake_local_persistent_index.cpp
+    persistent_index_compaction_manager.cpp)

@@ -47,7 +47,6 @@ StreamAggregator::StreamAggregator(AggregatorParamsPtr params) : Aggregator(std:
 
 Status StreamAggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
     RETURN_IF_ERROR(Aggregator::prepare(state, pool, runtime_profile));
-    RETURN_IF_ERROR(_prepare_state_tables(state));
     return Status::OK();
 }
 
@@ -110,6 +109,7 @@ Status StreamAggregator::_prepare_state_tables(RuntimeState* state) {
 
 Status StreamAggregator::open(RuntimeState* state) {
     RETURN_IF_ERROR(Aggregator::open(state));
+    RETURN_IF_ERROR(_prepare_state_tables(state));
     return _agg_group_state->open(state);
 }
 
@@ -197,7 +197,7 @@ Status StreamAggregator::output_changes(int32_t chunk_size, StreamChunkPtr* resu
 }
 
 Status StreamAggregator::reset_state(RuntimeState* state) {
-    return _reset_state(state);
+    return _reset_state(state, true);
 }
 
 Status StreamAggregator::reset_epoch(RuntimeState* state) {

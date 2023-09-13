@@ -35,6 +35,7 @@ public:
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
+    bool is_jni_scanner() override { return true; }
 
 private:
     struct FillColumnArgs {
@@ -57,10 +58,10 @@ private:
 
     Status _get_next_chunk(JNIEnv* _jni_env, long* chunk_meta);
 
-    template <LogicalType type, typename CppType>
+    template <LogicalType type>
     Status _append_primitive_data(const FillColumnArgs& args);
 
-    template <LogicalType type, typename CppType>
+    template <LogicalType type>
     Status _append_decimal_data(const FillColumnArgs& args);
 
     template <LogicalType type>
@@ -78,13 +79,13 @@ private:
 
     Status _release_off_heap_table(JNIEnv* _jni_env);
 
-    jclass _jni_scanner_cls;
-    jobject _jni_scanner_obj;
-    jmethodID _jni_scanner_open;
-    jmethodID _jni_scanner_get_next_chunk;
-    jmethodID _jni_scanner_close;
-    jmethodID _jni_scanner_release_column;
-    jmethodID _jni_scanner_release_table;
+    jclass _jni_scanner_cls = nullptr;
+    jobject _jni_scanner_obj = nullptr;
+    jmethodID _jni_scanner_open = nullptr;
+    jmethodID _jni_scanner_get_next_chunk = nullptr;
+    jmethodID _jni_scanner_close = nullptr;
+    jmethodID _jni_scanner_release_column = nullptr;
+    jmethodID _jni_scanner_release_table = nullptr;
 
     std::map<std::string, std::string> _jni_scanner_params;
     std::string _jni_scanner_factory_class;
