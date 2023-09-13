@@ -69,7 +69,6 @@ Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, Sp
         _chunk_builder.chunk_schema()->set_schema(chunk);
         RETURN_IF_ERROR(_serde->prepare());
     }
-    
 
     std::vector<uint32_t> indexs;
     auto writer = _writer->as<PartitionedSpillerWriter*>();

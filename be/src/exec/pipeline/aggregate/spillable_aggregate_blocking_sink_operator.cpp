@@ -49,7 +49,6 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
         _aggregator->spiller()->cancel();
     }
 
-
     if (!_aggregator->spiller()->spilled()) {
         RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
         return Status::OK();
@@ -164,7 +163,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
     // this strategy is similar to the LIMITED_MEM mode in agg streaming
 
     if (_streaming_bytes + ht_mem_usage > max_mem_usage) {
-        // if hash map need expand and the memory usage of all buffered data exceed limit,
+        // if current memory usage exceeds limit,
         // use force streaming mode and spill all data
         SCOPED_TIMER(_aggregator->streaming_timer());
         ChunkPtr res = std::make_shared<Chunk>();
@@ -182,6 +181,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         RETURN_IF_ERROR(_aggregator->check_has_error());
         _continuous_low_reduction_chunk_num = 0;
     } else {
+        // selective preaggregation
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
             TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection(chunk_size));
@@ -218,13 +218,15 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         _aggregator->update_num_input_rows(hit_count);
         RETURN_IF_ERROR(_aggregator->check_has_error());
     }
-    // finally, check memory usage of buffer + hashtable and decide wether to spill
+    // finally, check memory usage of streaming_chunks and hash table, decide wether to spill
 
     size_t revocable_mem_bytes = _streaming_bytes + _aggregator->hash_map_memory_usage();
     set_revocable_mem_bytes(revocable_mem_bytes);
-    if (revocable_mem_bytes > state->spill_mem_table_size()) {
+    if (revocable_mem_bytes > max_mem_usage) {
+        // If the aggregation degree of _ht_low_reduction_chunk_limit consecutive chunks is less than _ht_low_reduction_threshold,
+        // it is meaningless to keep the hash table in memory, just spill it.
         bool should_spill_hash_table = _continuous_low_reduction_chunk_num >= _ht_low_reduction_chunk_limit ||
-                                       _aggregator->hash_map_memory_usage() > state->spill_mem_table_size();
+                                       _aggregator->hash_map_memory_usage() > max_mem_usage;
         if (should_spill_hash_table) {
             _continuous_low_reduction_chunk_num = 0;
         }
@@ -264,7 +266,6 @@ std::function<StatusOr<ChunkPtr>()> SpillableAggregateBlockingSinkOperator::_bui
             COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
             COUNTER_UPDATE(_aggregator->rows_returned_counter(), _aggregator->hash_map_variant().size());
             COUNTER_UPDATE(_hash_table_spill_times, 1);
-            // LOG(INFO) << "spill done, rows: " << _aggregator->num_input_rows() + _non_agg_rows << ", " << _aggregator->spiller().get();
             RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr));
         }
         _streaming_rows = 0;

@@ -454,7 +454,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SPILL_OPERATOR_MAX_BYTES = "spill_operator_max_bytes";
     public static final String SPILL_REVOCABLE_MAX_BYTES = "spill_revocable_max_bytes";
     public static final String SPILL_ENCODE_LEVEL = "spill_encode_level";
-    public static final String SPILL_JOIN_MEM_TABLE_SIZE = "spill_join_mem_table_size";
 
     // full_sort_max_buffered_{rows,bytes} are thresholds that limits input size of partial_sort
     // in full sort.
