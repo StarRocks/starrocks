@@ -2,12 +2,12 @@
 [UC]shell: snappy_prefix=echo "oss://${oss_bucket}/test_csv_compression/${uuid0}/snappy_format/"
 -- result:
 0
-oss://starrocks-env-s3-unit-test/test_csv_compression/a945b82e34ef4099a5a8efd272a10fe6/snappy_format/
+oss://starrocks-env-s3-unit-test/test_csv_compression/c7e24c35375548c989ee4fff8383c592/snappy_format/
 -- !result
-shell: ossutil64 mkdir ${snappy_prefix[1]} /dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 mkdir ${snappy_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
 0
-Error: invalid usage of "mkdir" command, reason: the command needs at most 1 argument, please try "help mkdir" for more information
+
 -- !result
 shell: ossutil64 cp --force ../be/test/exec/test_data/csv_scanner/decompress_test0.csv.snappy ${snappy_prefix[1]} | grep -Pv "(average|elapsed)"
 -- result:
@@ -60,7 +60,7 @@ shell: ossutil64 rm -rf ${snappy_prefix[1]}  >/dev/null || echo "exit 0" >/dev/n
 [UC]shell: lzo_prefix=echo "oss://${oss_bucket}/test_csv_compression/${uuid0}/lzo_format/"
 -- result:
 0
-oss://starrocks-env-s3-unit-test/test_csv_compression/963ca76ef596437db3693044d41d2a27/lzo_format/
+oss://starrocks-env-s3-unit-test/test_csv_compression/85cc45678ae9430396893aea7c85f756/lzo_format/
 -- !result
 shell: ossutil64 mkdir ${lzo_prefix[1]} /dev/null || echo "exit 0" >/dev/null
 -- result:
