@@ -29,6 +29,10 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
         LOG(WARNING) << "tablet: " << tablet->id() << " is not primary key tablet";
         return Status::NotSupported("Only PrimaryKey table is supported to use persistent index");
     }
+    // persistent index' minor compaction is a new strategy to decrease the IO amplification.
+    // More detail: https://github.com/StarRocks/starrocks/issues/27581.
+    // disable minor_compaction in cloud native table for now, will enable it later
+    config::enable_pindex_minor_compaction = false;
 
     MonotonicStopWatch timer;
     timer.start();
