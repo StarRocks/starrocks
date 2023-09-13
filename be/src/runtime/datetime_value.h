@@ -242,6 +242,7 @@ public:
 
     static uint8_t calc_weekday(uint64_t daynr, bool);
 
+    TimeType type() const { return (TimeType)_type; }
     int year() const { return _year; }
     int month() const { return _month; }
     int day() const { return _day; }
@@ -398,7 +399,7 @@ public:
 
     void set_type(int type);
 
-private:
+protected:
     // Used to make sure sizeof DateTimeValue
     friend class UnusedClass;
 
@@ -506,6 +507,25 @@ std::size_t operator-(const DateTimeValue& v1, const DateTimeValue& v2);
 std::ostream& operator<<(std::ostream& os, const DateTimeValue& value);
 
 std::size_t hash_value(DateTimeValue const& value);
+
+class TeradataFormat final : public DateTimeValue {
+public:
+    TeradataFormat() {
+        _month = 1;
+        _day = 1;
+    }
+    ~TeradataFormat() = default;
+
+    bool prepare(std::string_view format);
+    bool parse(std::string_view str, DateTimeValue* output);
+
+private:
+    // Token parsers
+    std::vector<std::function<bool()>> _token_parsers;
+    // Cursor
+    const char* val = nullptr;
+    const char* val_end = nullptr;
+};
 
 } // namespace starrocks
 

@@ -351,6 +351,8 @@ vectorized_functions = [
     [50041, 'dayofweek_iso', 'INT', ['DATETIME'], 'TimeFunctions::day_of_week_iso'],
     [50050, 'to_date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
     [50051, 'date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
+    [50052, 'to_tera_date', 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_tera_date', "TimeFunctions::to_tera_date_prepare", "TimeFunctions::to_tera_date_close"],
+    [50053, 'to_tera_timestamp', 'DATETIME', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_tera_timestamp', "TimeFunctions::to_tera_timestamp_prepare", "TimeFunctions::to_tera_timestamp_close"],
 
     [50057, 'day', 'TINYINT', ['DATE'], 'TimeFunctions::dayV3'],
     [50058, 'day', 'TINYINT', ['DATETIME'], 'TimeFunctions::dayV2'],
