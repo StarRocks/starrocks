@@ -216,8 +216,14 @@ void LakeDataSource::close(RuntimeState* state) {
     _dict_optimize_parser.close(state);
 }
 
+<<<<<<< HEAD
 Status LakeDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
     chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(), true));
+=======
+Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
+    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(),
+                                               _runtime_state->use_column_pool()));
+>>>>>>> f9c3c0564a ([Enhancement] spark/flink connector export data without using column pool (#30855))
     auto* chunk_ptr = chunk->get();
 
     SCOPED_TIMER(_scan_timer);

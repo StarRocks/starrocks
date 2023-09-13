@@ -261,9 +261,14 @@ vectorized::Chunk* ChunkHelper::new_chunk_pooled(const vectorized::Schema& schem
     vectorized::Columns columns;
     columns.reserve(schema.num_fields());
     for (size_t i = 0; i < schema.num_fields(); i++) {
+<<<<<<< HEAD
         const vectorized::FieldPtr& f = schema.field(i);
         auto column = (force && !config::disable_column_pool) ? column_from_pool<true>(*f, chunk_size)
                                                               : column_from_pool<false>(*f, chunk_size);
+=======
+        const FieldPtr& f = schema.field(i);
+        auto column = force ? column_from_pool<true>(*f, chunk_size) : column_from_pool<false>(*f, chunk_size);
+>>>>>>> f9c3c0564a ([Enhancement] spark/flink connector export data without using column pool (#30855))
         column->reserve(chunk_size);
         columns.emplace_back(std::move(column));
     }
