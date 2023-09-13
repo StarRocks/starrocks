@@ -751,7 +751,6 @@ public class UtFrameUtils {
                 }
             }
 
-            Tracers.init(connectContext, statementBase.getTraceMode(), statementBase.getTraceModule());
             try (Timer st1 = Tracers.watchScope("Analyze")) {
                 com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
             }

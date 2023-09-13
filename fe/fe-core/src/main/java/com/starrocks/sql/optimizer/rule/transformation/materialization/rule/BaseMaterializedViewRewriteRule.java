@@ -22,7 +22,6 @@ import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -114,14 +113,14 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             if (mvContext.getMv().getRefreshScheme().isSync()) {
                 if (queryPredicateWithoutCompensate == null) {
                     logMVRewrite(context, this, "Query expression's partition compensate failed from sync mv.");
-                    return results;
+                    continue;
                 }
                 mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
                         queryColumnRefRewriter, queryPredicateWithoutCompensate, onPredicates, this);
             } else {
                 if (queryPredicateSplit == null) {
                     logMVRewrite(context, this, "Query expression's partition compensate failed");
-                    return results;
+                    continue;
                 }
                 mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
                         queryColumnRefRewriter, queryPredicateSplit, onPredicates, this);
@@ -167,10 +166,12 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                     "from pruned partitions failed.");
             return null;
         }
-        ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
+        List<ScalarOperator> queryConjuncts = MvUtils.getAllValidPredicates(queryExpression);
         if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
-            queryPredicate = MvUtils.canonizePredicateForRewrite(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
+            queryConjuncts.addAll(MvUtils.getAllValidPredicates(queryPartitionPredicate));
         }
+        ScalarOperator queryPredicate =
+                MvUtils.rewriteOptExprCompoundPredicate(queryConjuncts, queryColumnRefRewriter);
         return PredicateSplit.splitPredicate(queryPredicate);
     }
 
