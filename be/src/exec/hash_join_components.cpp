@@ -71,7 +71,7 @@ void HashJoinBuilder::reset(const HashTableParam& param) {
 
 void HashJoinBuilder::reset_probe(RuntimeState* state) {
     _key_columns.clear();
-    (void)_ht.reset_probe_state(state);
+    _ht.reset_probe_state(state);
 }
 
 Status HashJoinBuilder::append_chunk(RuntimeState* state, const ChunkPtr& chunk) {

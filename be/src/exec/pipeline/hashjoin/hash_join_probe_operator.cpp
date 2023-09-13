@@ -119,7 +119,7 @@ Status HashJoinProbeOperator::reset_state(RuntimeState* state, const vector<Chun
     _reference_builder_hash_table_once();
     // Reset probe state only when it has valid state after referencing the build hash table.
     if (_join_prober->has_referenced_hash_table()) {
-        _join_prober->reset_probe(state);
+        RETURN_IF_ERROR(_join_prober->reset_probe(state));
     }
     return Status::OK();
 }

@@ -760,7 +760,7 @@ public:
     void close();
 
     [[nodiscard]] Status build(RuntimeState* state);
-    [[nodiscard]] Status reset_probe_state(RuntimeState* state);
+    void reset_probe_state(RuntimeState* state);
     [[nodiscard]] Status probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
                                bool* eos);
     [[nodiscard]] Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
