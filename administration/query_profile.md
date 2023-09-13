@@ -89,6 +89,14 @@ Query Profile 包含大量查询执行详细信息的指标。在大多数情况
 | PushRowNum        | Operator 累积输入行数。 |
 | PullRowNum        | Operator 累积输出行数。 |
 
+#### Unique 指标
+
+| 指标              | 说明                        |
+| ----------------- | -------------------------- |
+| IOTaskExecTime    | 所有 I/O Task 的累计执行时间。 |
+| IOTaskWaitTime    | 所有 I/O Task 的累计等待时间。 |
+| MorselsCount      | I/O Task 的总数。            |
+
 #### Scan operator
 
 | 指标                            | 说明                                              |
@@ -174,13 +182,34 @@ Query Profile 包含大量查询执行详细信息的指标。在大多数情况
 | Type       | Local Exchange 类型，包括：`Passthrough`、Partition` 以及 `Broadcast`。 |
 | ShuffleNum | Shuffle 数量。该指标仅当 `Type` 为 `Partition` 时有效。      |
 
+#### Hive Connector
+
+| 指标                      | 说明                        |
+| ------------------------- | --------------------------- |
+| ScanRanges                | 扫描的数据分片总数。             |
+| ReaderInit                | Reader 初始化时间。           |
+| ColumnReadTime            | Reader 读取和解析数据时间。    |
+| ExprFilterTime            | 表达式过滤时间。              |
+| RowsRead                  | 读取的数据行数。                |
+
+#### Input Stream
+
+| 指标                      | 说明                        |
+| ------------------------- | --------------------------- |
+| AppIOBytesRead            | 应用层读取的数据量。            |
+| AppIOCounter              | 应用层读取的 I/O 次数。          |
+| AppIOTime                 | 应用层累计读取时间。          |
+| FSBytesRead               | 存储系统读取的数据量。          |
+| FSIOCounter               | 存储层读取的 I/O 次数。          |
+| FSIOTime                  | 存储层累计读取时间。        |
+
 ### Operator 耗时
 
 - 对于 OlapScan 和 ConnectorScan Operator，其耗时相当于 `OperatorTotalTime + ScanTime`。因为 Scan Operator 在异步 I/O 线程池中进行 I/O 操作，所以 ScanTime 为异步 I/O 时间。
 - Exchange Operator 的耗时相当于 `OperatorTotalTime + NetworkTime`。因为 Exchange Operator 在 BRPC 线程池中收发数据包，NetworkTime 即为网络传输消耗的时间。
 - 对于其他 Operator，其耗时为 `OperatorTotalTime`。
 
-### Metric merging and MIN/MAX
+### Metric 合并以及 MIN/MAX 值
 
 Pipeline Engine 是并行计算引擎。每个 Fragment 被分发到多台机器上并行处理，每台机器上的 Pipeline 作为多个并发实例同时执行。因此，在统计 Profile 时，StarRocks 会合并相同的指标，并记录所有并发实例中每个指标的最小值和最大值。
 
