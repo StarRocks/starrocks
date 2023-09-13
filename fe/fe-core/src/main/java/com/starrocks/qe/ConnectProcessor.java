@@ -538,7 +538,7 @@ public class ConnectProcessor {
     }
 
     private static boolean isNull(byte[] bitmap, int position) {
-        return (bitmap[position / 8] & (1 << (position & 7))) != 0;
+        return (bitmap[position / 8] & (0xff & (1 << (position & 7)))) != 0;
     }
 
     private void dispatch() throws IOException {
