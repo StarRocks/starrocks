@@ -386,7 +386,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             BaseTableInfo baseTableInfo = tablePair.first;
             Table table = tablePair.second;
-            if (!table.isNativeTableOrMaterializedView()) {
+            if (!table.isNativeTableOrMaterializedView() && !table.isHiveView()) {
                 context.getCtx().getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
                         baseTableInfo.getDbName(), table, Lists.newArrayList(), true);
             }
