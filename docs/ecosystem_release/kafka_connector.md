@@ -12,7 +12,7 @@
 
 | Kafka Connector | Kafka | StarRocks | Java |
 | --------------- | ----- | --------- | ---- |
-| 1               |       |           | 8    |
+| 1.0               |       |           | 8    |
 
 ## Release note
 
