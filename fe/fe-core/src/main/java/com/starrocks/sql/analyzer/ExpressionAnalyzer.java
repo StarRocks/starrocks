@@ -1204,16 +1204,16 @@ public class ExpressionAnalyzer {
                                 node.getPos());
                     }
                     if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
-                        throw new SemanticException(fnName + "'s first input " + node.getChild(0) +
+                        throw new SemanticException(fnName + "'s first input " + node.getChild(0).toSql() +
                                 " should be an array or a lambda function", node.getPos());
                     }
                     if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
-                        throw new SemanticException(fnName + "'s second input " + node.getChild(1) +
+                        throw new SemanticException(fnName + "'s second input " + node.getChild(1).toSql() +
                                 " should be an array or a lambda function", node.getPos());
                     }
                     // force the second array be of Type.ARRAY_BOOLEAN
                     if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
-                        throw new SemanticException(fnName + "'s second input " + node.getChild(1) +
+                        throw new SemanticException(fnName + "'s second input " + node.getChild(1).toSql() +
                                 "  can't cast to ARRAY<BOOL>", node.getPos());
                     }
                     break;
@@ -1223,13 +1223,13 @@ public class ExpressionAnalyzer {
                         throw new SemanticException(fnName + " should have a input array", node.getPos());
                     }
                     if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
-                        throw new SemanticException(fnName + "'s input " + node.getChild(0) + " should be an array",
-                                node.getPos());
+                        throw new SemanticException(fnName + "'s input " + node.getChild(0).toSql() + " should be " +
+                                "an array", node.getPos());
                     }
                     // force the input array be of Type.ARRAY_BOOLEAN
                     if (!Type.canCastTo(node.getChild(0).getType(), Type.ARRAY_BOOLEAN)) {
                         throw new SemanticException(fnName + "'s input " +
-                                node.getChild(0) + "  can't cast to ARRAY<BOOL>", node.getPos());
+                                node.getChild(0).toSql() + "  can't cast to ARRAY<BOOL>", node.getPos());
                     }
                     break;
                 case FunctionSet.ARRAY_SORTBY:
@@ -1238,11 +1238,11 @@ public class ExpressionAnalyzer {
                                 node.getPos());
                     }
                     if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
-                        throw new SemanticException(fnName + "'s first input " + node.getChild(0) +
+                        throw new SemanticException(fnName + "'s first input " + node.getChild(0).toSql() +
                                 " should be an array or a lambda function", node.getPos());
                     }
                     if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
-                        throw new SemanticException(fnName + "'s second input " + node.getChild(1) +
+                        throw new SemanticException(fnName + "'s second input " + node.getChild(1).toSql() +
                                 " should be an array or a lambda function", node.getPos());
                     }
                     break;
@@ -1266,16 +1266,16 @@ public class ExpressionAnalyzer {
                                 "but there are just " + node.getChildren().size() + " inputs");
                     }
                     if (!node.getChild(0).getType().isMapType() && !node.getChild(0).getType().isNull()) {
-                        throw new SemanticException(fnName + "'s first input " + node.getChild(0) +
+                        throw new SemanticException(fnName + "'s first input " + node.getChild(0).toSql() +
                                 " should be a map or a lambda function.");
                     }
                     if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
-                        throw new SemanticException(fnName + "'s second input " + node.getChild(1) +
+                        throw new SemanticException(fnName + "'s second input " + node.getChild(1).toSql() +
                                 " should be an array or a lambda function.");
                     }
                     // force the second array be of Type.ARRAY_BOOLEAN
                     if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
-                        throw new SemanticException(fnName + "'s second input " + node.getChild(1) +
+                        throw new SemanticException(fnName + "'s second input " + node.getChild(1).toSql() +
                                 "  can't cast to ARRAY<BOOL>");
                     }
                     break;
@@ -1321,7 +1321,6 @@ public class ExpressionAnalyzer {
                             throw new SemanticException("named_struct contains duplicate subfield name: " +
                                     name + " at " + (i + 1) + "-th input", node.getPos());
                         }
-
                         check.add(name.toLowerCase());
                     }
                     break;
