@@ -177,7 +177,6 @@ public class WebBaseAction extends BaseAction {
             UserIdentity currentUser = checkPassword(authInfo);
             if (needAdmin()) {
                 checkUserOwnsAdminRole(currentUser);
-                checkActionOnSystem(currentUser, PrivilegeType.NODE);
             }
             request.setAuthorized(true);
             SessionValue value = new SessionValue();
