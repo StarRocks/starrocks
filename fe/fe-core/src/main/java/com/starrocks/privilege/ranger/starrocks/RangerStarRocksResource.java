@@ -22,7 +22,9 @@ import java.util.Locale;
 
 public class RangerStarRocksResource extends RangerAccessResourceImpl {
     public RangerStarRocksResource(ObjectType objectType, List<String> objectTokens) {
-        if (objectType.equals(ObjectType.CATALOG)) {
+        if (objectType.equals(ObjectType.USER)) {
+            setValue(ObjectType.USER.name().toLowerCase(Locale.ENGLISH), objectTokens.get(0));
+        } else if (objectType.equals(ObjectType.CATALOG)) {
             setValue(ObjectType.CATALOG.name().toLowerCase(Locale.ENGLISH), objectTokens.get(0));
         } else if (objectType.equals(ObjectType.DATABASE)) {
             setValue(ObjectType.CATALOG.name().toLowerCase(Locale.ENGLISH), objectTokens.get(0));

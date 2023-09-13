@@ -11,76 +11,32 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-package com.starrocks.privilege.ranger.hive;
+package com.starrocks.privilege;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Type;
-import com.starrocks.privilege.AccessControl;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.ranger.RangerStarRocksAccessRequest;
 import com.starrocks.privilege.ranger.starrocks.RangerStarRocksResource;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.lang.StringUtils;
 import org.apache.ranger.plugin.audit.RangerDefaultAuditHandler;
 import org.apache.ranger.plugin.model.RangerPolicy;
 import org.apache.ranger.plugin.model.RangerServiceDef;
 import org.apache.ranger.plugin.policyengine.RangerAccessResult;
-import org.apache.ranger.plugin.policyengine.RangerPolicyEngine;
 import org.apache.ranger.plugin.service.RangerBasePlugin;
-
-import java.util.Set;
 
 import static java.util.Locale.ENGLISH;
 
-public class RangerHiveAccessControl implements AccessControl {
-    private final RangerBasePlugin rangerPlugin;
+public abstract class RangerAccessController extends ExternalAccessController {
+    protected final RangerBasePlugin rangerPlugin;
 
-    public RangerHiveAccessControl(String serviceName) {
-        rangerPlugin = new RangerBasePlugin("hive", serviceName, "hive");
-        rangerPlugin.init();
+    public RangerAccessController(String serviceType) {
+        rangerPlugin = new RangerBasePlugin(serviceType, serviceType);
+        rangerPlugin.init(); // this will initialize policy engine and policy refresher
         rangerPlugin.setResultProcessor(new RangerDefaultAuditHandler());
-    }
-
-    @Override
-    public void checkDbAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db,
-                              PrivilegeType privilegeType) {
-        RangerHiveResource resource = new RangerHiveResource(ObjectType.DATABASE, Lists.newArrayList(db));
-        if (!hasPermission(resource, currentUser, privilegeType)) {
-            AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.DATABASE, db);
-        }
-    }
-
-    @Override
-    public void checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db) {
-        RangerHiveResource resource = new RangerHiveResource(ObjectType.DATABASE, Lists.newArrayList(db));
-        if (!hasPermission(resource, currentUser, PrivilegeType.ANY)) {
-            AccessDeniedException.reportAccessDenied(PrivilegeType.ANY.name(), ObjectType.DATABASE, db);
-        }
-    }
-
-    @Override
-    public void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType) {
-        RangerHiveResource resource = new RangerHiveResource(ObjectType.TABLE,
-                Lists.newArrayList(tableName.getDb(), tableName.getTbl()));
-        if (!hasPermission(resource, currentUser, privilegeType)) {
-            AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.TABLE, tableName.getTbl());
-        }
-    }
-
-    @Override
-    public void checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, TableName tableName) {
-        RangerHiveResource resource = new RangerHiveResource(ObjectType.TABLE,
-                Lists.newArrayList(tableName.getDb(), tableName.getTbl()));
-        if (!hasPermission(resource, currentUser, PrivilegeType.ANY)) {
-            AccessDeniedException.reportAccessDenied(PrivilegeType.ANY.name(), ObjectType.TABLE, tableName.getTbl());
-        }
     }
 
     @Override
@@ -132,33 +88,6 @@ public class RangerHiveAccessControl implements AccessControl {
             return SqlParser.parseSqlToExpr(result.getFilterExpr(), currentUser.getSessionVariable().getSqlMode());
         } else {
             return null;
-        }
-    }
-
-    public HiveAccessType convertToAccessType(PrivilegeType privilegeType) {
-        if (privilegeType == PrivilegeType.SELECT) {
-            return HiveAccessType.SELECT;
-        } else {
-            return HiveAccessType.NONE;
-        }
-    }
-
-    private boolean hasPermission(RangerHiveResource resource, UserIdentity user, PrivilegeType privilegeType) {
-        String accessType;
-        if (privilegeType.equals(PrivilegeType.ANY)) {
-            accessType = RangerPolicyEngine.ANY_ACCESS;
-        } else {
-            HiveAccessType hiveAccessType = convertToAccessType(privilegeType);
-            accessType = hiveAccessType.name().toLowerCase(ENGLISH);
-        }
-
-        RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(resource, user, accessType);
-
-        RangerAccessResult result = rangerPlugin.isAccessAllowed(request);
-        if (result != null && result.getIsAllowed()) {
-            return true;
-        } else {
-            return false;
         }
     }
 }
