@@ -210,14 +210,14 @@ A query profile encompasses a mass of metrics that show the details of the query
 
 #### Input Stream
 
-| Metric                    | Description                                                      |
-| ------------------------- | ---------------------------------------------------------------- |
-| AppIOBytesRead            | Size of the data read by I/O tasks from applications.            |
-| AppIOCounter              | Number of I/O tasks from applications.                           |
-| AppIOTime                 | Total time consumed by I/O tasks from applications to read data. |
-| FSBytesRead               | Size of the data read by the storage system.                     |
-| FSIOCounter               | Number of I/O tasks from the storage layer.                      |
-| FSIOTime                  | Total time consumed by the storage layer to read data.           |
+| Metric                    | Description                                                               |
+| ------------------------- | ------------------------------------------------------------------------- |
+| AppIOBytesRead            | Size of the data read by I/O tasks from the application layer.            |
+| AppIOCounter              | Number of I/O tasks from the application layer.                           |
+| AppIOTime                 | Total time consumed by I/O tasks from the application layer to read data. |
+| FSBytesRead               | Size of the data read by the storage system.                              |
+| FSIOCounter               | Number of I/O tasks from the storage layer.                               |
+| FSIOTime                  | Total time consumed by the storage layer to read data.                    |
 
 ### Time consumed by operators
 
