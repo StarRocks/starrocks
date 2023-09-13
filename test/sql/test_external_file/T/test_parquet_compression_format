@@ -1,0 +1,30 @@
+------------------------------------
+-------------- DATA ----------------
+-- a,b
+-- 0,1
+-- 1,2
+-- ...
+-- 99999, 100000
+
+-- name: testParquetLZOFormat
+
+[UC]shell: lzo_prefix=echo "oss://${oss_bucket}/test_parquet_compression/${uuid0}/lzo_format/"
+shell: ossutil64 mkdir ${lzo_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/lzo_compression.parquet ${lzo_prefix[1]} | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE test_parquet_lzo_format
+(
+    a string,
+    b string
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "${lzo_prefix[1]}",
+    "format" = "parquet"
+);
+
+select * from test_parquet_lzo_format where a = '100';
+select * from test_parquet_lzo_format where a = '99999';
+
+shell: ossutil64 rm -rf ${lzo_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
