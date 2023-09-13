@@ -56,7 +56,8 @@ public:
                 if (errno == ENOENT) {
                     return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, file={}", _path));
                 } else {
-                    return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", _path));
+                    return Status::InternalError(
+                            fmt::format("hdfsOpenFile failed, file={}. err_msg: {}", _path, get_hdfs_err_msg()));
                 }
             }
         }
@@ -601,7 +602,8 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
         if (errno == ENOENT) {
             return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, file={}", path));
         } else {
-            return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+            return Status::InternalError(
+                    fmt::format("hdfsOpenFile failed, file={}. err_msg: {}", path, get_hdfs_err_msg()));
         }
     }
     return std::make_unique<HDFSWritableFile>(hdfs_client->hdfs_fs, file, path, 0);
