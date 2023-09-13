@@ -118,7 +118,9 @@ public class LeaderOpExecutor {
         }
         if (result.isSetAudit_statistics()) {
             TAuditStatistics tAuditStatistics = result.getAudit_statistics();
-            ctx.getExecutor().setQueryStatistics(AuditStatisticsUtil.toProtobuf(tAuditStatistics));
+            if (ctx.getExecutor() != null) {
+                ctx.getExecutor().setQueryStatistics(AuditStatisticsUtil.toProtobuf(tAuditStatistics));
+            }
         }
     }
 
