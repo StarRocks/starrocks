@@ -21,6 +21,8 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import static java.lang.String.format;
 
 public class SemanticException extends StarRocksPlannerException {
+
+    protected boolean canNested = true;
     public SemanticException(String formatString) {
         super(formatString, ErrorType.USER_ERROR);
     }
@@ -31,5 +33,9 @@ public class SemanticException extends StarRocksPlannerException {
 
     public static SemanticException missingAttributeException(Expr node) throws SemanticException {
         throw new SemanticException("Column '%s' cannot be resolved", node.toSql());
+    }
+
+    boolean canNested() {
+        return canNested;
     }
 }
