@@ -281,6 +281,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     global_env->stop();
     LOG(INFO) << "BE exit step " << exit_step++ << ": global env stop successfully";
 
+    shutdown_tracer();
+
     LOG(INFO) << "BE exited successfully";
 }
 } // namespace starrocks
