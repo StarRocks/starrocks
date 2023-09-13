@@ -70,7 +70,6 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
     for (const auto& del_file : op_write.dels()) {
         _trash_files->push_back(del_file);
     }
-    _has_update_index = true;
 }
 
 void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction) {
@@ -122,8 +121,6 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         rowset->set_id(_tablet_meta->next_rowset_id());
         _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + rowset->segments_size());
     }
-
-    _has_update_index = true;
 
     VLOG(2) << fmt::format("MetaFileBuilder apply_opcompaction, id:{} input range:{} delvec del cnt:{} output:{}",
                            _tablet_meta->id(), del_range_ss.str(), delvec_erase_cnt,
@@ -199,6 +196,8 @@ Status MetaFileBuilder::finalize(int64_t txn_id) {
     RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
     _update_mgr->update_primary_index_data_version(_tablet, version);
     _fill_delvec_cache();
+    // Set _has_finalized at last, and if failure happens before this, we need to clear pk index
+    // and retry publish later.
     _has_finalized = true;
     return Status::OK();
 }

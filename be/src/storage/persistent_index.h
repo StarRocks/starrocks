@@ -581,6 +581,8 @@ public:
     Status load_from_tablet(Tablet* tablet);
 
     // start modification with intended version
+    // | version |: intended commit version
+    // | n |: deprecated
     Status prepare(const EditVersion& version, size_t n);
 
     // abort modification
