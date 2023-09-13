@@ -621,6 +621,10 @@ void StorageEngine::stop() {
     if (_compaction_checker_thread.joinable()) {
         _compaction_checker_thread.join();
     }
+
+    if (_update_manager) {
+        _update_manager->stop();
+    }
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {

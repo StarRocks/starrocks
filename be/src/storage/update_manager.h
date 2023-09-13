@@ -56,6 +56,8 @@ public:
 
     Status init();
 
+    void stop();
+
     void set_cache_expire_ms(int64_t expire_ms) { _cache_expire_ms = expire_ms; }
 
     int64_t get_cache_expire_ms() const { return _cache_expire_ms; }

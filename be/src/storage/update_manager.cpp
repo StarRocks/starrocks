@@ -53,15 +53,6 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
 }
 
 UpdateManager::~UpdateManager() {
-    if (_apply_thread_pool != nullptr) {
-        // DynamicCache may be still used by apply thread.
-        // Before deconstrut the DynamicCache, apply thread
-        // should be shutdown.
-        _apply_thread_pool->shutdown();
-    }
-    if (_get_pindex_thread_pool) {
-        _get_pindex_thread_pool->shutdown();
-    }
     clear_cache();
     if (_compaction_state_mem_tracker) {
         _compaction_state_mem_tracker.reset();
@@ -96,6 +87,26 @@ Status UpdateManager::init() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+void UpdateManager::stop() {
+    if (_get_pindex_thread_pool) {
+        _get_pindex_thread_pool->shutdown();
+    }
+    if (_apply_thread_pool) {
+        _apply_thread_pool->shutdown();
+    }
+}
+
+int64_t UpdateManager::get_index_cache_expire_ms(const Tablet& tablet) const {
+    const int32_t tablet_index_cache_expire_sec = tablet.tablet_meta()->get_primary_index_cache_expire_sec();
+    if (tablet_index_cache_expire_sec > 0) {
+        return tablet_index_cache_expire_sec * 1000;
+    }
+    return _cache_expire_ms;
+}
+
+>>>>>>> 4b9768ea16 ([BugFix] Shutdown update manager & tracer during BE and UT exit (#30829))
 Status UpdateManager::get_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
                                           DelVector* delvec, int64_t* latest_version) {
     return TabletMetaManager::get_del_vector(meta, tsid.tablet_id, tsid.segment_id, version, delvec, latest_version);
