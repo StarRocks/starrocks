@@ -146,15 +146,17 @@ public class RuntimeFilterDescription {
         long probeMin = sessionVariable.getGlobalRuntimeFilterProbeMinSize();
         long card = node.getCardinality();
         // The special value 0 means force use this filter
-        if (probeMin == 0) {
+        // Adopts small runtime filter(row count <= 1024) always
+        if (probeMin == 0 || buildCardinality <= 1024) {
             return true;
         }
         if (card < probeMin) {
             return false;
         }
         long buildCard = Math.max(0, buildCardinality);
-        float sel = (1.0f - buildCard * 1.0f / card);
-        return !(sel < sessionVariable.getGlobalRuntimeFilterProbeMinSelectivity());
+        float evaluatedFilterRatio = (buildCard * 1.0f / card);
+        float acceptedFilterRatioLB = 1.0f - sessionVariable.getGlobalRuntimeFilterProbeMinSelectivity();
+        return evaluatedFilterRatio <= acceptedFilterRatioLB;
     }
 
     // return true if Node could accept the Filter

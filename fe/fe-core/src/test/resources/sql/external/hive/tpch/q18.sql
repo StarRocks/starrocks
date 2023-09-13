@@ -132,7 +132,7 @@ OutPut Exchange Id: 20
 |    |  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE(S))
 |    |  equal join conjunct: [9: o_orderkey, INT, true] = [34: l_orderkey, INT, true]
 |    |  build runtime filters:
-|    |  - filter_id = 1, build_expr = (34: l_orderkey), remote = false
+|    |  - filter_id = 1, build_expr = (34: l_orderkey), remote = true
 |    |  output columns: 1, 2, 9, 12, 13
 |    |  cardinality: 149999686
 |    |  column statistics:
@@ -248,6 +248,8 @@ OutPut Exchange Id: 08
 distribution type: SHUFFLE
 partition exprs: [10: o_custkey, INT, true]
 cardinality: 150000000
+probe runtime filters:
+- filter_id = 1, probe_expr = (9: o_orderkey)
 
 PLAN FRAGMENT 4(F04)
 

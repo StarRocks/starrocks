@@ -65,10 +65,11 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  other join predicates: CASE 174: type WHEN '1' THEN concat('ocms_', 90: name) = 'ocms_fengyang56' " +
                 "WHEN '0' THEN TRUE ELSE FALSE END\n" +
                 "  |  limit: 10"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("4:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  4:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [tid, BIGINT, true] = [5: customer_id, BIGINT, true]\n" +
-                "  |  output columns: 3, 90"));
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (5: customer_id), remote = true"));
         sessionVariable.setNewPlanerAggStage(0);
     }
 
@@ -80,13 +81,16 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  |----24:EXCHANGE\n" +
                 "  |       distribution type: BROADCAST\n" +
                 "  |       cardinality: 65744\n" +
+                "  |       probe runtime filters:\n" +
+                "  |       - filter_id = 3, probe_expr = (397: d_week_seq)\n" +
                 "  |    \n" +
                 "  18:UNION\n" +
                 "  |  output exprs:\n" +
                 "  |      [391, INT, true] | [392, DECIMAL64(7,2), true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [325: ws_sold_date_sk, INT, true] | [346: ws_ext_sales_price, DECIMAL64(7,2), true]\n" +
-                "  |      [359: cs_sold_date_sk, INT, true] | [380: cs_ext_sales_price, DECIMAL64(7,2), true]"));
+                "  |      [359: cs_sold_date_sk, INT, true] | [380: cs_ext_sales_price, DECIMAL64(7,2), true]\n" +
+                " "));
     }
 
     @Test
@@ -607,9 +611,11 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testHiveTPCH05UsingResource() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch05_resource"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("20:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  20:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [10: o_custkey, INT, true] = [1: c_custkey, INT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 3, build_expr = (1: c_custkey), remote = false\n" +
                 "  |  output columns: 4, 9\n" +
                 "  |  cardinality: 22765073"));
     }
