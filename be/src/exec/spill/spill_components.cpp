@@ -529,6 +529,7 @@ Status PartitionedSpillerWriter::_split_partition(SerdeContext& spill_ctx, Spill
         right_accumulate_writer.flush();
     });
 
+    TRY_CATCH_ALLOC_SCOPE_START()
     while (true) {
         RETURN_IF_ERROR(reader->trigger_restore(_runtime_state, SyncTaskExecutor{}, EmptyMemGuard{}));
         if (!reader->has_output_data()) {
@@ -585,6 +586,7 @@ Status PartitionedSpillerWriter::_split_partition(SerdeContext& spill_ctx, Spill
             right_accumulate_writer.write(right_chunk);
         }
     }
+    TRY_CATCH_ALLOC_SCOPE_END()
     DCHECK_EQ(restore_rows, partition->num_rows);
     return Status::OK();
 }

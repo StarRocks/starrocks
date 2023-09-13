@@ -30,13 +30,14 @@ bool UnorderedMemTable::is_empty() {
     return _chunks.empty();
 }
 
-void UnorderedMemTable::append(ChunkPtr chunk) {
+Status UnorderedMemTable::append(ChunkPtr chunk) {
     _tracker->consume(chunk->memory_usage());
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, chunk->memory_usage());
     _chunks.emplace_back(std::move(chunk));
+    return Status::OK();
 }
 
-void UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (_chunks.empty() || _chunks.back()->num_rows() + size > _runtime_state->chunk_size()) {
         _chunks.emplace_back(src.clone_empty());
         _tracker->consume(_chunks.back()->memory_usage());
@@ -50,6 +51,7 @@ void UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* index
 
     _tracker->consume(mem_usage);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, mem_usage);
+    return Status::OK();
 }
 
 Status UnorderedMemTable::flush(FlushCallBack callback) {
@@ -75,7 +77,7 @@ bool OrderedMemTable::is_empty() {
     return _chunk == nullptr || _chunk->is_empty();
 }
 
-void OrderedMemTable::append(ChunkPtr chunk) {
+Status OrderedMemTable::append(ChunkPtr chunk) {
     if (_chunk == nullptr) {
         _chunk = chunk->clone_empty();
     }
@@ -84,9 +86,10 @@ void OrderedMemTable::append(ChunkPtr chunk) {
     int64_t new_mem_usage = _chunk->memory_usage();
     _tracker->set(_chunk->memory_usage());
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, new_mem_usage - old_mem_usage);
+    return Status::OK();
 }
 
-void OrderedMemTable::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+Status OrderedMemTable::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (_chunk == nullptr) {
         _chunk = src.clone_empty();
     }
@@ -98,6 +101,7 @@ void OrderedMemTable::append_selective(const Chunk& src, const uint32_t* indexes
 
     _tracker->consume(mem_usage);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, mem_usage);
+    return Status::OK();
 }
 
 Status OrderedMemTable::flush(FlushCallBack callback) {

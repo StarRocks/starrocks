@@ -110,7 +110,9 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
                 state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
-    RETURN_IF_ERROR(publish_runtime_filters(state));
+    WARN_IF_ERROR(publish_runtime_filters(state),
+                  fmt::format("spillable hash join operator of query {} publish runtime filter failed, ignore it...",
+                              print_id(state->query_id())));
     SpillProcessTasksBuilder task_builder(state, io_executor);
     task_builder.then(flush_function).finally(set_call_back_function);
 
