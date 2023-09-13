@@ -544,6 +544,8 @@ struct TMasterOpResult {
     4: optional string state;
     // for query statement
     5: optional list<binary> channelBufferList;
+
+    6: optional string resource_group_name;
 }
 
 struct TIsMethodSupportedRequest {
