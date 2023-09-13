@@ -174,6 +174,7 @@ public:
         //config::max_cumulative_compaction_num_singleton_deltas = 5;
         config::max_compaction_concurrency = 10;
         config::enable_event_based_compaction_framework = false;
+        config::vertical_compaction_max_columns_per_group = 5;
         Compaction::init(config::max_compaction_concurrency);
 
         _default_storage_root_path = config::storage_root_path;
