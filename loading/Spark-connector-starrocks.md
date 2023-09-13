@@ -115,27 +115,27 @@ connector jar包的命名格式如下
 
 - 数据类型映射默认如下：
 
-|  Spark 数据类型  | StarRocks 数据类型                                             |
-| --------------- | ------------------------------------------------------------ |
-| BooleanType     | BOOLEAN                                                      |
-| ByteType        | TINYINT                                                      |
-| ShortType       | SMALLINT                                                     |
-| IntegerType     | INT                                                          |
-| LongType        | BIGINT                                                       |
-| StringType      | LARGEINT                                                     |
-| FloatType       | FLOAT                                                        |
-| DoubleType      | DOUBLE                                                       |
-| DecimalType     | DECIMAL                                                      |
-| StringType      | CHAR                                                         |
-| StringType      | VARCHAR                                                      |
-| StringType      | STRING                                                       |
-| DateType        | DATE                                                         |
-| TimestampType   | DATETIME                                                     |
-| ArrayType       | ARRAY <br> **说明:** <br> **自版本 1.1.1 开始支持。** 详细步骤, 请参见 [导入至 ARRAY 类型的列](#load-data-into-columns-of-array-type). |
+  |  Spark 数据类型  | StarRocks 数据类型                                             |
+  | --------------- | ------------------------------------------------------------ |
+  | BooleanType     | BOOLEAN                                                      |
+  | ByteType        | TINYINT                                                      |
+  | ShortType       | SMALLINT                                                     |
+  | IntegerType     | INT                                                          |
+  | LongType        | BIGINT                                                       |
+  | StringType      | LARGEINT                                                     |
+  | FloatType       | FLOAT                                                        |
+  | DoubleType      | DOUBLE                                                       |
+  | DecimalType     | DECIMAL                                                      |
+  | StringType      | CHAR                                                         |
+  | StringType      | VARCHAR                                                      |
+  | StringType      | STRING                                                       |
+  | DateType        | DATE                                                         |
+  | TimestampType   | DATETIME                                                     |
+  | ArrayType       | ARRAY <br> **说明:** <br> **自版本 1.1.1 开始支持。** 详细步骤, 请参见 [导入至 ARRAY 类型的列](#load-data-into-columns-of-array-type). |
 
 - 您还可以自定义数据类型映射。
 
-例如，一个 StarRocks 表包含了 BITMAP 和 HLL 类型的列，但 Spark 不支持这两种数据类型。则您需要在 Spark 中设置其支持的数据类型，并且自定义数据类型映射关系。详细步骤，参见导入至 [BITMAP]() 和 [HLL]() 类型的列。自版本 1.1.1 起支持导入至 BITMAP 和 HLL 类型的列。
+  例如，一个 StarRocks 表包含了 BITMAP 和 HLL 类型的列，但 Spark 不支持这两种数据类型。则您需要在 Spark 中设置其支持的数据类型，并且自定义数据类型映射关系。详细步骤，参见导入至 [BITMAP](#导入至-bitmap-列) 和 [HLL](#导入至-hll-列) 类型的列。自版本 1.1.1 起支持导入至 BITMAP 和 HLL 类型的列。
 
 ## 升级 Spark connector
 
@@ -152,7 +152,7 @@ connector jar包的命名格式如下
 
 ### 准备工作
 
-#### 创建StarRocks表
+#### 创建 StarRocks 表
 
 创建数据库 `test`，并在其中创建名为 `score_board` 的主键表。
 
