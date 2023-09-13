@@ -245,6 +245,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
     version++;
     ASSERT_EQ(kChunkSize, read(version));
+    if (GetParam().enable_persistent_index) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata2, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata2->rowsets_size(), 1);
@@ -291,6 +294,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
     ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
+    if (GetParam().enable_persistent_index) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
@@ -345,6 +351,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
     EXPECT_EQ(100, progress.value());
     ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
     version++;
+    if (GetParam().enable_persistent_index) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
     ASSERT_EQ(kChunkSize * 2, read(version));
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));

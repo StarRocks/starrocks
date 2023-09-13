@@ -221,6 +221,9 @@ TEST_P(ConditionUpdateTest, test_condition_update) {
         ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 4 + i);
     }
+    if (GetParam().enable_persistent_index) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
 }
 
 TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
@@ -270,6 +273,9 @@ TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 4 == c1) && (c0 * 5 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 5);
+    if (GetParam().enable_persistent_index) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
 }
 
 TEST_P(ConditionUpdateTest, test_condition_update_in_memtable) {
@@ -302,6 +308,9 @@ TEST_P(ConditionUpdateTest, test_condition_update_in_memtable) {
               }));
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
+    if (GetParam().enable_persistent_index) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(ConditionUpdateTest, ConditionUpdateTest,

@@ -50,6 +50,7 @@ public:
     // when apply or finalize fail, need to clear primary index cache
     void handle_failure();
     bool has_update_index() const { return _has_update_index; }
+    void set_has_update_index() { _has_update_index = true; }
     // collect files that need to removed
     std::shared_ptr<std::vector<std::string>> trash_files() { return _trash_files; }
 
