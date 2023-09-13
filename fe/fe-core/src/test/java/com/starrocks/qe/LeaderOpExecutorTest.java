@@ -53,6 +53,10 @@ public class LeaderOpExecutorTest {
         cluster = PseudoCluster.getInstance();
 
         FeConstants.runningUnitTest = true;
+<<<<<<< HEAD
+=======
+        Config.alter_scheduler_interval_millisecond = 100;
+>>>>>>> 97d28cb8ff ([BugFix] Fix lost resource group in audit log for insert (#30626 #30726) (#30833))
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_experimental_mv = true;
