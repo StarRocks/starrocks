@@ -84,6 +84,9 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _peak_io_tasks_counter = _unique_metrics->AddHighWaterMarkCounter(
             "PeakIOTasks", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG));
 
+    _prepare_chunk_source_timer = ADD_TIMER(_unique_metrics, "PrepareChunkSourceTime");
+    _submit_io_task_timer = ADD_TIMER(_unique_metrics, "SubmitIOTaskTime");
+
     RETURN_IF_ERROR(do_prepare(state));
     return Status::OK();
 }
@@ -493,15 +496,23 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
     if (morsel != nullptr) {
         COUNTER_UPDATE(_morsels_counter, 1);
-        _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
-        auto status = _chunk_sources[chunk_source_index]->prepare(state);
-        if (!status.ok()) {
-            _chunk_sources[chunk_source_index] = nullptr;
-            set_finishing(state);
-            return status;
+
+        {
+            SCOPED_TIMER(_prepare_chunk_source_timer);
+            _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
+            auto status = _chunk_sources[chunk_source_index]->prepare(state);
+            if (!status.ok()) {
+                _chunk_sources[chunk_source_index] = nullptr;
+                set_finishing(state);
+                return status;
+            }
         }
+
         need_detach = false;
-        RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
+        {
+            SCOPED_TIMER(_submit_io_task_timer);
+            RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
+        }
     }
 
     return Status::OK();
