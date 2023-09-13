@@ -25,6 +25,7 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/tablet_manager.h"
+#include "storage/tablet_meta_manager.h"
 #include "util/pretty_printer.h"
 #include "util/trace.h"
 
@@ -52,11 +53,9 @@ Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelV
     return _update_mgr->get_del_vec(tsid, version, _pk_builder, pdelvec);
 }
 
-// |metadata| contain last tablet meta info with new version
-Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
-                                                 const TabletMetadata& metadata, Tablet* tablet,
-                                                 MetaFileBuilder* builder, int64_t base_version) {
-    // 1. update primary index
+StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadata& metadata, Tablet* tablet,
+                                                           MetaFileBuilder* builder, int64_t base_version,
+                                                           int64_t new_version) {
     auto index_entry = _index_cache.get_or_create(tablet->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -64,14 +63,57 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     _index_cache.update_object_size(index_entry, index.memory_usage());
     if (!st.ok()) {
         _index_cache.remove(index_entry);
-        std::string msg =
-                strings::Substitute("publish_primary_key_tablet: load primary index failed: $0", st.to_string());
+        std::string msg = strings::Substitute("prepare_primary_index: load primary index failed: $0", st.to_string());
         LOG(ERROR) << msg;
-        return st;
+        return Status::InternalError(msg);
     }
-    // release index entry but keep it in cache
-    DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
-    // 2. load rowset update data to cache, get upsert and delete list
+    st = index.prepare(EditVersion(new_version, 0), 0);
+    if (!st.ok()) {
+        _index_cache.remove(index_entry);
+        std::string msg =
+                strings::Substitute("prepare_primary_index: prepare primary index failed: $0", st.to_string());
+        LOG(ERROR) << msg;
+        return Status::InternalError(msg);
+    }
+    builder->set_has_update_index();
+    return index_entry;
+}
+
+Status UpdateManager::commit_primary_index(IndexEntry* index_entry, Tablet* tablet) {
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        if (index.enable_persistent_index()) {
+            // only take affect in local persistent index
+            PersistentIndexMetaPB index_meta;
+            PersistentIndexMetaLockGuard index_meta_lock_guard;
+            DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store();
+            index.get_persistent_index_meta_lock_guard(&index_meta_lock_guard);
+            RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, tablet->id(), &index_meta));
+            RETURN_IF_ERROR(index.commit(&index_meta));
+            RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, tablet->id(), index_meta));
+            // Call `on_commited` here, which will remove old files is safe.
+            // Because if publish version fail after `on_commited`, index will be rebuild.
+            RETURN_IF_ERROR(index.on_commited());
+            TRACE("commit primary index");
+        }
+    }
+
+    return Status::OK();
+}
+
+void UpdateManager::release_primary_index(IndexEntry* index_entry) {
+    if (index_entry != nullptr) {
+        _index_cache.release(index_entry);
+    }
+}
+
+// |metadata| contain last tablet meta info with new version
+Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                                 const TabletMetadata& metadata, Tablet* tablet,
+                                                 IndexEntry* index_entry, MetaFileBuilder* builder,
+                                                 int64_t base_version) {
+    auto& index = index_entry->value();
+    // 1. load rowset update data to cache, get upsert and delete list
     const uint32_t rowset_id = metadata.next_rowset_id();
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
     auto state_entry = _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->id(), txn_id));
@@ -81,7 +123,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     auto& state = state_entry->value();
     RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet, builder, true));
     _update_state_cache.update_object_size(state_entry, state.memory_usage());
-    // 3. rewrite segment file if it is partial update
+    // 2. rewrite segment file if it is partial update
     std::vector<std::string> orphan_files;
     RETURN_IF_ERROR(state.rewrite_segment(op_write, metadata, tablet, &orphan_files));
     PrimaryIndex::DeletesMap new_deletes;
@@ -91,6 +133,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     auto& upserts = state.upserts();
     // handle merge condition, skip update row which's merge condition column value is smaller than current row
     int32_t condition_column = _get_condition_column(op_write, *tablet_schema);
+    // 3. update primary index, and generate delete info.
     for (uint32_t i = 0; i < upserts.size(); i++) {
         if (upserts[i] != nullptr) {
             if (condition_column < 0) {
@@ -452,26 +495,13 @@ size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
 
 Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction,
                                                  const TabletMetadata& metadata, Tablet* tablet,
-                                                 MetaFileBuilder* builder, int64_t base_version) {
+                                                 IndexEntry* index_entry, MetaFileBuilder* builder,
+                                                 int64_t base_version) {
     std::stringstream cost_str;
     MonotonicStopWatch watch;
     watch.start();
-    // 1. load primary index
-    auto index_entry = _index_cache.get_or_create(tablet->id());
-    index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
-    Status st = index.lake_load(tablet, metadata, base_version, builder);
-    _index_cache.update_object_size(index_entry, index.memory_usage());
-    if (!st.ok()) {
-        _index_cache.remove(index_entry);
-        LOG(ERROR) << strings::Substitute("publish_primary_key_tablet: load primary index failed: $0", st.to_string());
-        return st;
-    }
-    cost_str << " [primary index load] " << watch.elapsed_time();
-    watch.reset();
-    // release index entry but keep it in cache
-    DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
-    // 2. iterate output rowset, update primary index and generate delvec
+    // 1. iterate output rowset, update primary index and generate delvec
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
     RowsetPtr output_rowset =
             std::make_shared<Rowset>(tablet, std::make_shared<RowsetMetadata>(op_compaction.output_rowset()));
@@ -489,6 +519,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
                                      [&](const RowsetMetadata& r) { return r.id() == max_rowset_id; });
     uint32_t max_src_rssid = max_rowset_id + input_rowset->segments_size() - 1;
 
+    // 2. update primary index, and generate delete info.
     for (size_t i = 0; i < compaction_state->pk_cols.size(); i++) {
         RETURN_IF_ERROR(compaction_state->load_segments(output_rowset.get(), *tablet_schema, i));
         auto& pk_col = compaction_state->pk_cols[i];
