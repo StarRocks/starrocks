@@ -85,7 +85,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
             "PeakIOTasks", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG));
 
     _prepare_chunk_source_timer = ADD_TIMER(_unique_metrics, "PrepareChunkSourceTime");
-    _submit_io_task_timer = ADD_TIMER(_unique_metrics, "SubmitIOTaskTime");
+    _submit_io_task_timer = ADD_TIMER(_unique_metrics, "SubmitTaskTime");
 
     RETURN_IF_ERROR(do_prepare(state));
     return Status::OK();
