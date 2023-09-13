@@ -101,7 +101,7 @@ public:
         // Test Seek within block by ordinal
         for (int i = 0; i < 100; i++) {
             uint32_t seek_off = random() % size;
-            for_page_decoder.seek_to_position_in_page(seek_off);
+            ASSERT_TRUE(for_page_decoder.seek_to_position_in_page(seek_off).ok());
             EXPECT_EQ((int32_t)(seek_off), for_page_decoder.current_index());
             CppType ret;
             copy_one<Type, PageDecoderType>(&for_page_decoder, &ret);

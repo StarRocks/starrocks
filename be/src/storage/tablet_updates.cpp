@@ -4286,7 +4286,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                                 tablet_column.is_nullable(), type_info, tablet_column.length(), 1);
                 ColumnIteratorOptions iter_opts;
                 RETURN_IF_ERROR(default_value_iter->init(iter_opts));
-                default_value_iter->fetch_values_by_rowid(nullptr, 1, (*columns)[i].get());
+                RETURN_IF_ERROR(default_value_iter->fetch_values_by_rowid(nullptr, 1, (*columns)[i].get()));
             } else {
                 (*columns)[i]->append_default();
             }

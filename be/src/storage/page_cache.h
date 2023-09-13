@@ -153,8 +153,12 @@ public:
         return *this;
     }
 
-    Cache* cache() const { return _cache; }
-    Slice data() const { return _cache->value_slice(_handle); }
+    Cache* cache() const {
+        return _cache;
+    }
+    Slice data() const {
+        return _cache->value_slice(_handle);
+    }
 
 private:
     Cache* _cache = nullptr;
