@@ -152,7 +152,6 @@ bool ExchangeSinkOperator::Channel::_check_use_pass_through() {
 }
 
 void ExchangeSinkOperator::Channel::_prepare_pass_through() {
-    // @TODO init metrics
     _pass_through_context.init();
     _use_pass_through = _check_use_pass_through();
 }

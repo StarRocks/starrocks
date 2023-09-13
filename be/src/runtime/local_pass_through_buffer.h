@@ -53,7 +53,6 @@ private:
     const TUniqueId _query_id;
     std::unordered_map<Key, PassThroughChannel*, KeyHash> _key_to_channel;
     int _ref_count;
-    // @TODO pass counter?
 };
 
 class PassThroughContext {
