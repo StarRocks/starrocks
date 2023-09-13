@@ -104,7 +104,8 @@ Status JDBCDriverManager::init(const std::string& driver_dir) {
             std::string checksum;
             int64_t first_access_ts;
             if (!_parse_from_file_name(file, &name, &checksum, &first_access_ts)) {
-                LOG(WARNING) << fmt::format("cannot parse jdbc driver info from file {}, try to remove it", target_file);
+                LOG(WARNING) << fmt::format("cannot parse jdbc driver info from file {}, try to remove it",
+                                            target_file);
                 RETURN_IF_ERROR(FileSystem::Default()->delete_file(target_file));
                 continue;
             }
