@@ -31,6 +31,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -46,8 +47,6 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
-import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
@@ -189,6 +188,10 @@ public class MvRewritePreprocessor {
 
         Set<ColumnRefOperator> originQueryColumns = Sets.newHashSet(queryColumnRefFactory.getColumnRefs());
         for (MaterializedView mv : relatedMvs) {
+            if (!mv.isValidPlan()) {
+                // skip to process unsupported plan tree
+                continue;
+            }
             try {
                 preprocessMv(mv, queryTables, originQueryColumns, isSyncMV);
             } catch (Exception e) {
@@ -217,34 +220,18 @@ public class MvRewritePreprocessor {
             return;
         }
 
-        MaterializedView.MVRewriteContextCache mvRewriteContextCache = mv.getPlanContext();
-        if (connectContext.getSessionVariable().isEnableMaterializedViewRewriteGreedyMode() ||
-                mvRewriteContextCache == null) {
-            // build mv query logical plan
-            MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-            // optimize the sql by rule and disable rule based materialized view rewrite
-            OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-            optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
-            optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
-            optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
-            // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
-            if (mv.getRefreshScheme().isSync()) {
-                optimizerConfig.disableRule(RuleType.TF_MATERIALIZED_VIEW);
-            }
-            optimizerConfig.setMVRewritePlan(true);
-
-            mvRewriteContextCache = mvOptimizer.optimize(mv, connectContext, optimizerConfig);
-            mv.setPlanContext(mvRewriteContextCache);
-        }
-        if (mvRewriteContextCache == null) {
+        MvPlanContext mvPlanContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
+                connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+        if (mvPlanContext == null) {
             logMVPrepare(connectContext, mv, "[SYNC={}] MV plan is not valid: {}, cannot generate plan for rewrite",
                         isSyncMV, mv.getName());
             return;
         }
-        if (!mvRewriteContextCache.isValidMvPlan()) {
-            if (mvRewriteContextCache.getLogicalPlan() != null) {
+        if (!mvPlanContext.isValidMvPlan()) {
+            mv.setPlanMode(MaterializedView.PlanMode.INVALID);
+            if (mvPlanContext.getLogicalPlan() != null) {
                 logMVPrepare(connectContext, mv, "[SYNC={}] MV plan is not valid: {}, plan:\n {}",
-                        isSyncMV, mv.getName(), mvRewriteContextCache.getLogicalPlan().explain());
+                        isSyncMV, mv.getName(), mvPlanContext.getLogicalPlan().explain());
             } else {
                 logMVPrepare(connectContext, mv, "[SYNC={}] MV plan is not valid: {}",
                         isSyncMV, mv.getName());
@@ -279,8 +266,8 @@ public class MvRewritePreprocessor {
             return;
         }
 
-        Preconditions.checkState(mvRewriteContextCache != null);
-        OptExpression mvPlan = mvRewriteContextCache.getLogicalPlan();
+        Preconditions.checkState(mvPlanContext != null);
+        OptExpression mvPlan = mvPlanContext.getLogicalPlan();
         Preconditions.checkState(mvPlan != null);
 
         ScalarOperator mvPartialPartitionPredicates = null;
@@ -305,9 +292,9 @@ public class MvRewritePreprocessor {
         List<Table> intersectingTables = baseTables.stream().filter(queryTables::contains).collect(Collectors.toList());
         MaterializationContext materializationContext =
                 new MaterializationContext(context, mv, mvPlan, queryColumnRefFactory,
-                        mv.getPlanContext().getRefFactory(), partitionNamesToRefresh,
+                        mvPlanContext.getRefFactory(), partitionNamesToRefresh,
                         baseTables, originQueryColumns, intersectingTables, mvPartialPartitionPredicates);
-        List<ColumnRefOperator> mvOutputColumns = mv.getPlanContext().getOutputColumns();
+        List<ColumnRefOperator> mvOutputColumns = mvPlanContext.getOutputColumns();
         // generate scan mv plan here to reuse it in rule applications
         LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext, partitionNamesToRefresh);
         materializationContext.setScanMvOperator(scanMvOp);

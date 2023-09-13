@@ -261,4 +261,13 @@ public abstract class ScalarOperator implements Cloneable {
         }
         return false;
     }
+
+    public static boolean isColumnEqualConstant(ScalarOperator predicate) {
+        if (predicate instanceof BinaryPredicateOperator) {
+            BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) predicate;
+            return binaryPredicate.getBinaryType().isEquivalence()
+                    && binaryPredicate.getChild(0).isColumnRef() && binaryPredicate.getChild(1).isConstantRef();
+        }
+        return false;
+    }
 }

@@ -83,7 +83,7 @@ public class DateLiteral extends LiteralExpr {
         super();
     }
 
-    public DateLiteral(Type type, boolean isMax) throws AnalysisException {
+    public DateLiteral(Type type, boolean isMax) {
         super();
         this.type = type;
         if (type.isDate()) {
@@ -157,7 +157,7 @@ public class DateLiteral extends LiteralExpr {
         type = other.type;
     }
 
-    public static DateLiteral createMinValue(Type type) throws AnalysisException {
+    public static DateLiteral createMinValue(Type type) {
         return new DateLiteral(type, false);
     }
 

@@ -412,6 +412,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 throw new DmlException(
                         "update meta failed. materialized view:" + materializedView.getName() + " not exist");
             }
+
             // check
             if (mvRefreshedPartitions == null || refTableAndPartitionNames == null) {
                 return;

@@ -220,16 +220,6 @@ Stream Load does not allow you to query the result of a load job by using the SH
 
 Stream Load does not allow you to cancel a load job. If a load job times out or encounters errors, StarRocks automatically cancels the job.
 
-## Load streaming data
-
-Stream Load allows you to load streaming data into StarRocks in real time by using programs. For more information, see the following topics:
-
-- For information about how to run Stream Load jobs by using Flink, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
-
-- For information about how to run Stream Load jobs by using Java programs, visit [https://github.com/StarRocks/demo/MiscDemo/stream_load](https://github.com/StarRocks/demo/tree/master/MiscDemo/stream_load).
-
-- For information about how to run Stream Load jobs by using Apache Spark™, see [01_sparkStreaming2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/01_sparkStreaming2StarRocks.md).
-
 ## Parameter configurations
 
 This section describes some system parameters that you need to configure if you choose the loading method Stream Load. These parameter configurations take effect on all Stream Load jobs.

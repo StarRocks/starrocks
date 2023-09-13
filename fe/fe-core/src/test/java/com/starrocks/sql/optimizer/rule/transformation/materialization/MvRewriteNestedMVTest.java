@@ -16,9 +16,16 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class MvRewriteNestedMVTest extends MvRewriteTestBase {
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        MvRewriteTestBase.beforeClass();
+        MvRewriteTestBase.prepareDefaultDatas();
+    }
+
     @Test
     public void testNestedMv() throws Exception {
         starRocksAssert.withTable("CREATE TABLE nest_base_table_1 (\n" +

@@ -200,16 +200,12 @@ You can configure the following parameters in the configuration file **fe.conf**
 
 You can configure the following parameters in the configuration file **be.conf** of each BE:
 
-- `push_write_mbytes_per_sec`
-  
-  This parameter specifies the maximum write speed per tablet. The default value is 10 MB/s. In real-world business scenarios, the maximum write speed usually ranges from 10 MB/s to 30 MB/s depending on the schema used. You can adjust the value of this parameter to control the data loading speed.
-
 - `write_buffer_size`
   
   This parameter specifies the maximum memory block size. The default size is 100 MB. The loaded data is first written to a memory block on the BE. When the amount of data that is loaded reaches the maximum memory block size that you specify, the data is flushed to disk. You must specify a proper maximum memory block size based on your business scenario.
 
   - If the maximum memory block size is exceedingly small, a large number of small files may be generated on the BE. In this case, query performance degrades. You can increase the maximum memory block size to reduce the number of files generated.
-  - If the maximum memory block size is exceedingly large, remote procedure calls (RPCs) may time out. In this case, you can adjust the value of this parameter together with the value of the `tablet_writer_rpc_timeout_sec` parameter.
+  - If the maximum memory block size is exceedingly large, remote procedure calls (RPCs) may time out. In this case, you can adjust the value of this parameter based on your business needs.
 
 - `streaming_load_rpc_max_alive_time_sec`
   
@@ -223,6 +219,14 @@ You can configure the following parameters in the configuration file **be.conf**
   - `load_process_max_memory_limit_percent`: specifies the maximum memory usage. The default value is 30%. This parameter differs from the `mem_limit` parameter. The `mem_limit` parameter specifies the total maximum memory usage of your StarRocks cluster, and the default value is 90% x 90%.
 
     If the memory capacity of the machine on which the BE resides is M, the maximum amount of memory that can be consumed for load jobs is calculated as follows: `M x 90% x 90% x 30%`.
+
+### System variable configurations
+
+You can configure the following [system variable](../reference/System_variable.md):
+
+- `query_timeout`
+
+  The query timeout duration. Unit: seconds. Value range: `1` to `259200`. Default value: `300`. This variable will act on all query statements in the current connection, as well as INSERT statements.
 
 ## Troubleshooting
 

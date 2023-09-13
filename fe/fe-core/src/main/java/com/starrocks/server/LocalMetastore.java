@@ -211,6 +211,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
@@ -3130,11 +3131,12 @@ public class LocalMetastore implements ConnectorMetadata {
             Authorizer.checkMaterializedViewAction(ConnectContext.get().getCurrentUserIdentity(),
                     ConnectContext.get().getCurrentRoleIds(), stmt.getDbMvName(), PrivilegeType.DROP);
 
-            MaterializedView view = (MaterializedView) table;
-            MaterializedViewMgr.getInstance().stopMaintainMV(view);
+            MaterializedView mv = (MaterializedView) table;
+            MaterializedViewMgr.getInstance().stopMaintainMV(mv);
 
             MvId mvId = new MvId(db.getId(), table.getId());
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
+            CachingMvPlanContextBuilder.getInstance().invalidateFromCache(mv);
             List<BaseTableInfo> baseTableInfos = ((MaterializedView) table).getBaseTableInfos();
             if (baseTableInfos != null) {
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {

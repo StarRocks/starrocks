@@ -799,4 +799,29 @@ public class CTEPlanTest extends PlanTestBase {
         assertContains(plan, "9:SELECT\n" +
                 "  |  predicates: 26: v2 > 0, 28: v4 = 123");
     }
+
+    @Test
+    public void testCTEForceUseUnForce() throws Exception {
+        String sql = "with " +
+                "x1 as (select * from t0),\n" +
+                "y1 as (select count(distinct v1, v2), count(distinct v2, v3) from x1)," +
+                "y2 as (select count(distinct v3, v2), count(distinct v1, v3) from x1)" +
+                "select * " +
+                "from y1 join y2" +
+                "        join t3";
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(1);
+        defaultCTEReuse();
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
+        assertContains(plan, "  MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 21\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
 }

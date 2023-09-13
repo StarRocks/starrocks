@@ -49,6 +49,7 @@ import static java.util.stream.Collectors.toList;
  * because ExpressionRangePartitionInfo is not easily scalable
  * and get more extensions by extracting objects
  * in the future this will replace all expr range partition info
+ * As of 2023-09, it's used to describe range using expr like partition by range cast((substring(col, 3)) as int)
  */
 public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         implements GsonPreProcessable, GsonPostProcessable {
@@ -229,15 +230,5 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
 
     public void setSourcePartitionTypes(List<Type> sourcePartitionTypes) {
         this.sourcePartitionTypes = sourcePartitionTypes;
-    }
-
-    @Override
-    protected Object clone() {
-        ExpressionRangePartitionInfoV2 v2 = (ExpressionRangePartitionInfoV2) super.clone();
-        v2.partitionExprs = Lists.newArrayList(this.partitionExprs);
-        v2.serializedPartitionExprs = Lists.newArrayList(this.serializedPartitionExprs);
-        v2.automaticPartition = this.automaticPartition;
-        v2.sourcePartitionTypes = Lists.newArrayList(sourcePartitionTypes);
-        return v2;
     }
 }
