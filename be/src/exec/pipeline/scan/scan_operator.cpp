@@ -419,7 +419,13 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         }
     };
 
-    if (_scan_executor->submit(std::move(task))) {
+    bool submit_success;
+    {
+        SCOPED_TIMER(_submit_io_task_timer);
+        submit_success = _scan_executor->submit(std::move(task));
+    }
+
+    if (submit_success) {
         _io_task_retry_cnt = 0;
     } else {
         _chunk_sources[chunk_source_index]->unpin_chunk_token();
@@ -509,10 +515,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
         }
 
         need_detach = false;
-        {
-            SCOPED_TIMER(_submit_io_task_timer);
-            RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
-        }
+        RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
     }
 
     return Status::OK();
