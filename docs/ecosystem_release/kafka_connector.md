@@ -18,7 +18,7 @@
 
 ### 1.0
 
-**Release date****:** June 25, 2023
+**Release date:** June 25, 2023
 
 **Features:**
 

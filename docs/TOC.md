@@ -744,7 +744,7 @@
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
 + Ecosystem Release Notes
-  + [Kafka connector](./)
+  + [Kafka connector](./ecosystem_release/kafka_connector.md)
 + Release Notes
   + [v3.1](./release_notes/release-3.1.md)
   + [v3.0](./release_notes/release-3.0.md)
