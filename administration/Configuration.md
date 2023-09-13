@@ -118,7 +118,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |export_max_bytes_per_be_per_task|268435456|单个导出任务在单个 BE 上导出的最大数据量，单位为 Byte。|
 |export_running_job_num_limit|5|导出作业最大的运行数目。|
 |export_task_default_timeout_second|7200|导出作业的超时时长，单位为秒。|
-|empty_load_as_error|TRUE|导入数据为空时，是否返回报错提示 `all partitions have no load data`。取值：<br> - **TRUE**：当导入数据为空时，则显示导入失败，并返回报错提示 `all partitions have no load data`。<br> - **FALSE**：当导入数据为空时，则显示导入成功，并返回 `OK`，不返回报错提示。|
 
 #### 存储
 
