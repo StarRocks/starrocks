@@ -175,6 +175,9 @@ struct TQueryOptions {
   91: optional bool use_page_cache;
 
   102: optional bool enable_collect_table_level_scan_stats;
+
+  105: optional bool use_column_pool = true;
+
   // The following params only exist on 2.2 2.3, to avoid upgrade inconsistency
   //  (if start from a low number, say 80, this id may be used by another param in the new version),
   // start from 1000
