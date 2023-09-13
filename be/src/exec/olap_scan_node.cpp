@@ -396,8 +396,6 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
     }
 
-<<<<<<< HEAD
-=======
     if (partition_order_hint().has_value()) {
         bool asc = partition_order_hint().value();
         std::stable_sort(morsels.begin(), morsels.end(), [asc](auto& l, auto& r) {
@@ -411,14 +409,6 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
         });
     }
 
-    if (output_chunk_by_bucket()) {
-        std::stable_sort(morsels.begin(), morsels.end(), [](auto& l, auto& r) {
-            return down_cast<pipeline::ScanMorsel*>(l.get())->owner_id() <
-                   down_cast<pipeline::ScanMorsel*>(r.get())->owner_id();
-        });
-    }
-
->>>>>>> a49d2507a9 ([Enhancement] optimize TOPN Filter desc case (#33325))
     // None tablet to read shouldn't use tablet internal parallel.
     if (morsels.empty()) {
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
