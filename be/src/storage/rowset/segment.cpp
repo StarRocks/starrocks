@@ -121,7 +121,7 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
     }
 
     if (file_size < 12 + footer_length) {
-        return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < $2", read_file->filename(),
+        return Status::Corruption(strings::Substitute("Bad · file $0: file size $1 < $2", read_file->filename(),
                                                       file_size, 12 + footer_length));
     }
 
