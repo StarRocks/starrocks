@@ -1,5 +1,5 @@
 -- name: test_to_tera_date
-select to_tera_date(NULL);
+select to_tera_date(NULL, NULL);
 -- result:
 None
 -- !result
@@ -7,7 +7,7 @@ select to_tera_date(NULL, "yyyy");
 -- result:
 None
 -- !result
-select to_tera_date("2020-02-02 00:00:00");
+select to_tera_date("2020-02-02 00:00:00", "yyyy-mm-dd");
 -- result:
 2020-02-02
 -- !result

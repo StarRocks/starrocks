@@ -1,7 +1,7 @@
 -- name: test_to_tera_date
-select to_tera_date(NULL);
+select to_tera_date(NULL, NULL);
 select to_tera_date(NULL, "yyyy");
-select to_tera_date("2020-02-02 00:00:00");
+select to_tera_date("2020-02-02 00:00:00", "yyyy-mm-dd");
 select to_tera_date("1988","yyyy");
 select to_tera_date("1988/04/08","yyyy/mm/dd");
 select to_tera_date("1988/04/08","yyyy/mm/dd");
