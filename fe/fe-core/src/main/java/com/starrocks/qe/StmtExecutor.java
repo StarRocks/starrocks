@@ -49,6 +49,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
@@ -100,6 +101,8 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.proto.PQueryStatistics;
@@ -837,8 +840,15 @@ public class StmtExecutor {
             context.setKilled();
         } else {
             if (!Objects.equals(killCtx.getQualifiedUser(), context.getQualifiedUser())) {
-                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.OPERATE);
+                try {
+                    Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.OPERATE);
+                } catch (AccessDeniedException e) {
+                    AccessDeniedException.reportAccessDenied(
+                            InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+                }
             }
             killCtx.kill(killStmt.isConnectionKill());
         }
@@ -1164,10 +1174,25 @@ public class StmtExecutor {
         MetaUtils.getDatabase(catalogName, dbName);
         MetaUtils.getTable(catalogName, dbName, tableName);
 
-        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                catalogName, dbName, tableName, PrivilegeType.SELECT);
-        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                catalogName, dbName, tableName, PrivilegeType.INSERT);
+        try {
+            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    catalogName, dbName, tableName, PrivilegeType.SELECT);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    catalogName,
+                    ConnectContext.get().getCurrentUserIdentity(),
+                    ConnectContext.get().getCurrentRoleIds(), PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName);
+        }
+
+        try {
+            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    catalogName, dbName, tableName, PrivilegeType.INSERT);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    catalogName,
+                    ConnectContext.get().getCurrentUserIdentity(),
+                    ConnectContext.get().getCurrentRoleIds(), PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), tableName);
+        }
     }
 
     public void checkPrivilegeForKillAnalyzeStmt(ConnectContext context, long analyzeId) {
@@ -1189,7 +1214,7 @@ public class StmtExecutor {
                     nativeAnalyzeJob.getTableId());
             tableNames.forEach(tableName ->
                     checkTblPrivilegeForKillAnalyzeStmt(context, tableName.getCatalog(), tableName.getDb(),
-                        tableName.getTbl(), analyzeId)
+                            tableName.getTbl(), analyzeId)
             );
         }
     }
