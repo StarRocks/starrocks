@@ -40,6 +40,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
@@ -730,6 +731,8 @@ public class MaterializedViewRewriter {
                     compensationJoinColumns, compensationRelations, expectedExtraQueryToMVRelationIds);
             if (rewritten != null) {
                 logMVRewrite(mvRewriteContext, "ViewDelta " + REWRITE_SUCCESS);
+                Tracers.record(Tracers.Module.MV, mvRewriteContext.getMaterializationContext().getMv().getName(),
+                        "ViewDelta " + REWRITE_SUCCESS);
                 return rewritten;
             }
         }
@@ -835,6 +838,8 @@ public class MaterializedViewRewriter {
                     rewrittenExpression.getOp().setLimit(rewriteContext.getQueryExpression().getOp().getLimit());
                 }
                 logMVRewrite(mvRewriteContext, REWRITE_SUCCESS);
+                Tracers.record(Tracers.Module.MV, mvRewriteContext.getMaterializationContext().getMv().getName(),
+                        REWRITE_SUCCESS);
                 return rewrittenExpression;
             }
         }

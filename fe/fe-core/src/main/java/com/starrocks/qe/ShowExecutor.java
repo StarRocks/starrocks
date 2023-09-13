@@ -82,7 +82,6 @@ import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
@@ -1113,10 +1112,8 @@ public class ShowExecutor {
         createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
-        }
-        String storageVolumeId = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeIdOfDb(db.getId());
-        if (!Strings.isNullOrEmpty(storageVolumeId)) {
-            String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeName(storageVolumeId);
+        } else if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
             createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
         }
         rows.add(Lists.newArrayList(showStmt.getDb(), createSqlBuilder.toString()));
@@ -1320,7 +1317,7 @@ public class ShowExecutor {
                 final String columnType = col.getType().canonicalName().toLowerCase();
                 final String isAllowNull = col.isAllowNull() ? "YES" : "NO";
                 final String isKey = col.isKey() ? "YES" : "NO";
-                String defaultValue = FeConstants.NULL_STRING;
+                String defaultValue = null;
                 if (!col.getType().isOnlyMetricType()) {
                     defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
                 }

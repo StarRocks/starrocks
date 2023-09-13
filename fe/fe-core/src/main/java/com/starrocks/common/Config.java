@@ -1066,6 +1066,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean ignore_materialized_view_error = false;
 
+    /**
+     * whether backup materialized views in backing databases. If not, will skip backing materialized views.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_backup_materialized_view = true;
+
     @ConfField
     public static boolean enable_udf = false;
 
@@ -2026,6 +2032,7 @@ public class Config extends ConfigBase {
     /**
      * Enable pipeline engine load
      */
+    @Deprecated
     @ConfField(mutable = true)
     public static boolean enable_pipeline_load = true;
 
@@ -2498,4 +2505,16 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int catalog_metadata_cache_size = 500;
+
+    /**
+     * mv plan cache expire interval in seconds
+     */
+    @ConfField(mutable = true)
+    public static long mv_plan_cache_expire_interval_sec = 24L * 60L * 60L;
+
+    /**
+     * mv plan cache expire interval in seconds
+     */
+    @ConfField(mutable = true)
+    public static long mv_plan_cache_max_size = 1000;
 }

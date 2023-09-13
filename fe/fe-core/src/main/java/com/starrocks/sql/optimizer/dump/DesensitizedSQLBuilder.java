@@ -469,10 +469,10 @@ public class DesensitizedSQLBuilder {
                 sb.append("\"database\" = \"").append(desensitizedDbName).append("\",\n");
                 sb.append("\"table\" = \"").append(desensitizedTblName).append("\",\n");
                 sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\"");
-                if (!hiveTable.getHiveProperties().isEmpty()) {
+                if (!table.getProperties().isEmpty()) {
                     sb.append(",\n");
                 }
-                sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
+                sb.append(new PrintableMap<>(hiveTable.getProperties(), " = ", true, true, false).toString());
                 sb.append("\n)");
             } else if (table.getType() == Table.TableType.FILE) {
                 FileTable fileTable = (FileTable) table;

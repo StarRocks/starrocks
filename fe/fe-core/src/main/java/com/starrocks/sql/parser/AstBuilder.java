@@ -93,6 +93,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
@@ -116,6 +117,7 @@ import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -1552,8 +1554,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        if (context.modifyTablePropertiesClause() != null) {
-            alterTableClause = (ModifyTablePropertiesClause) visit(context.modifyTablePropertiesClause());
+        if (context.modifyPropertiesClause() != null) {
+            alterTableClause = (ModifyTablePropertiesClause) visit(context.modifyPropertiesClause());
         }
 
         if (context.statusDesc() != null) {
@@ -1629,6 +1631,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowCatalogsStatement(StarRocksParser.ShowCatalogsStatementContext context) {
         return new ShowCatalogsStmt(createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterCatalogStatement(StarRocksParser.AlterCatalogStatementContext context) {
+        String catalogName = ((Identifier) visit(context.catalogName)).getValue();
+        AlterClause alterClause = (AlterClause) visit(context.modifyPropertiesClause());
+        return new AlterCatalogStmt(catalogName, alterClause, createPos(context));
     }
 
     // ---------------------------------------- Warehouse Statement -----------------------------------------------------
@@ -1767,7 +1776,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitShowCreateRoutineLoadStatement(StarRocksParser.ShowCreateRoutineLoadStatementContext context) {
+    public ParseNode visitShowCreateRoutineLoadStatement(
+            StarRocksParser.ShowCreateRoutineLoadStatementContext context) {
         return new ShowCreateRoutineLoadStmt(createLabelName(context.db, context.name));
     }
 
@@ -3470,7 +3480,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitModifyTablePropertiesClause(StarRocksParser.ModifyTablePropertiesClauseContext context) {
+    public ParseNode visitModifyPropertiesClause(StarRocksParser.ModifyPropertiesClauseContext context) {
         Map<String, String> properties = new HashMap<>();
         List<Property> propertyList = visit(context.propertyList().property(), Property.class);
         for (Property property : propertyList) {
@@ -3860,10 +3870,28 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         if (context.optimizerTrace() != null) {
-            queryStatement.setIsExplain(true, getTraceType(context.optimizerTrace()));
+            String module = "base";
+            if (context.optimizerTrace().identifier() != null) {
+                module = ((Identifier) visit(context.optimizerTrace().identifier())).getValue();
+            }
+            queryStatement.setIsTrace(getTraceMode(context.optimizerTrace()), module);
         }
 
         return queryStatement;
+    }
+
+    private Tracers.Mode getTraceMode(StarRocksParser.OptimizerTraceContext context) {
+        if (context.LOGS() != null) {
+            return Tracers.Mode.LOGS;
+        } else if (context.VALUES() != null) {
+            return Tracers.Mode.VARS;
+        } else if (context.TIMES() != null) {
+            return Tracers.Mode.TIMER;
+        } else if (context.ALL() != null) {
+            return Tracers.Mode.TIMING;
+        } else {
+            return Tracers.Mode.NONE;
+        }
     }
 
     @Override
@@ -6165,14 +6193,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             explainLevel = StatementBase.ExplainLevel.SCHEDULER;
         }
         return explainLevel;
-    }
-
-    private static StatementBase.ExplainLevel getTraceType(StarRocksParser.OptimizerTraceContext context) {
-        if (context.REWRITE() != null) {
-            return StatementBase.ExplainLevel.REWRITE;
-        } else {
-            return StatementBase.ExplainLevel.OPTIMIZER;
-        }
     }
 
     public static SetType getVariableType(StarRocksParser.VarTypeContext context) {

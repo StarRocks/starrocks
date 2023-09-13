@@ -27,11 +27,13 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.PartitionUpdate.UpdateMode;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -60,24 +62,30 @@ public class HiveMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(HiveMetadata.class);
     public static final String STARROCKS_QUERY_ID = "starrocks_query_id";
     private final String catalogName;
+    private final HdfsEnvironment hdfsEnvironment;
     private final HiveMetastoreOperations hmsOps;
     private final RemoteFileOperations fileOps;
     private final HiveStatisticsProvider statisticsProvider;
     private final Optional<CacheUpdateProcessor> cacheUpdateProcessor;
     private Executor updateExecutor;
+    private Executor refreshOthersFeExecutor;
 
     public HiveMetadata(String catalogName,
+                        HdfsEnvironment hdfsEnvironment,
                         HiveMetastoreOperations hmsOps,
                         RemoteFileOperations fileOperations,
                         HiveStatisticsProvider statisticsProvider,
                         Optional<CacheUpdateProcessor> cacheUpdateProcessor,
-                        Executor updateExecutor) {
+                        Executor updateExecutor,
+                        Executor refreshOthersFeExecutor) {
         this.catalogName = catalogName;
+        this.hdfsEnvironment = hdfsEnvironment;
         this.hmsOps = hmsOps;
         this.fileOps = fileOperations;
         this.statisticsProvider = statisticsProvider;
         this.cacheUpdateProcessor = cacheUpdateProcessor;
         this.updateExecutor = updateExecutor;
+        this.refreshOthersFeExecutor = refreshOthersFeExecutor;
     }
 
     @Override
@@ -169,7 +177,8 @@ public class HiveMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate, List<String> fieldNames) {
+                                                   long snapshotId, ScalarOperator predicate,
+                                                   List<String> fieldNames, long limit) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
 
@@ -216,7 +225,8 @@ public class HiveMetadata implements ConnectorMetadata {
                                          Table table,
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate) {
+                                         ScalarOperator predicate,
+                                         long limit) {
         Statistics statistics = null;
         List<ColumnRefOperator> columnRefOperators = Lists.newArrayList(columns.keySet());
         try {
@@ -293,7 +303,8 @@ public class HiveMetadata implements ConnectorMetadata {
             }
         }
 
-        HiveCommitter committer = new HiveCommitter(hmsOps, fileOps, updateExecutor, table, new Path(stagingDir));
+        HiveCommitter committer = new HiveCommitter(
+                hmsOps, fileOps, updateExecutor, refreshOthersFeExecutor, table, new Path(stagingDir));
         committer.commit(partitionUpdates);
     }
 
@@ -301,5 +312,10 @@ public class HiveMetadata implements ConnectorMetadata {
     public void clear() {
         hmsOps.invalidateAll();
         fileOps.invalidateAll();
+    }
+
+    @Override
+    public CloudConfiguration getCloudConfiguration() {
+        return hdfsEnvironment.getCloudConfiguration();
     }
 }

@@ -33,11 +33,9 @@ RollingAsyncParquetWriter::RollingAsyncParquetWriter(
           _parent_profile(parent_profile),
           _commit_func(std::move(commit_func)),
           _state(state),
-          _driver_id(driver_id) {
-    init_rolling_writer();
-}
+          _driver_id(driver_id) {}
 
-Status RollingAsyncParquetWriter::init_rolling_writer() {
+Status RollingAsyncParquetWriter::init() {
     ASSIGN_OR_RETURN(
             _fs, FileSystem::CreateUniqueFromString(_table_info.partition_location, FSOptions(&_table_info.cloud_conf)))
     _schema = _table_info.schema;
@@ -78,20 +76,14 @@ Status RollingAsyncParquetWriter::_new_file_writer() {
 
 Status RollingAsyncParquetWriter::append_chunk(Chunk* chunk, RuntimeState* state) {
     if (_writer == nullptr) {
-        auto status = _new_file_writer();
-        if (!status.ok()) {
-            return status;
-        }
+        RETURN_IF_ERROR(_new_file_writer());
     }
     // exceed file size
     if (_writer->file_size() > _max_file_size) {
-        auto st = close_current_writer(state);
-        if (st.ok()) {
-            _new_file_writer();
-        }
+        RETURN_IF_ERROR(close_current_writer(state));
+        RETURN_IF_ERROR(_new_file_writer());
     }
-    auto st = _writer->write(chunk);
-    return st;
+    return _writer->write(chunk);
 }
 
 Status RollingAsyncParquetWriter::close_current_writer(RuntimeState* state) {

@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hudi;
 
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileOperations;
@@ -26,7 +26,6 @@ import com.starrocks.connector.hive.CachingHiveMetastoreConf;
 import com.starrocks.connector.hive.HiveMetastoreOperations;
 import com.starrocks.connector.hive.HiveStatisticsProvider;
 import com.starrocks.connector.hive.IHiveMetastore;
-import org.apache.hadoop.conf.Configuration;
 
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
@@ -41,7 +40,7 @@ public class HudiMetadataFactory {
     private final long perQueryCacheRemotePathMaxNum;
     private final ExecutorService pullRemoteFileExecutor;
     private final boolean isRecursive;
-    private final Configuration hadoopConf;
+    private final HdfsEnvironment hdfsEnvironment;
     private final MetastoreType metastoreType;
 
     public HudiMetadataFactory(String catalogName,
@@ -51,7 +50,7 @@ public class HudiMetadataFactory {
                                CachingRemoteFileConf fileConf,
                                ExecutorService pullRemoteFileExecutor,
                                boolean isRecursive,
-                               Configuration hadoopConf,
+                               HdfsEnvironment hdfsEnvironment,
                                MetastoreType metastoreType) {
         this.catalogName = catalogName;
         this.metastore = metastore;
@@ -60,7 +59,7 @@ public class HudiMetadataFactory {
         this.perQueryCacheRemotePathMaxNum = fileConf.getPerQueryCacheMaxSize();
         this.pullRemoteFileExecutor = pullRemoteFileExecutor;
         this.isRecursive = isRecursive;
-        this.hadoopConf = hadoopConf;
+        this.hdfsEnvironment = hdfsEnvironment;
         this.metastoreType = metastoreType;
     }
 
@@ -68,18 +67,18 @@ public class HudiMetadataFactory {
         HiveMetastoreOperations hiveMetastoreOperations = new HiveMetastoreOperations(
                 createQueryLevelInstance(metastore, perQueryMetastoreMaxNum),
                 metastore instanceof CachingHiveMetastore,
-                hadoopConf, metastoreType, catalogName);
+                hdfsEnvironment.getConfiguration(), metastoreType, catalogName);
         RemoteFileOperations remoteFileOperations = new RemoteFileOperations(
                 CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxNum),
                 pullRemoteFileExecutor,
                 pullRemoteFileExecutor,
                 isRecursive,
                 remoteFileIO instanceof CachingRemoteFileIO,
-                hadoopConf);
+                hdfsEnvironment.getConfiguration());
         HiveStatisticsProvider statisticsProvider = new HiveStatisticsProvider(hiveMetastoreOperations, remoteFileOperations);
         Optional<CacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
 
-        return new HudiMetadata(catalogName, hiveMetastoreOperations,
+        return new HudiMetadata(catalogName, hdfsEnvironment, hiveMetastoreOperations,
                 remoteFileOperations, statisticsProvider, cacheUpdateProcessor);
     }
 

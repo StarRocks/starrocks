@@ -15,29 +15,25 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupType;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-public class ResourceGroup implements Writable {
+public class ResourceGroup {
     public static final String GROUP_TYPE = "type";
     public static final String USER = "user";
     public static final String ROLE = "role";
     public static final String QUERY_TYPE = "query_type";
     public static final String SOURCE_IP = "source_ip";
     public static final String DATABASES = "db";
+    public static final String PLAN_CPU_COST_RANGE = "plan_cpu_cost_range";
+    public static final String PLAN_MEM_COST_RANGE = "plan_mem_cost_range";
     public static final String CPU_CORE_LIMIT = "cpu_core_limit";
     public static final String MAX_CPU_CORES = "max_cpu_cores";
     public static final String MEM_LIMIT = "mem_limit";
@@ -108,11 +104,6 @@ public class ResourceGroup implements Writable {
     public ResourceGroup() {
     }
 
-    public static ResourceGroup read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ResourceGroup.class);
-    }
-
     private List<String> showClassifier(ResourceGroupClassifier classifier) {
         List<String> row = new ArrayList<>();
         row.add(this.name);
@@ -152,11 +143,6 @@ public class ResourceGroup implements Writable {
 
     public void setVersion(long version) {
         this.version = version;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     public List<List<String>> show() {

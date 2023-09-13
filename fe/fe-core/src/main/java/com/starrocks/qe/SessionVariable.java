@@ -47,6 +47,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TOverflowMode;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
@@ -317,6 +318,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ALLOW_DEFAULT_PARTITION = "allow_default_partition";
 
+    public static final String ENABLE_PRUNE_ICEBERG_MANIFEST = "enable_prune_iceberg_manifest";
+
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
     public static final String ENABLE_HIVE_METADATA_CACHE_WITH_INSERT = "enable_hive_metadata_cache_with_insert";
@@ -336,6 +339,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_multicolumn_global_runtime_filter";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
     public static final String ENABLE_MV_OPTIMIZER_TRACE_LOG = "enable_mv_optimizer_trace_log";
+
+    // command, file
+    public static final String TRACE_LOG_MODE = "trace_log_mode";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
     public static final String JOIN_IMPLEMENTATION_MODE_V2 = "join_implementation_mode_v2";
 
@@ -416,6 +422,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_INCLUDING_MV_NAMES = "query_including_mv_names";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_GREEDY_MODE =
             "enable_materialized_view_rewrite_greedy_mode";
+
+    public static final String ENABLE_MATERIALIZED_VIEW_PLAN_CACHE = "enable_materialized_view_plan_cache";
 
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
@@ -498,7 +506,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // binary, json, compact
     public static final String THRIFT_PLAN_PROTOCOL = "thrift_plan_protocol";
 
+    // 0 means disable interleaving, positive value sets the group size, but adaptively enable interleaving,
+    // negative value means force interleaving under the group size of abs(interleaving_group_size)
+    public static final String INTERLEAVING_GROUP_SIZE = "interleaving_group_size";
+
     public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
+
+    public static final String ENABLE_EXPR_PRUNE_PARTITION = "enable_expr_prune_partition";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -996,14 +1010,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE_V2, alias = JOIN_IMPLEMENTATION_MODE)
     private String joinImplementationMode = "auto"; // auto, merge, hash, nestloop
 
-    @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
-    private boolean enableOptimizerTraceLog = false;
-
-    @VariableMgr.VarAttr(name = ENABLE_MV_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
-    private boolean enableMVOptimizerTraceLog = false;
-
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DEBUG_TRACE, flag = VariableMgr.INVISIBLE)
     private boolean enableQueryDebugTrace = false;
+
+    // command, file
+    @VarAttr(name = TRACE_LOG_MODE, flag = VariableMgr.INVISIBLE)
+    private String traceLogMode = "command";
 
     @VariableMgr.VarAttr(name = INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
     private boolean interpolatePassthrough = true;
@@ -1048,6 +1060,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN)
     private boolean enableRewriteSimpleAggToMetaScan = false;
 
+    @VariableMgr.VarAttr(name = INTERLEAVING_GROUP_SIZE)
+    private int interleavingGroupSize = 10;
+
     // support auto|row|column
     @VariableMgr.VarAttr(name = PARTIAL_UPDATE_MODE)
     private String partialUpdateMode = "auto";
@@ -1075,6 +1090,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getThriftPlanProtocol() {
         return thriftPlanProtocol;
+    }
+
+    public void setTraceLogMode(String traceLogMode) {
+        this.traceLogMode = traceLogMode;
+    }
+
+    public String getTraceLogMode() {
+        return traceLogMode;
     }
 
     public void setPartialUpdateMode(String mode) {
@@ -1189,6 +1212,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE_GREEDY_MODE)
     private boolean enableMaterializedViewRewriteGreedyMode = false;
 
+    // whether to use materialized view plan context cache to reduce mv rewrite time cost
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_PLAN_CACHE, flag = VariableMgr.INVISIBLE)
+    private boolean enableMaterializedViewPlanCache = true;
+
     @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryExcludingMVNames = "";
 
@@ -1292,6 +1319,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = HIVE_TEMP_STAGING_DIR)
     private String hiveTempStagingDir = "/tmp/starrocks";
 
+    @VarAttr(name = ENABLE_EXPR_PRUNE_PARTITION, flag = VariableMgr.INVISIBLE)
+    private boolean enableExprPrunePartition = true;
+
     private int exprChildrenLimit = -1;
 
     @VarAttr(name = CBO_PREDICATE_SUBFIELD_PATH, flag = VariableMgr.INVISIBLE)
@@ -1304,6 +1334,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public SessionVariable setHiveTempStagingDir(String hiveTempStagingDir) {
         this.hiveTempStagingDir = hiveTempStagingDir;
         return this;
+    }
+
+    @VarAttr(name = ENABLE_PRUNE_ICEBERG_MANIFEST)
+    private boolean enablePruneIcebergManifest = true;
+
+    public boolean isEnablePruneIcebergManifest() {
+        return enablePruneIcebergManifest;
+    }
+
+    public void setEnablePruneIcebergManifest(boolean enablePruneIcebergManifest) {
+        this.enablePruneIcebergManifest = enablePruneIcebergManifest;
     }
 
     public boolean isCboPredicateSubfieldPath() {
@@ -2137,22 +2178,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.joinImplementationMode = joinImplementationMode;
     }
 
-    public boolean isEnableOptimizerTraceLog() {
-        return enableOptimizerTraceLog;
-    }
-
-    public void setEnableOptimizerTraceLog(boolean val) {
-        this.enableOptimizerTraceLog = val;
-    }
-
-    public boolean isEnableMVOptimizerTraceLog() {
-        return enableMVOptimizerTraceLog || enableOptimizerTraceLog;
-    }
-
-    public void setEnableMVOptimizerTraceLog(boolean val) {
-        this.enableMVOptimizerTraceLog = val;
-    }
-
     public boolean isRuntimeFilterOnExchangeNode() {
         return runtimeFilterOnExchangeNode;
     }
@@ -2300,6 +2325,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableMaterializedViewRewriteGreedyMode() {
         return this.enableMaterializedViewRewriteGreedyMode;
+    }
+
+    public void setEnableMaterializedViewPlanCache(boolean enableMaterializedViewPlanCache) {
+        this.enableMaterializedViewPlanCache = enableMaterializedViewPlanCache;
+    }
+
+    public boolean isEnableMaterializedViewPlanCache() {
+        return this.enableMaterializedViewPlanCache;
     }
 
     public String getQueryExcludingMVNames() {
@@ -2494,6 +2527,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         enableCountStarOptimization = v;
     }
 
+    public boolean isEnableExprPrunePartition() {
+        return enableExprPrunePartition;
+    }
+
+    public void setEnableExprPrunePartition(boolean enableExprPrunePartition) {
+        this.enableExprPrunePartition = enableExprPrunePartition;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -2518,6 +2559,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setMax_pushdown_conditions_per_column(maxPushdownConditionsPerColumn);
         }
 
+        if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_IF_OVERFLOW)) {
+            tResult.setOverflow_mode(TOverflowMode.REPORT_ERROR);
+        }
+
         tResult.setEnable_spill(enableSpill);
         if (enableSpill) {
             tResult.setSpill_mem_table_size(spillMemTableSize);
@@ -2539,6 +2584,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setTransmission_encode_level(transmissionEncodeLevel);
         tResult.setGroup_concat_max_len(groupConcatMaxLen);
         tResult.setRpc_http_min_size(rpcHttpMinSize);
+        tResult.setInterleaving_group_size(interleavingGroupSize);
 
         TCompressionType loadCompressionType =
                 CompressionUtils.findTCompressionByName(loadTransmissionCompressionType);
@@ -2553,19 +2599,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
         tResult.setRuntime_filter_scan_wait_time_ms(runtimeFilterScanWaitTime);
         tResult.setPipeline_dop(pipelineDop);
-        switch (pipelineProfileLevel) {
-            case 0:
-                tResult.setPipeline_profile_level(TPipelineProfileLevel.CORE_METRICS);
-                break;
-            case 1:
-                tResult.setPipeline_profile_level(TPipelineProfileLevel.ALL_METRICS);
-                break;
-            case 2:
-                tResult.setPipeline_profile_level(TPipelineProfileLevel.DETAIL);
-                break;
-            default:
-                tResult.setPipeline_profile_level(TPipelineProfileLevel.CORE_METRICS);
-                break;
+        if (pipelineProfileLevel == 2) {
+            tResult.setPipeline_profile_level(TPipelineProfileLevel.DETAIL);
+        } else {
+            tResult.setPipeline_profile_level(TPipelineProfileLevel.MERGE);
         }
 
         tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);

@@ -24,6 +24,7 @@ import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.connector.jdbc.JDBCConnector;
 import com.starrocks.connector.paimon.PaimonConnector;
+import com.starrocks.connector.unified.UnifiedConnector;
 
 import java.util.Set;
 
@@ -35,7 +36,8 @@ public enum ConnectorType {
     JDBC("jdbc", JDBCConnector.class, null),
     HUDI("hudi", HudiConnector.class, null),
     DELTALAKE("deltalake", DeltaLakeConnector.class, null),
-    PAIMON("paimon", PaimonConnector.class, null);
+    PAIMON("paimon", PaimonConnector.class, null),
+    UNIFIED("unified", UnifiedConnector.class, null);
 
     public static Set<String> SUPPORT_TYPE_SET = ImmutableSet.of(
             ELASTICSEARCH.getName(),
@@ -44,7 +46,8 @@ public enum ConnectorType {
             JDBC.getName(),
             HUDI.getName(),
             DELTALAKE.getName(),
-            PAIMON.getName()
+            PAIMON.getName(),
+            UNIFIED.getName()
     );
 
     ConnectorType(String name, Class connectorClass, Class configClass) {
@@ -89,6 +92,8 @@ public enum ConnectorType {
                 return DELTALAKE;
             case "paimon":
                 return PAIMON;
+            case "unified":
+                return UNIFIED;
             default:
                 throw new IllegalStateException("Unexpected value: " + name);
         }

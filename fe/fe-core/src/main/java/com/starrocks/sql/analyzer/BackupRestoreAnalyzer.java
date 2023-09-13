@@ -84,6 +84,11 @@ public class BackupRestoreAnalyzer {
             // We should backup all table in current database.
             if (tableRefs.size() == 0) {
                 for (Table tbl : database.getTables()) {
+                    if (!Config.enable_backup_materialized_view && tbl.isMaterializedView()) {
+                        LOG.info("Skip backup materialized view: {} because " +
+                                        "`Config.enable_backup_materialized_view=false`", tbl.getName());
+                        continue;
+                    }
                     TableName tableName = new TableName(dbName, tbl.getName());
                     TableRef tableRef = new TableRef(tableName, null, null);
                     tableRefs.add(tableRef);
@@ -413,7 +418,7 @@ public class BackupRestoreAnalyzer {
         }
 
         if (partitionNames != null) {
-            if (!tbl.isCloudNativeTableOrMaterializedView()) {
+            if (!tbl.isNativeTableOrMaterializedView()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName.getTbl());
             }
             OlapTable olapTbl = (OlapTable) tbl;

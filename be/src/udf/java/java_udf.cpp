@@ -91,15 +91,15 @@ void JVMFunctionHelper::_init() {
     _object_class = JNI_FIND_CLASS("java/lang/Object");
     _object_array_class = JNI_FIND_CLASS("[Ljava/lang/Object;");
     _string_class = JNI_FIND_CLASS("java/lang/String");
-    _throwable_class = JNI_FIND_CLASS("java/lang/Throwable");
     _jarrays_class = JNI_FIND_CLASS("java/util/Arrays");
     _list_class = JNI_FIND_CLASS("java/util/List");
+    _exception_util_class = JNI_FIND_CLASS("org/apache/commons/lang3/exception/ExceptionUtils");
 
     CHECK(_object_class);
     CHECK(_string_class);
-    CHECK(_throwable_class);
     CHECK(_jarrays_class);
     CHECK(_list_class);
+    CHECK(_exception_util_class);
 
     ADD_NUMBERIC_CLASS(boolean, Boolean, Z);
     ADD_NUMBERIC_CLASS(byte, Byte, B);
@@ -234,20 +234,13 @@ std::string JVMFunctionHelper::to_cxx_string(jstring str) {
 }
 
 std::string JVMFunctionHelper::dumpExceptionString(jthrowable throwable) {
-    std::stringstream ss;
     // toString
-    jmethodID toString = getToStringMethod(_throwable_class);
-    CHECK(toString != nullptr) << "Not Found JNI method toString";
-    ss << to_string(throwable);
-
-    // e.getStackTrace()
-    jmethodID getStackTrace = _env->GetMethodID(_throwable_class, "getStackTrace", "()[Ljava/lang/StackTraceElement;");
-    CHECK(getStackTrace != nullptr) << "Not Found JNI method getStackTrace";
-    jobject stack_traces = _env->CallObjectMethod((jobject)throwable, getStackTrace);
+    auto get_stack_trace = _env->GetStaticMethodID(_exception_util_class, "getStackTrace",
+                                                   "(Ljava/lang/Throwable;)Ljava/lang/String;");
+    CHECK(get_stack_trace != nullptr) << "Not Found JNI method getStackTrace";
+    jobject stack_traces = _env->CallStaticObjectMethod(_exception_util_class, get_stack_trace, (jobject)throwable);
     LOCAL_REF_GUARD(stack_traces);
-    CHECK_FUNCTION_EXCEPTION(_env, "dump_string")
-    ss << array_to_string(stack_traces);
-    return ss.str();
+    return to_cxx_string((jstring)stack_traces);
 }
 
 jmethodID JVMFunctionHelper::getToStringMethod(jclass clazz) {

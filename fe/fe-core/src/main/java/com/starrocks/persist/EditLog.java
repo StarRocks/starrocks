@@ -103,6 +103,7 @@ import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.Backend;
@@ -905,13 +906,13 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_ADD_ANALYZER_JOB: {
-                    AnalyzeJob analyzeJob = (AnalyzeJob) journal.getData();
-                    globalStateMgr.getAnalyzeMgr().replayAddAnalyzeJob(analyzeJob);
+                    NativeAnalyzeJob nativeAnalyzeJob = (NativeAnalyzeJob) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayAddAnalyzeJob(nativeAnalyzeJob);
                     break;
                 }
                 case OperationType.OP_REMOVE_ANALYZER_JOB: {
-                    AnalyzeJob analyzeJob = (AnalyzeJob) journal.getData();
-                    globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeJob(analyzeJob);
+                    NativeAnalyzeJob nativeAnalyzeJob = (NativeAnalyzeJob) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeJob(nativeAnalyzeJob);
                     break;
                 }
                 case OperationType.OP_ADD_ANALYZE_STATUS: {
@@ -981,12 +982,14 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_DROP_CATALOG: {
-                    DropCatalogLog dropCatalogLog =
-                            (DropCatalogLog) journal.getData();
+                    DropCatalogLog dropCatalogLog = (DropCatalogLog) journal.getData();
                     globalStateMgr.getCatalogMgr().replayDropCatalog(dropCatalogLog);
                     break;
                 }
-
+                case OperationType.OP_ALTER_CATALOG:
+                    AlterCatalogLog alterCatalogLog = (AlterCatalogLog) journal.getData();
+                    globalStateMgr.getCatalogMgr().replayAlterCatalog(alterCatalogLog);
+                    break;
                 case OperationType.OP_CREATE_INSERT_OVERWRITE: {
                     CreateInsertOverwriteJobLog jobInfo = (CreateInsertOverwriteJobLog) journal.getData();
                     globalStateMgr.getInsertOverwriteJobMgr().replayCreateInsertOverwrite(jobInfo);
@@ -1900,11 +1903,15 @@ public class EditLog {
     }
 
     public void logAddAnalyzeJob(AnalyzeJob job) {
-        logEdit(OperationType.OP_ADD_ANALYZER_JOB, job);
+        if (job.isNative()) {
+            logEdit(OperationType.OP_ADD_ANALYZER_JOB, (NativeAnalyzeJob) job);
+        }
     }
 
     public void logRemoveAnalyzeJob(AnalyzeJob job) {
-        logEdit(OperationType.OP_REMOVE_ANALYZER_JOB, job);
+        if (job.isNative()) {
+            logEdit(OperationType.OP_REMOVE_ANALYZER_JOB, (NativeAnalyzeJob) job);
+        }
     }
 
     public void logAddAnalyzeStatus(AnalyzeStatus status) {
@@ -1949,6 +1956,10 @@ public class EditLog {
 
     public void logDropCatalog(DropCatalogLog log) {
         logEdit(OperationType.OP_DROP_CATALOG, log);
+    }
+
+    public void logAlterCatalog(AlterCatalogLog log) {
+        logEdit(OperationType.OP_ALTER_CATALOG, log);
     }
 
     public void logCreateInsertOverwrite(CreateInsertOverwriteJobLog info) {

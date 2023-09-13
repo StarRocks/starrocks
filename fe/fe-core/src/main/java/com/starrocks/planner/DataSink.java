@@ -91,7 +91,7 @@ public abstract class DataSink {
 
     public static boolean canTableSinkUsePipeline(Table table) {
         if (table instanceof OlapTable) {
-            return Config.enable_pipeline_load;
+            return true;
         } else if (table instanceof MysqlTable) {
             return true;
         } else if (table instanceof IcebergTable) {

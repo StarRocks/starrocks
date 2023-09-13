@@ -15,6 +15,12 @@ Fixed the following issues:
 - If the [array_map()](../sql-reference/sql-functions/array-functions/array_map.md) function in queries involves multiple tables, the queries fail due to pushdown strategy issues. [#29504](https://github.com/StarRocks/starrocks/pull/29504)
 - Queries against ORC-formatted files fail because the bugfix ORC-1304 ([apache/orc#1299](https://github.com/apache/orc/pull/1299)) from Apache ORC is not merged. [#29804](https://github.com/StarRocks/starrocks/pull/29804)
 
+### Behavior Change
+
+For a newly deployed StarRocks v3.1 cluster, you must have the USAGE privilege on the destination external catalog if you want to run [SET CATALOG](../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to switch to that catalog. You can use [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the required privileges.
+
+For a v3.1 cluster upgraded from an earlier version, you can run SET CATALOG with inherited privilege.
+
 ## 3.1.1
 
 Release date: August 18, 2023

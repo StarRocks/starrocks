@@ -47,6 +47,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThriftServer;
 import com.starrocks.common.UserException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
@@ -71,7 +73,6 @@ import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
-import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
@@ -448,15 +449,15 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public void startScheduling(boolean needDeploy) throws Exception {
-        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Pending")) {
+        try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Pending")) {
             QueryQueueManager.getInstance().maybeWait(connectContext, this);
         }
 
-        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Prepare")) {
+        try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Prepare")) {
             prepareExec();
         }
 
-        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Deploy")) {
+        try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
             deliverExecFragments(needDeploy);
         }
 

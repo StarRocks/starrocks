@@ -49,7 +49,7 @@ Status ColumnChunkReader::init(int chunk_size) {
     _page_reader = std::make_unique<PageReader>(_opts.file->stream().get(), start_offset, size, num_values);
 
     // seek to the first page
-    _page_reader->seek_to_offset(start_offset);
+    RETURN_IF_ERROR(_page_reader->seek_to_offset(start_offset));
 
     auto compress_type = convert_compression_codec(metadata().codec);
     RETURN_IF_ERROR(get_block_compression_codec(compress_type, &_compress_codec));
@@ -149,7 +149,7 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
     auto ret = _page_reader->peek(read_size);
     if (ret.ok() && ret.value().size() == read_size) {
         // peek dos not advance offset.
-        _page_reader->skip_bytes(read_size);
+        RETURN_IF_ERROR(_page_reader->skip_bytes(read_size));
         read_data = Slice(ret.value().data(), read_size);
     } else {
         read_buffer.reserve(read_size);
@@ -211,7 +211,7 @@ Status ColumnChunkReader::_parse_data_page() {
     }
 
     _cur_decoder->set_type_length(_type_length);
-    _cur_decoder->set_data(_data);
+    RETURN_IF_ERROR(_cur_decoder->set_data(_data));
 
     _page_parse_state = PAGE_DATA_PARSED;
     return Status::OK();
@@ -243,7 +243,7 @@ Status ColumnChunkReader::_parse_dict_page() {
     const EncodingInfo* code_info = nullptr;
     RETURN_IF_ERROR(EncodingInfo::get(metadata().type, dict_encoding, &code_info));
     RETURN_IF_ERROR(code_info->create_decoder(&dict_decoder));
-    dict_decoder->set_data(_data);
+    RETURN_IF_ERROR(dict_decoder->set_data(_data));
     dict_decoder->set_type_length(_type_length);
 
     // initialize decoder
