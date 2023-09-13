@@ -725,4 +725,12 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  \n" +
                 "  |----25:EXCHANGE"));
     }
+
+    @Test
+    public void testCoalesceJoin() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/coalesce_join.json"),
+                        null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("join op: INNER JOIN"));
+    }
 }
