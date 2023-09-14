@@ -2411,7 +2411,7 @@ public class LocalMetastore implements ConnectorMetadata {
         } else if (replicationNum > 1) {
             List<Long> backendIds = systemInfoService.getBackendIds(true);
             throw new DdlException(
-                    String.format("Table replication num should be less than of equal to the number of available BE nodes. "
+                    String.format("Table replication num should be less than or equal to the number of available BE nodes. "
                             + "You can change this default by setting the replication_num table properties. "
                             + "Current alive backend is [%s]. ", Joiner.on(",").join(backendIds)));
         } else {
