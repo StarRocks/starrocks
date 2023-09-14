@@ -2308,6 +2308,115 @@ public class CreateMaterializedViewTest {
             Assert.fail();
         }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testCreateAsyncMVWithDifferentDB2() {
+        try {
+            ConnectContext newConnectContext = UtFrameUtils.createDefaultCtx();
+            StarRocksAssert newStarRocksAssert = new StarRocksAssert(newConnectContext);
+            newStarRocksAssert.withDatabase("test_mv_different_db")
+                    .useDatabase("test_mv_different_db");
+            String sql = "create materialized view test_mv_different_db.test_mv_use_different_tbl " +
+                    "distributed by hash(k1) " +
+                    "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            newStarRocksAssert.getCtx());
+            Assert.assertEquals(stmt.getTableName().getDb(), "test_mv_different_db");
+            Assert.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
+
+            currentState.createMaterializedView(stmt);
+
+            Database differentDb = currentState.getDb("test_mv_different_db");
+            Table mv1 = differentDb.getTable("test_mv_use_different_tbl");
+            Assert.assertTrue(mv1 instanceof MaterializedView);
+
+            newStarRocksAssert.dropDatabase("test_mv_different_db");
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testCreateSyncMVWithCaseWhenComplexExpression1() {
+        try {
+            String t1 = "CREATE TABLE case_when_t1 (\n" +
+                    "    k1 INT,\n" +
+                    "    k2 char(20))\n" +
+                    "DUPLICATE KEY(k1)\n" +
+                    "DISTRIBUTED BY HASH(k1)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n";
+            starRocksAssert.withTable(t1);
+            String mv1 = "create materialized view case_when_mv1 AS SELECT k1, " +
+                    "(CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_t1;\n";
+            starRocksAssert.withMaterializedView(mv1);
+            waitingRollupJobV2Finish();
+
+            Table table = testDb.getTable("case_when_t1");
+            Assert.assertNotNull(table);
+            OlapTable olapTable = (OlapTable) table;
+            Assert.assertTrue(olapTable.getIndexIdToMeta().size() >= 2);
+            Assert.assertTrue(olapTable.getIndexIdToMeta().entrySet().stream()
+                    .noneMatch(x -> x.getValue().getKeysType().isAggregationFamily()));
+            List<Column> fullSchemas = table.getFullSchema();
+            Assert.assertTrue(fullSchemas.size() == 3);
+            Column mvColumn = fullSchemas.get(2);
+            Assert.assertTrue(mvColumn.getName().equals("mv_city"));
+            Assert.assertTrue(mvColumn.getType().isVarchar());
+            Assert.assertTrue(mvColumn.getType().getColumnSize() == 1048576);
+            starRocksAssert.dropTable("case_when_t1");
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testCreateImmediateDeferred(@Mocked TaskManager taskManager) throws Exception {
+        new Expectations() {
+            {
+                taskManager.executeTask((String) any);
+                times = 1;
+            }
+        };
+        String createImmediate =
+                "create materialized view immediate_mv refresh deferred async distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1";
+        starRocksAssert.withMaterializedView(createImmediate);
+
+        String createDeferred =
+                "create materialized view deferred_mv refresh immediate async distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1";
+        starRocksAssert.withMaterializedView(createDeferred);
+    }
+
+    private void testMVColumnAlias(String expr) throws Exception {
+        String mvName = "mv_alias";
+        try {
+            String createMvExpr =
+                    String.format("create materialized view %s " +
+                            "refresh deferred manual distributed by hash(c_1_9) as" +
+                            " select c_1_9, %s from t1", mvName, expr);
+            starRocksAssert.withMaterializedView(createMvExpr);
+            Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
+            Table table = db.getTable(mvName);
+            List<String> columnNames = table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList());
+            Assert.assertTrue(columnNames.toString(), columnNames.contains(expr));
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+    }
+
+    @Test
+    public void testExprAlias() throws Exception {
+        testMVColumnAlias("c_1_9 + 1");
+        testMVColumnAlias("char_length(c_1_9)");
+        testMVColumnAlias("(char_length(c_1_9)) + 1");
+        testMVColumnAlias("(char_length(c_1_9)) + '$'");
+        testMVColumnAlias("c_1_9 + c_1_10");
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
     }
 
     private Table getTable(String dbName, String mvName) {

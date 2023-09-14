@@ -85,10 +85,18 @@ public class ShowCreateMaterializedViewStmtTest {
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
+<<<<<<< HEAD
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\",\n" +
                 "\"unique_constraints\" = \"default_catalog.test.tbl2.k1\",\n" +
                 "\"foreign_key_constraints\" = \"default_catalog.test.tbl1(k1) REFERENCES default_catalog.test.tbl2(k1)\"\n" +
+=======
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"unique_constraints\" = \"default_catalog.test.tbl2.k1\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"foreign_key_constraints\" = \"default_catalog.test.tbl1(k1) REFERENCES default_catalog.test.tbl2(k1)\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
                 ")\n" +
                 "AS SELECT `tbl1`.`k1`, `tbl2`.`k2`\n" +
                 "FROM `test`.`tbl1` INNER JOIN `test`.`tbl2` ON `tbl1`.`k1` = `tbl2`.`k1`;", createTableStmt.get(0));
@@ -112,10 +120,18 @@ public class ShowCreateMaterializedViewStmtTest {
                         "DISTRIBUTED BY HASH(`c1`) BUCKETS 10 \n" +
                         "REFRESH MANUAL\n" +
                         "PROPERTIES (\n" +
+<<<<<<< HEAD
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\",\n" +
                         "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\",\n" +
                         "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) REFERENCES hive0.partitioned_db2.t2(c2)\"\n" +
+=======
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\",\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) REFERENCES hive0.partitioned_db2.t2(c2)\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
                         ")\n" +
                         "AS SELECT `hive0`.`partitioned_db2`.`t2`.`c1`, `hive0`.`partitioned_db`.`t1`.`c2`\n" +
                         "FROM `hive0`.`partitioned_db`.`t1` INNER JOIN `hive0`.`partitioned_db2`.`t2` ON `hive0`.`partitioned_db`.`t1`.`c2` = `hive0`.`partitioned_db2`.`t2`.`c2`;",
@@ -153,6 +169,10 @@ public class ShowCreateMaterializedViewStmtTest {
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
+<<<<<<< HEAD
+=======
+                "\"replicated_storage\" = \"true\",\n" +
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
@@ -180,6 +200,10 @@ public class ShowCreateMaterializedViewStmtTest {
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
+<<<<<<< HEAD
+=======
+                "\"replicated_storage\" = \"true\",\n" +
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
@@ -207,6 +231,10 @@ public class ShowCreateMaterializedViewStmtTest {
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
+<<<<<<< HEAD
+=======
+                "\"replicated_storage\" = \"true\",\n" +
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
@@ -235,6 +263,10 @@ public class ShowCreateMaterializedViewStmtTest {
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
+<<<<<<< HEAD
+=======
+                "\"replicated_storage\" = \"true\",\n" +
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
@@ -267,9 +299,14 @@ public class ShowCreateMaterializedViewStmtTest {
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH ASYNC START(\"2122-12-31 00:00:00\") EVERY(INTERVAL 1 HOUR)\n" +
                 "PROPERTIES (\n" +
+<<<<<<< HEAD
                 "\"replication_num\" = \"1\",\n" +
+=======
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\",\n" +
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
                 "\"storage_medium\" = \"SSD\",\n" +
-                "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
+                "\"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv5", "mv5_copy");
@@ -300,9 +337,14 @@ public class ShowCreateMaterializedViewStmtTest {
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH ASYNC\n" +
                 "PROPERTIES (\n" +
+<<<<<<< HEAD
                 "\"replication_num\" = \"1\",\n" +
+=======
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\",\n" +
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
                 "\"storage_medium\" = \"SSD\",\n" +
-                "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
+                "\"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv6", "mv6_copy");
@@ -328,16 +370,21 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv7");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv7` (`k3`, `k2`)\n" +
+        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv7` (`k3`, `k2`)\n" +
                 "PARTITION BY (date_trunc('month', `k3`))\n" +
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH ASYNC EVERY(INTERVAL 1 HOUR)\n" +
                 "PROPERTIES (\n" +
+<<<<<<< HEAD
                 "\"replication_num\" = \"1\",\n" +
+=======
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\",\n" +
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
                 "\"storage_medium\" = \"SSD\",\n" +
-                "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
+                "\"replication_num\" = \"1\"\n" +
                 ")\n" +
-                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;", createTableStmt.get(0));
         String copySql = createTableStmt.get(0).replaceAll("mv7", "mv7_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -361,6 +408,10 @@ public class ShowCreateMaterializedViewStmtTest {
                 "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
+<<<<<<< HEAD
+=======
+                "\"replicated_storage\" = \"true\",\n" +
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
@@ -369,10 +420,107 @@ public class ShowCreateMaterializedViewStmtTest {
         ctx.getGlobalStateMgr().setMetadataMgr(oldMetadataMgr);
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testShowCreateDeferredMv() throws Exception {
+        String createMvSql = "create materialized view deferred_mv4 " +
+                "partition by (date_trunc('month',k3))" +
+                "distributed by hash(k3) buckets 10 " +
+                "refresh deferred manual " +
+                "as select k1 as k3, k2 from tbl1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        Table table = currentState.getDb("test").getTable("deferred_mv4");
+        List<String> createTableStmt = Lists.newArrayList();
+        GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `deferred_mv4` (`k3`, `k2`)\n" +
+                "PARTITION BY (date_trunc('month', `k3`))\n" +
+                "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
+        String copySql = createTableStmt.get(0).replaceAll("deferred_mv4", "deferred_mv4_copy");
+        currentState.createMaterializedView(
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
+        String meta = starRocksAssert.query("select inspect_mv_meta('deferred_mv4')").explainQuery();
+        Assert.assertTrue(meta, meta.contains("\"refreshScheme\":{\"moment\":\"DEFERRED\",\"type\":\"MANUAL\""));
+    }
+
+    @Test
+    public void testMvOrderBy() throws Exception {
+        String mvName = "mv11_orderby";
+        String createMvSql = "create materialized view mv11_orderby " +
+                "distributed by hash(k3) buckets 10 " +
+                "order by (k3) " +
+                "refresh deferred manual " +
+                "as select k1 as k3, k2 from tbl1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        Table table = currentState.getDb("test").getTable(mvName);
+        List<String> createTableStmt = Lists.newArrayList();
+        GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv11_orderby` (`k3`, `k2`)\n" +
+                "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
+                "ORDER BY (k3)\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
+        String copySql = createTableStmt.get(0).replaceAll(mvName, mvName + "_copy");
+        currentState.createMaterializedView(
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
+    }
+
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
     @Test(expected = SemanticException.class)
     public void testNoTbl(){
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(null, ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No Exception throws.");
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testShowCreateMVWithStaleness() throws Exception {
+        String createMvSql = "create materialized view mv_with_staleness " +
+                "distributed by hash(k1) buckets 10 " +
+                "refresh manual " +
+                "PROPERTIES (\n" +
+                "\"mv_rewrite_staleness_second\" = \"60\"\n" +
+                ")\n" +
+                "as select k1, k2 from tbl1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        Table table = currentState.getDb("test").getTable("mv_with_staleness");
+        List<String> createTableStmt = Lists.newArrayList();
+        GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv_with_staleness` (`k1`, `k2`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 10 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"mv_rewrite_staleness_second\" = \"60\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `tbl1`.`k1`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
+        String copySql = createTableStmt.get(0).replaceAll("mv_with_staleness", "mv_with_staleness_copy");
+        currentState.createMaterializedView(
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
+
+    }
+}
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))

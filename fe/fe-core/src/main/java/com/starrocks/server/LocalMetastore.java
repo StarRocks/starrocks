@@ -3306,9 +3306,39 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         // create mv
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
+<<<<<<< HEAD
         MaterializedView materializedView =
                 new MaterializedView(mvId, db.getId(), mvName, baseSchema, stmt.getKeysType(), partitionInfo,
                         distributionInfo, mvRefreshScheme);
+=======
+        MaterializedView materializedView;
+        if (RunMode.getCurrentRunMode().isAllowCreateOlapTable()) {
+            if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
+                materializedView =
+                        MaterializedViewMgr.getInstance().createSinkTable(stmt, partitionInfo, mvId, db.getId());
+                materializedView.setMaintenancePlan(stmt.getMaintenancePlan());
+            } else {
+                materializedView =
+                        new MaterializedView(mvId, db.getId(), mvName, baseSchema, stmt.getKeysType(), partitionInfo,
+                                baseDistribution, mvRefreshScheme);
+            }
+        } else {
+            Preconditions.checkState(RunMode.getCurrentRunMode().isAllowCreateLakeTable());
+            if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
+                throw new DdlException("Incremental materialized view in shared_data mode is not supported");
+            }
+
+            materializedView =
+                    new LakeMaterializedView(mvId, db.getId(), mvName, baseSchema, stmt.getKeysType(), partitionInfo,
+                            baseDistribution, mvRefreshScheme);
+        }
+
+        // sort keys
+        if (CollectionUtils.isNotEmpty(stmt.getSortKeys())) {
+            materializedView.setTableProperty(new TableProperty());
+            materializedView.getTableProperty().setMvSortKeys(stmt.getSortKeys());
+        }
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
         // set comment
         materializedView.setComment(stmt.getComment());
         // set baseTableIds
@@ -3517,6 +3547,39 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.setEnableReplicatedStorage(PropertyAnalyzer.analyzeBooleanProp(properties,
                         PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE, false));
             }
+<<<<<<< HEAD
+=======
+            // lake storage info
+            if (materializedView.isCloudNativeMaterializedView()) {
+                String volume = "";
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+                    volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+                }
+                StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+                svm.bindTableToStorageVolume(volume, db.getId(), materializedView.getId());
+                String storageVolumeId = svm.getStorageVolumeIdOfTable(materializedView.getId());
+                setLakeStorageInfo(materializedView, storageVolumeId, properties);
+            }
+
+            // session properties
+            if (!properties.isEmpty()) {
+                // analyze properties
+                List<SetListItem> setListItems = Lists.newArrayList();
+                for (Map.Entry<String, String> entry : properties.entrySet()) {
+                    if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                        throw new AnalysisException("Analyze materialized properties failed " +
+                                "because unknown properties: " + properties +
+                                ", please add `session.` prefix if you want add session variables for mv(" +
+                                "eg, \"session.query_timeout\"=\"30000000\").");
+                    }
+                    String varKey = entry.getKey().substring(
+                            PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                    SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
+                    VariableMgr.checkSystemVariableExist(variable);
+                    setListItems.add(variable);
+                }
+                SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
 
             if (!properties.isEmpty()) {
                 // here, all properties should be checked
@@ -3544,7 +3607,12 @@ public class LocalMetastore implements ConnectorMetadata {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             taskManager.createTask(task, false);
             // for event triggered type, run task
+<<<<<<< HEAD
             if (task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
+=======
+            if (task.getType() == Constants.TaskType.EVENT_TRIGGERED &&
+                    !refreshMoment.equals(MaterializedView.RefreshMoment.DEFERRED)) {
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
                 taskManager.executeTask(task.getName());
             }
         }

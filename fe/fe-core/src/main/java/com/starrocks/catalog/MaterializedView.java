@@ -767,6 +767,19 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return true;
     }
 
+<<<<<<< HEAD
+=======
+    protected void appendUniqueProperties(StringBuilder sb) {
+        Preconditions.checkNotNull(sb);
+
+        // storageMedium
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                .append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM).append("\" = \"");
+        sb.append(getStorageMedium()).append("\"");
+
+    }
+
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
     public String getMaterializedViewDdlStmt(boolean simple) {
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE MATERIALIZED VIEW `").append(getName()).append("` (");
@@ -796,6 +809,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         DistributionInfo distributionInfo = this.getDefaultDistributionInfo();
         sb.append("\n").append(distributionInfo.toSql());
 
+        // order by
+        if (CollectionUtils.isNotEmpty(getTableProperty().getMvSortKeys())) {
+            String str = Joiner.on(",").join(getTableProperty().getMvSortKeys());
+            sb.append("\nORDER BY (").append(str).append(")");
+        }
+
         // refresh scheme
         MvRefreshScheme refreshScheme = this.getRefreshScheme();
         if (refreshScheme == null) {
@@ -818,6 +837,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         // properties
         sb.append("\nPROPERTIES (\n");
+<<<<<<< HEAD
 
         // replicationNum
         Short replicationNum = this.getDefaultReplicationNum();
@@ -897,6 +917,45 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                     .append("\" = \"");
             sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(getForeignKeyConstraints()))
                     .append("\"");
+=======
+        boolean first = true;
+        Map<String, String> properties = this.getTableProperty().getProperties();
+        boolean hasStorageMedium = false;
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            String name = entry.getKey();
+            String value = entry.getValue();
+            if (!first) {
+                sb.append(",\n");
+            }
+            first = false;
+            if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+                sb.append("\"")
+                        .append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                        .append("\" = \"")
+                        .append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(getForeignKeyConstraints()))
+                        .append("\"");
+            } else if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
+                sb.append("\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
+                        .append("\" = \"")
+                        .append(TimeUtils.longToTimeString(
+                                Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME))))
+                        .append("\"");
+            } else if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                // handled in appendUniqueProperties
+                hasStorageMedium = true;
+                sb.append("\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                        .append("\" = \"")
+                        .append(getStorageMedium())
+                        .append("\"");
+            } else {
+                sb.append("\"").append(name).append("\"");
+                sb.append(" = ");
+                sb.append("\"").append(value).append("\"");
+            }
+        }
+        if (!hasStorageMedium) {
+            appendUniqueProperties(sb);
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
         }
 
         sb.append("\n)");

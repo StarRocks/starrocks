@@ -43,6 +43,7 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,6 +51,11 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashMap;
+<<<<<<< HEAD
+=======
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -111,6 +117,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // Indicates which tables do not listen to auto refresh events when load
     private List<TableName> excludedTriggerTables;
 
+    // This property only applies to materialized views
+    private List<String> mvSortKeys;
+
     // This property only applies to materialized views,
     // Specify the query rewrite behaviour for external table
     private QueryRewriteConsistencyMode forceExternalTableQueryRewrite =
@@ -161,6 +170,18 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // foreign key constraint for mv rewrite
     private List<ForeignKeyConstraint> foreignKeyConstraints;
+<<<<<<< HEAD
+=======
+
+    private Boolean useSchemaLightChange;
+
+    private PeriodDuration dataCachePartitionDuration;
+
+    public TableProperty() {
+        this.properties = new LinkedHashMap<>();
+    }
+
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
     }
@@ -224,6 +245,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildAutoRefreshPartitionsLimit();
         buildExcludedTriggerTables();
         buildConstraint();
+        buildMvSortKeys();
         return this;
     }
 
@@ -281,7 +303,36 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+<<<<<<< HEAD
     public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) throws AnalysisException {
+=======
+    public TableProperty buildMvSortKeys() {
+        String sortKeys = properties.get(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS);
+        this.mvSortKeys = analyzeMvSortKeys(sortKeys);
+        return this;
+    }
+
+    public static List<String> analyzeMvSortKeys(String value) {
+        if (StringUtils.isEmpty(value)) {
+            return Lists.newArrayList();
+        } else {
+            return Splitter.on(",").omitEmptyStrings().trimResults().splitToList(value);
+        }
+    }
+
+    public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) {
+        QueryRewriteConsistencyMode res = EnumUtils.getEnumIgnoreCase(QueryRewriteConsistencyMode.class, value);
+        if (res == null) {
+            String allValues = EnumUtils.getEnumList(QueryRewriteConsistencyMode.class)
+                    .stream().map(Enum::name).collect(Collectors.joining(","));
+            throw new SemanticException(
+                    PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY + " could only be " + allValues + " but got " + value);
+        }
+        return res;
+    }
+
+    public static QueryRewriteConsistencyMode analyzeExternalTableQueryRewrite(String value) {
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
         if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
             // old version use the boolean value
             boolean boolValue = Boolean.parseBoolean(value);
@@ -430,6 +481,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public void setExcludedTriggerTables(List<TableName> excludedTriggerTables) {
         this.excludedTriggerTables = excludedTriggerTables;
+    }
+
+    public List<String> getMvSortKeys() {
+        return mvSortKeys;
+    }
+
+    public void setMvSortKeys(List<String> sortKeys) {
+        this.mvSortKeys = sortKeys;
     }
 
     public QueryRewriteConsistencyMode getForceExternalTableQueryRewrite() {

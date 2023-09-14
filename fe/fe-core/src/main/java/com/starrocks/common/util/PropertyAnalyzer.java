@@ -137,6 +137,27 @@ public class PropertyAnalyzer {
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";
+<<<<<<< HEAD
+=======
+    public static final String PROPERTIES_DATACACHE_ENABLE = "datacache.enable";
+    public static final String PROPERTIES_DATACACHE_PARTITION_DURATION = "datacache.partition_duration";
+
+    // Materialized View properties
+    public static final String PROPERTIES_MV_REWRITE_STALENESS_SECOND = "mv_rewrite_staleness_second";
+    // Randomized start interval
+    // 0(default value): automatically chosed between [0, min(300, INTERVAL/2))
+    // -1: disable randomize, use current time as start
+    // positive value: use [0, mv_randomize_start) as random interval
+    public static final String PROPERTY_MV_RANDOMIZE_START = "mv_randomize_start";
+
+    /**
+     * Materialized View sort keys
+     */
+    public static final String PROPERTY_MV_SORT_KEYS = "mv_sort_keys";
+
+    // light schema change
+    public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
