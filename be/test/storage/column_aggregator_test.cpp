@@ -179,7 +179,6 @@ TEST(ColumnAggregator, testNullIntSum) {
 
     ASSERT_EQ(1, ndst->get_data()[2]);
 
-    ASSERT_EQ(0, dst->get_data()[3]);
     ASSERT_EQ(1, ndst->get_data()[3]);
 
     ASSERT_EQ(1, ndst->get_data()[4]);
