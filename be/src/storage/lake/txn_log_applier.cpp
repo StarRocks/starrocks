@@ -39,16 +39,15 @@ public:
               _new_version(new_version),
               _max_txn_id(0),
               _builder(_tablet, _metadata),
-              _inited(false),
-              _check_meta_version_succ(false) {
+              _inited(false) {
         _metadata->set_version(_new_version);
     }
 
     ~PrimaryKeyTxnLogApplier() override {
+        // must release primary index before `handle_failure`, otherwise `handle_failure` will fail
+        _tablet.update_mgr()->release_primary_index(_index_entry);
         // handle failure first, then release lock
-        if (_check_meta_version_succ) {
-            _builder.handle_failure();
-        }
+        _builder.handle_failure();
         if (_inited) {
             _s_schema_change_set.erase(_tablet.id());
         }
@@ -67,7 +66,6 @@ public:
     Status check_meta_version() {
         // check tablet meta
         RETURN_IF_ERROR(_tablet.update_mgr()->check_meta_version(_tablet, _base_version));
-        _check_meta_version_succ = true;
         return Status::OK();
     }
 
@@ -85,7 +83,13 @@ public:
         return Status::OK();
     }
 
-    Status finish() override { return _builder.finalize(_max_txn_id); }
+    Status finish() override {
+        // Must call `commit_primary_index` before `finalize`,
+        // because if `commit_primary_index` or `finalize` fail, we can remove index in `handle_failure`.
+        // if `_index_entry` is null, do nothing.
+        RETURN_IF_ERROR(_tablet.update_mgr()->commit_primary_index(_index_entry, &_tablet));
+        return _builder.finalize(_max_txn_id);
+    }
 
     std::shared_ptr<std::vector<std::string>> trash_files() override { return _builder.trash_files(); }
 
@@ -95,8 +99,14 @@ private:
             !op_write.rowset().has_delete_predicate()) {
             return Status::OK();
         }
-        return _tablet.update_mgr()->publish_primary_key_tablet(op_write, txn_id, *_metadata, &_tablet, &_builder,
-                                                                _base_version);
+        // We call `prepare_primary_index` only when first time we apply `write_log` or `compaction_log`, instead of
+        // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
+        if (_index_entry == nullptr) {
+            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(*_metadata, &_tablet, &_builder,
+                                                                                       _base_version, _new_version));
+        }
+        return _tablet.update_mgr()->publish_primary_key_tablet(op_write, txn_id, *_metadata, &_tablet, _index_entry,
+                                                                &_builder, _base_version);
     }
 
     Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction) {
@@ -104,8 +114,14 @@ private:
             DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
             return Status::OK();
         }
-        return _tablet.update_mgr()->publish_primary_compaction(op_compaction, *_metadata, &_tablet, &_builder,
-                                                                _base_version);
+        // We call `prepare_primary_index` only when first time we apply `write_log` or `compaction_log`, instead of
+        // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
+        if (_index_entry == nullptr) {
+            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(*_metadata, &_tablet, &_builder,
+                                                                                       _base_version, _new_version));
+        }
+        return _tablet.update_mgr()->publish_primary_compaction(op_compaction, *_metadata, &_tablet, _index_entry,
+                                                                &_builder, _base_version);
     }
 
     Status apply_schema_change_log(const TxnLogPB_OpSchemaChange& op_schema_change) {
@@ -143,7 +159,7 @@ private:
     int64_t _max_txn_id; // Used as the file name prefix of the delvec file
     MetaFileBuilder _builder;
     bool _inited;
-    bool _check_meta_version_succ;
+    DynamicCache<uint64_t, LakePrimaryIndex>::Entry* _index_entry{nullptr};
 };
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {
