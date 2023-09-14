@@ -1,6 +1,6 @@
 # Export data using EXPORT
 
-This topic describes how to export data from specified tables or partitions in your StarRocks cluster as CSV data files by using the [EXPORT](../sql-reference/sql-statements/data-manipulation/EXPORT.md) statement to an external storage system, which can be a distributed file system HDFS or a cloud storage system such as AWS S3.
+This topic describes how to export data from specified tables or partitions in your StarRocks cluster as CSV data files to an external storage system, which can be a distributed file system HDFS or a cloud storage system such as AWS S3.
 
 > **NOTICE**
 >
