@@ -96,6 +96,8 @@ public:
     // RuntimeState for executing expr in fe-support.
     explicit RuntimeState(const TQueryGlobals& query_globals);
 
+    explicit RuntimeState(ExecEnv* exec_env);
+
     // Empty d'tor to avoid issues with std::unique_ptr.
     ~RuntimeState();
 

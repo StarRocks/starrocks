@@ -50,11 +50,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -102,6 +104,8 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.proto.PQueryStatistics;
@@ -194,6 +198,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -857,8 +863,15 @@ public class StmtExecutor {
             context.setKilled();
         } else {
             if (!Objects.equals(killCtx.getQualifiedUser(), context.getQualifiedUser())) {
-                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.OPERATE);
+                try {
+                    Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.OPERATE);
+                } catch (AccessDeniedException e) {
+                    AccessDeniedException.reportAccessDenied(
+                            InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+                }
             }
             killCtx.kill(killStmt.isConnectionKill());
         }
@@ -1184,10 +1197,25 @@ public class StmtExecutor {
         MetaUtils.getDatabase(catalogName, dbName);
         MetaUtils.getTable(catalogName, dbName, tableName);
 
-        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                catalogName, dbName, tableName, PrivilegeType.SELECT);
-        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                catalogName, dbName, tableName, PrivilegeType.INSERT);
+        try {
+            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    catalogName, dbName, tableName, PrivilegeType.SELECT);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    catalogName,
+                    ConnectContext.get().getCurrentUserIdentity(),
+                    ConnectContext.get().getCurrentRoleIds(), PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName);
+        }
+
+        try {
+            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    catalogName, dbName, tableName, PrivilegeType.INSERT);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    catalogName,
+                    ConnectContext.get().getCurrentUserIdentity(),
+                    ConnectContext.get().getCurrentRoleIds(), PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), tableName);
+        }
     }
 
     public void checkPrivilegeForKillAnalyzeStmt(ConnectContext context, long analyzeId) {
@@ -1209,7 +1237,7 @@ public class StmtExecutor {
                     nativeAnalyzeJob.getTableId());
             tableNames.forEach(tableName ->
                     checkTblPrivilegeForKillAnalyzeStmt(context, tableName.getCatalog(), tableName.getDb(),
-                        tableName.getTbl(), analyzeId)
+                            tableName.getTbl(), analyzeId)
             );
         }
     }
@@ -1403,11 +1431,17 @@ public class StmtExecutor {
                         .build();
         sendMetaData(metaData);
 
-        // Send result set.
-        for (String item : explainString.split("\n")) {
-            serializer.reset();
-            serializer.writeLenEncodedString(item);
-            context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+        if (isProxy) {
+            proxyResultSet = new ShowResultSet(metaData,
+                    Arrays.stream(explainString.split("\n")).map(Collections::singletonList).collect(
+                            Collectors.toList()));
+        } else {
+            // Send result set.
+            for (String item : explainString.split("\n")) {
+                serializer.reset();
+                serializer.writeLenEncodedString(item);
+                context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+            }
         }
         context.getState().setEof();
     }
@@ -1532,6 +1566,10 @@ public class StmtExecutor {
         context.getState().setEof();
     }
 
+    public void setQueryStatistics(PQueryStatistics statistics) {
+        this.statisticsForAuditLog = statistics;
+    }
+
     public PQueryStatistics getQueryStatisticsForAuditLog() {
         if (statisticsForAuditLog == null && coord != null) {
             statisticsForAuditLog = coord.getAuditStatistics();
@@ -1649,12 +1687,14 @@ public class StmtExecutor {
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+
         final Table targetTable;
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
             targetTable = ((InsertStmt) stmt).getTargetTable();
         } else {
             targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
         }
+
         if (isExplainAnalyze) {
             Preconditions.checkState(targetTable instanceof OlapTable,
                     "explain analyze only supports insert into olap native table");
@@ -1703,7 +1743,8 @@ public class StmtExecutor {
                                     sourceType,
                                     context.getSessionVariable().getQueryTimeoutS(),
                                     authenticateParams);
-        } else if (targetTable instanceof SystemTable || (targetTable.isIcebergTable() || targetTable.isHiveTable())) {
+        } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
+                || targetTable.isTableFunctionTable()) {
             // schema table and iceberg and hive table does not need txn
         } else {
             transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
@@ -1774,7 +1815,7 @@ public class StmtExecutor {
             }
 
             context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
-            if (!(targetTable.isIcebergTable() || targetTable.isHiveTable())) {
+            if (!(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isTableFunctionTable())) {
                 jobId = context.getGlobalStateMgr().getLoadMgr().registerLoadJob(
                         label,
                         database.getFullName(),
@@ -1872,8 +1913,8 @@ public class StmtExecutor {
                                 TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
                                         trackingSql
                         );
-                    } else if (targetTable instanceof SystemTable || (targetTable.isHiveTable() ||
-                            targetTable.isIcebergTable())) {
+                    } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() ||
+                            targetTable.isIcebergTable() || targetTable.isTableFunctionTable()) {
                         // schema table does not need txn
                     } else {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
@@ -1934,6 +1975,9 @@ public class StmtExecutor {
                 context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos);
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_HIVE_SINK_LABEL";
+            } else if (targetTable instanceof TableFunctionTable) {
+                txnStatus = TransactionStatus.VISIBLE;
+                label = "FAKE_TABLE_FUNCTION_TABLE_SINK_LABEL";
             } else {
                 if (isExplainAnalyze) {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr()
@@ -2056,12 +2100,14 @@ public class StmtExecutor {
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("{'label':'").append(label).append("', 'status':'").append(txnStatus.name());
-        sb.append("', 'txnId':'").append(transactionId).append("'");
-        if (!Strings.isNullOrEmpty(errMsg)) {
-            sb.append(", 'err':'").append(errMsg).append("'");
+        if (!label.startsWith("FAKE")) {
+            sb.append("{'label':'").append(label).append("', 'status':'").append(txnStatus.name());
+            sb.append("', 'txnId':'").append(transactionId).append("'");
+            if (!Strings.isNullOrEmpty(errMsg)) {
+                sb.append(", 'err':'").append(errMsg).append("'");
+            }
+            sb.append("}");
         }
-        sb.append("}");
 
         context.getState().setOk(loadedRows, filteredRows, sb.toString());
     }
