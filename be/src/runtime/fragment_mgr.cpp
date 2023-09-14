@@ -490,7 +490,11 @@ Status FragmentMgr::cancel(const TUniqueId& id, const PPlanFragmentCancelReason&
     auto s_tracker = exec_state->runtime_state()->instance_mem_tracker_ptr();
     exec_state->cancel(reason);
     exec_state.reset();
-
+    {
+        // Remove the exec state added
+        std::lock_guard<std::mutex> lock(_lock);
+        _fragment_map.erase(id);
+    }
     return Status::OK();
 }
 
