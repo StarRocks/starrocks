@@ -32,8 +32,10 @@ public:
             : _jindo_client(std::move(client)), _file_path(std::move(file_path)) {
         JdoContext_t jdo_ctx = jdo_createContext1(_jindo_client);
         _open_handle = jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_READ_ONLY, 0777);
-        io::check_jindo_status(jdo_ctx);
-        jdo_freeContext(jdo_ctx);
+        Status init_status = io::check_jindo_status(jdo_ctx);
+        if (init_status.ok()) {
+            jdo_freeContext(jdo_ctx);
+        }
     }
 
     ~JindoInputStream() override {
