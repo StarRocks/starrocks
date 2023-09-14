@@ -43,6 +43,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
@@ -718,6 +719,11 @@ public class ConnectProcessor {
             String resourceGroupName = ctx.getAuditEventBuilder().build().resourceGroup;
             if (StringUtils.isNotEmpty(resourceGroupName)) {
                 result.setResource_group_name(resourceGroupName);
+            }
+
+            PQueryStatistics audit = executor.getQueryStatisticsForAuditLog();
+            if (audit != null) {
+                result.setAudit_statistics(AuditStatisticsUtil.toThrift(audit));
             }
         }
         return result;

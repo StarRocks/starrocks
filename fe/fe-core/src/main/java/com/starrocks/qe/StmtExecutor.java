@@ -184,6 +184,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1358,11 +1360,17 @@ public class StmtExecutor {
                         .build();
         sendMetaData(metaData);
 
-        // Send result set.
-        for (String item : explainString.split("\n")) {
-            serializer.reset();
-            serializer.writeLenEncodedString(item);
-            context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+        if (isProxy) {
+            proxyResultSet = new ShowResultSet(metaData,
+                    Arrays.stream(explainString.split("\n")).map(Collections::singletonList).collect(
+                            Collectors.toList()));
+        } else {
+            // Send result set.
+            for (String item : explainString.split("\n")) {
+                serializer.reset();
+                serializer.writeLenEncodedString(item);
+                context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+            }
         }
         context.getState().setEof();
     }
@@ -1427,6 +1435,10 @@ public class StmtExecutor {
         ExportStmt exportStmt = (ExportStmt) parsedStmt;
         exportStmt.setExportStartTime(context.getStartTime());
         context.getGlobalStateMgr().getExportMgr().addExportJob(queryId, exportStmt);
+    }
+
+    public void setQueryStatistics(PQueryStatistics statistics) {
+        this.statisticsForAuditLog = statistics;
     }
 
     public PQueryStatistics getQueryStatisticsForAuditLog() {
