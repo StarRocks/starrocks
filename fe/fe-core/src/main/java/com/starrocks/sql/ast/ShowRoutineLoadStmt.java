@@ -84,6 +84,7 @@ public class ShowRoutineLoadStmt extends ShowStmt {
                     .add("ErrorLogUrls")
                     .add("TrackingSQL")
                     .add("OtherMsg")
+                    .add("Warehouse")
                     .build();
 
     private final LabelName labelName;

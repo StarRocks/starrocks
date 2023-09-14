@@ -86,6 +86,7 @@ import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -810,6 +811,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 jobInfo.add("");
             }
             jobInfo.add(loadingStatus.getLoadStatistic().toShowInfoStr());
+            // warehouse
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+            if (warehouse != null) {
+                jobInfo.add(warehouse.getName());
+            } else {
+                jobInfo.add("");
+            }
             return jobInfo;
         } finally {
             readUnlock();

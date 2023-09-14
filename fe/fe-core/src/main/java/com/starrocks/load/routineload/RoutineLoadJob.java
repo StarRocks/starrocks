@@ -98,6 +98,7 @@ import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1500,6 +1501,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 row.add("");
             }
             row.add(otherMsg);
+
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+            if (warehouse != null) {
+                row.add(warehouse.getName());
+            } else {
+                row.add("");
+            }
+
             return row;
         } finally {
             readUnlock();
