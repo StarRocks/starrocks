@@ -647,7 +647,6 @@ SELECT * FROM table4;
   ```Bash
   curl --location-trusted -u <username>:<password> \
       -H "Expect:100-continue" \
-      -H "Expect:100-continue" \
       -H "label:label10" \
       -H "column_separator:," \
       -H "merge_condition:version" \
