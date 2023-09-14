@@ -39,6 +39,7 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.QueryState.MysqlStateType;
@@ -50,6 +51,7 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TAuditStatistics;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -110,6 +112,19 @@ public class LeaderOpExecutor {
                 }
             }
         }
+<<<<<<< HEAD
+=======
+
+        if (result.isSetResource_group_name()) {
+            ctx.getAuditEventBuilder().setResourceGroup(result.getResource_group_name());
+        }
+        if (result.isSetAudit_statistics()) {
+            TAuditStatistics tAuditStatistics = result.getAudit_statistics();
+            if (ctx.getExecutor() != null) {
+                ctx.getExecutor().setQueryStatistics(AuditStatisticsUtil.toProtobuf(tAuditStatistics));
+            }
+        }
+>>>>>>> 4a6b0c9405 ([BugFix] Support audit for insert into statement executing from follower (#30663))
     }
 
     private void afterForward() throws DdlException {
