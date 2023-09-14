@@ -50,7 +50,7 @@ using TFetchDataResultPtrs = std::vector<TFetchDataResultPtr>;
 class MysqlResultWriter final : public ResultWriter {
 public:
     MysqlResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
-                      RuntimeProfile* parent_profile);
+                      bool is_binary_format, RuntimeProfile* parent_profile);
 
     ~MysqlResultWriter() override;
 
@@ -72,6 +72,7 @@ private:
     BufferControlBlock* _sinker;
     const std::vector<ExprContext*>& _output_expr_ctxs;
     MysqlRowBuffer* _row_buffer;
+    bool _is_binary_format;
 
     RuntimeProfile* _parent_profile; // parent profile from result sink. not owned
     // total time cost on append chunk operation
