@@ -85,10 +85,11 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentClient;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.THdfsProperties;
@@ -723,13 +724,21 @@ public class ExportJob implements Writable, GsonPostProcessable {
             TNetworkAddress address = snapshotPath.first;
             String host = address.getHostname();
             int port = address.getPort();
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
-            if (backend == null) {
-                continue;
+
+            ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+            if (node == null) {
+                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                    node = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, port);
+                }
+                if (node == null) {
+                    continue;
+                }
             }
-            long backendId = backend.getId();
-            if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
-                continue;
+            long nodeId = node.getId();
+            if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(nodeId)) {
+                if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+                    continue;
+                }
             }
 
             AgentClient client = new AgentClient(host, port);
@@ -755,9 +764,14 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 TNetworkAddress address = location.getServer();
                 String host = address.getHostname();
                 int port = address.getPort();
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
-                if (backend == null) {
-                    continue;
+                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+                if (node == null) {
+                    if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                        node = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, port);
+                    }
+                    if (node == null) {
+                        continue;
+                    }
                 }
                 try {
                     LakeService lakeService = BrpcProxy.getLakeService(host, port);
