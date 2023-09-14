@@ -24,14 +24,8 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
@@ -75,25 +69,33 @@ public class EquationRewriter {
             }
 
             @Override
+            public Optional<ScalarOperator> preprocess(ScalarOperator scalarOperator) {
+                return replace(scalarOperator);
+            }
+
+            @Override
             public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-                ScalarOperator tmp = replace(predicate);
-                return tmp != null ? tmp : super.visitBinaryPredicate(predicate, context);
+                Optional<ScalarOperator> tmp = replace(predicate);
+                if (tmp.isPresent()) {
+                    return tmp.get();
+                }
+                return super.visitBinaryPredicate(predicate, context);
             }
 
             @Override
             public ScalarOperator visitCall(CallOperator call, Void context) {
                 // 1. rewrite query's predicate
-                ScalarOperator tmp = replace(call);
-                if (tmp != null) {
-                    return tmp;
+                Optional<ScalarOperator> tmp = replace(call);
+                if (tmp.isPresent()) {
+                    return tmp.get();
                 }
 
                 // 2. normalize predicate to better match mv
                 // TODO: merge into aggregateFunctionRewriter later.
                 CallOperator normalizedCall = normalizeCallOperator(call);
                 tmp = replace(normalizedCall);
-                if (tmp != null) {
-                    return tmp;
+                if (tmp.isPresent()) {
+                    return tmp.get();
                 }
 
                 // 3. retry again by using aggregateFunctionRewriter when predicate cannot be rewritten.
@@ -113,49 +115,7 @@ public class EquationRewriter {
                 return super.visitCall(call, context);
             }
 
-            @Override
-            public ScalarOperator visitCastOperator(CastOperator cast, Void context) {
-                ScalarOperator tmp = replace(cast);
-                return tmp != null ? tmp : super.visitCastOperator(cast, context);
-            }
-
-            @Override
-            public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
-                ScalarOperator tmp = replace(variable);
-                return tmp != null ? tmp : super.visitVariableReference(variable, context);
-            }
-
-            @Override
-            public ScalarOperator visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
-                ScalarOperator tmp = replace(operator);
-                return tmp != null ? tmp : super.visitCaseWhenOperator(operator, context);
-            }
-
-            @Override
-            public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator operator, Void context) {
-                ScalarOperator tmp = replace(operator);
-                return tmp != null ? tmp : super.visitIsNullPredicate(operator, context);
-            }
-
-            @Override
-            public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
-                ScalarOperator tmp = replace(predicate);
-                return tmp != null ? tmp : super.visitCompoundPredicate(predicate, context);
-            }
-
-            @Override
-            public ScalarOperator visitInPredicate(InPredicateOperator predicate, Void context) {
-                ScalarOperator tmp = replace(predicate);
-                return tmp != null ? tmp : super.visitInPredicate(predicate, context);
-            }
-
-            @Override
-            public ScalarOperator visitLikePredicateOperator(LikePredicateOperator predicate, Void context) {
-                ScalarOperator tmp = replace(predicate);
-                return tmp != null ? tmp : super.visitLikePredicateOperator(predicate, context);
-            }
-
-            ScalarOperator replace(ScalarOperator scalarOperator) {
+            Optional<ScalarOperator> replace(ScalarOperator scalarOperator) {
                 if (equationMap.containsKey(scalarOperator)) {
                     Optional<Pair<ColumnRefOperator, ScalarOperator>> mappedColumnAndExprRef =
                             equationMap.get(scalarOperator).stream().findFirst();
@@ -164,23 +124,23 @@ public class EquationRewriter {
                     ScalarOperator extendedExpr = mappedColumnAndExprRef.get().second;
 
                     if (columnMapping == null) {
-                        return extendedExpr == null ? basedColumn.clone() : extendedExpr.clone();
+                        return extendedExpr == null ? Optional.of(basedColumn.clone()) : Optional.of(extendedExpr.clone());
                     }
 
                     ColumnRefOperator replaced = columnMapping.get(basedColumn);
                     if (replaced == null) {
-                        return null;
+                        return Optional.empty();
                     }
 
                     if (extendedExpr == null) {
-                        return replaced.clone();
+                        return Optional.of(replaced.clone());
                     }
                     ScalarOperator newExpr = extendedExpr.clone();
                     return replaceColInExpr(newExpr, basedColumn,
-                            replaced.clone()) ? newExpr : null;
+                            replaced.clone()) ? Optional.of(newExpr) : Optional.empty();
                 }
 
-                return null;
+                return Optional.empty();
             }
 
             private boolean replaceColInExpr(ScalarOperator expr, ColumnRefOperator oldCol, ScalarOperator newCol) {

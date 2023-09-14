@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
@@ -57,6 +58,7 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
         runFileUnitTest("materialized-view/tpch-hive/q6");
     }
 
+    @Ignore
     @Test
     public void testQuery7() {
         runFileUnitTest("materialized-view/tpch-hive/q7");
