@@ -290,8 +290,6 @@ public class TableFunctionTable extends Table {
         return columns;
     }
 
-
-
     public List<ImportColumnDesc> getColumnExprList() {
         List<ImportColumnDesc> exprs = new ArrayList<>();
         List<Column> columns = super.getFullSchema();
