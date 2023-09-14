@@ -430,7 +430,9 @@ public class SlotRef extends Expr {
     public boolean isBoundByTupleIds(List<TupleId> tids) {
         Preconditions.checkState(desc != null);
         for (TupleId tid : tids) {
-            if (tid.equals(desc.getParent().getId())) {
+            if (desc.getParent() == null) {
+                return false;
+            } else if (tid.equals(desc.getParent().getId())) {
                 return true;
             }
         }
