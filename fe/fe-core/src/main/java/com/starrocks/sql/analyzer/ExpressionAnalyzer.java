@@ -118,17 +118,6 @@ public class ExpressionAnalyzer {
         this.session = session;
     }
 
-    public static void analyzeExpression(Expr expression, AnalyzeState state, Scope scope, ConnectContext session) {
-        ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
-        expressionAnalyzer.analyze(expression, state, scope);
-    }
-
-    public static void analyzeExpressionIgnoreSlot(Expr expression, ConnectContext session) {
-        ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
-        expressionAnalyzer.analyzeIgnoreSlot(expression, new AnalyzeState(),
-                new Scope(RelationId.anonymous(), new RelationFields()));
-    }
-
     public void analyze(Expr expression, AnalyzeState analyzeState, Scope scope) {
         Visitor visitor = new Visitor(analyzeState, session);
         bottomUpAnalyze(visitor, expression, scope);
@@ -333,10 +322,6 @@ public class ExpressionAnalyzer {
 
         private final AnalyzeState analyzeState;
         private final ConnectContext session;
-        List<String> addDateFunctions = Lists.newArrayList(FunctionSet.DATE_ADD,
-                FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
-        List<String> subDateFunctions = Lists.newArrayList(FunctionSet.DATE_SUB, FunctionSet.SUBDATE,
-                FunctionSet.DAYS_SUB);
 
         public Visitor(AnalyzeState analyzeState, ConnectContext session) {
             this.analyzeState = analyzeState;
@@ -688,7 +673,7 @@ public class ExpressionAnalyzer {
                                     + " is invalid.");
                 }
 
-                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[]{lhsType, rhsType},
+                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {lhsType, rhsType},
                         Function.CompareMode.IS_SUPERTYPE_OF);
 
                 /*
@@ -701,7 +686,7 @@ public class ExpressionAnalyzer {
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_PREFIX) {
 
                 Function fn = Expr.getBuiltinFunction(
-                        node.getOp().getName(), new Type[]{Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
+                        node.getOp().getName(), new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
 
                 node.setType(Type.BIGINT);
                 node.setFn(fn);
@@ -713,6 +698,11 @@ public class ExpressionAnalyzer {
 
             return null;
         }
+
+        List<String> addDateFunctions = Lists.newArrayList(FunctionSet.DATE_ADD,
+                FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
+        List<String> subDateFunctions = Lists.newArrayList(FunctionSet.DATE_SUB, FunctionSet.SUBDATE,
+                FunctionSet.DAYS_SUB);
 
         @Override
         public Void visitTimestampArithmeticExpr(TimestampArithmeticExpr node, Scope scope) {
@@ -910,7 +900,7 @@ public class ExpressionAnalyzer {
             if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 //Compatible with the logic of the original search function "count distinct"
                 //TODO: fix how we equal count distinct.
-                fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[]{argumentTypes[0]},
+                fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (fnName.equals(FunctionSet.EXCHANGE_BYTES) || fnName.equals(FunctionSet.EXCHANGE_SPEED)) {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes,
@@ -1497,6 +1487,17 @@ public class ExpressionAnalyzer {
         public Void visitSlot(SlotRef node, Scope scope) {
             return null;
         }
+    }
+
+    public static void analyzeExpression(Expr expression, AnalyzeState state, Scope scope, ConnectContext session) {
+        ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
+        expressionAnalyzer.analyze(expression, state, scope);
+    }
+
+    public static void analyzeExpressionIgnoreSlot(Expr expression, ConnectContext session) {
+        ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
+        expressionAnalyzer.analyzeIgnoreSlot(expression, new AnalyzeState(),
+                new Scope(RelationId.anonymous(), new RelationFields()));
     }
 
 }
