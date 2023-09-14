@@ -37,13 +37,8 @@ class MemoryScratchSinkOperator final : public Operator {
 public:
     MemoryScratchSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                               std::vector<ExprContext*> output_expr_ctxs, std::shared_ptr<arrow::Schema> arrow_schema,
-<<<<<<< HEAD
-                              BlockQueueSharedPtr queue)
-            : Operator(factory, id, "memory_scratch_sink", plan_node_id, driver_sequence),
-=======
                               BlockQueueSharedPtr queue, std::atomic<int32_t>& num_sinkers)
-            : Operator(factory, id, "memory_scratch_sink", plan_node_id, false, driver_sequence),
->>>>>>> 4a6b0c9405 ([BugFix] Support audit for insert into statement executing from follower (#30663))
+            : Operator(factory, id, "memory_scratch_sink", plan_node_id, driver_sequence),
               _output_expr_ctxs(std::move(output_expr_ctxs)),
               _arrow_schema(std::move(arrow_schema)),
               _queue(std::move(queue)),

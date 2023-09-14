@@ -34,16 +34,10 @@ class FragmentContext;
 class ExportSinkOperator final : public Operator {
 public:
     ExportSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-<<<<<<< HEAD
-                       std::shared_ptr<ExportSinkIOBuffer> export_sink_buffer)
-            : Operator(factory, id, "export_sink", plan_node_id, driver_sequence),
-              _export_sink_buffer(std::move(std::move(export_sink_buffer))) {}
-=======
                        std::shared_ptr<ExportSinkIOBuffer> export_sink_buffer, std::atomic<int32_t>& num_sinkers)
-            : Operator(factory, id, "export_sink", plan_node_id, false, driver_sequence),
+            : Operator(factory, id, "export_sink", plan_node_id, driver_sequence),
               _export_sink_buffer(std::move(std::move(export_sink_buffer))),
               _num_sinkers(num_sinkers) {}
->>>>>>> 4a6b0c9405 ([BugFix] Support audit for insert into statement executing from follower (#30663))
 
     ~ExportSinkOperator() override = default;
 

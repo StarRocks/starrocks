@@ -200,7 +200,7 @@ public class InsertStmt extends DmlStmt {
 
     @Override
     public RedirectStatus getRedirectStatus() {
-        if (isExplain() && !StatementBase.ExplainLevel.ANALYZE.equals(getExplainLevel())) {
+        if (isExplain()) {
             return RedirectStatus.NO_FORWARD;
         } else {
             return RedirectStatus.FORWARD_WITH_SYNC;

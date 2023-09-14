@@ -46,15 +46,11 @@ bool MemoryScratchSinkOperator::is_finished() const {
 
 Status MemoryScratchSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
-<<<<<<< HEAD
-    auto* executor = state->fragment_ctx()->enable_resource_group() ? state->exec_env()->wg_driver_executor()
-                                                                    : state->exec_env()->driver_executor();
-    executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
-=======
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+        auto* executor = state->fragment_ctx()->enable_resource_group() ? state->exec_env()->wg_driver_executor()
+                                                                        : state->exec_env()->driver_executor();
+        executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
     }
->>>>>>> 4a6b0c9405 ([BugFix] Support audit for insert into statement executing from follower (#30663))
     return Status::OK();
 }
 
