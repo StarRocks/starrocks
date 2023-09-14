@@ -34,11 +34,9 @@ bool MemoryScratchSinkOperator::is_finished() const {
 
 Status MemoryScratchSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
-    if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-        auto* executor = state->fragment_ctx()->enable_resource_group() ? state->exec_env()->wg_driver_executor()
-                                                                        : state->exec_env()->driver_executor();
-        executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
-    }
+    auto* executor = state->fragment_ctx()->enable_resource_group() ? state->exec_env()->wg_driver_executor()
+                                                                    : state->exec_env()->driver_executor();
+    executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
     return Status::OK();
 }
 
