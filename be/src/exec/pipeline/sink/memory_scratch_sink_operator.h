@@ -37,11 +37,12 @@ class MemoryScratchSinkOperator final : public Operator {
 public:
     MemoryScratchSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                               std::vector<ExprContext*> output_expr_ctxs, std::shared_ptr<arrow::Schema> arrow_schema,
-                              BlockQueueSharedPtr queue)
+                              BlockQueueSharedPtr queue, std::atomic<int32_t>& num_sinkers)
             : Operator(factory, id, "memory_scratch_sink", plan_node_id, false, driver_sequence),
               _output_expr_ctxs(std::move(output_expr_ctxs)),
               _arrow_schema(std::move(arrow_schema)),
-              _queue(std::move(queue)) {}
+              _queue(std::move(queue)),
+              _num_sinkers(num_sinkers) {}
 
     ~MemoryScratchSinkOperator() override = default;
 
@@ -71,6 +72,7 @@ private:
     std::vector<ExprContext*> _output_expr_ctxs;
     std::shared_ptr<arrow::Schema> _arrow_schema;
     BlockQueueSharedPtr _queue;
+    std::atomic<int32_t>& _num_sinkers;
     mutable std::shared_ptr<arrow::RecordBatch> _pending_result;
     bool _is_finished = false;
     bool _has_put_sentinel = false;
@@ -84,8 +86,9 @@ public:
     ~MemoryScratchSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
+        _increment_num_sinkers_no_barrier();
         return std::make_shared<MemoryScratchSinkOperator>(this, _id, _plan_node_id, driver_sequence, _output_expr_ctxs,
-                                                           _arrow_schema, _queue);
+                                                           _arrow_schema, _queue, _num_sinkers);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -93,6 +96,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
+    void _increment_num_sinkers_no_barrier() { _num_sinkers.fetch_add(1, std::memory_order_relaxed); }
     void _prepare_id_to_col_name_map();
 
     const RowDescriptor _row_desc;
@@ -101,6 +105,7 @@ private:
     std::vector<ExprContext*> _output_expr_ctxs;
 
     BlockQueueSharedPtr _queue;
+    std::atomic<int32_t> _num_sinkers = 0;
     std::unordered_map<int64_t, std::string> _id_to_col_name;
 };
 
