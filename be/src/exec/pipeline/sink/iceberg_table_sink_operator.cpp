@@ -61,7 +61,9 @@ bool IcebergTableSinkOperator::is_finished() const {
 }
 
 Status IcebergTableSinkOperator::set_finishing(RuntimeState* state) {
-    state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+    if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+    }
 
     for (const auto& writer : _partition_writers) {
         if (!writer.second->closed()) {

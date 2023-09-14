@@ -35,7 +35,8 @@ public:
                              const TCloudConfiguration& cloud_conf, IcebergTableDescriptor* iceberg_table,
                              FragmentContext* fragment_ctx, const std::shared_ptr<::parquet::schema::GroupNode>& schema,
                              const std::vector<ExprContext*>& output_expr_ctxs,
-                             const vector<ExprContext*>& partition_output_expr, bool is_static_partition_insert)
+                             const vector<ExprContext*>& partition_output_expr, bool is_static_partition_insert,
+                             std::atomic<int32_t>& num_sinkers)
             : Operator(factory, id, "iceberg_table_sink", plan_node_id, false, driver_sequence),
               _location(std::move(location)),
               _iceberg_table_data_location(_location + "/data/"),
@@ -46,7 +47,8 @@ public:
               _parquet_file_schema(std::move(schema)),
               _output_expr(output_expr_ctxs),
               _partition_expr(partition_output_expr),
-              _is_static_partition_insert(is_static_partition_insert) {}
+              _is_static_partition_insert(is_static_partition_insert),
+              _num_sinkers(num_sinkers) {}
 
     ~IcebergTableSinkOperator() override = default;
 
@@ -90,6 +92,7 @@ private:
     std::unordered_map<std::string, std::unique_ptr<starrocks::RollingAsyncParquetWriter>> _partition_writers;
     std::atomic<bool> _is_finished = false;
     bool _is_static_partition_insert = false;
+    std::atomic<int32_t>& _num_sinkers;
 };
 
 class IcebergTableSinkOperatorFactory final : public OperatorFactory {
@@ -102,10 +105,11 @@ public:
     ~IcebergTableSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<IcebergTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _location,
-                                                          _file_format, _compression_codec, _cloud_conf, _iceberg_table,
-                                                          _fragment_ctx, _parquet_file_schema, _output_expr_ctxs,
-                                                          _partition_expr_ctxs, is_static_partition_insert);
+        _increment_num_sinkers_no_barrier();
+        return std::make_shared<IcebergTableSinkOperator>(
+                this, _id, _plan_node_id, driver_sequence, _location, _file_format, _compression_codec, _cloud_conf,
+                _iceberg_table, _fragment_ctx, _parquet_file_schema, _output_expr_ctxs, _partition_expr_ctxs,
+                is_static_partition_insert, _num_sinkers);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -113,6 +117,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
+    void _increment_num_sinkers_no_barrier() { _num_sinkers.fetch_add(1, std::memory_order_relaxed); }
     std::vector<parquet::FileColumnId> generate_parquet_field_ids(const std::vector<TIcebergSchemaField>& fields);
 
 private:
@@ -129,6 +134,7 @@ private:
     std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;
     std::vector<ExprContext*> _partition_expr_ctxs;
     bool is_static_partition_insert = false;
+    std::atomic<int32_t> _num_sinkers = 0;
 };
 
 } // namespace pipeline
