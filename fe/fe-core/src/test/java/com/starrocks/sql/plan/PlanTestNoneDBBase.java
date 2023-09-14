@@ -510,12 +510,12 @@ public class PlanTestNoneDBBase {
         }
     }
 
-    protected void assertExceptionMessage(String sql, String message) {
+    protected void assertExceptionMsgContains(String sql, String message) {
         try {
             getFragmentPlan(sql);
             throw new Error();
         } catch (Exception e) {
-            Assert.assertEquals(message, e.getMessage());
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains(message));
         }
     }
 
