@@ -208,4 +208,7 @@ public interface ParserErrorMsg {
 
     @BaseMessage("Conflicted options {0} and {1}")
     String conflictedOptions(String a0, String a1);
+
+    @BaseMessage("Not support ''{0}'' {1}")
+    String unsupportedSubquery(String a0, String a1);
 }
