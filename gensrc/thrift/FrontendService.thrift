@@ -497,6 +497,12 @@ struct TMasterOpResult {
     4: optional string state;
     // for query statement
     5: optional list<binary> channelBufferList;
+<<<<<<< HEAD
+=======
+
+    6: optional string resource_group_name;
+    7: optional TAuditStatistics audit_statistics;
+>>>>>>> 5cef0e07d ([BugFix] Fix lost resource group in audit log for insert (#30626 #30726) (#30835))
 }
 
 struct TIsMethodSupportedRequest {

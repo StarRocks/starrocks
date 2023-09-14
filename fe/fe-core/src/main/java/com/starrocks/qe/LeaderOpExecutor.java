@@ -90,6 +90,19 @@ public class LeaderOpExecutor {
                 }
             }
         }
+<<<<<<< HEAD
+=======
+
+        if (result.isSetResource_group_name()) {
+            ctx.getAuditEventBuilder().setResourceGroup(result.getResource_group_name());
+        }
+        if (result.isSetAudit_statistics()) {
+            TAuditStatistics tAuditStatistics = result.getAudit_statistics();
+            if (ctx.getExecutor() != null) {
+                ctx.getExecutor().setQueryStatistics(AuditStatisticsUtil.toProtobuf(tAuditStatistics));
+            }
+        }
+>>>>>>> 5cef0e07d ([BugFix] Fix lost resource group in audit log for insert (#30626 #30726) (#30835))
     }
 
     private void afterForward() throws DdlException {

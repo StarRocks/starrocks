@@ -58,6 +58,7 @@ import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -669,6 +670,18 @@ public class ConnectProcessor {
             } else if (executor.getProxyResultBuffer() != null) {  // query statement
                 result.setChannelBufferList(executor.getProxyResultBuffer());
             }
+<<<<<<< HEAD
+=======
+
+            String resourceGroupName = ctx.getAuditEventBuilder().build().resourceGroup;
+            if (StringUtils.isNotEmpty(resourceGroupName)) {
+                result.setResource_group_name(resourceGroupName);
+            }
+            PQueryStatistics audit = executor.getQueryStatisticsForAuditLog();
+            if (audit != null) {
+                result.setAudit_statistics(AuditStatisticsUtil.toThrift(audit));
+            }
+>>>>>>> 5cef0e07d ([BugFix] Fix lost resource group in audit log for insert (#30626 #30726) (#30835))
         }
         return result;
     }
