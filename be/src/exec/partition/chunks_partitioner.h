@@ -88,7 +88,7 @@ public:
     // @consumer: bool consumer(int32_t partition_idx, const ChunkPtr& chunk)
     //      The return value of the consumer denote whether to continue or not
     template <typename Consumer>
-    Status consume_from_hash_map(Consumer&& consumer) {
+    [[nodiscard]] Status consume_from_hash_map(Consumer&& consumer) {
         if (is_hash_map_eos()) {
             return Status::OK();
         }

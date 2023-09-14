@@ -51,7 +51,6 @@ Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* ind
 
     _tracker->consume(mem_usage);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, mem_usage);
-
     return Status::OK();
 }
 
@@ -102,7 +101,6 @@ Status OrderedMemTable::append_selective(const Chunk& src, const uint32_t* index
 
     _tracker->consume(mem_usage);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, mem_usage);
-
     return Status::OK();
 }
 

@@ -57,7 +57,7 @@ private:
 
     std::function<StatusOr<ChunkPtr>()> _convert_hash_map_to_chunk();
 
-    Status publish_runtime_filters(RuntimeState* state);
+    [[nodiscard]] Status publish_runtime_filters(RuntimeState* state);
 
     Status append_hash_columns(const ChunkPtr& chunk);
 
