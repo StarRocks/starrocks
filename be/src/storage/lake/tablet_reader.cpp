@@ -164,18 +164,13 @@ Status TabletReader::init_predicates(const TabletReaderParams& params) {
 }
 
 Status TabletReader::init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
-<<<<<<< HEAD
-    PredicateParser pred_parser(*_tablet_schema);
-    ASSIGN_OR_RETURN(auto tablet_metadata, enhance_error_prompt(_tablet.get_metadata(_version)));
-=======
     if (UNLIKELY(_tablet_metadata == nullptr)) {
         return Status::InternalError("tablet metadata is null. forget or fail to call prepare()");
     }
     if (UNLIKELY(_tablet_schema == nullptr)) {
         return Status::InternalError("tablet schema is null. forget or fail to call prepare()");
     }
-    PredicateParser pred_parser(_tablet_schema);
->>>>>>> 33807d12aa ([Enhancement] Remove the get schema call in TabletReader. (#30998))
+    PredicateParser pred_parser(*_tablet_schema);
 
     for (int index = 0, size = _tablet_metadata->rowsets_size(); index < size; ++index) {
         const auto& rowset_metadata = _tablet_metadata->rowsets(index);
