@@ -113,10 +113,8 @@ Status BufferControlBlock::add_batch(TFetchDataResult* result, bool need_free) {
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
     }
-    // serialize
-    auto status_or_value = _serialize_result(result);
-    RETURN_IF_ERROR(status_or_value.status());
-    auto ser_res = std::move(status_or_value.value());
+    // serialize first
+    ASSIGN_OR_RETURN(auto ser_res, _serialize_result(result))
     // should delete it outside in abnormal cases
     if (need_free) {
         delete result;
@@ -139,12 +137,9 @@ StatusOr<std::unique_ptr<SerializeRes>> BufferControlBlock::_serialize_result(TF
     uint32_t len = 0;
     auto ser_res = std::make_unique<SerializeRes>();
     ser_res->row_size = result->result_batch.rows.size();
-    {
-        SCOPED_TIMER(_rpc_serialize_timer);
-        ThriftSerializer ser(false, 4096);
-        RETURN_IF_ERROR(ser.serialize(&result->result_batch, &len, &buf));
-        ser_res->attachment.append(buf, len);
-    }
+    ThriftSerializer ser(false, 4096);
+    RETURN_IF_ERROR(ser.serialize(&result->result_batch, &len, &buf));
+    ser_res->attachment.append(buf, len);
     return std::move(ser_res);
 }
 
@@ -174,9 +169,7 @@ StatusOr<bool> BufferControlBlock::try_add_batch(std::unique_ptr<TFetchDataResul
         return false;
     }
     l.unlock();
-    auto status_or_value = _serialize_result(result.get());
-    RETURN_IF_ERROR(status_or_value.status());
-    auto ser_res = std::move(status_or_value.value());
+    ASSIGN_OR_RETURN(auto ser_res, _serialize_result(result.get()))
     l.lock();
     _process_batch_without_lock(ser_res);
     return true;
@@ -196,9 +189,7 @@ StatusOr<bool> BufferControlBlock::try_add_batch(std::vector<std::unique_ptr<TFe
     l.unlock();
     // serialize first
     for (auto& result : results) {
-        auto status_or_value = _serialize_result(result.get());
-        RETURN_IF_ERROR(status_or_value.status());
-        auto ser_res = std::move(status_or_value.value());
+        ASSIGN_OR_RETURN(auto ser_res, _serialize_result(result.get()))
         l.lock();
         _buffer_bytes += ser_res->attachment.length();
         _batch_queue.push_back(std::move(ser_res));

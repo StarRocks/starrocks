@@ -126,17 +126,12 @@ public:
         }
     }
 
-    void set_profile(RuntimeProfile::Counter* profile) {
-        if (_rpc_serialize_timer == nullptr && profile != nullptr) {
-            _rpc_serialize_timer = profile;
-        }
-    }
-
 private:
     void _process_batch_without_lock(std::unique_ptr<SerializeRes>& result);
 
     StatusOr<std::unique_ptr<SerializeRes>> _serialize_result(TFetchDataResult*);
 
+    // as no idea of whether sending sorted results, can't use concurrentQueue here.
     typedef std::list<std::unique_ptr<SerializeRes>> ResultQueue;
     // result's query id
     TUniqueId _fragment_id;
@@ -158,13 +153,11 @@ private:
 
     std::deque<GetResultBatchCtx*> _waiting_rpc;
 
-    RuntimeProfile::Counter* _rpc_serialize_timer = nullptr;
-
     // It is shared with PlanFragmentExecutor and will be called in two different
     // threads. But their calls are all at different time, there is no problem of
     // multithreaded access.
     std::shared_ptr<QueryStatistics> _query_statistics;
-    size_t _max_memory_usage = 1UL << 28; // 256MB
+    static const size_t _max_memory_usage = 1UL << 28; // 256MB
 };
 
 } // namespace starrocks

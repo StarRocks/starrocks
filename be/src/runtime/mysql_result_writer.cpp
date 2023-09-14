@@ -70,7 +70,6 @@ Status MysqlResultWriter::init(RuntimeState* state) {
         return Status::InternalError("no memory to alloc.");
     }
 
-    _sinker->set_profile(_rpc_serialize_timer);
     return Status::OK();
 }
 
@@ -78,7 +77,6 @@ void MysqlResultWriter::_init_profile() {
     _append_chunk_timer = ADD_TIMER(_parent_profile, "AppendChunkTime");
     _convert_tuple_timer = ADD_CHILD_TIMER(_parent_profile, "TupleConvertTime", "AppendChunkTime");
     _result_send_timer = ADD_CHILD_TIMER(_parent_profile, "ResultRendTime", "AppendChunkTime");
-    _rpc_serialize_timer = ADD_TIMER(_parent_profile, "RpcSerializeTime");
     _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
 }
 
