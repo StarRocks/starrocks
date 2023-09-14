@@ -110,6 +110,16 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTest {
     }
 
     @Test
+    public void testMVOnMV2() throws Exception {
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv2"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        System.out.println(replayPair.second);
+        Assert.assertTrue(replayPair.second.contains("test_mv2"));
+    }
+
+    @Test
     public void testMV_AggWithHaving1() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having1"),

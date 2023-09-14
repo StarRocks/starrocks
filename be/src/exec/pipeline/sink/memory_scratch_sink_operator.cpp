@@ -34,9 +34,11 @@ bool MemoryScratchSinkOperator::is_finished() const {
 
 Status MemoryScratchSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
-    auto* executor = state->fragment_ctx()->enable_resource_group() ? state->exec_env()->wg_driver_executor()
-                                                                    : state->exec_env()->driver_executor();
-    executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+    if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        auto* executor = state->fragment_ctx()->enable_resource_group() ? state->exec_env()->wg_driver_executor()
+                                                                        : state->exec_env()->driver_executor();
+        executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+    }
     return Status::OK();
 }
 
@@ -61,6 +63,9 @@ StatusOr<vectorized::ChunkPtr> MemoryScratchSinkOperator::pull_chunk(RuntimeStat
 }
 
 Status MemoryScratchSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+    // Same as ResultSinkOperator, The memory of the output result set should not be counted in the query memory,
+    // otherwise it will cause memory statistics errors.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return Status::OK();
     }
