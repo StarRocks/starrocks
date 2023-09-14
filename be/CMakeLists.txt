@@ -277,7 +277,7 @@ set_target_properties(parquet PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib
 add_library(brpc STATIC IMPORTED GLOBAL)
 set_target_properties(brpc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrpc.a)
 
-add_library(rocksdb STATIC IMPORTED)
+add_library(rocksdb STATIC IMPORTED GLOBAL)
 set_target_properties(rocksdb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/librocksdb.a)
 
 add_library(sasl STATIC IMPORTED GLOBAL)
@@ -430,6 +430,7 @@ if ("${USE_STAROS}" STREQUAL "ON")
     add_library(brpc::brpc ALIAS brpc)
     add_library(leveldb::leveldb ALIAS leveldb)
     add_library(CURL::libcurl ALIAS curl)
+    add_library(rocksdb::rocksdb ALIAS rocksdb)
 
     set(absl_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
     find_package(absl CONFIG REQUIRED)
