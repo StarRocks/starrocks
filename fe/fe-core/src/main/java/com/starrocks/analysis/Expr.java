@@ -445,6 +445,32 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         extractConjunctsImpl(cpe.getChild(1), conjuncts);
     }
 
+    public static List<Expr> flattenPredicate(Expr root) {
+        List<Expr> children = Lists.newArrayList();
+        if (null == root) {
+            return children;
+        }
+
+        flattenPredicate(root, children);
+        return children;
+    }
+
+    private static void flattenPredicate(Expr root, List<Expr> children) {
+        if (!(root instanceof CompoundPredicate)) {
+            children.add(root);
+            return;
+        }
+
+        CompoundPredicate cpe = (CompoundPredicate) root;
+        if (CompoundPredicate.Operator.AND.equals(cpe.getOp()) || CompoundPredicate.Operator.OR.equals(cpe.getOp())) {
+            extractConjunctsImpl(cpe.getChild(0), children);
+            extractConjunctsImpl(cpe.getChild(1), children);
+        } else {
+            children.add(root);
+        }
+    }
+
+
     public static Expr compoundAnd(Collection<Expr> conjuncts) {
         return createCompound(CompoundPredicate.Operator.AND, conjuncts);
     }
