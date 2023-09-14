@@ -133,7 +133,14 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                                     const CancelFunc& cancel_func) {
     ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size_for_column_group(column_group));
 
+<<<<<<< HEAD
     Schema schema = ChunkHelper::convert_schema(*_tablet_schema, column_group);
+=======
+    Schema schema = column_group_index == 0 ? (_tablet_schema->sort_key_idxes().empty()
+                                                       ? ChunkHelper::convert_schema(_tablet_schema, column_group)
+                                                       : ChunkHelper::get_sort_key_schema(_tablet_schema))
+                                            : ChunkHelper::convert_schema(_tablet_schema, column_group);
+>>>>>>> e5ecb85c77 ([BugFix] Fix sort key bug in vertical compaction of cloud native table (#30996))
     TabletReader reader(*_tablet, _version, schema, _input_rowsets, is_key, mask_buffer);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
