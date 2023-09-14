@@ -160,6 +160,33 @@ void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& age
 
     auto dropped_tablet = StorageEngine::instance()->tablet_manager()->get_tablet(drop_tablet_req.tablet_id);
     if (dropped_tablet != nullptr) {
+        if (!config::enable_drop_tablet_if_unfinished_txn) {
+            int64_t partition_id;
+            std::set<int64_t> transaction_ids;
+            {
+                std::lock_guard push_lock(dropped_tablet->get_push_lock());
+                StorageEngine::instance()->txn_manager()->get_tablet_related_txns(
+                        drop_tablet_req.tablet_id, drop_tablet_req.schema_hash, dropped_tablet->tablet_uid(),
+                        &partition_id, &transaction_ids);
+            }
+            if (!transaction_ids.empty()) {
+                std::stringstream ss;
+                ss << "Failed to drop tablet when there is unfinished txns."
+                   << "tablet_id: " << drop_tablet_req.tablet_id << ", txn_ids: ";
+                for (auto itr = transaction_ids.begin(); itr != transaction_ids.end(); itr++) {
+                    ss << *itr;
+                    if (std::next(itr) != transaction_ids.end()) {
+                        ss << ",";
+                    }
+                }
+                LOG(WARNING) << ss.str();
+                error_msgs.emplace_back(ss.str());
+                status_code = TStatusCode::RUNTIME_ERROR;
+                unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature);
+                return;
+            }
+        }
+
         TabletDropFlag flag = force_drop ? kDeleteFiles : kMoveFilesToTrash;
         auto st = StorageEngine::instance()->tablet_manager()->drop_tablet(drop_tablet_req.tablet_id, flag);
         if (!st.ok()) {
