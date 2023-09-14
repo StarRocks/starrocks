@@ -125,19 +125,19 @@ public class ScalarOperatorFunctions {
     /**
      * date and time function
      */
-    @ConstantFunction(name = "timediff", argTypes = {DATETIME, DATETIME}, returnType = TIME)
+    @ConstantFunction(name = "timediff", argTypes = {DATETIME, DATETIME}, returnType = TIME, isMonotonic = true)
     public static ConstantOperator timeDiff(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createTime(Duration.between(second.getDatetime(), first.getDatetime()).getSeconds());
     }
 
-    @ConstantFunction(name = "datediff", argTypes = {DATETIME, DATETIME}, returnType = INT)
+    @ConstantFunction(name = "datediff", argTypes = {DATETIME, DATETIME}, returnType = INT, isMonotonic = true)
     public static ConstantOperator dateDiff(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createInt((int) Duration.between(
                 second.getDatetime().truncatedTo(ChronoUnit.DAYS),
                 first.getDatetime().truncatedTo(ChronoUnit.DAYS)).toDays());
     }
 
-    @ConstantFunction(name = "years_add", argTypes = {DATETIME, INT}, returnType = DATETIME)
+    @ConstantFunction(name = "years_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator yearsAdd(ConstantOperator date, ConstantOperator year) {
         return ConstantOperator.createDatetime(date.getDatetime().plusYears(year.getInt()));
     }
@@ -148,63 +148,93 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "adddate", argTypes = {DATETIME, INT}, returnType = DATETIME),
-            @ConstantFunction(name = "date_add", argTypes = {DATETIME, INT}, returnType = DATETIME),
-            @ConstantFunction(name = "days_add", argTypes = {DATETIME, INT}, returnType = DATETIME)
+            @ConstantFunction(name = "adddate", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true),
+            @ConstantFunction(name = "date_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true),
+            @ConstantFunction(name = "days_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     })
     public static ConstantOperator daysAdd(ConstantOperator date, ConstantOperator day) {
         return ConstantOperator.createDatetime(date.getDatetime().plusDays(day.getInt()));
     }
 
-    @ConstantFunction(name = "hours_add", argTypes = {DATETIME, INT}, returnType = DATETIME)
+    @ConstantFunction(name = "hours_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator hoursAdd(ConstantOperator date, ConstantOperator hour) {
         return ConstantOperator.createDatetime(date.getDatetime().plusHours(hour.getInt()));
     }
 
-    @ConstantFunction(name = "minutes_add", argTypes = {DATETIME, INT}, returnType = DATETIME)
+    @ConstantFunction(name = "minutes_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator minutesAdd(ConstantOperator date, ConstantOperator minute) {
         return ConstantOperator.createDatetime(date.getDatetime().plusMinutes(minute.getInt()));
     }
 
-    @ConstantFunction(name = "seconds_add", argTypes = {DATETIME, INT}, returnType = DATETIME)
+    @ConstantFunction(name = "seconds_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator secondsAdd(ConstantOperator date, ConstantOperator second) {
         return ConstantOperator.createDatetime(date.getDatetime().plusSeconds(second.getInt()));
     }
 
-    @ConstantFunction(name = "date_trunc", argTypes = {VARCHAR, DATETIME}, returnType = DATETIME)
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "date_trunc", argTypes = {VARCHAR, DATETIME}, returnType = DATETIME, isMonotonic = true),
+            @ConstantFunction(name = "date_trunc", argTypes = {VARCHAR, DATE}, returnType = DATE, isMonotonic = true)
+    })
     public static ConstantOperator dateTrunc(ConstantOperator fmt, ConstantOperator date) {
-        switch (fmt.getVarchar()) {
-            case "second":
-                return ConstantOperator.createDatetime(date.getDatetime().truncatedTo(ChronoUnit.SECONDS));
-            case "minute":
-                return ConstantOperator.createDatetime(date.getDatetime().truncatedTo(ChronoUnit.MINUTES));
-            case "hour":
-                return ConstantOperator.createDatetime(date.getDatetime().truncatedTo(ChronoUnit.HOURS));
-            case "day":
-                return ConstantOperator.createDatetime(date.getDatetime().truncatedTo(ChronoUnit.DAYS));
-            case "month":
-                return ConstantOperator.createDatetime(
-                        date.getDatetime().with(TemporalAdjusters.firstDayOfMonth()).truncatedTo(ChronoUnit.DAYS));
-            case "year":
-                return ConstantOperator.createDatetime(
-                        date.getDatetime().with(TemporalAdjusters.firstDayOfYear()).truncatedTo(ChronoUnit.DAYS));
-            case "week":
-                return ConstantOperator.createDatetime(
-                        date.getDatetime().with(DayOfWeek.MONDAY).truncatedTo(ChronoUnit.DAYS));
-            case "quarter":
-                int year = date.getDatetime().getYear();
-                int month = date.getDatetime().getMonthValue();
-                int quarterMonth = (month - 1) / 3 * 3 + 1;
-                LocalDateTime quarterDate = LocalDateTime.of(year, quarterMonth, 1, 0, 0);
-                return ConstantOperator.createDatetime(quarterDate);
-            default:
-                throw new IllegalArgumentException(fmt + " not supported in date_trunc format string");
+        if (date.getType().isDate()) {
+            switch (fmt.getVarchar()) {
+                case "day":
+                    return ConstantOperator.createDate(date.getDate().truncatedTo(ChronoUnit.DAYS));
+                case "month":
+                    return ConstantOperator.createDate(
+                            date.getDate().with(TemporalAdjusters.firstDayOfMonth()).truncatedTo(ChronoUnit.DAYS));
+                case "year":
+                    return ConstantOperator.createDate(
+                            date.getDate().with(TemporalAdjusters.firstDayOfYear()).truncatedTo(ChronoUnit.DAYS));
+                case "week":
+                    return ConstantOperator.createDate(
+                            date.getDate().with(DayOfWeek.MONDAY).truncatedTo(ChronoUnit.DAYS));
+                case "quarter":
+                    int year = date.getDate().getYear();
+                    int month = date.getDate().getMonthValue();
+                    int quarterMonth = (month - 1) / 3 * 3 + 1;
+                    LocalDateTime quarterDate = LocalDateTime.of(year, quarterMonth, 1, 0, 0);
+                    return ConstantOperator.createDate(quarterDate);
+                default:
+                    throw new IllegalArgumentException(fmt + " not supported in date_trunc format string");
+            }
+
+        } else {
+            switch (fmt.getVarchar()) {
+                case "second":
+                    return ConstantOperator.createDatetime(date.getDatetime().truncatedTo(ChronoUnit.SECONDS));
+                case "minute":
+                    return ConstantOperator.createDatetime(date.getDatetime().truncatedTo(ChronoUnit.MINUTES));
+                case "hour":
+                    return ConstantOperator.createDatetime(date.getDatetime().truncatedTo(ChronoUnit.HOURS));
+                case "day":
+                    return ConstantOperator.createDatetime(date.getDatetime().truncatedTo(ChronoUnit.DAYS));
+                case "month":
+                    return ConstantOperator.createDatetime(
+                            date.getDatetime().with(TemporalAdjusters.firstDayOfMonth()).truncatedTo(ChronoUnit.DAYS));
+                case "year":
+                    return ConstantOperator.createDatetime(
+                            date.getDatetime().with(TemporalAdjusters.firstDayOfYear()).truncatedTo(ChronoUnit.DAYS));
+                case "week":
+                    return ConstantOperator.createDatetime(
+                            date.getDatetime().with(DayOfWeek.MONDAY).truncatedTo(ChronoUnit.DAYS));
+                case "quarter":
+                    int year = date.getDatetime().getYear();
+                    int month = date.getDatetime().getMonthValue();
+                    int quarterMonth = (month - 1) / 3 * 3 + 1;
+                    LocalDateTime quarterDate = LocalDateTime.of(year, quarterMonth, 1, 0, 0);
+                    return ConstantOperator.createDatetime(quarterDate);
+                default:
+                    throw new IllegalArgumentException(fmt + " not supported in date_trunc format string");
+            }
         }
+
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "date_format", argTypes = {DATETIME, VARCHAR}, returnType = VARCHAR),
-            @ConstantFunction(name = "date_format", argTypes = {DATE, VARCHAR}, returnType = VARCHAR)
+            @ConstantFunction(name = "date_format", argTypes = {DATETIME, VARCHAR}, returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "date_format", argTypes = {DATE, VARCHAR}, returnType = VARCHAR, isMonotonic = true)
     })
     public static ConstantOperator dateFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
         String format = fmtLiteral.getVarchar();
@@ -222,8 +252,8 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "to_iso8601", argTypes = {DATETIME}, returnType = VARCHAR),
-            @ConstantFunction(name = "to_iso8601", argTypes = {DATE}, returnType = VARCHAR)
+            @ConstantFunction(name = "to_iso8601", argTypes = {DATETIME}, returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "to_iso8601", argTypes = {DATE}, returnType = VARCHAR, isMonotonic = true)
     })
     public static ConstantOperator toISO8601(ConstantOperator date) {
         if (date.getType().isDatetime()) {
@@ -265,36 +295,36 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
 
-    @ConstantFunction(name = "years_sub", argTypes = {DATETIME, INT}, returnType = DATETIME)
+    @ConstantFunction(name = "years_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator yearsSub(ConstantOperator date, ConstantOperator year) {
         return ConstantOperator.createDatetime(date.getDatetime().minusYears(year.getInt()));
     }
 
-    @ConstantFunction(name = "months_sub", argTypes = {DATETIME, INT}, returnType = DATETIME)
+    @ConstantFunction(name = "months_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator monthsSub(ConstantOperator date, ConstantOperator month) {
         return ConstantOperator.createDatetime(date.getDatetime().minusMonths(month.getInt()));
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "subdate", argTypes = {DATETIME, INT}, returnType = DATETIME),
-            @ConstantFunction(name = "date_sub", argTypes = {DATETIME, INT}, returnType = DATETIME),
-            @ConstantFunction(name = "days_sub", argTypes = {DATETIME, INT}, returnType = DATETIME)
+            @ConstantFunction(name = "subdate", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true),
+            @ConstantFunction(name = "date_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true),
+            @ConstantFunction(name = "days_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     })
     public static ConstantOperator daysSub(ConstantOperator date, ConstantOperator day) {
         return ConstantOperator.createDatetime(date.getDatetime().minusDays(day.getInt()));
     }
 
-    @ConstantFunction(name = "hours_sub", argTypes = {DATETIME, INT}, returnType = DATETIME)
+    @ConstantFunction(name = "hours_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator hoursSub(ConstantOperator date, ConstantOperator hour) {
         return ConstantOperator.createDatetime(date.getDatetime().minusHours(hour.getInt()));
     }
 
-    @ConstantFunction(name = "minutes_sub", argTypes = {DATETIME, INT}, returnType = DATETIME)
+    @ConstantFunction(name = "minutes_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator minutesSub(ConstantOperator date, ConstantOperator minute) {
         return ConstantOperator.createDatetime(date.getDatetime().minusMinutes(minute.getInt()));
     }
 
-    @ConstantFunction(name = "seconds_sub", argTypes = {DATETIME, INT}, returnType = DATETIME)
+    @ConstantFunction(name = "seconds_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator secondsSub(ConstantOperator date, ConstantOperator second) {
         return ConstantOperator.createDatetime(date.getDatetime().minusSeconds(second.getInt()));
     }
@@ -375,7 +405,7 @@ public class ScalarOperatorFunctions {
         return dateFormat(dl, fmtLiteral);
     }
 
-    @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME)    
+    @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME)
     public static ConstantOperator now() {
         ConnectContext connectContext = ConnectContext.get();
         LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime() / 1000 * 1000)
@@ -436,17 +466,17 @@ public class ScalarOperatorFunctions {
     /**
      * Arithmetic function
      */
-    @ConstantFunction(name = "add", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT)
+    @ConstantFunction(name = "add", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT, isMonotonic = true)
     public static ConstantOperator addSmallInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createSmallInt((short) Math.addExact(first.getSmallint(), second.getSmallint()));
     }
 
-    @ConstantFunction(name = "add", argTypes = {INT, INT}, returnType = INT)
+    @ConstantFunction(name = "add", argTypes = {INT, INT}, returnType = INT, isMonotonic = true)
     public static ConstantOperator addInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createInt(Math.addExact(first.getInt(), second.getInt()));
     }
 
-    @ConstantFunction(name = "add", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
+    @ConstantFunction(name = "add", argTypes = {BIGINT, BIGINT}, returnType = BIGINT, isMonotonic = true)
     public static ConstantOperator addBigInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createBigint(Math.addExact(first.getBigint(), second.getBigint()));
     }
@@ -466,22 +496,22 @@ public class ScalarOperatorFunctions {
         return createDecimalConstant(first.getDecimal().add(second.getDecimal()));
     }
 
-    @ConstantFunction(name = "add", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT)
+    @ConstantFunction(name = "add", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT, isMonotonic = true)
     public static ConstantOperator addLargeInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createLargeInt(first.getLargeInt().add(second.getLargeInt()));
     }
 
-    @ConstantFunction(name = "subtract", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT)
+    @ConstantFunction(name = "subtract", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT, isMonotonic = true)
     public static ConstantOperator subtractSmallInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createSmallInt((short) Math.subtractExact(first.getSmallint(), second.getSmallint()));
     }
 
-    @ConstantFunction(name = "subtract", argTypes = {INT, INT}, returnType = INT)
+    @ConstantFunction(name = "subtract", argTypes = {INT, INT}, returnType = INT, isMonotonic = true)
     public static ConstantOperator subtractInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createInt(Math.subtractExact(first.getInt(), second.getInt()));
     }
 
-    @ConstantFunction(name = "subtract", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
+    @ConstantFunction(name = "subtract", argTypes = {BIGINT, BIGINT}, returnType = BIGINT, isMonotonic = true)
     public static ConstantOperator subtractBigInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createBigint(Math.subtractExact(first.getBigint(), second.getBigint()));
     }
@@ -501,7 +531,7 @@ public class ScalarOperatorFunctions {
         return createDecimalConstant(first.getDecimal().subtract(second.getDecimal()));
     }
 
-    @ConstantFunction(name = "subtract", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT)
+    @ConstantFunction(name = "subtract", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT, isMonotonic = true)
     public static ConstantOperator subtractLargeInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createLargeInt(first.getLargeInt().subtract(second.getLargeInt()));
     }
