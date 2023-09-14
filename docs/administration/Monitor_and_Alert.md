@@ -99,6 +99,7 @@ The available metrics are:
 |starrocks_be_resource_group_cpu_use_ratio|percentage|average|The ratio of CPU time used by the resource group to the CPU time of all resource groups|
 |starrocks_be_resource_group_mem_limit_bytes|byte|Instantaneous|Instantaneous value of resource group memory quota|
 |starrocks_be_resource_group_mem_allocated_bytes|byte|Instantaneous|Instantaneous value of resource group memory usage|
+|starrocks_be_pipe_prepare_pool_queue_len|count|Instantaneous|Instantaneous value of pipeline prepare thread pool task queue length|
 
 ## Monitoring Alarm Best Practices
 
