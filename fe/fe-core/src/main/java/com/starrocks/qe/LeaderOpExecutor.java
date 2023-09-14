@@ -112,6 +112,10 @@ public class LeaderOpExecutor {
                 }
             }
         }
+
+        if (result.isSetResource_group_name()) {
+            ctx.getAuditEventBuilder().setResourceGroup(result.getResource_group_name());
+        }
         if (result.isSetAudit_statistics()) {
             TAuditStatistics tAuditStatistics = result.getAudit_statistics();
             if (ctx.getExecutor() != null) {

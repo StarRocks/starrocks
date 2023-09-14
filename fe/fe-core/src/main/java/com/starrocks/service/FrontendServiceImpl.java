@@ -1223,7 +1223,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         // add this log so that we can track this stmt
-        LOG.info("receive forwarded stmt {} from FE: {}", params.getStmt_id(), clientAddr.getHostname());
+        LOG.info("receive forwarded stmt {} from FE: {}",
+                params.getStmt_id(), clientAddr != null ? clientAddr.getHostname() : "unknown");
         ConnectContext context = new ConnectContext(null);
         ConnectProcessor processor = new ConnectProcessor(context);
         TMasterOpResult result = processor.proxyExecute(params);
@@ -1968,7 +1969,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
-    public synchronized TImmutablePartitionResult updateImmutablePartitionInternal(TImmutablePartitionRequest request) 
+    public synchronized TImmutablePartitionResult updateImmutablePartitionInternal(TImmutablePartitionRequest request)
             throws UserException {
         long dbId = request.getDb_id();
         long tableId = request.getTable_id();
@@ -2105,7 +2106,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     if (bePathsMap.keySet().size() < quorum) {
                         throw new UserException(
                                 "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                + tablet.getId() + ", backends: " + Joiner.on(",").join(localTablet.getBackends()));
+                                        + tablet.getId() + ", backends: " + Joiner.on(",").join(localTablet.getBackends()));
                     }
                     // replicas[0] will be the primary replica
                     // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable
@@ -2619,7 +2620,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return res;
     }
 
-
     @Override
     public TGetDictQueryParamResponse getDictQueryParam(TGetDictQueryParamRequest request) throws TException {
         Database db = GlobalStateMgr.getCurrentState().getDb(request.getDb_name());
@@ -2650,7 +2650,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             List<Long> allPartitions = dictTable.getAllPartitionIds();
             response.setPartition(
                     OlapTableSink.createPartition(
-                        db.getId(), dictTable, dictTable.supportedAutomaticPartition(), allPartitions));
+                            db.getId(), dictTable, dictTable.supportedAutomaticPartition(), allPartitions));
             response.setLocation(OlapTableSink.createLocation(
                     dictTable, dictTable.getClusterId(), allPartitions, dictTable.enableReplicatedStorage()));
             response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(dictTable.getClusterId()));
