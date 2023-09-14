@@ -117,6 +117,13 @@ RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
     TimezoneUtils::find_cctz_time_zone(_timezone, _timezone_obj);
 }
 
+RuntimeState::RuntimeState(ExecEnv* exec_env) : _exec_env(exec_env) {
+    _profile = std::make_shared<RuntimeProfile>("<unnamed>");
+    _query_options.batch_size = DEFAULT_CHUNK_SIZE;
+    _timezone = TimezoneUtils::default_time_zone;
+    _timestamp_ms = 0;
+}
+
 RuntimeState::~RuntimeState() {
     // close error log file
     if (_error_log_file != nullptr && _error_log_file->is_open()) {
