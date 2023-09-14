@@ -3762,10 +3762,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 setLakeStorageInfo(materializedView, properties);
             }
 
-<<<<<<< HEAD
-=======
             // session properties
->>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
             if (!properties.isEmpty()) {
                 // analyze properties
                 List<SetListItem> setListItems = Lists.newArrayList();

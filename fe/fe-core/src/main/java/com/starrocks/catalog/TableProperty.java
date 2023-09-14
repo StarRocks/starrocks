@@ -56,6 +56,7 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -206,17 +207,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // foreign key constraint for mv rewrite
     private List<ForeignKeyConstraint> foreignKeyConstraints;
 
-<<<<<<< HEAD
-=======
-    private Boolean useSchemaLightChange;
-
-    private PeriodDuration dataCachePartitionDuration;
-
     public TableProperty() {
         this.properties = new LinkedHashMap<>();
     }
 
->>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
     }
@@ -385,9 +379,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-<<<<<<< HEAD
-    public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) throws AnalysisException {
-=======
     public TableProperty buildMvSortKeys() {
         String sortKeys = properties.get(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS);
         this.mvSortKeys = analyzeMvSortKeys(sortKeys);
@@ -413,8 +404,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return res;
     }
 
-    public static QueryRewriteConsistencyMode analyzeExternalTableQueryRewrite(String value) {
->>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
+    public static QueryRewriteConsistencyMode analyzeExternalTableQueryRewrite(String value) throws AnalysisException {
         if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
             // old version use the boolean value
             boolean boolValue = Boolean.parseBoolean(value);
@@ -436,21 +426,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
         String value = properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
         forceExternalTableQueryRewrite = QueryRewriteConsistencyMode.defaultForExternalTable();
         if (value != null) {
-            try {
-                forceExternalTableQueryRewrite = analyzeQueryRewriteMode(value);
-            } catch (AnalysisException e) {
-                LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, e);
-            }
+            forceExternalTableQueryRewrite = analyzeQueryRewriteMode(value);
         }
 
         olapTableQueryRewrite = QueryRewriteConsistencyMode.defaultForOlapTable();
         value = properties.get(PropertyAnalyzer.PROPERTIES_OLAP_TABLE_QUERY_REWRITE);
         if (value != null) {
-            try {
-                olapTableQueryRewrite = analyzeQueryRewriteMode(value);
-            } catch (AnalysisException e) {
-                LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_OLAP_TABLE_QUERY_REWRITE, e);
-            }
+            olapTableQueryRewrite = analyzeQueryRewriteMode(value);
         }
 
         return this;

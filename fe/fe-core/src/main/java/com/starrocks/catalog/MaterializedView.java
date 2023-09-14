@@ -897,79 +897,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         sb.append("\nPROPERTIES (\n");
         boolean first = true;
         Map<String, String> properties = this.getTableProperty().getProperties();
-<<<<<<< HEAD
-        // replicated storage
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
-                    .append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)).append("\"");
-        }
-
-        // partition TTL
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
-                    .append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)).append("\"");
-        }
-
-        // auto refresh partitions limit
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                    .append(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
-                    .append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)).append("\"");
-        }
-
-        // partition refresh number
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                    .append(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
-                    .append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)).append("\"");
-        }
-
-        // excluded trigger tables
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                    .append(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
-                    .append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)).append("\"");
-        }
-
-        // force_external_table_query_rewrite
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
-                    PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE).append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)).append("\"");
-        }
-        // mv_rewrite_staleness
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
-                    PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND).append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)).append("\"");
-        }
-
-        // unique constraints
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
-                    .append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)).append("\"");
-        }
-
-        // foreign keys constraints
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                    .append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
-                    .append("\" = \"");
-            sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(getForeignKeyConstraints()))
-                    .append("\"");
-        }
-
-        appendUniqueProperties(sb);
-
-=======
         boolean hasStorageMedium = false;
->>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String name = entry.getKey();
             String value = entry.getValue();
