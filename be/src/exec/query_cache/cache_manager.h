@@ -64,8 +64,8 @@ class CacheManager {
 public:
     explicit CacheManager(size_t capacity);
     ~CacheManager() = default;
-    Status populate(const std::string& key, const CacheValue& value);
-    StatusOr<CacheValue> probe(const std::string& key);
+    void populate(const std::string& key, const CacheValue& value);
+    [[nodiscard]] StatusOr<CacheValue> probe(const std::string& key);
     size_t memory_usage();
     size_t capacity();
     size_t lookup_count();

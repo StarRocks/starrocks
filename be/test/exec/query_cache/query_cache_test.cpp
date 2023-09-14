@@ -107,8 +107,7 @@ TEST_F(QueryCacheTest, testCacheManager) {
     };
 
     for (auto i = 0; i < 10; ++i) {
-        auto st = cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
-        st.permit_unchecked_error();
+        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
     }
 
     ASSERT_EQ(cache_mgr->memory_usage(), 960);
@@ -125,8 +124,7 @@ TEST_F(QueryCacheTest, testCacheManager) {
     ASSERT_EQ(cache_mgr->memory_usage(), 960);
 
     for (auto i = 20; i < 30; ++i) {
-        auto st = cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));
-        st.permit_unchecked_error();
+        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));
     }
     ASSERT_LE(cache_mgr->memory_usage(), cache_mgr->capacity());
 
@@ -150,8 +148,7 @@ TEST_F(QueryCacheTest, testCacheManager) {
     ASSERT_GE(cache_mgr->hit_count(), 0);
 
     for (auto i = 0; i < 10; ++i) {
-        auto st = cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
-        st.permit_unchecked_error();
+        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
     }
     ASSERT_EQ(cache_mgr->capacity(), CACHE_CAPACITY);
     ASSERT_GE(cache_mgr->memory_usage(), 0);

@@ -712,11 +712,11 @@ void JoinHashMapTest::check_empty_hash_map(TJoinOp::type join_type, int num_prob
 
     Columns build_key_columns{build_chunk->columns()[0], build_chunk->columns()[1]};
     hash_table.append_chunk(runtime_state.get(), build_chunk, build_key_columns);
-    hash_table.build(runtime_state.get());
+    (void)hash_table.build(runtime_state.get());
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     bool eos = false;
-    hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+    (void)hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
 
     ASSERT_EQ(result_chunk->num_rows(), expect_num_rows);
     ASSERT_EQ(result_chunk->num_columns(), expect_num_colums);
@@ -1105,8 +1105,8 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
     ht.create(param);
     Columns key_columns{build_chunk->columns()[0]};
     ht.append_chunk(_runtime_state.get(), build_chunk, key_columns);
-    ht.build(_runtime_state.get());
-    ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+    (void)ht.build(_runtime_state.get());
+    (void)ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
 
     // check
     ASSERT_EQ(result_chunk->columns().size(), 2);
@@ -1171,8 +1171,8 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
     ht.create(param);
     Columns key_columns{build_chunk->columns()[0]};
     ht.append_chunk(_runtime_state.get(), build_chunk, key_columns);
-    ht.build(_runtime_state.get());
-    ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+    (void)ht.build(_runtime_state.get());
+    (void)ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
 
     // check
     ASSERT_EQ(result_chunk->columns().size(), 2);
@@ -1899,12 +1899,12 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
 
     Columns build_keys_column{build_chunk->columns()[0]};
     hash_table.append_chunk(runtime_state.get(), build_chunk, build_keys_column);
-    hash_table.build(runtime_state.get());
+    (void)hash_table.build(runtime_state.get());
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     bool eos = false;
 
-    hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+    (void)hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
 
     ASSERT_EQ(result_chunk->num_columns(), 6);
 
@@ -1965,12 +1965,12 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     Columns build_key_columns;
     build_key_columns.emplace_back(build_chunk->columns()[0]);
     hash_table.append_chunk(runtime_state.get(), build_chunk, build_key_columns);
-    hash_table.build(runtime_state.get());
+    (void)hash_table.build(runtime_state.get());
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     bool eos = false;
 
-    hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+    (void)hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
 
     ASSERT_EQ(result_chunk->num_columns(), 6);
 
@@ -2033,12 +2033,12 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
 
     Columns build_key_columns{build_chunk->columns()[0], build_chunk->columns()[1]};
     hash_table.append_chunk(runtime_state.get(), build_chunk, build_key_columns);
-    hash_table.build(runtime_state.get());
+    (void)hash_table.build(runtime_state.get());
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     bool eos = false;
 
-    hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+    (void)hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
 
     ASSERT_EQ(result_chunk->num_columns(), 6);
 
@@ -2098,12 +2098,12 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
 
     Columns build_key_columns{build_chunk->columns()[0], build_chunk->columns()[1]};
     hash_table.append_chunk(runtime_state.get(), build_chunk, build_key_columns);
-    hash_table.build(runtime_state.get());
+    (void)hash_table.build(runtime_state.get());
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     bool eos = false;
 
-    hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+    (void)hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
 
     ASSERT_EQ(result_chunk->num_columns(), 6);
 
