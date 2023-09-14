@@ -2727,16 +2727,6 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testCreateImmediateDeferred() throws Exception {
-        UtFrameUtils.parseStmtWithNewParser(
-                "create materialized view immediate_mv refresh deferred async distributed by hash(c_1_9) as" +
-                        " select c_1_9, c_1_4 from t1", connectContext);
-        UtFrameUtils.parseStmtWithNewParser(
-                "create materialized view immediate_mv refresh immediate async distributed by hash(c_1_9) as" +
-                        " select c_1_9, c_1_4 from t1", connectContext);
-    }
-
-    @Test
     public void testCreateImmediateDeferred(@Mocked TaskManager taskManager) throws Exception {
         new Expectations() {
             {
@@ -2745,12 +2735,12 @@ public class CreateMaterializedViewTest {
             }
         };
         String createImmediate =
-                "create materialized view immediate_mv refresh deferred manual distributed by hash(c_1_9) as" +
+                "create materialized view immediate_mv refresh deferred async distributed by hash(c_1_9) as" +
                         " select c_1_9, c_1_4 from t1";
         starRocksAssert.withMaterializedView(createImmediate);
 
         String createDeferred =
-                "create materialized view deferred_mv refresh immediate manual distributed by hash(c_1_9) as" +
+                "create materialized view deferred_mv refresh immediate async distributed by hash(c_1_9) as" +
                         " select c_1_9, c_1_4 from t1";
         starRocksAssert.withMaterializedView(createDeferred);
     }

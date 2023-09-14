@@ -175,6 +175,17 @@ public class PropertyAnalyzer {
     // positive value: use [0, mv_randomize_start) as random interval
     public static final String PROPERTY_MV_RANDOMIZE_START = "mv_randomize_start";
 
+<<<<<<< HEAD
+=======
+    /**
+     * Materialized View sort keys
+     */
+    public static final String PROPERTY_MV_SORT_KEYS = "mv_sort_keys";
+
+    // light schema change
+    public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
+
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties,
