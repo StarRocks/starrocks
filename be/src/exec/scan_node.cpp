@@ -108,7 +108,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         const std::vector<TScanRangeParams>& global_scan_ranges,
         const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
         int pipeline_dop, bool enable_tablet_internal_parallel,
-        TTabletInternalParallelMode::type tablet_internal_parallel_mode) {
+        TTabletInternalParallelMode::type tablet_internal_parallel_mode, bool enable_shared_scan) {
     DCHECK(!output_chunk_by_bucket() || !scan_ranges_per_driver_seq.empty());
     if (scan_ranges_per_driver_seq.empty()) {
         ASSIGN_OR_RETURN(auto morsel_queue,
@@ -116,6 +116,9 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
                                                             enable_tablet_internal_parallel,
                                                             tablet_internal_parallel_mode, global_scan_ranges.size()));
         int scan_dop = std::min<int>(std::max<int>(1, morsel_queue->max_degree_of_parallelism()), pipeline_dop);
+        if (config::use_default_dop_when_shared_scan && enable_shared_scan) {
+            scan_dop = pipeline_dop;
+        }
         int io_parallelism = scan_dop * io_tasks_per_scan_operator();
 
         // If not so much morsels, try to assign morsel uniformly among operators to avoid data skew
