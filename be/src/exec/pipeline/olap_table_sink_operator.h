@@ -19,13 +19,8 @@ class OlapTableSinkOperator final : public Operator {
 public:
     OlapTableSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                           int32_t sender_id, starrocks::stream_load::OlapTableSink* sink,
-<<<<<<< HEAD
-                          FragmentContext* const fragment_ctx)
-            : Operator(factory, id, "olap_table_sink", plan_node_id, driver_sequence),
-=======
                           FragmentContext* const fragment_ctx, std::atomic<int32_t>& num_sinkers)
-            : Operator(factory, id, "olap_table_sink", plan_node_id, false, driver_sequence),
->>>>>>> 4a6b0c9405 ([BugFix] Support audit for insert into statement executing from follower (#30663))
+            : Operator(factory, id, "olap_table_sink", plan_node_id, driver_sequence),
               _sink(sink),
               _fragment_ctx(fragment_ctx),
               _num_sinkers(num_sinkers),
