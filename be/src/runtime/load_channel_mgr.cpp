@@ -200,8 +200,11 @@ void* LoadChannelMgr::load_channel_clean_bg_worker(void* arg) {
 #endif
     auto mgr = static_cast<LoadChannelMgr*>(arg);
     while (!bthread_stopped(bthread_self())) {
+        LOG(ERROR) << "LXH: SLEEP 1";
         if (bthread_usleep(interval * 1000 * 1000) == 0) {
+            LOG(ERROR) << "LXH: SLEEP 2";
             mgr->_start_load_channels_clean();
+            LOG(ERROR) << "LXH: SLEEP 3";
         }
     }
     return nullptr;
