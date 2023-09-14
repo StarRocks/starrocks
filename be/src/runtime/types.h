@@ -110,7 +110,7 @@ struct TypeDescriptor {
         return res;
     }
 
-    static TypeDescriptor create_array_type(const TypeDescriptor &children) {
+    static TypeDescriptor create_array_type(const TypeDescriptor& children) {
         TypeDescriptor res;
         res.type = TYPE_ARRAY;
         res.children.push_back(children);
