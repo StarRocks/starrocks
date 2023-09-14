@@ -28,6 +28,8 @@ public class SemanticException extends StarRocksPlannerException {
 
     private final NodePosition pos;
 
+    protected boolean canNested = true;
+
 
     public SemanticException(String formatString) {
         this(formatString, NodePosition.ZERO);
@@ -38,6 +40,17 @@ public class SemanticException extends StarRocksPlannerException {
         super(detailMsg, ErrorType.USER_ERROR);
         this.detailMsg = detailMsg;
         this.pos = pos;
+    }
+
+    public SemanticException(String detailMsg, NodePosition pos, boolean canNested) {
+        super(detailMsg, ErrorType.USER_ERROR);
+        this.detailMsg = detailMsg;
+        this.pos = pos;
+        this.canNested = canNested;
+    }
+
+    boolean canNested() {
+        return canNested;
     }
 
     public SemanticException(String formatString, Object... args) {
