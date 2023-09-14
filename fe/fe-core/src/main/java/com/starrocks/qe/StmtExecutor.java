@@ -184,6 +184,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1353,11 +1355,17 @@ public class StmtExecutor {
                         .build();
         sendMetaData(metaData);
 
-        // Send result set.
-        for (String item : explainString.split("\n")) {
-            serializer.reset();
-            serializer.writeLenEncodedString(item);
-            context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+        if (isProxy) {
+            proxyResultSet = new ShowResultSet(metaData,
+                    Arrays.stream(explainString.split("\n")).map(Collections::singletonList).collect(
+                            Collectors.toList()));
+        } else {
+            // Send result set.
+            for (String item : explainString.split("\n")) {
+                serializer.reset();
+                serializer.writeLenEncodedString(item);
+                context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+            }
         }
         context.getState().setEof();
     }
@@ -1424,6 +1432,67 @@ public class StmtExecutor {
         context.getGlobalStateMgr().getExportMgr().addExportJob(queryId, exportStmt);
     }
 
+<<<<<<< HEAD
+=======
+    private void handleUpdateFailPointStatusStmt() throws Exception {
+        FailPointExecutor executor = new FailPointExecutor(context, parsedStmt);
+        executor.execute();
+    }
+
+    private void handleDeallocateStmt() throws Exception {
+        DeallocateStmt deallocateStmt = (DeallocateStmt) parsedStmt;
+        String stmtName = deallocateStmt.getStmtName();
+        if (context.getPreparedStmt(stmtName) == null) {
+            throw new UserException("PrepareStatement `" + stmtName + "` not exist");
+        }
+        context.removePreparedStmt(stmtName);
+        context.getState().setOk();
+    }
+
+    private void handlePrepareStmt(ExecPlan execPlan) throws Exception {
+        PrepareStmt prepareStmt = (PrepareStmt) parsedStmt;
+        boolean isBinaryRowFormat = context.getCommand() == MysqlCommand.COM_STMT_PREPARE;
+        // register prepareStmt
+        LOG.debug("add prepared statement {}, isBinaryProtocol {}", prepareStmt.getName(), isBinaryRowFormat);
+        context.putPreparedStmt(prepareStmt.getName(), new PrepareStmtContext(prepareStmt, context, execPlan));
+        if (isBinaryRowFormat) {
+            sendStmtPrepareOK(prepareStmt);
+        }
+    }
+
+    private void sendStmtPrepareOK(PrepareStmt prepareStmt) throws IOException {
+        // https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html#sect_protocol_com_stmt_prepare_response
+        serializer.reset();
+        // 0x00 OK
+        serializer.writeInt1(0);
+        // statement_id
+        serializer.writeInt4(Integer.valueOf(prepareStmt.getName()));
+        // num_columns
+        int numColumns = 0;
+        serializer.writeInt2(numColumns);
+        // num_params
+        int numParams = prepareStmt.getParameters().size();
+        serializer.writeInt2(numParams);
+        // reserved_1
+        serializer.writeInt1(0);
+        context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+        if (numParams > 0) {
+            List<String> colNames = prepareStmt.getParameterLabels();
+            List<Parameter> parameters = prepareStmt.getParameters();
+            for (int i = 0; i < colNames.size(); ++i) {
+                serializer.reset();
+                serializer.writeField(colNames.get(i), parameters.get(i).getType());
+                context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+            }
+        }
+        context.getState().setEof();
+    }
+
+    public void setQueryStatistics(PQueryStatistics statistics) {
+        this.statisticsForAuditLog = statistics;
+    }
+
+>>>>>>> 4a6b0c9405 ([BugFix] Support audit for insert into statement executing from follower (#30663))
     public PQueryStatistics getQueryStatisticsForAuditLog() {
         if (statisticsForAuditLog == null && coord != null) {
             statisticsForAuditLog = coord.getAuditStatistics();

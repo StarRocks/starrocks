@@ -335,7 +335,8 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
     TReportAuditStatisticsParams params;
     params.__set_query_id(fragment_ctx->query_id());
     params.__set_fragment_instance_id(fragment_ctx->fragment_instance_id());
-    query_statistics->to_params(&params);
+    params.__set_audit_statistics({});
+    query_statistics->to_params(&params.audit_statistics);
 
     auto fe_addr = fragment_ctx->fe_addr();
     if (fe_addr.hostname.empty()) {
