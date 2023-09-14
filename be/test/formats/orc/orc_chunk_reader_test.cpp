@@ -207,24 +207,18 @@ static uint64_t get_hit_rows(OrcChunkReader* reader) {
     return records;
 }
 
-void check_schema(const std::string& path, const std::vector<std::pair<std::string, LogicalType>>& expected_schema) {
+void check_schema(const std::string& path, const std::vector<std::pair<std::string, TypeDescriptor>>& expected_schema) {
     OrcChunkReader reader;
-    std::cerr << "111" << std::endl;
     auto input_stream = orc::readLocalFile(path);
     reader.init(std::move(input_stream));
     std::vector<SlotDescriptor> schema;
-    std::cerr << "222" << std::endl;
-
-    std::cerr << "333" << std::endl;
     EXPECT_OK(reader.get_schema(&schema));
-    std::cerr << "444" << std::endl;
-
     EXPECT_EQ(schema.size(), expected_schema.size());
     for (size_t i = 0; i < expected_schema.size(); ++i) {
-        std::cerr << schema[i].col_name() << std::endl;
         EXPECT_EQ(schema[i].col_name(), expected_schema[i].first);
-        EXPECT_EQ(schema[i].type().type, expected_schema[i].second) << schema[i].col_name();
-        std::cerr << schema[i].col_name() << "  done" << std::endl;
+        EXPECT_TRUE(schema[i].type() == expected_schema[i].second)
+                << "column name: " << schema[i].col_name() << " expected: " << expected_schema[i].second.debug_string()
+                << " actual: " << schema[i].type().debug_string();
     }
 }
 
@@ -2140,27 +2134,31 @@ TEST_F(OrcChunkReaderTest, TestTypeMismatched) {
 }
 
 TEST_F(OrcChunkReaderTest, get_file_schema) {
-    const std::vector<std::pair<std::string, std::vector<std::pair<std::string, LogicalType>>>> test_cases = {
+    const std::vector<std::pair<std::string, std::vector<std::pair<std::string, TypeDescriptor>>>> test_cases = {
             {"./be/test/exec/test_data/orc_scanner/scalar_types.orc",
-             {{"col_bool", TYPE_BOOLEAN},
-              {"col_tinyint", TYPE_TINYINT},
-              {"col_smallint", TYPE_SMALLINT},
-              {"col_int", TYPE_INT},
-              {"col_bigint", TYPE_BIGINT},
-              {"col_float", TYPE_FLOAT},
-              {"col_double", TYPE_DOUBLE},
-              {"col_string", TYPE_VARCHAR},
-              {"col_char", TYPE_CHAR},
-              {"col_varchar", TYPE_VARCHAR},
-              {"col_binary", TYPE_VARBINARY},
-              {"col_decimal", TYPE_DECIMAL128},
-              {"col_timestamp", TYPE_DATETIME},
-              {"col_date", TYPE_DATE}}},
+             {{"col_bool", TypeDescriptor::from_logical_type(TYPE_BOOLEAN)},
+              {"col_tinyint", TypeDescriptor::from_logical_type(TYPE_TINYINT)},
+              {"col_smallint", TypeDescriptor::from_logical_type(TYPE_SMALLINT)},
+              {"col_int", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+              {"col_float", TypeDescriptor::from_logical_type(TYPE_FLOAT)},
+              {"col_double", TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+              {"col_string", TypeDescriptor::create_varchar_type(1048576)},
+              {"col_char", TypeDescriptor::create_char_type(10)},
+              {"col_varchar", TypeDescriptor::create_varchar_type(1048576)},
+              {"col_binary", TypeDescriptor::create_varbinary_type(1048576)},
+              {"col_decimal", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 19)},
+              {"col_timestamp", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
+              {"col_date", TypeDescriptor::from_logical_type(TYPE_DATE)}}},
             {"./be/test/exec/test_data/orc_scanner/compound.orc",
-             {{"col_int", TYPE_INT},
-              {"col_list_int", TYPE_ARRAY},
-              {"col_map_int_double", TYPE_MAP},
-              {"col_struct_int_double", TYPE_STRUCT}}}};
+             {{"col_int", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_list_int", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_map_string_int", TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
+                                                                     TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_struct_string_int",
+               TypeDescriptor::create_struct_type(
+                       {"field_string", "field_int"},
+                       {TypeDescriptor::create_varchar_type(1048576), TypeDescriptor::from_logical_type(TYPE_INT)})}}}};
 
     for (const auto& test_case : test_cases) {
         check_schema(test_case.first, test_case.second);

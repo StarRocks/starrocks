@@ -20,7 +20,7 @@ import pyorc
 
 # Define the ORC type for the columns
 orc_type = pyorc.TypeDescription.from_string(
-    "struct<col_int:int,col_list_int:array<int>,col_map_int_bool:map<int,double>,col_struct_int_double:struct<field_int:int,field_double:double>>"
+    "struct<col_int:int,col_list_int:array<int>,col_map_string_int:map<string,int>,col_struct_string_int:struct<field_string:string,field_int:int>>"
 )
 
 # Open a file to write
@@ -31,8 +31,8 @@ with open("compound.orc", "wb") as data:
     writer.write((
         1,
         [2, 3],
-        {4: 5.1, 6: 7.1},
-        (8, 3.14)
+        {"key4": 5, "key6": 7},
+        ("value8", 9)
     ))
 
     # Close the writer to ensure everything is written to the file
