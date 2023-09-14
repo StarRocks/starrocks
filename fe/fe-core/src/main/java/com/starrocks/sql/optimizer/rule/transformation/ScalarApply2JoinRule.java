@@ -119,8 +119,7 @@ public class ScalarApply2JoinRule extends TransformationRule {
         CorrelatedPredicateRewriter rewriter = new CorrelatedPredicateRewriter(
                 apply.getCorrelationColumnRefs(), context);
 
-        ScalarOperator newPredicate =
-                SubqueryUtils.rewritePredicateAndExtractColumnRefs(correlationPredicate, rewriter);
+        ScalarOperator newPredicate = rewriter.rewrite(correlationPredicate);
 
         Map<ColumnRefOperator, ScalarOperator> innerRefMap = rewriter.getColumnRefToExprMap();
 

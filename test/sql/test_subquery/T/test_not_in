@@ -1,0 +1,35 @@
+-- name: test_subquery
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT "",
+  `v4` largeint NULL COMMENT "",
+  `v5` tinyint NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+insert into t0 values (1, 1, null, null, null), (2, 2, null, null, null);
+
+select * from t0 x1 where x1.v2 not in (select x2.v1 from t0 x2 where x1.v2 = x2.v2);
+select * from t0 x1 where x1.v3 not in (select x2.v2 from t0 x2 where x1.v2 = x2.v2);
+select * from t0 x1 where x1.v3 not in (select x2.v4 from t0 x2 where x1.v2 = x2.v2);
+select * from t0 x1 where x1.v2 not in (select x2.v2 from t0 x2 where x1.v3 = x2.v2);
+select * from t0 x1 where x1.v2 not in (select x2.v2 from t0 x2 where x1.v3 = x2.v2);
+select * from t0 x1 where x1.v4 not in (select x2.v2 from t0 x2 where x1.v2 = x2.v2);
+select * from t0 x1 where x1.v5 not in (select x2.v2 from t0 x2 where x1.v2 = x2.v2);
+
+
+select * from t0 x1 where x1.v2 not in (select x2.v2 from t0 x2 where (x1.v3 IS NULL) = (x2.v3 IS NULL));
+select * from t0 x1 where x1.v2 not in (select x2.v2 from t0 x2 where x1.v3 = x2.v3 + x1.v2);
+
+select x1.v2 not in (select x2.v2 from t0 x2 where (x1.v3 IS NULL) = (x2.v3 IS NULL)) from t0 x1;
+select x1.v2 not in (select x2.v2 from t0 x2 where x1.v3 = x2.v3 + x1.v2) from t0 x1;
