@@ -11,49 +11,54 @@ However, when it comes to building complex and efficient reports using data from
 StarRocks supports building asynchronous materialized views based on external catalogs such as Hive catalog, Iceberg catalog, and Hudi catalog. External catalog-based materialized views are particularly useful in the following scenarios:
 
 - **Transparent Acceleration of data lake reports**
-  -  To ensure the query performance of data lake reports, data engineers typically need to work closely with data analysts to probe into the construction logic of the acceleration layer for reports. If the acceleration layer requires further updates, they must update the construction logic, processing schedules, and query statements accordingly.
 
-  -  Through the query rewrite capability of materialized views, report acceleration can be made transparent and imperceptible to users. When slow queries are identified, data engineers can analyze the pattern of slow queries and create materialized views on demand. Application-side queries are then intelligently rewritten and transparently accelerated by the materialized view, allowing for rapid improvement in query performance without modifying the logic of the business application or the query statement.
-- **Incremental calculation of  real-time  data associated with historical data**
-  -  Suppose your business application requires the association of real-time data in StarRocks native tables and historical data in the data lake for incremental calculations. In this situation, materialized views can provide a straightforward solution. For example, if the real-time fact table is a native table in StarRocks and the dimension table is stored in the data lake, you can easily perform incremental calculations by constructing materialized views that associate the native table with the table in the external data sources.
+  To ensure the query performance of data lake reports, data engineers typically need to work closely with data analysts to probe into the construction logic of the acceleration layer for reports. If the acceleration layer requires further updates, they must update the construction logic, processing schedules, and query statements accordingly.
+
+  Through the query rewrite capability of materialized views, report acceleration can be made transparent and imperceptible to users. When slow queries are identified, data engineers can analyze the pattern of slow queries and create materialized views on demand. Application-side queries are then intelligently rewritten and transparently accelerated by the materialized view, allowing for rapid improvement in query performance without modifying the logic of the business application or the query statement.
+
+- **Incremental calculation of real-time  data associated with historical data**
+
+  Suppose your business application requires the association of real-time data in StarRocks native tables and historical data in the data lake for incremental calculations. In this situation, materialized views can provide a straightforward solution. For example, if the real-time fact table is a native table in StarRocks and the dimension table is stored in the data lake, you can easily perform incremental calculations by constructing materialized views that associate the native table with the table in the external data sources.
+
 - **Rapid construction of metric layers**
-  -  Calculating and processing metrics may encounter challenges when dealing with a high dimensionality of data. You can use materialized views, which allows you to perform data pre-aggregation and rollup, to create a relatively lightweight metric layer. Moreover, materialized views can be refreshed automatically, further reducing the complexity of metric calculations.
+
+  Calculating and processing metrics may encounter challenges when dealing with a high dimensionality of data. You can use materialized views, which allows you to perform data pre-aggregation and rollup, to create a relatively lightweight metric layer. Moreover, materialized views can be refreshed automatically, further reducing the complexity of metric calculations.
 
 Materialized views, Data Cache, and native tables in StarRocks are all effective methods to achieve significant boosts in query performance. The following table compares their major differences:
 
 <table class="comparison">
-	<thead>
-	<tr>
-		<th>&nbsp;</th>
-		<th>Data Cache</th>
-		<th>Materialized view</th>
-		<th>Native table</th>
-	</tr>
-	</thead>
-	<tbody>
-	<tr>
-		<td><b>Data loading and updates</b></td>
-		<td>Queries automatically trigger data caching.</td>
-		<td>Refresh tasks are triggered automatically.</td>
-		<td>Supports various import methods but requires manual maintenance of import tasks</td>
-	</tr>
-	<tr>
-		<td><b>Data caching granularity</b></td>
-		<td><ul><li>Supports block-level data caching</li><li>Follows LRU cache eviction mechanism</li><li>No computation results are cached</li></ul></td>
-		<td>Stores the precomputed query results</td>
-		<td>Stores data based on table schema</td>
-	</tr>
-	<tr>
-		<td><b>Query performance</b></td>
-		<td colspan="3" style="text-align: center;">Data Cache <= Materialized view = Native table</td>
-	</tr>
-	<tr>
-		<td><b>Query statement</b></td>
-		<td><ul><li>No need to modify query statements against the data lake</li><li>Once queries hit the cache, computation occurs.</li></ul></td>
-		<td><ul><li>No need to modify query statements against the data lake</li><li>Leverages query rewrite to reuse precomputed results</li></ul></td>
-		<td>Requires modification of query statements to query the native table</td>
-	</tr>
-	<tbody>
+  <thead>
+    <tr>
+      <th>&nbsp;</th>
+      <th>Data Cache</th>
+      <th>Materialized view</th>
+      <th>Native table</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>Data loading and updates</b></td>
+      <td>Queries automatically trigger data caching.</td>
+      <td>Refresh tasks are triggered automatically.</td>
+      <td>Supports various import methods but requires manual maintenance of import tasks</td>
+    </tr>
+    <tr>
+      <td><b>Data caching granularity</b></td>
+      <td><ul><li>Supports block-level data caching</li><li>Follows LRU cache eviction mechanism</li><li>No computation results are cached</li></ul></td>
+      <td>Stores the precomputed query results</td>
+      <td>Stores data based on table schema</td>
+    </tr>
+    <tr>
+      <td><b>Query performance</b></td>
+      <td colspan="3" style="text-align: center;">Data Cache <= Materialized view = Native table</td>
+    </tr>
+    <tr>
+      <td><b>Query statement</b></td>
+      <td><ul><li>No need to modify query statements against the data lake</li><li>Once queries hit the cache, computation occurs.</li></ul></td>
+      <td><ul><li>No need to modify query statements against the data lake</li><li>Leverages query rewrite to reuse precomputed results</li></ul></td>
+      <td>Requires modification of query statements to query the native table</td>
+    </tr>
+  <tbody>
 </table>
 
 <br>
