@@ -23,8 +23,14 @@ import static java.lang.String.format;
 public class SemanticException extends StarRocksPlannerException {
 
     protected boolean canNested = true;
+
     public SemanticException(String formatString) {
         super(formatString, ErrorType.USER_ERROR);
+    }
+
+    public SemanticException(String formatString, boolean canNested) {
+        super(formatString, ErrorType.USER_ERROR);
+        this.canNested = canNested;
     }
 
     public SemanticException(String formatString, Object... args) {
