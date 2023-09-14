@@ -45,22 +45,6 @@ public:
             _engine = nullptr;
         }
     }
-    void write_new_version(const TabletMetaSharedPtr& tablet_meta) {
-        RowsetWriterContext rowset_writer_context;
-        create_rowset_writer_context(&rowset_writer_context, _version);
-        _version++;
-        std::unique_ptr<RowsetWriter> rowset_writer;
-        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
-
-        rowset_writer_add_rows(rowset_writer);
-
-        rowset_writer->flush();
-        RowsetSharedPtr src_rowset = *rowset_writer->build();
-        ASSERT_TRUE(src_rowset != nullptr);
-        ASSERT_EQ(1024, src_rowset->num_rows());
-
-        tablet_meta->add_rs_meta(src_rowset->rowset_meta());
-    }
 
     void write_new_version(const TabletSharedPtr& tablet) {
         RowsetWriterContext rowset_writer_context;
@@ -86,7 +70,7 @@ public:
         rowset_writer_context->tablet_id = 12345;
         rowset_writer_context->tablet_schema_hash = 1111;
         rowset_writer_context->partition_id = 10;
-        rowset_writer_context->rowset_path_prefix = config::storage_root_path + "/data/0/12345/1111";
+        rowset_writer_context->rowset_path_prefix = _default_storage_root_path + "/data/0/12345/1111";
         rowset_writer_context->rowset_state = VISIBLE;
         rowset_writer_context->tablet_schema = _tablet_schema;
         rowset_writer_context->version.first = version;
@@ -171,18 +155,18 @@ public:
 
     void SetUp() override {
         config::min_cumulative_compaction_num_singleton_deltas = 2;
-        //config::max_cumulative_compaction_num_singleton_deltas = 5;
+        config::max_cumulative_compaction_num_singleton_deltas = 1000;
         config::max_compaction_concurrency = 10;
         config::enable_event_based_compaction_framework = false;
         config::vertical_compaction_max_columns_per_group = 5;
+        config::enable_size_tiered_compaction_strategy = true;
         Compaction::init(config::max_compaction_concurrency);
 
-        _default_storage_root_path = config::storage_root_path;
-        config::storage_root_path = std::filesystem::current_path().string() + "/data_test_cumulative_compaction";
-        fs::remove_all(config::storage_root_path);
-        ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
+        _default_storage_root_path = std::filesystem::current_path().string() + "/data_test_cumulative_compaction";
+        fs::remove_all(_default_storage_root_path);
+        ASSERT_TRUE(fs::create_directories(_default_storage_root_path).ok());
         std::vector<StorePath> paths;
-        paths.emplace_back(config::storage_root_path);
+        paths.emplace_back(_default_storage_root_path);
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
@@ -192,7 +176,7 @@ public:
             ASSERT_TRUE(s.ok()) << s.to_string();
         }
 
-        _schema_hash_path = fmt::format("{}/data/0/12345/1111", config::storage_root_path);
+        _schema_hash_path = fmt::format("{}/data/0/12345/1111", _default_storage_root_path);
         ASSERT_OK(fs::create_directories(_schema_hash_path));
 
         _metadata_mem_tracker = std::make_unique<MemTracker>(-1);
@@ -205,10 +189,9 @@ public:
     }
 
     void TearDown() override {
-        if (fs::path_exist(config::storage_root_path)) {
-            ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
+        if (fs::path_exist(_default_storage_root_path)) {
+            ASSERT_TRUE(fs::remove_all(_default_storage_root_path).ok());
         }
-        config::storage_root_path = _default_storage_root_path;
     }
 
 protected:
@@ -240,8 +223,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel) {
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
 
-    TabletSharedPtr tablet =
-            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, _engine->get_stores()[0]);
     ASSERT_TRUE(tablet->init().ok());
 
     // task 1
@@ -251,22 +233,22 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel) {
     }
 
     // select rowsets for compaction
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // create compaction
     CompactionCandidate compaction_candidate;
     std::shared_ptr<CompactionTask> compaction_task = nullptr;
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->pick_candidate(&compaction_candidate));
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_TRUE(_engine->compaction_manager()->pick_candidate(&compaction_candidate));
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
     compaction_task = compaction_candidate.tablet->create_compaction_task();
     for (const auto& rowset : compaction_task->input_rowsets()) {
         ASSERT_TRUE(rowset->get_is_compacting());
     }
 
     // execute compaction
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->register_task(compaction_task.get()));
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_TRUE(_engine->compaction_manager()->register_task(compaction_task.get()));
+    ASSERT_EQ(1, _engine->compaction_manager()->running_tasks_num());
     std::shared_lock<std::shared_mutex> _compaction_lock;
     if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
         _compaction_lock = std::shared_lock(compaction_task->tablet()->get_cumulative_lock(), std::try_to_lock);
@@ -284,20 +266,20 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel) {
     }
 
     // select rowsets for compaction
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // create compaction
     std::shared_ptr<CompactionTask> compaction_task2 = nullptr;
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->pick_candidate(&compaction_candidate));
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_TRUE(_engine->compaction_manager()->pick_candidate(&compaction_candidate));
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
     compaction_task2 = compaction_candidate.tablet->create_compaction_task();
     for (const auto& rowset : compaction_task2->input_rowsets()) {
         ASSERT_TRUE(rowset->get_is_compacting());
     }
     // execute compaction
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->register_task(compaction_task2.get()));
-    ASSERT_EQ(2, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_TRUE(_engine->compaction_manager()->register_task(compaction_task2.get()));
+    ASSERT_EQ(2, _engine->compaction_manager()->running_tasks_num());
     std::shared_lock<std::shared_mutex> _compaction_lock2;
     if (compaction_task2->compaction_type() == CUMULATIVE_COMPACTION) {
         _compaction_lock2 = std::shared_lock(compaction_task2->tablet()->get_cumulative_lock(), std::try_to_lock);
@@ -315,20 +297,20 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel) {
     }
 
     // select rowsets for compaction
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // create compaction
     std::shared_ptr<CompactionTask> compaction_task3 = nullptr;
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->pick_candidate(&compaction_candidate));
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_TRUE(_engine->compaction_manager()->pick_candidate(&compaction_candidate));
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
     compaction_task3 = compaction_candidate.tablet->create_compaction_task();
     for (const auto& rowset : compaction_task3->input_rowsets()) {
         ASSERT_TRUE(rowset->get_is_compacting());
     }
     // execute compaction
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->register_task(compaction_task3.get()));
-    ASSERT_EQ(3, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_TRUE(_engine->compaction_manager()->register_task(compaction_task3.get()));
+    ASSERT_EQ(3, _engine->compaction_manager()->running_tasks_num());
     std::shared_lock<std::shared_mutex> _compaction_lock3;
     if (compaction_task3->compaction_type() == CUMULATIVE_COMPACTION) {
         _compaction_lock3 = std::shared_lock(compaction_task3->tablet()->get_cumulative_lock(), std::try_to_lock);
@@ -339,7 +321,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel) {
     // execution progress
     ASSERT_TRUE(tablet->has_compaction_task());
 
-    auto task_set = StorageEngine::instance()->compaction_manager()->get_running_task(tablet);
+    auto task_set = _engine->compaction_manager()->get_running_task(tablet);
     int base_count = 0, cumu_count = 0;
     for (auto& task : task_set) {
         if (task->compaction_type() == BASE_COMPACTION) {
@@ -357,14 +339,14 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel) {
     ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task3.get())->run_impl().ok());
 
     // finish executing task
-    StorageEngine::instance()->compaction_manager()->unregister_task(compaction_task.get());
-    ASSERT_EQ(2, StorageEngine::instance()->compaction_manager()->running_tasks_num());
-    StorageEngine::instance()->compaction_manager()->unregister_task(compaction_task2.get());
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num());
-    StorageEngine::instance()->compaction_manager()->unregister_task(compaction_task3.get());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
-    ASSERT_FALSE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    _engine->compaction_manager()->unregister_task(compaction_task.get());
+    ASSERT_EQ(2, _engine->compaction_manager()->running_tasks_num());
+    _engine->compaction_manager()->unregister_task(compaction_task2.get());
+    ASSERT_EQ(1, _engine->compaction_manager()->running_tasks_num());
+    _engine->compaction_manager()->unregister_task(compaction_task3.get());
+    ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
+    ASSERT_FALSE(_engine->compaction_manager()->has_running_task(tablet));
 
     ASSERT_EQ(3, tablet->version_count());
     std::vector<Version> versions;
@@ -385,8 +367,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel2) {
     create_tablet_schema(UNIQUE_KEYS);
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
-    TabletSharedPtr tablet =
-            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, _engine->get_stores()[0]);
     ASSERT_TRUE(tablet->init().ok());
 
     // write 5 rowsets
@@ -395,8 +376,8 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel2) {
     }
 
     // select rowsets for compaction
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // write 6 rowsets
     for (int i = 0; i < 6; ++i) {
@@ -404,14 +385,14 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel2) {
     }
 
     // select rowsets and replace candidate
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // create compaction
     CompactionCandidate compaction_candidate;
     std::shared_ptr<CompactionTask> compaction_task = nullptr;
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->pick_candidate(&compaction_candidate));
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_TRUE(_engine->compaction_manager()->pick_candidate(&compaction_candidate));
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
     compaction_task = compaction_candidate.tablet->create_compaction_task();
     ASSERT_EQ(11, compaction_task->input_rowsets().size());
     for (const auto& rowset : compaction_task->input_rowsets()) {
@@ -419,8 +400,8 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel2) {
     }
 
     // execute compaction
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->register_task(compaction_task.get()));
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_TRUE(_engine->compaction_manager()->register_task(compaction_task.get()));
+    ASSERT_EQ(1, _engine->compaction_manager()->running_tasks_num());
     {
         std::shared_lock<std::shared_mutex> _compaction_lock;
         if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
@@ -434,10 +415,10 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel2) {
         ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task.get())->run_impl().ok());
 
         // finish
-        StorageEngine::instance()->compaction_manager()->unregister_task(compaction_task.get());
-        ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
-        ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
-        ASSERT_FALSE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+        _engine->compaction_manager()->unregister_task(compaction_task.get());
+        ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+        ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
+        ASSERT_FALSE(_engine->compaction_manager()->has_running_task(tablet));
 
         ASSERT_EQ(1, tablet->version_count());
         std::vector<Version> versions;
@@ -454,13 +435,13 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel2) {
     }
 
     // select rowsets for compaction
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // create compaction
     std::shared_ptr<CompactionTask> compaction_task2 = nullptr;
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->pick_candidate(&compaction_candidate));
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_TRUE(_engine->compaction_manager()->pick_candidate(&compaction_candidate));
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
     compaction_task2 = compaction_candidate.tablet->create_compaction_task();
     ASSERT_EQ(BASE_COMPACTION, compaction_task2->compaction_type());
     ASSERT_EQ(8, compaction_task2->input_rowsets().size());
@@ -468,8 +449,8 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel2) {
         ASSERT_TRUE(rowset->get_is_compacting());
     }
     // execute compaction
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->register_task(compaction_task2.get()));
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_TRUE(_engine->compaction_manager()->register_task(compaction_task2.get()));
+    ASSERT_EQ(1, _engine->compaction_manager()->running_tasks_num());
     std::shared_lock<std::shared_mutex> _compaction_lock2;
     if (compaction_task2->compaction_type() == CUMULATIVE_COMPACTION) {
         _compaction_lock2 = std::shared_lock(compaction_task2->tablet()->get_cumulative_lock(), std::try_to_lock);
@@ -482,10 +463,10 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel2) {
     ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task2.get())->run_impl().ok());
 
     // finish
-    StorageEngine::instance()->compaction_manager()->unregister_task(compaction_task2.get());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
-    ASSERT_FALSE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    _engine->compaction_manager()->unregister_task(compaction_task2.get());
+    ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
+    ASSERT_FALSE(_engine->compaction_manager()->has_running_task(tablet));
 
     ASSERT_EQ(1, tablet->version_count());
     std::vector<Version> versions;
@@ -502,8 +483,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel_repla
     create_tablet_schema(UNIQUE_KEYS);
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
-    TabletSharedPtr tablet =
-            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, _engine->get_stores()[0]);
     ASSERT_TRUE(tablet->init().ok());
 
     // write 5 rowsets
@@ -512,8 +492,8 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel_repla
     }
 
     // select rowsets for compaction
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // write 6 rowsets
     for (int i = 0; i < 6; ++i) {
@@ -521,14 +501,14 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel_repla
     }
 
     // select rowsets and replace the old candidate
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // create compaction task1
     CompactionCandidate compaction_candidate;
     std::shared_ptr<CompactionTask> compaction_task = nullptr;
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->pick_candidate(&compaction_candidate));
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_TRUE(_engine->compaction_manager()->pick_candidate(&compaction_candidate));
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
     compaction_task = compaction_candidate.tablet->create_compaction_task();
     ASSERT_EQ(11, compaction_task->input_rowsets().size());
     for (const auto& rowset : compaction_task->input_rowsets()) {
@@ -540,12 +520,12 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel_repla
         write_new_version(tablet);
     }
     // select rowsets and add candidate into queue, which excludes rowsets being compacted
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // execute task1
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->register_task(compaction_task.get()));
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_TRUE(_engine->compaction_manager()->register_task(compaction_task.get()));
+    ASSERT_EQ(1, _engine->compaction_manager()->running_tasks_num());
     {
         std::shared_lock<std::shared_mutex> _compaction_lock;
         if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
@@ -559,10 +539,10 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel_repla
         ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task.get())->run_impl().ok());
 
         // finish
-        StorageEngine::instance()->compaction_manager()->unregister_task(compaction_task.get());
-        ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
-        ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
-        ASSERT_FALSE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+        _engine->compaction_manager()->unregister_task(compaction_task.get());
+        ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+        ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
+        ASSERT_FALSE(_engine->compaction_manager()->has_running_task(tablet));
 
         ASSERT_EQ(8, tablet->version_count());
         std::vector<Version> versions;
@@ -574,8 +554,8 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel_repla
 
     // create compaction task2
     std::shared_ptr<CompactionTask> compaction_task2 = nullptr;
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->pick_candidate(&compaction_candidate));
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_TRUE(_engine->compaction_manager()->pick_candidate(&compaction_candidate));
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
     compaction_task2 = compaction_candidate.tablet->create_compaction_task();
     ASSERT_EQ(7, compaction_task2->input_rowsets().size());
     for (const auto& rowset : compaction_task2->input_rowsets()) {
@@ -583,8 +563,8 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel_repla
     }
 
     // execute compaction task2
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->register_task(compaction_task2.get()));
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_TRUE(_engine->compaction_manager()->register_task(compaction_task2.get()));
+    ASSERT_EQ(1, _engine->compaction_manager()->running_tasks_num());
     std::shared_lock<std::shared_mutex> _compaction_lock2;
     if (compaction_task2->compaction_type() == CUMULATIVE_COMPACTION) {
         _compaction_lock2 = std::shared_lock(compaction_task2->tablet()->get_cumulative_lock(), std::try_to_lock);
@@ -597,10 +577,10 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel_repla
     ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task2.get())->run_impl().ok());
 
     // finish
-    StorageEngine::instance()->compaction_manager()->unregister_task(compaction_task2.get());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
-    ASSERT_FALSE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    _engine->compaction_manager()->unregister_task(compaction_task2.get());
+    ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
+    ASSERT_FALSE(_engine->compaction_manager()->has_running_task(tablet));
 
     ASSERT_EQ(2, tablet->version_count());
     std::vector<Version> versions;
@@ -627,8 +607,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel3) {
     create_tablet_schema(UNIQUE_KEYS);
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
-    TabletSharedPtr tablet =
-            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, _engine->get_stores()[0]);
     ASSERT_TRUE(tablet->init().ok());
 
     // write 5 rowsets
@@ -637,13 +616,13 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel3) {
     }
 
     // selection thread selects rowsets and adds candidate into queue
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // schedule thread picks candidate out of queue
     CompactionCandidate compaction_candidate;
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->pick_candidate(&compaction_candidate));
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_TRUE(_engine->compaction_manager()->pick_candidate(&compaction_candidate));
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
 
     // write 6 rowsets
     for (int i = 0; i < 6; ++i) {
@@ -651,8 +630,8 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel3) {
     }
 
     // selection thread selects rowsets and adds new candidate into queue, which may includes rowsets being compacting
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // schedule thread creates task for old candidate
     std::shared_ptr<CompactionTask> compaction_task = nullptr;
@@ -663,8 +642,8 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel3) {
     }
 
     // execute compaction of for old candidate
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->register_task(compaction_task.get()));
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_TRUE(_engine->compaction_manager()->register_task(compaction_task.get()));
+    ASSERT_EQ(1, _engine->compaction_manager()->running_tasks_num());
     {
         std::shared_lock<std::shared_mutex> _compaction_lock;
         if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
@@ -678,15 +657,15 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel3) {
         ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task.get())->run_impl().ok());
 
         // finish executing task of old candidate
-        StorageEngine::instance()->compaction_manager()->unregister_task(compaction_task.get());
-        ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
-        ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
-        ASSERT_FALSE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+        _engine->compaction_manager()->unregister_task(compaction_task.get());
+        ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+        ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
+        ASSERT_FALSE(_engine->compaction_manager()->has_running_task(tablet));
     }
 
     // schedule thread creates task for new candidate, but failed
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->pick_candidate(&compaction_candidate));
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_TRUE(_engine->compaction_manager()->pick_candidate(&compaction_candidate));
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
     std::shared_ptr<CompactionTask> compaction_task2 = nullptr;
     compaction_task2 = compaction_candidate.tablet->create_compaction_task();
     ASSERT_EQ(nullptr, compaction_task2);
@@ -714,8 +693,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel4) {
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
 
-    TabletSharedPtr tablet =
-            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, _engine->get_stores()[0]);
     ASSERT_TRUE(tablet->init().ok());
 
     // task 1
@@ -725,14 +703,14 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel4) {
     }
 
     // select rowsets for compaction
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // create compaction
     CompactionCandidate compaction_candidate;
     std::shared_ptr<CompactionTask> compaction_task = nullptr;
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->pick_candidate(&compaction_candidate));
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_TRUE(_engine->compaction_manager()->pick_candidate(&compaction_candidate));
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
     compaction_task = compaction_candidate.tablet->create_compaction_task();
     ASSERT_EQ(5, compaction_task->input_rowsets().size());
     for (const auto& rowset : compaction_task->input_rowsets()) {
@@ -746,13 +724,13 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel4) {
     }
 
     // select rowsets for compaction
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // create compaction
     std::shared_ptr<CompactionTask> compaction_task2 = nullptr;
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->pick_candidate(&compaction_candidate));
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_TRUE(_engine->compaction_manager()->pick_candidate(&compaction_candidate));
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
     compaction_task2 = compaction_candidate.tablet->create_compaction_task();
     ASSERT_EQ(6, compaction_task2->input_rowsets().size());
     for (const auto& rowset : compaction_task2->input_rowsets()) {
@@ -760,8 +738,8 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel4) {
     }
 
     // execute task2
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->register_task(compaction_task2.get()));
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_TRUE(_engine->compaction_manager()->register_task(compaction_task2.get()));
+    ASSERT_EQ(1, _engine->compaction_manager()->running_tasks_num());
     std::shared_lock<std::shared_mutex> _compaction_lock2;
     if (compaction_task2->compaction_type() == CUMULATIVE_COMPACTION) {
         _compaction_lock2 = std::shared_lock(compaction_task2->tablet()->get_cumulative_lock(), std::try_to_lock);
@@ -773,8 +751,8 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel4) {
     ASSERT_TRUE(tablet->has_compaction_task());
 
     // execute task1
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->register_task(compaction_task.get()));
-    ASSERT_EQ(2, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_TRUE(_engine->compaction_manager()->register_task(compaction_task.get()));
+    ASSERT_EQ(2, _engine->compaction_manager()->running_tasks_num());
     std::shared_lock<std::shared_mutex> _compaction_lock;
     if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
         _compaction_lock = std::shared_lock(compaction_task->tablet()->get_cumulative_lock(), std::try_to_lock);
@@ -785,7 +763,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel4) {
     // execution progress
     ASSERT_TRUE(tablet->has_compaction_task());
 
-    auto task_set = StorageEngine::instance()->compaction_manager()->get_running_task(tablet);
+    auto task_set = _engine->compaction_manager()->get_running_task(tablet);
     int base_count = 0, cumu_count = 0;
     for (auto& task : task_set) {
         if (task->compaction_type() == BASE_COMPACTION) {
@@ -802,12 +780,12 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel4) {
     ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task.get())->run_impl().ok());
 
     // finish executing task
-    StorageEngine::instance()->compaction_manager()->unregister_task(compaction_task.get());
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num());
-    StorageEngine::instance()->compaction_manager()->unregister_task(compaction_task2.get());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
-    ASSERT_FALSE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    _engine->compaction_manager()->unregister_task(compaction_task.get());
+    ASSERT_EQ(1, _engine->compaction_manager()->running_tasks_num());
+    _engine->compaction_manager()->unregister_task(compaction_task2.get());
+    ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
+    ASSERT_FALSE(_engine->compaction_manager()->has_running_task(tablet));
 
     ASSERT_EQ(2, tablet->version_count());
     std::vector<Version> versions;
@@ -821,15 +799,13 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel4) {
 
 // does not support compaction parallelization under one tablet when using default compaction strategy
 TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel) {
-    LOG(INFO) << "test_default_base_cumu_compaction_parallel";
     config::enable_size_tiered_compaction_strategy = false;
     create_tablet_schema(UNIQUE_KEYS);
 
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
 
-    TabletSharedPtr tablet =
-            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, _engine->get_stores()[0]);
     ASSERT_TRUE(tablet->init().ok());
 
     // task 1
@@ -839,19 +815,19 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
     }
 
     // select rowsets for compaction
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // create compaction
     CompactionCandidate compaction_candidate;
     std::shared_ptr<CompactionTask> compaction_task = nullptr;
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->pick_candidate(&compaction_candidate));
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_TRUE(_engine->compaction_manager()->pick_candidate(&compaction_candidate));
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
     compaction_task = compaction_candidate.tablet->create_compaction_task();
 
     // execute compaction
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->register_task(compaction_task.get()));
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_TRUE(_engine->compaction_manager()->register_task(compaction_task.get()));
+    ASSERT_EQ(1, _engine->compaction_manager()->running_tasks_num());
 
     // task 2
     // write 6 rowsets
@@ -860,7 +836,7 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
     }
     // select rowsets for compaction, but failed
     ASSERT_FALSE(tablet->need_compaction());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
 
     std::shared_lock<std::shared_mutex> _compaction_lock;
     if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
@@ -874,10 +850,10 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
 
     // finish executing task
     tablet->reset_compaction_status();
-    StorageEngine::instance()->compaction_manager()->unregister_task(compaction_task.get());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
-    ASSERT_FALSE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    _engine->compaction_manager()->unregister_task(compaction_task.get());
+    ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
+    ASSERT_FALSE(_engine->compaction_manager()->has_running_task(tablet));
 
     // task 2
     // write 6 rowsets
@@ -886,18 +862,18 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
     }
 
     // select rowsets for compaction
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // create compaction
     std::shared_ptr<CompactionTask> compaction_task2 = nullptr;
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->pick_candidate(&compaction_candidate));
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_TRUE(_engine->compaction_manager()->pick_candidate(&compaction_candidate));
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
     compaction_task2 = compaction_candidate.tablet->create_compaction_task();
 
     // execute compaction
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->register_task(compaction_task2.get()));
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_TRUE(_engine->compaction_manager()->register_task(compaction_task2.get()));
+    ASSERT_EQ(1, _engine->compaction_manager()->running_tasks_num());
     std::shared_lock<std::shared_mutex> _compaction_lock2;
     if (compaction_task2->compaction_type() == CUMULATIVE_COMPACTION) {
         _compaction_lock2 = std::shared_lock(compaction_task2->tablet()->get_cumulative_lock(), std::try_to_lock);
@@ -909,10 +885,10 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
     ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task2.get())->run_impl().ok());
 
     // finish executing task
-    StorageEngine::instance()->compaction_manager()->unregister_task(compaction_task2.get());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
-    ASSERT_FALSE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    _engine->compaction_manager()->unregister_task(compaction_task2.get());
+    ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
+    ASSERT_FALSE(_engine->compaction_manager()->has_running_task(tablet));
 
     ASSERT_EQ(2, tablet->version_count());
     std::vector<Version> versions;
@@ -933,8 +909,7 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
 
-    TabletSharedPtr tablet =
-            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, _engine->get_stores()[0]);
     ASSERT_TRUE(tablet->init().ok());
 
     // task 1
@@ -944,8 +919,8 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
     }
 
     // select rowsets for compaction
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // task 2
     // write 6 rowsets
@@ -953,14 +928,14 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
         write_new_version(tablet);
     }
     // select rowsets and add into task priority queue, which will replace the old candidate
-    StorageEngine::instance()->compaction_manager()->update_tablet(tablet);
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    _engine->compaction_manager()->update_tablet(tablet);
+    ASSERT_EQ(1, _engine->compaction_manager()->get_waiting_task_num());
 
     // create compaction
     CompactionCandidate compaction_candidate;
     std::shared_ptr<CompactionTask> compaction_task = nullptr;
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->pick_candidate(&compaction_candidate));
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_TRUE(_engine->compaction_manager()->pick_candidate(&compaction_candidate));
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
     compaction_task = compaction_candidate.tablet->create_compaction_task();
     ASSERT_EQ(11, compaction_task->input_rowsets().size());
 
@@ -971,15 +946,15 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
     }
     // select rowsets for compaction, but failed
     ASSERT_FALSE(tablet->need_compaction());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
 
     // execute compaction
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->register_task(compaction_task.get()));
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_TRUE(_engine->compaction_manager()->register_task(compaction_task.get()));
+    ASSERT_EQ(1, _engine->compaction_manager()->running_tasks_num());
 
     // select rowsets for compaction, but failed
     ASSERT_FALSE(tablet->need_compaction());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
 
     std::shared_lock<std::shared_mutex> _compaction_lock;
     if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
@@ -992,10 +967,10 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
     ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task.get())->run_impl().ok());
 
     // finish executing task
-    StorageEngine::instance()->compaction_manager()->unregister_task(compaction_task.get());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());
-    ASSERT_FALSE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    _engine->compaction_manager()->unregister_task(compaction_task.get());
+    ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+    ASSERT_EQ(0, _engine->compaction_manager()->get_waiting_task_num());
+    ASSERT_FALSE(_engine->compaction_manager()->has_running_task(tablet));
 
     ASSERT_EQ(8, tablet->version_count());
     std::vector<Version> versions;
