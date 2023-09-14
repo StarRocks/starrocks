@@ -123,12 +123,14 @@ bool RollingAsyncParquetWriter::closed() {
     }
 
     if (_writer != nullptr) {
-        return _writer->closed();
-    }
+        if (!_writer->closed()) {
+            return false;
+        }
 
-    auto st = _writer->get_io_status();
-    if (!st.ok()) {
-        set_io_status(st);
+        auto st = _writer->get_io_status();
+        if (!st.ok()) {
+            set_io_status(st);
+        }
     }
 
     return true;
