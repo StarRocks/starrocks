@@ -176,9 +176,11 @@ bool ExportSinkOperator::is_finished() const {
 }
 
 Status ExportSinkOperator::set_finishing(RuntimeState* state) {
-    auto* executor = state->fragment_ctx()->enable_resource_group() ? state->exec_env()->wg_driver_executor()
-                                                                    : state->exec_env()->driver_executor();
-    executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+    if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        auto* executor = state->fragment_ctx()->enable_resource_group() ? state->exec_env()->wg_driver_executor()
+                                                                        : state->exec_env()->driver_executor();
+        executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+    }
     return _export_sink_buffer->set_finishing();
 }
 
@@ -206,7 +208,7 @@ Status ExportSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
 
     _export_sink_buffer =
-            std::make_shared<ExportSinkIOBuffer>(_t_export_sink, _output_expr_ctxs, _num_sinkers, _fragment_ctx);
+            std::make_shared<ExportSinkIOBuffer>(_t_export_sink, _output_expr_ctxs, _total_num_sinkers, _fragment_ctx);
     return Status::OK();
 }
 
