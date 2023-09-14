@@ -630,13 +630,8 @@ void StorageEngine::stop() {
 #undef JOIN_THREADS
 #undef JOIN_THREAD
 
-    {
-        std::lock_guard<std::mutex> l(_store_lock);
-        for (auto& store_pair : _store_map) {
-            delete store_pair.second;
-            store_pair.second = nullptr;
-        }
-        _store_map.clear();
+    if (_update_manager) {
+        _update_manager->stop();
     }
 
     _checker_cv.notify_all();
@@ -644,8 +639,13 @@ void StorageEngine::stop() {
         _compaction_checker_thread.join();
     }
 
-    if (_update_manager) {
-        _update_manager->stop();
+    {
+        std::lock_guard<std::mutex> l(_store_lock);
+        for (auto& store_pair : _store_map) {
+            delete store_pair.second;
+            store_pair.second = nullptr;
+        }
+        _store_map.clear();
     }
 }
 
