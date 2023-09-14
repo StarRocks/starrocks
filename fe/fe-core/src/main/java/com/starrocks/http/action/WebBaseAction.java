@@ -181,8 +181,11 @@ public class WebBaseAction extends BaseAction {
             UserIdentity currentUser = checkPassword(authInfo);
             if (needAdmin()) {
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    checkUserOwnsAdminRole(currentUser);
-                    checkActionOnSystem(currentUser, PrivilegeType.NODE);
+                    try {
+                        checkActionOnSystem(currentUser, PrivilegeType.NODE);
+                    } catch (UnauthorizedException e) {
+                        checkUserOwnsAdminRole(currentUser);
+                    }
                 } else {
                     checkGlobalAuth(currentUser, PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
                             Privilege.NODE_PRIV), Operator.OR));
@@ -223,8 +226,12 @@ public class WebBaseAction extends BaseAction {
             boolean authorized = false;
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                 try {
-                    checkUserOwnsAdminRole(sessionValue.currentUser);
-                    checkActionOnSystem(sessionValue.currentUser, PrivilegeType.NODE);
+                    try {
+                        checkActionOnSystem(sessionValue.currentUser, PrivilegeType.NODE);
+                    } catch (UnauthorizedException e) {
+                        checkUserOwnsAdminRole(sessionValue.currentUser);
+                    }
+
                     authorized = true;
                 } catch (UnauthorizedException e) {
                     // ignore

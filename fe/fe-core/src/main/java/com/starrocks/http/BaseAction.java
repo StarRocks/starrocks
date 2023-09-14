@@ -322,9 +322,8 @@ public abstract class BaseAction implements IAction {
                                 "operation");
             }
         } catch (PrivilegeException e) {
-            UnauthorizedException newException = new UnauthorizedException(
+            throw new UnauthorizedException(
                     "Access denied; you need own db_admin and user_admin roles for this operation");
-            newException.initCause(e);
         }
     }
 
