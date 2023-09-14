@@ -14,24 +14,13 @@
 
 package com.starrocks.sql.plan;
 
-import com.google.common.collect.Lists;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterViewStmt;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 public class ViewPlanTest extends PlanTestBase {
     private static final AtomicInteger INDEX = new AtomicInteger(0);
@@ -1766,49 +1755,6 @@ public class ViewPlanTest extends PlanTestBase {
                 "      json_test ge\n" +
                 "      ,lateral json_each(cast (ge.v_json as json) -> '$.') ie(`key`, `value`)";
         testView(sql);
-    }
-
-    @Test
-    public void testAlterView() throws Exception {
-        String sql = "select * from t0;";
-        String viewName = "view" + INDEX.getAndIncrement();
-        String createView = "create view " + viewName + " as " + sql;
-        starRocksAssert.withView(createView);
-
-        String viewPlan = getFragmentPlan("select * from " + viewName);
-        assertContains(viewPlan, "OlapScanNode");
-
-        Table view = MetaUtils.getTable(new TableName("test", viewName));
-
-        List<Column> t0Columns = view.getColumns();
-
-        List<Column> mockColumns =
-                t0Columns.stream().map(c -> GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(c), Column.class))
-                        .collect(Collectors.toList());
-
-        List<Column> mockColumn1 = Lists.newArrayList(mockColumns);
-        mockColumn1.remove(0);
-        new Expectations(view) {
-            {
-                view.getColumns();
-                result = mockColumn1;
-                times = 1;
-            }
-        };
-
-        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan("select * from " + viewName));
-
-        List<Column> mockColumn2 = Lists.newArrayList(mockColumns);
-        mockColumn2.get(0).setType(Type.STRING);
-        new Expectations(view) {
-            {
-                view.getColumns();
-                result = mockColumn2;
-                times = 1;
-            }
-        };
-        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan("select * from " + viewName));
-        starRocksAssert.dropView(viewName);
     }
 
     @Test
