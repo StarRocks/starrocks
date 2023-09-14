@@ -1012,4 +1012,11 @@ CONF_mInt32(finish_publish_version_internal, "100");
 
 CONF_mInt32(get_txn_status_internal_sec, "30");
 
+<<<<<<< HEAD
+=======
+CONF_mBool(dump_metrics_with_bvar, "true");
+
+CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
+
+>>>>>>> b81d46fe30 ([Refactor] Add a new config enable_drop_tablet_if_unfinished_txn when dropping tablet (#30847))
 } // namespace starrocks::config
