@@ -218,7 +218,6 @@ public final class SqlToScalarOperatorTranslator {
                 if (num > 0) {
                     return num;
                 }
-
                 if (child instanceof Subquery) {
                     num++;
                 } else {
@@ -736,9 +735,9 @@ public final class SqlToScalarOperatorTranslator {
             ColumnRefSet outerUsedColumns = new ColumnRefSet();
             if (subqueryPlan.getCorrelation().isEmpty()) {
                 for (Expr outer : context.outerExprs) {
-                    outerUsedColumns.union(SqlToScalarOperatorTranslator
-                            .translate(outer, builder.getExpressionMapping(), columnRefFactory)
-                            .getUsedColumns());
+                    outerUsedColumns.union(
+                            SqlToScalarOperatorTranslator.translate(outer, expressionMapping, columnRefFactory)
+                                    .getUsedColumns());
                 }
             }
 
