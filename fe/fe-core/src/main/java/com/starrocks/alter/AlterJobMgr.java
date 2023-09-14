@@ -159,7 +159,7 @@ public class AlterJobMgr {
         compactionHandler = new CompactionHandler();
     }
 
-    public void processCreateMaterializedView(CreateMaterializedViewStmt stmt)
+    public void processCreateSynchronousMaterializedView(CreateMaterializedViewStmt stmt)
             throws DdlException, AnalysisException {
         String tableName = stmt.getBaseIndexName();
         // check db
@@ -181,9 +181,15 @@ public class AlterJobMgr {
             if (table == null) {
                 throw new DdlException("create materialized failed. table:" + tableName + " not exist");
             }
+            if (table.isCloudNativeTable()) {
+                throw new DdlException("Creating synchronous materialized view(rollup) is not supported in " +
+                        "shared data clusters.\nPlease use asynchronous materialized view instead.\n" +
+                        "Refer to https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements" +
+                        "/data-definition/CREATE%20MATERIALIZED%20VIEW#asynchronous-materialized-view for details.");
+            }
             if (!table.isOlapTable()) {
-                throw new DdlException("Do not support create rollup on " + table.getType().name() +
-                        " table[" + tableName + "], please use new syntax to create materialized view");
+                throw new DdlException("Do not support create synchronous materialized view(rollup) on " +
+                        table.getType().name() + " table[" + tableName + "]");
             }
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {

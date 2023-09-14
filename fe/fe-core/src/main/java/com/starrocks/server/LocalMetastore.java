@@ -2836,7 +2836,7 @@ public class LocalMetastore implements ConnectorMetadata {
     @Override
     public void createMaterializedView(CreateMaterializedViewStmt stmt)
             throws AnalysisException, DdlException {
-        stateMgr.getAlterJobMgr().processCreateMaterializedView(stmt);
+        stateMgr.getAlterJobMgr().processCreateSynchronousMaterializedView(stmt);
     }
 
     // TODO(murphy) refactor it into MVManager
