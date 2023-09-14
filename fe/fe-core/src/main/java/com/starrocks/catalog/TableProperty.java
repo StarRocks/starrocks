@@ -385,9 +385,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-<<<<<<< HEAD
-    public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) throws AnalysisException {
-=======
     public TableProperty buildMvSortKeys() {
         String sortKeys = properties.get(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS);
         this.mvSortKeys = analyzeMvSortKeys(sortKeys);
@@ -402,8 +399,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
-    public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) {
->>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
+    public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) throws AnalysisException {
         QueryRewriteConsistencyMode res = EnumUtils.getEnumIgnoreCase(QueryRewriteConsistencyMode.class, value);
         if (res == null) {
             String allValues = EnumUtils.getEnumList(QueryRewriteConsistencyMode.class)
