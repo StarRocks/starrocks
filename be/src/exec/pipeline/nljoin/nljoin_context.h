@@ -60,7 +60,8 @@ public:
     const std::shared_ptr<spill::Spiller>& spiller() { return _spiller; }
     bool has_spilled() { return _spiller && _spiller->spilled(); }
 
-    Status add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk, spill::IOTaskExecutor& executor);
+    [[nodiscard]] Status add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk,
+                                                   spill::IOTaskExecutor& executor);
 
     void finalize();
 

@@ -103,9 +103,13 @@ bool SpillableHashJoinProbeOperator::has_output() const {
             if (_current_reader[i]->has_output_data()) {
                 return true;
             } else if (!_current_reader[i]->has_restore_task()) {
-                _current_reader[i]->trigger_restore(
+                // if trigger_restore returns error, should record this status and return it in pull_chunk
+                _update_status(_current_reader[i]->trigger_restore(
                         runtime_state(), *_executor,
-                        RESOURCE_TLS_MEMTRACER_GUARD(runtime_state(), std::weak_ptr(_current_reader[i])));
+                        RESOURCE_TLS_MEMTRACER_GUARD(runtime_state(), std::weak_ptr(_current_reader[i]))));
+                if (!_status().ok()) {
+                    return true;
+                }
             }
         }
     }
