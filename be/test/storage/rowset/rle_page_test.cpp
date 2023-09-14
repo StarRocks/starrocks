@@ -61,7 +61,7 @@ public:
         auto column = ChunkHelper::column_from_field_type(type, false);
 
         size_t n = 1;
-        decoder->next_batch(&n, column.get());
+        ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
         ASSERT_EQ(1, n);
         *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
     }
