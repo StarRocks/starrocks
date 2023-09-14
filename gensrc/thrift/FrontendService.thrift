@@ -561,9 +561,7 @@ struct TReportExecStatusParams {
   24: optional i64 source_scan_bytes
 }
 
-struct TReportAuditStatisticsParams {
-    1: optional Types.TUniqueId query_id
-    2: optional Types.TUniqueId fragment_instance_id
+struct TAuditStatistics {
     3: optional i64 scan_rows
     4: optional i64 scan_bytes
     5: optional i64 returned_rows
@@ -571,6 +569,12 @@ struct TReportAuditStatisticsParams {
     7: optional i64 mem_cost_bytes
     8: optional i64 spill_bytes
     9: optional list<TAuditStatisticsItem> stats_items
+}
+
+struct TReportAuditStatisticsParams {
+    1: optional Types.TUniqueId query_id
+    2: optional Types.TUniqueId fragment_instance_id
+    3: optional TAuditStatistics audit_statistics
 }
 
 struct TAuditStatisticsItem {
@@ -644,6 +648,7 @@ struct TMasterOpResult {
     5: optional list<binary> channelBufferList;
 
     6: optional string resource_group_name;
+    7: optional TAuditStatistics audit_statistics;
 }
 
 struct TIsMethodSupportedRequest {
