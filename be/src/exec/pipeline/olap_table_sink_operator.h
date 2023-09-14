@@ -31,10 +31,11 @@ class OlapTableSinkOperator final : public Operator {
 public:
     OlapTableSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                           int32_t sender_id, starrocks::stream_load::OlapTableSink* sink,
-                          FragmentContext* const fragment_ctx)
+                          FragmentContext* const fragment_ctx, std::atomic<int32_t>& num_sinkers)
             : Operator(factory, id, "olap_table_sink", plan_node_id, false, driver_sequence),
               _sink(sink),
               _fragment_ctx(fragment_ctx),
+              _num_sinkers(num_sinkers),
               _sender_id(sender_id) {}
 
     ~OlapTableSinkOperator() override = default;
@@ -67,6 +68,7 @@ public:
 private:
     starrocks::stream_load::OlapTableSink* _sink;
     FragmentContext* const _fragment_ctx;
+    std::atomic<int32_t>& _num_sinkers;
 
     bool _is_finished = false;
     mutable bool _is_open_done = false;
@@ -101,9 +103,12 @@ public:
     void close(RuntimeState* state) override;
 
 private:
+    void _increment_num_sinkers_no_barrier() { _num_sinkers.fetch_add(1, std::memory_order_relaxed); }
+
     std::unique_ptr<starrocks::DataSink> _data_sink;
     starrocks::stream_load::OlapTableSink* _sink0;
     FragmentContext* const _fragment_ctx;
+    std::atomic<int32_t> _num_sinkers = 0;
     int32_t _cur_sender_id;
     std::vector<std::unique_ptr<starrocks::stream_load::OlapTableSink>> _sinks;
 };
