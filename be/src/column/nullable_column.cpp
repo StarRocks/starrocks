@@ -136,7 +136,7 @@ bool NullableColumn::append_nulls(size_t count) {
     if (count == 0) {
         return true;
     }
-    _data_column->append_default(count);
+    _data_column->resize_uninitialized(_data_column->size() + count);
     null_column_data().insert(null_column_data().end(), count, 1);
     DCHECK_EQ(_null_column->size(), _data_column->size());
     _has_null = true;

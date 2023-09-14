@@ -118,7 +118,6 @@ TEST(FixedLengthColumnTest, test_nullable) {
     for (int i = 0; i < 100; i++) {
         if (i % 3) {
             ASSERT_EQ(true, column->is_null(i));
-            ASSERT_EQ(0, data[i]);
         } else {
             ASSERT_EQ(false, column->is_null(i));
             ASSERT_EQ(i, data[i]);
