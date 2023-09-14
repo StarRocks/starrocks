@@ -1890,4 +1890,25 @@ public class SubqueryTest extends PlanTestBase {
             connectContext.getSessionVariable().setSqlMode(sqlMode);
         }
     }
+
+    @Test
+    public void testComplexCorrelationPredicateInSubquery1() throws Exception {
+        String sql = "select v2 in (select v5 from t1 where (t0.v1 IS NULL) = (t1.v4 IS NULL)) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 5> : 5: v5\n" +
+                "  |  <slot 8> : 4: v4 IS NULL\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t1");
+    }
+
+    @Test
+    public void testComplexCorrelationPredicateNotInSubquery2() throws Exception {
+        String sql = "select v2 not in (select v5 from t1 where t0.v1 = t1.v4 + t0.v1) from t0";
+        Assert.assertThrows("IN subquery not supported the correlation predicate of the" +
+                        " WHERE clause that used multiple outer-table columns at the same time.\n", SemanticException.class,
+                () -> getFragmentPlan(sql));
+    }
+
 }
