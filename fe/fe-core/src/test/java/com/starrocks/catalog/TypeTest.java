@@ -295,7 +295,6 @@ public class TypeTest {
         return td;
     }
 
-
     @Test
     public void testPTypeDescFromProtobuf() {
         PTypeDesc pTypeDesc = buildScalarType(TPrimitiveType.BIGINT);
