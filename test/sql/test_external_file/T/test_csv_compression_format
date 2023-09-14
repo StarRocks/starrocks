@@ -1,0 +1,74 @@
+------------------------------------
+-------------- DATA ----------------
+--- test0.csv
+-- Alice,1
+-- Bob,2
+-- CharlieX,3
+
+--- test1.csv
+-- 0,1
+-- 1,2
+-- ...
+-- 99999, 100000
+
+------------------------------------
+------------------------------------
+-- name: testCSVSnappyFormat
+
+[UC]shell: snappy_prefix=echo "oss://${oss_bucket}/test_csv_compression/${uuid0}/snappy_format/"
+shell: ossutil64 mkdir ${snappy_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/exec/test_data/csv_scanner/decompress_test0.csv.snappy ${snappy_prefix[1]} | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ../be/test/exec/test_data/csv_scanner/decompress_test1.csv.snappy ${snappy_prefix[1]} | grep -Pv "(average|elapsed)"
+
+
+CREATE EXTERNAL TABLE test_csv_snappy_format
+(
+    a string,
+    b string
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "${snappy_prefix[1]}",
+    "format" = "text",
+    "column_separator" = ","
+);
+
+
+select * from test_csv_snappy_format where a = 'Alice';
+select * from test_csv_snappy_format where a = 'Bob';
+select * from test_csv_snappy_format where a = 'CharlieX';
+select * from test_csv_snappy_format where a = '99999';
+
+shell: ossutil64 rm -rf ${snappy_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
+
+------------------------------------
+------------------------------------
+------------------------------------
+-- name: testCSVLZOFormat
+
+[UC]shell: lzo_prefix=echo "oss://${oss_bucket}/test_csv_compression/${uuid0}/lzo_format/"
+shell: ossutil64 mkdir ${lzo_prefix[1]} /dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/exec/test_data/csv_scanner/decompress_test0.csv.lzo ${lzo_prefix[1]} | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ../be/test/exec/test_data/csv_scanner/decompress_test1.csv.lzo ${lzo_prefix[1]} | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE test_csv_lzo_format
+(
+    a string,
+    b string
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "${lzo_prefix[1]}",
+    "format" = "text",
+    "column_separator" = ","
+);
+
+
+select * from test_csv_lzo_format where a = 'Alice';
+select * from test_csv_lzo_format where a = 'Bob';
+select * from test_csv_lzo_format where a = 'CharlieX';
+select * from test_csv_lzo_format where a = '99999';
+
+shell: ossutil64 rm -rf ${lzo_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
