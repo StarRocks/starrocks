@@ -458,7 +458,7 @@ Status JoinHashTable::build(RuntimeState* state) {
     return Status::OK();
 }
 
-Status JoinHashTable::reset_probe_state(starrocks::RuntimeState* state) {
+void JoinHashTable::reset_probe_state(starrocks::RuntimeState* state) {
     _hash_map_type = _choose_join_hash_map();
     switch (_hash_map_type) {
 #define M(NAME)                                                                                                       \
@@ -471,7 +471,6 @@ Status JoinHashTable::reset_probe_state(starrocks::RuntimeState* state) {
     default:
         assert(false);
     }
-    return Status::OK();
 }
 
 Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
