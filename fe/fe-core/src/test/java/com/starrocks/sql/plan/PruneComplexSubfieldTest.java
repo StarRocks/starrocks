@@ -689,4 +689,27 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                     "     cardinality: 1\n");
         }
     }
+
+    @Test
+    public void testSubfieldWithoutCols() throws Exception {
+        String sql = "select [1, 2, 3] is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "5:Project\n" +
+                "  |  <slot 15> : array_length([1,2,3]) IS NULL");
+
+        sql = "select [1, 2, 3][1] is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "5:Project\n" +
+                "  |  <slot 15> : [1,2,3][1] IS NULL");
+
+        sql = "select map_keys(map{'a':1,'b':2}) is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "5:Project\n" +
+                "  |  <slot 15> : array_length(map_keys(map{'a':1,'b':2})) IS NULL");
+
+        sql = "select row(1,2,3).col2 is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "5:Project\n" +
+                "  |  <slot 15> : row(1, 2, 3).col2 IS NULL");
+    }
 }
