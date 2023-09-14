@@ -234,7 +234,7 @@ public:
         MonotonicStopWatch timer;
         timer.start();
         if (cfg.algorithm == VERTICAL_COMPACTION) {
-            CompactionUtils::split_column_into_groups(tablet.num_columns(), schema.sort_key_idxes(),
+            CompactionUtils::split_column_into_groups(schema.num_fields(), schema.sort_key_idxes(),
                                                       config::vertical_compaction_max_columns_per_group,
                                                       &column_groups);
             RETURN_IF_ERROR(_do_merge_vertically(tablet, version, rowsets, writer, cfg, column_groups,

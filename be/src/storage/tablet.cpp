@@ -1719,11 +1719,11 @@ const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
     return _max_version_schema;
 }
 
-void Tablet::update_max_version_schema(const TabletSchemaSPtr& tablet_schema) {
+void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
     std::lock_guard wrlock(_schema_lock);
     // Double Check for concurrent update
     if (!_max_version_schema || tablet_schema->schema_version() > _max_version_schema->schema_version()) {
-        _max_version_schema = tablet_schema;
+        _max_version_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_schema).first;
     }
 }
 

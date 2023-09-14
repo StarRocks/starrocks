@@ -113,11 +113,11 @@ public:
 
     // propreties encapsulated in TabletSchema
     KeysType keys_type() const;
-    size_t num_columns() const;
-    size_t num_key_columns() const;
-    size_t num_rows_per_row_block() const;
+    size_t num_columns_with_max_version() const;
+    size_t num_key_columns_with_max_version() const;
+    size_t num_rows_per_row_block_with_max_version() const;
     size_t next_unique_id() const;
-    size_t field_index(const string& field_name) const;
+    size_t field_index_with_max_version(const string& field_name) const;
     std::string schema_debug_string() const;
     std::string debug_string() const;
     bool enable_shortcut_compaction() const;
@@ -299,7 +299,7 @@ public:
 
     const TabletSchemaCSPtr thread_safe_get_tablet_schema() const;
 
-    void update_max_version_schema(const TabletSchemaSPtr& tablet_schema);
+    void update_max_version_schema(const TabletSchemaCSPtr& tablet_schema);
 
     int64_t data_size();
 
@@ -451,6 +451,7 @@ inline void Tablet::set_cumulative_layer_point(int64_t new_point) {
     _cumulative_point = new_point;
 }
 
+/*
 inline KeysType Tablet::keys_type() const {
     return tablet_schema()->keys_type();
 }
@@ -472,6 +473,36 @@ inline size_t Tablet::next_unique_id() const {
 }
 
 inline size_t Tablet::field_index(const string& field_name) const {
+    return tablet_schema()->field_index(field_name);
+}
+
+inline bool Tablet::enable_shortcut_compaction() const {
+    std::shared_lock rdlock(_meta_lock);
+    return _tablet_meta->enable_shortcut_compaction();
+}
+*/
+
+inline KeysType Tablet::keys_type() const {
+    return tablet_schema()->keys_type();
+}
+
+inline size_t Tablet::num_columns_with_max_version() const {
+    return tablet_schema()->num_columns();
+}
+
+inline size_t Tablet::num_key_columns_with_max_version() const {
+    return tablet_schema()->num_key_columns();
+}
+
+inline size_t Tablet::num_rows_per_row_block_with_max_version() const {
+    return tablet_schema()->num_rows_per_row_block();
+}
+
+inline size_t Tablet::next_unique_id() const {
+    return tablet_schema()->next_column_unique_id();
+}
+
+inline size_t Tablet::field_index_with_max_version(const string& field_name) const {
     return tablet_schema()->field_index(field_name);
 }
 

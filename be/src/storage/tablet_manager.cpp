@@ -1326,8 +1326,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
             col_idx_to_unique_id[col_idx] = col_idx;
         }
     } else {
-        next_unique_id = base_tablet->next_unique_id();
-        size_t old_num_columns = base_tablet->num_columns();
+        size_t old_num_columns = base_tablet->num_columns_with_max_version();
         const auto& new_columns = request.tablet_schema.columns;
         for (uint32_t new_col_idx = 0; new_col_idx < new_columns.size(); ++new_col_idx) {
             const TColumn& column = new_columns[new_col_idx];

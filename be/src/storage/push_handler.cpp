@@ -234,7 +234,7 @@ Status PushHandler::_delete_convert(const TabletSharedPtr& cur_tablet, RowsetSha
 
         // 3. New RowsetBuilder to write data into rowset
         VLOG(3) << "init rowset builder. tablet=" << cur_tablet->full_name()
-                << ", block_row_size=" << cur_tablet->num_rows_per_row_block();
+                << ", block_row_size=" << cur_tablet->num_rows_per_row_block_with_max_version();
         st = rowset_writer->flush();
         if (!st.ok()) {
             LOG(WARNING) << "Failed to finalize writer: " << st;

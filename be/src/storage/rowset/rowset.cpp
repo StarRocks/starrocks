@@ -209,6 +209,24 @@ Status Rowset::reload_segment(int32_t segment_id) {
     return Status::OK();
 }
 
+Status Rowset::reload_segment_with_schema(int32_t segment_id, TabletSchemaCSPtr& schema) {
+    DCHECK(_segments.size() > segment_id);
+    if (_segments.size() <= segment_id) {
+        LOG(WARNING) << "Error segment id: " << segment_id;
+        return Status::InternalError("Error segment id");
+    }
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    size_t footer_size_hint = 16 * 1024;
+    std::string seg_path = segment_file_path(_rowset_path, rowset_id(), segment_id);
+    auto res = Segment::open(fs, seg_path, segment_id, schema, &footer_size_hint);
+    if (!res.ok()) {
+        LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
+        return res.status();
+    }
+    _segments[segment_id] = std::move(res).value();
+    return Status::OK();
+}
+
 int64_t Rowset::total_segment_data_size() {
     int64_t res = 0;
     for (auto& seg : _segments) {

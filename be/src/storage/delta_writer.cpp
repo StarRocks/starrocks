@@ -196,14 +196,16 @@ Status DeltaWriter::_init() {
         }
     }();
 
-    _build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, _tablet->tablet_schema());
+    // build tablet schema in request level
+    auto tablet_schema_ptr = _tablet->tablet_schema();
+    RETURN_IF_ERROR(_build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, _tablet->tablet_schema()));
 
     // maybe partial update, change to partial tablet schema
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && partial_cols_num < _tablet_schema->num_columns()) {
         writer_context.referenced_column_ids.reserve(partial_cols_num);
         for (auto i = 0; i < partial_cols_num; ++i) {
             const auto& slot_col_name = (*_opt.slots)[i]->col_name();
-            int32_t index = _tablet->field_index(slot_col_name);
+            int32_t index = tablet_schema_ptr->field_index(slot_col_name);
             if (index < 0) {
                 auto msg = strings::Substitute("Invalid column name: $0", slot_col_name);
                 LOG(WARNING) << msg;
@@ -495,8 +497,9 @@ Status DeltaWriter::_flush_memtable() {
     return _flush_token->wait();
 }
 
-void DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam& ptable_schema_param,
-                                               const TabletSchemaCSPtr& ori_tablet_schema) {
+Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam& ptable_schema_param,
+                                                 const TabletSchemaCSPtr& ori_tablet_schema) {
+    Status st;
     _tablet_schema->copy_from(ori_tablet_schema);
     // new tablet schema if new table
 
@@ -505,14 +508,16 @@ void DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTabl
     for (; i < ptable_schema_param.indexes_size(); i++) {
         if (ptable_schema_param.indexes(i).id() == index_id) break;
     }
-    if (ptable_schema_param.indexes_size() > 0 && ptable_schema_param.indexes(0).columns_desc_size() != 0 &&
-        ptable_schema_param.indexes(0).columns_desc(0).unique_id() >= 0) {
-        _tablet_schema->build_current_tablet_schema(index_id, ptable_schema_param.version(),
-                                                    ptable_schema_param.indexes(i), ori_tablet_schema);
+    if (ptable_schema_param.indexes_size() > 0 && ptable_schema_param.indexes(0).has_column_param() != 0 &&
+        ptable_schema_param.indexes(0).column_param().columns_desc_size() != 0 &&
+        ptable_schema_param.indexes(0).column_param().columns_desc(0).unique_id() >= 0) {
+        RETURN_IF_ERROR(_tablet_schema->build_current_tablet_schema(index_id, ptable_schema_param.version(),
+                                                                    ptable_schema_param.indexes(i), ori_tablet_schema));
     }
     if (_tablet_schema->schema_version() > ori_tablet_schema->schema_version()) {
         _tablet->update_max_version_schema(_tablet_schema);
     }
+    return st;
 }
 
 void DeltaWriter::_reset_mem_table() {
