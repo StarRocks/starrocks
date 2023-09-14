@@ -361,13 +361,18 @@ public class ReplayFromDumpTest {
     public void testTPCDS94() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds94"));
         // check ANTI JOIN cardinality is not 0
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  21:HASH JOIN\n" +
-                "  |  join op: RIGHT ANTI JOIN (PARTITIONED)\n" +
-                "  |  equal join conjunct: [138: wr_order_number, INT, false] = [2: ws_order_number, INT, false]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 3, build_expr = (2: ws_order_number), remote = true\n" +
-                "  |  output columns: 2, 17, 29, 34\n" +
-                "  |  cardinality: 26765"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("21:HASH JOIN\n" +
+                "  |    |  join op: RIGHT ANTI JOIN (PARTITIONED)\n" +
+                "  |    |  equal join conjunct: [138: wr_order_number, INT, false] = [2: ws_order_number, INT, false]\n" +
+                "  |    |  build runtime filters:\n" +
+                "  |    |  - filter_id = 3, build_expr = (2: ws_order_number), remote = true\n" +
+                "  |    |  output columns: 2, 17, 29, 34\n" +
+                "  |    |  cardinality: 26765"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("23:HASH JOIN\n" +
+                "  |  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  equal join conjunct: [103: ws_order_number, INT, false] = [2: ws_order_number, INT, false]\n" +
+                "  |  other join predicates: [17: ws_warehouse_sk, INT, true] != [118: ws_warehouse_sk, INT, true]\n" +
+                "  |  build runtime filters:"));
     }
 
     @Test
