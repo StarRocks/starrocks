@@ -30,6 +30,7 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
+import com.starrocks.persist.UserPrivilegeCollectionInfoDeprecated;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -1863,5 +1864,35 @@ public class AuthorizationMgrTest {
         ShowGrantsStmt showStreamLoadStmt = (ShowGrantsStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, showStreamLoadStmt);
         ShowResultSet resultSet = executor.execute();
+    }
+
+    @Test
+    public void testUserPriUpgrade() throws IOException, InterruptedException, PrivilegeException {
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+
+        UserPrivilegeCollection collection = new UserPrivilegeCollection();
+        HashSet<Long> roleIds = new HashSet<>();
+        roleIds.add(1L);
+        collection.grantRoles(roleIds);
+        collection.setDefaultRoleIds(roleIds);
+        collection.grant(ObjectTypeDeprecate.SYSTEM, Lists.newArrayList(PrivilegeType.OPERATE),
+                Lists.newArrayList(new PEntryObject[] {null}), false);
+
+        UserPrivilegeCollectionInfoDeprecated deprecated = new UserPrivilegeCollectionInfoDeprecated(
+                new UserIdentity("u1", "%"),
+                collection,
+                (short) 1, (short) 1);
+
+        deprecated.write(emptyImage.getDataOutputStream());
+
+        UserPrivilegeCollectionInfo userPrivilegeCollectionInfo =
+                UserPrivilegeCollectionInfo.read(emptyImage.getDataInputStream());
+
+        Assert.assertEquals(new UserIdentity("u1", "%"), userPrivilegeCollectionInfo.getUserIdentity());
+        Assert.assertEquals(roleIds, userPrivilegeCollectionInfo.getPrivilegeCollection().getAllRoles());
+        Assert.assertEquals(roleIds, userPrivilegeCollectionInfo.getPrivilegeCollection().getDefaultRoleIds());
+        Assert.assertTrue(userPrivilegeCollectionInfo.getPrivilegeCollection()
+                .check(ObjectType.SYSTEM, PrivilegeType.OPERATE, null));
     }
 }
