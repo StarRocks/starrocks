@@ -280,7 +280,6 @@ void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
         ++_packet_num;
         l.unlock();
         ctx->on_data(ser.get(), packet_num);
-        ser.reset(nullptr);
         return;
     }
     if (_is_close) {
