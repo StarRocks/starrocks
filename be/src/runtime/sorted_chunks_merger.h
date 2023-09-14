@@ -95,7 +95,7 @@ private:
 class ChunkMerger {
 public:
     ChunkMerger(RuntimeState* state) : _state(state) {}
-    ~ChunkMerger() = default;
+    virtual ~ChunkMerger() = default;
 
     virtual Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
                         const SortDescs& _sort_desc) = 0;
