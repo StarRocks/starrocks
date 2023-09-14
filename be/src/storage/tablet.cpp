@@ -1723,7 +1723,11 @@ void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
     std::lock_guard wrlock(_schema_lock);
     // Double Check for concurrent update
     if (!_max_version_schema || tablet_schema->schema_version() > _max_version_schema->schema_version()) {
-        _max_version_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_schema).first;
+        if (tablet_schema->id() == TabletSchema::invalid_id()) {
+            _max_version_schema = tablet_schema;
+        } else {
+            _max_version_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_schema).first;
+        }
     }
 }
 

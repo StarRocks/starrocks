@@ -781,7 +781,8 @@ TEST_P(RowsetColumnPartialUpdateTest, test_get_column_values) {
             auto column = ChunkHelper::column_from_field(*read_column_schema.field(colid).get());
             columns[colid] = column->clone_empty();
         }
-        ASSERT_OK(tablet->updates()->get_column_values(column_ids, version, false, rowids_by_rssid, &columns, nullptr));
+        ASSERT_OK(tablet->updates()->get_column_values(column_ids, version, false, rowids_by_rssid, &columns, nullptr,
+                                                       tablet->tablet_schema()));
         // check column values
         for (int i = 0; i < N; i++) {
             ASSERT_EQ(columns[0]->get(i).get_int64(), i);

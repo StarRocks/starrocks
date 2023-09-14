@@ -222,7 +222,11 @@ public:
     void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema_ptr) {
         TabletSchemaPB* ts_pb = _rowset_meta_pb->mutable_tablet_schema();
         tablet_schema_ptr->to_schema_pb(ts_pb);
-        _schema = GlobalTabletSchemaMap::Instance()->emplace(*ts_pb).first;
+        if (ts_pb->has_id() && ts_pb->id() != TabletSchema::invalid_id()) {
+            _schema = GlobalTabletSchemaMap::Instance()->emplace(*ts_pb).first;
+        } else {
+            _schema = TabletSchemaCSPtr(TabletSchema::copy(tablet_schema_ptr));
+        }
     }
 
     const TabletSchemaCSPtr tablet_schema() { return _schema; }

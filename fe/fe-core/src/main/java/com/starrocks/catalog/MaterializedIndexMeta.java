@@ -99,12 +99,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         this.keysType = keysType;
         this.defineStmt = defineStmt;
         this.sortKeyIdxes = sortKeyIdxes;
-        for (Integer id : sortKeyIdxes) {
-            // if column unique id is less than 0, this tablet maybe create in old version, skip it
-            if (schema.get(id).getUniqueId() < 0) {
-                break;
+        if (sortKeyIdxes != null) {
+            for (Integer id : sortKeyIdxes) {
+                // if column unique id is less than 0, this tablet maybe create in old version, skip it
+                if (schema.get(id).getUniqueId() < 0) {
+                    break;
+                }
+                sortKeyUniqueIds.add(schema.get(id).getUniqueId());
             }
-            sortKeyUniqueIds.add(schema.get(id).getUniqueId());
         }
     }
 
