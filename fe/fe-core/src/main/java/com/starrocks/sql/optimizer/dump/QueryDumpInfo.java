@@ -25,6 +25,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -39,6 +40,8 @@ import java.util.Set;
 
 public class QueryDumpInfo implements DumpInfo {
     private String originStmt = "";
+
+    private StatementBase statementBase;
     private final Set<Resource> resourceSet = new HashSet<>();
     // tableId-><dbName, table>
     private final Map<Long, Pair<String, Table>> tableMap = new LinkedHashMap<>();
@@ -46,7 +49,7 @@ public class QueryDumpInfo implements DumpInfo {
     private final Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> hmsTableMap = new HashMap<>();
     // viewId-><dbName, view>
     private final Map<Long, Pair<String, View>> viewMap = new LinkedHashMap<>();
-    // tableName->partitionName->partitionRowCount
+    // dbName.tableName->partitionName->partitionRowCount
     private final Map<String, Map<String, Long>> partitionRowCountMap = new HashMap<>();
     // tableName->columnName->column statistics
     private final Map<String, Map<String, ColumnStatistic>> tableStatisticsMap = new HashMap<>();
@@ -65,6 +68,10 @@ public class QueryDumpInfo implements DumpInfo {
     private SessionVariable sessionVariable;
     private final ConnectContext connectContext;
 
+    private String explainInfo = "";
+
+    private boolean desensitizedInfo;
+
     public QueryDumpInfo(ConnectContext context) {
         this.connectContext = context;
         this.sessionVariable = context.getSessionVariable();
@@ -82,6 +89,15 @@ public class QueryDumpInfo implements DumpInfo {
 
     public String getOriginStmt() {
         return originStmt;
+    }
+
+    @Override
+    public void setStatement(StatementBase statement) {
+        this.statementBase = statement;
+    }
+
+    public StatementBase getStatement() {
+        return statementBase;
     }
 
     public SessionVariable getSessionVariable() {
@@ -271,5 +287,23 @@ public class QueryDumpInfo implements DumpInfo {
 
     public int getBeNum() {
         return this.beNum;
+    }
+
+    public boolean isDesensitizedInfo() {
+        return desensitizedInfo;
+    }
+
+    @Override
+    public void setDesensitizedInfo(boolean desensitizedInfo) {
+        this.desensitizedInfo = desensitizedInfo;
+    }
+
+    public String getExplainInfo() {
+        return explainInfo;
+    }
+
+    @Override
+    public void setExplainInfo(String explainInfo) {
+        this.explainInfo = explainInfo;
     }
 }
