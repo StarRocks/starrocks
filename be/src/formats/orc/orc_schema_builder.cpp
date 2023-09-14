@@ -129,14 +129,17 @@ static Status get_orc_type_from_list(const orc::Type* typ, TypeDescriptor* desc)
 }
 
 static Status get_orc_type_from_map(const orc::Type* typ, TypeDescriptor* desc) {
+    *desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     return Status::OK();
 }
 
 static Status get_orc_type_from_struct(const orc::Type* typ, TypeDescriptor* desc) {
+    *desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     return Status::OK();
 }
 
 static Status get_orc_type_from_union(const orc::Type* typ, TypeDescriptor* desc) {
+    *desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     return Status::OK();
 }
 
