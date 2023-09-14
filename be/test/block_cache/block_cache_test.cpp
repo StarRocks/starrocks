@@ -44,6 +44,7 @@ TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
     options.disk_spaces.push_back({.path = "./ut_dir/final_entry_not_exist", .size = quota});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
+    options.enable_checksum = false;
 #ifdef WITH_STARCACHE
     options.engine = "starcache";
 #else
