@@ -115,8 +115,8 @@ static Status get_orc_type_from_scalar_type(const orc::Type* typ, TypeDescriptor
 static Status get_orc_type_from_list(const orc::Type* typ, TypeDescriptor* desc) {
     DCHECK(typ->getKind() == orc::TypeKind::LIST);
 
-    if (typ->getSubtypeCount() <= 0) {
-        return Status::Corruption("no element in orc list");
+    if (typ->getSubtypeCount() != 1) {
+        return Status::Corruption(fmt::format("expect 1 element in orc list type, got: {}", typ->getSubtypeCount()));
     }
 
     auto subtype = typ->getSubtype(0);
@@ -129,12 +129,42 @@ static Status get_orc_type_from_list(const orc::Type* typ, TypeDescriptor* desc)
 }
 
 static Status get_orc_type_from_map(const orc::Type* typ, TypeDescriptor* desc) {
-    *desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    DCHECK(typ->getKind() == orc::TypeKind::MAP);
+    if (typ->getSubtypeCount() != 2) {
+        return Status::Corruption(fmt::format("expect key and value in orc map type, got: {}", typ->getSubtypeCount()));
+    }
+
+    auto key_type = typ->getSubtype(0);
+    TypeDescriptor key_desc;
+    RETURN_IF_ERROR(get_orc_type(key_type, &key_desc));
+
+    auto value_type = typ->getSubtype(1);
+    TypeDescriptor value_desc;
+    RETURN_IF_ERROR(get_orc_type(value_type, &value_desc));
+
+    *desc = TypeDescriptor::create_map_type(key_desc, value_desc);
+
     return Status::OK();
 }
 
 static Status get_orc_type_from_struct(const orc::Type* typ, TypeDescriptor* desc) {
-    *desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    DCHECK(typ->getKind() == orc::TypeKind::STRUCT);
+    if (typ->getSubtypeCount() == 0) {
+        return Status::Corruption("no fields in orc struct type");
+    }
+
+    std::vector<std::string> field_names;
+    std::vector<TypeDescriptor> field_types;
+    for (size_t i = 0; i < typ->getSubtypeCount(); ++i) {
+        auto name = typ->getFieldName(i);
+        field_names.emplace_back(std::move(name));
+
+        TypeDescriptor field_desc;
+        RETURN_IF_ERROR(get_orc_type(typ->getSubtype(i), &field_desc));
+        field_types.emplace_back(std::move(field_desc));
+    }
+
+    *desc = TypeDescriptor::create_struct_type(field_names, field_types);
     return Status::OK();
 }
 

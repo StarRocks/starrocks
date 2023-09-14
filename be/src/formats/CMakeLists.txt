@@ -39,11 +39,11 @@ add_library(Formats STATIC
         avro/numeric_column.cpp
         avro/binary_column.cpp
         orc/orc_chunk_reader.cpp
-        orc/orc_schema_builder.cpp
         orc/orc_input_stream.cpp
         orc/orc_mapping.cpp
         orc/orc_memory_pool.cpp
         orc/orc_min_max_decoder.cpp
+        orc/orc_schema_builder.cpp
         orc/utils.cpp
         orc/column_reader.cpp
         orc/memory_stream/MemoryInputStream.cc
