@@ -346,6 +346,7 @@ public class HiveMetadataTest {
         tSinkCommitInfo.setStaging_dir(stagingDir);
         tSinkCommitInfo.setIs_overwrite(false);
         tSinkCommitInfo.setHive_file_info(fileInfo);
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList());
         hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
     }
 
