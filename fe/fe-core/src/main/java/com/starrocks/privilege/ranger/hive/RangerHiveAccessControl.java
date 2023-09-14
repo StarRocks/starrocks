@@ -84,10 +84,10 @@ public class RangerHiveAccessControl implements AccessControl {
     }
 
     @Override
-    public Expr getColumnMaskingPolicy(ConnectContext currentUser, TableName tableName, String columnName, Type type) {
+    public Expr getColumnMaskingPolicy(ConnectContext context, TableName tableName, String columnName, Type type) {
         RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(
                 new RangerStarRocksResource(tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), columnName),
-                currentUser.getCurrentUserIdentity(), PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
+                context.getCurrentUserIdentity(), PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
 
         RangerAccessResult result = rangerPlugin.evalDataMaskPolicies(request, null);
         if (result.isMaskEnabled()) {
@@ -115,21 +115,21 @@ public class RangerHiveAccessControl implements AccessControl {
                 transformer = transformer.replace("{col}", columnName).replace("{type}", type.toSql());
             }
 
-            return SqlParser.parseSqlToExpr(transformer, currentUser.getSessionVariable().getSqlMode());
+            return SqlParser.parseSqlToExpr(transformer, context.getSessionVariable().getSqlMode());
         } else {
             return null;
         }
     }
 
     @Override
-    public Expr getRowAccessPolicy(ConnectContext currentUser, TableName tableName) {
+    public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
         RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(
                 new RangerStarRocksResource(ObjectType.TABLE,
                         Lists.newArrayList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
-                currentUser.getCurrentUserIdentity(), PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
+                context.getCurrentUserIdentity(), PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
         RangerAccessResult result = rangerPlugin.evalRowFilterPolicies(request, null);
         if (result != null && result.isRowFilterEnabled()) {
-            return SqlParser.parseSqlToExpr(result.getFilterExpr(), currentUser.getSessionVariable().getSqlMode());
+            return SqlParser.parseSqlToExpr(result.getFilterExpr(), context.getSessionVariable().getSqlMode());
         } else {
             return null;
         }

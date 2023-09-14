@@ -1724,7 +1724,7 @@ public class ExpressionAnalyzer {
                 strictModeIdx = params.size() - 1;
             } else {
                 throw new SemanticException(String.format("dict_mapping function param size should be %d - %d",
-                    keyColumns.size() + 1, keyColumns.size() + 3));
+                        keyColumns.size() + 1, keyColumns.size() + 3));
             }
 
             String valueField;
@@ -1782,7 +1782,7 @@ public class ExpressionAnalyzer {
                 List<String> actualTypeNames = actualTypes.stream().map(Type::canonicalName).collect(Collectors.toList());
                 throw new SemanticException(
                         String.format("dict_mapping function params not match expected,\nExpect: %s\nActual: %s",
-                            String.join(", ", expectTypeNames), String.join(", ", actualTypeNames)));
+                                String.join(", ", expectTypeNames), String.join(", ", actualTypeNames)));
             }
 
             Type valueType = ScalarType.createType(valueColumn.getType().getPrimitiveType());
@@ -1836,6 +1836,5 @@ public class ExpressionAnalyzer {
         expressionAnalyzer.analyzeIgnoreSlot(expression, new AnalyzeState(),
                 new Scope(RelationId.anonymous(), new RelationFields()));
     }
-
 }
 

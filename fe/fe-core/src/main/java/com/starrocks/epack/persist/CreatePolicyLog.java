@@ -3,7 +3,6 @@
 package com.starrocks.epack.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -11,8 +10,8 @@ import com.starrocks.epack.privilege.DbUID;
 import com.starrocks.epack.privilege.Policy;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.parser.SqlParser;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -20,6 +19,9 @@ import java.io.IOException;
 import java.util.List;
 
 public class CreatePolicyLog implements Writable {
+
+    private static final Logger LOG = LogManager.getLogger(CreatePolicyLog.class);
+
     @SerializedName(value = "type")
     private PolicyType policyType;
 
@@ -58,7 +60,7 @@ public class CreatePolicyLog implements Writable {
         this.argNames = policy.getArgNames();
         this.argTypes = policy.getArgTypes();
         this.retType = policy.getRetType();
-        this.policyExpressionSQL = AstToSQLBuilder.toSQL(policy.getPolicyExpression());
+        this.policyExpressionSQL = policy.getPolicyExpressionSQL();
         this.comment = policy.getComment();
     }
 
@@ -90,8 +92,8 @@ public class CreatePolicyLog implements Writable {
         return retType;
     }
 
-    public Expr getPolicyExpression() {
-        return SqlParser.parseSqlToExpr(policyExpressionSQL, sqlMode);
+    public String getPolicyExpressionSQL() {
+        return policyExpressionSQL;
     }
 
     public String getComment() {

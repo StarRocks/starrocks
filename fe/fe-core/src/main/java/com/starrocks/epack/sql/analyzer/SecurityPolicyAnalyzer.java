@@ -3,9 +3,8 @@
 package com.starrocks.epack.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Type;
 import com.starrocks.epack.privilege.Policy;
@@ -19,19 +18,20 @@ import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.SelectList;
-import com.starrocks.sql.ast.SelectListItem;
-import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.TypeManager;
 
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 
 public class SecurityPolicyAnalyzer {
@@ -88,40 +88,31 @@ public class SecurityPolicyAnalyzer {
 
         private void analyzePolicyBody(ConnectContext context, PolicyType policyType, Expr policyBody,
                                        List<Type> argTypeDefs, Type returnType, List<String> argNames) {
-            Expr policyBodyCopy = policyBody.clone();
-
-            SelectList selectList;
-            Expr predicate = null;
-            if (policyType.equals(PolicyType.MASKING)) {
-                selectList = new SelectList(Lists.newArrayList(
-                        new SelectListItem(policyBodyCopy, null)), false);
-            } else {
-                selectList = new SelectList(Lists.newArrayList(
-                        new SelectListItem(null)), false);
-                predicate = policyBodyCopy;
+            List<Field> fields = new ArrayList<>();
+            for (int i = 0; i < argTypeDefs.size(); ++i) {
+                fields.add(new Field(argNames.get(i), argTypeDefs.get(i), new TableName(null, "__policy"), policyBody));
             }
 
-            List<Expr> row = Lists.newArrayList();
-            ValuesRelation valuesRelation;
-            if (!argNames.isEmpty()) {
-                for (Type argType : argTypeDefs) {
-                    row.add(NullLiteral.create(argType));
+            ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(context);
+            expressionAnalyzer.analyze(policyBody, new AnalyzeState(),
+                    new Scope(RelationId.anonymous(), new RelationFields(fields)));
+
+            //Policy Analyzer does not set the TableName of slotRef because the analysis here is just a temporary policy table.
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitSlot(SlotRef slotRef, Void context) {
+                    TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+                    if (tableName != null) {
+                        if (slotRef.getTblNameWithoutAnalyzed().equals(new TableName(null, "__policy"))) {
+                            slotRef.setTblName(null);
+                        }
+                    }
+                    return null;
                 }
-                List<List<Expr>> rows = Collections.singletonList(row);
-                valuesRelation = new ValuesRelation(rows, argNames);
-                valuesRelation.setAlias(new TableName(null, "__policy"));
-            } else {
-                valuesRelation = ValuesRelation.newDualRelation();
-            }
+            }.visit(policyBody);
 
-            SelectRelation selectRelation = new SelectRelation(selectList, valuesRelation, predicate, null, null);
-            QueryStatement queryStatement = new QueryStatement(selectRelation);
-            Analyzer.analyze(queryStatement, context);
-            if (policyType.equals(PolicyType.MASKING)) {
-                Expr result = queryStatement.getQueryRelation().getOutputExpression().get(0);
-                //Check compatible between expr result type and return type
-                TypeManager.addCastExpr(result, returnType);
-            }
+            //Check compatible between expr result type and return type
+            TypeManager.addCastExpr(policyBody, returnType);
         }
 
         @Override

@@ -71,13 +71,13 @@ insert into sales values('SH', 200);
 insert into sales values('GZ', 300);
 -- result:
 -- !result
-select * from sales;
+select * from sales order by region;
 -- result:
 -- !result
 execute as kevin with no revert;
 -- result:
 -- !result
-select * from sales;
+select * from sales order by region;;
 -- result:
 BJ	100
 -- !result
@@ -87,7 +87,7 @@ execute as root with no revert;
 execute as tony with no revert;
 -- result:
 -- !result
-select * from sales;
+select * from sales order by region;;
 -- result:
 SH	200
 -- !result
@@ -100,10 +100,10 @@ update sales_manager set sales_manager='tony' where region='GZ';
 execute as tony with no revert;
 -- result:
 -- !result
-select * from sales;
+select * from sales order by region;;
 -- result:
-SH	200
 GZ	300
+SH	200
 -- !result
 execute as root with no revert;
 -- result:

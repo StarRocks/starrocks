@@ -40,20 +40,20 @@ insert into sales values('BJ', 100);
 insert into sales values('SH', 200);
 insert into sales values('GZ', 300);
 
-select * from sales;
+select * from sales order by region;
 
 execute as kevin with no revert;
-select * from sales;
+select * from sales order by region;;
 
 execute as root with no revert;
 execute as tony with no revert;
-select * from sales;
+select * from sales order by region;;
 
 execute as root with no revert;
 update sales_manager set sales_manager='tony' where region='GZ';
 
 execute as tony with no revert;
-select * from sales;
+select * from sales order by region;;
 
 execute as root with no revert;
 alter table sales drop all row access policies;

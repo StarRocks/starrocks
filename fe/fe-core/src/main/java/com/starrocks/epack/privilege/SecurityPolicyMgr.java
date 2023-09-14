@@ -86,7 +86,7 @@ public class SecurityPolicyMgr {
                     stmt.getArgNames(),
                     stmt.getArgTypeDefs(),
                     stmt.getReturnType().getType(),
-                    stmt.getExpression(),
+                    AstToSQLBuilder.toSQL(stmt.getExpression()),
                     stmt.getComment());
 
             registerPolicy(policy);
@@ -110,7 +110,7 @@ public class SecurityPolicyMgr {
                     createPolicyInfo.getArgNames(),
                     createPolicyInfo.getArgTypes(),
                     createPolicyInfo.getRetType(),
-                    createPolicyInfo.getPolicyExpression(),
+                    createPolicyInfo.getPolicyExpressionSQL(),
                     createPolicyInfo.getComment());
 
             registerPolicy(policy);
@@ -235,7 +235,7 @@ public class SecurityPolicyMgr {
     }
 
     private void doAlterPolicySetBodyUnlocked(Policy policy, Expr policyBody) {
-        policy.setPolicyExpression(policyBody);
+        policy.setPolicyExpressionSQL(AstToSQLBuilder.toSQL(policyBody));
     }
 
     private void doAlterPolicySetCommentUnlocked(Policy policy, String comment) {
@@ -394,9 +394,8 @@ public class SecurityPolicyMgr {
             Policy policy = new Policy(createPolicyInfo.getPolicyType(), createPolicyInfo.getPolicyId(),
                     createPolicyInfo.getName(), createPolicyInfo.getDbUID(),
                     createPolicyInfo.getArgNames(), createPolicyInfo.getArgTypes(),
-                    createPolicyInfo.getRetType(), createPolicyInfo.getPolicyExpression(),
+                    createPolicyInfo.getRetType(), createPolicyInfo.getPolicyExpressionSQL(),
                     createPolicyInfo.getComment());
-
             registerPolicy(policy);
         }
 

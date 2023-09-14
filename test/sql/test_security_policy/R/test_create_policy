@@ -32,7 +32,7 @@ alter row access policy if exists not_exists_policy set comment = "foo";
 -- !result
 alter row access policy rp set body -> row(0, 1);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: WHERE clause row(0, 1) can not be converted to boolean type.')
+E: (1064, "Getting analyzing error. Detail message: Cannot cast 'row(0, 1)' from struct<col1 tinyint(4), col2 tinyint(4)> to BOOLEAN.")
 -- !result
 alter row access policy rp set body -> if (v2 = 2, true, false);
 -- result:
@@ -40,7 +40,7 @@ E: (1064, "Getting analyzing error. Detail message: Column 'v2' cannot be resolv
 -- !result
 alter row access policy rp set body -> if (v1 = 2, row(0, 1), row(1,1));
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: WHERE clause if(`__policy`.`v1` = 2, row(0, 1), row(1, 1)) can not be converted to boolean type.')
+E: (1064, "Getting analyzing error. Detail message: Cannot cast 'if(v1 = 2, row(0, 1), row(1, 1))' from struct<col1 tinyint(4), col2 tinyint(4)> to BOOLEAN.")
 -- !result
 create masking policy policy_struct as (col struct<s1 int,sa2 int>) returns struct<s1 int,sa2 int>
     -> case when current_role() = 'root' then row(0) else col end;
@@ -67,5 +67,85 @@ E: (1064, "Getting analyzing error. Detail message: Column 'col2' cannot be reso
 -- !result
 create row access policy rp1 as (col array<int>) returns boolean -> cast('[1,1]' as array<int>);
 -- result:
-E: (1064, "Getting analyzing error. Detail message: WHERE clause CAST('[1,1]' AS ARRAY<INT>) can not be converted to boolean type.")
+E: (1064, "Getting analyzing error. Detail message: Cannot cast 'CAST('[1,1]' AS ARRAY<INT>)' from ARRAY<INT> to BOOLEAN.")
+-- !result
+create masking policy policy_map as (col map<int,int>) returns map<int,int> ->
+            case when current_role() = 'root' then map{0:0} else col end;
+-- result:
+-- !result
+show create masking policy policy_map;
+-- result:
+policy_map	CREATE MASKING POLICY policy_map AS (col map<int(11),int(11)>) RETURNS map<int(11),int(11)> -> CASE WHEN ((CURRENT_ROLE()) = 'root') THEN (MAP<TINYINT,TINYINT>{0:0}) ELSE `col` END
+-- !result
+create masking policy policy_struct2 as (col struct<s1 int,sa2 int>) returns struct<s1 int,sa2 int> ->
+            case when current_role() = 'root' then row(0,0) else row(-1,-1) end;
+-- result:
+-- !result
+show create masking policy policy_struct2;
+-- result:
+policy_struct2	CREATE MASKING POLICY policy_struct2 AS (col struct<s1 int(11), sa2 int(11)>) RETURNS struct<s1 int(11), sa2 int(11)> -> CASE WHEN ((CURRENT_ROLE()) = 'root') THEN (row(0, 0)) ELSE (row(-1, -1)) END
+-- !result
+create database test_create_policy_2;
+-- result:
+-- !result
+use test_create_policy_2;
+-- result:
+-- !result
+CREATE TABLE sales_manager (
+  region        varchar(20),
+  sales_manager varchar(20)
+)
+PRIMARY KEY(`region`)
+DISTRIBUTED BY HASH(`region`) BUCKETS 10
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE ROW ACCESS POLICY sales_policy
+    AS (sales_region varchar) RETURNS BOOLEAN -> EXISTS (
+            SELECT 1 FROM sales_manager where trim(split(current_user(), '@')[1], "'") = sales_manager and region = sales_region
+    )
+;
+-- result:
+-- !result
+show create row access policy sales_policy;
+-- result:
+sales_policy	CREATE ROW ACCESS POLICY sales_policy AS (sales_region varchar) RETURNS boolean -> EXISTS (SELECT 1 AS `1`
+FROM `test_create_policy_2`.`sales_manager`
+WHERE ((trim(split(CURRENT_USER(), '@')[1], '\'')) = `test_create_policy_2`.`sales_manager`.`sales_manager`) AND (`test_create_policy_2`.`sales_manager`.`region` = `sales_region`))
+-- !result
+create database test_create_policy_3;
+-- result:
+-- !result
+use test_create_policy_3;
+-- result:
+-- !result
+CREATE ROW ACCESS POLICY sales_policy
+    AS (sales_region varchar) RETURNS BOOLEAN -> EXISTS (
+            SELECT 1 FROM sales_manager where trim(split(current_user(), '@')[1], "'") = sales_manager and region = sales_region
+    )
+;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_create_policy_3.sales_manager'.")
+-- !result
+CREATE ROW ACCESS POLICY sales_policy
+    AS (sales_region varchar) RETURNS BOOLEAN -> EXISTS (
+            SELECT 1 FROM test_create_policy_2.sales_manager where trim(split(current_user(), '@')[1], "'") = sales_manager and region = sales_region
+    )
+;
+-- result:
+-- !result
+show create row access policy sales_policy;
+-- result:
+sales_policy	CREATE ROW ACCESS POLICY sales_policy AS (sales_region varchar) RETURNS boolean -> EXISTS (SELECT 1 AS `1`
+FROM `test_create_policy_2`.`sales_manager`
+WHERE ((trim(split(CURRENT_USER(), '@')[1], '\'')) = `test_create_policy_2`.`sales_manager`.`sales_manager`) AND (`test_create_policy_2`.`sales_manager`.`region` = `sales_region`))
+-- !result
+create row access policy policy01 as (col int) returns boolean -> current_role() = 'root'
+    and col = ( select sum(CHARACTER_MAXIMUM_LENGTH) as revenue from information_schema.columns order by revenue desc );
+-- result:
+-- !result
+show create row access policy policy01;
+-- result:
+policy01	CREATE ROW ACCESS POLICY policy01 AS (col int(11)) RETURNS boolean -> ((CURRENT_ROLE()) = 'root') AND (`col` = ((SELECT sum(`information_schema`.`columns`.`CHARACTER_MAXIMUM_LENGTH`) AS `revenue`
+FROM `information_schema`.`columns` ORDER BY `revenue` DESC )))
 -- !result

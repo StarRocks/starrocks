@@ -55,10 +55,10 @@ alter table t0 modify column v1 unset masking policy;
 alter table t0 modify column v1 set masking policy mp1 using(v2);
 -- result:
 -- !result
-select * from t0 order by v1;
+select * from t0 order by v1,v2,v3;
 -- result:
-3	5	6
 3	2	3
+3	5	6
 -- !result
 alter table t0 modify column v1 unset masking policy;
 -- result:

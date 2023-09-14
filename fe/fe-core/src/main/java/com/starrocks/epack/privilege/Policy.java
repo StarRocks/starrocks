@@ -2,7 +2,6 @@
 
 package com.starrocks.epack.privilege;
 
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Type;
 import com.starrocks.epack.sql.ast.PolicyType;
 
@@ -16,13 +15,13 @@ public class Policy {
     private final List<String> argNames;
     private final List<Type> argTypes;
     private final Type retType;
-    private Expr policyExpression;
+    private String policyExpressionSQL;
     private String comment;
 
     public Policy(PolicyType policyType, Long policyId,
                   String policyName, DbUID dbUID,
                   List<String> argNames, List<Type> argTypes, Type retType,
-                  Expr policyExpression, String comment) {
+                  String policyExpressionSQL, String comment) {
         this.policyType = policyType;
         this.policyId = policyId;
 
@@ -32,7 +31,7 @@ public class Policy {
         this.argNames = argNames;
         this.argTypes = argTypes;
         this.retType = retType;
-        this.policyExpression = policyExpression;
+        this.policyExpressionSQL = policyExpressionSQL;
         this.comment = comment;
     }
 
@@ -68,12 +67,12 @@ public class Policy {
         return retType;
     }
 
-    public Expr getPolicyExpression() {
-        return policyExpression.clone();
+    public String getPolicyExpressionSQL() {
+        return policyExpressionSQL;
     }
 
-    public void setPolicyExpression(Expr policyExpression) {
-        this.policyExpression = policyExpression;
+    public void setPolicyExpressionSQL(String policyExpressionSQL) {
+        this.policyExpressionSQL = policyExpressionSQL;
     }
 
     public String getComment() {

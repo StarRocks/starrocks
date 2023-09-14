@@ -17,6 +17,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstRewriter;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.parser.SqlParser;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -70,7 +71,7 @@ public class NativeAccessControlEPack extends NativeAccessControl implements Acc
     }
 
     @Override
-    public Expr getColumnMaskingPolicy(ConnectContext currentUser, TableName tableName, String columnName, Type type) {
+    public Expr getColumnMaskingPolicy(ConnectContext context, TableName tableName, String columnName, Type type) {
         SecurityPolicyMgr policyManager = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
         TableUID tableUID = TableUID.generate(tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         if (!policyManager.hasTableAppliedPolicy(tableUID)) {
@@ -92,14 +93,16 @@ public class NativeAccessControlEPack extends NativeAccessControl implements Acc
             }
 
             RewriteAliasVisitor r = new RewriteAliasVisitor(onColumnsMap);
-            return (Expr) r.visit(maskingPolicy.getPolicyExpression());
+            Expr policyExpr = SqlParser.parseSqlToExpr(maskingPolicy.getPolicyExpressionSQL(),
+                    context.getSessionVariable().getSqlMode());
+            return (Expr) r.visit(policyExpr);
         } else {
             return null;
         }
     }
 
     @Override
-    public Expr getRowAccessPolicy(ConnectContext currentUser, TableName tableName) {
+    public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
         SecurityPolicyMgr policyManager = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
         TableUID tableUID = TableUID.generate(tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         if (!policyManager.hasTableAppliedPolicy(tableUID)) {
@@ -111,6 +114,8 @@ public class NativeAccessControlEPack extends NativeAccessControl implements Acc
         Expr rewriteExpr = null;
         for (RowAccessPolicyContext rowAccessPolicyInfo : tableAppliedPolicyInfo.getRowAccessPolicyApply()) {
             Policy rowAccessPolicy = policyManager.getPolicyById(rowAccessPolicyInfo.getPolicyId());
+            Expr policyExpr = SqlParser.parseSqlToExpr(rowAccessPolicy.getPolicyExpressionSQL(),
+                    context.getSessionVariable().getSqlMode());
 
             if (!rowAccessPolicyInfo.getOnColumns().isEmpty()) {
                 Map<SlotRef, SlotRef> onColumnsMap = new HashMap<>();
@@ -123,14 +128,14 @@ public class NativeAccessControlEPack extends NativeAccessControl implements Acc
                 }
 
                 RewriteAliasVisitor r = new RewriteAliasVisitor(onColumnsMap);
+
                 if (rewriteExpr == null) {
-                    rewriteExpr = (Expr) r.visit(rowAccessPolicy.getPolicyExpression());
+                    rewriteExpr = (Expr) r.visit(policyExpr);
                 } else {
-                    rewriteExpr = Expr.compoundAnd(Lists.newArrayList(
-                            (Expr) r.visit(rowAccessPolicy.getPolicyExpression()), rewriteExpr));
+                    rewriteExpr = Expr.compoundAnd(Lists.newArrayList((Expr) r.visit(policyExpr), rewriteExpr));
                 }
             } else {
-                rewriteExpr = rowAccessPolicy.getPolicyExpression();
+                rewriteExpr = policyExpr;
             }
         }
         return rewriteExpr;
