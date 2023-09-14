@@ -98,8 +98,8 @@ public:
     Status set_data(const Slice& data) override {
         if (data.size > 0) {
             uint8_t bit_width = *data.data;
-            _index_batch_decoder = RleBatchDecoder<uint32_t>(reinterpret_cast<uint8_t*>(data.data) + 1,
-                                                             static_cast<int>(data.size) - 1, bit_width);
+            _rle_batch_reader = RleBatchDecoder<uint32_t>(reinterpret_cast<uint8_t*>(data.data) + 1,
+                                                          static_cast<int>(data.size) - 1, bit_width);
         } else {
             return Status::Corruption("input encoded data size is 0");
         }
@@ -109,16 +109,12 @@ public:
     Status skip(size_t values_to_skip) override {
         //TODO(Smith) still heavy work load
         _indexes.reserve(values_to_skip);
-        _index_batch_decoder.GetBatch(&_indexes[0], values_to_skip);
+        _rle_batch_reader.GetBatch(&_indexes[0], values_to_skip);
         return Status::OK();
     }
 
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
-        _indexes.reserve(count);
-        _index_batch_decoder.GetBatch(&_indexes[0], count);
-
         FixedLengthColumn<T>* data_column = nullptr;
-
         if (dst->is_nullable()) {
             auto nullable_column = down_cast<NullableColumn*>(dst);
             nullable_column->null_column()->append_default(count);
@@ -131,17 +127,9 @@ public:
         data_column->resize_uninitialized(cur_size + count);
         T* __restrict__ data = data_column->get_data().data() + cur_size;
 
-        auto flag = 0;
-        size_t size = _dict.size();
-        for (int i = 0; i < count; i++) {
-            flag |= _indexes[i] >= size;
-        }
-        if (UNLIKELY(flag)) {
-            return Status::InternalError("Index not in dictionary bounds");
-        }
-
-        for (int i = 0; i < count; i++) {
-            data[i] = _dict[_indexes[i]];
+        auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), data, count);
+        if (UNLIKELY(ret <= 0)) {
+            return Status::InternalError("DictDecoder GetBatchWithDict failed");
         }
         return Status::OK();
     }
@@ -149,7 +137,7 @@ public:
 private:
     enum { SIZE_OF_TYPE = sizeof(T) };
 
-    RleBatchDecoder<uint32_t> _index_batch_decoder;
+    RleBatchDecoder<uint32_t> _rle_batch_reader;
     std::vector<T> _dict;
     std::vector<uint32_t> _indexes;
 };
@@ -245,8 +233,8 @@ public:
     Status set_data(const Slice& data) override {
         if (data.size > 0) {
             uint8_t bit_width = *data.data;
-            _index_batch_decoder = RleBatchDecoder<uint32_t>(reinterpret_cast<uint8_t*>(data.data) + 1,
-                                                             static_cast<int>(data.size) - 1, bit_width);
+            _rle_batch_reader = RleBatchDecoder<uint32_t>(reinterpret_cast<uint8_t*>(data.data) + 1,
+                                                          static_cast<int>(data.size) - 1, bit_width);
         } else {
             return Status::Corruption("input encoded data size is 0");
         }
@@ -256,37 +244,34 @@ public:
     Status skip(size_t values_to_skip) override {
         //TODO(Smith) still heavy work load
         _indexes.reserve(values_to_skip);
-        _index_batch_decoder.GetBatch(&_indexes[0], values_to_skip);
+        _rle_batch_reader.GetBatch(&_indexes[0], values_to_skip);
         return Status::OK();
     }
 
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
-        _indexes.reserve(count);
-        _index_batch_decoder.GetBatch(&_indexes[0], count);
-
         switch (content_type) {
         case DICT_CODE: {
-            auto ret = dst->append_numbers(&_indexes[0], count * SIZE_OF_DICT_CODE_TYPE);
-            if (UNLIKELY(!ret)) {
-                return Status::InternalError("DictDecoder append numbers to column failed");
+            FixedLengthColumn<int32_t>* data_column = nullptr;
+            if (dst->is_nullable()) {
+                auto nullable_column = down_cast<NullableColumn*>(dst);
+                nullable_column->null_column()->append_default(count);
+                data_column = down_cast<FixedLengthColumn<int32_t>*>(nullable_column->data_column().get());
+            } else {
+                data_column = down_cast<FixedLengthColumn<int32_t>*>(dst);
             }
-            DCHECK(ret) << "append_numbers failed";
+            size_t cur_size = data_column->size();
+            data_column->resize_uninitialized(cur_size + count);
+            int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
+            _rle_batch_reader.GetBatch(reinterpret_cast<uint32_t*>(data), count);
             break;
         }
         case VALUE: {
             raw::stl_vector_resize_uninitialized(&_slices, count);
-            auto flag = 0;
-            size_t size = _dict.size();
-            for (int i = 0; i < count; i++) {
-                flag |= _indexes[i] >= size;
+            auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), _slices.data(), count);
+            if (UNLIKELY(ret <= 0)) {
+                return Status::InternalError("DictDecoder GetBatchWithDict failed");
             }
-            if (UNLIKELY(flag)) {
-                return Status::InternalError("Index not in dictionary bounds");
-            }
-            for (int i = 0; i < count; ++i) {
-                _slices[i] = _dict[_indexes[i]];
-            }
-            auto ret = dst->append_strings_overflow(_slices, _max_value_length);
+            ret = dst->append_strings_overflow(_slices, _max_value_length);
             if (UNLIKELY(!ret)) {
                 return Status::InternalError("DictDecoder append strings to column failed");
             }
@@ -302,7 +287,7 @@ public:
 private:
     enum { SIZE_OF_DICT_CODE_TYPE = sizeof(int32_t) };
 
-    RleBatchDecoder<uint32_t> _index_batch_decoder;
+    RleBatchDecoder<uint32_t> _rle_batch_reader;
     std::vector<uint8_t> _dict_data;
     std::vector<Slice> _dict;
     std::vector<uint32_t> _indexes;
