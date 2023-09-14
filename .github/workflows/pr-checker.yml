@@ -121,7 +121,7 @@ jobs:
         id: unchanged
         if: >
           steps.check.outcome == 'skipped' &&
-          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior'')
+          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')
         uses: actions-ecosystem/action-remove-labels@v1
         with:
           labels: 'behavior_changed'
