@@ -59,6 +59,7 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
@@ -69,6 +70,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -132,6 +134,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // This property only applies to materialized views,
     // Indicates which tables do not listen to auto refresh events when load
     private List<TableName> excludedTriggerTables;
+
+    // This property only applies to materialized views
+    private List<String> mvSortKeys;
 
     // This property only applies to materialized views,
     // Specify the query rewrite behaviour for external table
@@ -200,6 +205,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private List<ForeignKeyConstraint> foreignKeyConstraints;
 
     private PeriodDuration dataCachePartitionDuration;
+
+    public TableProperty() {
+        this.properties = new LinkedHashMap<>();
+    }
 
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
@@ -274,6 +283,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildExcludedTriggerTables();
         buildResourceGroup();
         buildConstraint();
+        buildMvSortKeys();
         return this;
     }
 
@@ -373,6 +383,20 @@ public class TableProperty implements Writable, GsonPostProcessable {
             excludedTriggerTables = tables;
         }
         return this;
+    }
+
+    public TableProperty buildMvSortKeys() {
+        String sortKeys = properties.get(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS);
+        this.mvSortKeys = analyzeMvSortKeys(sortKeys);
+        return this;
+    }
+
+    public static List<String> analyzeMvSortKeys(String value) {
+        if (StringUtils.isEmpty(value)) {
+            return Lists.newArrayList();
+        } else {
+            return Splitter.on(",").omitEmptyStrings().trimResults().splitToList(value);
+        }
     }
 
     public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) throws AnalysisException {
@@ -585,6 +609,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public void setExcludedTriggerTables(List<TableName> excludedTriggerTables) {
         this.excludedTriggerTables = excludedTriggerTables;
+    }
+
+    public List<String> getMvSortKeys() {
+        return mvSortKeys;
+    }
+
+    public void setMvSortKeys(List<String> sortKeys) {
+        this.mvSortKeys = sortKeys;
     }
 
     public QueryRewriteConsistencyMode getForceExternalTableQueryRewrite() {
