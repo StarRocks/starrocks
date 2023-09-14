@@ -105,6 +105,14 @@ A query profile encompasses a mass of metrics that show the details of the query
 | PushRowNum        | Total row count of the data that the operator pushed. |
 | PullRowNum        | Total row count of the data that the operator pulled. |
 
+#### Unique metrics
+
+| Metric            | Description                             |
+| ----------------- | --------------------------------------- |
+| IOTaskExecTime    | Total execution time for all I/O tasks. |
+| IOTaskWaitTime    | Total wait time for all I/O tasks.      |
+| MorselsCount      | Total number of I/O tasks.              |
+
 #### Scan operator
 
 | Metric                          | Description                                                  |
@@ -189,6 +197,27 @@ A query profile encompasses a mass of metrics that show the details of the query
 | ---------- | ------------------------------------------------------------ |
 | Type       | Local Exchange type. Valid values: `Passthrough`, `Partition`, and `Broadcast`. |
 | ShuffleNum | Number of shuffles. This metric is valid only when `Type` is `Partition`. |
+
+#### Hive Connector
+
+| Metric                      | Description                                            |
+| --------------------------- | ------------------------------------------------------ |
+| ScanRanges                  | Number of tablets that are scanned.                    |
+| ReaderInit                  | The initiation time of Reader.                         |
+| ColumnReadTime              | Time consumed by Reader to read and parse data.        |
+| ExprFilterTime              | Time used to filter expressions.                       |
+| RowsRead                    | Number of data rows that are read.                     |
+
+#### Input Stream
+
+| Metric                    | Description                                                               |
+| ------------------------- | ------------------------------------------------------------------------- |
+| AppIOBytesRead            | Size of the data read by I/O tasks from the application layer.            |
+| AppIOCounter              | Number of I/O tasks from the application layer.                           |
+| AppIOTime                 | Total time consumed by I/O tasks from the application layer to read data. |
+| FSBytesRead               | Size of the data read by the storage system.                              |
+| FSIOCounter               | Number of I/O tasks from the storage layer.                               |
+| FSIOTime                  | Total time consumed by the storage layer to read data.                    |
 
 ### Time consumed by operators
 
