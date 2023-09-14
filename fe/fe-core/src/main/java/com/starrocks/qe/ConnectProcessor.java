@@ -717,19 +717,11 @@ public class ConnectProcessor {
             } else if (executor.getProxyResultBuffer() != null) {  // query statement
                 result.setChannelBufferList(executor.getProxyResultBuffer());
             }
-<<<<<<< HEAD
-=======
-
-            String resourceGroupName = ctx.getAuditEventBuilder().build().resourceGroup;
-            if (StringUtils.isNotEmpty(resourceGroupName)) {
-                result.setResource_group_name(resourceGroupName);
-            }
 
             PQueryStatistics audit = executor.getQueryStatisticsForAuditLog();
             if (audit != null) {
                 result.setAudit_statistics(AuditStatisticsUtil.toThrift(audit));
             }
->>>>>>> 4a6b0c9405 ([BugFix] Support audit for insert into statement executing from follower (#30663))
         }
         return result;
     }

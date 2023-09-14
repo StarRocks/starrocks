@@ -107,17 +107,10 @@ public:
         // phase of FragmentExecutor, and decremented and read when closing ResultSinkOperator. The visibility
         // of increasing _num_sinkers to ResultSinkOperator::close is guaranteed by pipeline driver queue,
         // so it doesn't need memory barrier here.
-<<<<<<< HEAD
-        _increment_num_result_sinkers_no_barrier();
-        return std::make_shared<ResultSinkOperator>(this, _id, _plan_node_id, driver_sequence, _sink_type, _format_type,
-                                                    _output_expr_ctxs, _sender, _num_result_sinkers, _num_written_rows,
-                                                    _fragment_ctx);
-=======
         _increment_num_sinkers_no_barrier();
-        return std::make_shared<ResultSinkOperator>(this, _id, _plan_node_id, driver_sequence, _sink_type,
-                                                    _is_binary_format, _format_type, _output_expr_ctxs, _sender,
-                                                    _num_sinkers, _num_written_rows, _fragment_ctx);
->>>>>>> 4a6b0c9405 ([BugFix] Support audit for insert into statement executing from follower (#30663))
+        return std::make_shared<ResultSinkOperator>(this, _id, _plan_node_id, driver_sequence, _sink_type, _format_type,
+                                                    _output_expr_ctxs, _sender, _num_sinkers, _num_written_rows,
+                                                    _fragment_ctx);
     }
 
     Status prepare(RuntimeState* state) override;
