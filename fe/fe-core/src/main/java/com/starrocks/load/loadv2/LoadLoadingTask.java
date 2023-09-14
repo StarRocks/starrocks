@@ -56,7 +56,6 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
@@ -97,7 +96,6 @@ public class LoadLoadingTask extends LoadTask {
     private final String mergeConditionStr;
     private final TPartialUpdateMode partialUpdateMode;
 
-    private LoadingTaskPlanner planner;
     private final ConnectContext context;
 
     private LoadPlanner loadPlanner;
@@ -105,7 +103,7 @@ public class LoadLoadingTask extends LoadTask {
     private final List<List<TBrokerFileStatus>> fileStatusList;
     private final int fileNum;
 
-    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    private long warehouseId;
 
     private LoadLoadingTask(Builder builder) {
         super(builder.callback, TaskType.LOADING, builder.priority);
@@ -132,10 +130,7 @@ public class LoadLoadingTask extends LoadTask {
         this.loadId = builder.loadId;
         this.fileStatusList = builder.fileStatusList;
         this.fileNum = builder.fileNum;
-    }
-
-    public void setWarehouseId(long warehouseId) {
-        this.warehouseId = warehouseId;
+        this.warehouseId = builder.warehouseId;
     }
 
     public void prepare() throws UserException {
@@ -143,7 +138,7 @@ public class LoadLoadingTask extends LoadTask {
                 timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
                 brokerDesc, fileGroups, fileStatusList, fileNum);
         loadPlanner.setPartialUpdateMode(partialUpdateMode);
-        planner.setWarehouseId(warehouseId);
+        loadPlanner.setWarehouseId(warehouseId);
         loadPlanner.plan();
     }
 
@@ -308,6 +303,7 @@ public class LoadLoadingTask extends LoadTask {
         private int fileNum = 0;
         private LoadTaskCallback callback;
         private int priority;
+        private long warehouseId;
 
         public Builder setCallback(LoadTaskCallback callback) {
             this.callback = callback;
@@ -421,6 +417,11 @@ public class LoadLoadingTask extends LoadTask {
 
         public Builder setFileNum(int fileNum) {
             this.fileNum = fileNum;
+            return this;
+        }
+
+        public Builder setWarehouseId(long warehouseId) {
+            this.warehouseId = warehouseId;
             return this;
         }
 
