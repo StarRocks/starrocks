@@ -162,8 +162,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // spill mode: auto, force
     public static final String SPILL_MODE = "spill_mode";
     public static final String ENABLE_AGG_SPILL_PREAGGREGATION = "enable_agg_spill_preaggregation";
-    public static final String AGG_SPILL_HT_LOW_REUCTION_THRESHOLD = "agg_spill_ht_low_reduction_threshold";
-    public static final String AGG_SPILL_HT_LOW_REDUCTION_CHUNK_LIMIT = "agg_spill_ht_low_reduction_chunk_limit";
     // enable table pruning(RBO) in cardinality-preserving joins
     public static final String ENABLE_RBO_TABLE_PRUNE = "enable_rbo_table_prune";
 
@@ -850,12 +848,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_AGG_SPILL_PREAGGREGATION, flag = VariableMgr.INVISIBLE)
     public boolean enableAggSpillPreaggregation = true;
-
-    @VarAttr(name = AGG_SPILL_HT_LOW_REUCTION_THRESHOLD, flag = VariableMgr.INVISIBLE)
-    public double aggSpillHtLowReductionThreshold = 0.5;
-
-    @VarAttr(name = AGG_SPILL_HT_LOW_REDUCTION_CHUNK_LIMIT, flag = VariableMgr.INVISIBLE)
-    public int aggSpillhtLowReductionChunkLimit = 5;
 
     @VarAttr(name = ENABLE_RBO_TABLE_PRUNE)
     private boolean enableRboTablePrune = false;
@@ -2595,8 +2587,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setSpill_encode_level(spillEncodeLevel);
             tResult.setSpillable_operator_mask(spillableOperatorMask);
             tResult.setEnable_agg_spill_preaggregation(enableAggSpillPreaggregation);
-            tResult.setAgg_spill_ht_low_reduction_threshold(aggSpillHtLowReductionThreshold);
-            tResult.setAgg_spill_ht_low_reduction_chunk_limit(aggSpillhtLowReductionChunkLimit);
         }
 
         // Compression Type

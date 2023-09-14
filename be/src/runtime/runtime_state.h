@@ -334,11 +334,6 @@ public:
 
     bool enable_agg_spill_preaggregation() const { return _query_options.enable_agg_spill_preaggregation; }
 
-    double agg_spill_ht_low_reduction_threshold() const { return _query_options.agg_spill_ht_low_reduction_threshold; }
-    int32_t agg_spill_ht_low_reduction_chunk_limit() const {
-        return _query_options.agg_spill_ht_low_reduction_chunk_limit;
-    }
-
     double spill_mem_limit_threshold() const { return _query_options.spill_mem_limit_threshold; }
 
     int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }

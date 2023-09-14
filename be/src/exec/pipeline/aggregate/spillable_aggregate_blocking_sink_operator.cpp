@@ -104,8 +104,6 @@ Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     _hash_table_spill_times = ADD_COUNTER(_unique_metrics.get(), "HashTableSpillTimes", TUnit::UNIT);
 
-    _ht_low_reduction_threshold = state->agg_spill_ht_low_reduction_threshold();
-    _ht_low_reduction_chunk_limit = state->agg_spill_ht_low_reduction_chunk_limit();
     return Status::OK();
 }
 
@@ -211,7 +209,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
                 _add_streaming_chunk(std::move(res));
             }
         }
-        if (hit_count * 1.0 / chunk_size <= _ht_low_reduction_threshold) {
+        if (hit_count * 1.0 / chunk_size <= HT_LOW_REDUCTION_THRESHOLD) {
             _continuous_low_reduction_chunk_num++;
         }
 
@@ -223,9 +221,9 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
     size_t revocable_mem_bytes = _streaming_bytes + _aggregator->hash_map_memory_usage();
     set_revocable_mem_bytes(revocable_mem_bytes);
     if (revocable_mem_bytes > max_mem_usage) {
-        // If the aggregation degree of _ht_low_reduction_chunk_limit consecutive chunks is less than _ht_low_reduction_threshold,
+        // If the aggregation degree of HT_LOW_REDUCTION_CHUNK_LIMIT consecutive chunks is less than HT_LOW_REDUCTION_THRESHOLD,
         // it is meaningless to keep the hash table in memory, just spill it.
-        bool should_spill_hash_table = _continuous_low_reduction_chunk_num >= _ht_low_reduction_chunk_limit ||
+        bool should_spill_hash_table = _continuous_low_reduction_chunk_num >= HT_LOW_REDUCTION_CHUNK_LIMIT ||
                                        _aggregator->hash_map_memory_usage() > max_mem_usage;
         if (should_spill_hash_table) {
             _continuous_low_reduction_chunk_num = 0;
