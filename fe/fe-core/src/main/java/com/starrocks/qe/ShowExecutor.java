@@ -996,7 +996,7 @@ public class ShowExecutor {
                     // Create_options
                     row.add("");
                     // Comment
-                    row.add(table.getComment());
+                    row.add(table.getDisplayComment());
 
                     rows.add(row);
                 }
@@ -1121,7 +1121,7 @@ public class ShowExecutor {
         sb.append(" DEFAULT NULL");
 
         if (!Strings.isNullOrEmpty(column.getComment())) {
-            sb.append(" COMMENT \"").append(column.getComment()).append("\"");
+            sb.append(" COMMENT \"").append(column.getDisplayComment()).append("\"");
         }
 
         return sb.toString();
@@ -1259,7 +1259,7 @@ public class ShowExecutor {
                             defaultValue,
                             aggType,
                             "",
-                            col.getComment()));
+                            col.getDisplayComment()));
                 } else {
                     // Field Type Null Key Default Extra
                     rows.add(Lists.newArrayList(columnName,
@@ -2673,7 +2673,7 @@ public class ShowExecutor {
         // Comment
         String comment = catalog.getComment();
         if (comment != null) {
-            createCatalogSql.append("comment \"").append(catalog.getComment()).append("\"\n");
+            createCatalogSql.append("comment \"").append(catalog.getDisplayComment()).append("\"\n");
         }
         Map<String, String> clonedConfig = new HashMap<>(catalog.getConfig());
         CredentialUtil.maskCredential(clonedConfig);

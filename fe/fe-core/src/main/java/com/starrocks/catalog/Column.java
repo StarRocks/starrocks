@@ -308,6 +308,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return comment;
     }
 
+    // Attention: cause the remove escape character in parser phase, when you want to print the
+    // comment, you need add the escape character back
+    public String getDisplayComment() {
+        return CatalogUtils.addEscapeCharacter(comment);
+    }
+
     public boolean isGeneratedColumn() {
         return generatedColumnExpr != null;
     }
@@ -498,7 +504,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         } else if (isGeneratedColumn()) {
             sb.append("AS " + generatedColumnExpr.toSql() + " ");
         }
-        sb.append("COMMENT \"").append(comment).append("\"");
+        sb.append("COMMENT \"").append(getDisplayComment()).append("\"");
 
         return sb.toString();
     }
