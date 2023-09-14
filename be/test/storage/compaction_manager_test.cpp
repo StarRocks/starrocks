@@ -198,6 +198,8 @@ TEST(CompactionManagerTest, test_compaction_parallel) {
     }
 
     StorageEngine::instance()->compaction_manager()->init_max_task_num(config::max_compaction_concurrency);
+    StorageEngine::instance()->compaction_manager()->clear_tasks();
+    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
 
     for (int i = 0; i < 9; i++) {
         bool ret = StorageEngine::instance()->compaction_manager()->register_task(tasks[i].get());
