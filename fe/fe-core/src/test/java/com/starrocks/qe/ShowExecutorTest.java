@@ -1051,9 +1051,8 @@ public class ShowExecutorTest {
                 "DISTRIBUTED BY HASH(`col1`) BUCKETS 10 \n" +
                 "REFRESH ASYNC\n" +
                 "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"storage_medium\" = \"SSD\",\n" +
-                "\"storage_cooldown_time\" = \"1970-01-01 08:00:00\"\n" +
+                "\"storage_cooldown_time\" = \"1970-01-01 08:00:00\",\n" +
+                "\"storage_medium\" = \"SSD\"\n" +
                 ")\n" +
                 "AS select col1, col2 from table1;";
 
