@@ -92,6 +92,26 @@ private:
     bool _wait_for_data = false;
 };
 
+<<<<<<< HEAD
+=======
+class ChunkMerger {
+public:
+    ChunkMerger(RuntimeState* state) : _state(state) {}
+    virtual ~ChunkMerger() = default;
+
+    virtual Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
+                        const SortDescs& _sort_desc) = 0;
+    virtual Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
+                        const std::vector<bool>* sort_orders, const std::vector<bool>* null_firsts) = 0;
+
+    virtual bool is_data_ready() = 0;
+    virtual Status get_next(ChunkUniquePtr* chunk, std::atomic<bool>* eos, bool* should_exit) = 0;
+
+protected:
+    RuntimeState* _state;
+};
+
+>>>>>>> b971b747a4 ([BugFix] ChunkMerger should use virtual destructor (#30913))
 // TODO(murphy) refactor it with MergeCursorsCascade
 // Merge sorted chunks in cascade style
 class CascadeChunkMerger {
