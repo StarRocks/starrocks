@@ -708,7 +708,10 @@ public class ConnectProcessor {
             if (StringUtils.isNotEmpty(resourceGroupName)) {
                 result.setResource_group_name(resourceGroupName);
             }
+<<<<<<< HEAD
 
+=======
+>>>>>>> 5cef0e07d ([BugFix] Fix lost resource group in audit log for insert (#30626 #30726) (#30835))
             PQueryStatistics audit = executor.getQueryStatisticsForAuditLog();
             if (audit != null) {
                 result.setAudit_statistics(AuditStatisticsUtil.toThrift(audit));
