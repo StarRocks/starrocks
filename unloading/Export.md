@@ -1,6 +1,6 @@
 # 使用 EXPORT 导出数据
 
-本文介绍如何把 StarRocks 集群中指定表或分区上的数据，以 CSV 的格式，通过 [EXPORT](../sql-reference/sql-statements/data-manipulation/EXPORT.md) 语句导出到外部云存储系统，如 HDFS、阿里云 OSS、AWS S3、或其他兼容 S3 协议的对象存储服务。
+本文介绍如何通过 [EXPORT](../sql-reference/sql-statements/data-manipulation/EXPORT.md) 语句把 StarRocks 集群中指定表或分区上的数据以 CSV 的格式导出到外部存储系统。当前支持导出到分布式文件系统 HDFS 或 AWS S3、阿里云 OSS、腾讯云 COS、华为云 OBS 等云存储系统。
 
 > **注意**
 >
@@ -20,6 +20,11 @@
 > **说明**
 >
 > 您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/deployment/deploy_broker.md)完成 Broker 部署。
+
+## 支持的外部存储系统
+
+- 分布式文件系统 HDFS
+- 云存储系统，包括 AWS S3、阿里云 OSS、腾讯云 COS、华为云 OBS
 
 ## 注意事项
 
@@ -89,7 +94,7 @@ WITH BROKER
 );
 ```
 
-有关 EXPORT 语句的详细语法和参数说明，请参见 [EXPORT](/sql-reference/sql-statements/data-manipulation/EXPORT.md)。
+有关 EXPORT 语句的详细语法和参数说明、以及导出数据到 AWS S3、阿里云 OSS、腾讯云 COS、华为云 OBS 等云存储系统的命令示例，请参见 [EXPORT](/sql-reference/sql-statements/data-manipulation/EXPORT.md)。
 
 ### 获取导出作业的查询 ID
 
