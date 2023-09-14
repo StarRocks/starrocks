@@ -127,14 +127,7 @@ StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
     ASSIGN_OR_RETURN(auto tablet_metadata, get_metadata(version));
-    std::vector<RowsetPtr> rowsets;
-    rowsets.reserve(tablet_metadata->rowsets_size());
-    for (int i = 0, size = tablet_metadata->rowsets_size(); i < size; ++i) {
-        const auto& rowset_metadata = tablet_metadata->rowsets(i);
-        auto rowset = std::make_shared<Rowset>(this, std::make_shared<const RowsetMetadata>(rowset_metadata), i);
-        rowsets.emplace_back(std::move(rowset));
-    }
-    return rowsets;
+    return get_rowsets(*tablet_metadata);
 }
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(const TabletMetadata& metadata) {

@@ -32,6 +32,7 @@
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/seek_range.h"
+#include "storage/tablet_schema_map.h"
 #include "storage/types.h"
 #include "storage/union_iterator.h"
 
@@ -71,9 +72,14 @@ TabletReader::~TabletReader() {
 }
 
 Status TabletReader::prepare() {
-    ASSIGN_OR_RETURN(_tablet_schema, _tablet.get_schema());
+    ASSIGN_OR_RETURN(_tablet_metadata, _tablet.get_metadata(_version));
+    CHECK_EQ(_version, _tablet_metadata->version());
+    _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
+    if (UNLIKELY(_tablet_schema == nullptr)) {
+        return Status::InternalError("failed to construct tablet schema");
+    }
     if (!_rowsets_inited) {
-        ASSIGN_OR_RETURN(_rowsets, enhance_error_prompt(_tablet.get_rowsets(_version)));
+        ASSIGN_OR_RETURN(_rowsets, enhance_error_prompt(_tablet.get_rowsets(*_tablet_metadata)));
         _rowsets_inited = true;
     }
     _stats.rowsets_read_count += _rowsets.size();
@@ -158,11 +164,16 @@ Status TabletReader::init_predicates(const TabletReaderParams& params) {
 }
 
 Status TabletReader::init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
+    if (UNLIKELY(_tablet_metadata == nullptr)) {
+        return Status::InternalError("tablet metadata is null. forget or fail to call prepare()");
+    }
+    if (UNLIKELY(_tablet_schema == nullptr)) {
+        return Status::InternalError("tablet schema is null. forget or fail to call prepare()");
+    }
     PredicateParser pred_parser(_tablet_schema);
-    ASSIGN_OR_RETURN(auto tablet_metadata, enhance_error_prompt(_tablet.get_metadata(_version)));
 
-    for (int index = 0, size = tablet_metadata->rowsets_size(); index < size; ++index) {
-        const auto& rowset_metadata = tablet_metadata->rowsets(index);
+    for (int index = 0, size = _tablet_metadata->rowsets_size(); index < size; ++index) {
+        const auto& rowset_metadata = _tablet_metadata->rowsets(index);
         if (!rowset_metadata.has_delete_predicate()) {
             continue;
         }
