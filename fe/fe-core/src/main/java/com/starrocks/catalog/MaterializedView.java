@@ -832,14 +832,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 .append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM).append("\" = \"");
         sb.append(getStorageMedium()).append("\"");
 
-        // storageCooldownTime
-        Map<String, String> properties = this.getTableProperty().getProperties();
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
-                    .append("\" = \"");
-            sb.append(TimeUtils.longToTimeString(
-                    Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)))).append("\"");
-        }
     }
 
     public String getMaterializedViewDdlStmt(boolean simple) {
@@ -871,6 +863,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         DistributionInfo distributionInfo = this.getDefaultDistributionInfo();
         sb.append("\n").append(distributionInfo.toSql());
 
+        // order by
+        if (CollectionUtils.isNotEmpty(getTableProperty().getMvSortKeys())) {
+            String str = Joiner.on(",").join(getTableProperty().getMvSortKeys());
+            sb.append("\nORDER BY (").append(str).append(")");
+        }
+
         // refresh scheme
         MvRefreshScheme refreshScheme = this.getRefreshScheme();
         if (refreshScheme == null) {
@@ -897,12 +895,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         // properties
         sb.append("\nPROPERTIES (\n");
-
-        // replicationNum
-        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
-        sb.append(getDefaultReplicationNum()).append("\"");
-
+        boolean first = true;
         Map<String, String> properties = this.getTableProperty().getProperties();
+<<<<<<< HEAD
         // replicated storage
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
@@ -972,11 +967,43 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         appendUniqueProperties(sb);
 
+=======
+        boolean hasStorageMedium = false;
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
         for (Map.Entry<String, String> entry : properties.entrySet()) {
-            if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(entry.getKey())
-                        .append("\" = \"").append(entry.getValue()).append("\"");
+            String name = entry.getKey();
+            String value = entry.getValue();
+            if (!first) {
+                sb.append(",\n");
             }
+            first = false;
+            if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+                sb.append("\"")
+                        .append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                        .append("\" = \"")
+                        .append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(getForeignKeyConstraints()))
+                        .append("\"");
+            } else if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
+                sb.append("\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
+                        .append("\" = \"")
+                        .append(TimeUtils.longToTimeString(
+                                Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME))))
+                        .append("\"");
+            } else if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                // handled in appendUniqueProperties
+                hasStorageMedium = true;
+                sb.append("\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                        .append("\" = \"")
+                        .append(getStorageMedium())
+                        .append("\"");
+            } else {
+                sb.append("\"").append(name).append("\"");
+                sb.append(" = ");
+                sb.append("\"").append(value).append("\"");
+            }
+        }
+        if (!hasStorageMedium) {
+            appendUniqueProperties(sb);
         }
 
         sb.append("\n)");

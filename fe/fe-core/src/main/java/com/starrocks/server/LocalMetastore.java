@@ -3545,6 +3545,11 @@ public class LocalMetastore implements ConnectorMetadata {
                             distributionInfo, mvRefreshScheme);
         }
 
+        // sort keys
+        if (CollectionUtils.isNotEmpty(stmt.getSortKeys())) {
+            materializedView.setTableProperty(new TableProperty());
+            materializedView.getTableProperty().setMvSortKeys(stmt.getSortKeys());
+        }
         // set comment
         materializedView.setComment(stmt.getComment());
         // set baseTableIds
@@ -3757,6 +3762,10 @@ public class LocalMetastore implements ConnectorMetadata {
                 setLakeStorageInfo(materializedView, properties);
             }
 
+<<<<<<< HEAD
+=======
+            // session properties
+>>>>>>> 75aa1239ac ([BugFix] fix show create materialized errors (#30631))
             if (!properties.isEmpty()) {
                 // analyze properties
                 List<SetListItem> setListItems = Lists.newArrayList();
@@ -3819,8 +3828,8 @@ public class LocalMetastore implements ConnectorMetadata {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             taskManager.createTask(task, false);
             // for event triggered type, run task
-            if (task.getType() == Constants.TaskType.EVENT_TRIGGERED ||
-                    refreshMoment.equals(MaterializedView.RefreshMoment.IMMEDIATE)) {
+            if (task.getType() == Constants.TaskType.EVENT_TRIGGERED &&
+                    !refreshMoment.equals(MaterializedView.RefreshMoment.DEFERRED)) {
                 taskManager.executeTask(task.getName());
             }
         }
