@@ -273,6 +273,10 @@ public class HiveMetadata implements ConnectorMetadata {
 
     @Override
     public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos) {
+        if (commitInfos.isEmpty()) {
+            LOG.warn("No commit info on {}.{} after hive sink", dbName, tableName);
+            return;
+        }
         HiveTable table = (HiveTable) getTable(dbName, tableName);
         String stagingDir = commitInfos.get(0).getStaging_dir();
         boolean isOverwrite = commitInfos.get(0).isIs_overwrite();
