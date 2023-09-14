@@ -172,6 +172,14 @@ public class RuntimeProfileParserTest {
     }
 
     @Test
+    public void testNone() {
+        RuntimeProfile profile = new RuntimeProfile("level 1");
+        addCounter(profile, "counter level 1", TUnit.NONE, 0);
+
+        checkParser(profile);
+    }
+
+    @Test
     public void testCounterHierarchy() {
         RuntimeProfile profile = new RuntimeProfile("level 1");
 
@@ -180,7 +188,7 @@ public class RuntimeProfileParserTest {
         addCounter(profile, "byte1-2", TUnit.BYTES, 3, "byte1");
         addCounter(profile, "byte1-2-1", TUnit.BYTES, 4, "byte1-2");
         addCounter(profile, "byte1-2-2", TUnit.BYTES, 5, "byte1-2");
-        addCounter(profile, "byte1-3", TUnit.BYTES, 6, "byte1");
+        addCounter(profile, "byte1-3", TUnit.NONE, 0, "byte1");
         addCounter(profile, "byte1-3-1", TUnit.BYTES, 7, "byte1-3");
         addCounter(profile, "byte2", TUnit.BYTES, 8);
 
