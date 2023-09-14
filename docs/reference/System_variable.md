@@ -6,7 +6,7 @@ The variables in StarRocks refer to the variable sets in MySQL, but **some varia
 
 > **NOTE**
 >
-> Any user has the privilege to run SHOW VARIABLES and make a variable take effect at session level. However, only users with the SYSTEM-level OPERATE privilege can make a variable take effect globally. Globally effective variables take effect on all future sessions (excluding the current session).
+> Any user has the privilege to run SHOW VARIABLES and make a variable take effect at session level. However, only users with the SYSTEM-level OPERATE privilege can make a variable take effect globally. Globally effective variables take effect on all the future sessions (excluding the current session).
 >
 > If you want to make a setting change for the current session and also make that setting change apply to all future sessions, you can make the change twice, once without the `GLOBAL` modifier and once with it. For example:
 >
@@ -414,9 +414,6 @@ For more information, see [UPDATE](../sql-reference/sql-statements/data-manipula
 
 ### performance_schema
 
-<<<<<<< HEAD
-* query_cache_entry_max_bytes (2.5 and later)
-=======
 Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical usage.
 
 ### prefer_compute_node
@@ -425,21 +422,12 @@ Specifies whether the FEs distribute query execution plans to CN nodes. Valid va
 
 * true: indicates that the FEs distribute query execution plans to CN nodes.
 * false: indicates that the FEs do not distribute query execution plans to CN nodes.
->>>>>>> e9cc50758d ([Doc] reformat system variables to help with Algolia indexing (#31021))
 
 ### pipeline_dop
 
 The parallelism of a pipeline instance, which is used to adjust the query concurrency. Default value: 0, indicating the system automatically adjusts the parallelism of each pipeline instance. You can also set this variable to a value greater than 0. Generally, set the value to half the number of physical CPU cores.
 
 From v3.0 onwards, StarRocks adaptively adjusts this variable based on query parallelism.
-
-### pipeline_profile_level
-
-Controls the level of the query profile. A query profile often has five layers: Fragment, FragmentInstance, Pipeline, PipelineDriver, and Operator. Different levels provide different details of the profile:
-
-* 0: StarRocks combines metrics of the profile and shows only a few core metrics.
-* 1: default value. StarRocks simplifies the profile and combines metrics of the profile to reduce profile layers.
-* 2: StarRocks retains all the layers of the profile. The profile size is large in this scenario, especially when the SQL query is complex. This value is not recommended.
 
 ### query_cache_entry_max_bytes (2.5 and later)
 
