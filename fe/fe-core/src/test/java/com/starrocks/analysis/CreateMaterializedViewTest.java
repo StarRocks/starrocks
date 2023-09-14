@@ -33,6 +33,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -258,6 +259,19 @@ public class CreateMaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH (c_0_2,c_0_1) BUCKETS 3\n" +
                         "properties('replication_num'='1');")
+                .withTable("CREATE TABLE test.mocked_cloud_table\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2020-01-01'),('2020-02-01')),\n" +
+                        "    PARTITION p2 values [('2020-02-01'),('2020-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
                 .useDatabase("test");
         starRocksAssert.withView("create view test.view_to_tbl1 as select * from test.tbl1;");
         currentState = GlobalStateMgr.getCurrentState();
@@ -3289,5 +3303,36 @@ public class CreateMaterializedViewTest {
         starRocksAssert.dropView("view_1");
         starRocksAssert.dropView("view_2");
         starRocksAssert.dropView("view_3");
+    }
+
+    @Test
+    public void testCreateSynchronousMVOnLakeTable() throws Exception {
+        String sql = "create materialized view sync_mv1 as select k1, sum(v1) from mocked_cloud_table group by k1;";
+        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
+                parseStmtWithNewParser(sql, connectContext);
+        Table table = getTable("test", "mocked_cloud_table");
+        // Change table type to cloud native table
+        Deencapsulation.setField(table, "type", Table.TableType.CLOUD_NATIVE);
+        DdlException e = Assert.assertThrows(DdlException.class, () -> {
+            GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+        });
+        Assert.assertTrue(e.getMessage().contains("Creating synchronous materialized view(rollup) is not supported in " +
+                "shared data clusters.\nPlease use asynchronous materialized view instead.\n" +
+                "Refer to https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements" +
+                "/data-definition/CREATE%20MATERIALIZED%20VIEW#asynchronous-materialized-view for details."));
+    }
+
+    @Test
+    public void testCreateSynchronousMVOnAnotherMV() throws Exception {
+        String sql = "create materialized view sync_mv1 as select k1, sum(v1) from mocked_cloud_table group by k1;";
+        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
+                parseStmtWithNewParser(sql, connectContext);
+        Table table = getTable("test", "mocked_cloud_table");
+        // Change table type to materialized view
+        Deencapsulation.setField(table, "type", Table.TableType.MATERIALIZED_VIEW);
+        DdlException e = Assert.assertThrows(DdlException.class, () -> {
+            GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+        });
+        Assert.assertTrue(e.getMessage().contains("Do not support create synchronous materialized view(rollup) on"));
     }
 }
