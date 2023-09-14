@@ -34,9 +34,10 @@ class FragmentContext;
 class ExportSinkOperator final : public Operator {
 public:
     ExportSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                       std::shared_ptr<ExportSinkIOBuffer> export_sink_buffer)
+                       std::shared_ptr<ExportSinkIOBuffer> export_sink_buffer, std::atomic<int32_t>& num_sinkers)
             : Operator(factory, id, "export_sink", plan_node_id, false, driver_sequence),
-              _export_sink_buffer(std::move(std::move(export_sink_buffer))) {}
+              _export_sink_buffer(std::move(std::move(export_sink_buffer))),
+              _num_sinkers(num_sinkers) {}
 
     ~ExportSinkOperator() override = default;
 
@@ -62,6 +63,7 @@ public:
 
 private:
     std::shared_ptr<ExportSinkIOBuffer> _export_sink_buffer;
+    std::atomic<int32_t>& _num_sinkers;
 };
 
 class ExportSinkOperatorFactory final : public OperatorFactory {
@@ -71,13 +73,15 @@ public:
             : OperatorFactory(id, "export_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
               _t_export_sink(t_export_sink),
               _t_output_expr(std::move(std::move(t_output_expr))),
-              _num_sinkers(num_sinkers),
+              _total_num_sinkers(num_sinkers),
               _fragment_ctx(fragment_ctx) {}
 
     ~ExportSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<ExportSinkOperator>(this, _id, _plan_node_id, driver_sequence, _export_sink_buffer);
+        _increment_num_sinkers_no_barrier();
+        return std::make_shared<ExportSinkOperator>(this, _id, _plan_node_id, driver_sequence, _export_sink_buffer,
+                                                    _num_sinkers);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -85,12 +89,15 @@ public:
     void close(RuntimeState* state) override;
 
 private:
+    void _increment_num_sinkers_no_barrier() { _num_sinkers.fetch_add(1, std::memory_order_relaxed); }
+
     TExportSink _t_export_sink;
 
     const std::vector<TExpr> _t_output_expr;
     std::vector<ExprContext*> _output_expr_ctxs;
 
-    int32_t _num_sinkers;
+    const int32_t _total_num_sinkers;
+    std::atomic<int32_t> _num_sinkers = 0;
     std::shared_ptr<ExportSinkIOBuffer> _export_sink_buffer;
 
     FragmentContext* _fragment_ctx = nullptr;
