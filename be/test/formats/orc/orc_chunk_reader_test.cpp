@@ -2153,12 +2153,26 @@ TEST_F(OrcChunkReaderTest, get_file_schema) {
             {"./be/test/exec/test_data/orc_scanner/compound.orc",
              {{"col_int", TypeDescriptor::from_logical_type(TYPE_INT)},
               {"col_list_int", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_list_list_int", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
+                                            TypeDescriptor::from_logical_type(TYPE_INT)))},
               {"col_map_string_int", TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
                                                                      TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_map_string_map_string_int",
+               TypeDescriptor::create_map_type(
+                       TypeDescriptor::create_varchar_type(1048576),
+                       TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
+                                                       TypeDescriptor::from_logical_type(TYPE_INT)))},
               {"col_struct_string_int",
                TypeDescriptor::create_struct_type(
                        {"field_string", "field_int"},
-                       {TypeDescriptor::create_varchar_type(1048576), TypeDescriptor::from_logical_type(TYPE_INT)})}}}};
+                       {TypeDescriptor::create_varchar_type(1048576), TypeDescriptor::from_logical_type(TYPE_INT)})},
+              {"col_struct_struct_string_int_string",
+               TypeDescriptor::create_struct_type(
+                       {"filed_struct", "field_string2"},
+                       {TypeDescriptor::create_struct_type({"field_string1", "field_int"},
+                                                           {TypeDescriptor::create_varchar_type(1048576),
+                                                            TypeDescriptor::from_logical_type(TYPE_INT)}),
+                        TypeDescriptor::create_varchar_type(1048576)})}}}};
 
     for (const auto& test_case : test_cases) {
         check_schema(test_case.first, test_case.second);
