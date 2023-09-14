@@ -40,6 +40,7 @@ import com.starrocks.thrift.TGetFileSchemaRequest;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
@@ -277,6 +278,11 @@ public class TableFunctionTable extends Table {
             throw new DdlException("failed to get file schema", e);
         } catch (Exception e) {
             throw new DdlException("failed to get file schema", e);
+        }
+
+        TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
+        if (code != TStatusCode.OK) {
+            throw new DdlException("failed to get file schema: " + result.status.errorMsgs);
         }
 
         List<Column> columns = new ArrayList<>();

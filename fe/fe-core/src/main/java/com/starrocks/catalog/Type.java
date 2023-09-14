@@ -1328,6 +1328,18 @@ public abstract class Type implements Cloneable {
                 Type valueType = fromProtobuf(pTypeDesc, nodeIndex + 2);
                 return new MapType(keyType, valueType);
             }
+            case STRUCT: {
+                Preconditions.checkState(pTypeDesc.types.size() >=
+                        nodeIndex + 1 + pTypeDesc.types.get(nodeIndex).structFields.size());
+                ArrayList<StructField> fields = new ArrayList<>();
+
+                for (int i = 0; i < pTypeDesc.types.get(nodeIndex).structFields.size(); ++i) {
+                    String fieldName = pTypeDesc.types.get(nodeIndex).structFields.get(i).name;
+                    Type fieldType = fromProtobuf(pTypeDesc, nodeIndex + i + 1);
+                    fields.add(new StructField(fieldName, fieldType));
+                }
+                return new StructType(fields);
+            }
         }
         return null;
     }

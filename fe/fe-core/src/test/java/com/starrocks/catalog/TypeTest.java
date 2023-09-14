@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.PScalarType;
+import com.starrocks.proto.PStructField;
 import com.starrocks.proto.PTypeDesc;
 import com.starrocks.proto.PTypeNode;
 import com.starrocks.thrift.TPrimitiveType;
@@ -45,6 +46,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class TypeTest {
     @Test
@@ -295,6 +297,33 @@ public class TypeTest {
         return td;
     }
 
+    private PTypeDesc buildStructType(List<String> fieldNames, List<TPrimitiveType> fieldTypes) {
+        PTypeDesc td = new PTypeDesc();
+        td.types = new ArrayList<>();
+
+        // STRUCT node
+        PTypeNode tn = new PTypeNode();
+        tn.type = TTypeNodeType.STRUCT.getValue();
+        tn.structFields = new ArrayList<>();
+
+        for (String fieldName : fieldNames) {
+            PStructField field = new PStructField();
+            field.name = fieldName;
+            tn.structFields.add(field);
+        }
+        td.types.add(tn);
+
+        // field node
+        for (TPrimitiveType field : fieldTypes) {
+            tn = new PTypeNode();
+            tn.type = TTypeNodeType.SCALAR.getValue();
+            tn.scalarType = new PScalarType();
+            tn.scalarType.type = field.getValue();
+            td.types.add(tn);
+        }
+        return td;
+    }
+
     @Test
     public void testPTypeDescFromProtobuf() {
         PTypeDesc pTypeDesc = buildScalarType(TPrimitiveType.BIGINT);
@@ -308,5 +337,18 @@ public class TypeTest {
         pTypeDesc = buildMapType(TPrimitiveType.BIGINT, TPrimitiveType.BOOLEAN);
         tp = Type.fromProtobuf(pTypeDesc, 0);
         Assert.assertTrue(tp.isMapType());
+
+        ArrayList<String> fieldNames = new ArrayList<>();
+        ArrayList<TPrimitiveType> fieldTypes = new ArrayList<>();
+
+        fieldNames.add("field_bigint");
+        fieldTypes.add(TPrimitiveType.BIGINT);
+
+        fieldNames.add("field_double");
+        fieldTypes.add(TPrimitiveType.DOUBLE);
+
+        pTypeDesc = buildStructType(fieldNames, fieldTypes);
+        tp = Type.fromProtobuf(pTypeDesc, 0);
+        Assert.assertTrue(tp.isStructType());
     }
 }
