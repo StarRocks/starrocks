@@ -1,4 +1,20 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> 50c64c35ad ([BugFix] Fix In-Subquerys use complex-expression as correlation predicate (#30583))
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -92,9 +108,6 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
         joinOnPredicate.add(
                 new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, inPredicate.getChildren()));
 
-        List<ColumnRefOperator> correlationColumnRefs = Utils.extractColumnRef(inPredicate.getChild(0));
-        correlationColumnRefs.addAll(apply.getCorrelationColumnRefs());
-
         // check correlation filter
         if (!SubqueryUtils.checkAllIsBinaryEQ(joinOnPredicate)) {
             // @Todo:
@@ -103,6 +116,15 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             //  a. outer-key < inner key -> outer-key < aggregate MAX(key)
             //  b. outer-key > inner key -> outer-key > aggregate MIN(key)
             throw new SemanticException(SubqueryUtils.EXIST_NON_EQ_PREDICATE);
+        }
+
+        ColumnRefSet outerRefs = input.getInputs().get(0).getOutputColumns();
+        if (!SubqueryUtils.checkUniqueCorrelation(apply.getCorrelationConjuncts(), outerRefs)) {
+            // e.g. select * from t1 where t1.v1 in (select t2.v1 from t2 where t2.v2 + t1.v3 = t1.v2)
+            // the correlation predicate (t2.v2 + t1.v3) = t1.v2, we can't promise (t2.v2 + t1.v3) is unique value
+            // after distinct (t2.v2), our implementation required the result must be 1-1 relation in count value join
+            throw new SemanticException("IN subquery not supported the correlation predicate of the WHERE clause " +
+                    "that used multiple outer-table columns at the same time");
         }
 
         CorrelationOuterJoinTransformer transformer = new CorrelationOuterJoinTransformer(input, context);
@@ -243,11 +265,8 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             CorrelatedPredicateRewriter inPredRewriter = new CorrelatedPredicateRewriter(
                     Utils.extractColumnRef(inPredicate.getChild(0)), context);
 
-            correlationPredicate = SubqueryUtils.rewritePredicateAndExtractColumnRefs(
-                    correlationPredicate, corPredRewriter);
-
-            inPredicate = (BinaryPredicateOperator) SubqueryUtils.rewritePredicateAndExtractColumnRefs(
-                    inPredicate, inPredRewriter);
+            correlationPredicate = corPredRewriter.rewrite(correlationPredicate);
+            inPredicate = (BinaryPredicateOperator) inPredRewriter.rewrite(inPredicate);
 
             // update used columns
             Preconditions.checkState(inPredRewriter.getColumnRefToExprMap().keySet().size() == 1);
