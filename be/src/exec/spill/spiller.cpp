@@ -70,6 +70,14 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
     partition_writer_peak_memory_usage =
             profile->AddHighWaterMarkCounter("PartitionWriterPeakMemoryBytes", TUnit::BYTES,
                                              RuntimeProfile::Counter::create_strategy(TUnit::BYTES), parent);
+
+    block_count = ADD_CHILD_COUNTER(profile, "BlockCount", TUnit::UNIT, parent);
+    flush_io_task_count = ADD_CHILD_COUNTER(profile, "FlushIOTaskCount", TUnit::UNIT, parent);
+    peak_flush_io_task_count = profile->AddHighWaterMarkCounter(
+            "PeakFlushIOTaskCount", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT), parent);
+    restore_io_task_count = ADD_CHILD_COUNTER(profile, "RestoreIOTaskCount", TUnit::UNIT, parent);
+    peak_restore_io_task_count = profile->AddHighWaterMarkCounter(
+            "PeakRestoreIOTaskCount", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT), parent);
 }
 
 Status Spiller::prepare(RuntimeState* state) {
@@ -83,7 +91,7 @@ Status Spiller::prepare(RuntimeState* state) {
         _writer = std::make_unique<RawSpillerWriter>(this, state);
     }
 
-    RETURN_IF_ERROR(_writer->prepare(state));
+    _writer->prepare(state);
 
     _reader = std::make_unique<SpillerReader>(this);
 
@@ -97,15 +105,13 @@ Status Spiller::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status Spiller::set_partition(const std::vector<const SpillPartitionInfo*>& parititons) {
+void Spiller::set_partition(const std::vector<const SpillPartitionInfo*>& parititons) {
     DCHECK_GT(_opts.init_partition_nums, 0);
-    RETURN_IF_ERROR(down_cast<PartitionedSpillerWriter*>(_writer.get())->reset_partition(parititons));
-    return Status::OK();
+    down_cast<PartitionedSpillerWriter*>(_writer.get())->reset_partition(parititons);
 }
 
-Status Spiller::set_partition(RuntimeState* state, size_t num_partitions) {
-    RETURN_IF_ERROR(down_cast<PartitionedSpillerWriter*>(_writer.get())->reset_partition(state, num_partitions));
-    return Status::OK();
+void Spiller::set_partition(RuntimeState* state, size_t num_partitions) {
+    down_cast<PartitionedSpillerWriter*>(_writer.get())->reset_partition(state, num_partitions);
 }
 
 void Spiller::update_spilled_task_status(Status&& st) {
@@ -142,7 +148,7 @@ Status Spiller::_acquire_input_stream(RuntimeState* state) {
     std::shared_ptr<SpillInputStream> input_stream;
 
     RETURN_IF_ERROR(_writer->acquire_stream(&input_stream));
-    RETURN_IF_ERROR(_reader->set_stream(std::move(input_stream)));
+    _reader->set_stream(std::move(input_stream));
 
     return Status::OK();
 }

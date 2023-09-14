@@ -3582,7 +3582,7 @@ public class GlobalStateMgr {
         }
         if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
             try {
-                Authorizer.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                Authorizer.checkAnyActionOnCatalog(ctx.getCurrentUserIdentity(),
                         ctx.getCurrentRoleIds(), newCatalogName);
             } catch (AccessDeniedException e) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
@@ -3613,7 +3613,7 @@ public class GlobalStateMgr {
             }
             if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
                 try {
-                    Authorizer.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                    Authorizer.checkAnyActionOnCatalog(ctx.getCurrentUserIdentity(),
                             ctx.getCurrentRoleIds(), newCatalogName);
                 } catch (AccessDeniedException e) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
@@ -3690,8 +3690,13 @@ public class GlobalStateMgr {
     }
 
     public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {
-        refreshExternalTable(stmt.getTableName(), stmt.getPartitions());
+        TableName tableName = stmt.getTableName();
+        List<String> partitionNames = stmt.getPartitions();
+        refreshExternalTable(tableName, partitionNames);
+        refreshOthersFeTable(tableName, partitionNames, true);
+    }
 
+    public void refreshOthersFeTable(TableName tableName, List<String> partitions, boolean isSync) throws DdlException {
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getFrontends(null);
         Map<String, Future<TStatus>> resultMap = Maps.newHashMapWithExpectedSize(allFrontends.size() - 1);
         for (Frontend fe : allFrontends) {
@@ -3699,8 +3704,8 @@ public class GlobalStateMgr {
                 continue;
             }
 
-            resultMap.put(fe.getHost(), refreshOtherFesTable(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                    stmt.getTableName(), stmt.getPartitions()));
+            resultMap.put(fe.getHost(), refreshOtherFesTable(
+                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()), tableName, partitions));
         }
 
         String errMsg = "";
@@ -3718,15 +3723,25 @@ public class GlobalStateMgr {
                 errMsg += "refresh fe " + entry.getKey() + " failed: " + e.getMessage();
             }
         }
+
         if (!errMsg.equals("")) {
-            ErrorReport.reportDdlException(ErrorCode.ERROR_REFRESH_EXTERNAL_TABLE_FAILED, errMsg);
+            if (isSync) {
+                ErrorReport.reportDdlException(ErrorCode.ERROR_REFRESH_EXTERNAL_TABLE_FAILED, errMsg);
+            } else {
+                LOG.error("Background refresh others fe failed, {}", errMsg);
+            }
         }
     }
 
     public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, TableName tableName,
                                                 List<String> partitions) {
-        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
-                + Config.thrift_rpc_timeout_ms;
+        int timeout;
+        if (ConnectContext.get() == null || ConnectContext.get().getSessionVariable() == null) {
+            timeout = Config.thrift_rpc_timeout_ms * 10;
+        } else {
+            timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000 + Config.thrift_rpc_timeout_ms;
+        }
+
         FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
             TRefreshTableRequest request = new TRefreshTableRequest();
             request.setCatalog_name(tableName.getCatalog());

@@ -2,8 +2,9 @@ name: INSPECTION PIPELINE
 
 on:
   schedule:
-    - cron: "0 9 * * 1-5"
-    - cron: "0 17 * * 1-5"
+    - cron: "0 1 * * 1-5"
+    - cron: "0 6 * * 1-5"
+    - cron: "0 11 * * 1-5"
   workflow_dispatch:
 
 concurrency:
@@ -28,6 +29,7 @@ jobs:
 
   be-ut:
     runs-on: [self-hosted, normal]
+    if: github.repository == 'StarRocks/starrocks'
     timeout-minutes: 180
     name: BE UT
     env:
@@ -65,9 +67,10 @@ jobs:
   fe-ut:
     runs-on: [self-hosted, normal]
     name: FE UT
+    if: github.repository == 'StarRocks/starrocks'
     env:
       BRANCH: 'main'
-      GH_TOKEN: ${{ secrets.PAT }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: clean
         run: |
@@ -109,7 +112,7 @@ jobs:
         if: always()
         id: download-ut-xml
         env:
-          bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
+          bucket_prefix: ${{ steps.branch.outputs.bucket_prefix }}
           PR_NUMBER: ${{ steps.run_ut.outputs.PR_NUMBER }}
         run: |
           oss_path=oss://${bucket_prefix}-ci-release/$BRANCH/Release/pr/UT-Report/${PR_NUMBER}
@@ -122,8 +125,8 @@ jobs:
         id: publish_report
         if: steps.download-ut-xml.outputs.size != '0'
         env:
-          github_token: ${{ secrets.PAT }}
-          token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
         with:
           check_name: 'FE UT Report'
           detailed_summary: true
@@ -143,6 +146,7 @@ jobs:
   build:
     runs-on: [self-hosted, normal]
     name: BUILD
+    if: github.repository == 'StarRocks/starrocks'
     env:
       BRANCH: 'main'
     outputs:
@@ -281,7 +285,7 @@ jobs:
           check_name: 'SQL-Tester Report'
           fail_on_failure: true
           detailed_summary: true
-          token: ${{ secrets.PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'test/*.xml'
 
       - name: Upload log
@@ -301,7 +305,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: ADMIT TEST
     needs: [ deploy, SQL-Tester ]
-    if: always() && needs.deploy.result == 'success' && needs.SQL-Tester.result == 'success'
+    if: always() && needs.deploy.result == 'success'
     timeout-minutes: 40
     env:
       PR_NUMBER: ${{ needs.build.outputs.pr_number }}
@@ -334,6 +338,7 @@ jobs:
           ./bin/run-admit.sh --pr ${PR_NUMBER} --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
 
       - name: Prepare Tools
+        if: success() || failure()
         id: prepare-tools
         run: |
           mkdir -p .actions/nose-report-action
@@ -347,7 +352,7 @@ jobs:
           check_name: 'Admit Report'
           fail_on_failure: true
           detailed_summary: true
-          token: ${{ secrets.PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: './StarRocksTest/result/*.xml'
 
       - name: Clean ENV

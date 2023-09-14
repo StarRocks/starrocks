@@ -122,7 +122,7 @@ public class HiveMetadataTest {
         columnRefFactory = new ColumnRefFactory();
         optimizerContext = new OptimizerContext(new Memo(), columnRefFactory, connectContext);
         hiveMetadata = new HiveMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps, statisticsProvider,
-                Optional.empty(), executorForHmsRefresh);
+                Optional.empty(), executorForHmsRefresh, executorForHmsRefresh);
     }
 
     @After
@@ -504,7 +504,7 @@ public class HiveMetadataTest {
                                         @Mocked RemoteFileOperations fileOps,
                                         @Mocked HiveTable hiveTable) throws Exception {
         HiveCommitter hiveCommitter = new HiveCommitter(hmsOps, fileOps, Executors.newSingleThreadExecutor(),
-                hiveTable, new Path("hdfs://hadoop01:9000/hive"));
+                Executors.newSingleThreadExecutor(), hiveTable, new Path("hdfs://hadoop01:9000/hive"));
         HiveCommitter.DeleteRecursivelyResult result = hiveCommitter.recursiveDeleteFiles(new Path("hdfs://aaa"), false);
         Assert.assertTrue(result.dirNotExists());
         Assert.assertTrue(result.getNotDeletedEligibleItems().isEmpty());
@@ -616,7 +616,7 @@ public class HiveMetadataTest {
                                          @Mocked RemoteFileOperations fileOps,
                                          @Mocked HiveTable hiveTable) {
         HiveCommitter hiveCommitter = new HiveCommitter(hmsOps, fileOps, Executors.newSingleThreadExecutor(),
-                hiveTable, new Path("hdfs://hadoop01:9000/hive"));
+                Executors.newSingleThreadExecutor(), hiveTable, new Path("hdfs://hadoop01:9000/hive"));
         new Expectations() {
             {
                 hiveTable.isUnPartitioned();

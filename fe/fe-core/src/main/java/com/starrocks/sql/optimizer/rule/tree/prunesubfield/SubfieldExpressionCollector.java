@@ -52,18 +52,28 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
 
     @Override
     public Void visitCollectionElement(CollectionElementOperator collectionElementOp, Void context) {
+        if (collectionElementOp.getUsedColumns().isEmpty()) {
+            return null;
+        }
         complexExpressions.add(collectionElementOp);
         return null;
     }
 
     @Override
     public Void visitSubfield(SubfieldOperator subfieldOperator, Void context) {
+        if (subfieldOperator.getUsedColumns().isEmpty()) {
+            return null;
+        }
         complexExpressions.add(subfieldOperator);
         return null;
     }
 
     @Override
     public Void visitCall(CallOperator call, Void context) {
+        if (call.getUsedColumns().isEmpty()) {
+            return null;
+        }
+
         if (PruneSubfieldRule.SUPPORT_FUNCTIONS.contains(call.getFnName())) {
             complexExpressions.add(call);
             return null;

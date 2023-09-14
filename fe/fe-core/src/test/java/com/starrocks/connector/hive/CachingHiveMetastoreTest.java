@@ -16,13 +16,11 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import mockit.Expectations;
@@ -33,8 +31,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -265,35 +261,10 @@ public class CachingHiveMetastoreTest {
     }
 
     @Test
-    public void testAddPartitions() {
-        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
-                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
-        cachingHiveMetastore.addPartitions("db", "table", new ArrayList<>());
-    }
-
-    @Test
     public void testDropPartition() {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         cachingHiveMetastore.dropPartition("db", "table", Lists.newArrayList("1"), false);
-    }
-
-    @Test
-    public void testAlterPartition() {
-        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
-                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
-        HivePartition hivePartition = HivePartition.builder()
-                .setColumns(Lists.newArrayList(new Column("c1", Type.INT)))
-                .setStorageFormat(HiveStorageFormat.PARQUET)
-                .setDatabaseName("db")
-                .setTableName("table")
-                .setLocation("location")
-                .setValues(Lists.newArrayList("p1=1"))
-                .setParameters(new HashMap<>()).build();
-
-        HivePartitionStats hivePartitionStats = HivePartitionStats.empty();
-        HivePartitionWithStats hivePartitionWithStats = new HivePartitionWithStats("p1=1", hivePartition, hivePartitionStats);
-        cachingHiveMetastore.alterPartition(hivePartitionWithStats);
     }
 
     @Test

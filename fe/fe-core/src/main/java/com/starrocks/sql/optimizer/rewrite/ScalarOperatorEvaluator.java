@@ -239,12 +239,12 @@ public enum ScalarOperatorEvaluator {
                 if (argType.isArray()) {
                     Preconditions.checkArgument(method.getParameterTypes().length == index + 1);
                     final List<ConstantOperator> variableArgs = Lists.newArrayList();
-                    Set<Type> checkSet = Sets.newHashSet();
+                    Set<PrimitiveType> checkSet = Sets.newHashSet();
 
                     for (int variableArgIndex = index; variableArgIndex < args.size(); variableArgIndex++) {
                         ConstantOperator arg = (ConstantOperator) args.get(variableArgIndex);
                         variableArgs.add(arg);
-                        checkSet.add(arg.getType());
+                        checkSet.add(arg.getType().getPrimitiveType());
                     }
 
                     // Array data must keep same kinds

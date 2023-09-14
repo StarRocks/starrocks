@@ -110,7 +110,9 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
                 state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
-    publish_runtime_filters(state);
+    WARN_IF_ERROR(publish_runtime_filters(state),
+                  fmt::format("spillable hash join operator of query {} publish runtime filter failed, ignore it...",
+                              print_id(state->query_id())));
     SpillProcessTasksBuilder task_builder(state, io_executor);
     task_builder.then(flush_function).finally(set_call_back_function);
 
@@ -162,7 +164,7 @@ Status SpillableHashJoinBuildOperator::init_spiller_partitions(RuntimeState* sta
     if (ht.get_row_count() > 0) {
         // We estimate the size of the hash table to be twice the size of the already input hash table
         auto num_partitions = ht.mem_usage() * 2 / _join_builder->spiller()->options().spill_mem_table_bytes_size;
-        RETURN_IF_ERROR(_join_builder->spiller()->set_partition(state, num_partitions));
+        _join_builder->spiller()->set_partition(state, num_partitions);
     }
     return Status::OK();
 }

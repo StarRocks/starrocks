@@ -142,6 +142,10 @@ size_t OlapScanOperator::buffer_capacity() const {
     return _ctx->get_chunk_buffer().limiter()->capacity();
 }
 
+size_t OlapScanOperator::buffer_memory_usage() const {
+    return _ctx->get_chunk_buffer().memory_usage();
+}
+
 size_t OlapScanOperator::default_buffer_capacity() const {
     return _ctx->get_chunk_buffer().limiter()->default_capacity();
 }

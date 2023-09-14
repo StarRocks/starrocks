@@ -45,6 +45,7 @@ import com.google.re2j.Pattern;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.ScalarType;
@@ -59,6 +60,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -91,6 +94,8 @@ import java.util.Map;
 import java.util.Set;
 
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
+import static com.starrocks.catalog.PrimitiveType.BITMAP;
+import static com.starrocks.catalog.PrimitiveType.BOOLEAN;
 import static com.starrocks.catalog.PrimitiveType.DATE;
 import static com.starrocks.catalog.PrimitiveType.DATETIME;
 import static com.starrocks.catalog.PrimitiveType.DECIMAL128;
@@ -98,8 +103,12 @@ import static com.starrocks.catalog.PrimitiveType.DECIMAL32;
 import static com.starrocks.catalog.PrimitiveType.DECIMAL64;
 import static com.starrocks.catalog.PrimitiveType.DECIMALV2;
 import static com.starrocks.catalog.PrimitiveType.DOUBLE;
+import static com.starrocks.catalog.PrimitiveType.FLOAT;
+import static com.starrocks.catalog.PrimitiveType.HLL;
 import static com.starrocks.catalog.PrimitiveType.INT;
+import static com.starrocks.catalog.PrimitiveType.JSON;
 import static com.starrocks.catalog.PrimitiveType.LARGEINT;
+import static com.starrocks.catalog.PrimitiveType.PERCENTILE;
 import static com.starrocks.catalog.PrimitiveType.SMALLINT;
 import static com.starrocks.catalog.PrimitiveType.TIME;
 import static com.starrocks.catalog.PrimitiveType.TINYINT;
@@ -1104,10 +1113,15 @@ public class ScalarOperatorFunctions {
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
-        Authorizer.checkAnyActionOnTable(
-                connectContext.getCurrentUserIdentity(),
-                connectContext.getCurrentRoleIds(),
-                tableName);
+        try {
+            Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                    tableName);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    tableName.getCatalog(),
+                    connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName.getTbl());
+        }
         return table;
     }
 
@@ -1117,10 +1131,17 @@ public class ScalarOperatorFunctions {
         Table table = db.tryGetTable(tableName.getTbl())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
-        Authorizer.checkAnyActionOnTable(
-                connectContext.getCurrentUserIdentity(),
-                connectContext.getCurrentRoleIds(),
-                tableName);
+        try {
+            Authorizer.checkAnyActionOnTable(
+                    connectContext.getCurrentUserIdentity(),
+                    connectContext.getCurrentRoleIds(),
+                    tableName);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    tableName.getCatalog(),
+                    connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName.getTbl());
+        }
         return Pair.of(db, table);
     }
 
@@ -1208,10 +1229,17 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "inspect_all_pipes", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator inspect_all_pipes() {
         ConnectContext connectContext = ConnectContext.get();
-        Authorizer.checkSystemAction(
-                connectContext.getCurrentUserIdentity(),
-                connectContext.getCurrentRoleIds(),
-                PrivilegeType.OPERATE);
+        try {
+            Authorizer.checkSystemAction(
+                    connectContext.getCurrentUserIdentity(),
+                    connectContext.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        }
         String currentDb = connectContext.getDatabase();
         Database db = GlobalStateMgr.getCurrentState().mayGetDb(connectContext.getDatabase())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, currentDb));
@@ -1219,4 +1247,35 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(json);
     }
 
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "coalesce", argTypes = {BOOLEAN}, returnType = BOOLEAN),
+            @ConstantFunction(name = "coalesce", argTypes = {TINYINT}, returnType = TINYINT),
+            @ConstantFunction(name = "coalesce", argTypes = {SMALLINT}, returnType = SMALLINT),
+            @ConstantFunction(name = "coalesce", argTypes = {INT}, returnType = INT),
+            @ConstantFunction(name = "coalesce", argTypes = {BIGINT}, returnType = BIGINT),
+            @ConstantFunction(name = "coalesce", argTypes = {LARGEINT}, returnType = LARGEINT),
+            @ConstantFunction(name = "coalesce", argTypes = {FLOAT}, returnType = FLOAT),
+            @ConstantFunction(name = "coalesce", argTypes = {DOUBLE}, returnType = DOUBLE),
+            @ConstantFunction(name = "coalesce", argTypes = {DATETIME}, returnType = DATETIME),
+            @ConstantFunction(name = "coalesce", argTypes = {DATE}, returnType = DATE),
+            @ConstantFunction(name = "coalesce", argTypes = {DECIMALV2}, returnType = DECIMALV2),
+            @ConstantFunction(name = "coalesce", argTypes = {DECIMAL32}, returnType = DECIMAL32),
+            @ConstantFunction(name = "coalesce", argTypes = {DECIMAL64}, returnType = DECIMAL64),
+            @ConstantFunction(name = "coalesce", argTypes = {DECIMAL128}, returnType = DECIMAL128),
+            @ConstantFunction(name = "coalesce", argTypes = {VARCHAR}, returnType = VARCHAR),
+            @ConstantFunction(name = "coalesce", argTypes = {BITMAP}, returnType = BITMAP),
+            @ConstantFunction(name = "coalesce", argTypes = {PERCENTILE}, returnType = PERCENTILE),
+            @ConstantFunction(name = "coalesce", argTypes = {HLL}, returnType = HLL),
+            @ConstantFunction(name = "coalesce", argTypes = {TIME}, returnType = TIME),
+            @ConstantFunction(name = "coalesce", argTypes = {JSON}, returnType = JSON)
+    })
+    public static ConstantOperator coalesce(ConstantOperator... values) {
+        Preconditions.checkArgument(values.length > 0);
+        for (ConstantOperator value : values) {
+            if (!value.isNull()) {
+                return value;
+            }
+        }
+        return values[values.length - 1];
+    }
 }

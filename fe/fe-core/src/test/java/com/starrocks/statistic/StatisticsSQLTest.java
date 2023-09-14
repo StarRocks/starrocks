@@ -39,6 +39,7 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+
         PlanTestBase.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
