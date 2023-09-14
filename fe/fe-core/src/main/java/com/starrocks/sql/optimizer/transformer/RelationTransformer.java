@@ -130,6 +130,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMapping> {
@@ -871,12 +872,26 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     private boolean isJoinLeftRelatedSubquery(JoinRelation node, Expr joinOnConjunct) {
         List<Subquery> subqueries = Lists.newArrayList();
-        joinOnConjunct.collect(Subquery.class, subqueries);
-        Preconditions.checkState(subqueries.size() <= 1,
-                "Not support ON Clause conjunct contains more than one subquery");
+
+        List<Expr> elements = Expr.flattenPredicate(joinOnConjunct);
+        List<Expr> predicateWithSubquery = Lists.newArrayList();
+        for (Expr element : elements) {
+            int oldSize = subqueries.size();
+            element.collect(Subquery.class, subqueries);
+            if (subqueries.size() > oldSize) {
+                predicateWithSubquery.add(element);
+            }
+        }
+
+        if (subqueries.size() > 1) {
+            throw new SemanticException(PARSER_ERROR_MSG.unsupportedSubquery(joinOnConjunct.toSql(),
+                    "contains more than one subquery"), joinOnConjunct.getPos());
+        }
+
         if (subqueries.isEmpty()) {
             return true;
         }
+
         Subquery subquery = subqueries.get(0);
         QueryStatement subqueryStmt = subquery.getQueryStatement();
         SelectRelation selectRelation = (SelectRelation) subqueryStmt.getQueryRelation();
@@ -891,7 +906,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
          *       /              \
          *   Outer:R        Inner: E(r)
          * Since join node has two relation, we should to determine which one(left or right or both)
-         * is the outer relation of ApplyOperator
+         * is the outer relation of ApplyOperator for correlated subquery or expr in (un-correlated subquery),
          * usingLeftRelation = true, then the left relation of join will be the outer relation of apply
          * usingLeftRelation = false, then the right relation of join will be the outer relation of apply
          * TODO, both of the left and right relations should be taken into account, and it is not supported yet
@@ -899,42 +914,43 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         final boolean usingLeftRelation;
 
         List<SlotRef> slotRefs = Lists.newArrayList();
-        joinOnConjunct.collect(SlotRef.class, slotRefs);
+        Expr predicate  = predicateWithSubquery.get(0);
+        predicate.collect(SlotRef.class, slotRefs);
         RelationFields leftRelationFields = node.getLeft().getRelationFields();
         RelationFields rightRelationFields = node.getRight().getRelationFields();
-        boolean isJoinLeftNonCorrelated =
+        boolean refLeftNodeCols =
                 slotRefs.stream().anyMatch(slotRef -> !leftRelationFields.resolveFields(slotRef).isEmpty());
-        boolean isJoinRightNonCorrelated =
+        boolean refRightNodeCols =
                 slotRefs.stream().anyMatch(slotRef -> !rightRelationFields.resolveFields(slotRef).isEmpty());
 
-        if (correlatedFieldIds.isEmpty()) {
-            Preconditions.checkState(!(isJoinLeftNonCorrelated && isJoinRightNonCorrelated),
-                    "Not support ON Clause un-correlated subquery referencing columns of more than one table");
-            usingLeftRelation = isJoinLeftNonCorrelated;
-        } else {
-            boolean isJoinLeftCorrelated = false;
-            boolean isJoinRightCorrelated = false;
-            for (FieldId correlatedFieldId : correlatedFieldIds) {
-                Field field = node.getRelationFields().getAllFields().get(correlatedFieldId.getFieldIndex());
-                if (node.getLeft().getRelationFields().getAllFields().contains(field)) {
-                    isJoinLeftCorrelated = true;
-                }
-                if (node.getRight().getRelationFields().getAllFields().contains(field)) {
-                    isJoinRightCorrelated = true;
-                }
+        boolean correlatedLeftNode = false;
+        boolean correlatedRightNode = false;
+        for (FieldId correlatedFieldId : correlatedFieldIds) {
+            Field field = node.getRelationFields().getAllFields().get(correlatedFieldId.getFieldIndex());
+            if (Objects.equals(node.getLeft().getResolveTableName(), field.getRelationAlias())) {
+                correlatedLeftNode = true;
+            } else if (Objects.equals(node.getRight().getResolveTableName(), field.getRelationAlias())) {
+                correlatedRightNode = true;
+            } else {
+                Preconditions.checkState(false, "Cannot find field %s in outer scope", field);
             }
-            Preconditions.checkState(isJoinLeftCorrelated || isJoinRightCorrelated);
-            Preconditions.checkState(!(isJoinLeftCorrelated && isJoinRightCorrelated),
-                    "Not support ON Clause correlated subquery referencing columns of more than one table");
-            if (joinOnConjunct instanceof InPredicate) {
-                // We DO NOT support this kind of in-predicate like below
-                // select * from t0 join t1 on t0.v1 in (select t2.v7 from t2 where t1.v5 = t2.v8)
-                Preconditions.checkState(!(isJoinLeftCorrelated && isJoinRightNonCorrelated ||
-                                isJoinRightCorrelated && isJoinLeftNonCorrelated),
-                        "Not support ON Clause correlated in-subquery referencing columns of more than one table");
-            }
-            usingLeftRelation = isJoinLeftCorrelated;
         }
+
+        if (predicate instanceof InPredicate &&
+                (refLeftNodeCols || correlatedLeftNode) && (refRightNodeCols || correlatedRightNode)) {
+            throw new SemanticException(PARSER_ERROR_MSG.unsupportedSubquery(predicate.toSql(),
+                    "referencing columns from more than one table"), predicate.getPos());
+        }
+
+        if (correlatedFieldIds.isEmpty()) {
+            usingLeftRelation = refLeftNodeCols;
+        } else if (correlatedLeftNode && correlatedRightNode) {
+            throw new SemanticException(PARSER_ERROR_MSG.unsupportedSubquery(predicate.toSql(),
+                    "referencing columns from more than one table"), predicate.getPos());
+        } else {
+            usingLeftRelation = correlatedLeftNode;
+        }
+
         return usingLeftRelation;
     }
 }
