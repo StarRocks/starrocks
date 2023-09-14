@@ -50,6 +50,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThriftServer;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
@@ -70,7 +71,6 @@ import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
-import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
 import com.starrocks.rpc.BackendServiceClient;
@@ -85,7 +85,6 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.LoadEtlTask;
-import com.starrocks.thrift.TAuditStatisticsItem;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
@@ -1626,22 +1625,12 @@ public class Coordinator {
         }
     }
 
-    public void updateAuditStatistics(TReportAuditStatisticsParams params) {
-        auditStatistics = new PQueryStatistics();
-        auditStatistics.scanRows = params.scan_rows;
-        auditStatistics.scanBytes = params.scan_bytes;
-        auditStatistics.returnedRows = params.returned_rows;
-        auditStatistics.cpuCostNs = params.cpu_cost_ns;
-        auditStatistics.memCostBytes = params.mem_cost_bytes;
-        if (CollectionUtils.isNotEmpty(params.stats_items)) {
-            auditStatistics.statsItems = Lists.newArrayList();
-            for (TAuditStatisticsItem item : params.stats_items) {
-                QueryStatisticsItemPB itemPB = new QueryStatisticsItemPB();
-                itemPB.scanBytes = item.scan_bytes;
-                itemPB.scanRows = item.scan_rows;
-                itemPB.tableId = item.table_id;
-                auditStatistics.statsItems.add(itemPB);
-            }
+    public synchronized void updateAuditStatistics(TReportAuditStatisticsParams params) {
+        PQueryStatistics newAuditStatistics = AuditStatisticsUtil.toProtobuf(params.audit_statistics);
+        if (auditStatistics == null) {
+            auditStatistics = newAuditStatistics;
+        } else {
+            AuditStatisticsUtil.mergeProtobuf(newAuditStatistics, auditStatistics);
         }
     }
 
