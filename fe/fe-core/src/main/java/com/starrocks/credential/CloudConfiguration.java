@@ -27,14 +27,14 @@ import org.apache.logging.log4j.Logger;
 import java.util.HashMap;
 import java.util.Map;
 
-import static com.starrocks.credential.CloudConfigurationConstants.ALL_SCHEMES;
-import static com.starrocks.credential.CloudConfigurationConstants.FS_IMPL_DISABLE_CACHE_FMT;
-import static com.starrocks.credential.CloudConfigurationConstants.FS_IMPL_FMT;
-import static com.starrocks.credential.CloudConfigurationConstants.FS_IMPL_STARROCKS_CACHE_FILESYSTEM;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CLOUD_CONFIGURATION_STRING;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES_LOADED;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_RUNTIME_JARS;
+import static com.starrocks.credential.FileSystemConstants.ALL_SCHEMES;
+import static com.starrocks.credential.FileSystemConstants.FS_IMPL_DISABLE_CACHE_FMT;
+import static com.starrocks.credential.FileSystemConstants.FS_IMPL_FMT;
+import static com.starrocks.credential.FileSystemConstants.FS_IMPL_STARROCKS_CACHE_FILESYSTEM;
 
 public class CloudConfiguration {
     private static final Logger LOG = LogManager.getLogger(CloudConfiguration.class);
