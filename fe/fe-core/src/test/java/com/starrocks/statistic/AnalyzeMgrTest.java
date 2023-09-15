@@ -15,7 +15,9 @@
 package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.journal.JournalEntity;
@@ -27,15 +29,21 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.bouncycastle.util.test.TestRandomBigInteger;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.UUID;
 
 public class AnalyzeMgrTest {
     public static ConnectContext connectContext;
@@ -207,5 +215,21 @@ public class AnalyzeMgrTest {
 
         analyzeMgr.dropExternalAnalyzeStatus(table.getUUID());
         Assert.assertEquals(0, analyzeMgr.getAnalyzeStatusMap().size());
+    }
+
+    @Test
+    public void testUpdateLoadRowsWithTableDropped() {
+        long dbId = 11111L;
+        long tableId = 22222L;
+        GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(new Database(dbId, "test"));
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(dbId, tableId,
+                Lists.newArrayList("c1"), StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), new HashMap<>()));
+
+        UUID uuid = UUID.randomUUID();
+        TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        TransactionState transactionState = new TransactionState(dbId, Lists.newArrayList(tableId), 33333L, "xxx",
+                requestId, TransactionState.LoadJobSourceType.INSERT_STREAMING, null, 44444L, 10000);
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(0));
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateLoadRows(transactionState);
     }
 }
