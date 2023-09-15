@@ -54,6 +54,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Map;
+import java.util.Objects;
 
 public class CreateLakeTableTest {
     private static ConnectContext connectContext;
@@ -197,6 +198,11 @@ public class CreateLakeTableTest {
                         "distributed by hash(key2) buckets 1\n" +
                         "properties('replication_num' = '1');"));
         checkLakeTable("lake_test", "multi_partition_unique_key");
+
+        LakeTable table = getLakeTable("lake_test", "multi_partition_unique_key");
+        Assert.assertEquals(getPathInfo(), table.getDefaultFilePathInfo());
+        Assert.assertEquals(getPathInfo().getFullPath() + "/100",
+                Objects.requireNonNull(table.getPartitionFilePathInfo(100)).getFullPath());
     }
 
     @Test

@@ -257,7 +257,7 @@ public class LakeMaterializedViewTest {
         Assert.assertTrue(newTable.isCloudNativeTableOrMaterializedView());
         LakeMaterializedView newMv = (LakeMaterializedView) newTable;
 
-        Assert.assertEquals("s3://test-bucket/1/", newMv.getStoragePath());
+        Assert.assertEquals("s3://test-bucket/1/", newMv.getDefaultFilePathInfo().getFullPath());
         FileCacheInfo cacheInfo = newMv.getPartitionFileCacheInfo(partitionId);
         Assert.assertTrue(cacheInfo.getEnableCache());
         Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
@@ -277,7 +277,7 @@ public class LakeMaterializedViewTest {
         // Test selectiveCopy
         MaterializedView newMv2 = mv.selectiveCopy(Lists.newArrayList("p1"), true, IndexExtState.ALL);
         Assert.assertTrue(newMv2.isCloudNativeMaterializedView());
-        Assert.assertEquals("s3://test-bucket/1/", newMv.getStoragePath());
+        Assert.assertEquals("s3://test-bucket/1/", newMv.getDefaultFilePathInfo().getFullPath());
         cacheInfo = newMv.getPartitionFileCacheInfo(partitionId);
         Assert.assertTrue(cacheInfo.getEnableCache());
         Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
@@ -312,7 +312,7 @@ public class LakeMaterializedViewTest {
 
         LakeMaterializedView lakeMv = (LakeMaterializedView) mv;
         // same as PseudoStarOSAgent.allocateFilePath
-        Assert.assertEquals("s3://test-bucket/1/", lakeMv.getStoragePath());
+        Assert.assertEquals("s3://test-bucket/1/", lakeMv.getDefaultFilePathInfo().getFullPath());
         // check table default cache info
         FileCacheInfo cacheInfo = lakeMv.getPartitionFileCacheInfo(0L);
         Assert.assertTrue(cacheInfo.getEnableCache());

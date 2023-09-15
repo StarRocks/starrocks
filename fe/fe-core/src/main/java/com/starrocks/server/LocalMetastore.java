@@ -2276,7 +2276,7 @@ public class LocalMetastore implements ConnectorMetadata {
         properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(index.getId()));
         int bucketNum = distributionInfo.getBucketNum();
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
-                table.getPartitionFilePathInfo(), table.getPartitionFileCacheInfo(partitionId), shardGroupId,
+                table.getPartitionFilePathInfo(partitionId), table.getPartitionFileCacheInfo(partitionId), shardGroupId,
                 properties);
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);

@@ -224,7 +224,7 @@ public class TablesProcDir implements ProcDirInterface {
     private String findStoragePath(Table table) {
         String storageGroup = null;
         if (table.isCloudNativeTableOrMaterializedView()) {
-            storageGroup = ((OlapTable) table).getStoragePath();
+            storageGroup = ((OlapTable) table).getDefaultFilePathInfo().getFullPath();
         }
         return storageGroup != null ? storageGroup : NULL_STRING_DEFAULT;
     }

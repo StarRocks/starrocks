@@ -495,13 +495,11 @@ public class StarOSAgent {
     }
 
     private List<ReplicaInfo> getShardReplicas(long shardId, long workerGroupId) throws UserException {
-        prepare();
         try {
-            List<ShardInfo> shardInfos = client.getShardInfo(serviceId, Lists.newArrayList(shardId), workerGroupId);
-            Preconditions.checkState(shardInfos.size() == 1);
-            return shardInfos.get(0).getReplicaInfoList();
+            ShardInfo info = getShardInfo(shardId, workerGroupId);
+            return info.getReplicaInfoList();
         } catch (StarClientException e) {
-            throw new UserException("Failed to get shard info. error: " + e.getMessage());
+            throw new UserException(e);
         }
     }
 
@@ -696,5 +694,13 @@ public class StarOSAgent {
         } catch (StarClientException e) {
             return "Fail to dump starmgr meta, " + e.getMessage();
         }
+    }
+
+    @NotNull
+    public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
+        prepare();
+        List<ShardInfo> shardInfos = client.getShardInfo(serviceId, Lists.newArrayList(shardId), workerGroupId);
+        Preconditions.checkState(shardInfos.size() == 1);
+        return shardInfos.get(0);
     }
 }

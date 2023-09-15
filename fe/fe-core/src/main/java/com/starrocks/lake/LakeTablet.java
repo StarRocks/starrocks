@@ -16,6 +16,8 @@ package com.starrocks.lake;
 
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.staros.client.StarClientException;
+import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.UserException;
@@ -32,6 +34,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import javax.validation.constraints.NotNull;
 
 import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
 
@@ -152,5 +155,15 @@ public class LakeTablet extends Tablet {
 
         LakeTablet tablet = (LakeTablet) obj;
         return (id == tablet.id && dataSize == tablet.dataSize && rowCount == tablet.rowCount);
+    }
+
+    @NotNull
+    public ShardInfo getShardInfo() throws StarClientException {
+        if (GlobalStateMgr.isCheckpointThread()) {
+            throw new RuntimeException("Cannot call getShardInfo in checkpoint thread");
+        }
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+        long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+        return GlobalStateMgr.getCurrentStarOSAgent().getShardInfo(getShardId(), workerGroupId);
     }
 }
