@@ -66,6 +66,7 @@ public class OptimizerContext {
     private QueryMaterializationContext queryMaterializationContext;
 
     private boolean isShortCircuit = false;
+    private boolean inMemoPhase = false;
 
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
@@ -257,5 +258,13 @@ public class OptimizerContext {
         if (this.queryMaterializationContext != null) {
             this.queryMaterializationContext.clear();
         }
+    }
+
+    public void setInMemoPhase(boolean inMemoPhase) {
+        this.inMemoPhase = inMemoPhase;
+    }
+
+    public boolean isInMemoPhase() {
+        return this.inMemoPhase;
     }
 }
