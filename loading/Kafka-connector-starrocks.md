@@ -56,7 +56,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
     value.converter=io.confluent.connect.json.JsonSchemaConverter
     ```
 
-    > **注意**：
+    > **注意**
     >
     > 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键模型的表，为了将源端的数据变更同步至主键模型的表，则您还需要[配置 `transform`](#导入-debezium-cdc-格式数据)。
 
@@ -76,9 +76,9 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
       1. 启动 worker：
 
-        ```Shell
-        bin/connect-distributed worker.properties
-        ```
+          ```Shell
+          bin/connect-distributed worker.properties
+          ```
 
       2. 注意，分布式模式不支持启动时在命令行配置 Kafka connector。您需要通过调用 REST API 来配置 Kafka connector 和启动 Kafka connect:
 
