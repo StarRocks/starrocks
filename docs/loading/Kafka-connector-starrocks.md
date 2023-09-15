@@ -70,9 +70,9 @@ The following steps take a self-managed Kafka cluster as an example to demonstra
 
     - Distributed mode
 
-    > **NOTE**
-    >
-    > It is recommended to use the distributed mode in the production environment. 
+      > **NOTE**
+      >
+      > It is recommended to use the distributed mode in the production environment.
 
     - Start the worker.
 
