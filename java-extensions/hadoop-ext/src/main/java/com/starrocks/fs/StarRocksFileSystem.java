@@ -19,7 +19,9 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.util.Progressable;
 import org.slf4j.Logger;
@@ -150,5 +152,17 @@ public class StarRocksFileSystem extends FileSystem {
     @Override
     public FileStatus getFileStatus(Path f) throws IOException {
         return fs.getFileStatus(f);
+    }
+
+    @Override
+    public RemoteIterator<LocatedFileStatus> listLocatedStatus(final Path f)
+            throws FileNotFoundException, IOException {
+        return fs.listLocatedStatus(f);
+    }
+
+    public RemoteIterator<LocatedFileStatus> listFiles(
+            final Path f, final boolean recursive)
+            throws FileNotFoundException, IOException {
+        return fs.listFiles(f, recursive);
     }
 }
