@@ -409,6 +409,10 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
 
 bool FileReader::_can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
                                         const tparquet::ColumnOrder* column_order) {
+    if (column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.max_value &&
+        column_meta.statistics.min_value == column_meta.statistics.max_value) {
+        return true;
+    }
     if (column_meta.statistics.__isset.min_value && _can_use_stats(column_meta.type, column_order)) {
         return true;
     }
@@ -422,8 +426,7 @@ bool FileReader::_can_use_stats(const tparquet::Type::type& type, const tparquet
     // If column order is not set, only statistics for numeric types can be trusted.
     if (column_order == nullptr) {
         // is boolean | is interger | is floating
-        return type == tparquet::Type::type::BOOLEAN || _is_integer_type(type) ||
-               type == tparquet::Type::type::DOUBLE || type == tparquet::Type::type::BYTE_ARRAY;
+        return type == tparquet::Type::type::BOOLEAN || _is_integer_type(type) || type == tparquet::Type::type::DOUBLE;
     }
     // Stats can be used if the column order is TypeDefinedOrder (see parquet.thrift).
     return column_order->__isset.TYPE_ORDER;
