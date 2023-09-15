@@ -19,12 +19,20 @@ import com.google.common.base.Joiner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
+<<<<<<< HEAD
 
 import java.util.List;
 import java.util.Map;
+=======
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
+
+import java.util.List;
+import java.util.stream.Collectors;
+>>>>>>> aab285cfce ([Enhancement] audit the mv usage (#31157))
 
 public class MVRewriteValidator {
     private static final MVRewriteValidator INSTANCE = new MVRewriteValidator();
@@ -33,17 +41,45 @@ public class MVRewriteValidator {
         return INSTANCE;
     }
 
+    /**
+     * Record the MV usage into audit log
+     */
+    public void auditMv(OptExpression physicalPlan, OptimizerContext optimizerContext) {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            return;
+        }
+
+        // Candidate MVs
+        if (CollectionUtils.isNotEmpty(optimizerContext.getCandidateMvs())) {
+            List<String> mvNames = optimizerContext.getCandidateMvs()
+                    .stream().map(x -> x.getMv().getName())
+                    .collect(Collectors.toList());
+            connectContext.getAuditEventBuilder().setCandidateMvs(mvNames);
+        }
+
+        // Rewritten MVs
+        List<String> mvNames = MvUtils.collectMaterializedViewNames(physicalPlan);
+        if (CollectionUtils.isNotEmpty(mvNames)) {
+            connectContext.getAuditEventBuilder().setHitMvs(mvNames);
+        }
+    }
+
     public void validateMV(OptExpression physicalPlan) {
         ConnectContext connectContext = ConnectContext.get();
         if (connectContext == null) {
             return;
         }
 
+<<<<<<< HEAD
         PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer("Summary");
         if (tracer == null) {
             return;
         }
         List<String> mvNames = collectMaterializedViewNames(physicalPlan);
+=======
+        List<String> mvNames = MvUtils.collectMaterializedViewNames(physicalPlan);
+>>>>>>> aab285cfce ([Enhancement] audit the mv usage (#31157))
         if (mvNames.isEmpty()) {
             // Check whether plan has been rewritten success by rule.
             Map<String, PlannerProfile.LogTracer> tracers = connectContext.getPlannerProfile().getTracers();
@@ -87,32 +123,5 @@ public class MVRewriteValidator {
         }
     }
 
-    private static List<String> collectMaterializedViewNames(OptExpression optExpression) {
-        List<String> names = Lists.newArrayList();
-        collectMaterializedViewNames(optExpression, names);
-        return names;
-    }
 
-    private static void collectMaterializedViewNames(OptExpression optExpression, List<String> names) {
-        if (optExpression == null) {
-            return;
-        }
-        collectMaterializedViewNames(optExpression.getOp(), names);
-
-        for (OptExpression child : optExpression.getInputs()) {
-            collectMaterializedViewNames(child, names);
-        }
-    }
-
-    public static void collectMaterializedViewNames(Operator op, List<String> names) {
-        if (op == null) {
-            return;
-        }
-        if (op instanceof PhysicalScanOperator) {
-            PhysicalScanOperator scanOperator = (PhysicalScanOperator) op;
-            if (scanOperator.getTable().isMaterializedView()) {
-                names.add(scanOperator.getTable().getName());
-            }
-        }
-    }
 }

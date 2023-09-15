@@ -75,6 +75,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -91,6 +92,7 @@ import com.starrocks.sql.parser.ParsingException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -154,6 +156,29 @@ public class MvUtils {
             for (OptExpression child : root.getInputs()) {
                 getAllTables(child, tables);
             }
+        }
+    }
+
+    public static List<String> collectMaterializedViewNames(OptExpression optExpression) {
+        List<MaterializedView> mvs = new ArrayList<>();
+        collectMaterializedViewNames(optExpression, mvs);
+        return mvs.stream().map(Table::getName).collect(Collectors.toList());
+    }
+
+    private static void collectMaterializedViewNames(OptExpression optExpression, List<MaterializedView> mvs) {
+        if (optExpression == null) {
+            return;
+        }
+        Operator op = optExpression.getOp();
+        if (op instanceof PhysicalScanOperator) {
+            PhysicalScanOperator scanOperator = (PhysicalScanOperator) op;
+            if (scanOperator.getTable().isMaterializedView()) {
+                mvs.add((MaterializedView) scanOperator.getTable());
+            }
+        }
+
+        for (OptExpression child : optExpression.getInputs()) {
+            collectMaterializedViewNames(child, mvs);
         }
     }
 
