@@ -1246,6 +1246,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (statistics.getOutputRowCount() > 0 && result.getOutputRowCount() == 0) {
             return Statistics.buildFrom(result).setOutputRowCount(1).build();
         }
+
         return result;
     }
 

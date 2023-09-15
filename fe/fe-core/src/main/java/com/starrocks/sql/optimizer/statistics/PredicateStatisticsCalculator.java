@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -29,8 +30,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import org.apache.commons.math3.util.Precision;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT;
 
 public class PredicateStatisticsCalculator {
     public static Statistics statisticsCalculate(ScalarOperator predicate, Statistics statistics) {
@@ -38,12 +42,52 @@ public class PredicateStatisticsCalculator {
             return statistics;
         }
 
+        Statistics result;
         // The time-complexity of PredicateStatisticsCalculatingVisitor OR row-count is O(2^n), n is OR number
         if (countDisConsecutiveOr(predicate, 0, false) > StatisticsEstimateCoefficient.DEFAULT_OR_OPERATOR_LIMIT) {
-            return predicate.accept(new LargeOrCalculatingVisitor(statistics), null);
+            result = predicate.accept(new LargeOrCalculatingVisitor(statistics), null);
         } else {
-            return predicate.accept(new BaseCalculatingVisitor(statistics), null);
+            result = predicate.accept(new BaseCalculatingVisitor(statistics), null);
         }
+
+        Statistics.Builder builder = Statistics.buildFrom(result);
+
+        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : result.getColumnStatistics().entrySet()) {
+            ColumnRefOperator col = entry.getKey();
+            ColumnStatistic columnStatistic = entry.getValue();
+            // calculate ndv by using min/max value
+            if (columnStatistic.isUnknown() && !columnStatistic.isInfiniteRange()) {
+                ColumnStatistic.Builder colBuilder = ColumnStatistic.buildFrom(columnStatistic);
+                PrimitiveType primitiveType = col.getType().getPrimitiveType();
+                double ndv;
+                double minValue = columnStatistic.getMinValue();
+                double maxValue = columnStatistic.getMaxValue();
+                if (primitiveType.isFixedPointType()) {
+                    ndv = Math.max(maxValue - minValue, 1);
+                } else if (primitiveType == PrimitiveType.DATE) {
+                    // sampling by day
+                    ndv = Math.max((maxValue - minValue) / 86400, 1);
+                } else if (primitiveType == PrimitiveType.DATETIME) {
+                    // sampling by 30s
+                    ndv = Math.max((maxValue - minValue) / 30, 1);
+                } else if (primitiveType.isCharFamily()) {
+                    // sampling by minute. If there exists min/max value for a string column, it
+                    // must be derived from cast(column as type) predicate. We just simply assume
+                    // it's a date string value.
+                    ndv = Math.max((maxValue - minValue) / 600, 1);
+                } else {
+                    // skip update
+                    continue;
+                }
+
+                if (statistics.getOutputRowCount() / MEDIUM_AGGREGATE_EFFECT_COEFFICIENT > ndv) {
+                    // the ndv estimated by min/max may help the further statistics calculating
+                    colBuilder.setDistinctValuesCount(ndv).setType(ColumnStatistic.StatisticType.ESTIMATE);
+                    builder.addColumnStatistic(col, colBuilder.build());
+                }
+            }
+        }
+        return builder.build();
     }
 
     private static long countDisConsecutiveOr(ScalarOperator root, long count, boolean isConsecutive) {

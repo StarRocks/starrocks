@@ -87,6 +87,11 @@ public class BinaryPredicateStatisticCalculator {
             if (constant.isPresent()) {
                 Optional<Double> c = StatisticUtils.convertStatisticsToDouble(
                         constant.get().getType(), constant.get().toString());
+                // special process for string values
+                if (columnStatistic.isUnknown() && constant.get().getType().getPrimitiveType().isCharFamily()) {
+                    columnStatistic = ColumnStatistic.buildFrom(columnStatistic).setDistinctValuesCount(100).build();
+
+                }
                 predicateRange = c.map(aDouble -> new StatisticRangeValues(aDouble, aDouble, 1))
                         .orElseGet(() -> new StatisticRangeValues(NEGATIVE_INFINITY, POSITIVE_INFINITY, 1));
             } else {
@@ -374,7 +379,7 @@ public class BinaryPredicateStatisticCalculator {
                 setMaxValue(intersectRange.getHigh()).
                 setMinValue(intersectRange.getLow()).
                 setNullsFraction(0).
-                setDistinctValuesCount(columnStatistic.getDistinctValuesCount()).
+                setDistinctValuesCount(columnStatistic.isUnknown() ? 1 : columnStatistic.getDistinctValuesCount()).
                 setType(columnStatistic.getType()).
                 build();
         return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).

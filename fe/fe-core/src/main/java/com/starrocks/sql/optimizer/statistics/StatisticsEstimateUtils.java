@@ -38,12 +38,13 @@ public class StatisticsEstimateUtils {
         double newNonNullRowCount = newRowCount * (1 - newNullFraction);
 
         double newAverageRowSize = newNonNullRowCount == 0 ? 0 : (leftSize + rightSize) / newNonNullRowCount;
-        builder.setMinValue(newRange.getLow())
+        return builder.setMinValue(newRange.getLow())
                 .setMaxValue(newRange.getHigh())
                 .setNullsFraction(newNullFraction)
                 .setAverageRowSize(newAverageRowSize)
-                .setDistinctValuesCount(newRange.getDistinctValues());
-        return builder.build();
+                .setDistinctValuesCount(newRange.getDistinctValues())
+                .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                .build();
     }
 
     public static Statistics adjustStatisticsByRowCount(Statistics statistics, double rowCount) {
