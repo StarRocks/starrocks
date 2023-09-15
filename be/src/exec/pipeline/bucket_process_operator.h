@@ -29,7 +29,7 @@ class BucketProcessSinkOperator : public Operator {
 public:
     BucketProcessSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                               BucketProcessContextPtr& ctx)
-            : Operator(factory, id, "bucket_process_sink", plan_node_id, true, driver_sequence), _ctx(ctx) {}
+            : Operator(factory, id, "bucket_process_sink", plan_node_id, false, driver_sequence), _ctx(ctx) {}
     ~BucketProcessSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
@@ -60,7 +60,7 @@ class BucketProcessSourceOperator : public SourceOperator {
 public:
     BucketProcessSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                 BucketProcessContextPtr& ctx)
-            : SourceOperator(factory, id, "bucket_process_source", plan_node_id, true, driver_sequence), _ctx(ctx) {}
+            : SourceOperator(factory, id, "bucket_process_source", plan_node_id, false, driver_sequence), _ctx(ctx) {}
     ~BucketProcessSourceOperator() override = default;
 
     Status prepare(RuntimeState* state) override;

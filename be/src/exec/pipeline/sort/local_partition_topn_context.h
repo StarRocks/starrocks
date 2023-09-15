@@ -68,6 +68,10 @@ public:
     // Pull one chunk from sorters or passthrough_buffer
     StatusOr<ChunkPtr> pull_one_chunk();
 
+    bool is_passthrough() const { return _chunks_partitioner->is_passthrough(); }
+
+    size_t num_partitions() const { return _partition_num; }
+
 private:
     // Pull one chunk from one of the sorters
     // The output chunk stream is unordered
@@ -83,6 +87,7 @@ private:
 
     ChunksPartitionerPtr _chunks_partitioner;
     bool _is_transfered = false;
+    size_t _partition_num = 0;
 
     // Every partition holds a chunks_sorter
     ChunksSorters _chunks_sorters;

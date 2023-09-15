@@ -512,6 +512,10 @@ public class QueryRuntimeProfile {
             RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
             Preconditions.checkNotNull(commonMetrics);
 
+            if (commonMetrics.containsInfoString("IsChild")) {
+                continue;
+            }
+
             Counter closeTime = commonMetrics.getCounter("CloseTime");
             Counter minCloseTime = commonMetrics.getCounter("__MIN_OF_CloseTime");
             if (closeTime != null && closeTime.getValue() == 0 ||

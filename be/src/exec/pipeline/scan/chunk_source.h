@@ -36,6 +36,9 @@ using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
 
 class ChunkSource {
 public:
+    inline static const std::string IO_TASK_EXEC_TIMER_NAME = "IOTaskExecTime";
+
+public:
     ChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                 BalancedChunkBuffer& chunk_buffer);
 
