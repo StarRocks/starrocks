@@ -85,7 +85,7 @@ public class HadoopExt {
 
     public static boolean isS3Scheme(String scheme) {
         for (String a : S3_SCHEMES) {
-            if (scheme.equals(a)) {
+            if (scheme.equalsIgnoreCase(a)) {
                 return true;
             }
         }

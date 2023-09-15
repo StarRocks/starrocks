@@ -40,28 +40,28 @@ import static org.apache.hadoop.fs.FileSystem.SHUTDOWN_HOOK_PRIORITY;
 /**
  * Caching FileSystem objects
  */
-public class Cache {
-    public static final Log LOG = LogFactory.getLog(Cache.class);
+public class FileSystemCacheManager {
+    public static final Log LOG = LogFactory.getLog(FileSystemCacheManager.class);
 
-    private final Cache.ClientFinalizer clientFinalizer = new Cache.ClientFinalizer();
+    private final FileSystemCacheManager.ClientFinalizer clientFinalizer = new FileSystemCacheManager.ClientFinalizer();
 
-    private final Map<Cache.Key, FileSystem> map = new HashMap<Cache.Key, FileSystem>();
-    private final Set<Cache.Key> toAutoClose = new HashSet<Cache.Key>();
+    private final Map<FileSystemCacheManager.Key, FileSystem> map = new HashMap<FileSystemCacheManager.Key, FileSystem>();
+    private final Set<FileSystemCacheManager.Key> toAutoClose = new HashSet<FileSystemCacheManager.Key>();
     /**
      * A variable that makes all objects in the cache unique
      */
     private static AtomicLong unique = new AtomicLong(1);
 
-    static Cache.Key buildCacheKey(URI uri, Configuration conf) throws IOException {
-        return new Cache.Key(uri, conf);
+    static FileSystemCacheManager.Key buildCacheKey(URI uri, Configuration conf) throws IOException {
+        return new FileSystemCacheManager.Key(uri, conf);
     }
 
     FileSystem get(URI uri, Configuration conf) throws IOException {
-        Cache.Key key = new Cache.Key(uri, conf);
+        FileSystemCacheManager.Key key = new FileSystemCacheManager.Key(uri, conf);
         return getInternal(uri, conf, key);
     }
 
-    FileSystem get(URI uri, Configuration conf, Cache.Key key) throws IOException {
+    FileSystem get(URI uri, Configuration conf, FileSystemCacheManager.Key key) throws IOException {
         return getInternal(uri, conf, key);
     }
 
@@ -69,11 +69,11 @@ public class Cache {
      * The objects inserted into the cache using this method are all unique
      */
     FileSystem getUnique(URI uri, Configuration conf) throws IOException {
-        Cache.Key key = new Cache.Key(uri, conf, unique.getAndIncrement());
+        FileSystemCacheManager.Key key = new FileSystemCacheManager.Key(uri, conf, unique.getAndIncrement());
         return getInternal(uri, conf, key);
     }
 
-    private FileSystem getInternal(URI uri, Configuration conf, Cache.Key key) throws IOException {
+    private FileSystem getInternal(URI uri, Configuration conf, FileSystemCacheManager.Key key) throws IOException {
         FileSystem fs;
         synchronized (this) {
             fs = map.get(key);
@@ -82,7 +82,7 @@ public class Cache {
             return fs;
         }
 
-        fs = CacheFileSystem.createRealFileSystem(uri, conf);
+        fs = StarRocksFileSystem.createRealFileSystem(uri, conf);
         synchronized (this) { // refetch the lock again
             FileSystem oldfs = map.get(key);
             if (oldfs != null) { // a file system is created while lock is releasing
@@ -104,7 +104,7 @@ public class Cache {
         }
     }
 
-    synchronized void remove(Cache.Key key, FileSystem fs) {
+    synchronized void remove(FileSystemCacheManager.Key key, FileSystem fs) {
         FileSystem cachedFs = map.remove(key);
         if (fs == cachedFs) {
             toAutoClose.remove(key);
@@ -127,17 +127,15 @@ public class Cache {
 
         // Make a copy of the keys in the map since we'll be modifying
         // the map while iterating over it, which isn't safe.
-        List<Cache.Key> keys = new ArrayList<Cache.Key>();
+        List<FileSystemCacheManager.Key> keys = new ArrayList<FileSystemCacheManager.Key>();
         keys.addAll(map.keySet());
 
-        for (Cache.Key key : keys) {
-            final FileSystem fs = map.get(key);
-
+        for (FileSystemCacheManager.Key key : keys) {
             if (onlyAutomatic && !toAutoClose.contains(key)) {
                 continue;
             }
 
-            //remove from cache
+            final FileSystem fs = map.get(key);
             map.remove(key);
             toAutoClose.remove(key);
 
@@ -170,8 +168,8 @@ public class Cache {
         List<FileSystem> targetFSList = new ArrayList<FileSystem>();
         //Make a pass over the list and collect the filesystems to close
         //we cannot close inline since close() removes the entry from the Map
-        for (Map.Entry<Cache.Key, FileSystem> entry : map.entrySet()) {
-            final Cache.Key key = entry.getKey();
+        for (Map.Entry<FileSystemCacheManager.Key, FileSystem> entry : map.entrySet()) {
+            final FileSystemCacheManager.Key key = entry.getKey();
             final FileSystem fs = entry.getValue();
             if (ugi.equals(key.ugi) && fs != null) {
                 targetFSList.add(fs);

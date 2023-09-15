@@ -29,14 +29,14 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 
-public class CacheFileSystem extends FileSystem {
+public class StarRocksFileSystem extends FileSystem {
     private static final Logger LOGGER =
-            LoggerFactory.getLogger(CacheFileSystem.class);
+            LoggerFactory.getLogger(StarRocksFileSystem.class);
 
     FileSystem fs;
-    Cache.Key key;
+    FileSystemCacheManager.Key key;
 
-    static final Cache CACHE = new Cache();
+    static final FileSystemCacheManager CACHE = new FileSystemCacheManager();
 
     static FileSystem createRealFileSystem(URI uri, Configuration conf) throws IOException {
         String scheme = parseSchemeFromURI(uri, conf);
@@ -63,12 +63,12 @@ public class CacheFileSystem extends FileSystem {
         }
     }
 
-    public CacheFileSystem() {
+    public StarRocksFileSystem() {
     }
 
     @Override
     public void initialize(URI uri, Configuration conf) throws IOException {
-        key = Cache.buildCacheKey(uri, conf);
+        key = FileSystemCacheManager.buildCacheKey(uri, conf);
         fs = CACHE.get(uri, conf, key);
         LOGGER.info(String.format("%s CacheFileSystem initialize. %s", HadoopExt.LOGGER_MESSAGE_PREFIX, this));
     }
