@@ -52,6 +52,13 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTER
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.pruner.PrimaryKeyUpdateTableRule;
+import com.starrocks.sql.optimizer.rule.transformation.pruner.RboTablePruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.pruner.UniquenessBasedTablePruneRule;
+>>>>>>> 944ffc0f65 ([Enhancement] Add session variables enable_table_prune_on_update (#31151))
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
@@ -229,7 +236,46 @@ public class Optimizer {
         }
     }
 
+<<<<<<< HEAD
     private OptExpression logicalRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
+=======
+    private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
+        if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableRboTablePrune()) {
+            // PARTITION_PRUNE is required to run before ReorderJoinRule because ReorderJoinRule's
+            // Statistics calculation on Operators depends on row count yielded by the PARTITION_PRUNE.
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+            // ReorderJoinRule is a in-memo rule, when it is used outside memo, we must apply
+            // MergeProjectWithChildRule to merge LogicalProjectionOperator into its child's
+            // projection before ReorderJoinRule's application, after that, we must separate operator's
+            // projection as LogicalProjectionOperator from the operator by applying SeparateProjectRule.
+            ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+            tree = new UniquenessBasedTablePruneRule().rewrite(tree, rootTaskContext);
+            deriveLogicalProperty(tree);
+            tree = new ReorderJoinRule().rewrite(tree, context);
+            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+            deriveLogicalProperty(tree);
+            // TODO(by satanson): bucket shuffle join interpolation in PK table's update query can adjust layout
+            //  of the data ingested by OlapTableSink and eliminate race introduced by multiple concurrent write
+            //  operations on the same tablets, pruning this bucket shuffle join make update statement performance
+            //  regression, so we can turn on this rule after we put an bucket-shuffle exchange in front of
+            //  OlapTableSink in future, at present we turn off this rule.
+            if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableTablePruneOnUpdate()) {
+                tree = new PrimaryKeyUpdateTableRule().rewrite(tree, rootTaskContext);
+                deriveLogicalProperty(tree);
+            }
+            tree = new RboTablePruneRule().rewrite(tree, rootTaskContext);
+            ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+            rootTaskContext.setRequiredColumns(requiredColumns.clone());
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+            context.setEnableLeftRightJoinEquivalenceDerive(true);
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+        }
+    }
+
+    private OptExpression logicalRuleRewrite(ConnectContext connectContext,
+                                             OptExpression tree,
+                                             TaskContext rootTaskContext) {
+>>>>>>> 944ffc0f65 ([Enhancement] Add session variables enable_table_prune_on_update (#31151))
         tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
         ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
         deriveLogicalProperty(tree);
