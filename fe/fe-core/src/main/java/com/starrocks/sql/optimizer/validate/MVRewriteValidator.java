@@ -21,18 +21,12 @@ import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
-<<<<<<< HEAD
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 import java.util.Map;
-=======
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
-
-import java.util.List;
 import java.util.stream.Collectors;
->>>>>>> aab285cfce ([Enhancement] audit the mv usage (#31157))
 
 public class MVRewriteValidator {
     private static final MVRewriteValidator INSTANCE = new MVRewriteValidator();
@@ -71,15 +65,11 @@ public class MVRewriteValidator {
             return;
         }
 
-<<<<<<< HEAD
         PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer("Summary");
         if (tracer == null) {
             return;
         }
-        List<String> mvNames = collectMaterializedViewNames(physicalPlan);
-=======
         List<String> mvNames = MvUtils.collectMaterializedViewNames(physicalPlan);
->>>>>>> aab285cfce ([Enhancement] audit the mv usage (#31157))
         if (mvNames.isEmpty()) {
             // Check whether plan has been rewritten success by rule.
             Map<String, PlannerProfile.LogTracer> tracers = connectContext.getPlannerProfile().getTracers();
