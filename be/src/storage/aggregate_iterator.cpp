@@ -58,7 +58,7 @@ public:
 
     size_t merged_rows() const override { return _aggregator->merged_rows(); }
 
-    Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+    [[nodiscard]] Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         RETURN_IF_ERROR(_child->init_encoded_schema(dict_maps));
         _curr_chunk = ChunkHelper::new_chunk(encoded_schema(), _chunk_size);
@@ -67,8 +67,8 @@ public:
         return Status::OK();
     }
 
-    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
-        ChunkIterator::init_output_schema(unused_output_column_ids);
+    [[nodiscard]] Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+        RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
         RETURN_IF_ERROR(_child->init_output_schema(unused_output_column_ids));
         _curr_chunk = ChunkHelper::new_chunk(output_schema(), _chunk_size);
         _aggregator = std::make_unique<ChunkAggregator>(&output_schema(), _chunk_size, _pre_aggregate_factor / 100,

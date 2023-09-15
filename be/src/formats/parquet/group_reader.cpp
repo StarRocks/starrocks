@@ -633,10 +633,7 @@ Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const 
         while (ctx->rows_to_skip > 0) {
             size_t to_read = std::min(ctx->rows_to_skip, chunk_size);
             auto temp_column = chunk->get_column_by_slot_id(slot_id)->clone_empty();
-            Status status = _column_readers[slot_id]->next_batch(&to_read, temp_column.get());
-            if (!status.ok()) {
-                return status;
-            }
+            RETURN_IF_ERROR(_column_readers[slot_id]->next_batch(&to_read, temp_column.get()));
         }
     }
 

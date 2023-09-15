@@ -63,7 +63,7 @@ TEST_F(MergeIteratorTest, heap_merge_overlapping) {
     std::vector<RowSourceMask> source_masks;
 
     auto iter = new_heap_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2, sub3});
-    iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
     std::vector<int32_t> expected;
     expected.insert(expected.end(), v1.begin(), v1.end());
@@ -104,7 +104,7 @@ TEST_F(MergeIteratorTest, heap_merge_no_overlapping) {
     auto sub3 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v3));
 
     auto iter = new_heap_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2, sub3});
-    iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
     std::vector<int32_t> expected;
     expected.insert(expected.end(), v1.begin(), v1.end());
@@ -132,7 +132,7 @@ TEST_F(MergeIteratorTest, heap_merge_no_overlapping) {
 TEST_F(MergeIteratorTest, merge_one) {
     auto sub1 = std::make_shared<VectorChunkIterator>(_schema, COL_INT({1, 1, 2, 3, 4, 5}));
     auto iter = new_heap_merge_iterator(std::vector<ChunkIteratorPtr>{sub1});
-    iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
     auto get_row = [](const ChunkPtr& chunk, size_t row) -> int32_t {
         auto c = std::dynamic_pointer_cast<FixedLengthColumn<int32_t>>(chunk->get_column_by_index(0));
@@ -159,7 +159,7 @@ TEST_F(MergeIteratorTest, test_issue_DSDB_2715) {
     auto sub1 = std::make_shared<VectorChunkIterator>(_schema, COL_INT({1, 1, 2, 3, 4, 5}));
     auto sub2 = std::make_shared<VectorChunkIterator>(_schema, COL_INT({1, 1, 2, 3, 4, 5}));
     auto iter = new_heap_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2});
-    iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
     iter->close();
 }
@@ -246,7 +246,7 @@ TEST_F(MergeIteratorTest, mask_merge) {
     source_masks.clear();
 
     auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2, sub3}, &mask_buffer);
-    iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
     std::vector<int32_t> expected;
     expected.insert(expected.end(), v1.begin(), v1.end());
@@ -342,7 +342,7 @@ TEST_F(MergeIteratorTest, mask_merge_boundary_test) {
     source_masks.clear();
 
     auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2, sub3, sub4}, &mask_buffer);
-    iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
     std::vector<int32_t> real;
     ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
