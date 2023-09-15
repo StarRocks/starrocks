@@ -447,7 +447,10 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         LogicalScanOperator scanOperator;
         if (node.getTable().isNativeTableOrMaterializedView()) {
             DistributionInfo distributionInfo = ((OlapTable) node.getTable()).getDefaultDistributionInfo();
-            Preconditions.checkState(distributionInfo instanceof HashDistributionInfo);
+            if (!(distributionInfo instanceof HashDistributionInfo)) {
+                throw new StarRocksPlannerException("This table/materialized view using random distribution "
+                        + "which is not support in this version. ", ErrorType.UNSUPPORTED);
+            }
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
             List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
             List<Integer> hashDistributeColumns = new ArrayList<>();
