@@ -282,7 +282,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     {
         static const char* prefix = "SharedBuffered";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
         _profile.shared_buffered_shared_io_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "SharedIOBytes", TUnit::BYTES, prefix);
         _profile.shared_buffered_shared_io_count =
@@ -297,7 +297,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     if (_use_block_cache) {
         static const char* prefix = "BlockCache";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
         _profile.block_cache_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadCounter", TUnit::UNIT, prefix);
         _profile.block_cache_read_bytes =
@@ -316,7 +316,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     {
         static const char* prefix = "InputStream";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
         _profile.app_io_bytes_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "AppIOBytesRead", TUnit::BYTES, prefix);
         _profile.app_io_timer = ADD_CHILD_TIMER(_runtime_profile, "AppIOTime", prefix);
