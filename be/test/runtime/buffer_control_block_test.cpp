@@ -116,6 +116,7 @@ TEST_F(BufferControlBlockTest, add_then_cancel) {
         add_result->result_batch.rows.emplace_back("hello test2");
         ASSERT_TRUE(control_block.add_batch(add_result).ok());
     }
+    sleep(1);
     {
         std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
         add_result->result_batch.rows.emplace_back("hello test1");
