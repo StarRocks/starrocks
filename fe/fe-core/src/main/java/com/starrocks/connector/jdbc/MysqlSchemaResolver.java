@@ -131,7 +131,8 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
 
     @Override
     public List<String> listPartitionNames(Connection connection, String databaseName, String tableName) {
-        String partitionNamesQuery = "SELECT PARTITION_DESCRIPTION FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? " +
+        String partitionNamesQuery =
+                "SELECT PARTITION_DESCRIPTION as NAME FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? " +
                 "AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL";
         try (PreparedStatement ps = connection.prepareStatement(partitionNamesQuery)) {
             ps.setString(1, databaseName);
@@ -140,7 +141,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             ImmutableList.Builder<String> list = ImmutableList.builder();
             if (null != rs) {
                 while (rs.next()) {
-                    String[] partitionNames = rs.getString("PARTITION_DESCRIPTION").
+                    String[] partitionNames = rs.getString("NAME").
                             replace("'", "").split(",");
                     for (String partitionName : partitionNames) {
                         list.add(partitionName);
