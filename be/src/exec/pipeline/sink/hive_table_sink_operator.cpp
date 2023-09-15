@@ -18,8 +18,41 @@
 
 #include "exec/parquet_builder.h"
 #include "util/path_util.h"
+#include "util/url_coding.h"
 
 namespace starrocks::pipeline {
+
+StatusOr<std::string> column_to_string(const TypeDescriptor& type_desc, const ColumnPtr& column) {
+    auto datum = column->get(0);
+
+    switch (type_desc.type) {
+    case TYPE_BOOLEAN: {
+        return datum.get_uint8() ? "true" : "false";
+    }
+    case TYPE_TINYINT: {
+        return std::to_string(datum.get_int8());
+    }
+    case TYPE_SMALLINT: {
+        return std::to_string(datum.get_int16());
+    }
+    case TYPE_INT: {
+        return std::to_string(datum.get_int32());
+    }
+    case TYPE_BIGINT: {
+        return std::to_string(datum.get_int64());
+    }
+    case TYPE_DATE: {
+        return datum.get_date().to_string();
+    }
+    case TYPE_CHAR:
+    case TYPE_VARCHAR: {
+        return url_encode(datum.get_slice().to_string());
+    }
+    default: {
+        return Status::InvalidArgument("unsupported partition column type" + type_desc.debug_string());
+    }
+    }
+}
 
 static const std::string HIVE_UNPARTITIONED_TABLE_LOCATION = "hive_unpartitioned_table_fake_location";
 
@@ -103,22 +136,14 @@ Status HiveTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     } else if (_is_static_partition_insert && !_partition_writers.empty()) {
         _partition_writers.begin()->second->append_chunk(chunk.get(), state);
     } else {
-        Columns partitions_columns;
-        partitions_columns.resize(_partition_expr.size());
-        for (size_t i = 0; i < partitions_columns.size(); ++i) {
-            ASSIGN_OR_RETURN(partitions_columns[i], _partition_expr[i]->evaluate(chunk.get()));
-            DCHECK(partitions_columns[i] != nullptr);
-        }
-
-        std::vector<std::string> partition_column_values;
-        for (const ColumnPtr& column : partitions_columns) {
+        std::vector<std::string> partition_column_values(_partition_expr.size());
+        for (int i = 0; i < _partition_expr.size(); ++i) {
+            ASSIGN_OR_RETURN(ColumnPtr column, _partition_expr[i]->evaluate(chunk.get()));
+            DCHECK(column != nullptr);
             if (column->has_null()) {
                 return Status::NotSupported("Partition value can't be null.");
             }
-
-            std::string partition_value;
-            RETURN_IF_ERROR(partition_value_to_string(ColumnHelper::get_data_column(column.get()), partition_value));
-            partition_column_values.emplace_back(partition_value);
+            ASSIGN_OR_RETURN(partition_column_values[i], column_to_string(_partition_expr[i]->root()->type(), column))
         }
 
         DCHECK(_partition_column_names.size() == partition_column_values.size());
@@ -147,42 +172,6 @@ std::string HiveTableSinkOperator::_get_partition_location(const std::vector<std
         partition_location += _partition_column_names[i] + "=" + values[i] + "/";
     }
     return partition_location;
-}
-
-Status HiveTableSinkOperator::partition_value_to_string(Column* column, std::string& partition_value) {
-    auto v = column->get(0);
-    if (column->is_date()) {
-        partition_value = v.get_date().to_string();
-        return Status::OK();
-    }
-
-    bool not_support = false;
-    v.visit([&](auto& variant) {
-        std::visit(
-                [&](auto&& arg) {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, Slice>) {
-                        partition_value = arg.to_string();
-                    } else if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int16_t> ||
-                                         std::is_same_v<T, uint16_t> || std::is_same_v<T, uint24_t> ||
-                                         std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> ||
-                                         std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
-                        partition_value = std::to_string(arg);
-                    } else if constexpr (std::is_same_v<T, int8_t>) {
-                        // iceberg has no smallint type. we can safely use int8 as boolean.
-                        partition_value = arg == 0 ? "false" : "true";
-                    } else {
-                        not_support = true;
-                    }
-                },
-                variant);
-    });
-
-    if (not_support) {
-        return Status::NotSupported(fmt::format("Partition value can't be {}", column->get_name()));
-    }
-
-    return Status::OK();
 }
 
 HiveTableSinkOperatorFactory::HiveTableSinkOperatorFactory(int32_t id, FragmentContext* fragment_ctx,
