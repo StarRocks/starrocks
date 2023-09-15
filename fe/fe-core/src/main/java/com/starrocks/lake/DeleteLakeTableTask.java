@@ -62,14 +62,7 @@ class DeleteLakeTableTask implements Runnable {
     private Map<String, LakeTablet> findUniquePartitionDirectories() {
         Map<String, LakeTablet> storagePathToTablet = new HashMap<>();
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
-            LakeTablet anyTablet = null;
-            List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
-            for (MaterializedIndex materializedIndex : allIndices) {
-                for (Tablet tablet : materializedIndex.getTablets()) {
-                    anyTablet = (LakeTablet) tablet;
-                    break;
-                }
-            }
+            LakeTablet anyTablet = getAnyTablet(partition);
             if (anyTablet == null) {
                 continue;
             }
@@ -83,6 +76,16 @@ class DeleteLakeTableTask implements Runnable {
             }
         }
         return storagePathToTablet;
+    }
+
+    private LakeTablet getAnyTablet(PhysicalPartition partition) {
+        List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+        for (MaterializedIndex materializedIndex : allIndices) {
+            if (!materializedIndex.getTablets().isEmpty()) {
+                return (LakeTablet) materializedIndex.getTablets().get(0);
+            }
+        }
+        return null;
     }
 
     private void removePartitionDirectory(String path, Tablet tablet) {
