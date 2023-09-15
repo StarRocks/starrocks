@@ -338,10 +338,17 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_
     if (src_tablet_schema->has_bf_fpp()) {
         partial_tablet_schema_pb.set_bf_fpp(src_tablet_schema->bf_fpp());
     }
+    std::vector<ColumnId> sort_key_idxes;
+    uint32_t cid = 0;
     for (const auto referenced_column_id : referenced_column_ids) {
         auto* tablet_column = partial_tablet_schema_pb.add_column();
         src_tablet_schema->column(referenced_column_id).to_schema_pb(tablet_column);
+        if (src_tablet_schema->column(referenced_column_id).is_sort_key()) {
+            sort_key_idxes.emplace_back(cid);
+        }
+        cid++;
     }
+    partial_tablet_schema_pb.mutable_sort_key_idxes()->Add(sort_key_idxes.begin(), sort_key_idxes.end());
     return std::make_shared<TabletSchema>(partial_tablet_schema_pb);
 }
 
@@ -422,7 +429,7 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
         for (auto i = 0; i < schema.sort_key_idxes_size(); ++i) {
             _sort_key_idxes.push_back(schema.sort_key_idxes(i));
             _sort_key_idxes_set.emplace(schema.sort_key_idxes(i));
-        }
+        }\
     }
     for (auto cid : _sort_key_idxes) {
         _cols[cid].set_is_sort_key(true);
