@@ -261,7 +261,7 @@ public:
 
     // if return true it means the operator has child operators
     virtual bool is_combinatorial_operator() const { return false; }
-    //
+    // apply operation for each child operator
     virtual void for_each_child_operator(const std::function<void(Operator*)>& apply) {}
 
 protected:
