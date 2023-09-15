@@ -305,6 +305,10 @@ public class AuditEvent {
             return this;
         }
 
+        public String getHitMvs() {
+            return this.auditEvent.hitMVs;
+        }
+
         public AuditEvent build() {
             return this.auditEvent;
         }
