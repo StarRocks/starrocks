@@ -44,7 +44,7 @@ public class RangerHiveAccessControl implements AccessControl {
 
     public RangerHiveAccessControl(String serviceName) {
         rangerPlugin = new RangerBasePlugin("hive", serviceName, "hive");
-        rangerPlugin.init();
+        rangerPlugin.init(); // this will initialize policy engine and policy refresher
         rangerPlugin.setResultProcessor(new RangerDefaultAuditHandler());
     }
 
