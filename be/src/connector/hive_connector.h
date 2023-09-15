@@ -62,6 +62,13 @@ public:
     int64_t cpu_time_spent() const override;
     int64_t io_time_spent() const override;
     int64_t estimated_mem_usage() const override;
+    bool support_push_down_runtime_filter_to_reader() const override {
+        if (_scanner == nullptr) {
+            return false;
+        } else {
+            return _scanner->support_push_down_runtime_filter_to_reader();
+        }
+    }
 
 private:
     const HiveDataSourceProvider* _provider;

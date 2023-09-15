@@ -68,6 +68,8 @@ public:
     // Called frequently, don't do heavy work
     virtual const std::string get_custom_coredump_msg() const { return ""; }
 
+    virtual bool support_push_down_runtime_filter_to_reader() const { return false; }
+
     static const std::string PROFILE_NAME;
 
 protected:

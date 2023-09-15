@@ -28,6 +28,7 @@ public:
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
     void do_update_counter(HdfsScanProfile* profile) override;
+    bool support_push_down_runtime_filter_to_reader() const override { return true; }
 
 private:
     std::shared_ptr<parquet::FileReader> _reader = nullptr;

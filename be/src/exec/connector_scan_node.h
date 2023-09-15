@@ -49,6 +49,10 @@ public:
     connector::ConnectorType connector_type() { return _connector_type; }
     bool always_shared_scan() const override;
 
+    bool support_push_down_runtime_filter_to_reader() const override {
+        return _support_rf_push_down_to_reader;
+    }
+
 private:
     RuntimeState* _runtime_state = nullptr;
     connector::DataSourceProviderPtr _data_source_provider = nullptr;
@@ -125,5 +129,7 @@ private:
     int64_t _mem_limit = 0;
     size_t _estimated_scan_row_bytes = 0;
     size_t _estimated_mem_usage_per_chunk_source = 0;
+
+    bool _support_rf_push_down_to_reader = false;
 };
 } // namespace starrocks

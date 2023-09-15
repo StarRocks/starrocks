@@ -320,6 +320,8 @@ public:
     // how long it stays inside pending queue.
     uint64_t exit_pending_queue();
 
+    virtual bool support_push_down_runtime_filter_to_reader() const { return false; }
+
 protected:
     Status open_random_access_file();
 

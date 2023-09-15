@@ -126,6 +126,8 @@ public:
 
     const std::vector<ColumnAccessPathPtr>& column_access_paths() const { return _column_access_paths; }
 
+    virtual bool support_push_down_runtime_filter_to_reader() const { return false; }
+
 protected:
     RuntimeProfile::Counter* _bytes_read_counter = nullptr; // # bytes read from the scanner
     // # rows/tuples read from the scanner (including those discarded by eval_conjucts())
