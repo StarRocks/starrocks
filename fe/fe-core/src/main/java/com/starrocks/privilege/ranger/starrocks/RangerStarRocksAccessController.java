@@ -36,7 +36,7 @@ import static java.util.Locale.ENGLISH;
 
 public class RangerStarRocksAccessController extends RangerAccessController {
     public RangerStarRocksAccessController() {
-        super("starrocks");
+        super("starrocks", null);
     }
 
     @Override
