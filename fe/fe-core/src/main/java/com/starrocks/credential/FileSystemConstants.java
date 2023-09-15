@@ -33,5 +33,5 @@ public class FileSystemConstants {
 
     public static String FS_IMPL_FMT = "fs.%s.impl";
     public static String FS_IMPL_DISABLE_CACHE_FMT = "fs.%s.impl.disable.cache";
-    public static String FS_IMPL_STARROCKS_CACHE_FILESYSTEM = "com.starrocks.fs.CacheFileSystem";
+    public static String FS_IMPL_STARROCKS_FILESYSTEM = "com.starrocks.fs.StarRocksFileSystem";
 }

@@ -34,7 +34,7 @@ import static com.starrocks.credential.CloudConfigurationConstants.HDFS_RUNTIME_
 import static com.starrocks.credential.FileSystemConstants.ALL_SCHEMES;
 import static com.starrocks.credential.FileSystemConstants.FS_IMPL_DISABLE_CACHE_FMT;
 import static com.starrocks.credential.FileSystemConstants.FS_IMPL_FMT;
-import static com.starrocks.credential.FileSystemConstants.FS_IMPL_STARROCKS_CACHE_FILESYSTEM;
+import static com.starrocks.credential.FileSystemConstants.FS_IMPL_STARROCKS_FILESYSTEM;
 
 public class CloudConfiguration {
     private static final Logger LOG = LogManager.getLogger(CloudConfiguration.class);
@@ -69,7 +69,7 @@ public class CloudConfiguration {
         configuration.set(HDFS_CLOUD_CONFIGURATION_STRING, toConfString());
         for (String scheme : ALL_SCHEMES) {
             String implKey = String.format(FS_IMPL_FMT, scheme);
-            configuration.set(implKey, FS_IMPL_STARROCKS_CACHE_FILESYSTEM);
+            configuration.set(implKey, FS_IMPL_STARROCKS_FILESYSTEM);
             String disableKey = String.format(FS_IMPL_DISABLE_CACHE_FMT, scheme);
             configuration.setBoolean(disableKey, true);
         }

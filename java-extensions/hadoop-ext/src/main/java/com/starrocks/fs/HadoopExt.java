@@ -41,7 +41,7 @@ public class HadoopExt {
 
     public static String FS_IMPL_FMT = "fs.%s.impl";
     public static String FS_IMPL_DISABLE_CACHE_FMT = "fs.%s.impl.disable.cache";
-    public static String FS_IMPL_STARROCKS_CACHE_FILESYSTEM = "com.starrocks.fs.CacheFileSystem";
+    public static String FS_IMPL_STARROCKS_FILESYSTEM = "com.starrocks.fs.StarRocksFileSystem";
 
     public static String FS_S3A_FILESYSTEM = "org.apache.hadoop.fs.s3a.S3AFileSystem";
 
@@ -74,10 +74,10 @@ public class HadoopExt {
         conf.setBoolean(HDFS_CONFIG_RESOURCES_LOADED, true);
     }
 
-    public static void setImplToCacheFileSystem(Configuration configuration) {
+    public static void setImplToStarRocksFileSystem(Configuration configuration) {
         for (String scheme : ALL_SCHEMES) {
             String implKey = String.format(FS_IMPL_FMT, scheme);
-            configuration.set(implKey, FS_IMPL_STARROCKS_CACHE_FILESYSTEM);
+            configuration.set(implKey, FS_IMPL_STARROCKS_FILESYSTEM);
             String disableKey = String.format(FS_IMPL_DISABLE_CACHE_FMT, scheme);
             configuration.setBoolean(disableKey, true);
         }

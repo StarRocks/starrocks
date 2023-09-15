@@ -110,7 +110,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         jobConf.setBoolean("hive.io.file.read.all.columns", false);
         properties.stringPropertyNames().forEach(name -> jobConf.set(name, properties.getProperty(name)));
         HadoopExt.addConfigResourcesToConfiguration(jobConf);
-        HadoopExt.setImplToCacheFileSystem(jobConf);
+        HadoopExt.setImplToStarRocksFileSystem(jobConf);
         return jobConf;
     }
 

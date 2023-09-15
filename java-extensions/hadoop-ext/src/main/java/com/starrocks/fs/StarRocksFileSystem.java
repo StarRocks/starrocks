@@ -70,7 +70,7 @@ public class StarRocksFileSystem extends FileSystem {
     public void initialize(URI uri, Configuration conf) throws IOException {
         key = FileSystemCacheManager.buildCacheKey(uri, conf);
         fs = CACHE.get(uri, conf, key);
-        LOGGER.info(String.format("%s CacheFileSystem initialize. %s", HadoopExt.LOGGER_MESSAGE_PREFIX, this));
+        LOGGER.info(String.format("%s initialize. %s", HadoopExt.LOGGER_MESSAGE_PREFIX, this));
     }
 
     public static String parseSchemeFromURI(URI name, Configuration conf) {
@@ -85,14 +85,14 @@ public class StarRocksFileSystem extends FileSystem {
 
     @Override
     public void close() throws IOException {
-        LOGGER.info(String.format("%s CacheFileSystem close. %s", HadoopExt.LOGGER_MESSAGE_PREFIX, this));
+        LOGGER.info(String.format("%s close. %s", HadoopExt.LOGGER_MESSAGE_PREFIX, this));
         fs.close();
         CACHE.remove(key, fs);
     }
 
     @Override
     public String toString() {
-        return String.format("CacheFileSystem(key = %s, fs = %s)", key == null ? "null" : key, fs == null ? "null" : fs);
+        return String.format("StarRocksFileSystem(key = %s, fs = %s)", key == null ? "null" : key, fs == null ? "null" : fs);
     }
 
     // =================== proxy methods ======================
@@ -103,7 +103,7 @@ public class StarRocksFileSystem extends FileSystem {
 
     @Override
     public FSDataInputStream open(Path f, int bufferSize) throws IOException {
-        LOGGER.info(String.format("%s CacheFileSystem open. %s", HadoopExt.LOGGER_MESSAGE_PREFIX, this));
+        LOGGER.info(String.format("%s open. %s", HadoopExt.LOGGER_MESSAGE_PREFIX, this));
         return fs.open(f, bufferSize);
     }
 
@@ -130,7 +130,7 @@ public class StarRocksFileSystem extends FileSystem {
 
     @Override
     public FileStatus[] listStatus(Path f) throws FileNotFoundException, IOException {
-        LOGGER.info(String.format("%s CacheFileSystem listStatus. %s", HadoopExt.LOGGER_MESSAGE_PREFIX, this));
+        LOGGER.info(String.format("%s listStatus. %s", HadoopExt.LOGGER_MESSAGE_PREFIX, this));
         return fs.listStatus(f);
     }
 
