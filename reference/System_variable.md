@@ -258,10 +258,6 @@ Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数�
 * 如果该选项关闭: 则只会产生 Local RF。
 * 如果该选项打开, 则会生成 multi-part GRF, 并且该 GRF 需要携带 multi-column 作为 partition-by 表达式.
 
-### enbale_strict_type (3.1 及以后)
-
-是否对所有复合谓词以及 WHERE 子句中的表达式进行隐式转换。默认值：false。
-
 ### event_scheduler
 
 用于兼容 MySQL 客户端。无实际作用。
@@ -334,14 +330,6 @@ Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数�
 
 其他导入方式，如 Broker Load，STREAM LOAD 的内存限制依然使用 `query_mem_limit`。
 
-### log_rejected_record_num（3.1 及以后）
-
-指定最多允许记录多少条因数据质量不合格而过滤掉的数据行数。取值范围：`0`、`-1`、大于 0 的正整数。默认值：`0`。
-
-* 取值为 `0` 表示不记录过滤掉的数据行。
-* 取值为 `-1` 表示记录所有过滤掉的数据行。
-* 取值为大于 0 的正整数（比如 `n`）表示每个 BE 节点上最多可以记录 `n` 条过滤掉的数据行。
-
 ### lower_case_table_names (global)
 
 用于兼容 MySQL 客户端，无实际作用。StarRocks 中的表名是大小写敏感的。
@@ -395,15 +383,6 @@ Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数�
 一个查询计划通常会产生一组 scan range，即需要扫描的数据范围。这些数据分布在多个 BE 节点上。一个 BE 节点会有一个或多个 scan range。默认情况下，每个 BE 节点的一组 scan range 只由一个执行实例处理。当机器资源比较充裕时，可以将增加该变量，让更多的执行实例同时处理一组 scan range，从而提升查询效率。
 
 而 scan 实例的数量决定了上层其他执行节点，如聚合节点，join 节点的数量。因此相当于增加了整个查询计划执行的并发度。修改该参数会对大查询效率提升有帮助，但较大数值会消耗更多的机器资源，如CPU、内存、磁盘I/O。
-
-### partial_update_mode (3.1 及以后)
-
-控制部分更新的模式，支持取值为：
-
-* `auto`（默认值），表示由系统通过分析更新语句以及其涉及的列，自动判断执行部分更新时使用的模式。
-* `column`，指定使用列模式执行部分更新，比较适用于涉及少数列并且大量行的部分列更新场景。
-
-详细信息，请参见[UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md#列模式的部分更新自-31)。
 
 ### performance_schema
 
@@ -494,12 +473,6 @@ GRF 成功下推跨过 Exchange 算子后，是否在 Exchange Node 上放置 GR
 ### runtime_join_filter_push_down_limit
 
 生成 Bloomfilter 类型的 Local RF 的 Hash Table 的行数阈值。超过该阈值, 则不产生 Local RF。该变量避免产生过大 Local RF。取值为整数，表示行数。默认值：1024000。
-
-### runtime_profile_report_interval
-
-报告 Runtime Profile 的时间间隔。此变量从 v3.1.0 开始支持。
-
-单位：秒，默认值：`10`。
 
 ### spill_mode (3.0 及以后)
 
