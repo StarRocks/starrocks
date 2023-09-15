@@ -113,8 +113,9 @@ public class FunctionSet {
     public static final String YEARS_SUB = "years_sub";
     public static final String MONTHS_ADD = "months_add";
     public static final String MONTHS_SUB = "months_sub";
-    public static final String DAYS_ADD = "days_add";
-    public static final String DAYS_SUB = "days_sub";
+    public static final String ADD_MONTHS = "add_months";
+    public static final String DAYS_ADD   = "days_add";
+    public static final String DAYS_SUB   = "days_sub";
     public static final String ADDDATE = "adddate";
     public static final String SUBDATE = "subdate";
     public static final String TIME_SLICE = "time_slice";
@@ -448,6 +449,22 @@ public class FunctionSet {
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
+
+    // dict query function
+    public static final String DICT_MAPPING = "dict_mapping";
+
+    public static final String QUARTERS_ADD = "quarters_add";
+    public static final String QUARTERS_SUB = "quarters_sub";
+    public static final String WEEKS_ADD = "weeks_add";
+    public static final String WEEKS_SUB = "weeks_sub";
+    public static final String HOURS_ADD = "hours_add";
+    public static final String HOURS_SUB = "hours_sub";
+    public static final String MINUTES_ADD = "minutes_add";
+    public static final String MINUTES_SUB = "minutes_sub";
+    public static final String SECONDS_ADD = "seconds_add";
+    public static final String SECONDS_SUB = "seconds_sub";
+    public static final String MILLISECONDS_ADD = "milliseconds_add";
+    public static final String MILLISECONDS_SUB = "milliseconds_sub";
 
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
