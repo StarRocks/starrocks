@@ -34,6 +34,12 @@
         </dependency>
 
         <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>hadoop-ext</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
+        <dependency>
             <groupId>org.apache.hudi</groupId>
             <artifactId>hudi-presto-bundle</artifactId>
             <version>${hudi.version}</version>

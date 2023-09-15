@@ -23,7 +23,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-class HadoopExt {
+public class HadoopExt {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(HadoopExt.class);
 
@@ -72,6 +72,15 @@ class HadoopExt {
             conf.addResource(path);
         }
         conf.setBoolean(HDFS_CONFIG_RESOURCES_LOADED, true);
+    }
+
+    public static void setImplToCacheFileSystem(Configuration configuration) {
+        for (String scheme : ALL_SCHEMES) {
+            String implKey = String.format(FS_IMPL_FMT, scheme);
+            configuration.set(implKey, FS_IMPL_STARROCKS_CACHE_FILESYSTEM);
+            String disableKey = String.format(FS_IMPL_DISABLE_CACHE_FMT, scheme);
+            configuration.setBoolean(disableKey, true);
+        }
     }
 
     public static boolean isS3Scheme(String scheme) {

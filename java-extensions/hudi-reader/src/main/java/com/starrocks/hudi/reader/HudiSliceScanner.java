@@ -14,6 +14,7 @@
 
 package com.starrocks.hudi.reader;
 
+import com.starrocks.fs.HadoopExt;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
@@ -108,6 +109,8 @@ public class HudiSliceScanner extends ConnectorScanner {
         JobConf jobConf = new JobConf(conf);
         jobConf.setBoolean("hive.io.file.read.all.columns", false);
         properties.stringPropertyNames().forEach(name -> jobConf.set(name, properties.getProperty(name)));
+        HadoopExt.addConfigResourcesToConfiguration(jobConf);
+        HadoopExt.setImplToCacheFileSystem(jobConf);
         return jobConf;
     }
 
