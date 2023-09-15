@@ -736,6 +736,10 @@ public class OlapScanNode extends ScanNode {
             output.append(explainColumnAccessPath(prefix));
         }
 
+        if (olapTable.isMaterializedView()) {
+            output.append(prefix).append("MaterializedView: true\n");
+        }
+
         return output.toString();
     }
 
