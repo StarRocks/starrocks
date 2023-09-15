@@ -12,15 +12,17 @@
 
 | Kafka Connector | StarRocks | Java |
 | --------------- | --------- | ---- |
-| 1.0             | 2.1 and later | 8    |
+| 1.0.0           | 2.1 and later | 8    |
 
 ## Release note
 
 ### 1.0
 
-**Release date:** June 25, 2023
+**1.0.0**
+
+Release date: June 25, 2023
 
 **Features**
 
 - Supports loading CSV, JSON, Avro, and Protobuf data.
-- Supports loading data from a self-managed Apache Kafka cluster or the Confluent cloud.
+- Supports loading data from a self-managed Apache Kafka cluster or Confluent cloud.
