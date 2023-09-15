@@ -90,8 +90,6 @@ The following fields are provided in `tables_config`:
 | SORT_KEY         | Sort keys of the table.                                      |
 | PROPERTIES       | Properties of the table.                                     |
 | TABLE_ID         | ID of the table.                                             |
-<<<<<<< HEAD
-=======
 
 ## load_tracking_logs
 
@@ -135,4 +133,3 @@ The following fields are provided in `materialized_views`:
 | LAST_REFRESH_ERROR_MESSAGE           | Error message of the most recent refresh task                |
 | TABLE_ROWS                           | Number of data rows in the materialized view, based on approximate background statistics |
 | MATERIALIZED_VIEW_DEFINITION         | SQL definition of the materialized view                      |
->>>>>>> 9ac0ddb86d ([Doc] Remake MV docs - part1 (#31087))
