@@ -1051,4 +1051,6 @@ CONF_mBool(dump_metrics_with_bvar, "true");
 
 CONF_mBool(enable_batch_apply, "true");
 
+CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
+
 } // namespace starrocks::config
