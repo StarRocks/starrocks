@@ -70,7 +70,7 @@ public class StarRocksFileSystem extends FileSystem {
     public void initialize(URI uri, Configuration conf) throws IOException {
         key = FileSystemCacheManager.buildCacheKey(uri, conf);
         fs = CACHE.get(uri, conf, key);
-        LOGGER.info(String.format("%s initialize. %s", HadoopExt.LOGGER_MESSAGE_PREFIX, this));
+        LOGGER.info(HadoopExt.LOGGER_MESSAGE_PREFIX + " Get FileSystem Instance = " + this);
     }
 
     public static String parseSchemeFromURI(URI name, Configuration conf) {
@@ -85,7 +85,7 @@ public class StarRocksFileSystem extends FileSystem {
 
     @Override
     public void close() throws IOException {
-        LOGGER.info(String.format("%s close. %s", HadoopExt.LOGGER_MESSAGE_PREFIX, this));
+        LOGGER.info(HadoopExt.LOGGER_MESSAGE_PREFIX + " Close FileSystem Instance = " + this);
         fs.close();
         CACHE.remove(key, fs);
     }
@@ -103,7 +103,6 @@ public class StarRocksFileSystem extends FileSystem {
 
     @Override
     public FSDataInputStream open(Path f, int bufferSize) throws IOException {
-        LOGGER.info(String.format("%s open. %s", HadoopExt.LOGGER_MESSAGE_PREFIX, this));
         return fs.open(f, bufferSize);
     }
 
@@ -130,7 +129,6 @@ public class StarRocksFileSystem extends FileSystem {
 
     @Override
     public FileStatus[] listStatus(Path f) throws FileNotFoundException, IOException {
-        LOGGER.info(String.format("%s listStatus. %s", HadoopExt.LOGGER_MESSAGE_PREFIX, this));
         return fs.listStatus(f);
     }
 
