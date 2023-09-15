@@ -147,12 +147,7 @@ public abstract class ScanNode extends PlanNode {
         return columnAccessPaths.stream().map(ColumnAccessPath::toThrift).collect(Collectors.toList());
     }
 
-    public boolean isExternalTableScanNodeWithFileSystem() {
-        return this instanceof HdfsScanNode || this instanceof IcebergScanNode || this instanceof HudiScanNode ||
-                this instanceof PaimonScanNode || this instanceof DeltaLakeScanNode;
-    }
-
-    public boolean isOlapScanNode() {
-        return this instanceof OlapScanNode;
+    protected boolean supportTopNRuntimeFilter() {
+        return false;
     }
 }

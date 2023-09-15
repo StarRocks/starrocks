@@ -162,7 +162,7 @@ public class RuntimeFilterDescription {
         if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
             if (node instanceof ScanNode) {
                 ScanNode scanNode = (ScanNode) node;
-                return scanNode.isOlapScanNode() || scanNode.isExternalTableScanNodeWithFileSystem();
+                return scanNode.supportTopNRuntimeFilter();
             } else {
                 return false;
             }
