@@ -96,11 +96,9 @@ public class CTEUtils {
             LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) expression.getOp();
 
             // costs
-            if (context.getCteContext().isForceCTE(produce.getCteId())) {
-                OptExpression opt = root.extractLogicalTree();
-                calculateStatistics(opt, context);
-                context.getCteContext().addCTEStatistics(produce.getCteId(), opt.getStatistics());
-            }
+            OptExpression opt = root.extractLogicalTree();
+            calculateStatistics(opt, context);
+            context.getCteContext().addCTEStatistics(produce.getCteId(), opt.getStatistics());
         }
     }
 
