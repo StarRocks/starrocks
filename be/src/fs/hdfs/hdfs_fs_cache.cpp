@@ -82,9 +82,9 @@ static Status create_hdfs_fs_handle(const std::string& namenode, const std::shar
                               hedged_read_threshold_millis.data());
     }
 
-    hdfsBuilderConfSetStr(hdfs_builder, "fs.hdfs.impl", "com.starrocks.fs.CacheFileSystem");
+    hdfsBuilderConfSetStr(hdfs_builder, "fs.hdfs.impl", "com.starrocks.fs.StarRocksFileSystem");
     hdfsBuilderConfSetStr(hdfs_builder, "fs.hdfs.impl.disable.cache", "true");
-    hdfsBuilderConfSetStr(hdfs_builder, "fs.viewfs.impl", "com.starrocks.fs.CacheFileSystem");
+    hdfsBuilderConfSetStr(hdfs_builder, "fs.viewfs.impl", "com.starrocks.fs.StarRocksFileSystem");
     hdfsBuilderConfSetStr(hdfs_builder, "fs.viewfs.impl.disable.cache", "true");
 
     hdfs_client->hdfs_fs = hdfsBuilderConnect(hdfs_builder);
