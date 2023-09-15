@@ -228,6 +228,8 @@ struct TQueryOptions {
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
   105: optional bool use_column_pool = true;
+
+  106: optional bool enable_agg_spill_preaggregation;
 }
 
 
