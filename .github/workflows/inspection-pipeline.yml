@@ -280,7 +280,7 @@ jobs:
 
       - name: Publish SQL-Tester Report
         uses: ./.actions/nose-report-action
-        if: steps.prepare-tools.outcome == 'success'
+        if: always() && steps.prepare-tools.outcome == 'success'
         with:
           check_name: 'SQL-Tester Report'
           fail_on_failure: true
@@ -347,7 +347,7 @@ jobs:
 
       - name: Publish Admit Report
         uses: ./.actions/nose-report-action
-        if: steps.prepare-tools.outcome == 'success'
+        if: always() && steps.prepare-tools.outcome == 'success'
         with:
           check_name: 'Admit Report'
           fail_on_failure: true
@@ -368,6 +368,7 @@ jobs:
     env:
       BRANCH: ${{ github.base_ref }}
       CONF_FILE: ${{ needs.deploy.outputs.deploy_conf_file }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Backup SR Info
         if: needs.deploy.outputs.deploy_conf_file != ''
