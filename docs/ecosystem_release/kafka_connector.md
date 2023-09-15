@@ -10,9 +10,9 @@
 
 **Version requirements:**
 
-| Kafka Connector | Kafka | StarRocks | Java |
-| --------------- | ----- | --------- | ---- |
-| 1.0               |       |           | 8    |
+| Kafka Connector | StarRocks | Java |
+| --------------- | --------- | ---- |
+| 1.0             | 2.1 and later | 8    |
 
 ## Release note
 
