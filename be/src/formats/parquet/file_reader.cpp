@@ -422,7 +422,8 @@ bool FileReader::_can_use_stats(const tparquet::Type::type& type, const tparquet
     // If column order is not set, only statistics for numeric types can be trusted.
     if (column_order == nullptr) {
         // is boolean | is interger | is floating
-        return type == tparquet::Type::type::BOOLEAN || _is_integer_type(type) || type == tparquet::Type::type::DOUBLE;
+        return type == tparquet::Type::type::BOOLEAN || _is_integer_type(type) ||
+               type == tparquet::Type::type::DOUBLE || type == tparquet::Type::type::BYTE_ARRAY;
     }
     // Stats can be used if the column order is TypeDefinedOrder (see parquet.thrift).
     return column_order->__isset.TYPE_ORDER;
