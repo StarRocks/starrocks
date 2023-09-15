@@ -484,6 +484,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
 
+    public static final String WHERE_IN_TO_UNION_THRESHOLD = "where_in_to_union_threshold";
+
     public static final String SELECT_RATIO_THRESHOLD = "select_ratio_threshold";
 
     public static final String DISABLE_FUNCTION_FOLD_CONSTANTS = "disable_function_fold_constants";
@@ -1245,6 +1247,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SCAN_OR_TO_UNION_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private long scanOrToUnionThreshold = 50000000;
+
+    @VarAttr(name = WHERE_IN_TO_UNION_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private int whereInToUnionThreshold = 200;
 
     @VarAttr(name = SELECT_RATIO_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double selectRatioThreshold = 0.15;
@@ -2414,6 +2419,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setScanOrToUnionThreshold(long scanOrToUnionThreshold) {
         this.scanOrToUnionThreshold = scanOrToUnionThreshold;
+    }
+
+    public int getWhereInToUnionThreshold() {
+        return whereInToUnionThreshold;
+    }
+
+    public void setWhereInToUnionThreshold(int whereInToUnionThreshold) {
+        this.whereInToUnionThreshold = whereInToUnionThreshold;
     }
 
     public double getSelectRatioThreshold() {
