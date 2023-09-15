@@ -104,7 +104,7 @@ public class TriggerAction extends RestBaseAction {
             }
             dynamicPartitionScheduler.executeDynamicPartitionForTable(db.getId(), table.getId());
             response.appendContent("Success");
-            writeResponse(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
+            writeResponse(request, response, HttpResponseStatus.OK);
         } else {
             response.appendContent(new RestBaseResult("HTTP method is not allowed.").toJson());
             writeResponse(request, response, HttpResponseStatus.METHOD_NOT_ALLOWED);
