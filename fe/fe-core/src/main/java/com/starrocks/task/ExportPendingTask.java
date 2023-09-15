@@ -43,7 +43,8 @@ import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TNetworkAddress;
@@ -107,6 +108,8 @@ public class ExportPendingTask extends PriorityLeaderTask {
     }
 
     private Status makeSnapshots() {
+        // for debug
+        LOG.info("enter makeSnapshots()");
         List<TScanRangeLocations> tabletLocations = job.getTabletLocations();
         if (tabletLocations == null) {
             return Status.OK;
@@ -124,18 +127,35 @@ public class ExportPendingTask extends PriorityLeaderTask {
                 TNetworkAddress address = location.getServer();
                 String host = address.getHostname();
                 int port = address.getPort();
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
-                if (backend == null) {
+                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+
+                if (node == null) {
+                    if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                        node = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, port);
+                        if (node == null) {
+                            // for debug
+                            LOG.info("node is null");
+                            return Status.CANCELLED;
+                        }
+                    } else {
+                        return Status.CANCELLED;
+                    }
+                }
+
+                long nodeId = node.getId();
+                if ((RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) &&
+                        !GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(nodeId)) {
+                    // for debug
+                    LOG.info("node is unavailable");
                     return Status.CANCELLED;
                 }
-                long backendId = backend.getId();
-                if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
-                    return Status.CANCELLED;
-                }
-                this.job.setBeStartTime(backendId, backend.getLastStartTime());
+                
+                this.job.setBeStartTime(nodeId, node.getLastStartTime());
                 Status status;
                 if (job.exportLakeTable()) {
-                    status = lockTabletMetadata(internalScanRange, backend);
+                    // for debug
+                    LOG.info("status is lockTabletMetadata");
+                    status = lockTabletMetadata(internalScanRange, node);
                 } else {
                     status = makeSnapshot(internalScanRange, address);
                 }
@@ -147,7 +167,7 @@ public class ExportPendingTask extends PriorityLeaderTask {
         return Status.OK;
     }
 
-    private Status lockTabletMetadata(TInternalScanRange internalScanRange, Backend backend) {
+    private Status lockTabletMetadata(TInternalScanRange internalScanRange, ComputeNode backend) {
         try {
             LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
             LockTabletMetadataRequest request = new LockTabletMetadataRequest();
