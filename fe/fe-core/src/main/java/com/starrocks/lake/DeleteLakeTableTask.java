@@ -81,8 +81,9 @@ class DeleteLakeTableTask implements Runnable {
     private LakeTablet getAnyTablet(PhysicalPartition partition) {
         List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
         for (MaterializedIndex materializedIndex : allIndices) {
-            if (!materializedIndex.getTablets().isEmpty()) {
-                return (LakeTablet) materializedIndex.getTablets().get(0);
+            List<Tablet> tablets = materializedIndex.getTablets();
+            if (!tablets.isEmpty()) {
+                return (LakeTablet) tablets.get(0);
             }
         }
         return null;
