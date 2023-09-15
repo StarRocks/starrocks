@@ -1,12 +1,35 @@
-package org.apache.hadoop.fs;
+package com.starrocks.fs;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 class HadoopExt {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(HadoopExt.class);
+
+    // For s3 scheme, we have to set impl 'org.apache.hadoop.fs.s3a.S3AFileSystem'
+    public static String[] S3_SCHEMES = new String[] {"s3", "s3a", "oss", "ks3", "obs", "tos", "cosn", "oss"};
+    // For those schemes, we don't need to set explictly.
+    public static String[] REST_SCHEMES = new String[] {"wasb", "wasbs", "adl", "abfs", "abfss", "gs", "hdfs", "viewfs", "har"};
+
+    public static List<String> ALL_SCHEMES = new ArrayList<String>();
+
+    static {
+        ALL_SCHEMES.addAll(Arrays.asList(S3_SCHEMES));
+        ALL_SCHEMES.addAll(Arrays.asList(REST_SCHEMES));
+    }
+
+    public static String FS_IMPL_FMT = "fs.%s.impl";
+    public static String FS_IMPL_DISABLE_CACHE_FMT = "fs.%s.impl.disable.cache";
+    public static String FS_IMPL_STARROCKS_CACHE_FILESYSTEM = "com.starrocks.fs.CacheFileSystem";
+
+    public static String FS_S3A_FILESYSTEM = "org.apache.hadoop.fs.s3a.S3AFileSystem";
 
     public static final String HDFS_CONFIG_RESOURCES = "hadoop.config.resources";
     public static final String HDFS_CONFIG_RESOURCES_LOADED = "hadoop.config.resources.loaded";
@@ -35,6 +58,15 @@ class HadoopExt {
             conf.addResource(path);
         }
         conf.setBoolean(HDFS_CONFIG_RESOURCES_LOADED, true);
+    }
+
+    public static boolean isS3Scheme(String scheme) {
+        for (String a : S3_SCHEMES) {
+            if (scheme.equals(a)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static String getCloudConfString(Configuration conf) {

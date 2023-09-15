@@ -59,15 +59,6 @@ public class AWSCloudConfiguration extends CloudConfiguration {
     @Override
     public void applyToConfiguration(Configuration configuration) {
         super.applyToConfiguration(configuration);
-        configuration.set("fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
-        configuration.set("fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
-        // Below storage using s3 compatible storage api
-        configuration.set("fs.oss.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
-        configuration.set("fs.ks3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
-        configuration.set("fs.obs.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
-        configuration.set("fs.tos.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
-        configuration.set("fs.cosn.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
-
         // By default, S3AFileSystem will need 4 minutes to timeout when endpoint is unreachable,
         // after change, it will need 30 seconds.
         // Default value is 7.
