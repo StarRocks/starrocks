@@ -379,4 +379,9 @@ public class IcebergScanNode extends ScanNode {
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
+
+    @Override
+    protected boolean supportTopNRuntimeFilter() {
+        return !srIcebergTable.isV2Format();
+    }
 }
