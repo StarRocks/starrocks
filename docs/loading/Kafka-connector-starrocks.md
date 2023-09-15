@@ -44,61 +44,61 @@ The following steps take a self-managed Kafka cluster as an example to demonstra
 
 1. Create a Kafka connector configuration file named **connect-StarRocks-sink.properties** and configure the  parameters. For detailed information about parameters, see [Parameters](#parameters).
 
-```Properties
-name=starrocks-kafka-connector
-connector.class=com.starrocks.connector.kafka.StarRocksSinkConnector
-topics=dbserver1.inventory.customers
-starrocks.http.url=192.168.xxx.xxx:8030,192.168.xxx.xxx:8030
-starrocks.username=root
-starrocks.password=123456
-starrocks.database.name=inventory
-key.converter=io.confluent.connect.json.JsonSchemaConverter
-value.converter=io.confluent.connect.json.JsonSchemaConverter
-```
-
-> **NOTICE**
->
-> If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to configure transform in order to synchronize the source data changes to the Primary Key table.
-
-1. Run the Kafka Connector. For parameters and description in the following command, see [Kafka Documentation](https://kafka.apache.org/documentation.html#connect_running).
-
-- Standalone mode
-
-```Properties
-bin/connect-standalone worker.properties connect-StarRocks-sink.properties [connector2.properties connector3.properties ...]
-```
-
-- Distributed mode
-
-  - **NOTE**
-
-    It is recommended to use the distributed mode in the production environment. 
-
-  - Start the worker.
-
-  - ```Properties
-    bin/connect-distributed worker.properties
+    ```Properties
+    name=starrocks-kafka-connector
+    connector.class=com.starrocks.connector.kafka.StarRocksSinkConnector
+    topics=dbserver1.inventory.customers
+    starrocks.http.url=192.168.xxx.xxx:8030,192.168.xxx.xxx:8030
+    starrocks.username=root
+    starrocks.password=123456
+    starrocks.database.name=inventory
+    key.converter=io.confluent.connect.json.JsonSchemaConverter
+    value.converter=io.confluent.connect.json.JsonSchemaConverter
     ```
 
-  - Note that in distributed mode the connector configurations are not passed on the command line. Instead, use the REST API described below to configure the Kafka connector and run the Kafka connect.
+    > **NOTICE**
+    >
+    > If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
 
-  - ```Shell
-    curl -i http://127.0.0.1:8083/connectors -H "Content-Type: application/json" -X POST -d '{
-      "name":"starrocks-kafka-connector",
-      "config":{
-        "connector.class":"com.starrocks.connector.kafka.SinkConnector",
-        "topics":"dbserver1.inventory.customers",
-        "starrocks.http.url":"192.168.xxx.xxx:8030,192.168.xxx.xxx:8030",
-        "starrocks.user":"root",
-        "starrocks.password":"123456",
-        "starrocks.database.name":"inventory",
-        "key.converter":"io.confluent.connect.json.JsonSchemaConverter",
-        "value.converter":"io.confluent.connect.json.JsonSchemaConverter"
-      }
-    }
-    ```
+2. Run the Kafka Connector. For parameters and description in the following command, see [Kafka Documentation](https://kafka.apache.org/documentation.html#connect_running).
 
-- Query data in the StarRocks table.
+    - Standalone mode
+
+        ```shell
+        bin/connect-standalone worker.properties connect-StarRocks-sink.properties [connector2.properties connector3.properties ...]
+        ```
+
+    - Distributed mode
+
+    > **NOTE**
+    >
+    > It is recommended to use the distributed mode in the production environment. 
+
+    - Start the worker.
+
+        ```shell
+        bin/connect-distributed worker.properties
+        ```
+
+    - Note that in distributed mode the connector configurations are not passed on the command line. Instead, use the REST API described below to configure the Kafka connector and run the Kafka connect.
+
+        ```Shell
+        curl -i http://127.0.0.1:8083/connectors -H "Content-Type: application/json" -X POST -d '{
+        "name":"starrocks-kafka-connector",
+        "config":{
+            "connector.class":"com.starrocks.connector.kafka.SinkConnector",
+            "topics":"dbserver1.inventory.customers",
+            "starrocks.http.url":"192.168.xxx.xxx:8030,192.168.xxx.xxx:8030",
+            "starrocks.user":"root",
+            "starrocks.password":"123456",
+            "starrocks.database.name":"inventory",
+            "key.converter":"io.confluent.connect.json.JsonSchemaConverter",
+            "value.converter":"io.confluent.connect.json.JsonSchemaConverter"
+        }
+        }
+        ```
+
+3. Query data in the StarRocks table.
 
 ## Parameters
 
