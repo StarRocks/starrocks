@@ -395,7 +395,7 @@ From v3.1.0 onwards, StarRocks supports rewriting queries with a join that can b
 
 The following table specifies the correspondence of the join pattern in the materialized view and the join pattern in the queries that can be rewritten (`A` and `B` indicate the joined tables, `a1` indicates the joined column in `A`, and `b1` indicates the joined column in `B`):
 
-| **Join in the asynchronous** **materialized view** | **Join in the rewritable** **query** | **Constraints**                                              |
+| **Join in the asynchronous  materialized view** | **Join in the rewritable  query** | **Constraints**                                              |
 | -------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ |
 | LEFT OUTER JOIN ON A.a1 = B.b1                     | INNER JOIN ON A.a1 = B.b1            | None                                                         |
 | LEFT OUTER JOIN ON A.a1 = B.b1                     | LEFT ANTI JOIN ON A.a1 = B.b1        | None                                                         |
