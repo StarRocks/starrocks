@@ -339,6 +339,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(
           _output_columns(output_columns) {
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
     RuntimeState* state = fragment_ctx->runtime_state();
+
     PassThroughChunkBuffer* pass_through_chunk_buffer =
             state->exec_env()->stream_mgr()->get_pass_through_chunk_buffer(state->query_id());
 
