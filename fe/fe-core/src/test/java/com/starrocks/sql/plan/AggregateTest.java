@@ -435,27 +435,27 @@ public class AggregateTest extends PlanTestBase {
                 "lineitem group by L_LINENUMBER, day";
         String plan = getFragmentPlan(sql);
         // check use three stage aggregate
-        assertContains(plan, "  5:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(19: count)\n" +
-                "  |  group by: 4: L_LINENUMBER, 18: date_trunc\n" +
+        assertContains(plan, "  4:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(18: count)\n" +
+                "  |  group by: 4: L_LINENUMBER, 11: L_SHIPDATE\n" +
                 "  |  \n" +
-                "  4:EXCHANGE\n" +
+                "  3:EXCHANGE\n" +
                 "\n" +
                 "PLAN FRAGMENT 2\n" +
                 " OUTPUT EXPRS:\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 04\n" +
-                "    HASH_PARTITIONED: 4: L_LINENUMBER, 18: date_trunc\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    HASH_PARTITIONED: 4: L_LINENUMBER, 11: L_SHIPDATE\n" +
                 "\n" +
-                "  3:AGGREGATE (update serialize)\n" +
+                "  2:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: count(1: L_ORDERKEY)\n" +
-                "  |  group by: 4: L_LINENUMBER, 18: date_trunc\n" +
+                "  |  group by: 4: L_LINENUMBER, 11: L_SHIPDATE\n" +
                 "  |  \n" +
-                "  2:AGGREGATE (update finalize)\n" +
-                "  |  group by: 4: L_LINENUMBER, 18: date_trunc, 1: L_ORDERKEY");
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 4: L_LINENUMBER, 11: L_SHIPDATE, 1: L_ORDERKEY");
         FeConstants.runningUnitTest = false;
     }
 
