@@ -30,6 +30,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
@@ -730,6 +731,23 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |----25:EXCHANGE"));
     }
 
+
+    @Test
+    @Ignore
+    public void testDeriveStatsFromContext() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/test_derive_stats"),
+                        null, TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("|----14:EXCHANGE\n" +
+                "  |       distribution type: BROADCAST\n" +
+                "  |       cardinality: 25921\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     table: tbl_mock_001, rollup: tbl_mock_001"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("15:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  equal join conjunct: [38: mock_004, VARCHAR, true] = [49: max, VARCHAR, true]"));
+    }
 
     @Test
     public void testMockQueryDump() {

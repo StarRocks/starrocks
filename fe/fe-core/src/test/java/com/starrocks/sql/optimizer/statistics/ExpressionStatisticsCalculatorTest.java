@@ -403,10 +403,10 @@ public class ExpressionStatisticsCalculatorTest {
         Assert.assertEquals(0, columnStatistic.getMinValue(), 0.001);
         Assert.assertEquals(300, columnStatistic.getMaxValue(), 0.001);
         // test date_add function
-        callOperator = new CallOperator(FunctionSet.DATE_ADD, Type.BIGINT, Lists.newArrayList(left, right));
+        callOperator = new CallOperator(FunctionSet.DAYS_ADD, Type.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assert.assertEquals(0, columnStatistic.getMinValue(), 0.001);
-        Assert.assertEquals(300, columnStatistic.getMaxValue(), 0.001);
+        Assert.assertEquals(8639900, columnStatistic.getMinValue(), 100);
+        Assert.assertEquals(1.72801E7, columnStatistic.getMaxValue(), 100);
         // test substract function
         callOperator = new CallOperator(FunctionSet.SUBTRACT, Type.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
@@ -418,10 +418,10 @@ public class ExpressionStatisticsCalculatorTest {
         Assert.assertEquals(-300, columnStatistic.getMinValue(), 0.001);
         Assert.assertEquals(0, columnStatistic.getMaxValue(), 0.001);
         // test date_sub function
-        callOperator = new CallOperator(FunctionSet.DATE_SUB, Type.BIGINT, Lists.newArrayList(left, right));
+        callOperator = new CallOperator(FunctionSet.DAYS_SUB, Type.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assert.assertEquals(-300, columnStatistic.getMinValue(), 0.001);
-        Assert.assertEquals(0, columnStatistic.getMaxValue(), 0.001);
+        Assert.assertEquals(-8640100.0, columnStatistic.getMinValue(), 100);
+        Assert.assertEquals(-1.72799E7, columnStatistic.getMaxValue(), 100);
         // test years_diff function
         callOperator = new CallOperator(FunctionSet.YEARS_DIFF, Type.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
@@ -487,6 +487,12 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
         Assert.assertEquals(-100, columnStatistic.getMinValue(), 0.001);
         Assert.assertEquals(100, columnStatistic.getMaxValue(), 0.001);
+
+        // test date_trunc function
+        callOperator = new CallOperator(FunctionSet.DATE_TRUNC, Type.DATE, Lists.newArrayList(left, right));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
+        Assert.assertEquals(100, columnStatistic.getMinValue(), 0.001);
+        Assert.assertEquals(200, columnStatistic.getMaxValue(), 0.001);
 
         callOperator = new CallOperator(FunctionSet.MULTIPLY, Type.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());

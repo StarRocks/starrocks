@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.ConstantOperatorUtils;
@@ -43,6 +44,17 @@ public class ExpressionStatisticCalculator {
 
     public static final long DAYS_FROM_0_TO_1970 = 719528;
     public static final long DAYS_FROM_0_TO_9999 = 3652424;
+
+    private static ImmutableMap<String, Double> INTERVAL_MAP = ImmutableMap.<String, Double>builder()
+            .put("year", 86400d * 365)
+            .put("quarter", 86400d * 90)
+            .put("month", 86400d * 30)
+            .put("week", 86400d * 7)
+            .put("day", 86400d)
+            .put("hour", 3600d)
+            .put("minute", 60d)
+            .put("second", 1d)
+            .build();
 
     public static ColumnStatistic calculate(ScalarOperator operator, Statistics input) {
         return calculate(operator, input, input != null ? input.getOutputRowCount() : 0);
@@ -149,8 +161,11 @@ public class ExpressionStatisticCalculator {
             double maxValue = Utils.getLongFromDateTime(max.getDatetime());
             double minValue = Utils.getLongFromDateTime(min.getDatetime());
 
-            return new ColumnStatistic(minValue, maxValue, childStatistic.getNullsFraction(),
-                    childStatistic.getAverageRowSize(), childStatistic.getDistinctValuesCount());
+            return ColumnStatistic.buildFrom(childStatistic)
+                    .setMaxValue(maxValue)
+                    .setMinValue(minValue)
+                    .setHistogram(null)
+                    .build();
         }
 
         @Override
@@ -459,8 +474,13 @@ public class ExpressionStatisticCalculator {
             } else {
                 averageRowSize = columnStatistic.getAverageRowSize();
             }
-            return new ColumnStatistic(minValue, maxValue, columnStatistic.getNullsFraction(), averageRowSize,
-                    distinctValue);
+            return ColumnStatistic.buildFrom(columnStatistic)
+                    .setMinValue(minValue)
+                    .setMaxValue(maxValue)
+                    .setAverageRowSize(averageRowSize)
+                    .setDistinctValuesCount(distinctValue)
+                    .setHistogram(null)
+                    .build();
         }
 
         private ColumnStatistic binaryExpressionCalculate(CallOperator callOperator, ColumnStatistic left,
@@ -470,53 +490,63 @@ public class ExpressionStatisticCalculator {
             double nullsFraction = 1 - ((1 - left.getNullsFraction()) * (1 - right.getNullsFraction()));
             double distinctValues = Math.max(left.getDistinctValuesCount(), right.getDistinctValuesCount());
             double averageRowSize = callOperator.getType().getTypeSize();
-            long interval;
-            switch (callOperator.getFnName().toLowerCase()) {
+            String funcName = callOperator.getFnName().toLowerCase();
+            switch (funcName) {
                 case FunctionSet.ADD:
-                case FunctionSet.DATE_ADD:
                     minValue = left.getMinValue() + right.getMinValue();
                     maxValue = left.getMaxValue() + right.getMaxValue();
                     break;
                 case FunctionSet.SUBTRACT:
                 case FunctionSet.TIMEDIFF:
-                case FunctionSet.DATE_SUB:
+                case FunctionSet.SECONDS_DIFF:
                     minValue = left.getMinValue() - right.getMaxValue();
                     maxValue = left.getMaxValue() - right.getMinValue();
                     break;
                 case FunctionSet.YEARS_DIFF:
-                    interval = 3600L * 24L * 365L;
-                    minValue = (left.getMinValue() - right.getMaxValue()) / interval;
-                    maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
+                    minValue = (left.getMinValue() - right.getMaxValue()) / INTERVAL_MAP.get("year");
+                    maxValue = (left.getMaxValue() - right.getMinValue()) / INTERVAL_MAP.get("year");
                     break;
                 case FunctionSet.MONTHS_DIFF:
-                    interval = 3600L * 24L * 31L;
-                    minValue = (left.getMinValue() - right.getMaxValue()) / interval;
-                    maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
+                    minValue = (left.getMinValue() - right.getMaxValue()) / INTERVAL_MAP.get("month");
+                    maxValue = (left.getMaxValue() - right.getMinValue()) / INTERVAL_MAP.get("month");
                     break;
                 case FunctionSet.WEEKS_DIFF:
-                    interval = 3600L * 24L * 7L;
-                    minValue = (left.getMinValue() - right.getMaxValue()) / interval;
-                    maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
+                    minValue = (left.getMinValue() - right.getMaxValue()) / INTERVAL_MAP.get("week");
+                    maxValue = (left.getMaxValue() - right.getMinValue()) / INTERVAL_MAP.get("week");
+                    break;
+                case FunctionSet.YEARS_ADD:
+                case FunctionSet.YEARS_SUB:
+                case FunctionSet.QUARTERS_ADD:
+                case FunctionSet.QUARTERS_SUB:
+                case FunctionSet.MONTHS_ADD:
+                case FunctionSet.MONTHS_SUB:
+                case FunctionSet.DAYS_ADD:
+                case FunctionSet.DAYS_SUB:
+                case FunctionSet.HOURS_ADD:
+                case FunctionSet.HOURS_SUB:
+                case FunctionSet.MINUTES_ADD:
+                case FunctionSet.MINUTES_SUB:
+                case FunctionSet.SECONDS_ADD:
+                case FunctionSet.SECONDS_SUB:
+                    String[] words = funcName.split("_");
+                    String interval = words[0];
+                    interval = interval.substring(0, interval.length() - 1);
+                    double op = "add".equals(words[1]) ? 1 : -1;
+                    minValue = left.getMinValue() + op * right.getMinValue() * INTERVAL_MAP.get(interval);
+                    maxValue = left.getMaxValue() + op * right.getMaxValue() * INTERVAL_MAP.get(interval);
                     break;
                 case FunctionSet.DAYS_DIFF:
                 case FunctionSet.DATEDIFF:
-                    interval = 3600L * 24L;
-                    minValue = (left.getMinValue() - right.getMaxValue()) / interval;
-                    maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
+                    minValue = (left.getMinValue() - right.getMaxValue()) / INTERVAL_MAP.get("day");
+                    maxValue = (left.getMaxValue() - right.getMaxValue()) / INTERVAL_MAP.get("day");
                     break;
                 case FunctionSet.HOURS_DIFF:
-                    interval = 3600;
-                    minValue = (left.getMinValue() - right.getMaxValue()) / interval;
-                    maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
+                    minValue = (left.getMinValue() - right.getMaxValue()) / INTERVAL_MAP.get("hour");
+                    maxValue = (left.getMaxValue() - right.getMinValue()) / INTERVAL_MAP.get("hour");
                     break;
                 case FunctionSet.MINUTES_DIFF:
-                    interval = 60;
-                    minValue = (left.getMinValue() - right.getMaxValue()) / interval;
-                    maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
-                    break;
-                case FunctionSet.SECONDS_DIFF:
-                    minValue = left.getMinValue() - right.getMaxValue();
-                    maxValue = left.getMaxValue() - right.getMinValue();
+                    minValue = (left.getMinValue() - right.getMaxValue()) / INTERVAL_MAP.get("minute");
+                    maxValue = (left.getMaxValue() - right.getMinValue()) / INTERVAL_MAP.get("minute");
                     break;
                 case FunctionSet.MULTIPLY:
                     minValue = Math.min(Math.min(
@@ -555,11 +585,23 @@ public class ExpressionStatisticCalculator {
                     minValue = left.getMinValue();
                     maxValue = left.getMaxValue();
                     break;
+                case FunctionSet.DATE_TRUNC:
+                    minValue = right.getMinValue();
+                    maxValue = right.getMaxValue();
+                    break;
                 default:
                     return ColumnStatistic.unknown();
             }
 
-            return new ColumnStatistic(minValue, maxValue, nullsFraction, averageRowSize, distinctValues);
+            return ColumnStatistic.builder()
+                    .setMinValue(minValue)
+                    .setMaxValue(maxValue)
+                    .setNullsFraction(nullsFraction)
+                    .setAverageRowSize(averageRowSize)
+                    .setDistinctValuesCount(distinctValues)
+                    .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                    .build();
+
         }
 
         private ColumnStatistic multiaryExpressionCalculate(CallOperator callOperator,

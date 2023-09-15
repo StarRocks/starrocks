@@ -374,7 +374,7 @@ public class BinaryPredicateStatisticCalculator {
                 setMaxValue(intersectRange.getHigh()).
                 setMinValue(intersectRange.getLow()).
                 setNullsFraction(0).
-                setDistinctValuesCount(columnStatistic.getDistinctValuesCount()).
+                setDistinctValuesCount(intersectRange.getDistinctValues()).
                 setType(columnStatistic.getType()).
                 build();
         return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
