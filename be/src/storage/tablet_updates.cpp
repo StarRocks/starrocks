@@ -1870,100 +1870,75 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, std::vector<uint32_t>& upse
         return st;
     };
 
+    // TODO
+    // merge segment data first and then we could support batch upsert for condition update
     if (condition_column >= 0) {
         auto tablet_column = _tablet.tablet_schema()->column(condition_column);
         std::vector<uint32_t> read_column_ids;
         read_column_ids.push_back(condition_column);
+        for (auto& upsert_idx : upsert_ids) {
+            std::vector<uint64_t> old_rowids(upserts[upsert_idx]->size());
+            RETURN_IF_ERROR(index.get(*upserts[upsert_idx], &old_rowids));
+            bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int id) { return -1 == id; });
+            if (!non_old_value) {
+                std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
+                size_t num_default = 0;
+                vector<uint32_t> idxes;
+                RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
+                std::vector<std::unique_ptr<Column>> old_columns(1);
+                auto old_unordered_column =
+                        ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+                old_columns[0] = old_unordered_column->clone_empty();
+                RETURN_IF_ERROR(get_column_values(read_column_ids, read_version, num_default > 0, old_rowids_by_rssid,
+                                                  &old_columns, nullptr));
+                auto old_column =
+                        ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+                old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
-        size_t row_num = 0;
-        std::vector<const Column*> key_cols;
-        for (auto& id : upsert_ids) {
-            key_cols.emplace_back(upserts[id].get());
-            row_num += upserts[id]->size();
-        }
-        std::vector<uint64_t> old_rowids(row_num);
-        RETURN_IF_ERROR(index.get(key_cols, &old_rowids));
-        bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int id) { return -1 == id; });
-        if (!non_old_value) {
-            std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
-            size_t num_default = 0;
-            vector<uint32_t> idxes;
-            RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
-            std::vector<std::unique_ptr<Column>> old_columns(1);
-            auto old_unordered_column =
-                    ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
-            old_columns[0] = old_unordered_column->clone_empty();
-            RETURN_IF_ERROR(get_column_values(read_column_ids, read_version, num_default > 0, old_rowids_by_rssid,
-                                              &old_columns, nullptr));
-            auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
-            old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
-
-            std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
-            for (auto& upsert_id : upsert_ids) {
+                std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
                 std::vector<uint32_t> rowids;
-                for (int j = 0; j < upserts[upsert_id]->size(); ++j) {
+                for (int j = 0; j < upserts[upsert_idx]->size(); ++j) {
                     rowids.push_back(j);
                 }
-                new_rowids_by_rssid[rowset_id + upsert_id] = rowids;
-            }
-            std::vector<std::unique_ptr<Column>> new_columns(1);
-            auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
-            new_columns[0] = new_column->clone_empty();
-            RETURN_IF_ERROR(get_column_values(read_column_ids, read_version, false, new_rowids_by_rssid, &new_columns,
-                                              nullptr));
+                new_rowids_by_rssid[rowset_id + upsert_idx] = rowids;
+                std::vector<std::unique_ptr<Column>> new_columns(1);
+                auto new_column =
+                        ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+                new_columns[0] = new_column->clone_empty();
+                RETURN_IF_ERROR(get_column_values(read_column_ids, read_version, false, new_rowids_by_rssid,
+                                                  &new_columns, nullptr));
 
-            DCHECK(old_column->size() == new_columns[0]->size());
-            DCHECK(old_column->size() == row_num);
-
-            std::vector<std::pair<uint32_t, uint32_t>> idx_range;
-            std::vector<uint32_t> seg_ids;
-            std::vector<const Column*> key_cols;
-            std::vector<uint32_t> rowid_start;
-
-            DeletesMap condition_deletes;
-            size_t row_idx = 0;
-            for (auto upsert_id : upsert_ids) {
                 int idx_begin = 0;
                 int upsert_idx_step = 0;
-                for (int j = 0; j < upserts[upsert_id]->size(); ++j) {
-                    if (num_default > 0 && idxes[row_idx] == 0) {
+                for (int j = 0; j < old_column->size(); ++j) {
+                    if (num_default > 0 && idxes[j] == 0) {
+                        // plan_read_by_rssid will return idx with 0 if we have default value
                         upsert_idx_step++;
                     } else {
-                        int r = old_column->compare_at(row_idx, row_idx, *new_columns[0].get(), -1);
+                        int r = old_column->compare_at(j, j, *new_columns[0].get(), -1);
                         if (r > 0) {
-                            key_cols.emplace_back(upserts[upsert_id].get());
-                            seg_ids.emplace_back(upsert_id);
-                            idx_range.emplace_back(std::make_pair(idx_begin, idx_begin + upsert_idx_step));
+                            RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
+                                                         idx_begin + upsert_idx_step, new_deletes));
+
                             idx_begin = j + 1;
                             upsert_idx_step = 0;
-                            condition_deletes[rowset_id + upsert_id].push_back(j);
+
+                            // Update delete vector of current segment which is being applied
+                            (*new_deletes)[rowset_id + upsert_idx].push_back(j);
                         } else {
                             upsert_idx_step++;
                         }
                     }
-                    row_idx++;
                 }
-                if (idx_begin < upserts[upsert_id]->size()) {
-                    key_cols.emplace_back(upserts[upsert_id].get());
-                    seg_ids.emplace_back(upsert_id);
-                    idx_range.emplace_back(std::make_pair(idx_begin, idx_begin + upsert_idx_step));
-                }
-            }
-            rowid_start.resize(seg_ids.size());
-            rowid_start.assign(seg_ids.size(), 0);
-            UpdateInfos info(std::move(seg_ids), std::move(rowid_start), std::move(key_cols), std::move(idx_range));
-            std::unique_ptr<IOStat> iostat = std::make_unique<IOStat>();
-            RETURN_IF_ERROR(index.upsert(rowset_id, info, new_deletes, iostat.get()));
-            for (auto [rsid, seg_row_ids] : condition_deletes) {
-                for (auto row_id : seg_row_ids) {
-                    (*new_deletes)[rsid].emplace_back(row_id);
-                }
-            }
 
-        } else {
-            RETURN_IF_ERROR(batch_upsert());
+                if (idx_begin < old_column->size()) {
+                    RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
+                                                 idx_begin + upsert_idx_step, new_deletes));
+                }
+            } else {
+                RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes));
+            }
         }
-
     } else {
         RETURN_IF_ERROR(batch_upsert());
     }
