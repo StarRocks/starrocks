@@ -705,7 +705,7 @@ StarRocks supports building asynchronous materialized views on Hive catalogs, Hu
 
 In terms of materialized view-based query rewrite, StarRocks currently has the following limitations:
 
-1. StarRocks does not support rewriting queries with non-deterministic functions, including rand, random, uuid, and sleep.
-2. StarRocks does not support rewriting queries with window functions.
-3. Materialized views defined with statements containing LIMIT, ORDER BY, UNION, EXCEPT, INTERSECT, MINUS, GROUPING SETS, WITH CUBE, or WITH ROLLUP cannot be used for query rewrite.
-4. Strong consistency of query results is not guaranteed between base tables and materialized views built on external catalogs.
+- StarRocks does not support rewriting queries with non-deterministic functions, including rand, random, uuid, and sleep.
+- StarRocks does not support rewriting queries with window functions.
+- Materialized views defined with statements containing LIMIT, ORDER BY, UNION, EXCEPT, INTERSECT, MINUS, GROUPING SETS, WITH CUBE, or WITH ROLLUP cannot be used for query rewrite.
+- Strong consistency of query results is not guaranteed between base tables and materialized views built on external catalogs.
