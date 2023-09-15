@@ -43,6 +43,7 @@
 #include "util/date_func.h"
 #include "util/json.h"
 #include "util/mysql_global.h"
+#include "util/phmap/phmap.h"
 #include "velocypack/Iterator.h"
 
 namespace starrocks {
@@ -814,11 +815,20 @@ static ColumnPtr cast_from_string_to_date_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     ColumnBuilder<TYPE_DATE> builder(viewer.size());
 
+    phmap::flat_hash_map<Slice, std::pair<DateValue, bool>, SliceHashWithSeed<PhmapSeed::PhmapSeed1>, SliceEqual>
+            caches;
+    caches.reserve(viewer.size());
     if (!column->has_null()) {
         for (int row = 0; row < viewer.size(); ++row) {
             auto value = viewer.value(row);
-            DateValue v;
+            auto it = caches.find(value);
+            if (it != caches.end()) {
+                auto pair = it->second;
+                builder.append(pair.first, pair.second);
+                continue;
+            }
 
+            DateValue v;
             bool right = v.from_string(value.data, value.size);
             if constexpr (AllowThrowException) {
                 if (!right) {
@@ -826,6 +836,7 @@ static ColumnPtr cast_from_string_to_date_fn(ColumnPtr& column) {
                 }
             }
             builder.append(v, !right);
+            caches[value] = {v, !right};
         }
     } else {
         for (int row = 0; row < viewer.size(); ++row) {
@@ -835,8 +846,14 @@ static ColumnPtr cast_from_string_to_date_fn(ColumnPtr& column) {
             }
 
             auto value = viewer.value(row);
-            DateValue v;
+            auto it = caches.find(value);
+            if (it != caches.end()) {
+                auto pair = it->second;
+                builder.append(pair.first, pair.second);
+                continue;
+            }
 
+            DateValue v;
             bool right = v.from_string(value.data, value.size);
             if constexpr (AllowThrowException) {
                 if (!right) {
@@ -844,6 +861,7 @@ static ColumnPtr cast_from_string_to_date_fn(ColumnPtr& column) {
                 }
             }
             builder.append(v, !right);
+            caches[value] = {v, !right};
         }
     }
     return builder.build(column->is_constant());
@@ -900,9 +918,22 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     ColumnBuilder<TYPE_DATETIME> builder(viewer.size());
 
+    phmap::flat_hash_map<Slice, std::pair<TimestampValue, bool>, SliceHashWithSeed<PhmapSeed::PhmapSeed1>, SliceEqual>
+            caches;
+    caches.reserve(viewer.size());
+
+    std::pair<TimestampValue, bool> p;
     if (!column->has_null()) {
         for (int row = 0; row < viewer.size(); ++row) {
             auto value = viewer.value(row);
+
+            auto it = caches.find(value);
+            if (it != caches.end()) {
+                auto pair = it->second;
+                builder.append(pair.first, pair.second);
+                continue;
+            }
+
             TimestampValue v;
 
             bool right = v.from_string(value.data, value.size);
@@ -912,6 +943,7 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
                 }
             }
             builder.append(v, !right);
+            caches[value] = {v, !right};
         }
     } else {
         for (int row = 0; row < viewer.size(); ++row) {
@@ -921,6 +953,13 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
             }
 
             auto value = viewer.value(row);
+            auto it = caches.find(value);
+            if (it != caches.end()) {
+                auto pair = it->second;
+                builder.append(pair.first, pair.second);
+                continue;
+            }
+
             TimestampValue v;
 
             bool right = v.from_string(value.data, value.size);
@@ -930,6 +969,7 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
                 }
             }
             builder.append(v, !right);
+            caches[value] = {v, !right};
         }
     }
 
