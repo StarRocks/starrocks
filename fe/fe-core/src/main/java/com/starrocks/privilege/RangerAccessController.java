@@ -33,8 +33,8 @@ import static java.util.Locale.ENGLISH;
 public abstract class RangerAccessController extends ExternalAccessController {
     protected final RangerBasePlugin rangerPlugin;
 
-    public RangerAccessController(String serviceType) {
-        rangerPlugin = new RangerBasePlugin(serviceType, serviceType);
+    public RangerAccessController(String serviceType, String serviceName) {
+        rangerPlugin = new RangerBasePlugin(serviceType, serviceName, serviceType);
         rangerPlugin.init(); // this will initialize policy engine and policy refresher
         rangerPlugin.setResultProcessor(new RangerDefaultAuditHandler());
     }

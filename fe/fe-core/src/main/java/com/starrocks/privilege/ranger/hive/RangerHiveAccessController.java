@@ -31,7 +31,7 @@ import static java.util.Locale.ENGLISH;
 
 public class RangerHiveAccessController extends RangerAccessController {
     public RangerHiveAccessController(String serviceName) {
-        super(serviceName);
+        super("hive", serviceName);
     }
 
     @Override
