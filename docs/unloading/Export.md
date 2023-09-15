@@ -1,6 +1,6 @@
 # Export data using EXPORT
 
-This topic describes how to export data from specified tables or partitions in your StarRocks cluster as CSV data files by using the [EXPORT](../sql-reference/sql-statements/data-manipulation/EXPORT.md) statement to HDFS, Alibaba Cloud OSS, AWS S3, or other S3-compatible object storage systems.
+This topic describes how to export data from specified tables or partitions in your StarRocks cluster as CSV data files to an external storage system, which can be a distributed file system HDFS or a cloud storage system such as AWS S3.
 
 > **NOTICE**
 >
@@ -20,6 +20,11 @@ When your data is stored in HDFS, however, broker-free unloading may not work an
 > **NOTE**
 >
 > You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you can deploy brokers by following the instructions provided in [Deploy a broker](../deployment/deploy_broker.md).
+
+## Supported storage systems
+
+- Distributed file system HDFS
+- Cloud storage system such as AWS S3
 
 ## Precautions
 
@@ -95,7 +100,7 @@ WITH BROKER
 );
 ```
 
-For detailed syntax and parameter descriptions, see [EXPORT](../sql-reference/sql-statements/data-manipulation/EXPORT.md).
+For detailed syntax and parameter descriptions as well as the command examples of exporting data to AWS S3, see [EXPORT](../sql-reference/sql-statements/data-manipulation/EXPORT.md).
 
 ### Obtain the query ID of an export job
 
