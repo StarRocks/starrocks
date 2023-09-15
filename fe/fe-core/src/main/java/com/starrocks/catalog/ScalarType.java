@@ -41,7 +41,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.proto.PScalarType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
@@ -51,7 +50,6 @@ import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
 
 import java.util.Objects;
-import javax.naming.Context;
 
 /**
  * Describes a scalar type. For most types this class just wraps a PrimitiveType enum,

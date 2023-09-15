@@ -2570,10 +2570,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setLargeDecimalUnderlyingType(String type) {
-        if (type.equals(SessionVariableConstants.PANIC) ||
-                type.equals(SessionVariableConstants.DECIMAL) ||
-                type.equals(SessionVariableConstants.DOUBLE)) {
-            largeDecimalUnderlyingType = type;
+        if (type.equalsIgnoreCase(SessionVariableConstants.PANIC) ||
+                type.equalsIgnoreCase(SessionVariableConstants.DECIMAL) ||
+                type.equalsIgnoreCase(SessionVariableConstants.DOUBLE)) {
+            largeDecimalUnderlyingType = type.toLowerCase();
         } else {
             throw new IllegalArgumentException(
                     "Legal values of large_decimal_underlying_type are panic|decimal|double");
