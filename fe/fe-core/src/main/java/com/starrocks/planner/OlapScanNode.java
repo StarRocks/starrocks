@@ -1207,4 +1207,9 @@ public class OlapScanNode extends ScanNode {
                 tabletToPartitionMap, partitionToTabletMap);
         return partitionToTabletMap;
     }
+
+    @Override
+    protected boolean supportTopNRuntimeFilter() {
+        return true;
+    }
 }
