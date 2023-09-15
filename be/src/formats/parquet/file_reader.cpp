@@ -409,10 +409,16 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
 
 bool FileReader::_can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
                                         const tparquet::ColumnOrder* column_order) {
+    // disregard column sort order if statistics max/min are equal
     if (column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.max_value &&
         column_meta.statistics.min_value == column_meta.statistics.max_value) {
         return true;
     }
+    if (!column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.min &&
+        column_meta.statistics.__isset.max && column_meta.statistics.min == column_meta.statistics.max) {
+        return true;
+    }
+
     if (column_meta.statistics.__isset.min_value && _can_use_stats(column_meta.type, column_order)) {
         return true;
     }
