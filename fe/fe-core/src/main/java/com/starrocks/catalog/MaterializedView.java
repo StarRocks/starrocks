@@ -898,6 +898,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         boolean first = true;
         Map<String, String> properties = this.getTableProperty().getProperties();
         boolean hasStorageMedium = false;
+        boolean hasStaleness = false;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String name = entry.getKey();
             String value = entry.getValue();
@@ -929,9 +930,19 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 sb.append(" = ");
                 sb.append("\"").append(value).append("\"");
             }
+            if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+                hasStaleness = true;
+            }
         }
         if (!hasStorageMedium) {
             appendUniqueProperties(sb);
+        }
+        if (!hasStaleness && maxMVRewriteStaleness > 0) {
+            sb.append(",\n\"")
+                    .append(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)
+                    .append("\" = \"")
+                    .append(maxMVRewriteStaleness)
+                    .append("\"");
         }
 
         sb.append("\n)");

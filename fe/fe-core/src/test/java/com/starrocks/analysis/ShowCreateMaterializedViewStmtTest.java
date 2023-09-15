@@ -25,6 +25,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -46,7 +47,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
-        ctx = UtFrameUtils.createDefaultCtx();
+        ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         ConnectorPlanTestBase.mockHiveCatalog(ctx);
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase("test").useDatabase("test")
@@ -444,8 +445,8 @@ public class ShowCreateMaterializedViewStmtTest {
                 "ORDER BY (k3)\n" +
                 "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
-                "\"replicated_storage\" = \"true\",\n" +
                 "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
                 "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
@@ -481,9 +482,9 @@ public class ShowCreateMaterializedViewStmtTest {
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replicated_storage\" = \"true\",\n" +
-                "\"mv_rewrite_staleness_second\" = \"60\",\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"storage_medium\" = \"HDD\"\n" +
+                "\"storage_medium\" = \"HDD\",\n" +
+                "\"mv_rewrite_staleness_second\" = \"60\"\n" +
                 ")\n" +
                 "AS SELECT `tbl1`.`k1`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv_with_staleness", "mv_with_staleness_copy");
