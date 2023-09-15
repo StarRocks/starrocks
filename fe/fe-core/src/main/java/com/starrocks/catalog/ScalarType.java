@@ -40,6 +40,9 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.proto.PScalarType;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScalarType;
@@ -48,6 +51,7 @@ import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
 
 import java.util.Objects;
+import javax.naming.Context;
 
 /**
  * Describes a scalar type. For most types this class just wraps a PrimitiveType enum,
@@ -213,11 +217,25 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     public static ScalarType createDecimalV3Type(PrimitiveType type, int precision, int scale) {
-        Preconditions.checkArgument(0 <= precision && precision <= PrimitiveType.getMaxPrecisionOfDecimal(type),
-                "DECIMAL's precision should range from 1 to 38");
-        Preconditions.checkArgument(0 <= scale && scale <= precision,
-                "DECIMAL(P[,S]) type P must be greater than or equal to the value of S");
-
+        int maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+        if (ConnectContext.get() == null ||
+                ConnectContext.get().getSessionVariable().getLargeDecimalUnderlyingType().equals(
+                        SessionVariableConstants.PANIC)) {
+            Preconditions.checkArgument(0 <= precision &&
+                            precision <= PrimitiveType.getMaxPrecisionOfDecimal(type),
+                    "DECIMAL's precision should range from 1 to 38");
+            Preconditions.checkArgument(0 <= scale && scale <= precision,
+                    "DECIMAL(P[,S]) type P must be greater than or equal to the value of S");
+        }
+        if (precision > maxPrecision) {
+            String underlyingType = ConnectContext.get().getSessionVariable().getLargeDecimalUnderlyingType();
+            if (underlyingType.equals(SessionVariableConstants.DOUBLE)) {
+                return ScalarType.DOUBLE;
+            } else {
+                precision = maxPrecision;
+                type = PrimitiveType.DECIMAL128;
+            }
+        }
         ScalarType scalarType = new ScalarType(type);
         scalarType.precision = Math.max(precision, 1);
         scalarType.scale = scale;
