@@ -85,7 +85,19 @@
 + 查询加速
   + [CBO 统计信息](/using_starrocks/Cost_based_optimizer.md)
   + [同步物化视图](/using_starrocks/Materialized_view-single_table.md)
-  + [异步物化视图](/using_starrocks/Materialized_view.md)
+  + 异步物化视图
+    + [概述](/using_starrocks/Materialized_view.md)
+    + 使用场景
+      + [数据建模](/using_starrocks/data_modeling_with_materialized_views.md)
+      + [查询改写](/using_starrocks/query_rewrite_with_materialized_views.md)
+      + [湖仓加速](/using_starrocks/data_lake_query_acceleration_with_materialized_views.md)
+    + Usage
+      + [CREATE MATERIALIZED VIEW](/sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md)
+      + [ALTER MATERIALIZED VIEW](/sql-reference/sql-statements/data-definition/ALTER%20MATERIALIZED%20VIEW.md)
+      + [DROP MATERIALIZED VIEW](/sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md)
+      + [SHOW MATERIALIZED VIEWS](/sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md)
+      + [information_schema.materialized_views](/administration/information_schema.md#materialized_views)
+      + [故障排除](/using_starrocks/troubleshooting_asynchronous_materialized_views.md)
   + [Colocate Join](/using_starrocks/Colocate_join.md)
   + 索引
     + [Bitmap 索引](/using_starrocks/Bitmap_index.md)
