@@ -216,9 +216,11 @@ public class ScalarType extends Type implements Cloneable {
 
     public static ScalarType createDecimalV3Type(PrimitiveType type, int precision, int scale) {
         int maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
-        if (ConnectContext.get() == null ||
-                ConnectContext.get().getSessionVariable().getLargeDecimalUnderlyingType().equals(
-                        SessionVariableConstants.PANIC)) {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx == null ||
+                ctx.getSessionVariable() == null ||
+                ctx.getSessionVariable().getLargeDecimalUnderlyingType() == null ||
+                ctx.getSessionVariable().getLargeDecimalUnderlyingType().equals(SessionVariableConstants.PANIC)) {
             Preconditions.checkArgument(0 <= precision &&
                             precision <= PrimitiveType.getMaxPrecisionOfDecimal(type),
                     "DECIMAL's precision should range from 1 to 38");
