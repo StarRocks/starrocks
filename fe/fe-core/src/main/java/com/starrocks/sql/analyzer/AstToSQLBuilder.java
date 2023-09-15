@@ -55,9 +55,9 @@ public class AstToSQLBuilder {
         return new AST2SQLBuilderVisitor(false).visit(statement);
     }
 
-    private static class AST2SQLBuilderVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {
+    public static class AST2SQLBuilderVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {
 
-        private final boolean simple;
+        protected final boolean simple;
 
         public AST2SQLBuilderVisitor(boolean simple) {
             this.simple = simple;

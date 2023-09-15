@@ -153,6 +153,7 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TDescriptorTable;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
@@ -408,6 +409,7 @@ public class StmtExecutor {
                             context.getDumpInfo().reset();
                         }
                         context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
+                        context.getDumpInfo().setStatement(parsedStmt);
                     }
                     if (parsedStmt instanceof ShowStmt) {
                         com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
@@ -420,6 +422,9 @@ public class StmtExecutor {
                         }
                     } else {
                         execPlan = StatementPlanner.plan(parsedStmt, context);
+                        if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
+                            context.getDumpInfo().setExplainInfo(execPlan.getExplainString(TExplainLevel.COSTS));
+                        }
                     }
                     execPlanBuildByNewPlanner = true;
                 }
@@ -685,8 +690,9 @@ public class StmtExecutor {
     }
 
     private void dumpException(Exception e) {
-        if (context.shouldDumpQuery() && !context.isHTTPQueryDump()) {
+        if (context.isHTTPQueryDump()) {
             context.getDumpInfo().addException(ExceptionUtils.getStackTrace(e));
+        } else if (context.getSessionVariable().getEnableQueryDump()) {
             QueryDumpLog.getQueryDump().log(GsonUtils.GSON.toJson(context.getDumpInfo()));
         }
     }
