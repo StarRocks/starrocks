@@ -22,13 +22,45 @@ Before contributing, please read this article carefully to quickly understand th
 
 2. **Submission phase**: Create a pull request to submit the documentation changes to our documentation repository on GitHub, English documentation is in the `docs/` folder of the [StarRocks repository](https://github.com/StarRocks/starrocks) (for the English version) and [Chinese documentation repository](https://github.com/StarRocks/docs.zh-cn) (for the Chinese version).
 
-> **Note**
->
-> All commits in your PR should be signed. To sign a commit you can add the `-s` argument.  For example:
->
-> `commit -s -m "Update the MV doc"`
+   > **Note**
+   >
+   > All commits in your PR should be signed. To sign a commit you can add the `-s` argument.  For example:
+   >
+   > `commit -s -m "Update the MV doc"`
 
-3. **Review phase**:
+3. Lists of settings
+
+   Long lists of settings like this do not index well in search, and the reader will not find the information even when they type in the exact name of a setting:
+
+   ```markdown
+   - setting_name_foo
+
+     Details for foo
+
+   - setting_name_bar
+     Details for bar
+   ...
+   ```
+ 
+   Instead, use a section heading (e.g., `###`) for the setting name and remove the indent for the text:
+
+   ```markdown
+   ### setting_name_foo
+
+   Details for foo
+
+   ### setting_name_bar
+   Details for bar
+   ...
+   ```
+
+   |Search results with a long list:|Search results with H3 headings|
+   |--------------------------------|-------------------------------|
+   |![image](https://github.com/StarRocks/starrocks/assets/25182304/681580e6-820a-4a5a-8d68-65852687a0df)|![image](https://github.com/StarRocks/starrocks/assets/25182304/8623e005-d6e1-4b73-9270-8bc86a2aa680)|
+
+
+  
+5. **Review phase**:
 
     The review phase includes automatic checks and manual review.
 
