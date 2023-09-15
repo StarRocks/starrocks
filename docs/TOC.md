@@ -53,9 +53,12 @@
   + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from HDFS](./loading/hdfs_load.md)
   + [Load data from cloud storage](./loading/cloud_storage_load.md)
+  + Load data from Apache Kafka®
+    + [Load data using Kafka connector](/loading/Kafka-connector-starrocks.md)
+    + [Load data using Routine Load](/loading/RoutineLoad.md)
   + [Continuously load data from Apache Kafka®](./loading/RoutineLoad.md)
-  + Load data using Apache Spark™
-    + [Load data using Spark Connector](./loading/Spark-connector-starrocks.md)
+  + Load data from Apache Spark™
+    + [Load data using Spark Connector (recommended)](./loading/Spark-connector-starrocks.md)
     + [Load data in bulk using Spark Load](./loading/SparkLoad.md)
   + [Load data using INSERT](./loading/InsertInto.md)
   + [Load data using Stream Load transaction interface](./loading/Stream_Load_transaction_interface.md)
@@ -742,6 +745,8 @@
     + [Build Handbook](./developers/build-starrocks/handbook.md)
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
++ Ecosystem Release Notes
+  + [Kafka connector](./ecosystem_release/kafka_connector.md)
 + Release Notes
   + [v3.0](./release_notes/release-3.0.md)
   + [v2.5](./release_notes/release-2.5.md)
