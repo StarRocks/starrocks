@@ -87,6 +87,17 @@ public:
     RuntimeProfile::Counter* restore_from_mem_table_rows = nullptr;
     // peak memory usage of partition writer, only used in join operator
     RuntimeProfile::HighWaterMarkCounter* partition_writer_peak_memory_usage = nullptr;
+<<<<<<< HEAD
+=======
+
+    // the number of blocks created
+    RuntimeProfile::Counter* block_count = nullptr;
+    // flush/restore task count
+    RuntimeProfile::Counter* flush_io_task_count = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* peak_flush_io_task_count = nullptr;
+    RuntimeProfile::Counter* restore_io_task_count = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* peak_restore_io_task_count = nullptr;
+>>>>>>> d15ff35450 ([Enhancement] try to buffer aggregated data in spillable agg operator (#29469))
 };
 
 // major spill interfaces

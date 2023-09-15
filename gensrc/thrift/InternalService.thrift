@@ -227,6 +227,12 @@ struct TQueryOptions {
   103: optional i32 interleaving_group_size;
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
+<<<<<<< HEAD
+=======
+  105: optional bool use_column_pool = true;
+
+  106: optional bool enable_agg_spill_preaggregation;
+>>>>>>> d15ff35450 ([Enhancement] try to buffer aggregated data in spillable agg operator (#29469))
 }
 
 
