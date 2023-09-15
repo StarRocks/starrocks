@@ -924,7 +924,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
         ASSERT_EQ(2, values[1]);
         ASSERT_EQ(3, values[2]);
         ASSERT_EQ(4, values[3]);
-        agg_iter->get_next(chunk.get());
+        ASSERT_FALSE(agg_iter->get_next(chunk.get()).ok());
     }
     {
         auto pk1 = std::vector<std::string>{"abc", "abc", "abc", "abc"};

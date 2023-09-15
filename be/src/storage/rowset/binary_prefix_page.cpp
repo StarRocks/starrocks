@@ -303,7 +303,7 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const SparseRange<>& range, Col
     SparseRangeIterator<> iter = range.new_iterator();
     if constexpr (Type == TYPE_CHAR) {
         while (to_read > 0) {
-            seek_to_position_in_page(iter.begin());
+            RETURN_IF_ERROR(seek_to_position_in_page(iter.begin()));
             bool ok = dst->append_strings({_current_value});
             DCHECK(ok);
             Range<> r = iter.next(to_read);
@@ -316,7 +316,7 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const SparseRange<>& range, Col
         }
     } else {
         while (to_read > 0) {
-            seek_to_position_in_page(iter.begin());
+            RETURN_IF_ERROR(seek_to_position_in_page(iter.begin()));
             bool ok = dst->append_strings({_current_value});
             DCHECK(ok);
             Range<> r = iter.next(to_read);

@@ -728,7 +728,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         } else {
             itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators, _context.merge_condition), true);
         }
-        itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+        RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
         _context.max_rows_per_segment = CompactionUtils::get_segment_max_rows(config::max_segment_file_size,
                                                                               _num_rows_written, _total_data_size);
@@ -826,7 +826,7 @@ Status HorizontalRowsetWriter::_final_merge() {
             } else {
                 itr = new_aggregate_iterator(new_mask_merge_iterator(seg_iterators, mask_buffer.get()), false);
             }
-            itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+            RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
             auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
             auto chunk = chunk_shared_ptr.get();
@@ -898,7 +898,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         } else {
             itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators, _context.merge_condition), 0);
         }
-        itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+        RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
         auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();

@@ -83,7 +83,7 @@ TEST_F(ProjectionIteratorTest, all) {
         schema.remove(2);
         schema.remove(1);
         auto iter = new_projection_iterator(schema, child);
-        iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->encoded_schema(), config::vector_chunk_size);
         auto st = iter->get_next(chunk.get());
         ASSERT_TRUE(st.ok());
@@ -99,7 +99,7 @@ TEST_F(ProjectionIteratorTest, all) {
         Schema schema = child->schema();
         schema.remove(0);
         auto iter = new_projection_iterator(schema, child);
-        iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->encoded_schema(), config::vector_chunk_size);
         auto st = iter->get_next(chunk.get());
         ASSERT_TRUE(st.ok());
@@ -117,7 +117,7 @@ TEST_F(ProjectionIteratorTest, all) {
         FieldPtr f3 = child->schema().field(2);
         Schema schema({f3, f1});
         auto iter = new_projection_iterator(schema, child);
-        iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->encoded_schema(), config::vector_chunk_size);
         auto st = iter->get_next(chunk.get());
         ASSERT_TRUE(st.ok());

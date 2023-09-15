@@ -72,7 +72,7 @@ TEST_F(UniqueIteratorTest, single_int) {
         std::vector<int32_t> numbers{};
         auto sub = std::make_shared<IntIterator>(numbers);
         ChunkIteratorPtr iter = new_unique_iterator(sub);
-        iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
         Status st = iter->get_next(chunk.get());
@@ -82,7 +82,7 @@ TEST_F(UniqueIteratorTest, single_int) {
         std::vector<int32_t> numbers{1, 2, 3, 4};
         auto sub = std::make_shared<IntIterator>(numbers);
         ChunkIteratorPtr iter = new_unique_iterator(sub);
-        iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
         std::vector<int32_t> fetched;
@@ -102,7 +102,7 @@ TEST_F(UniqueIteratorTest, single_int) {
         std::vector<int32_t> numbers{1, 2, 3, 4, 5, 6, 7, 8, 9};
         auto sub = std::make_shared<IntIterator>(numbers);
         ChunkIteratorPtr iter = new_unique_iterator(sub);
-        iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
         std::vector<int32_t> fetched;
@@ -122,7 +122,7 @@ TEST_F(UniqueIteratorTest, single_int) {
         std::vector<int32_t> numbers{1, 1, 1};
         auto sub = std::make_shared<IntIterator>(numbers);
         ChunkIteratorPtr iter = new_unique_iterator(sub);
-        iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
         std::vector<int32_t> fetched;
@@ -142,7 +142,7 @@ TEST_F(UniqueIteratorTest, single_int) {
         std::vector<int32_t> numbers{1, 1, 1, 1, 1, 1};
         auto sub = std::make_shared<IntIterator>(numbers);
         ChunkIteratorPtr iter = new_unique_iterator(sub);
-        iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
         std::vector<int32_t> fetched;
@@ -162,7 +162,7 @@ TEST_F(UniqueIteratorTest, single_int) {
         std::vector<int32_t> numbers{1, 2, 3, 4, 5, 5, 6, 6, 6, 6, 7, 8, 8, 8, 9, 9, 10, 11, 12};
         auto sub = std::make_shared<IntIterator>(numbers);
         ChunkIteratorPtr iter = new_unique_iterator(sub);
-        iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
         std::vector<int32_t> fetched;
@@ -182,7 +182,7 @@ TEST_F(UniqueIteratorTest, single_int) {
         std::vector<int32_t> numbers{1, 2, 3, 3, 4, 4, 4, 4, 4, 5, 6, 6, 7, 8, 9, 9, 10, 11, 12};
         auto sub = std::make_shared<IntIterator>(numbers);
         ChunkIteratorPtr iter = new_unique_iterator(sub);
-        iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
         std::vector<int32_t> fetched;

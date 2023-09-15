@@ -230,10 +230,10 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSetWithUnusedColumn) {
     seg_opts.predicates[1].push_back(predicate.get());
 
     auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
-    chunk_iter->init_encoded_schema(dict_map);
+    ASSERT_OK(chunk_iter->init_encoded_schema(dict_map));
     std::unordered_set<uint32_t> set;
     set.insert(1);
-    chunk_iter->init_output_schema(set);
+    ASSERT_OK(chunk_iter->init_output_schema(set));
 
     auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
 
@@ -338,10 +338,10 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDictWithUnusedColumn) {
     seg_opts.predicates[1].push_back(predicate.get());
 
     auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
-    chunk_iter->init_encoded_schema(dict_map);
+    ASSERT_OK(chunk_iter->init_encoded_schema(dict_map));
     std::unordered_set<uint32_t> set;
     set.insert(1);
-    chunk_iter->init_output_schema(set);
+    ASSERT_OK(chunk_iter->init_output_schema(set));
 
     auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
 
@@ -420,8 +420,8 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     seg_opts.global_dictmaps = &dict_map;
 
     auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
-    chunk_iter->init_encoded_schema(dict_map);
-    chunk_iter->init_output_schema(std::unordered_set<uint32_t>());
+    ASSERT_OK(chunk_iter->init_encoded_schema(dict_map));
+    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
 
     auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
 
@@ -520,8 +520,8 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     seg_opts.global_dictmaps = &dict_map;
 
     auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
-    chunk_iter->init_encoded_schema(dict_map);
-    chunk_iter->init_output_schema(std::unordered_set<uint32_t>());
+    ASSERT_TRUE(chunk_iter->init_encoded_schema(dict_map).ok());
+    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
 
     auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
 

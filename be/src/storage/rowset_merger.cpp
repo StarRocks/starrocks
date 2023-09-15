@@ -474,7 +474,7 @@ private:
 
             CHECK_EQ(rowsets.size(), iterators.size());
             std::shared_ptr<ChunkIterator> iter = new_mask_merge_iterator(iterators, mask_buffer.get());
-            iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+            RETURN_IF_ERROR(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
             auto chunk = ChunkHelper::new_chunk(schema, _chunk_size);
             auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
