@@ -2,7 +2,10 @@
 
 ## **Notifications**
 
-**User guide:** [Load data using Flink connector](../loading/Flink-connector-starrocks.md)
+**User guide:**
+
+- [Load data into StarRocks using Flink connector](../loading/Flink-connector-starrocks.md)
+- [Read data from StarRocks using Flink connector](../unloading/Flink_connector.md)
 
 **Source codes:** [starrocks-connector-for-apache-flink](https://github.com/StarRocks/starrocks-connector-for-apache-flink)
 
@@ -14,8 +17,8 @@
 **Methods to obtain the JAR file:**
 
 - Directly download the the Flink connector JAR file from the [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks).
-- Add the Flink connector as a dependency in your Maven project's `pom.xml` file and download it. For specific instructions, see [user guide](../loading/Flink-connector-starrocks#obtain-flink-connector).
-- Compile the source codes into Flink connector JAR file. For specific instructions, see [user guide](../loading/Flink-connector-starrocks#obtain-flink-connector).
+- Add the Flink connector as a dependency in your Maven project's `pom.xml` file and download it. For specific instructions, see [user guide](../loading/Flink-connector-starrocks.md#obtain-flink-connector).
+- Compile the source codes into Flink connector JAR file. For specific instructions, see [user guide](../loading/Flink-connector-starrocks.md#obtain-flink-connector).
 
 **Version requirements:**
 
@@ -37,27 +40,27 @@
 This release includes some improvements and bug fixes. The notable changes are as follows:
 
 - Support Flink 1.16 and 1.17.
-- Recommend to set `sink.label-prefix` when the sink is configured to guarantee the exactly-once semantics. For the specific instructions, see [Exactly Once](../loading/Flink-connector-starrocks#exactly-once).
+- Recommend to set `sink.label-prefix` when the sink is configured to guarantee the exactly-once semantics. For the specific instructions, see [Exactly Once](../loading/Flink-connector-starrocks.md#exactly-once).
 
 **Improvements**
 
-- Support to configure whether to use Stream Load transaction interface. [#228](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/228)
+- Support to configure whether to use Stream Load transaction interface to guarantee at-least-once. [#228](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/228)
 - Add retry metrics for sink V1. [#229](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/229)
-- No need to getLabelState if an existing label is finished. [#231](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/231)
+- No need to getLabelState when EXISTING_JOB_STATUS is FINISHED. [#231](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/231)
 - Remove useless stack trace log for sink V1. [#232](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/232)
 - [Refactor] Move StarRocksSinkManagerV2 to stream-load-sdk. [#233](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/233)
 - Automatically detect partial updates according to a Flink table's schema instead of the `sink.properties.columns` parameter explicitly specified by users. [#235](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/235)
 - [Refactor] Move probeTransactionStreamLoad to stream-load-sdk. [#240](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/240)
 - Add git-commit-id-plugin for stream-load-sdk. [#242](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/242)
 - Use info log for DefaultStreamLoader#close. [#243](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/243)
-- Support to generate original and jar-with-dependencies jars for stream-load-sdk. [#245](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/245)
+- Support to generate stream-load-sdk JAR file without dependencies. [#245](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/245)
 - Replace fastjson with jackson in stream-load-sdk. [#247](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/247)
 - Support to process update_before record. [#250](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/250)
 - Add the Apache license into files. [#251](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/251)
 - Support to get the exception in stream-load-sdk. [#252](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/252)
 - Enable `strip_outer_array` and `ignore_json_size` by default. [#259](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/259)
 - Try to cleanup lingering transactions when a Flink job restores and the sink semantics is exactly-once. [#271](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/271)
-- Return the first exception after retrying. [#279](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/279)
+- Return the first exception after the retrying fails. [#279](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/279)
 
 **Bug Fixes**
 

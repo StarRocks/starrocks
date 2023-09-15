@@ -2,7 +2,10 @@
 
 ## **Notifications**
 
-**User guide:** [Load data using Spark connector](../loading/Spark-connector-starrocks.md)
+**User guide:**
+
+- [Load data into StarRocks using Spark connector](../loading/Spark-connector-starrocks.md)
+- [Read data from StarRocks using Spark connector](../unloading/Spark_connector.md)
 
 **Source codes**: [starrocks-connector-for-apache-spark](https://github.com/StarRocks/starrocks-connector-for-apache-spark)
 
@@ -31,7 +34,7 @@ This release mainly includes some features and improvements for loading data to 
 
 > **NOTICE**
 >
-> Take note of the some changes when you upgrade the Spark connector to this version. For details, see [Upgrade Spark connector](https://docs.starrocks.io/en-us/latest/loading/Spark-connector-starrocks#upgrade-from-version-110-to-111).
+> Take note of the some changes when you upgrade the Spark connector to this version. For details, see [Upgrade Spark connector](../loading/Spark-connector-starrocks.md#upgrade-from-version-110-to-111).
 
 **Features**
 
@@ -44,12 +47,12 @@ This release mainly includes some features and improvements for loading data to 
 
 - Remove useless dependency, and make the Spark connector JAR file lightweight. [#55](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/55) [#57](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/57)
 - Replace fastjson with jackson. [#58](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/58)
-- Add missing the Apache license header. [#60](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/60)
-- Do not provide the MySQL JDBC driver in the Spark connector JAR file. [#63](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/63)
-- Support to configure timezone parameter and become compatible with spark java8API datetime. [#64](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/64)
+- Add the missing Apache license header. [#60](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/60)
+- Do not package the MySQL JDBC driver in the Spark connector JAR file. [#63](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/63)
+- Support to configure timezone parameter and become compatible with Spark Java8 API datetime. [#64](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/64)
 - Optimize row-string converter to reduce CPU costs. [#68](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/68)
 - The `starrocks.fe.http.url` parameter supports to add a http scheme. [#71](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/71)
-- Override BatchWrite#useCommitCoordinator to run on DataBricks 13.1 [#79](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/79)
+- The interface BatchWrite#useCommitCoordinator is implemented to run on DataBricks 13.1 [#79](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/79)
 - Add the hint of checking the privileges and parameters in the error log. [#81](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/81)
 
 **Bug fixes**
