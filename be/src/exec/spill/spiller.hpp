@@ -77,7 +77,7 @@ Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, Sp
         writer->shuffle(indexs, hash_column);
         writer->process_partition_data(chunk, indexs, std::forward<Processer>(processer));
     }
-    COUNTER_SET(_metrics.partition_writer_peak_memory_usage, 0);
+    COUNTER_SET(_metrics.partition_writer_peak_memory_usage, writer->mem_consumption());
     RETURN_IF_ERROR(writer->flush_if_full(state, executor, guard));
     return Status::OK();
 }
