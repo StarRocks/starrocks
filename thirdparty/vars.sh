@@ -66,6 +66,10 @@ MACHINE_TYPE=$(uname -m)
 if [[ "${MACHINE_TYPE}" == "arm64" ]]; then 
     MACHINE_TYPE="aarch64"
 fi
+export MACHINE_TYPE
+
+# linux/darwin
+export MACHINE_OS=`uname -s | tr 'A-Z' 'a-z'`
 
 VARS_TARGET=vars-${MACHINE_TYPE}.sh
 
@@ -121,10 +125,10 @@ GLOG_SOURCE=glog-0.4.0
 GLOG_MD5SUM="0daea8785e6df922d7887755c3d100d0"
 
 # gtest
-GTEST_DOWNLOAD="https://github.com/google/googletest/archive/release-1.10.0.tar.gz"
-GTEST_NAME=googletest-release-1.10.0.tar.gz
-GTEST_SOURCE=googletest-release-1.10.0
-GTEST_MD5SUM="ecd1fa65e7de707cd5c00bdac56022cd"
+GTEST_DOWNLOAD="https://github.com/google/googletest/archive/release-1.11.0.tar.gz"
+GTEST_NAME=googletest-release-1.11.0.tar.gz
+GTEST_SOURCE=googletest-release-1.11.0
+GTEST_MD5SUM="e8a8df240b6938bb6384155d4c37d937"
 
 # snappy
 SNAPPY_DOWNLOAD="https://github.com/google/snappy/archive/1.1.8.tar.gz"

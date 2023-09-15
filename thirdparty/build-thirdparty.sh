@@ -60,7 +60,11 @@ if [[ ! -z ${STARROCKS_GCC_HOME} ]]; then
     export CC=${STARROCKS_GCC_HOME}/bin/gcc
     export CPP=${STARROCKS_GCC_HOME}/bin/cpp
     export CXX=${STARROCKS_GCC_HOME}/bin/g++
-    export PATH=${STARROCKS_GCC_HOME}/bin:$PATH
+    default_gcc=`which gcc 2>/dev/null`
+    if [[ "$default_gcc" != "${STARROCKS_GCC_HOME}/bin/gcc" ]] ; then
+        # add STARROCKS_GCC_HOME/bin to PATH, ensure it finds the correct gcc.
+        export PATH=${STARROCKS_GCC_HOME}/bin:$PATH
+    fi
 else
     echo "STARROCKS_GCC_HOME environment variable is not set"
     exit 1
@@ -172,9 +176,10 @@ build_libevent() {
 }
 
 build_openssl() {
-    OPENSSL_PLATFORM="linux-x86_64"
-    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-        OPENSSL_PLATFORM="linux-aarch64"
+    OPENSSL_PLATFORM="${MACHINE_OS}-${MACHINE_TYPE}"
+    if [[ "$MACHINE_OS" == "darwin" ]] ; then
+        # a little different format for darwin platform
+        OPENSSL_PLATFORM="darwin64-`uname -m`-cc"
     fi
 
     check_if_source_exist $OPENSSL_SOURCE
@@ -207,8 +212,8 @@ build_thrift() {
     ./configure LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" LIBS="-lssl -lcrypto -ldl" \
     --prefix=$TP_INSTALL_DIR --docdir=$TP_INSTALL_DIR/doc --enable-static --disable-shared --disable-tests \
     --disable-tutorial --without-qt4 --without-qt5 --without-csharp --without-erlang --without-nodejs \
-    --without-lua --without-perl --without-php --without-php_extension --without-dart --without-ruby \
-    --without-haskell --without-go --without-haxe --without-d --without-python -without-java --with-cpp \
+    --without-lua --without-perl --without-php --without-php_extension --without-dart --without-ruby --without-swift \
+    --without-haskell --without-go --without-haxe --without-d --without-python -without-java --without-rs --with-cpp \
     --with-libevent=$TP_INSTALL_DIR --with-boost=$TP_INSTALL_DIR --with-openssl=$TP_INSTALL_DIR
 
     if [ -f compiler/cpp/thrifty.hh ];then
@@ -301,7 +306,7 @@ build_llvm() {
     -DLLVM_INCLUDE_BENCHMARKS:BOOL=False \
     -DBUILD_SHARED_LIBS:BOOL=False \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../${LLVM_SOURCE}
+    -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm .
 
     # TODO(yueyang): Add more targets.
     # This is a little bit hack, we need to minimize the build time and binary size.
@@ -570,7 +575,7 @@ build_rocksdb() {
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    CFLAGS= ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=no --enable-static=yes --enable-shared=no --with-openssl=$TP_INSTALL_DIR
+    CFLAGS= ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=no --enable-static=yes --enable-shared=no --with-openssl=$TP_INSTALL_DIR --disable-macos-framework
     make -j$PARALLEL
     make install
 }
@@ -629,8 +634,7 @@ build_brotli() {
     mv -f $TP_INSTALL_DIR/lib64/libbrotlienc-static.a $TP_INSTALL_DIR/lib64/libbrotlienc.a
     mv -f $TP_INSTALL_DIR/lib64/libbrotlidec-static.a $TP_INSTALL_DIR/lib64/libbrotlidec.a
     mv -f $TP_INSTALL_DIR/lib64/libbrotlicommon-static.a $TP_INSTALL_DIR/lib64/libbrotlicommon.a
-    rm $TP_INSTALL_DIR/lib64/libbrotli*.so
-    rm $TP_INSTALL_DIR/lib64/libbrotli*.so.*
+    rm -f $TP_INSTALL_DIR/lib64/libbrotli*.so* $TP_INSTALL_DIR/lib64/libbrotli*.dylib
 }
 
 # arrow
@@ -835,8 +839,15 @@ build_cctz() {
     check_if_source_exist $CCTZ_SOURCE
     cd $TP_SOURCE_DIR/$CCTZ_SOURCE
 
-    make -j$PARALLEL
-    PREFIX=${TP_INSTALL_DIR} make install
+    # use cmake to build the project
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+    rm -rf CMakeCache.txt CMakeFiles/
+    $CMAKE_CMD -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_TESTING=OFF \
+        -DBUILD_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib \
+        ..
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
 }
 
 #fmt
@@ -1127,7 +1138,7 @@ build_avro_c() {
     $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_BUILD_TYPE=Release
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
-    rm ${TP_INSTALL_DIR}/lib64/libavro.so*
+    rm -f ${TP_INSTALL_DIR}/lib64/libavro.so* ${TP_INSTALL_DIR}/lib64/libavro.*dylib
 }
 
 # serders
@@ -1220,7 +1231,7 @@ strip_binary() {
 
 
 # set GLOBAL_C*FLAGS for easy restore in each sub build process
-export GLOBAL_CPPFLAGS="-I ${TP_INCLUDE_DIR}"
+export GLOBAL_CPPFLAGS="-I${TP_INCLUDE_DIR}"
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
 export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=199309L"
 export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g"

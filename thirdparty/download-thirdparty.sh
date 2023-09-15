@@ -49,8 +49,13 @@ fi
 mkdir -p ${TP_DIR}/src
 
 md5sum_bin=md5sum
-if ! command -v ${md5sum_bin} >/dev/null 2>&1; then
-    echo "Warn: md5sum is not installed"
+if [[ "$MACHINE_OS" == "darwin" ]] ; then
+    # use `md5 -r` to compatible with md5sum output format
+    md5sum_bin=md5
+    md5sum_opts="-r"
+fi
+if ! command -v ${md5sum_bin} &>/dev/null; then
+    echo "Warn: $md5sum_bin is not installed"
     md5sum_bin=""
 fi
 
@@ -62,8 +67,8 @@ md5sum_func() {
     if [ "$md5sum_bin" == "" ]; then
        return 0
     else
-       md5=`md5sum "$DESC_DIR/$FILENAME"`
-       if [ "$md5" != "$MD5SUM  $DESC_DIR/$FILENAME" ]; then
+       md5=`$md5sum_bin $md5sum_opts "$DESC_DIR/$FILENAME" | awk '{print $1}'`
+       if [ "$md5" != "$MD5SUM" ]; then
            echo "$DESC_DIR/$FILENAME md5sum check failed!"
            echo -e "expect-md5 $MD5SUM \nactual-md5 $md5"
            return 1
@@ -105,7 +110,7 @@ download_func() {
             rm -f "$DESC_DIR/$FILENAME"
         else
             echo "Downloading $FILENAME from $DOWNLOAD_URL to $DESC_DIR"
-            wget --no-check-certificate $DOWNLOAD_URL -O $DESC_DIR/$FILENAME
+            wget --progress=dot:mega --no-check-certificate $DOWNLOAD_URL -O $DESC_DIR/$FILENAME
             if [ "$?"x == "0"x ]; then
                 if md5sum_func $FILENAME $DESC_DIR $MD5SUM; then
                     SUCCESS=1
@@ -170,6 +175,10 @@ echo "===== Checking all thirdpart archives...done"
 # unpacking thirdpart archives
 echo "===== Unpacking all thirdparty archives..."
 TAR_CMD="tar"
+TAR_OPTS=""
+if [[ "$MACHINE_OS" == "darwin" ]] ; then
+    TAR_OPTS="--no-mac-metadata"
+fi
 UNZIP_CMD="unzip"
 SUFFIX_TGZ="\.(tar\.gz|tgz)$"
 SUFFIX_XZ="\.tar\.xz$"
@@ -191,14 +200,14 @@ do
         if [[ "${!NAME}" =~ $SUFFIX_TGZ  ]]; then
             echo "$TP_SOURCE_DIR/${!NAME}"
             echo "$TP_SOURCE_DIR/${!SOURCE}"
-            if ! $TAR_CMD xzf "$TP_SOURCE_DIR/${!NAME}" -C $TP_SOURCE_DIR/tmp_dir; then
+            if ! $TAR_CMD $TAR_OPTS -xzf "$TP_SOURCE_DIR/${!NAME}" -C $TP_SOURCE_DIR/tmp_dir; then
                 echo "Failed to untar ${!NAME}"
                 exit 1
             fi
         elif [[ "${!NAME}" =~ $SUFFIX_XZ ]]; then
             echo "$TP_SOURCE_DIR/${!NAME}"
             echo "$TP_SOURCE_DIR/${!SOURCE}"
-            if ! $TAR_CMD xJf "$TP_SOURCE_DIR/${!NAME}" -C $TP_SOURCE_DIR/tmp_dir; then
+            if ! $TAR_CMD $TAR_OPTS -xJf "$TP_SOURCE_DIR/${!NAME}" -C $TP_SOURCE_DIR/tmp_dir; then
                 echo "Failed to untar ${!NAME}"
                 exit 1
             fi
@@ -210,7 +219,7 @@ do
         elif [[ "${!NAME}" =~ $SUFFIX_BZ2 ]]; then
             echo "$TP_SOURCE_DIR/${!NAME}"
             echo "$TP_SOURCE_DIR/${!SOURCE}"
-            if ! $TAR_CMD jxvf "$TP_SOURCE_DIR/${!NAME}" -C $TP_SOURCE_DIR/tmp_dir; then
+            if ! $TAR_CMD $TAR_OPTS -jxvf "$TP_SOURCE_DIR/${!NAME}" -C $TP_SOURCE_DIR/tmp_dir; then
                 echo "Failed to untar ${!NAME}"
                 exit 1
             fi
@@ -291,14 +300,6 @@ echo "Finished patching $LZ4_SOURCE"
 
 # brpc patch to disable shared library
 cd $TP_SOURCE_DIR/$BRPC_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-0.9.5" ]; then
-    patch -p1 < $TP_PATCH_DIR/brpc-0.9.5.patch
-    touch $PATCHED_MARK
-fi
-if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-0.9.7" ]; then
-    patch -p1 < $TP_PATCH_DIR/brpc-0.9.7.patch
-    touch $PATCHED_MARK
-fi
 if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.3.0" ]; then
     patch -p1 < $TP_PATCH_DIR/brpc-1.3.0.patch
     patch -p1 < $TP_PATCH_DIR/brpc-1.3.0-CVE-2023-31039.patch
@@ -390,23 +391,7 @@ if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; 
 else
     echo "$MARIADB_SOURCE not patched"
 fi
-
-cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.9.179" ]; then
-    if [ ! -f prefetch_crt_dep_ok ]; then
-        bash ./prefetch_crt_dependency.sh
-        touch prefetch_crt_dep_ok
-    fi
-    patch -p0 < $TP_PATCH_DIR/aws-sdk-cpp-1.9.179.patch    
-    # Fix crt BB, refer to https://github.com/aws/s2n-tls/issues/3166
-    patch -p1 -f -i $TP_PATCH_DIR/aws-sdk-cpp-patch-1.9.179-s2n-compile-error.patch
-    # refer to https://github.com/aws/aws-sdk-cpp/issues/1824
-    patch -p1 < $TP_PATCH_DIR/aws-sdk-cpp-patch-1.9.179-LINK_LIBRARIES_ALL.patch
-    touch $PATCHED_MARK
-    echo "Finished patching $AWS_SDK_CPP_SOURCE"
-else
-    echo "$AWS_SDK_CPP_SOURCE not patched"
-fi
+cd -
 
 cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.10.36" ]; then
@@ -421,6 +406,7 @@ if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.10.36" ]; th
 else
     echo "$AWS_SDK_CPP_SOURCE not patched"
 fi
+cd -
 
 # patch jemalloc_hook
 cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
