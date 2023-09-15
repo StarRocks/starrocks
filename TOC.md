@@ -52,8 +52,10 @@
   + [通过 HTTP PUT 从本地文件系统或流式数据源导入](/loading/StreamLoad.md)
   + [从 HDFS 导入](/loading/hdfs_load.md)
   + [从云存储导入](/loading/cloud_storage_load.md)
-  + [从 Apache Kafka® 持续导入](/loading/RoutineLoad.md)
-  + 通过 Apache Spark™ 导入
+  + 从 Apache Kafka® 导入
+    + [使用 Kafka connector](/loading/Kafka-connector-starrocks.md)
+    + [使用 Routine Load](/loading/RoutineLoad.md)
+  + 从 Apache Spark™ 导入
     + [使用 Spark connector（推荐）](/loading/Spark-connector-starrocks.md)
     + [使用 Spark Load](/loading/SparkLoad.md)
   + [使用 INSERT 语句导入](/loading/InsertInto.md)
@@ -731,6 +733,8 @@
 + 开发指南
   + [编译 StarRocks](/developers/build-starrocks/Build_in_docker.md)
   + [使用 debuginfo 文件进行调试](/developers/debuginfo.md)
++ 生态组件发布记录
+  + [Kafka connector](/ecosystem_release/kafka_connector.md)
 + Release Notes
   + [v3.0](/release_notes/release-3.0.md)
   + [v2.5](/release_notes/release-2.5.md)
