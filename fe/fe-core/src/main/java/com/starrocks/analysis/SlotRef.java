@@ -443,9 +443,6 @@ public class SlotRef extends Expr {
     @Override
     public boolean isBound(SlotId slotId) {
         Preconditions.checkState(isAnalyzed);
-        if (isFromLambda()) {
-            return true;
-        }
         return desc.getId().equals(slotId);
     }
 
