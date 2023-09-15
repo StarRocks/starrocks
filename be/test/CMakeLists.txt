@@ -1,5 +1,4 @@
 set(EXEC_FILES
-        ./test_main.cpp
         ./agent/master_info_test.cpp
         ./column/array_column_test.cpp
         ./column/binary_column_test.cpp
@@ -394,10 +393,11 @@ if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
 endif ()
 
-add_executable(starrocks_test ${EXEC_FILES})
+add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
+SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs>)
 
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
-SET_TARGET_PROPERTIES(starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
 # =================================================
 # bytes_test requires tcmalloc which conflicts with sanitizer.
