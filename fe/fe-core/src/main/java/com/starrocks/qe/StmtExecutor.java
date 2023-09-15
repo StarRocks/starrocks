@@ -190,6 +190,7 @@ import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import org.apache.commons.lang.exception.ExceptionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -313,6 +314,10 @@ public class StmtExecutor {
             summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
 
             summaryProfile.addInfoString("NonDefaultSessionVariables", variables.getNonDefaultVariablesJson());
+            String hitMvs = context.getAuditEventBuilder().getHitMvs();
+            if (StringUtils.isNotEmpty(hitMvs)) {
+                summaryProfile.addInfoString("HitMaterializedViews", hitMvs);
+            }
         }
 
         profile.addChild(summaryProfile);

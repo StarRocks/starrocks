@@ -766,6 +766,10 @@ public class OlapScanNode extends ScanNode {
             output.append(explainColumnAccessPath(prefix));
         }
 
+        if (olapTable.isMaterializedView()) {
+            output.append(prefix).append("MaterializedView: true\n");
+        }
+
         return output.toString();
     }
 
@@ -1206,5 +1210,10 @@ public class OlapScanNode extends ScanNode {
         LOG.debug("mapTabletsToPartitions. tabletToPartitionMap: {}, partitionToTabletMap: {}",
                 tabletToPartitionMap, partitionToTabletMap);
         return partitionToTabletMap;
+    }
+
+    @Override
+    protected boolean supportTopNRuntimeFilter() {
+        return true;
     }
 }
