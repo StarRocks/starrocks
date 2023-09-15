@@ -94,7 +94,7 @@ public:
 
     // the number of blocks created
     RuntimeProfile::Counter* block_count = nullptr;
-    // spill task/ restore task
+    // flush/restore task count
     RuntimeProfile::Counter* flush_io_task_count = nullptr;
     RuntimeProfile::HighWaterMarkCounter* peak_flush_io_task_count = nullptr;
     RuntimeProfile::Counter* restore_io_task_count = nullptr;
