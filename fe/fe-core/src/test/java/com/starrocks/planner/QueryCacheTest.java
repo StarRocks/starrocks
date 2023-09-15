@@ -414,6 +414,7 @@ public class QueryCacheTest {
                 throw new RuntimeException(e);
             }
         });
+        ctx.getSessionVariable().setQueryCacheDenyOversizeResult(false);
     }
 
     public static List<String> getSsbCreateTableSqlList() {

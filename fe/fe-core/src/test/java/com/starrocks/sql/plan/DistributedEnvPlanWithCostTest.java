@@ -1101,6 +1101,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
         // For the none-local one-phase aggregation, disable AssignScanRangesPerDriverSeq and enable SharedScan.
         ConnectContext.get().getSessionVariable().setNewPlanerAggStage(1);
+        ConnectContext.get().getSessionVariable().setEnableQueryCache(false);
         sql = "select count(1) from customer group by C_NAME";
         plan = getExecPlan(sql);
         fragment = plan.getFragments().get(2);
