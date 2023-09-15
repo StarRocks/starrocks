@@ -128,33 +128,23 @@ public class ExportPendingTask extends PriorityLeaderTask {
                 String host = address.getHostname();
                 int port = address.getPort();
                 ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                    node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNodeWithBePort(host, port);
+                }
 
                 if (node == null) {
-                    if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                        node = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, port);
-                        if (node == null) {
-                            // for debug
-                            LOG.info("node is null");
-                            return Status.CANCELLED;
-                        }
-                    } else {
-                        return Status.CANCELLED;
-                    }
+                    return Status.CANCELLED;
                 }
 
                 long nodeId = node.getId();
                 if ((RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) &&
                         !GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(nodeId)) {
-                    // for debug
-                    LOG.info("node is unavailable");
                     return Status.CANCELLED;
                 }
-                
+
                 this.job.setBeStartTime(nodeId, node.getLastStartTime());
                 Status status;
                 if (job.exportLakeTable()) {
-                    // for debug
-                    LOG.info("status is lockTabletMetadata");
                     status = lockTabletMetadata(internalScanRange, node);
                 } else {
                     status = makeSnapshot(internalScanRange, address);

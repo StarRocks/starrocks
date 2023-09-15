@@ -583,6 +583,14 @@ public class SystemInfoService implements GsonPostProcessable {
         return null;
     }
 
+    public ComputeNode getBackendOrComputeNodeWithBePort(String host, int bePort) {
+        ComputeNode node = getBackendWithBePort(host, bePort);
+        if (node == null) {
+            node = getComputeNodeWithBePort(host, bePort);
+        }
+        return node;
+    }
+
     public List<Backend> getBackendOnlyWithHost(String host) {
         List<Backend> resultBackends = new ArrayList<>();
         for (Backend backend : idToBackendRef.values()) {

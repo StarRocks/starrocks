@@ -765,13 +765,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 String host = address.getHostname();
                 int port = address.getPort();
                 ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                    node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNodeWithBePort(host, port);
+                }
                 if (node == null) {
-                    if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                        node = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, port);
-                    }
-                    if (node == null) {
-                        continue;
-                    }
+                    continue;
                 }
                 try {
                     LakeService lakeService = BrpcProxy.getLakeService(host, port);
