@@ -359,7 +359,6 @@ public:
                         LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
                                    << " [" << hexdump(keys[i].data, keys[i].size) << "]";
                     }
-                    LOG(INFO) << "erase old kv, rssid:" << (old >> 32) << ", rowid:" << (uint32_t)(old & ROWID_MASK);
                     (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                     p.first->second = v;
                 }
