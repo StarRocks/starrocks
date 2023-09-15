@@ -32,12 +32,9 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
-=======
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
->>>>>>> 6138cc07c4 ([Enhancement] Refine error prompt (#31056))
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -2922,7 +2919,6 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-<<<<<<< HEAD
     public void testMVWithMaxRewriteStaleness() throws Exception {
         LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
         String sql = "create materialized view mv_with_rewrite_staleness \n" +
@@ -2952,9 +2948,7 @@ public class CreateMaterializedViewTest {
         }
     }
 
-}
-
-=======
+    @Test
     public void testCreateSynchronousMVOnLakeTable() throws Exception {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from mocked_cloud_table group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
@@ -2985,4 +2979,3 @@ public class CreateMaterializedViewTest {
         Assert.assertTrue(e.getMessage().contains("Do not support create synchronous materialized view(rollup) on"));
     }
 }
->>>>>>> 6138cc07c4 ([Enhancement] Refine error prompt (#31056))
