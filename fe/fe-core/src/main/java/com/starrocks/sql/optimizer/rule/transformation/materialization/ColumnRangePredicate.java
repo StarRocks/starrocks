@@ -99,6 +99,12 @@ public class ColumnRangePredicate extends RangePredicate {
 
     @Override
     public ScalarOperator toScalarOperator() {
+        if (canonicalColumnRanges.isEmpty()) {
+            return ConstantOperator.FALSE;
+        }
+        if (isUnbounded()) {
+            return ConstantOperator.TRUE;
+        }
         List<ScalarOperator> orOperators = Lists.newArrayList();
         for (Range<ConstantOperator> range : columnRanges.asRanges()) {
             List<ScalarOperator> andOperators = Lists.newArrayList();

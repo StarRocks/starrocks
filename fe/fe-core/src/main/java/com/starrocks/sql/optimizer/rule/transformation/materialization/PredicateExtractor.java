@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.function.BiFunction;
 
 public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, PredicateExtractor.PredicateExtractorContext> {
     private final List<ScalarOperator> columnEqualityPredicates = Lists.newArrayList();
@@ -119,17 +120,15 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
             if (predicate.isOr()) {
                 if (childRange instanceof ColumnRangePredicate) {
                     ColumnRangePredicate childColumnRange = childRange.cast();
-                    Optional<RangePredicate> rangePredicateOpt = findColumnRangePredicate(rangePredicates, childColumnRange);
-                    if (rangePredicateOpt.isPresent()) {
-                        ColumnRangePredicate matchedColumnRangePredicate = rangePredicateOpt.get().cast();
-                        ColumnRangePredicate newPredicate =
-                                matchedColumnRangePredicate.orRange(matchedColumnRangePredicate, childColumnRange);
-                        rangePredicates.remove(matchedColumnRangePredicate);
-                        if (!newPredicate.isUnbounded()) {
-                            rangePredicates.add(newPredicate);
-                        }
-                    } else {
-                        if (!((ColumnRangePredicate) childRange).isUnbounded()) {
+                    mergeColumnRange(childColumnRange, rangePredicates,
+                            (columnRange1, columnRange2) -> ColumnRangePredicate.orRange(columnRange1, columnRange2));
+                } else if (childRange instanceof OrRangePredicate) {
+                    for (RangePredicate subRangePredicate : childRange.getChildPredicates()) {
+                        if (subRangePredicate instanceof ColumnRangePredicate) {
+                            ColumnRangePredicate childColumnRange = subRangePredicate.cast();
+                            mergeColumnRange(childColumnRange, rangePredicates,
+                                    (columnRange1, columnRange2) -> ColumnRangePredicate.orRange(columnRange1, columnRange2));
+                        } else {
                             rangePredicates.add(childRange);
                         }
                     }
@@ -139,33 +138,14 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
             } else if (predicate.isAnd()) {
                 if (childRange instanceof ColumnRangePredicate) {
                     ColumnRangePredicate childColumnRange = childRange.cast();
-                    Optional<RangePredicate> rangePredicateOpt = findColumnRangePredicate(rangePredicates, childColumnRange);
-                    if (rangePredicateOpt.isPresent()) {
-                        ColumnRangePredicate newPredicate =
-                                ColumnRangePredicate.andRange(rangePredicateOpt.get().cast(), childColumnRange);
-                        rangePredicates.remove(rangePredicateOpt.get());
-                        rangePredicates.add(newPredicate);
-                    } else {
-                        if (!childColumnRange.isUnbounded()) {
-                            rangePredicates.add(childRange);
-                        }
-                    }
+                    mergeColumnRange(childColumnRange, rangePredicates,
+                            (columnRange1, columnRange2) -> ColumnRangePredicate.andRange(columnRange1, columnRange2));
                 } else if (childRange instanceof AndRangePredicate) {
                     for (RangePredicate subRangePredicate : childRange.getChildPredicates()) {
                         if (subRangePredicate instanceof ColumnRangePredicate) {
                             ColumnRangePredicate childColumnRange = subRangePredicate.cast();
-                            Optional<RangePredicate> rangePredicateOpt =
-                                    findColumnRangePredicate(rangePredicates, childColumnRange);
-                            if (rangePredicateOpt.isPresent()) {
-                                ColumnRangePredicate newPredicate =
-                                        ColumnRangePredicate.andRange(rangePredicateOpt.get().cast(), childColumnRange);
-                                rangePredicates.remove(rangePredicateOpt.get());
-                                rangePredicates.add(newPredicate);
-                            } else {
-                                if (!childColumnRange.isUnbounded()) {
-                                    rangePredicates.add(subRangePredicate);
-                                }
-                            }
+                            mergeColumnRange(childColumnRange, rangePredicates,
+                                    (columnRange1, columnRange2) -> ColumnRangePredicate.andRange(columnRange1, columnRange2));
                         } else {
                             rangePredicates.add(childRange);
                         }
@@ -178,13 +158,29 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
                 return null;
             }
         }
+        if (rangePredicates.size() == 1 && (rangePredicates.get(0) instanceof ColumnRangePredicate)) {
+            return rangePredicates.get(0);
+        }
         if (predicate.isAnd()) {
-            if (rangePredicates.size() == 1 && (rangePredicates.get(0) instanceof ColumnRangePredicate)) {
-                return rangePredicates.get(0);
-            }
             return new AndRangePredicate(rangePredicates);
         } else {
             return new OrRangePredicate(rangePredicates);
+        }
+    }
+
+    private void mergeColumnRange(
+            ColumnRangePredicate childColumnRange,
+            List<RangePredicate> rangePredicates,
+            BiFunction<ColumnRangePredicate, ColumnRangePredicate, ColumnRangePredicate> mergeOp) {
+        Optional<RangePredicate> rangePredicateOpt =
+                findColumnRangePredicate(rangePredicates, childColumnRange);
+        ColumnRangePredicate newPredicate = childColumnRange;
+        if (rangePredicateOpt.isPresent()) {
+            newPredicate = mergeOp.apply(rangePredicateOpt.get().cast(), childColumnRange);
+            rangePredicates.remove(rangePredicateOpt.get());
+        }
+        if (!newPredicate.isUnbounded()) {
+            rangePredicates.add(newPredicate);
         }
     }
 

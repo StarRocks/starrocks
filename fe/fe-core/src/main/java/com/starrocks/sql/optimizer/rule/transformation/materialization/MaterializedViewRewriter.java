@@ -1662,6 +1662,9 @@ public class MaterializedViewRewriter {
         List<ScalarOperator> predicates = Utils.extractConjuncts(queryCompensationPredicate);
         predicates.removeAll(mvRewriteContext.getOnPredicates());
         queryCompensationPredicate = Utils.compoundAnd(predicates);
+        // use PredicateSplit to normalize range predicate
+        PredicateSplit predicateSplit = PredicateSplit.splitPredicate(queryCompensationPredicate);
+        queryCompensationPredicate = predicateSplit.toScalarOperator();
         ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
         queryCompensationPredicate = columnRewriter.rewriteByQueryEc(queryCompensationPredicate);
         queryCompensationPredicate = MvUtils.canonizePredicate(queryCompensationPredicate);

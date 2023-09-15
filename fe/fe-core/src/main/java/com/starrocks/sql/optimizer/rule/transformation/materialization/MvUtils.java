@@ -849,7 +849,8 @@ public class MvUtils {
 
     public static ScalarOperator compensatePartitionPredicate(OptExpression plan,
                                                               ColumnRefFactory columnRefFactory,
-                                                              boolean isCompensate) {
+                                                              boolean isCompensate,
+                                                              MaterializedView mv) {
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(plan);
         if (scanOperators.isEmpty()) {
             return ConstantOperator.createBoolean(true);
@@ -882,7 +883,7 @@ public class MvUtils {
                     // `partitionPredicate` : k1>='2020-02-11'
                     // however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
                     partitionPredicate = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
-                            columnRefFactory);
+                            columnRefFactory, mv);
                 }
             } else if (scanOperator instanceof LogicalHiveScanOperator) {
                 partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator);
@@ -907,13 +908,27 @@ public class MvUtils {
      * @return
      */
     private static List<ScalarOperator> compensatePartitionPredicateForOlapScan(LogicalOlapScanOperator olapScanOperator,
-                                                                                ColumnRefFactory columnRefFactory) {
+                                                                                ColumnRefFactory columnRefFactory,
+                                                                                MaterializedView mv) {
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
         Preconditions.checkState(olapScanOperator.getTable().isNativeTableOrMaterializedView());
         OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
 
         // compensate nothing for single partition table
         if (olapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
+            return partitionPredicates;
+        }
+        if (mv.getPartitionInfo() instanceof SinglePartitionInfo) {
+            return olapScanOperator.getPrunedPartitionPredicates();
+        }
+
+        Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
+        if (partitionTableAndColumns == null) {
+            return null;
+        }
+        if (!olapTable.getTableIdentifier().equals(partitionTableAndColumns.first.getTableIdentifier())) {
+            // for non ref table, do not compensate any partition predicates
+            // because they must be the same for mv and base tables
             return partitionPredicates;
         }
 
