@@ -19,6 +19,7 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -252,6 +253,12 @@ public class ExpressionTest extends PlanTestBase {
 
         Assert.assertTrue(lambdaFunc instanceof LambdaFunctionExpr);
         Assert.assertEquals("<slot 100000> -> <slot 100000> = 1", lambdaFunc.toSql());
+
+        LambdaFunctionExpr lexpr = ((LambdaFunctionExpr) lambdaFunc);
+        Assert.assertTrue(lexpr.getChildren().size() == 2 && lexpr.getChild(1) instanceof SlotRef);
+
+        SlotRef slotRef = ((SlotRef) lexpr.getChild(1));
+        Assert.assertTrue(slotRef.isFromLambda());
     }
 
     @Test
