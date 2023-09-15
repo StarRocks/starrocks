@@ -533,13 +533,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         EditLog.waitInfinity(startWriteTs, editLogFuture);
 
         // Delete tablet and shards
-        List<Long> unusedShards = new ArrayList<>();
         for (MaterializedIndex droppedIndex : droppedIndexes) {
             List<Long> shards = droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList());
-            unusedShards.addAll(shards);
+            // TODO: what if unusedShards deletion is partially successful?
+            StarMgrMetaSyncer.dropTabletAndDeleteShard(shards, GlobalStateMgr.getCurrentStarOSAgent());
         }
-        // TODO: what if unusedShards deletion is partially successful?
-        StarMgrMetaSyncer.dropTabletAndDeleteShard(unusedShards, GlobalStateMgr.getCurrentStarOSAgent());
+
 
         if (span != null) {
             span.end();
