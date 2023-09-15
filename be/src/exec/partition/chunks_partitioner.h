@@ -221,7 +221,7 @@ private:
         });
 
         while (chunk_it != chunk_end) {
-            if (!consumer(hash_map_with_key.nullKeyPartitionIdx, *chunk_it++)) {
+            if (!consumer(hash_map_with_key.kNullKeyPartitionIdx, *chunk_it++)) {
                 // Fetch suspend, and it may proceed the next call.
                 return;
             }

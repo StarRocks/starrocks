@@ -145,8 +145,6 @@ private:
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
     RuntimeProfile::Counter* _read_pk_index_timer = nullptr;
 
-    // IO statistics
-    RuntimeProfile::Counter* _io_statistics = nullptr;
     // Page count
     RuntimeProfile::Counter* _pages_count_memory_counter = nullptr;
     RuntimeProfile::Counter* _pages_count_local_disk_counter = nullptr;
@@ -569,7 +567,7 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     // IOTime
     _io_timer = ADD_TIMER(_runtime_profile, "IOTime");
     const std::string io_statistics_name = "IOStatistics";
-    _io_statistics = ADD_COUNTER(_runtime_profile, io_statistics_name, TUnit::NONE);
+    ADD_COUNTER(_runtime_profile, io_statistics_name, TUnit::NONE);
     // Page count
     _pages_count_memory_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "PagesCountMemory", TUnit::UNIT, io_statistics_name);

@@ -92,7 +92,7 @@ struct PartitionHashMapBase {
     int64_t total_num_rows = 0;
 
     bool init_null_key_partition = false;
-    static constexpr size_t nullKeyPartitionIdx = 0;
+    static constexpr size_t kNullKeyPartitionIdx = 0;
 
     PartitionHashMapBase(int32_t chunk_size) : chunk_size(chunk_size) {}
 
@@ -257,7 +257,7 @@ protected:
         if (!init_null_key_partition) {
             init_null_key_partition = true;
             if constexpr (!std::is_same_v<std::nullptr_t, std::decay_t<decltype(new_partition_cb)>>) {
-                new_partition_cb(nullKeyPartitionIdx);
+                new_partition_cb(kNullKeyPartitionIdx);
             }
         }
 
@@ -347,8 +347,6 @@ protected:
                 consume_full_chunks(null_key_value, std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
             }
 
-            chunk->check_or_die();
-
             // The first i rows has been pushed into hash_map
             if (is_passthrough && i > 0) {
                 for (auto& column : chunk->columns()) {
@@ -389,7 +387,7 @@ struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase<tr
     using ColumnType = RunTimeColumnType<logical_type>;
     using FieldType = RunTimeCppType<logical_type>;
     HashMap hash_map;
-    PartitionChunks null_key_value{nullKeyPartitionIdx};
+    PartitionChunks null_key_value{kNullKeyPartitionIdx};
 
     PartitionHashMapWithOneNullableNumberKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
 
@@ -437,7 +435,7 @@ template <typename HashMap>
 struct PartitionHashMapWithOneNullableStringKey : public PartitionHashMapBase<true, false> {
     using Iterator = typename HashMap::iterator;
     HashMap hash_map;
-    PartitionChunks null_key_value{nullKeyPartitionIdx};
+    PartitionChunks null_key_value{kNullKeyPartitionIdx};
 
     PartitionHashMapWithOneNullableStringKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
 
