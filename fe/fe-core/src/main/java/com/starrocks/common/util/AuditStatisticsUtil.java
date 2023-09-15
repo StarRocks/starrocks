@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.common.util;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.thrift.TAuditStatistics;
