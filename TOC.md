@@ -747,6 +747,8 @@
   + [使用 debuginfo 文件进行调试](/developers/debuginfo.md)
 + 生态组件发布记录
   + [Kafka connector](/ecosystem_release/kafka_connector.md)
+  + [Spark connector](/ecosystem_release/spark_connector.md)
+  + [Flink connector](/ecosystem_release/flink_connector.md)
 + Release Notes
   + [v3.1](/release_notes/release-3.1.md)
   + [v3.0](/release_notes/release-3.0.md)
