@@ -129,14 +129,6 @@ This feature is supported since StarRocks v3.0.
 
 The following fields are provided in `load_tracking_logs`:
 
-<<<<<<< HEAD
-| **Field**        | **Description**                                              |
-| ---------------- | ------------------------------------------------------------ |
-| JOB_ID           | The ID of the load job.                                      |
-| LABEL            | The label of the load job.                                   |
-| DATABASE_NAME    | The database that the load job belongs to.                   |
-| TRACKING_LOG     | Error logs (if any) of the load job.                         |
-=======
 | **Field**     | **Description**                                                                       |
 |---------------|---------------------------------------------------------------------------------------|
 | JOB_ID        | The ID of the load job.                                                               |
@@ -173,4 +165,3 @@ The following fields are provided in `materialized_views`:
 | LAST_REFRESH_ERROR_MESSAGE           | Error message of the most recent refresh task                |
 | TABLE_ROWS                           | Number of data rows in the materialized view, based on approximate background statistics |
 | MATERIALIZED_VIEW_DEFINITION         | SQL definition of the materialized view                      |
->>>>>>> 9ac0ddb86d ([Doc] Remake MV docs - part1 (#31087))
