@@ -146,7 +146,6 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 全局变量，仅支持全局生效。用于设置计算节点存储引擎默认的存储格式。当前支持的存储格式包括：alpha/beta。
 
-
 ### disable_colocate_join
 
 控制是否启用 Colocate Join 功能。默认为 false，表示启用该功能。true 表示禁用该功能。当该功能被禁用后，查询规划将不会尝试执行 Colocate Join。

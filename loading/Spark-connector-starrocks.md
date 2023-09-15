@@ -135,7 +135,7 @@ connector jar包的命名格式如下
 
 - 您还可以自定义数据类型映射。
 
-例如，一个 StarRocks 表包含了 BITMAP 和 HLL 类型的列，但 Spark 不支持这两种数据类型。则您需要在 Spark 中设置其支持的数据类型，并且自定义数据类型映射关系。详细步骤，参见导入至 [BITMAP]() 和 [HLL]() 类型的列。自版本 1.1.1 起支持导入至 BITMAP 和 HLL 类型的列。
+例如，一个 StarRocks 表包含了 BITMAP 和 HLL 类型的列，但 Spark 不支持这两种数据类型。则您需要在 Spark 中设置其支持的数据类型，并且自定义数据类型映射关系。详细步骤，参见导入至 [BITMAP](#导入至-bitmap-列) 和 [HLL](#导入至-hll-列) 类型的列。自版本 1.1.1 起支持导入至 BITMAP 和 HLL 类型的列。
 
 ## 升级 Spark connector
 

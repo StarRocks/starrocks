@@ -12,7 +12,7 @@
 **更多创建和使用 UDF 的信息，推荐参考 [Java UDF](../../sql-functions/JAVA_UDF.md)。**
 
 > **说明**
-> 
+>
 > 仅 admin 用户有权限使用该语句。
 
 ## 语法

@@ -911,11 +911,7 @@ from int_t where property in ('odd','even');
 | 5  | odd      | 15           |
 | 7  | odd      | 21           |
 +----+----------+--------------+
-<<<<<<< HEAD
-~~~
-=======
 ```
->>>>>>> 760ddf69 (Update Window_function.md (backport #6276) (#6321))
 
 ## 使用 VARIANCE, VAR_POP, VARIANCE_POP 窗口函数
 
