@@ -20,7 +20,7 @@
 
 **Release date:** June 25, 2023
 
-**Features:**
+**Features**
 
 - Supports loading CSV, JSON, Avro, and Protobuf data.
 - Supports loading data from a self-managed Apache Kafka cluster or the Confluent cloud.
