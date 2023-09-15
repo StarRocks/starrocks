@@ -51,6 +51,8 @@ Status HashJoinBuildOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 void HashJoinBuildOperator::close(RuntimeState* state) {
+    COUNTER_SET(_join_builder->build_metrics().hash_table_memory_usage,
+                _join_builder->hash_join_builder()->hash_table_mem_usage());
     _join_builder->unref(state);
 
     Operator::close(state);

@@ -156,6 +156,11 @@ struct HashJoinBuildMetrics {
     RuntimeProfile::Counter* build_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* build_buckets_counter = nullptr;
     RuntimeProfile::Counter* runtime_filter_num = nullptr;
+<<<<<<< HEAD
+=======
+    RuntimeProfile::Counter* build_keys_per_bucket = nullptr;
+    RuntimeProfile::Counter* hash_table_memory_usage = nullptr;
+>>>>>>> d15ff35450 ([Enhancement] try to buffer aggregated data in spillable agg operator (#29469))
 
     void prepare(RuntimeProfile* runtime_profile);
 };

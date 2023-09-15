@@ -331,6 +331,8 @@ public:
 
     int32_t spill_mem_table_num() const { return _query_options.spill_mem_table_num; }
 
+    bool enable_agg_spill_preaggregation() const { return _query_options.enable_agg_spill_preaggregation; }
+
     double spill_mem_limit_threshold() const { return _query_options.spill_mem_limit_threshold; }
 
     int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }

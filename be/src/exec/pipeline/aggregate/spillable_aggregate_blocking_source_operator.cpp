@@ -99,7 +99,6 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::pull_chunk(RuntimeS
 }
 
 StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk(RuntimeState* state) {
-    DCHECK(_accumulator.need_input());
     ChunkPtr res;
 
     if (_accumulator.has_output()) {
