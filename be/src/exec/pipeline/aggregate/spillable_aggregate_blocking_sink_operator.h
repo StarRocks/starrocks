@@ -61,11 +61,29 @@ private:
     bool spilled() const { return _aggregator->spiller()->spilled(); }
 
 private:
-    Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
-    std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state);
+    Status _try_to_spill_by_force(RuntimeState* state, const ChunkPtr& chunk);
+
+    Status _try_to_spill_by_auto(RuntimeState* state, const ChunkPtr& chunk);
+
+    Status _spill_all_data(RuntimeState* state, bool should_spill_hash_table);
+
+    void _add_streaming_chunk(ChunkPtr chunk);
+
+    std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state, bool should_spill_hash_table = true);
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
 
+    std::queue<ChunkPtr> _streaming_chunks;
+    size_t _streaming_rows = 0;
+    size_t _streaming_bytes = 0;
+
+    int32_t _continuous_low_reduction_chunk_num = 0;
+
     bool _is_finished = false;
+
+    RuntimeProfile::Counter* _hash_table_spill_times = nullptr;
+
+    static constexpr double HT_LOW_REDUCTION_THRESHOLD = 0.5;
+    static constexpr int32_t HT_LOW_REDUCTION_CHUNK_LIMIT = 5;
 };
 
 class SpillableAggregateBlockingSinkOperatorFactory : public OperatorFactory {
