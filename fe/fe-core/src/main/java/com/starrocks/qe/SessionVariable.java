@@ -358,7 +358,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
-
+    public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
 
@@ -1143,6 +1143,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableSimplifyCaseWhen = true;
 
     private int exprChildrenLimit = -1;
+
+    @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
+    private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -2178,6 +2181,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableSimplifyCaseWhen(boolean enableSimplifyCaseWhen) {
         this.enableSimplifyCaseWhen = enableSimplifyCaseWhen;
+    }
+
+    public void setLargeDecimalUnderlyingType(String type) {
+        if (type.equalsIgnoreCase(SessionVariableConstants.PANIC) ||
+                type.equalsIgnoreCase(SessionVariableConstants.DECIMAL) ||
+                type.equalsIgnoreCase(SessionVariableConstants.DOUBLE)) {
+            largeDecimalUnderlyingType = type.toLowerCase();
+        } else {
+            throw new IllegalArgumentException(
+                    "Legal values of large_decimal_underlying_type are panic|decimal|double");
+        }
+    }
+
+    public String getLargeDecimalUnderlyingType() {
+        return largeDecimalUnderlyingType;
     }
 
     // Serialize to thrift object
