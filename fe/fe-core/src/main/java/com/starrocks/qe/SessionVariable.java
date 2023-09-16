@@ -363,6 +363,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
 
+    public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
+
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
         DEFAULT,            // default, choose the materialized view or not by cost optimizer
@@ -1181,6 +1183,39 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     private int exprChildrenLimit = -1;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = CBO_PREDICATE_SUBFIELD_PATH, flag = VariableMgr.INVISIBLE)
+    private boolean cboPredicateSubfieldPath = true;
+
+    public String getHiveTempStagingDir() {
+        return hiveTempStagingDir;
+    }
+
+    public SessionVariable setHiveTempStagingDir(String hiveTempStagingDir) {
+        this.hiveTempStagingDir = hiveTempStagingDir;
+        return this;
+    }
+
+    @VarAttr(name = ENABLE_PRUNE_ICEBERG_MANIFEST)
+    private boolean enablePruneIcebergManifest = true;
+
+    @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
+    private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
+
+    public boolean isEnablePruneIcebergManifest() {
+        return enablePruneIcebergManifest;
+    }
+
+    public void setEnablePruneIcebergManifest(boolean enablePruneIcebergManifest) {
+        this.enablePruneIcebergManifest = enablePruneIcebergManifest;
+    }
+
+    public boolean isCboPredicateSubfieldPath() {
+        return cboPredicateSubfieldPath;
+    }
+
+>>>>>>> ab38cf5f79 ([Feature] Substitute large decimal types with double/decimal (#31171))
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
@@ -2250,6 +2285,28 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableExprPrunePartition = enableExprPrunePartition;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isAuditExecuteStmt() {
+        return auditExecuteStmt;
+    }
+
+    public void setLargeDecimalUnderlyingType(String type) {
+        if (type.equalsIgnoreCase(SessionVariableConstants.PANIC) ||
+                type.equalsIgnoreCase(SessionVariableConstants.DECIMAL) ||
+                type.equalsIgnoreCase(SessionVariableConstants.DOUBLE)) {
+            largeDecimalUnderlyingType = type.toLowerCase();
+        } else {
+            throw new IllegalArgumentException(
+                    "Legal values of large_decimal_underlying_type are panic|decimal|double");
+        }
+    }
+
+    public String getLargeDecimalUnderlyingType() {
+        return largeDecimalUnderlyingType;
+    }
+
+>>>>>>> ab38cf5f79 ([Feature] Substitute large decimal types with double/decimal (#31171))
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {

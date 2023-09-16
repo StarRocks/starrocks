@@ -27,4 +27,17 @@ public:
     ~ComputeService() override;
 };
 
+<<<<<<< HEAD:be/src/service/service_cn/compute_service.h
 } // namespace starrocks
+=======
+    public static final String FORCE_PREAGGREGATION = "force_preaggregation";
+
+    public static final String LIMITED = "limited";
+
+    public static final String PANIC = "panic";
+
+    public static final String DOUBLE = "double";
+
+    public static final String DECIMAL = "decimal";
+}
+>>>>>>> ab38cf5f79 ([Feature] Substitute large decimal types with double/decimal (#31171)):fe/fe-core/src/main/java/com/starrocks/qe/SessionVariableConstants.java
