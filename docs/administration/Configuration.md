@@ -1816,9 +1816,12 @@ BE static parameters are as follows.
 
 #### storage_root_path
 
-- **Default**: ${STARROCKS_HOME}/storage
+- **Default**: `${STARROCKS_HOME}/storage`
 - **Unit**: N/A
-- **Description**: The directory and medium of the storage volume. Multiple volumes are separated by semicolons (;). If the storage medium is SSD, add ,medium:ssd at the end of the directory. If the storage medium is HDD, add ,medium:hdd at the end of the directory.
+- **Description**: The directory and medium of the storage volume.
+  - Multiple volumes are separated by semicolons (`;`).
+  - If the storage medium is SSD, add `medium:ssd` at the end of the directory.
+  - If the storage medium is HDD, add ,medium:hdd at the end of the directory.
 
 #### max_length_for_bitmap_function
 
@@ -1872,7 +1875,11 @@ BE static parameters are as follows.
 
 - **Default**: FALSE
 - **Unit**: N/A
-- **Description**: A boolean value to control whether to disable PageCache. When PageCache is enabled, StarRocks caches the recently scanned data. PageCache can significantly improve the query performance when similar queries are repeated frequently. TRUE indicates disabling PageCache. The default value of this item has been changed from TRUE to FALSE since StarRocks v2.4.
+- **Description**: A boolean value to control whether to disable PageCache.
+  - When PageCache is enabled, StarRocks caches the recently scanned data.
+  - PageCache can significantly improve the query performance when similar queries are repeated frequently.
+  - TRUE indicates disabling PageCache.
+  - The default value of this item has been changed from TRUE to FALSE since StarRocks v2.4.
 
 #### base_compaction_num_threads_per_disk
 
