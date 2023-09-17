@@ -44,566 +44,566 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### qe_slow_log_ms
 
-  - Unit: ms
-  - Default: 5000
-  - Description: The threshold used to determine whether a query is a slow query. If the response time of a query exceeds this threshold, it is recorded as a slow query in `fe.audit.log`.
+- Unit: ms
+- Default: 5000
+- Description: The threshold used to determine whether a query is a slow query. If the response time of a query exceeds this threshold, it is recorded as a slow query in `fe.audit.log`.
 
 #### Metadata and cluster management
 
 ##### catalog_try_lock_timeout_ms
 
-  - **Unit**: ms
-  - **Default**: 5000
-  - **Description**: The timeout duration to obtain the global lock.
+- **Unit**: ms
+- **Default**: 5000
+- **Description**: The timeout duration to obtain the global lock.
 
 ##### edit_log_roll_num
 
-  - **Unit**: -
-  - **Default**: 50000
-  - **Description**: The maximum number of metadata log entries that can be written before a log file is created for these log entries. This parameter is used to control the size of log files. The new log file is written to the BDBJE database.
+- **Unit**: -
+- **Default**: 50000
+- **Description**: The maximum number of metadata log entries that can be written before a log file is created for these log entries. This parameter is used to control the size of log files. The new log file is written to the BDBJE database.
 
 ##### ignore_unknown_log_id
 
-  - **Unit**: -
-  - **Default**: FALSE
-  - **Description**: Whether to ignore an unknown log ID. When an FE is rolled back, the BEs of the earlier version may be unable to recognize some log IDs. If the value is `TRUE`, the FE ignores unknown log IDs. If the value is `FALSE`, the FE exits.
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether to ignore an unknown log ID. When an FE is rolled back, the BEs of the earlier version may be unable to recognize some log IDs. If the value is `TRUE`, the FE ignores unknown log IDs. If the value is `FALSE`, the FE exits.
 
 ##### ignore_materialized_view_error
 
-  - **Unit**: -
-  - **Default**: FALSE
-  - **Description**: Whether FE ignores the metadata exception caused by materialized view errors. If FE fails to start due to the metadata exception caused by materialized view errors, you can set this parameter to `true` to allow FE to ignore the exception. This parameter is supported from v2.5.10 onwards.
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether FE ignores the metadata exception caused by materialized view errors. If FE fails to start due to the metadata exception caused by materialized view errors, you can set this parameter to `true` to allow FE to ignore the exception. This parameter is supported from v2.5.10 onwards.
 
 ##### ignore_meta_check
 
-  - **Unit**: -
-  - **Default**: FALSE
-  - **Description**: Whether non-leader FEs ignore the metadata gap from the leader FE. If the value is TRUE, non-leader FEs ignore the metadata gap from the leader FE and continue providing data reading services. This parameter ensures continuous data reading services even when you stop the leader FE for a long period of time. If the value is FALSE, non-leader FEs do not ignore the metadata gap from the leader FE and stop providing data reading services.
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether non-leader FEs ignore the metadata gap from the leader FE. If the value is TRUE, non-leader FEs ignore the metadata gap from the leader FE and continue providing data reading services. This parameter ensures continuous data reading services even when you stop the leader FE for a long period of time. If the value is FALSE, non-leader FEs do not ignore the metadata gap from the leader FE and stop providing data reading services.
 
 ##### meta_delay_toleration_second
 
-  - **Unit**: s
-  - **Default**: 300
-  - **Description**: The maximum duration by which the metadata on the follower and observer FEs can lag behind that on the leader FE. Unit: seconds. If this duration is exceeded, the non-leader FE stops providing services.
+- **Unit**: s
+- **Default**: 300
+- **Description**: The maximum duration by which the metadata on the follower and observer FEs can lag behind that on the leader FE. Unit: seconds. If this duration is exceeded, the non-leader FE stops providing services.
 
 ##### drop_backend_after_decommission
 
-  - **Unit**: -
-  - **Default**: TRUE
-  - **Description**: Whether to delete a BE after the BE is decommissioned. `TRUE` indicates that the BE is deleted immediately after it is decommissioned. `FALSE` indicates that the BE is not deleted after it is decommissioned.
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: Whether to delete a BE after the BE is decommissioned. `TRUE` indicates that the BE is deleted immediately after it is decommissioned. `FALSE` indicates that the BE is not deleted after it is decommissioned.
 
 ##### enable_collect_query_detail_info
 
-  - **Unit**: -
-  - **Default**: FALSE
-  - **Description**: Whether to view the profile of a query. If this parameter is set to `TRUE`, the system collects the profile of the query. If this parameter is set to `FALSE`, the system does not collect the profile of the query.
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether to view the profile of a query. If this parameter is set to `TRUE`, the system collects the profile of the query. If this parameter is set to `FALSE`, the system does not collect the profile of the query.
 
 ##### enable_background_refresh_connector_metadata
 
-  - **Unit**: -
-  - **Default**: `true` in v3.0<br />`false` in v2.5
-  - **Description**: Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This parameter is supported from v2.5.5 onwards.
+- **Unit**: -
+- **Default**: `true` in v3.0<br />`false` in v2.5
+- **Description**: Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This parameter is supported from v2.5.5 onwards.
 
 ##### background_refresh_metadata_interval_millis
 
-  - **Unit**: ms
-  - **Default**: 600000
-  - **Description**: The interval between two consecutive Hive metadata cache refreshes. This parameter is supported from v2.5.5 onwards.
+- **Unit**: ms
+- **Default**: 600000
+- **Description**: The interval between two consecutive Hive metadata cache refreshes. This parameter is supported from v2.5.5 onwards.
 
 ##### background_refresh_metadata_time_secs_since_last_access_secs
 
-  - **Unit**: s
-  - **Default**: 86400
-  - **Description**: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. This parameter is supported from v2.5.5 onwards.
+- **Unit**: s
+- **Default**: 86400
+- **Description**: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. This parameter is supported from v2.5.5 onwards.
 
 #### Query engine
 
 - **max_allowed_in_element_num_of_delete**
-  - Unit: -
-  - Default: 10000
-  - Description: The maximum number of elements allowed for the IN predicate in a DELETE statement.
+- Unit: -
+- Default: 10000
+- Description: The maximum number of elements allowed for the IN predicate in a DELETE statement.
 
 - **enable_materialized_view**
-  - Unit: -
-  - Default: TRUE
-  - Description: Whether to enable the creation of materialized views.
+- Unit: -
+- Default: TRUE
+- Description: Whether to enable the creation of materialized views.
 
 - **enable_decimal_v3**
-  - Unit: -
-  - Default: TRUE
-  - Description: Whether to support the DECIMAL V3 data type.
+- Unit: -
+- Default: TRUE
+- Description: Whether to support the DECIMAL V3 data type.
 
 - **enable_sql_blacklist**
-  - Unit: -
-  - Default: FALSE
-  - Description: Whether to enable blacklist check for SQL queries. When this feature is enabled, queries in the blacklist cannot be executed.
+- Unit: -
+- Default: FALSE
+- Description: Whether to enable blacklist check for SQL queries. When this feature is enabled, queries in the blacklist cannot be executed.
 
 - **dynamic_partition_check_interval_seconds**
-  - Unit: s
-  - Default: 600
-  - Description: The interval at which new data is checked. If new data is detected, StarRocks automatically creates partitions for the data.
+- Unit: s
+- Default: 600
+- Description: The interval at which new data is checked. If new data is detected, StarRocks automatically creates partitions for the data.
 
 - **dynamic_partition_enable**
-  - Unit: -
-  - Default: TRUE
-  - Description: Whether to enable the dynamic partitioning feature. When this feature is enabled, StarRocks dynamically creates partitions for new data and automatically deletes expired partitions to ensure the freshness of data.
+- Unit: -
+- Default: TRUE
+- Description: Whether to enable the dynamic partitioning feature. When this feature is enabled, StarRocks dynamically creates partitions for new data and automatically deletes expired partitions to ensure the freshness of data.
 
 - **max_partitions_in_one_batch**
-  - Unit: -
-  - Default: 4096
-  - Description: The maximum number of partitions that can be created when you bulk create partitions.
+- Unit: -
+- Default: 4096
+- Description: The maximum number of partitions that can be created when you bulk create partitions.
 
 - **max_query_retry_time**
-  - Unit: -
-  - Default: 2
-  - Description: The maximum number of query retries on an FE.
+- Unit: -
+- Default: 2
+- Description: The maximum number of query retries on an FE.
 
 - **max_create_table_timeout_second**
-  - Unit: s
-  - Default: 600
-  - Description: The maximum timeout duration for creating a table, in seconds.
+- Unit: s
+- Default: 600
+- Description: The maximum timeout duration for creating a table, in seconds.
 
 - **create_table_max_serial_replicas**
-  - Unit: -
-  - Default: 128
-  - Description: The maximum number of replicas to create serially. If actual replica count exceeds this, replicas will be created concurrently. Try to reduce this config if table creation is taking a long time to complete.
+- Unit: -
+- Default: 128
+- Description: The maximum number of replicas to create serially. If actual replica count exceeds this, replicas will be created concurrently. Try to reduce this config if table creation is taking a long time to complete.
 
 - **max_running_rollup_job_num_per_table**
-  - Unit: -
-  - Default: 1
-  - Description: The maximum number of rollup jobs can run in parallel for a table.
+- Unit: -
+- Default: 1
+- Description: The maximum number of rollup jobs can run in parallel for a table.
 
 - **max_planner_scalar_rewrite_num**
-  - Unit: -
-  - Default: 100000
-  - Description: The maximum number of times that the optimizer can rewrite a scalar operator.
+- Unit: -
+- Default: 100000
+- Description: The maximum number of times that the optimizer can rewrite a scalar operator.
 
 - **enable_statistic_collect**
-  - Unit: -
-  - Default: TRUE
-  - Description: Whether to collect statistics for the CBO. This feature is enabled by default.
+- Unit: -
+- Default: TRUE
+- Description: Whether to collect statistics for the CBO. This feature is enabled by default.
 
 - **enable_collect_full_statistic**
-  - Unit: -
-  - Default: TRUE
-  - Description: Whether to enable automatic full statistics collection. This feature is enabled by default.
+- Unit: -
+- Default: TRUE
+- Description: Whether to enable automatic full statistics collection. This feature is enabled by default.
 
 - **statistic_auto_collect_ratio**
-  - Unit: -
-  - Default: 0.8
-  - Description: The threshold for determining whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered.
+- Unit: -
+- Default: 0.8
+- Description: The threshold for determining whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered.
 
 - **statistic_max_full_collect_data_size**
-  - Unit: LONG
-  - Default: 107374182400
-  - Description: The size of the largest partition for automatic collection to collect data. Unit: Byte. If a partition exceeds this value, full collection is discarded and sampled collection is performed instead.
+- Unit: LONG
+- Default: 107374182400
+- Description: The size of the largest partition for automatic collection to collect data. Unit: Byte. If a partition exceeds this value, full collection is discarded and sampled collection is performed instead.
 
 - **statistic_collect_max_row_count_per_query**
-  - Unit: INT
-  - Default: 5000000000
-  - Description: The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded.
+- Unit: INT
+- Default: 5000000000
+- Description: The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded.
 
 - **statistic_collect_interval_sec**
-  - Unit: s
-  - Default: 300
-  - Description: The interval for checking data updates during automatic collection. Unit: seconds.
+- Unit: s
+- Default: 300
+- Description: The interval for checking data updates during automatic collection. Unit: seconds.
 
 - **statistic_auto_analyze_start_time**
-  - Unit: STRING
-  - Default: 00:00:00
-  - Description: The start time of automatic collection. Value range: `00:00:00` - `23:59:59`.
+- Unit: STRING
+- Default: 00:00:00
+- Description: The start time of automatic collection. Value range: `00:00:00` - `23:59:59`.
 
 - **statistic_auto_analyze_end_time**
-  - Unit: STRING
-  - Default: 23:59:59
-  - Description: The end time of automatic collection. Value range: `00:00:00` - `23:59:59`.
+- Unit: STRING
+- Default: 23:59:59
+- Description: The end time of automatic collection. Value range: `00:00:00` - `23:59:59`.
 
 - **statistic_sample_collect_rows**
-  - Unit: -
-  - Default: 200000
-  - Description: The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed.
+- Unit: -
+- Default: 200000
+- Description: The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed.
 
 - **histogram_buckets_size**
-  - Unit: -
-  - Default: 64
-  - Description: The default bucket number for a histogram.
+- Unit: -
+- Default: 64
+- Description: The default bucket number for a histogram.
 
 - **histogram_mcv_size**
-  - Unit: -
-  - Default: 100
-  - Description: The number of most common values (MCV) for a histogram.
+- Unit: -
+- Default: 100
+- Description: The number of most common values (MCV) for a histogram.
 
 - **histogram_sample_ratio**
-  - Unit: -
-  - Default: 0.1
-  - Description: The sampling ratio for a histogram.
+- Unit: -
+- Default: 0.1
+- Description: The sampling ratio for a histogram.
 
 - **histogram_max_sample_row_count**
-  - Unit: -
-  - Default: 10000000
-  - Description: The maximum number of rows to collect for a histogram.
+- Unit: -
+- Default: 10000000
+- Description: The maximum number of rows to collect for a histogram.
 
 - **statistics_manager_sleep_time_sec**
-  - Unit: s
-  - Default: 60
-  - Description: The interval at which metadata is scheduled. Unit: seconds. The system performs the following operations based on this interval:
-    - Create tables for storing statistics.
-    - Delete statistics that have been deleted.
-    - Delete expired statistics.
+- Unit: s
+- Default: 60
+- Description: The interval at which metadata is scheduled. Unit: seconds. The system performs the following operations based on this interval:
+  - Create tables for storing statistics.
+  - Delete statistics that have been deleted.
+  - Delete expired statistics.
 
 - **statistic_update_interval_sec**
-  - Unit: s
-  - Default: 24 * 60 * 60
-  - Description: The interval at which the cache of statistical information is updated. Unit: seconds.
+- Unit: s
+- Default: `24 * 60 * 60`
+- Description: The interval at which the cache of statistical information is updated. Unit: seconds.
 
 - **statistic_analyze_status_keep_second**
-  - Unit: s
-  - Default: 259200
-  - Description: The duration to retain the history of collection tasks. The default value is 3 days. Unit: seconds.
+- Unit: s
+- Default: 259200
+- Description: The duration to retain the history of collection tasks. The default value is 3 days. Unit: seconds.
 
 - **statistic_collect_concurrency**
-  - Unit: -
-  - Default: 3
-  - Description: The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled.
+- Unit: -
+- Default: 3
+- Description: The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled.
 
 - **enable_local_replica_selection**
-  - Unit: -
-  - Default: FALSE
-  - Description: Whether to select local replicas for queries. Local replicas reduce the network transmission cost. If this parameter is set to TRUE, the CBO preferentially selects tablet replicas on BEs that have the same IP address as the current FE. If this parameter is set to FALSE, both local replicas and non-local replicas can be selected. The default value is FALSE.
+- Unit: -
+- Default: FALSE
+- Description: Whether to select local replicas for queries. Local replicas reduce the network transmission cost. If this parameter is set to TRUE, the CBO preferentially selects tablet replicas on BEs that have the same IP address as the current FE. If this parameter is set to FALSE, both local replicas and non-local replicas can be selected. The default value is FALSE.
 
 - **max_distribution_pruner_recursion_depth**
-  - Unit: -
-  - Default: 100
-  - Description: The maximum recursion depth allowed by the partition pruner. Increasing the recursion depth can prune more elements but also increases CPU consumption.
+- Unit: -
+- Default: 100
+- Description: The maximum recursion depth allowed by the partition pruner. Increasing the recursion depth can prune more elements but also increases CPU consumption.
 
 - **enable_udf**
-  - Unit: -
-  - Default: FALSE
-  - Description: Whether to enable UDF.
+- Unit: -
+- Default: FALSE
+- Description: Whether to enable UDF.
 
 #### Loading and unloading
 
 ##### max_broker_load_job_concurrency
 
-  - **Unit**: -
-  - **Default**: 5
-  - **Description**: The maximum number of concurrent Broker Load jobs allowed within the StarRocks cluster. This parameter is valid only for Broker Load. The value of this parameter must be less than the value of `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from `10` to `5`. The alias of this parameter is `async_load_task_pool_size`.
+- **Unit**: -
+- **Default**: 5
+- **Description**: The maximum number of concurrent Broker Load jobs allowed within the StarRocks cluster. This parameter is valid only for Broker Load. The value of this parameter must be less than the value of `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from `10` to `5`. The alias of this parameter is `async_load_task_pool_size`.
 
 ##### load_straggler_wait_second
 
-  - **Unit**: s
-  - **Default**: 300
-  - **Description**: The maximum loading lag that can be tolerated by a BE replica. If this value is exceeded, cloning is performed to clone data from other replicas. Unit: seconds.
+- **Unit**: s
+- **Default**: 300
+- **Description**: The maximum loading lag that can be tolerated by a BE replica. If this value is exceeded, cloning is performed to clone data from other replicas. Unit: seconds.
 
 ##### desired_max_waiting_jobs
 
-  - **Unit**: -
-  - **Default**: 1024
-  - **Description**: The maximum number of pending jobs in an FE. The number refers to all jobs, such as table creation, loading, and schema change jobs. If the number of pending jobs in an FE reaches this value, the FE will reject new load requests. This parameter takes effect only for asynchronous loading. From v2.5 onwards, the default value is changed from 100 to 1024.
+- **Unit**: -
+- **Default**: 1024
+- **Description**: The maximum number of pending jobs in an FE. The number refers to all jobs, such as table creation, loading, and schema change jobs. If the number of pending jobs in an FE reaches this value, the FE will reject new load requests. This parameter takes effect only for asynchronous loading. From v2.5 onwards, the default value is changed from 100 to 1024.
 
 ##### max_load_timeout_second
 
-  - **Unit**: s
-  - **Default**: 259200
-  - **Description**: The maximum timeout duration allowed for a load job. The load job fails if this limit is exceeded. This limit applies to all types of load jobs. Unit: seconds.
+- **Unit**: s
+- **Default**: 259200
+- **Description**: The maximum timeout duration allowed for a load job. The load job fails if this limit is exceeded. This limit applies to all types of load jobs. Unit: seconds.
 
 ##### min_load_timeout_second
 
-  - **Unit**: s
-  - **Default**: 1
-  - **Description**: The minimum timeout duration allowed for a load job. This limit applies to all types of load jobs. Unit: seconds.
+- **Unit**: s
+- **Default**: 1
+- **Description**: The minimum timeout duration allowed for a load job. This limit applies to all types of load jobs. Unit: seconds.
 
 ##### max_running_txn_num_per_db
 
-  - **Unit**: -
-  - **Default**: 100
-  - **Description**: The maximum number of load transactions allowed to be running for each database within a StarRocks cluster. The default value is `100`. When the actual number of load transactions running for a database exceeds the value of this parameter, new load requests will not be processed. New requests for synchronous load jobs will be denied, and new requests for asynchronous load jobs will be placed in queue. We do not recommend you increase the value of this parameter because this will increase system load.
+- **Unit**: -
+- **Default**: 100
+- **Description**: The maximum number of load transactions allowed to be running for each database within a StarRocks cluster. The default value is `100`. When the actual number of load transactions running for a database exceeds the value of this parameter, new load requests will not be processed. New requests for synchronous load jobs will be denied, and new requests for asynchronous load jobs will be placed in queue. We do not recommend you increase the value of this parameter because this will increase system load.
 
 ##### load_parallel_instance_num
 
-  - **Unit**: -
-  - **Default**: 1
-  - **Description**: The maximum number of concurrent loading instances for each load job on a BE.
+- **Unit**: -
+- **Default**: 1
+- **Description**: The maximum number of concurrent loading instances for each load job on a BE.
 
 ##### disable_load_job
 
-  - **Unit**: -
-  - **Default**: FALSE
-  - **Description**: Whether to disable loading when the cluster encounters an error. This prevents any loss caused by cluster errors. The default value is `FALSE`, indicating that loading is not disabled.
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether to disable loading when the cluster encounters an error. This prevents any loss caused by cluster errors. The default value is `FALSE`, indicating that loading is not disabled.
 
 ##### history_job_keep_max_second
 
-  - **Unit**: s
-  - **Default**: 604800
-  - **Description**: The maximum duration a historical job can be retained, such as schema change jobs, in seconds.
+- **Unit**: s
+- **Default**: 604800
+- **Description**: The maximum duration a historical job can be retained, such as schema change jobs, in seconds.
 
 ##### label_keep_max_num
 
-  - **Unit**: -
-  - **Default**: 1000
-  - **Description**: The maximum number of load jobs that can be retained within a period of time. If this number is exceeded, the information of historical jobs will be deleted.
+- **Unit**: -
+- **Default**: 1000
+- **Description**: The maximum number of load jobs that can be retained within a period of time. If this number is exceeded, the information of historical jobs will be deleted.
 
 ##### label_keep_max_second
 
-  - **Unit**: s
-  - **Default**: 259200
-  - **Description**: The maximum duration the labels of load jobs that have been completed and are in the FINISHED or CANCELLED state can be retained in the StarRocks system. The default value is 3 days. After this duration expires, the labels will be deleted. This parameter applies to all types of load jobs. Unit: seconds. A value too large consumes a lot of memory.
+- **Unit**: s
+- **Default**: 259200
+- **Description**: The maximum duration the labels of load jobs that have been completed and are in the FINISHED or CANCELLED state can be retained in the StarRocks system. The default value is 3 days. After this duration expires, the labels will be deleted. This parameter applies to all types of load jobs. Unit: seconds. A value too large consumes a lot of memory.
 
 ##### max_routine_load_job_num
 
-  - **Unit**: -
-  - **Default**: 100
-  - **Description**: The maximum number of Routine Load jobs in a StarRocks cluster. This parameter is deprecated since v3.1.0.
+- **Unit**: -
+- **Default**: 100
+- **Description**: The maximum number of Routine Load jobs in a StarRocks cluster. This parameter is deprecated since v3.1.0.
 
 ##### max_routine_load_task_concurrent_num
 
-  - **Unit**: -
-  - **Default**: 5
-  - **Description**: The maximum number of concurrent tasks for each Routine Load job.
+- **Unit**: -
+- **Default**: 5
+- **Description**: The maximum number of concurrent tasks for each Routine Load job.
 
 ##### max_routine_load_task_num_per_be
 
-  - **Unit**: -
-  - **Default**: 16
-  - **Description**: The maximum number of concurrent Routine Load tasks on each BE. Since v3.1.0, the default value for this parameter is increased to 16 from 5, and no longer needs to be less than or equal to the value of BE static parameter `routine_load_thread_pool_size` (deprecated).
+- **Unit**: -
+- **Default**: 16
+- **Description**: The maximum number of concurrent Routine Load tasks on each BE. Since v3.1.0, the default value for this parameter is increased to 16 from 5, and no longer needs to be less than or equal to the value of BE static parameter `routine_load_thread_pool_size` (deprecated).
 
 ##### max_routine_load_batch_size
 
-  - **Unit**: Byte
-  - **Default**: 4294967296
-  - **Description**: The maximum amount of data that can be loaded by a Routine Load task, in bytes.
+- **Unit**: Byte
+- **Default**: 4294967296
+- **Description**: The maximum amount of data that can be loaded by a Routine Load task, in bytes.
 
 ##### routine_load_task_consume_second
 
-  - **Unit**: s
-  - **Default**: 15
-  - **Description**: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+- **Unit**: s
+- **Default**: 15
+- **Description**: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 
 ##### routine_load_task_timeout_second
 
-  - **Unit**: s
-  - **Default**: 60
-  - **Description**: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+- **Unit**: s
+- **Default**: 60
+- **Description**: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 
 ##### max_tolerable_backend_down_num
 
-  - **Unit**: -
-  - **Default**: 0
-  - **Description**: The maximum number of faulty BE nodes allowed. If this number is exceeded, Routine Load jobs cannot be automatically recovered.
+- **Unit**: -
+- **Default**: 0
+- **Description**: The maximum number of faulty BE nodes allowed. If this number is exceeded, Routine Load jobs cannot be automatically recovered.
 
 ##### period_of_auto_resume_min
 
-  - **Unit**: Min
-  - **Default**: 5
-  - **Description**: The interval at which Routine Load jobs are automatically recovered, in minutes.
+- **Unit**: Min
+- **Default**: 5
+- **Description**: The interval at which Routine Load jobs are automatically recovered, in minutes.
 
 ##### spark_load_default_timeout_second
 
-  - **Unit**: s
-  - **Default**: 86400
-  - **Description**: The timeout duration for each Spark Load job, in seconds.
+- **Unit**: s
+- **Default**: 86400
+- **Description**: The timeout duration for each Spark Load job, in seconds.
 
 ##### spark_home_default_dir
 
-  - **Unit**: -
-  - **Default**: StarRocksFE.STARROCKS_HOME_DIR + "/lib/spark2x"
-  - **Description**: The root directory of a Spark client.
+- **Unit**: -
+- **Default**: StarRocksFE.STARROCKS_HOME_DIR + "/lib/spark2x"
+- **Description**: The root directory of a Spark client.
 
 ##### stream_load_default_timeout_second
 
-  - **Unit**: s
-  - **Default**: 600
-  - **Description**: The default timeout duration for each Stream Load job, in seconds.
+- **Unit**: s
+- **Default**: 600
+- **Description**: The default timeout duration for each Stream Load job, in seconds.
 
 ##### max_stream_load_timeout_second
 
-  - **Unit**: s
-  - **Default**: 259200
-  - **Description**: The maximum allowed timeout duration for a Stream Load job, in seconds.
+- **Unit**: s
+- **Default**: 259200
+- **Description**: The maximum allowed timeout duration for a Stream Load job, in seconds.
 
 ##### insert_load_default_timeout_second
 
-  - **Unit**: s
-  - **Default**: 3600
-  - **Description**: The timeout duration for the INSERT INTO statement that is used to load data, in seconds.
+- **Unit**: s
+- **Default**: 3600
+- **Description**: The timeout duration for the INSERT INTO statement that is used to load data, in seconds.
 
 ##### broker_load_default_timeout_second
 
-  - **Unit**: s
-  - **Default**: 14400
-  - **Description**: The timeout duration for a Broker Load job, in seconds.
+- **Unit**: s
+- **Default**: 14400
+- **Description**: The timeout duration for a Broker Load job, in seconds.
 
 ##### min_bytes_per_broker_scanner
 
-  - **Unit**: Byte
-  - **Default**: 67108864
-  - **Description**: The minimum allowed amount of data that can be processed by a Broker Load instance, in bytes.
+- **Unit**: Byte
+- **Default**: 67108864
+- **Description**: The minimum allowed amount of data that can be processed by a Broker Load instance, in bytes.
 
 ##### max_broker_concurrency
 
-  - **Unit**: -
-  - **Default**: 100
-  - **Description**: The maximum number of concurrent instances for a Broker Load task. This parameter is deprecated from v3.1 onwards.
+- **Unit**: -
+- **Default**: 100
+- **Description**: The maximum number of concurrent instances for a Broker Load task. This parameter is deprecated from v3.1 onwards.
 
 ##### export_max_bytes_per_be_per_task
 
-  - **Unit**: Byte
-  - **Default**: 268435456
-  - **Description**: The maximum amount of data that can be exported from a single BE by a single data unload task, in bytes.
+- **Unit**: Byte
+- **Default**: 268435456
+- **Description**: The maximum amount of data that can be exported from a single BE by a single data unload task, in bytes.
 
 ##### export_running_job_num_limit
 
-  - **Unit**: -
-  - **Default**: 5
-  - **Description**: The maximum number of data exporting tasks that can run in parallel.
+- **Unit**: -
+- **Default**: 5
+- **Description**: The maximum number of data exporting tasks that can run in parallel.
 
 ##### export_task_default_timeout_second
 
-  - **Unit**: s
-  - **Default**: 7200
-  - **Description**: The timeout duration for a data exporting task, in seconds.
+- **Unit**: s
+- **Default**: 7200
+- **Description**: The timeout duration for a data exporting task, in seconds.
 
 ##### empty_load_as_error
 
-  - **Unit**: -
-  - **Default**: TRUE
-  - **Description**: Whether to return an error message "all partitions have no load data" if no data is loaded. Values: TRUE: If no data is loaded, the system displays a failure message and returns an error "all partitions have no load data". FALSE: If no data is loaded, the system displays a success message and returns OK, instead of an error.
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: Whether to return an error message "all partitions have no load data" if no data is loaded. Values: TRUE: If no data is loaded, the system displays a failure message and returns an error "all partitions have no load data". FALSE: If no data is loaded, the system displays a success message and returns OK, instead of an error.
 
 ##### external_table_commit_timeout_ms
 
-  - **Unit**: ms
-  - **Default**: 10000
-  - **Description**: The timeout duration for committing (publishing) a write transaction to a StarRocks external table. The default value `10000` indicates a 10-second timeout duration.
+- **Unit**: ms
+- **Default**: 10000
+- **Description**: The timeout duration for committing (publishing) a write transaction to a StarRocks external table. The default value `10000` indicates a 10-second timeout duration.
 
 #### Storage
 
 ##### enable_strict_storage_medium_check
 
-  - **Unit**: -
-  - **Default**: FALSE
-  - **Description**: Whether the FE strictly checks the storage medium of BEs when users create tables. If this parameter is set to `TRUE`, the FE checks the storage medium of BEs when users create tables and returns an error if the storage medium of the BE is different from the `storage_medium` parameter specified in the CREATE TABLE statement. For example, the storage medium specified in the CREATE TABLE statement is SSD but the actual storage medium of BEs is HDD. As a result, the table creation fails. If this parameter is `FALSE`, the FE does not check the storage medium of BEs when users create a table.
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether the FE strictly checks the storage medium of BEs when users create tables. If this parameter is set to `TRUE`, the FE checks the storage medium of BEs when users create tables and returns an error if the storage medium of the BE is different from the `storage_medium` parameter specified in the CREATE TABLE statement. For example, the storage medium specified in the CREATE TABLE statement is SSD but the actual storage medium of BEs is HDD. As a result, the table creation fails. If this parameter is `FALSE`, the FE does not check the storage medium of BEs when users create a table.
 
 ##### enable_auto_tablet_distribution
 
-  - **Unit**: -
-  - **Default**: TRUE
-  - **Description**: Whether to automatically set the number of buckets.
-    - If this parameter is set to `TRUE`, you don't need to specify the number of buckets when you create a table or add a partition. StarRocks automatically determines the number of buckets.
-    - If this parameter is set to `FALSE`, you need to manually specify the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition. Starting from version 2.5.7, StarRocks supports setting this parameter.
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: Whether to automatically set the number of buckets.
+  - If this parameter is set to `TRUE`, you don't need to specify the number of buckets when you create a table or add a partition. StarRocks automatically determines the number of buckets.
+  - If this parameter is set to `FALSE`, you need to manually specify the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition. Starting from version 2.5.7, StarRocks supports setting this parameter.
 
 ##### storage_usage_soft_limit_percent
 
-  - **Unit**: %
-  - **Default**: 90
-  - **Description**: If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_usage_soft_limit_reserve_bytes`, tablets cannot be cloned into this directory.
+- **Unit**: %
+- **Default**: 90
+- **Description**: If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_usage_soft_limit_reserve_bytes`, tablets cannot be cloned into this directory.
 
 ##### storage_usage_soft_limit_reserve_bytes
 
-  - **Unit**: Byte
-  - **Default**: 200 * 1024 * 1024 * 1024
-  - **Description**: If the remaining storage space in the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_usage_soft_limit_percent`, tablets cannot be cloned into this directory.
+- **Unit**: Byte
+- **Default**: `200 * 1024 * 1024 * 1024`
+- **Description**: If the remaining storage space in the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_usage_soft_limit_percent`, tablets cannot be cloned into this directory.
 
 ##### catalog_trash_expire_second
 
-  - **Unit**: s
-  - **Default**: 86400
-  - **Description**: The longest duration the metadata can be retained after a table or database is deleted. If this duration expires, the data will be deleted and cannot be recovered. Unit: seconds.
+- **Unit**: s
+- **Default**: 86400
+- **Description**: The longest duration the metadata can be retained after a table or database is deleted. If this duration expires, the data will be deleted and cannot be recovered. Unit: seconds.
 
 ##### alter_table_timeout_second
 
-  - **Unit**: s
-  - **Default**: 86400
-  - **Description**: The timeout duration for the schema change operation (ALTER TABLE). Unit: seconds.
+- **Unit**: s
+- **Default**: 86400
+- **Description**: The timeout duration for the schema change operation (ALTER TABLE). Unit: seconds.
 
 ##### recover_with_empty_tablet
 
-  - **Unit**: -
-  - **Default**: FALSE
-  - **Description**: Whether to replace a lost or corrupted tablet replica with an empty one. If a tablet replica is lost or corrupted, data queries on this tablet or other healthy tablets may fail. Replacing the lost or corrupted tablet replica with an empty tablet ensures that the query can still be executed. However, the result may be incorrect because data is lost. The default value is `FALSE`, which means lost or corrupted tablet replicas are not replaced with empty ones, and the query fails.
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether to replace a lost or corrupted tablet replica with an empty one. If a tablet replica is lost or corrupted, data queries on this tablet or other healthy tablets may fail. Replacing the lost or corrupted tablet replica with an empty tablet ensures that the query can still be executed. However, the result may be incorrect because data is lost. The default value is `FALSE`, which means lost or corrupted tablet replicas are not replaced with empty ones, and the query fails.
 
 ##### tablet_create_timeout_second
 
-  - **Unit**: s
-  - **Default**: 10
-  - **Description**: The timeout duration for creating a tablet, in seconds.
+- **Unit**: s
+- **Default**: 10
+- **Description**: The timeout duration for creating a tablet, in seconds.
 
 ##### tablet_delete_timeout_second
 
-  - **Unit**: s
-  - **Default**: 2
-  - **Description**: The timeout duration for deleting a tablet, in seconds.
+- **Unit**: s
+- **Default**: 2
+- **Description**: The timeout duration for deleting a tablet, in seconds.
 
 ##### check_consistency_default_timeout_second
 
-  - **Unit**: s
-  - **Default**: 600
-  - **Description**: The timeout duration for a replica consistency check. You can set this parameter based on the size of your tablet.
+- **Unit**: s
+- **Default**: 600
+- **Description**: The timeout duration for a replica consistency check. You can set this parameter based on the size of your tablet.
 
 ##### tablet_sched_slot_num_per_path
 
-  - **Unit**: -
-  - **Default**: 8
-  - **Description**: The maximum number of tablet-related tasks that can run concurrently in a BE storage directory. The alias is `schedule_slot_num_per_path`. From v2.5 onwards, the default value of this parameter is changed from `4` to `8`.
+- **Unit**: -
+- **Default**: 8
+- **Description**: The maximum number of tablet-related tasks that can run concurrently in a BE storage directory. The alias is `schedule_slot_num_per_path`. From v2.5 onwards, the default value of this parameter is changed from `4` to `8`.
 
 ##### tablet_sched_max_scheduling_tablets
 
-  - **Unit**: -
-  - **Default**: 10000
-  - **Description**: The maximum number of tablets that can be scheduled at the same time. If the value is exceeded, tablet balancing and repair checks will be skipped.
+- **Unit**: -
+- **Default**: 10000
+- **Description**: The maximum number of tablets that can be scheduled at the same time. If the value is exceeded, tablet balancing and repair checks will be skipped.
 
 ##### tablet_sched_disable_balance
 
-  - **Unit**: -
-  - **Default**: FALSE
-  - **Description**: Whether to disable tablet balancing. `TRUE` indicates that tablet balancing is disabled. `FALSE` indicates that tablet balancing is enabled. The alias is `disable_balance`.
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether to disable tablet balancing. `TRUE` indicates that tablet balancing is disabled. `FALSE` indicates that tablet balancing is enabled. The alias is `disable_balance`.
 
 ##### tablet_sched_disable_colocate_balance
 
-  - **Unit**: -
-  - **Default**: FALSE
-  - **Description**: Whether to disable replica balancing for Colocate Table. `TRUE` indicates replica balancing is disabled. `FALSE` indicates replica balancing is enabled. The alias is `disable_colocate_balance`.
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether to disable replica balancing for Colocate Table. `TRUE` indicates replica balancing is disabled. `FALSE` indicates replica balancing is enabled. The alias is `disable_colocate_balance`.
 
 ##### tablet_sched_max_balancing_tablets
 
-  - **Unit**: -
-  - **Default**: 500
-  - **Description**: The maximum number of tablets that can be balanced at the same time. If this value is exceeded, tablet re-balancing will be skipped. The alias is `max_balancing_tablets`.
+- **Unit**: -
+- **Default**: 500
+- **Description**: The maximum number of tablets that can be balanced at the same time. If this value is exceeded, tablet re-balancing will be skipped. The alias is `max_balancing_tablets`.
 
 ##### tablet_sched_balance_load_disk_safe_threshold
 
-  - **Unit**: -
-  - **Default**: 0.5
-  - **Description**: The threshold for determining whether the BE disk usage is balanced. This parameter takes effect only when `tablet_sched_balancer_strategy` is set to `disk_and_tablet`. If the disk usage of all BEs is lower than 50%, disk usage is considered balanced. For the `disk_and_tablet` policy, if the difference between the highest and lowest BE disk usage is greater than 10%, disk usage is considered unbalanced and tablet re-balancing is triggered. The alias is `balance_load_disk_safe_threshold`.
+- **Unit**: -
+- **Default**: 0.5
+- **Description**: The threshold for determining whether the BE disk usage is balanced. This parameter takes effect only when `tablet_sched_balancer_strategy` is set to `disk_and_tablet`. If the disk usage of all BEs is lower than 50%, disk usage is considered balanced. For the `disk_and_tablet` policy, if the difference between the highest and lowest BE disk usage is greater than 10%, disk usage is considered unbalanced and tablet re-balancing is triggered. The alias is `balance_load_disk_safe_threshold`.
 
 ##### tablet_sched_balance_load_score_threshold
 
-  - **Unit**: -
-  - **Default**: 0.1
-  - **Description**: The threshold for determining whether the BE load is balanced. This parameter takes effect only when `tablet_sched_balancer_strategy` is set to `be_load_score`. A BE whose load is 10% lower than the average load is in a low load state, and a BE whose load is 10% higher than the average load is in a high load state. The alias is `balance_load_score_threshold`.
+- **Unit**: -
+- **Default**: 0.1
+- **Description**: The threshold for determining whether the BE load is balanced. This parameter takes effect only when `tablet_sched_balancer_strategy` is set to `be_load_score`. A BE whose load is 10% lower than the average load is in a low load state, and a BE whose load is 10% higher than the average load is in a high load state. The alias is `balance_load_score_threshold`.
 
 ##### tablet_sched_repair_delay_factor_second
 
-  - **Unit**: s
-  - **Default**: 60
-  - **Description**: The interval at which replicas are repaired, in seconds. The alias is `tablet_repair_delay_factor_second`.
+- **Unit**: s
+- **Default**: 60
+- **Description**: The interval at which replicas are repaired, in seconds. The alias is `tablet_repair_delay_factor_second`.
 
 ##### tablet_sched_min_clone_task_timeout_sec
 
-  - **Unit**: s
-  - **Default**: 3 * 60
-  - **Description**: The minimum timeout duration for cloning a tablet, in seconds.
+- **Unit**: s
+- **Default**: 3 * 60
+- **Description**: The minimum timeout duration for cloning a tablet, in seconds.
 
 ##### tablet_sched_max_clone_task_timeout_sec
 
-  - **Unit**: s
-  - **Default**: 2 * 60 * 60
-  - **Description**: The maximum timeout duration for cloning a tablet, in seconds. The alias is `max_clone_task_timeout_sec`.
+- **Unit**: s
+- **Default**: `2 * 60 * 60`
+- **Description**: The maximum timeout duration for cloning a tablet, in seconds. The alias is `max_clone_task_timeout_sec`.
 
 ##### tablet_sched_max_not_being_scheduled_interval_ms
 
-  - **Unit**: ms
-  - **Default**: 15 * 60 * 100
-  - **Description**: When the tablet clone tasks are being scheduled, if a tablet has not been scheduled for the specified time in this parameter, StarRocks gives it a higher priority to schedule it as soon as possible.
+- **Unit**: ms
+- **Default**: `15 * 60 * 100`
+- **Description**: When the tablet clone tasks are being scheduled, if a tablet has not been scheduled for the specified time in this parameter, StarRocks gives it a higher priority to schedule it as soon as possible.
 
 #### Other FE dynamic parameters
 
@@ -703,304 +703,373 @@ This section provides an overview of the static parameters that you can configur
 
 #### Logging
 
-### log_roll_size_mb
+##### log_roll_size_mb
+
 - **Default:** 1024 MB
 - **Description:** The size per log file. Unit: MB. The default value `1024` specifies the size per log file as 1 GB.
 
-### sys_log_dir
+##### sys_log_dir
+
 - **Default:** StarRocksFE.STARROCKS_HOME_DIR + "/log"
 - **Description:** The directory that stores system log files.
 
-### sys_log_level
+##### sys_log_level
+
 - **Default:** INFO
 - **Description:** The severity levels into which system log entries are classified. Valid values: `INFO`, `WARN`, `ERROR`, and `FATAL`.
 
-### sys_log_verbose_modules
+##### sys_log_verbose_modules
+
 - **Default:** Empty string
 - **Description:** The modules for which StarRocks generates system logs. If this parameter is set to `org.apache.starrocks.catalog`, StarRocks generates system logs only for the catalog module.
 
-### sys_log_roll_interval
+##### sys_log_roll_interval
+
 - **Default:** DAY
 - **Description:** The time interval at which StarRocks rotates system log entries. Valid values: `DAY` and `HOUR`.
   - If this parameter is set to `DAY`, a suffix in the `yyyyMMdd` format is added to the names of system log files.
   - If this parameter is set to `HOUR`, a suffix in the `yyyyMMddHH` format is added to the names of system log files.
 
-### sys_log_delete_age
+##### sys_log_delete_age
+
 - **Default:** 7d
 - **Description:** The retention period of system log files. The default value `7d` specifies that each system log file can be retained for 7 days. StarRocks checks each system log file and deletes those that were generated 7 days ago.
 
-### sys_log_roll_num
+##### sys_log_roll_num
+
 - **Default:** 10
 - **Description:** The maximum number of system log files that can be retained within each retention period specified by the `sys_log_roll_interval` parameter.
 
-### audit_log_dir
+##### audit_log_dir
+
 - **Default:** StarRocksFE.STARROCKS_HOME_DIR + "/log"
 - **Description:** The directory that stores audit log files.
 
-### audit_log_roll_num
+##### audit_log_roll_num
+
 - **Default:** 90
 - **Description:** The maximum number of audit log files that can be retained within each retention period specified by the `audit_log_roll_interval` parameter.
 
-### audit_log_modules
+##### audit_log_modules
+
 - **Default:** slow_query, query
 - **Description:** The modules for which StarRocks generates audit log entries. By default, StarRocks generates audit logs for the slow_query module and the query module. Separate the module names with a comma (,) and a space.
 
-### audit_log_roll_interval
+##### audit_log_roll_interval
+
 - **Default:** DAY
 - **Description:** The time interval at which StarRocks rotates audit log entries. Valid values: `DAY` and `HOUR`.
-  - If this parameter is set to `DAY`, a suffix in the `yyyyMMdd` format is added to the names of audit log files.
-  - If this parameter is set to `HOUR`, a suffix in the `yyyyMMddHH` format is added to the names of audit log files.
+- If this parameter is set to `DAY`, a suffix in the `yyyyMMdd` format is added to the names of audit log files.
+- If this parameter is set to `HOUR`, a suffix in the `yyyyMMddHH` format is added to the names of audit log files.
 
-### audit_log_delete_age
+##### audit_log_delete_age
+
 - **Default:** 30d
 - **Description:** The retention period of audit log files. The default value `30d` specifies that each audit log file can be retained for 30 days. StarRocks checks each audit log file and deletes those that were generated 30 days ago.
 
-### dump_log_dir
+##### dump_log_dir
+
 - **Default:** StarRocksFE.STARROCKS_HOME_DIR + "/log"
 - **Description:** The directory that stores dump log files.
 
-### dump_log_modules
+##### dump_log_modules
+
 - **Default:** query
 - **Description:** The modules for which StarRocks generates dump log entries. By default, StarRocks generates dump logs for the query module. Separate the module names with a comma (,) and a space.
 
-### dump_log_roll_interval
+##### dump_log_roll_interval
+
 - **Default:** DAY
 - **Description:** The time interval at which StarRocks rotates dump log entries. Valid values: `DAY` and `HOUR`.
   - If this parameter is set to `DAY`, a suffix in the `yyyyMMdd` format is added to the names of dump log files.
   - If this parameter is set to `HOUR`, a suffix in the `yyyyMMddHH` format is added to the names of dump log files.
 
-### dump_log_roll_num
+##### dump_log_roll_num
+
 - **Default:** 10
 - **Description:** The maximum number of dump log files that can be retained within each retention period specified by the `dump_log_roll_interval` parameter.
 
-### dump_log_delete_age
+##### dump_log_delete_age
+
 - **Default:** 7d
 - **Description:** The retention period of dump log files. The default value `7d` specifies that each dump log file can be retained for 7 days. StarRocks checks each dump log file and deletes those that were generated 7 days ago.
 
 #### Server
 
-### frontend_address
+##### frontend_address
+
 - **Default:** 0.0.0.0
 - **Description:** The IP address of the FE node.
 
-### priority_networks
+##### priority_networks
+
 - **Default:** Empty string
 - **Description:** Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as 10.10.10.0/24. If no IP address matches the entries in this list, an IP address will be randomly selected.
 
-### http_port
+##### http_port
+
 - **Default:** 8030
 - **Description:** The port on which the HTTP server in the FE node listens.
 
-### http_backlog_num
+##### http_backlog_num
+
 - **Default:** 1024
 - **Description:** The length of the backlog queue held by the HTTP server in the FE node.
 
-### cluster_name
+##### cluster_name
+
 - **Default:** StarRocks Cluster
 - **Description:** The name of the StarRocks cluster to which the FE belongs. The cluster name is displayed for `Title` on the web page.
 
-### rpc_port
+##### rpc_port
+
 - **Default:** 9020
 - **Description:** The port on which the Thrift server in the FE node listens.
 
-### thrift_backlog_num
+##### thrift_backlog_num
+
 - **Default:** 1024
 - **Description:** The length of the backlog queue held by the Thrift server in the FE node.
 
-### thrift_server_max_worker_threads
+##### thrift_server_max_worker_threads
+
 - **Default:** 4096
 - **Description:** The maximum number of worker threads that are supported by the Thrift server in the FE node.
 
-### thrift_client_timeout_ms
+##### thrift_client_timeout_ms
+
 - **Default:** 5000
 - **Description:** The length of time after which idle client connections time out. Unit: ms.
 
-### thrift_server_queue_size
+##### thrift_server_queue_size
+
 - **Default:** 4096
 - **Description:** The length of queue where requests are pending. If the number of threads that are being processed in the thrift server exceeds the value specified in `thrift_server_max_worker_threads`, new requests are added to the pending queue.
 
-### brpc_idle_wait_max_time
+##### brpc_idle_wait_max_time
+
 - **Default:** 10000
 - **Description:** The maximum length of time for which BRPC clients wait as in the idle state. Unit: ms.
 
-### query_port
+##### query_port
+
 - **Default:** 9030
 - **Description:** The port on which the MySQL server in the FE node listens.
 
-### mysql_service_nio_enabled
+##### mysql_service_nio_enabled
+
 - **Default:** TRUE
 - **Description:** Specifies whether asynchronous I/O is enabled for the FE node.
 
-### mysql_service_io_threads_num
+##### mysql_service_io_threads_num
+
 - **Default:** 4
 - **Description:** The maximum number of threads that can be run by the MySQL server in the FE node to process I/O events.
 
-### mysql_nio_backlog_num
+##### mysql_nio_backlog_num
+
 - **Default:** 1024
 - **Description:** The length of the backlog queue held by the MySQL server in the FE node.
 
-### max_mysql_service_task_threads_num
+##### max_mysql_service_task_threads_num
+
 - **Default:** 4096
 - **Description:** The maximum number of threads that can be run by the MySQL server in the FE node to process tasks.
 
-### mysql_server_version
+##### mysql_server_version
+
 - **Default:** 5.1.0
 - **Description:** The MySQL server version returned to the client. Modifying this parameter will affect the version information in the following situations:
   1. `select version();`
   2. Handshake packet version
   3. Value of the global variable `version` (`show variables like 'version';`)
 
-### max_connection_scheduler_threads_num
+##### max_connection_scheduler_threads_num
+
 - **Default:** 4096
 - **Description:** The maximum number of threads that are supported by the connection scheduler.
 
-### qe_max_connection
+##### qe_max_connection
+
 - **Default:** 1024
 - **Description:** The maximum number of connections that can be established by all users to the FE node.
 
-### check_java_version
+##### check_java_version
+
 - **Default:** TRUE
 - **Description:** Specifies whether to check version compatibility between the executed and compiled Java programs. If the versions are incompatible, StarRocks reports errors and aborts the startup of Java programs.
 
 #### Metadata and cluster management
 
-### meta_dir
+##### meta_dir
+
 - **Default:** StarRocksFE.STARROCKS_HOME_DIR + "/meta"
 - **Description:** The directory that stores metadata.
 
-### heartbeat_mgr_threads_num
+##### heartbeat_mgr_threads_num
+
 - **Default:** 8
 - **Description:** The number of threads that can be run by the Heartbeat Manager to run heartbeat tasks.
 
-### heartbeat_mgr_blocking_queue_size
+##### heartbeat_mgr_blocking_queue_size
+
 - **Default:** 1024
 - **Description:** The size of the blocking queue that stores heartbeat tasks run by the Heartbeat Manager.
 
-### metadata_failure_recovery
+##### metadata_failure_recovery
+
 - **Default:** FALSE
 - **Description:** Specifies whether to forcibly reset the metadata of the FE. Exercise caution when you set this parameter.
 
-### edit_log_port
+##### edit_log_port
+
 - **Default:** 9010
 - **Description:** The port that is used for communication among the leader, follower, and observer FEs in the StarRocks cluster.
 
-### edit_log_type
+##### edit_log_type
+
 - **Default:** BDB
 - **Description:** The type of edit log that can be generated. Set the value to `BDB`.
 
-### bdbje_heartbeat_timeout_second
+##### bdbje_heartbeat_timeout_second
+
 - **Default:** 30
 - **Description:** The amount of time after which the heartbeats among the leader, follower, and observer FEs in the StarRocks cluster time out. Unit: second.
 
-### bdbje_lock_timeout_second
+##### bdbje_lock_timeout_second
+
 - **Default:** 1
 - **Description:** The amount of time after which a lock in the BDB JE-based FE times out. Unit: second.
 
-### max_bdbje_clock_delta_ms
+##### max_bdbje_clock_delta_ms
+
 - **Default:** 5000
 - **Description:** The maximum clock offset that is allowed between the leader FE and the follower or observer FEs in the StarRocks cluster. Unit: ms.
 
-### txn_rollback_limit
+##### txn_rollback_limit
+
 - **Default:** 100
 - **Description:** The maximum number of transactions that can be rolled back.
 
-### bdbje_replica_ack_timeout_second
+##### bdbje_replica_ack_timeout_second
+
 - **Default:** 10
 - **Description:** The maximum amount of time for which the leader FE can wait for ACK messages from a specified number of follower FEs when metadata is written from the leader FE to the follower FEs. Unit: second. If a large amount of metadata is being written, the follower FEs require a long time before they can return ACK messages to the leader FE, causing ACK timeout. In this situation, metadata writes fail, and the FE process exits. We recommend that you increase the value of this parameter to prevent this situation.
 
-### master_sync_policy
+##### master_sync_policy
+
 - **Default:** SYNC
 - **Description:** The policy based on which the leader FE flushes logs to disk. This parameter is valid only when the current FE is a leader FE. Valid values:
   - `SYNC`: When a transaction is committed, a log entry is generated and flushed to disk simultaneously.
   - `NO_SYNC`: The generation and flushing of a log entry do not occur at the same time when a transaction is committed.
   - `WRITE_NO_SYNC`: When a transaction is commited, a log entry is generated simultaneously but is not flushed to disk. If you have deployed only one follower FE, we recommend that you set this parameter to `SYNC`. If you have deployed three or more follower FEs, we recommend that you set this parameter and the `replica_sync_policy` both to `WRITE_NO_SYNC`.
 
-### replica_sync_policy
+##### replica_sync_policy
+
 - **Default:** SYNC
 - **Description:** The policy based on which the follower FE flushes logs to disk. This parameter is valid only when the current FE is a follower FE. Valid values:
   - `SYNC`: When a transaction is committed, a log entry is generated and flushed to disk simultaneously.
   - `NO_SYNC`: The generation and flushing of a log entry do not occur at the same time when a transaction is committed.
   - `WRITE_NO_SYNC`: When a transaction is committed, a log entry is generated simultaneously but is not flushed to disk.
 
-### replica_ack_policy
+##### replica_ack_policy
+
 - **Default:** SIMPLE_MAJORITY
 - **Description:** The policy based on which a log entry is considered valid. The default value `SIMPLE_MAJORITY` specifies that a log entry is considered valid if a majority of follower FEs return ACK messages.
 
-### cluster_id
+##### cluster_id
+
 - **Default:** -1
 - **Description:** The ID of the StarRocks cluster to which the FE belongs. FEs or BEs that have the same cluster ID belong to the same StarRocks cluster. Valid values: any positive integer. The default value `-1` specifies that StarRocks will generate a random cluster ID for the StarRocks cluster at the time when the leader FE of the cluster is started for the first time.
 
 #### Query engine
 
-### publish_version_interval_ms
+##### publish_version_interval_ms
+
 - **Default:** 10
 - **Description:** The time interval at which release validation tasks are issued. Unit: ms.
 
-### statistic_cache_columns
+##### statistic_cache_columns
+
 - **Default:** 100000
 - **Description:** The number of rows that can be cached for the statistics table.
 
-### statistic_cache_thread_pool_size
+##### statistic_cache_thread_pool_size
+
 - **Default:** 10
 - **Description:** The size of the thread-pool which will be used to refresh statistic caches.
 
 #### Loading and unloading
 
-### load_checker_interval_second
+##### load_checker_interval_second
+
 - **Default:** 5
 - **Description:** The time interval at which load jobs are processed on a rolling basis. Unit: second.
 
-### transaction_clean_interval_second
+##### transaction_clean_interval_second
+
 - **Default:** 30
 - **Description:** The time interval at which finished transactions are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that finished transactions can be cleaned up in a timely manner.
 
-### label_clean_interval_second
+##### label_clean_interval_second
+
 - **Default:** 14400
 - **Description:** The time interval at which labels are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that historical labels can be cleaned up in a timely manner.
 
-### spark_dpp_version
+##### spark_dpp_version
+
 - **Default:** 1.0.0
 - **Description:** The version of Spark Dynamic Partition Pruning (DPP) used.
 
-### spark_resource_path
+##### spark_resource_path
+
 - **Default:** Empty string
 - **Description:** The root directory of the Spark dependency package.
 
-### spark_launcher_log_dir
+##### spark_launcher_log_dir
+
 - **Default:** sys_log_dir + "/spark_launcher_log"
 - **Description:** The directory that stores Spark log files.
 
-### yarn_client_path
+##### yarn_client_path
+
 - **Default:** StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-client/hadoop/bin/yarn"
 - **Description:** The root directory of the Yarn client package.
 
-### yarn_config_dir
+##### yarn_config_dir
+
 - **Default:** StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-config"
 - **Description:** The directory that stores the Yarn configuration file.
 
-### export_checker_interval_second
+##### export_checker_interval_second
+
 - **Default:** 5
 - **Description:** The time interval at which load jobs are scheduled.
 
-### export_task_pool_size
+##### export_task_pool_size
+
 - **Default:** 5
 - **Description:** The size of the unload task thread pool.
 
 #### Storage
 
-### default_storage_medium
+##### default_storage_medium
+
 - **Default:** HDD
 - **Description:** The default storage media that is used for a table or partition at the time of table or partition creation if no storage media is specified. Valid values: `HDD` and `SSD`. When you create a table or partition, the default storage media specified by this parameter is used if you do not specify a storage media type for the table or partition.
 
-### tablet_sched_balancer_strategy
+##### tablet_sched_balancer_strategy
+
 - **Default:** disk_and_tablet
 - **Description:** The policy based on which load balancing is implemented among tablets. The alias of this parameter is `tablet_balancer_strategy`. Valid values: `disk_and_tablet` and `be_load_score`.
 
-### tablet_sched_storage_cooldown_second
+##### tablet_sched_storage_cooldown_second
+
 - **Default:** -1
 - **Description:** The latency of automatic cooling starting from the time of table creation. The alias of this parameter is `storage_cooldown_second`. Unit: second. The default value `-1` specifies that automatic cooling is disabled. If you want to enable automatic cooling, set this parameter to a value greater than `-1`.
 
-### tablet_stat_update_interval_second
+##### tablet_stat_update_interval_second
+
 - **Default:** 300
 - **Description:** The time interval at which the FE retrieves tablet statistics from each BE. Unit: second.
 
@@ -1035,7 +1104,7 @@ DO NOT change run_mode after the cluster is deployed. Otherwise, the cluster fai
 ##### aws_s3_endpoint
 
 - **Default**: N/A
-- **Description**: The endpoint used to access your S3 bucket, for example, https://s3.us-west-2.amazonaws.com.
+- **Description**: The endpoint used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`.
 
 ##### aws_s3_region
 
@@ -1084,7 +1153,7 @@ DO NOT change run_mode after the cluster is deployed. Otherwise, the cluster fai
 ##### azure_blob_endpoint
 
 - **Default**: N/A
-- **Description**: The endpoint of your Azure Blob Storage Account, for example, https://test.blob.core.windows.net.
+- **Description**: The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`.
 
 ##### azure_blob_shared_key
 
@@ -1098,55 +1167,68 @@ DO NOT change run_mode after the cluster is deployed. Otherwise, the cluster fai
 
 #### Other FE static parameters
 
-### plugin_dir
+##### plugin_dir
+
 - **Default:** STARROCKS_HOME_DIR/plugins
 - **Description:** The directory that stores plugin installation packages.
 
-### small_file_dir
+##### small_file_dir
+
 - **Default:** StarRocksFE.STARROCKS_HOME_DIR + "/small_files"
 - **Description:** The root directory of small files.
 
-### max_agent_task_threads_num
+##### max_agent_task_threads_num
+
 - **Default:** 4096
 - **Description:** The maximum number of threads that are allowed in the agent task thread pool.
 
-### auth_token
+##### auth_token
+
 - **Default:** Empty string
 - **Description:** The token that is used for identity authentication within the StarRocks cluster to which the FE belongs. If this parameter is left unspecified, StarRocks generates a random token for the cluster at the time when the leader FE of the cluster is started for the first time.
 
-### tmp_dir
+##### tmp_dir
+
 - **Default:** StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir"
 - **Description:** The directory that stores temporary files such as files generated during backup and restore procedures. After these procedures finish, the generated temporary files are deleted.
 
-### locale
+##### locale
+
 - **Default:** zh_CN.UTF-8
 - **Description:** The character set that is used by the FE.
 
-### hive_meta_load_concurrency
+##### hive_meta_load_concurrency
+
 - **Default:** 4
 - **Description:** The maximum number of concurrent threads that are supported for Hive metadata.
 
-### hive_meta_cache_refresh_interval_s
+##### hive_meta_cache_refresh_interval_s
+
 - **Default:** 7200
 - **Description:** The time interval at which the cached metadata of Hive external tables is updated. Unit: second.
 
-### hive_meta_cache_ttl_s
+##### hive_meta_cache_ttl_s
+
 - **Default:** 86400
 - **Description:** The amount of time after which the cached metadata of Hive external tables expires. Unit: second.
 
-### hive_meta_store_timeout_s
+##### hive_meta_store_timeout_s
+
 - **Default:** 10
 - **Description:** The amount of time after which a connection to a Hive metastore times out. Unit: second.
 
-### es_state_sync_interval_second
+##### es_state_sync_interval_second
+
 - **Default:** 10
 - **Description:** The time interval at which the FE obtains Elasticsearch indexes and synchronizes the metadata of StarRocks external tables. Unit: second.
 
-### enable_auth_check
+##### enable_auth_check
+
 - **Default:** TRUE
 - **Description:** Specifies whether to enable the authentication check feature. Valid values: `TRUE` and `FALSE`. `TRUE` specifies to enable this feature, and `FALSE` specifies to disable this feature.
 
-### enable_metric_calculator
+##### enable_metric_calculator
+
 - **Default:** TRUE
 - **Description:** Specifies whether to enable the feature that is used to periodically collect metrics. Valid values: `TRUE` and `FALSE`. `TRUE` specifies to enable this feature, and `FALSE` specifies to disable this feature.
 
@@ -1172,267 +1254,333 @@ curl -XPOST http://be_host:http_port/api/update_config?<configuration_item>=<val
 
 BE dynamic parameters are as follows.
 
-### report_task_interval_seconds
+#### report_task_interval_seconds
+
 - **Default:** 10 seconds
 - **Description:** The time interval at which to report the state of a task. A task can be creating a table, dropping a table, loading data, or changing a table schema.
 
-### report_disk_state_interval_seconds
+#### report_disk_state_interval_seconds
+
 - **Default:** 60 seconds
 - **Description:** The time interval at which to report the storage volume state, which includes the size of data within the volume.
 
-### report_tablet_interval_seconds
+#### report_tablet_interval_seconds
+
 - **Default:** 60 seconds
 - **Description:** The time interval at which to report the most updated version of all tablets.
 
-### report_workgroup_interval_seconds
+#### report_workgroup_interval_seconds
+
 - **Default:** 5 seconds
 - **Description:** The time interval at which to report the most updated version of all workgroups.
 
-### max_download_speed_kbps
+#### max_download_speed_kbps
+
 - **Default:** 50,000 KB/s
 - **Description:** The maximum download speed of each HTTP request. This value affects the performance of data replica synchronization across BE nodes.
 
-### download_low_speed_limit_kbps
+#### download_low_speed_limit_kbps
+
 - **Default:** 50 KB/s
 - **Description:** The download speed lower limit of each HTTP request. An HTTP request aborts when it constantly runs with a lower speed than this value within the time span specified in the configuration item `download_low_speed_time`.
 
-### download_low_speed_time
+#### download_low_speed_time
+
 - **Default:** 300 seconds
 - **Description:** The maximum time that an HTTP request can run with a download speed lower than the limit. An HTTP request aborts when it constantly runs with a lower speed than the value of `download_low_speed_limit_kbps` within the time span specified in this configuration item.
 
-### status_report_interval
+#### status_report_interval
+
 - **Default:** 5 seconds
 - **Description:** The time interval at which a query reports its profile, which can be used for query statistics collection by FE.
 
-### scanner_thread_pool_thread_num
+#### scanner_thread_pool_thread_num
+
 - **Default:** 48 (Number of Threads)
 - **Description:** The number of threads which the storage engine used for concurrent storage volume scanning. All threads are managed in the thread pool.
 
-### thrift_client_retry_interval_ms
+#### thrift_client_retry_interval_ms
+
 - **Default:** 100 ms
 - **Description:** The time interval at which a thrift client retries.
 
-### scanner_thread_pool_queue_size
+#### scanner_thread_pool_queue_size
+
 - **Default:** 102,400 (Number of Tasks)
 - **Description:** The number of scan tasks supported by the storage engine.
 
-### scanner_row_num
+#### scanner_row_num
+
 - **Default:** 16,384 (Maximum Rows per Scan Thread)
 - **Description:** The maximum row count returned by each scan thread in a scan.
 
-### max_scan_key_num
+#### max_scan_key_num
+
 - **Default:** 1,024 (Maximum Number of Scan Keys per Query)
 - **Description:** The maximum number of scan keys segmented by each query.
 
-### max_pushdown_conditions_per_column
+#### max_pushdown_conditions_per_column
+
 - **Default:** 1,024 (Maximum Number of Pushdown Conditions per Column)
 - **Description:** The maximum number of conditions that allow pushdown in each column. If the number of conditions exceeds this limit, the predicates are not pushed down to the storage layer.
 
-### exchg_node_buffer_size_bytes
+#### exchg_node_buffer_size_bytes
+
 - **Default:** 10,485,760 Bytes
 - **Description:** The maximum buffer size on the receiver end of an exchange node for each query. This configuration item is a soft limit. A backpressure is triggered when data is sent to the receiver end with an excessive speed.
 
-### memory_limitation_per_thread_for_schema_change
+#### memory_limitation_per_thread_for_schema_change
+
 - **Default:** 2 GB
 - **Description:** The maximum memory size allowed for each schema change task.
 
-### update_cache_expire_sec
+#### update_cache_expire_sec
+
 - **Default:** 360 seconds
 - **Description:** The expiration time of Update Cache.
 
-### file_descriptor_cache_clean_interval
+#### file_descriptor_cache_clean_interval
+
 - **Default:** 3,600 seconds
 - **Description:** The time interval at which to clean file descriptors that have not been used for a certain period of time.
 
-### disk_stat_monitor_interval
+#### disk_stat_monitor_interval
+
 - **Default:** 5 seconds
 - **Description:** The time interval at which to monitor health status of disks.
 
-### unused_rowset_monitor_interval
+#### unused_rowset_monitor_interval
+
 - **Default:** 30 seconds
 - **Description:** The time interval at which to clean the expired rowsets.
 
-### max_percentage_of_error_disk
+#### max_percentage_of_error_disk
+
 - **Default:** 0%
 - **Description:** The maximum percentage of error that is tolerable in a storage volume before the corresponding BE node quits.
 
-### default_num_rows_per_column_file_block
+#### default_num_rows_per_column_file_block
+
 - **Default:** 1,024
 - **Description:** The maximum number of rows that can be stored in each row block.
 
-### pending_data_expire_time_sec
+#### pending_data_expire_time_sec
+
 - **Default:** 1,800 seconds
 - **Description:** The expiration time of the pending data in the storage engine.
 
-### inc_rowset_expired_sec
+#### inc_rowset_expired_sec
+
 - **Default:** 1,800 seconds
 - **Description:** The expiration time of the incoming data. This configuration item is used in incremental clone.
 
-### tablet_rowset_stale_sweep_time_sec
+#### tablet_rowset_stale_sweep_time_sec
+
 - **Default:** 1,800 seconds
 - **Description:** The time interval at which to sweep the stale rowsets in tablets.
 
-### snapshot_expire_time_sec
+#### snapshot_expire_time_sec
+
 - **Default:** 172,800 seconds
 - **Description:** The expiration time of snapshot files.
 
-### trash_file_expire_time_sec
+#### trash_file_expire_time_sec
+
 - **Default:** 259,200 seconds
 - **Description:** The time interval at which to clean trash files.
 
-### base_compaction_check_interval_seconds
+#### base_compaction_check_interval_seconds
+
 - **Default:** 60 seconds
 - **Description:** The time interval of thread polling for a Base Compaction.
 
-### min_base_compaction_num_singleton_deltas
+#### min_base_compaction_num_singleton_deltas
+
 - **Default:** 5
 - **Description:** The minimum number of segments that trigger a Base Compaction.
 
-### max_base_compaction_num_singleton_deltas
+#### max_base_compaction_num_singleton_deltas
+
 - **Default:** 100
 - **Description:** The maximum number of segments that can be compacted in each Base Compaction.
 
-### base_compaction_interval_seconds_since_last_operation
+#### base_compaction_interval_seconds_since_last_operation
+
 - **Default:** 86,400 seconds
 - **Description:** The time interval since the last Base Compaction. This configuration item is one of the conditions that trigger a Base Compaction.
 
-### cumulative_compaction_check_interval_seconds
+#### cumulative_compaction_check_interval_seconds
+
 - **Default:** 1 second
 - **Description:** The time interval of thread polling for a Cumulative Compaction.
 
-### update_compaction_check_interval_seconds
+#### update_compaction_check_interval_seconds
+
 - **Default:** 60 seconds
 - **Description:** The time interval at which to check the Update Compaction of the Primary Key table.
 
-### min_compaction_failure_interval_sec
+#### min_compaction_failure_interval_sec
+
 - **Default:** 120 seconds
 - **Description:** The minimum time interval that a Tablet Compaction can be scheduled since the last compaction failure.
 
-### max_compaction_concurrency
+#### max_compaction_concurrency
+
 - **Default:** -1
 - **Description:** The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency.
 
-### periodic_counter_update_period_ms
+#### periodic_counter_update_period_ms
+
 - **Default:** 500 ms
 - **Description:** The time interval at which to collect the Counter statistics.
 
-### load_error_log_reserve_hours
+#### load_error_log_reserve_hours
+
 - **Default:** 48 hours
 - **Description:** The time for which data loading logs are reserved.
 
-### streaming_load_max_mb
+#### streaming_load_max_mb
+
 - **Default:** 10,240 MB
 - **Description:** The maximum size of a file that can be streamed into StarRocks.
 
-### streaming_load_max_batch_size_mb
+#### streaming_load_max_batch_size_mb
+
 - **Default:** 100 MB
 - **Description:** The maximum size of a JSON file that can be streamed into StarRocks.
 
-### memory_maintenance_sleep_time_s
+#### memory_maintenance_sleep_time_s
+
 - **Default:** 10 seconds
 - **Description:** The time interval at which ColumnPool GC is triggered. StarRocks executes GC periodically and returns the released memory to the operating system.
 
-### write_buffer_size
+#### write_buffer_size
+
 - **Default:** 104,857,600 Bytes
 - **Description:** The buffer size of MemTable in the memory. This configuration item is the threshold to trigger a flush.
 
-### tablet_stat_cache_update_interval_second
+#### tablet_stat_cache_update_interval_second
+
 - **Default:** 300 seconds
 - **Description:** The time interval at which to update Tablet Stat Cache.
 
-### result_buffer_cancelled_interval_time
+#### result_buffer_cancelled_interval_time
+
 - **Default:** 300 seconds
 - **Description:** The wait time before BufferControlBlock releases data.
 
-### thrift_rpc_timeout_ms
+#### thrift_rpc_timeout_ms
+
 - **Default:** 5,000 ms
 - **Description:** The timeout for a thrift RPC.
 
-### txn_commit_rpc_timeout_ms
+#### txn_commit_rpc_timeout_ms
+
 - **Default:** 60,000 ms
 - **Description:** The timeout for a transaction commit RPC.
 
-### max_consumer_num_per_group
+#### max_consumer_num_per_group
+
 - **Default:** 3 (Maximum Number of Consumers in a Consumer Group of Routine Load)
 - **Description:** The maximum number of consumers in a consumer group of Routine Load.
 
-### max_memory_sink_batch_count
+#### max_memory_sink_batch_count
+
 - **Default:** 20 (Maximum Number of Scan Cache Batches)
 - **Description:** The maximum number of Scan Cache batches.
 
-### scan_context_gc_interval_min
+#### scan_context_gc_interval_min
+
 - **Default:** 5 minutes
 - **Description:** The time interval at which to clean the Scan Context.
 
-### path_gc_check_step
+#### path_gc_check_step
+
 - **Default:** 1,000 (Maximum Number of Files Scanned Continuously Each Time)
 - **Description:** The maximum number of files that can be scanned continuously each time.
 
-### path_gc_check_step_interval_ms
+#### path_gc_check_step_interval_ms
+
 - **Default:** 10 ms
 - **Description:** The time interval between file scans.
 
-### path_scan_interval_second
+#### path_scan_interval_second
+
 - **Default:** 86,400 seconds
 - **Description:** The time interval at which GC cleans expired data.
 
-### storage_flood_stage_usage_percent
+#### storage_flood_stage_usage_percent
+
 - **Default:** 95% (Storage Usage Threshold for Load and Restore Job Rejection)
 - **Description:** If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_flood_stage_left_capacity_bytes`, Load and Restore jobs are rejected.
 
-### storage_flood_stage_left_capacity_bytes
+#### storage_flood_stage_left_capacity_bytes
+
 - **Default:** 107,374,182,400 Bytes (Remaining Storage Space Threshold for Load and Restore Job Rejection)
 - **Description:** If the remaining storage space of the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_flood_stage_usage_percent`, Load and Restore jobs are rejected.
 
-### tablet_meta_checkpoint_min_new_rowsets_num
+#### tablet_meta_checkpoint_min_new_rowsets_num
+
 - **Default:** 10 (Minimum Number of Rowsets to Trigger a TabletMeta Checkpoint)
 - **Description:** The minimum number of rowsets to create since the last TabletMeta Checkpoint.
 
-### tablet_meta_checkpoint_min_interval_secs
+#### tablet_meta_checkpoint_min_interval_secs
+
 - **Default:** 600 seconds
 - **Description:** The time interval of thread polling for a TabletMeta Checkpoint.
 
-### max_runnings_transactions_per_txn_map
+#### max_runnings_transactions_per_txn_map
+
 - **Default:** 100 (Maximum Number of Concurrent Transactions per Partition)
 - **Description:** The maximum number of transactions that can run concurrently in each partition.
 
-### tablet_max_pending_versions
+#### tablet_max_pending_versions
+
 - **Default:** 1,000 (Maximum Number of Pending Versions on a Primary Key Tablet)
 - **Description:** The maximum number of pending versions that are tolerable on a Primary Key tablet. Pending versions refer to versions that are committed but not applied yet.
 
-### tablet_max_versions
+#### tablet_max_versions
+
 - **Default:** 1,000 (Maximum Number of Versions Allowed on a Tablet)
 - **Description:** The maximum number of versions allowed on a tablet. If the number of versions exceeds this value, new write requests will fail.
 
-### max_hdfs_file_handle
+#### max_hdfs_file_handle
+
 - **Default:** 1,000 (Maximum Number of HDFS File Descriptors)
 - **Description:** The maximum number of HDFS file descriptors that can be opened.
 
-### be_exit_after_disk_write_hang_second
+#### be_exit_after_disk_write_hang_second
+
 - **Default:** 60 seconds
 - **Description:** The length of time that the BE waits to exit after the disk hangs.
 
-### min_cumulative_compaction_failure_interval_sec
+#### min_cumulative_compaction_failure_interval_sec
+
 - **Default:** 30 seconds
 - **Description:** The minimum time interval at which Cumulative Compaction retries upon failures.
 
-### size_tiered_level_num
+#### size_tiered_level_num
+
 - **Default:** 7 (Number of Levels for Size-tiered Compaction)
 - **Description:** The number of levels for the Size-tiered Compaction strategy. At most one rowset is reserved for each level. Therefore, under a stable condition, there are, at most, as many rowsets as the level number specified in this configuration item.
 
-### size_tiered_level_multiple
+#### size_tiered_level_multiple
+
 - **Default:** 5 (Multiple of Data Size Between Contiguous Levels in Size-tiered Compaction)
 - **Description:** The multiple of data size between two contiguous levels in the Size-tiered Compaction strategy.
 
-### size_tiered_min_level_size
+#### size_tiered_min_level_size
+
 - **Default:** 131,072 Bytes
 - **Description:** The data size of the minimum level in the Size-tiered Compaction strategy. Rowsets smaller than this value immediately trigger the data compaction.
 
-### storage_page_cache_limit
+#### storage_page_cache_limit
+
 - **Default:** 20%
 - **Description:** The PageCache size. It can be specified as size, for example, `20G`, `20,480M`, `20,971,520K`, or `21,474,836,480B`. It can also be specified as the ratio (percentage) to the memory size, for example, `20%`. It takes effect only when `disable_storage_page_cache` is set to `false`.
 
-### internal_service_async_thread_num
+#### internal_service_async_thread_num
+
 - **Default:** 10 (Number of Threads)
 - **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs.
 
@@ -1442,456 +1590,455 @@ You can only set the static parameters of a BE by changing them in the correspon
 
 BE static parameters are as follows.
 
-##### hdfs_client_enable_hedged_read
+#### hdfs_client_enable_hedged_read
 
 - **Default**: false
 - **Unit**: N/A
 - **Description**: Specifies whether to enable the hedged read feature. This parameter is supported from v3.0 onwards.
 
-##### hdfs_client_hedged_read_threadpool_size
+#### hdfs_client_hedged_read_threadpool_size
 
 - **Default**: 128
 - **Unit**: N/A
 - **Description**: Specifies the size of the Hedged Read thread pool on your HDFS client. The thread pool size limits the number of threads to dedicate to the running of hedged reads in your HDFS client. This parameter is supported from v3.0 onwards. It is equivalent to the dfs.client.hedged.read.threadpool.size parameter in the hdfs-site.xml file of your HDFS cluster.
 
-##### hdfs_client_hedged_read_threshold_millis
+#### hdfs_client_hedged_read_threshold_millis
 
 - **Default**: 2500
 - **Unit**: Millisecond
 - **Description**: Specifies the number of milliseconds to wait before starting up a hedged read. For example, you have set this parameter to 30. In this situation, if a read from a block has not returned within 30 milliseconds, your HDFS client immediately starts up a new read against a different block replica. This parameter is supported from v3.0 onwards. It is equivalent to the dfs.client.hedged.read.threshold.millis parameter in the hdfs-site.xml file of your HDFS cluster.
 
-##### be_port
+#### be_port
 
 - **Default**: 9060
 - **Unit**: N/A
 - **Description**: The BE thrift server port, which is used to receive requests from FEs.
 
-##### brpc_port
+#### brpc_port
 
 - **Default**: 8060
 - **Unit**: N/A
 - **Description**: The BE BRPC port, which is used to view the network statistics of BRPCs.
 
-##### brpc_num_threads
+#### brpc_num_threads
 
 - **Default**: -1
 - **Unit**: N/A
 - **Description**: The number of bthreads of a BRPC. The value -1 indicates the same number with the CPU threads.
 
-##### priority_networks
+#### priority_networks
 
 - **Default**: Empty string
 - **Unit**: N/A
 - **Description**: The CIDR-formatted IP address that is used to specify the priority IP address of a BE node if the machine that hosts the BE node has multiple IP addresses.
 
-##### heartbeat_service_port
+#### heartbeat_service_port
 
 - **Default**: 9050
 - **Unit**: N/A
 - **Description**: The BE heartbeat service port, which is used to receive heartbeats from FEs.
 
-##### starlet_port
+#### starlet_port
 
 - **Default**: 9070
 - **Unit**: N/A
 - **Description**: The BE heartbeat service port for the StarRocks shared-data cluster.
 
-##### heartbeat_service_thread_count
+#### heartbeat_service_thread_count
 
 - **Default**: 1
 - **Unit**: N/A
 - **Description**: The thread count of the BE heartbeat service.
 
-##### create_tablet_worker_count
+#### create_tablet_worker_count
 
 - **Default**: 3
 - **Unit**: N/A
 - **Description**: The number of threads used to create a tablet.
 
-##### drop_tablet_worker_count
+#### drop_tablet_worker_count
 
 - **Default**: 3
 - **Unit**: N/A
 - **Description**: The number of threads used to drop a tablet.
 
-##### push_worker_count_normal_priority
+#### push_worker_count_normal_priority
 
 - **Default**: 3
 - **Unit**: N/A
 - **Description**: The number of threads used to handle a load task with NORMAL priority.
 
-##### push_worker_count_high_priority
+#### push_worker_count_high_priority
 
 - **Default**: 3
 - **Unit**: N/A
 - **Description**: The number of threads used to handle a load task with HIGH priority.
 
-##### transaction_publish_version_worker_count
+#### transaction_publish_version_worker_count
 
 - **Default**: 0
 - **Unit**: N/A
 - **Description**: The maximum number of threads used to publish a version. When this value is set to less than or equal to 0, the system uses half of the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from 8 to 0.
 
-##### clear_transaction_task_worker_count
+#### clear_transaction_task_worker_count
 
 - **Default**: 1
 - **Unit**: N/A
 - **Description**: The number of threads used for clearing transaction.
 
-##### alter_tablet_worker_count
+#### alter_tablet_worker_count
 
 - **Default**: 3
 - **Unit**: N/A
 - **Description**: The number of threads used for schema change.
 
-##### clone_worker_count
+#### clone_worker_count
 
 - **Default**: 3
 - **Unit**: N/A
 - **Description**: The number of threads used for clone.
 
-##### storage_medium_migrate_count
+#### storage_medium_migrate_count
 
 - **Default**: 1
 - **Unit**: N/A
 - **Description**: The number of threads used for storage medium migration (from SATA to SSD).
 
-##### check_consistency_worker_count
+#### check_consistency_worker_count
 
 - **Default**: 1
 - **Unit**: N/A
 - **Description**: The number of threads used for checking the consistency of tablets.
 
-##### sys_log_dir
+#### sys_log_dir
 
 - **Default**: ${STARROCKS_HOME}/log
 - **Unit**: N/A
 - **Description**: The directory that stores system logs (including INFO, WARNING, ERROR, and FATAL).
 
-##### user_function_dir
+#### user_function_dir
 
 - **Default**: ${STARROCKS_HOME}/lib/udf
 - **Unit**: N/A
 - **Description**: The directory used to store User-defined Functions (UDFs).
 
-##### small_file_dir
+#### small_file_dir
 
 - **Default**: ${STARROCKS_HOME}/lib/small_file
 - **Unit**: N/A
 - **Description**: The directory used to store the files downloaded by the file manager.
 
-##### sys_log_level
+#### sys_log_level
 
 - **Default**: INFO
 - **Unit**: N/A
 - **Description**: The severity levels into which system log entries are classified. Valid values: INFO, WARN, ERROR, and FATAL.
 
-##### sys_log_roll_mode
+#### sys_log_roll_mode
 
 - **Default**: SIZE-MB-1024
 - **Unit**: N/A
 - **Description**: The mode in which system logs are segmented into log rolls. Valid values include TIME-DAY, TIME-HOUR, and SIZE-MB-<size>. The default value indicates that logs are segmented into rolls, each of which is 1 GB.
 
-##### sys_log_roll_num
+#### sys_log_roll_num
 
 - **Default**: 10
 - **Unit**: N/A
 - **Description**: The number of log rolls to reserve.
 
-##### sys_log_verbose_modules
+#### sys_log_verbose_modules
 
 - **Default**: Empty string
 - **Unit**: N/A
 - **Description**: The module of the logs to be printed. For example, if you set this configuration item to OLAP, StarRocks only prints the logs of the OLAP module. Valid values are namespaces in BE, including starrocks, starrocks::debug, starrocks::fs, starrocks::io, starrocks::lake, starrocks::pipeline, starrocks::query_cache, starrocks::stream, and starrocks::workgroup.
 
-##### sys_log_verbose_level
+#### sys_log_verbose_level
 
 - **Default**: 10
 - **Unit**: N/A
 - **Description**: The level of the logs to be printed. This configuration item is used to control the output of logs initiated with VLOG in codes.
 
-##### log_buffer_level
+#### log_buffer_level
 
 - **Default**: Empty string
 - **Unit**: N/A
 - **Description**: The strategy for flushing logs. The default value indicates that logs are buffered in memory. Valid values are -1 and 0. -1 indicates that logs are not buffered in memory.
 
-##### num_threads_per_core
+#### num_threads_per_core
 
 - **Default**: 3
 - **Unit**: N/A
 - **Description**: The number of threads started on each CPU core.
 
-##### compress_rowbatches
+#### compress_rowbatches
 
 - **Default**: TRUE
 - **Unit**: N/A
 - **Description**: A boolean value to control whether to compress the row batches in RPCs between BEs. TRUE indicates compressing the row batches, and FALSE indicates not compressing them.
 
-##### serialize_batch
+#### serialize_batch
 
 - **Default**: FALSE
 - **Unit**: N/A
 - **Description**: A boolean value to control whether to serialize the row batches in RPCs between BEs. TRUE indicates serializing the row batches, and FALSE indicates not serializing them.
 
-##### storage_root_path
+#### storage_root_path
 
 - **Default**: ${STARROCKS_HOME}/storage
 - **Unit**: N/A
 - **Description**: The directory and medium of the storage volume. Multiple volumes are separated by semicolons (;). If the storage medium is SSD, add ,medium:ssd at the end of the directory. If the storage medium is HDD, add ,medium:hdd at the end of the directory.
 
-##### max_length_for_bitmap_function
+#### max_length_for_bitmap_function
 
 - **Default**: 1000000
 - **Unit**: Byte
 - **Description**: The maximum length of input values for bitmap functions.
 
-##### max_length_for_to_base64
+#### max_length_for_to_base64
 
 - **Default**: 200000
 - **Unit**: Byte
 - **Description**: The maximum length of input values for the to_base64() function.
 
-##### max_tablet_num_per_shard
+#### max_tablet_num_per_shard
 
 - **Default**: 1024
 - **Unit**: N/A
 - **Description**: The maximum number of tablets in each shard. This configuration item is used to restrict the number of tablet child directories under each storage directory.
 
-##### max_garbage_sweep_interval
+#### max_garbage_sweep_interval
 
 - **Default**: 3600
 - **Unit**: Second
 - **Description**: The maximum time interval for garbage collection on storage volumes.
 
-##### min_garbage_sweep_interval
+#### min_garbage_sweep_interval
 
 - **Default**: 180
 - **Unit**: Second
 - **Description**: The minimum time interval for garbage collection on storage volumes.
 
-##### file_descriptor_cache_capacity
+#### file_descriptor_cache_capacity
 
 - **Default**: 16384
 - **Unit**: N/A
 - **Description**: The number of file descriptors that can be cached.
 
-##### min_file_descriptor_number
+#### min_file_descriptor_number
 
 - **Default**: 60000
 - **Unit**: N/A
 - **Description**: The minimum number of file descriptors in the BE process.
 
-##### index_stream_cache_capacity
+#### index_stream_cache_capacity
 
 - **Default**: 10737418240
 - **Unit**: Byte
 - **Description**: The cache capacity for the statistical information of BloomFilter, Min, and Max.
 
-##### disable_storage_page_cache
+#### disable_storage_page_cache
 
 - **Default**: FALSE
 - **Unit**: N/A
 - **Description**: A boolean value to control whether to disable PageCache. When PageCache is enabled, StarRocks caches the recently scanned data. PageCache can significantly improve the query performance when similar queries are repeated frequently. TRUE indicates disabling PageCache. The default value of this item has been changed from TRUE to FALSE since StarRocks v2.4.
 
-##### base_compaction_num_threads_per_disk
+#### base_compaction_num_threads_per_disk
 
 - **Default**: 1
 - **Unit**: N/A
 - **Description**: The number of threads used for Base Compaction on each storage volume.
 
-##### base_cumulative_delta_ratio
+#### base_cumulative_delta_ratio
 
 - **Default**: 0.3
 - **Unit**: N/A
 - **Description**: The ratio of cumulative file size to base file size. The ratio reaching this value is one of the conditions that trigger the Base Compaction.
 
-##### compaction_trace_threshold
+#### compaction_trace_threshold
 
 - **Default**: 60
 - **Unit**: Second
 - **Description**: The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace.
 
-##### be_http_port
+#### be_http_port
 
 - **Default**: 8040
 - **Unit**: N/A
 - **Description**: The HTTP server port.
 
-##### be_http_num_workers
+#### be_http_num_workers
 
 - **Default**: 48
 - **Unit**: N/A
 - **Description**: The number of threads used by the HTTP server.
 
-##### load_data_reserve_hours
+#### load_data_reserve_hours
 
 - **Default**: 4
 - **Unit**: Hour
 - **Description**: The reservation time for the files produced by small-scale loadings.
 
-##### number_tablet_writer_threads
+#### number_tablet_writer_threads
 
 - **Default**: 16
 - **Unit**: N/A
 - **Description**: The number of threads used for Stream Load.
 
-##### streaming_load_rpc_max_alive_time_sec
+#### streaming_load_rpc_max_alive_time_sec
 
 - **Default**: 1200
 - **Unit**: Second
 - **Description**: The RPC timeout for Stream Load.
 
-##### fragment_pool_thread_num_min
+#### fragment_pool_thread_num_min
 
 - **Default**: 64
 - **Unit**: N/A
 - **Description**: The minimum number of threads used for query.
 
-##### fragment_pool_thread_num_max
+#### fragment_pool_thread_num_max
 
 - **Default**: 4096
 - **Unit**: N/A
 - **Description**: The maximum number of threads used for query.
 
-##### fragment_pool_queue_size
+#### fragment_pool_queue_size
 
 - **Default**: 2048
 - **Unit**: N/A
 - **Description**: The upper limit of the query number that can be processed on each BE node.
 
-##### enable_token_check
+#### enable_token_check
 
 - **Default**: TRUE
 - **Unit**: N/A
 - **Description**: A boolean value to control whether to enable the token check. TRUE indicates enabling the token check, and FALSE indicates disabling it.
 
-##### enable_prefetch
+#### enable_prefetch
 
 - **Default**: TRUE
 - **Unit**: N/A
 - **Description**: A boolean value to control whether to enable the pre-fetch of the query. TRUE indicates enabling pre-fetch, and FALSE indicates disabling it.
 
-##### load_process_max_memory_limit_bytes
+#### load_process_max_memory_limit_bytes
 
 - **Default**: 107374182400
 - **Unit**: Byte
 - **Description**: The maximum size limit of memory resources that can be taken up by all load processes on a BE node.
 
-##### load_process_max_memory_limit_percent
+#### load_process_max_memory_limit_percent
 
 - **Default**: 30
 - **Unit**: %
 - **Description**: The maximum percentage limit of memory resources that can be taken up by all load processes on a BE node.
 
-##### sync_tablet_meta
+#### sync_tablet_meta
 
 - **Default**: FALSE
 - **Unit**: N/A
 - **Description**: A boolean value to control whether to enable the synchronization of the tablet metadata. TRUE indicates enabling synchronization, and FALSE indicates disabling it.
 
-##### routine_load_thread_pool_size
+#### routine_load_thread_pool_size
 
 - **Default**: 10
 - **Unit**: N/A
 - **Description**: The thread pool size for Routine Load on each BE. Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now controlled by the FE dynamic parameter max_routine_load_task_num_per_be.
 
-##### brpc_max_body_size
+#### brpc_max_body_size
 
 - **Default**: 2147483648
 - **Unit**: Byte
 - **Description**: The maximum body size of a BRPC.
 
-##### tablet_map_shard_size
+#### tablet_map_shard_size
 
 - **Default**: 32
 - **Unit**: N/A
 - **Description**: The tablet map shard size. The value must be a power of two.
 
-##### enable_bitmap_union_disk_format_with_set
+#### enable_bitmap_union_disk_format_with_set
 
 - **Default**: FALSE
 - **Unit**: N/A
 - **Description**: A boolean value to control whether to enable the new storage format of the BITMAP type, which can improve the performance of bitmap_union. TRUE indicates enabling the new storage format, and FALSE indicates disabling it.
 
-##### mem_limit
+#### mem_limit
 
 - **Default**: 90%
 - **Unit**: N/A
 - **Description**: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100GB").
 
-##### flush_thread_num_per_store
+#### flush_thread_num_per_store
 
 - **Default**: 2
 - **Unit**: N/A
 - **Description**: Number of threads that are used for flushing MemTable in each store.
 
-##### block_cache_enable
+#### block_cache_enable
 
 - **Default**: false
 - **Unit**: N/A
 - **Description**: Whether to enable Data Cache. TRUE indicates Data Cache is enabled, and FALSE indicates Data Cache is disabled.
 
-##### block_cache_disk_path
+#### block_cache_disk_path
 
 - **Default**: N/A
 - **Unit**: N/A
 - **Description**: The paths of disks. We recommend that the number of paths you configure for this parameter is the same as the number of disks on your BE machine. Multiple paths need to be separated with semicolons (;). After you add this parameter, StarRocks automatically creates a file named cachelib_data to cache blocks.
 
-##### block_cache_meta_path
+#### block_cache_meta_path
 
 - **Default**: N/A
 - **Unit**: N/A
 - **Description**: The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the $STARROCKS_HOME path.
 
-##### block_cache_mem_size
+#### block_cache_mem_size
 
 - **Default**: 2147483648
 - **Unit**: Bytes
 - **Description**: The maximum amount of data that can be cached in memory. Unit: bytes. The default value is 2147483648, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after Data Cache is enabled, consider increasing the value.
 
-##### block_cache_disk_size
+#### block_cache_disk_size
 
 - **Default**: 0
 - **Unit**: Bytes
 - **Description**: The maximum amount of data that can be cached on a single disk. For example, if you configure two disk paths for the block_cache_disk_path parameter and set the value of the block_cache_disk_size parameter as 21474836480 (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is 0, which indicates that only memory is used to cache data. Unit: bytes.
 
-##### jdbc_connection_pool_size
+#### jdbc_connection_pool_size
 
 - **Default**: 8
 - **Unit**: N/A
 - **Description**: The JDBC connection pool size. On each BE node, queries that access the external table with the same jdbc_url share the same connection pool.
 
-##### jdbc_minimum_idle_connections
+#### jdbc_minimum_idle_connections
 
 - **Default**: 1
 - **Unit**: N/A
 - **Description**: The minimum number of idle connections in the JDBC connection pool.
 
-##### jdbc_connection_idle_timeout_ms
+#### jdbc_connection_idle_timeout_ms
 
 - **Default**: 600000
 - **Unit**: N/A
 - **Description**: The length of time after which an idle connection in the JDBC connection pool expires. If the connection idle time in the JDBC connection pool exceeds this value, the connection pool closes idle connections beyond the number specified in the configuration item jdbc_minimum_idle_connections.
 
-##### query_cache_capacity
+#### query_cache_capacity
 
 - **Default**: 536870912
 - **Unit**: N/A
 - **Description**: The size of the query cache in the BE. Unit: bytes. The default size is 512 MB. The size cannot be less than 4 MB. If the memory capacity of the BE is insufficient to provision your expected query cache size, you can increase the memory capacity of the BE.
 
-##### enable_event_based_compaction_framework
+#### enable_event_based_compaction_framework
 
 - **Default**: TRUE
 - **Unit**: N/A
 - **Description**: Whether to enable the Event-based Compaction Framework. TRUE indicates Event-based Compaction Framework is enabled, and FALSE indicates it is disabled. Enabling Event-based Compaction Framework can greatly reduce the overhead of compaction in scenarios where there are many tablets or a single tablet has a large amount of data.
 
-##### enable_size_tiered_compaction_strategy
+#### enable_size_tiered_compaction_strategy
 
 - **Default**: TRUE
 - **Unit**: N/A
 - **Description**: Whether to enable the Size-tiered Compaction strategy. TRUE indicates the Size-tiered Compaction strategy is enabled, and FALSE indicates it is disabled.
-
 
 <!--| aws_sdk_logging_trace_enabled | 0 | N/A | |
 | be_exit_after_disk_write_hang_second | 60 | N/A | |
