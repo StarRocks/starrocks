@@ -118,132 +118,158 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### Query engine
 
-- **max_allowed_in_element_num_of_delete**
+##### max_allowed_in_element_num_of_delete
+
 - Unit: -
 - Default: 10000
 - Description: The maximum number of elements allowed for the IN predicate in a DELETE statement.
 
-- **enable_materialized_view**
+##### enable_materialized_view
+
 - Unit: -
 - Default: TRUE
 - Description: Whether to enable the creation of materialized views.
 
-- **enable_decimal_v3**
+##### enable_decimal_v3
+
 - Unit: -
 - Default: TRUE
 - Description: Whether to support the DECIMAL V3 data type.
 
-- **enable_sql_blacklist**
+##### enable_sql_blacklist
+
 - Unit: -
 - Default: FALSE
 - Description: Whether to enable blacklist check for SQL queries. When this feature is enabled, queries in the blacklist cannot be executed.
 
-- **dynamic_partition_check_interval_seconds**
+##### dynamic_partition_check_interval_seconds
+
 - Unit: s
 - Default: 600
 - Description: The interval at which new data is checked. If new data is detected, StarRocks automatically creates partitions for the data.
 
-- **dynamic_partition_enable**
+##### dynamic_partition_enable
+
 - Unit: -
 - Default: TRUE
 - Description: Whether to enable the dynamic partitioning feature. When this feature is enabled, StarRocks dynamically creates partitions for new data and automatically deletes expired partitions to ensure the freshness of data.
 
-- **max_partitions_in_one_batch**
+##### max_partitions_in_one_batch
+
 - Unit: -
 - Default: 4096
 - Description: The maximum number of partitions that can be created when you bulk create partitions.
 
-- **max_query_retry_time**
+##### max_query_retry_time
+
 - Unit: -
 - Default: 2
 - Description: The maximum number of query retries on an FE.
 
-- **max_create_table_timeout_second**
+##### max_create_table_timeout_second
+
 - Unit: s
 - Default: 600
 - Description: The maximum timeout duration for creating a table, in seconds.
 
-- **create_table_max_serial_replicas**
+##### create_table_max_serial_replicas
+
 - Unit: -
 - Default: 128
 - Description: The maximum number of replicas to create serially. If actual replica count exceeds this, replicas will be created concurrently. Try to reduce this config if table creation is taking a long time to complete.
 
-- **max_running_rollup_job_num_per_table**
+##### max_running_rollup_job_num_per_table
+
 - Unit: -
 - Default: 1
 - Description: The maximum number of rollup jobs can run in parallel for a table.
 
-- **max_planner_scalar_rewrite_num**
+##### max_planner_scalar_rewrite_num
+
 - Unit: -
 - Default: 100000
 - Description: The maximum number of times that the optimizer can rewrite a scalar operator.
 
-- **enable_statistic_collect**
+##### enable_statistic_collect
+
 - Unit: -
 - Default: TRUE
 - Description: Whether to collect statistics for the CBO. This feature is enabled by default.
 
-- **enable_collect_full_statistic**
+##### enable_collect_full_statistic
+
 - Unit: -
 - Default: TRUE
 - Description: Whether to enable automatic full statistics collection. This feature is enabled by default.
 
-- **statistic_auto_collect_ratio**
+##### statistic_auto_collect_ratio
+
 - Unit: -
 - Default: 0.8
 - Description: The threshold for determining whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered.
 
-- **statistic_max_full_collect_data_size**
+##### statistic_max_full_collect_data_size
+
 - Unit: LONG
 - Default: 107374182400
 - Description: The size of the largest partition for automatic collection to collect data. Unit: Byte. If a partition exceeds this value, full collection is discarded and sampled collection is performed instead.
 
-- **statistic_collect_max_row_count_per_query**
+##### statistic_collect_max_row_count_per_query
+
 - Unit: INT
 - Default: 5000000000
 - Description: The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded.
 
-- **statistic_collect_interval_sec**
+##### statistic_collect_interval_sec
+
 - Unit: s
 - Default: 300
 - Description: The interval for checking data updates during automatic collection. Unit: seconds.
 
-- **statistic_auto_analyze_start_time**
+##### statistic_auto_analyze_start_time
+
 - Unit: STRING
 - Default: 00:00:00
 - Description: The start time of automatic collection. Value range: `00:00:00` - `23:59:59`.
 
-- **statistic_auto_analyze_end_time**
+##### statistic_auto_analyze_end_time
+
 - Unit: STRING
 - Default: 23:59:59
 - Description: The end time of automatic collection. Value range: `00:00:00` - `23:59:59`.
 
-- **statistic_sample_collect_rows**
+##### statistic_sample_collect_rows
+
 - Unit: -
 - Default: 200000
 - Description: The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed.
 
-- **histogram_buckets_size**
+##### histogram_buckets_size
+
 - Unit: -
 - Default: 64
 - Description: The default bucket number for a histogram.
 
-- **histogram_mcv_size**
+##### histogram_mcv_size
+
 - Unit: -
 - Default: 100
 - Description: The number of most common values (MCV) for a histogram.
 
-- **histogram_sample_ratio**
+##### histogram_sample_ratio
+
 - Unit: -
 - Default: 0.1
 - Description: The sampling ratio for a histogram.
 
-- **histogram_max_sample_row_count**
+##### histogram_max_sample_row_count
+
 - Unit: -
 - Default: 10000000
 - Description: The maximum number of rows to collect for a histogram.
 
-- **statistics_manager_sleep_time_sec**
+##### statistics_manager_sleep_time_sec
+
 - Unit: s
 - Default: 60
 - Description: The interval at which metadata is scheduled. Unit: seconds. The system performs the following operations based on this interval:
@@ -251,32 +277,38 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - Delete statistics that have been deleted.
   - Delete expired statistics.
 
-- **statistic_update_interval_sec**
+##### statistic_update_interval_sec
+
 - Unit: s
 - Default: `24 * 60 * 60`
 - Description: The interval at which the cache of statistical information is updated. Unit: seconds.
 
-- **statistic_analyze_status_keep_second**
+##### statistic_analyze_status_keep_second
+
 - Unit: s
 - Default: 259200
 - Description: The duration to retain the history of collection tasks. The default value is 3 days. Unit: seconds.
 
-- **statistic_collect_concurrency**
+##### statistic_collect_concurrency
+
 - Unit: -
 - Default: 3
 - Description: The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled.
 
-- **enable_local_replica_selection**
+##### enable_local_replica_selection
+
 - Unit: -
 - Default: FALSE
 - Description: Whether to select local replicas for queries. Local replicas reduce the network transmission cost. If this parameter is set to TRUE, the CBO preferentially selects tablet replicas on BEs that have the same IP address as the current FE. If this parameter is set to FALSE, both local replicas and non-local replicas can be selected. The default value is FALSE.
 
-- **max_distribution_pruner_recursion_depth**
+##### max_distribution_pruner_recursion_depth
+
 - Unit: -
 - Default: 100
 - Description: The maximum recursion depth allowed by the partition pruner. Increasing the recursion depth can prune more elements but also increases CPU consumption.
 
-- **enable_udf**
+##### enable_udf
+
 - Unit: -
 - Default: FALSE
 - Description: Whether to enable UDF.
