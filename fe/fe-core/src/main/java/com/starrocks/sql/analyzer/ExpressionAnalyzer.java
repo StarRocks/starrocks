@@ -585,7 +585,7 @@ public class ExpressionAnalyzer {
                         node.getPos());
             }
             if (scope.getLambdaInputs().size() != node.getChildren().size() - 1) {
-                throw new SemanticException("Lambda arguments should equal to lambda input arrays/maps", node.getPos());
+                throw new SemanticException("Lambda arguments should equal to lambda input arrays", node.getPos());
             }
 
             // process lambda arguments
