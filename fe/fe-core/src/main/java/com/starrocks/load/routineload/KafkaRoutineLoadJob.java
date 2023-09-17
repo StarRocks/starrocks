@@ -123,6 +123,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     private List<Pair<Integer, Long>> customeKafkaPartitionOffsets = null;
     boolean useDefaultGroupId = true;
 
+    private long lastScheduledTime = System.currentTimeMillis();
+
     public KafkaRoutineLoadJob() {
         // for serialization, id is dummy
         super(-1, LoadDataSourceType.KAFKA);
@@ -763,5 +765,18 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
         LOG.info("modify the data source properties of kafka routine load job: {}, datasource properties: {}",
                 this.id, dataSourceProperties);
+    }
+
+    /*
+    To avoid the consume group offset is cleared by Kafka, the job should be scheduled at least once
+    at Config.routine_load_kafka_offset_retention_minutes intervals.
+     */
+    public boolean needSchedule() {
+        if ((System.currentTimeMillis() - this.lastScheduledTime) / 1000 / 60
+                > Config.routine_load_kafka_offset_retention_minutes * 0.8) {
+            this.lastScheduledTime = System.currentTimeMillis();
+            return true;
+        }
+        return false;
     }
 }

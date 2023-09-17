@@ -85,6 +85,7 @@ private:
     void exec_task(StreamLoadContext* ctx, DataConsumerPool* pool, const ExecFinishCallback& cb);
 
     void err_handler(StreamLoadContext* ctx, const Status& st, const std::string& err_msg);
+    void kafka_commit(StreamLoadContext* ctx, bool move_forward);
 
     ExecEnv* _exec_env;
     std::unique_ptr<ThreadPool> _thread_pool;

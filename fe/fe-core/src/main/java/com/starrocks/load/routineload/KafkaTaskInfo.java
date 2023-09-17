@@ -102,6 +102,11 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         }
 
         KafkaRoutineLoadJob kafkaRoutineLoadJob = (KafkaRoutineLoadJob) routineLoadJob;
+
+        if (kafkaRoutineLoadJob.needSchedule()) {
+            return true;
+        }
+
         Map<Integer, Long> latestOffsets = KafkaUtil.getLatestOffsets(kafkaRoutineLoadJob.getBrokerList(),
                 kafkaRoutineLoadJob.getTopic(),
                 ImmutableMap.copyOf(kafkaRoutineLoadJob.getConvertedCustomProperties()),

@@ -1428,6 +1428,13 @@ public class Config extends ConfigBase {
     public static int max_tolerable_backend_down_num = 0;
 
     /**
+     * This value should be not less than the Kafka broke config offsets.retention.minutes.
+     * https://kafka.apache.org/documentation/#brokerconfigs_offsets.retention.minutes
+    */
+    @ConfField(mutable = true)
+    public static long routine_load_kafka_offset_retention_minutes = 10080;
+
+    /**
      * a period for auto resume routine load
      */
     @ConfField(mutable = true)
