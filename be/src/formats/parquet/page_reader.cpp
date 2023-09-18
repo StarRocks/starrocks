@@ -29,8 +29,8 @@ static constexpr size_t kDefaultPageHeaderSize = 16 * 1024;
 static constexpr size_t kMaxPageHeaderSize = 16 * 1024 * 1024;
 
 PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, uint64_t length, uint64_t num_values,
-                       const ColumnReaderOptions& opts)
-        : _stream(stream), _finish_offset(start_offset + length), _num_values_total(num_values), _opts(opts) {}
+                       HdfsScanStats* stats)
+        : _stream(stream), _finish_offset(start_offset + length), _num_values_total(num_values), _stats(stats) {}
 
 Status PageReader::next_header() {
     if (_offset != _next_header_pos) {
@@ -70,7 +70,7 @@ Status PageReader::next_header() {
                 page_buf = page_buffer.data();
                 st = _stream->peek(allowed_page_size);
                 if (st.ok()) {
-                    _opts.stats->bytes_read -= allowed_page_size;
+                    _stats->bytes_read -= allowed_page_size;
                     peek_mode = true;
                 }
             }
@@ -81,7 +81,7 @@ Status PageReader::next_header() {
 
         if (st.ok()) {
             if (peek_mode) {
-                _opts.stats->bytes_read += header_length;
+                _stats->bytes_read += header_length;
             }
             break;
         }
