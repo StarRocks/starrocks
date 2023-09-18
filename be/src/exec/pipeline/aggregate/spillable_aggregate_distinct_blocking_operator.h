@@ -71,13 +71,13 @@ private:
     size_t _streaming_rows = 0;
     size_t _streaming_bytes = 0;
     int32_t _continuous_low_reduction_chunk_num = 0;
-    double _ht_low_reduction_threshold = 0.5;
-    int32_t _ht_low_reduction_chunk_limit = 5;
 
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
     bool _is_finished = false;
 
     RuntimeProfile::Counter* _hash_set_spill_times = nullptr;
+    static constexpr double HS_LOW_REDUCTION_THRESHOLD = 0.5;
+    static constexpr int32_t HS_LOW_REDUCTION_CHUNK_LIMIT = 5;
 };
 
 class SpillableAggregateDistinctBlockingSinkOperatorFactory final : public OperatorFactory {

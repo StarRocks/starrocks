@@ -156,7 +156,7 @@ Status SpillableAggregateDistinctBlockingSinkOperator::_try_to_spill_by_auto(Run
                 RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming_with_selection(chunk.get(), &res));
                 _add_streaming_chunk(res);
             }
-            if (hit_count * 1.0 / chunk_size <= _ht_low_reduction_threshold) {
+            if (hit_count * 1.0 / chunk_size <= HS_LOW_REDUCTION_THRESHOLD) {
                 _continuous_low_reduction_chunk_num++;
             }
         }
@@ -164,7 +164,7 @@ Status SpillableAggregateDistinctBlockingSinkOperator::_try_to_spill_by_auto(Run
     size_t revocable_mem_bytes = _streaming_bytes + _aggregator->hash_set_memory_usage();
     set_revocable_mem_bytes(revocable_mem_bytes);
     if (revocable_mem_bytes > max_mem_usage) {
-        bool should_spill_hash_set = _continuous_low_reduction_chunk_num >= _ht_low_reduction_chunk_limit ||
+        bool should_spill_hash_set = _continuous_low_reduction_chunk_num >= HS_LOW_REDUCTION_CHUNK_LIMIT ||
                                      _aggregator->hash_set_memory_usage() >= max_mem_usage;
         if (should_spill_hash_set) {
             _continuous_low_reduction_chunk_num = 0;
