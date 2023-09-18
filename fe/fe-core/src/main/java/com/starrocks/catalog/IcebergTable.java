@@ -159,7 +159,7 @@ public class IcebergTable extends Table {
     }
 
     public boolean isUnPartitioned() {
-        return getPartitionColumns().size() == 0;
+        return ((BaseTable) getNativeTable()).operations().current().spec().isUnpartitioned();
     }
 
     public List<String> getPartitionColumnNames() {

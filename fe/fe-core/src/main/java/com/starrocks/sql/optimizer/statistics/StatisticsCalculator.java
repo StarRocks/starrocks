@@ -284,9 +284,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         if (context.getStatistics() == null) {
+            ScanOperatorPredicates scanOperatorPredicates = new ScanOperatorPredicates();
             String catalogName = ((IcebergTable) table).getCatalogName();
+            if (node instanceof LogicalIcebergScanOperator) {
+                scanOperatorPredicates = ((LogicalIcebergScanOperator) node).getScanOperatorPredicates();
+            }
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, colRefToColumnMetaMap, null, node.getPredicate(), node.getLimit());
+                    optimizerContext, catalogName, table, colRefToColumnMetaMap, null,
+                    node.getPredicate(), node.getLimit(), scanOperatorPredicates);
             context.setStatistics(stats);
         }
 

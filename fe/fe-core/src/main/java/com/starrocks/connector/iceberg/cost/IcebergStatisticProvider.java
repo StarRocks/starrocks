@@ -15,11 +15,13 @@
 
 package com.starrocks.connector.iceberg.cost;
 
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -28,6 +30,7 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Types;
@@ -41,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -52,15 +56,17 @@ import static org.apache.iceberg.SnapshotSummary.TOTAL_RECORDS_PROP;
 
 public class IcebergStatisticProvider {
     private static final Logger LOG = LogManager.getLogger(IcebergStatisticProvider.class);
+    private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     public IcebergStatisticProvider() {
     }
 
     public Statistics getTableStatistics(IcebergTable icebergTable, ScalarOperator predicate,
-                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap, long limit) {
+                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap, long limit,
+                                         ScanOperatorPredicates scanNodePredicates) {
         LOG.debug("Begin to make iceberg table statistics!");
         Table nativeTable = icebergTable.getNativeTable();
-        IcebergFileStats icebergFileStats = generateIcebergFileStats(icebergTable, predicate, limit);
+        IcebergFileStats icebergFileStats = generateIcebergFileStats(icebergTable, predicate, limit, scanNodePredicates);
 
         Statistics.Builder statisticsBuilder = Statistics.builder();
         double recordCount = Math.max(icebergFileStats == null ? 0 : icebergFileStats.getRecordCount(), 1);
@@ -70,7 +76,8 @@ public class IcebergStatisticProvider {
         return statisticsBuilder.build();
     }
 
-    private IcebergFileStats generateIcebergFileStats(IcebergTable icebergTable, ScalarOperator icebergPredicate, long limit) {
+    private IcebergFileStats generateIcebergFileStats(IcebergTable icebergTable, ScalarOperator icebergPredicate,
+                                                      long limit, ScanOperatorPredicates scanNodePredicates) {
         Optional<Snapshot> snapshot = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot());
         if (!snapshot.isPresent()) {
             return null;
@@ -91,9 +98,11 @@ public class IcebergStatisticProvider {
             long totalRecords = Long.parseLong(snapshot.get().summary().getOrDefault(TOTAL_RECORDS_PROP, "1"));
             long totalPosDeletes = Long.parseLong(snapshot.get().summary().getOrDefault(TOTAL_POS_DELETES_PROP, "0"));
             long totalEqDeletes = Long.parseLong(snapshot.get().summary().getOrDefault(TOTAL_EQ_DELETES_PROP, "0"));
+            scanNodePredicates.getSelectedPartitionIds().add(0L);
             return new IcebergFileStats(totalRecords - totalPosDeletes - totalEqDeletes);
         }
 
+        Map<StructLike, Long> partitionKeyToId = Maps.newHashMap();
         RemoteFileDesc remoteFileDesc = splits.get(0).getFiles().get(0);
         if (remoteFileDesc == null) {
             icebergFileStats =  new IcebergFileStats(1);
@@ -109,6 +118,10 @@ public class IcebergStatisticProvider {
                 if (files.contains(dataFile.path().toString())) {
                     continue;
                 }
+
+                StructLike partition = fileScanTask.file().partition();
+                partitionKeyToId.putIfAbsent(partition, nextPartitionId());
+
                 files.add(dataFile.path().toString());
                 if (icebergFileStats == null) {
                     icebergFileStats = new IcebergFileStats(dataFile.recordCount());
@@ -116,6 +129,7 @@ public class IcebergStatisticProvider {
                     icebergFileStats.incrementRecordCount(dataFile.recordCount());
                 }
             }
+            scanNodePredicates.getSelectedPartitionIds().addAll(partitionKeyToId.values());
         }
 
         // all dataFile.recordCount() == 0
@@ -146,6 +160,10 @@ public class IcebergStatisticProvider {
             columnStatistics.put(columnList.get(0), ColumnStatistic.unknown());
         }
         return columnStatistics;
+    }
+
+    private long nextPartitionId() {
+        return partitionIdGen.getAndIncrement();
     }
 
     public void updateColumnSizes(IcebergFileStats icebergFileStats, Map<Integer, Long> addedColumnSizes) {

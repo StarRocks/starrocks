@@ -53,6 +53,11 @@ public class LogicalPaimonScanOperator extends LogicalScanOperator {
     }
 
     @Override
+    protected boolean noPartitionSelected() {
+        return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
+    }
+
+    @Override
     public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
         this.predicates = predicates;
     }

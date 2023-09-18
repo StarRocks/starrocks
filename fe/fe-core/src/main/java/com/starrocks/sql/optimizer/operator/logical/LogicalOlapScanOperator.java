@@ -120,6 +120,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return selectedPartitionId;
     }
 
+    @Override
+    protected boolean noPartitionSelected() {
+        return selectedPartitionId == null || selectedPartitionId.isEmpty();
+    }
+
     public PartitionNames getPartitionNames() {
         return partitionNames;
     }

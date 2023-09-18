@@ -39,6 +39,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -232,7 +233,8 @@ public class HiveMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
-                                         long limit) {
+                                         long limit,
+                                         ScanOperatorPredicates scanNodePredicates) {
         Statistics statistics = null;
         List<ColumnRefOperator> columnRefOperators = Lists.newArrayList(columns.keySet());
         try {
