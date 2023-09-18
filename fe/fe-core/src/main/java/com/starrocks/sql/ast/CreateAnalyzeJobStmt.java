@@ -32,7 +32,6 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     private final List<String> columnNames;
     private final boolean isSample;
     private Map<String, String> properties;
-    private boolean isNative;
 
     public CreateAnalyzeJobStmt(boolean isSample, Map<String, String> properties, NodePosition pos) {
         this(null, Lists.newArrayList(), isSample, properties, pos);
@@ -52,7 +51,6 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
         this.columnNames = columnNames;
         this.isSample = isSample;
         this.properties = properties;
-        this.isNative = true;
     }
 
     public void setDbId(long dbId) {
@@ -92,15 +90,7 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     }
 
     public boolean isNative() {
-        return isNative;
-    }
-
-    public void setIsNative(boolean isNative) {
-        this.isNative = isNative;
-    }
-
-    public String getCatalogName() {
-        return catalogName;
+        return this.catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
     }
 
     public void setCatalogName(String catalogName) {

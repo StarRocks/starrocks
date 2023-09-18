@@ -141,6 +141,7 @@ public class AnalyzeStmtAnalyzer {
                     String catalogName = Strings.isNullOrEmpty(tbl.getCatalog()) ?
                             session.getCurrentCatalog() : tbl.getCatalog();
                     tbl.setCatalog(catalogName);
+                    statement.setCatalogName(catalogName);
                     String dbName = Strings.isNullOrEmpty(tbl.getDb()) ?
                             session.getDatabase() : tbl.getDb();
                     tbl.setDb(dbName);
@@ -149,7 +150,6 @@ public class AnalyzeStmtAnalyzer {
                         throw new SemanticException("Analyze external table only support hive and iceberg table",
                                 statement.getTableName().toString());
                     }
-                    statement.setIsNative(false);
                 }
 
                 if (null != tbl.getDb() && null == tbl.getTbl()) {
