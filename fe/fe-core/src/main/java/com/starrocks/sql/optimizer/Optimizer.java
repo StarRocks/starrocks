@@ -57,6 +57,7 @@ import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.pruner.PrimaryKeyUpdateTableRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.RboTablePruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.UniquenessBasedTablePruneRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
@@ -217,6 +218,8 @@ public class Optimizer {
             PlanValidator.getInstance().validatePlan(finalPlan, rootTaskContext);
             // validate mv and log tracer if needed
             MVRewriteValidator.getInstance().validateMV(finalPlan);
+            // Audit the usage of materialized view
+            MVRewriteValidator.getInstance().auditMv(finalPlan, context);
             return finalPlan;
         }
     }
@@ -263,8 +266,10 @@ public class Optimizer {
             //  operations on the same tablets, pruning this bucket shuffle join make update statement performance
             //  regression, so we can turn on this rule after we put an bucket-shuffle exchange in front of
             //  OlapTableSink in future, at present we turn off this rule.
-            // tree = new PrimaryKeyUpdateTableRule().rewrite(tree, rootTaskContext);
-            // deriveLogicalProperty(tree);
+            if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableTablePruneOnUpdate()) {
+                tree = new PrimaryKeyUpdateTableRule().rewrite(tree, rootTaskContext);
+                deriveLogicalProperty(tree);
+            }
             tree = new RboTablePruneRule().rewrite(tree, rootTaskContext);
             ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
             rootTaskContext.setRequiredColumns(requiredColumns.clone());

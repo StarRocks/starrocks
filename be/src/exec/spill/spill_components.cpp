@@ -40,9 +40,9 @@ bool RawSpillerWriter::has_pending_data() {
     return _mem_table_pool.size() != options().mem_table_pool_size;
 }
 
-Status RawSpillerWriter::prepare(RuntimeState* state) {
+void RawSpillerWriter::prepare(RuntimeState* state) {
     if (!_mem_table_pool.empty()) {
-        return Status::OK();
+        return;
     }
 
     const auto& opts = options();
@@ -56,8 +56,6 @@ Status RawSpillerWriter::prepare(RuntimeState* state) {
                                                       opts.spill_mem_table_bytes_size, _parent_tracker, _spiller));
         }
     }
-
-    return Status::OK();
 }
 
 Status RawSpillerWriter::flush_task(RuntimeState* state, const MemTablePtr& mem_table) {
@@ -71,6 +69,7 @@ Status RawSpillerWriter::flush_task(RuntimeState* state, const MemTablePtr& mem_
     opts.plan_node_id = options().plan_node_id;
     opts.name = options().name;
     ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
+    COUNTER_UPDATE(_spiller->metrics().block_count, 1);
 
     // TODO: reuse io context
     SerdeContext spill_ctx;
@@ -135,15 +134,14 @@ Status RawSpillerWriter::acquire_stream(std::shared_ptr<SpillInputStream>* strea
 PartitionedSpillerWriter::PartitionedSpillerWriter(Spiller* spiller, RuntimeState* state)
         : SpillerWriter(spiller, state), _mem_tracker(std::make_unique<MemTracker>(-1)) {}
 
-Status PartitionedSpillerWriter::prepare(RuntimeState* state) {
+void PartitionedSpillerWriter::prepare(RuntimeState* state) {
     DCHECK_GT(options().init_partition_nums, 0);
     _partition_set.resize(max_partition_size);
-    RETURN_IF_ERROR(_init_with_partition_nums(state, options().init_partition_nums));
+    _init_with_partition_nums(state, options().init_partition_nums);
     for (auto [_, partition] : _id_to_partitions) {
-        RETURN_IF_ERROR(partition->spill_writer->prepare(state));
+        partition->spill_writer->prepare(state);
         partition->spill_writer->acquire_mem_table();
     }
-    return Status::OK();
 }
 
 Status PartitionedSpillerWriter::acquire_stream(const SpillPartitionInfo* partition,
@@ -162,7 +160,7 @@ Status PartitionedSpillerWriter::get_spill_partitions(std::vector<const SpillPar
     return Status::OK();
 }
 
-Status PartitionedSpillerWriter::reset_partition(const std::vector<const SpillPartitionInfo*>& partitions) {
+void PartitionedSpillerWriter::reset_partition(const std::vector<const SpillPartitionInfo*>& partitions) {
     DCHECK_GT(partitions.size(), 0);
     _level_to_partitions.clear();
     _id_to_partitions.clear();
@@ -184,11 +182,10 @@ Status PartitionedSpillerWriter::reset_partition(const std::vector<const SpillPa
         _max_level = std::max(_max_level, partition->level);
         _partition_set[partitions[i]->partition_id] = true;
     }
-    RETURN_IF_ERROR(_prepare_partitions(_runtime_state));
-    return Status::OK();
+    _prepare_partitions(_runtime_state);
 }
 
-Status PartitionedSpillerWriter::reset_partition(RuntimeState* state, size_t num_partitions) {
+void PartitionedSpillerWriter::reset_partition(RuntimeState* state, size_t num_partitions) {
     num_partitions = BitUtil::next_power_of_two(num_partitions);
     num_partitions = std::min<size_t>(num_partitions, 1 << max_partition_level);
     num_partitions = std::max<size_t>(num_partitions, _spiller->options().init_partition_nums);
@@ -196,12 +193,11 @@ Status PartitionedSpillerWriter::reset_partition(RuntimeState* state, size_t num
     _level_to_partitions.clear();
     _id_to_partitions.clear();
     std::fill(_partition_set.begin(), _partition_set.end(), false);
-    RETURN_IF_ERROR(_init_with_partition_nums(state, num_partitions));
-    RETURN_IF_ERROR(_prepare_partitions(state));
-    return Status::OK();
+    _init_with_partition_nums(state, num_partitions);
+    _prepare_partitions(state);
 }
 
-Status PartitionedSpillerWriter::_init_with_partition_nums(RuntimeState* state, int num_partitions) {
+void PartitionedSpillerWriter::_init_with_partition_nums(RuntimeState* state, int num_partitions) {
     DCHECK((num_partitions & (num_partitions - 1)) == 0);
     DCHECK(num_partitions > 0);
     DCHECK(_level_to_partitions.empty());
@@ -221,16 +217,13 @@ Status PartitionedSpillerWriter::_init_with_partition_nums(RuntimeState* state, 
         _max_partition_id = std::max(partition->partition_id, _max_partition_id);
         _partition_set[partition->partition_id] = true;
     }
-
-    return Status::OK();
 }
 
-Status PartitionedSpillerWriter::_prepare_partitions(RuntimeState* state) {
+void PartitionedSpillerWriter::_prepare_partitions(RuntimeState* state) {
     for (auto [_, partition] : _id_to_partitions) {
-        RETURN_IF_ERROR(partition->spill_writer->prepare(state));
+        partition->spill_writer->prepare(state);
         partition->spill_writer->acquire_mem_table();
     }
-    return Status::OK();
 }
 
 void PartitionedSpillerWriter::_add_partition(SpilledPartitionPtr&& partition_ptr) {
@@ -471,9 +464,10 @@ Status PartitionedSpillerWriter::_spill_input_partitions(SerdeContext& context,
                                                          const std::vector<SpilledPartition*>& spilling_partitions) {
     SCOPED_TIMER(_spiller->metrics().flush_timer);
     for (auto partition : spilling_partitions) {
-        RETURN_IF_ERROR(spill_partition(context, partition, [&partition](auto& consumer) {
+        RETURN_IF_ERROR(spill_partition(context, partition, [&partition, this](auto& consumer) {
             auto& mem_table = partition->spill_writer->mem_table();
             RETURN_IF_ERROR(mem_table->flush(consumer));
+            COUNTER_SET(_spiller->metrics().partition_writer_peak_memory_usage, mem_consumption());
             return Status::OK();
         }));
     }
@@ -487,12 +481,12 @@ Status PartitionedSpillerWriter::_split_input_partitions(SerdeContext& context,
         auto [left, right] = partition->split();
         left->spill_writer = std::make_unique<RawSpillerWriter>(_spiller, _runtime_state, _mem_tracker.get());
         left->in_mem = false;
-        RETURN_IF_ERROR(left->spill_writer->prepare(_runtime_state));
+        left->spill_writer->prepare(_runtime_state);
         left->spill_writer->acquire_mem_table();
         right->in_mem = false;
 
         right->spill_writer = std::make_unique<RawSpillerWriter>(_spiller, _runtime_state, _mem_tracker.get());
-        RETURN_IF_ERROR(right->spill_writer->prepare(_runtime_state));
+        right->spill_writer->prepare(_runtime_state);
         right->spill_writer->acquire_mem_table();
 
         // write
@@ -537,6 +531,7 @@ Status PartitionedSpillerWriter::_split_partition(SerdeContext& spill_ctx, Spill
         right_accumulate_writer.flush();
     });
 
+    TRY_CATCH_ALLOC_SCOPE_START()
     while (true) {
         RETURN_IF_ERROR(reader->trigger_restore(_runtime_state, SyncTaskExecutor{}, EmptyMemGuard{}));
         if (!reader->has_output_data()) {
@@ -593,6 +588,7 @@ Status PartitionedSpillerWriter::_split_partition(SerdeContext& spill_ctx, Spill
             right_accumulate_writer.write(right_chunk);
         }
     }
+    TRY_CATCH_ALLOC_SCOPE_END()
     DCHECK_EQ(restore_rows, partition->num_rows);
     return Status::OK();
 }

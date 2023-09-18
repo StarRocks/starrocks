@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <butil/iobuf.h>
+
 #include <condition_variable>
 #include <deque>
 #include <list>
@@ -44,6 +46,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/query_statistics.h"
+#include "util/runtime_profile.h"
 
 namespace google::protobuf {
 class Closure;
@@ -53,10 +56,19 @@ namespace brpc {
 class Controller;
 }
 
+namespace butil {
+class IOBuf;
+}
+
 namespace starrocks {
 
 class TFetchDataResult;
 class PFetchDataResult;
+
+struct SerializeRes {
+    butil::IOBuf attachment;
+    size_t row_size;
+};
 
 struct GetResultBatchCtx {
     brpc::Controller* cntl = nullptr;
@@ -69,6 +81,7 @@ struct GetResultBatchCtx {
     void on_failure(const Status& status);
     void on_close(int64_t packet_seq, QueryStatistics* statistics = nullptr);
     void on_data(TFetchDataResult* t_result, int64_t packet_seq, bool eos = false);
+    void on_data(SerializeRes* t_result, int64_t packet_seq, bool eos = false);
 };
 
 // buffer used for result customer and productor
@@ -80,7 +93,7 @@ public:
     Status init();
     // In order not to affect the current implementation of the non-pipeline engine,
     // this method is reserved and is only used in the non-pipeline engine
-    Status add_batch(TFetchDataResult* result);
+    Status add_batch(TFetchDataResult* result, bool need_free = true);
     Status add_batch(std::unique_ptr<TFetchDataResult>& result);
 
     // non-blocking version of add_batch
@@ -114,18 +127,20 @@ public:
     }
 
 private:
-    void _process_batch_without_lock(std::unique_ptr<TFetchDataResult>& result);
+    void _process_batch_without_lock(std::unique_ptr<SerializeRes>& result);
 
-    typedef std::list<TFetchDataResult*> ResultQueue;
+    StatusOr<std::unique_ptr<SerializeRes>> _serialize_result(TFetchDataResult*);
 
+    // as no idea of whether sending sorted results, can't use concurrentQueue here.
+    typedef std::list<std::unique_ptr<SerializeRes>> ResultQueue;
     // result's query id
     TUniqueId _fragment_id;
-    bool _is_close;
-    bool _is_cancelled;
+    std::atomic_bool _is_close;
+    std::atomic_bool _is_cancelled;
     Status _status;
-    int _buffer_rows;
+    std::atomic_int64_t _buffer_bytes;
     int _buffer_limit;
-    int64_t _packet_num;
+    std::atomic<int64_t> _packet_num;
 
     // blocking queue for batch
     ResultQueue _batch_queue;
@@ -142,6 +157,7 @@ private:
     // threads. But their calls are all at different time, there is no problem of
     // multithreaded access.
     std::shared_ptr<QueryStatistics> _query_statistics;
+    static const size_t _max_memory_usage = 1UL << 28; // 256MB
 };
 
 } // namespace starrocks

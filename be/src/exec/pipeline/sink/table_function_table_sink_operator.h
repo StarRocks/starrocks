@@ -27,6 +27,8 @@
 
 namespace starrocks::pipeline {
 
+StatusOr<std::string> column_to_string(const TypeDescriptor& type_desc, const ColumnPtr& column);
+
 class TableFunctionTableSinkOperator final : public Operator {
 public:
     TableFunctionTableSinkOperator(OperatorFactory* factory, const int32_t id, const int32_t plan_node_id,

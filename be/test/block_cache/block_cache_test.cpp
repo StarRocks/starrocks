@@ -44,6 +44,7 @@ TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
     options.disk_spaces.push_back({.path = "./ut_dir/final_entry_not_exist", .size = quota});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
+    options.enable_checksum = false;
 #ifdef WITH_STARCACHE
     options.engine = "starcache";
 #else
@@ -75,6 +76,34 @@ TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
     }
 
     cache->shutdown();
+}
+
+TEST_F(BlockCacheTest, copy_to_iobuf) {
+    // Create an iobuffer which contains 3 blocks
+    const size_t buf_block_size = 100;
+    void* data1 = malloc(buf_block_size);
+    void* data2 = malloc(buf_block_size);
+    void* data3 = malloc(buf_block_size);
+    memset(data1, 1, buf_block_size);
+    memset(data2, 2, buf_block_size);
+    memset(data3, 3, buf_block_size);
+
+    IOBuffer buffer;
+    buffer.append_user_data(data1, buf_block_size, nullptr);
+    buffer.append_user_data(data2, buf_block_size, nullptr);
+    buffer.append_user_data(data3, buf_block_size, nullptr);
+
+    // Copy the last 150 bytes of iobuffer to a target buffer
+    const off_t offset = 150;
+    const size_t size = 150;
+    char result[size] = {0};
+    buffer.copy_to(result, size, offset);
+
+    // Check the target buffer content
+    char expect[size] = {0};
+    memset(expect, 2, 50);
+    memset(expect + 50, 3, 100);
+    ASSERT_EQ(memcmp(result, expect, size), 0);
 }
 
 #ifdef WITH_STARCACHE

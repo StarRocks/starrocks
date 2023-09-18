@@ -464,7 +464,7 @@ BE static parameters are as follows.
 | file_descriptor_cache_capacity | 16384 | N/A | The number of file descriptors that can be cached. |
 | min_file_descriptor_number | 60000 | N/A | The minimum number of file descriptors in the BE process. |
 | index_stream_cache_capacity | 10737418240 | Byte | The cache capacity for the statistical information of BloomFilter, Min, and Max. |
-| disable_storage_page_cache | FALSE | N/A | The boolean value to control if to disable PageCache. When PageCache is enabled, StarRocks caches the query results. PageCache can significantly improve the query performance when similar queries are repeated frequently. `true` indicates to disable PageCache. The value of this item has been changed from `true` to `false` since StarRocks v2.4.|
+| disable_storage_page_cache | FALSE | N/A | The boolean value to control whether to disable PageCache. When PageCache is enabled, StarRocks caches the recently scanned data. PageCache can significantly improve the query performance when similar queries are repeated frequently. `true` indicates to disable PageCache. The default value of this item has been changed from `true` to `false` since StarRocks v2.4.|
 | base_compaction_num_threads_per_disk | 1 | N/A | The number of threads used for Base Compaction on each storage volume. |
 | base_cumulative_delta_ratio | 0.3 | N/A | The ratio of cumulative file size to base file size. The ratio reaching this value is one of the conditions that trigger the Base Compaction. |
 | compaction_trace_threshold | 60 | Second | The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace. |
