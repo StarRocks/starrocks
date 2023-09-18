@@ -22,6 +22,7 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.PartitionUtil;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -171,6 +172,8 @@ public class MysqlSchemaResolverTest {
                 "test", "catalog", properties);
         int size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
         Assert.assertEquals(1, size);
+        List<String> partitionNames = PartitionUtil.getPartitionNames(jdbcTable);
+        Assert.assertEquals(Arrays.asList("tbl1"), partitionNames);
     }
 
     @Test
