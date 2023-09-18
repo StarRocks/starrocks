@@ -20,9 +20,11 @@ import java.util.List;
 
 public class FileSystemConstants {
     // For s3 scheme, we have to set impl 'org.apache.hadoop.fs.s3a.S3AFileSystem'
-    public static String[] S3_SCHEMES = new String[] {"s3", "s3a", "oss", "ks3", "obs", "tos", "cosn", "oss"};
+    public static String[] S3_SCHEMES = new String[] {"s3", "s3a", "s3n", "oss", "ks3", "obs", "tos", "cosn"};
     // For those schemes, we don't need to set explictly.
-    public static String[] REST_SCHEMES = new String[] {"wasb", "wasbs", "adl", "abfs", "abfss", "gs", "hdfs", "viewfs", "har"};
+    public static String[] REST_SCHEMES =
+            new String[] {"wasb", "wasbs", "adl", "abfs", "abfss", "gs",
+                    "hdfs", "viewfs", "har", "nullscan", "file", "webhdfs", "swebhdfs"};
 
     public static List<String> ALL_SCHEMES = new ArrayList<String>();
 
@@ -32,6 +34,7 @@ public class FileSystemConstants {
     }
 
     public static String FS_IMPL_FMT = "fs.%s.impl";
+    public static String FS_IMPL_FMT_SAVED = "fs.%s.impl.saved";
     public static String FS_IMPL_DISABLE_CACHE_FMT = "fs.%s.impl.disable.cache";
     public static String FS_IMPL_STARROCKS_FILESYSTEM = "com.starrocks.fs.StarRocksFileSystem";
 }

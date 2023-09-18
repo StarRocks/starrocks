@@ -38,11 +38,20 @@ public class StarRocksFileSystem extends FileSystem {
         String disableKey = String.format(HadoopExt.FS_IMPL_DISABLE_CACHE_FMT, scheme);
         String disableValue = conf.get(disableKey);
 
+        // set default implementation
         if (HadoopExt.isS3Scheme(scheme)) {
             conf.set(implKey, HadoopExt.FS_S3A_FILESYSTEM);
         } else {
             conf.unset(implKey);
         }
+        // if user has specified impl in config file
+        String implSavedKey = String.format(HadoopExt.FS_IMPL_FMT_SAVED, scheme);
+        String implSavedValue = conf.get(implSavedKey);
+        if (implSavedValue != null) {
+            LOGGER.info(HadoopExt.LOGGER_MESSAGE_PREFIX + " Create FileSystem Impl = " + implSavedValue);
+            conf.set(implKey, implSavedValue);
+        }
+
         conf.setBoolean(disableKey, true);
         try {
             return FileSystem.get(uri, conf);
