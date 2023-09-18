@@ -90,6 +90,13 @@ public class PaimonConnector implements Connector {
                 paimonOptions.set("s3.secret-key", awsCloudCredential.getSecretKey());
             }
         }
+
+        // properties starts with `paimon.option.` will push down to paimon api
+        for (Map.Entry<String, String> entry : properties.entrySet()) {   
+            if (entry.getKey().startsWith("paimon.option.")) {
+                paimonOptions.setString(entry.getKey().replace("paimon.option.", ""), entry.getValue());
+            }
+        }   
     }
 
     public Options getPaimonOptions() {
