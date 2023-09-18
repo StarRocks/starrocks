@@ -158,6 +158,9 @@ public:
 
     void remove_in_writing_data_size(int64_t tablet_id, int64_t txn_id);
 
+    // only for TEST purpose
+    void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
+
 private:
     using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr, DelVectorPtr>;
 
