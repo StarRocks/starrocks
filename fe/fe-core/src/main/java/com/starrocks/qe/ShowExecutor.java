@@ -2759,6 +2759,7 @@ public class ShowExecutor {
                 }
             } catch (MetaNotFoundException e) {
                 // pass
+                LOG.warn("analyze job {} meta not found, {}", job.getId(), e);
             }
         }
         rows = doPredicate(stmt, stmt.getMetaData(), rows);

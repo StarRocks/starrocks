@@ -21,7 +21,6 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
@@ -65,14 +64,14 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
 
     public static List<String> showAnalyzeJobs(ConnectContext context,
                                                AnalyzeJob analyzeJob) throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "ALL", "ALL",
+        List<String> row = Lists.newArrayList("", analyzeJob.getCatalogName(), "ALL", "ALL",
                 "ALL", "", "", "", "", "", "");
         List<String> columns = analyzeJob.getColumns();
         row.set(0, String.valueOf(analyzeJob.getId()));
 
         if (!analyzeJob.isAnalyzeAllDb()) {
             String dbName = analyzeJob.getDbName();
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(analyzeJob.getCatalogName(), dbName);
 
             if (db == null) {
                 throw new MetaNotFoundException("No found database: " + dbName);
@@ -82,7 +81,8 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
 
             if (!analyzeJob.isAnalyzeAllTable()) {
                 String tableName = analyzeJob.getTableName();
-                Table table = db.getTable(tableName);
+                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(analyzeJob.getCatalogName(),
+                        dbName, tableName);
 
                 if (table == null) {
                     throw new MetaNotFoundException("No found table: " + tableName);

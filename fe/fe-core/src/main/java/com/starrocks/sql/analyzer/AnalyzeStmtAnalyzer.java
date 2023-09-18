@@ -130,13 +130,33 @@ public class AnalyzeStmtAnalyzer {
                 if ((Strings.isNullOrEmpty(tbl.getCatalog()) &&
                         CatalogMgr.isExternalCatalog(session.getCurrentCatalog())) ||
                         CatalogMgr.isExternalCatalog(tbl.getCatalog())) {
-                    throw new SemanticException("External Table don't support analyze job");
+                    if (tbl.getTbl() == null) {
+                        throw new SemanticException("External catalog don't support analyze all tables, please give a" +
+                                " specific table");
+                    }
+                    if (statement.isSample()) {
+                        throw new SemanticException("External table %s don't support SAMPLE analyze",
+                                statement.getTableName().toString());
+                    }
+                    String catalogName = Strings.isNullOrEmpty(tbl.getCatalog()) ?
+                            session.getCurrentCatalog() : tbl.getCatalog();
+                    tbl.setCatalog(catalogName);
+                    statement.setCatalogName(catalogName);
+                    String dbName = Strings.isNullOrEmpty(tbl.getDb()) ?
+                            session.getDatabase() : tbl.getDb();
+                    tbl.setDb(dbName);
+                    Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+                    if (!analyzeTable.isHiveTable() && !analyzeTable.isIcebergTable()) {
+                        throw new SemanticException("Analyze external table only support hive and iceberg table",
+                                statement.getTableName().toString());
+                    }
                 }
 
                 if (null != tbl.getDb() && null == tbl.getTbl()) {
                     Database db = MetaUtils.getDatabase(session, tbl);
 
-                    if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
+                    if (statement.isNative() &&
+                            StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
                         throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
                     }
 
@@ -165,6 +185,11 @@ public class AnalyzeStmtAnalyzer {
 
                     statement.setDbId(db.getId());
                     statement.setTableId(analyzeTable.getId());
+                }
+            } else {
+                if (CatalogMgr.isExternalCatalog(session.getCurrentCatalog())) {
+                    throw new SemanticException("External catalog %s don't support analyze all databases",
+                            session.getCurrentCatalog());
                 }
             }
             analyzeProperties(statement.getProperties());

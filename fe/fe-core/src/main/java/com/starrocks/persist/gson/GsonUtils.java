@@ -164,8 +164,11 @@ import com.starrocks.sql.optimizer.dump.HiveTableDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
+import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
+import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.system.BackendHbResponse;
 import com.starrocks.system.BrokerHbResponse;
@@ -383,6 +386,12 @@ public class GsonUtils {
                     .registerSubtype(NativeAnalyzeStatus.class, "NativeAnalyzeStatus", true)
                     .registerSubtype(ExternalAnalyzeStatus.class, "ExternalAnalyzeStatus");
 
+    public static final RuntimeTypeAdapterFactory<AnalyzeJob> ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(AnalyzeJob.class, "clazz")
+                    .registerSubtype(NativeAnalyzeJob.class, "NativeAnalyzeJob", true)
+                    .registerSubtype(ExternalAnalyzeJob.class, "ExternalAnalyzeJob");
+
+
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -443,6 +452,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(STORAGE_VOLUME_MGR_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ALTER_POLICY_CLAUSE_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)

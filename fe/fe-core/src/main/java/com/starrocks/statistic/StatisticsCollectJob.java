@@ -22,6 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
@@ -80,6 +81,10 @@ public abstract class StatisticsCollectJob {
     }
 
     public abstract void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception;
+
+    public String getCatalogName() {
+        return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+    }
 
     public Database getDb() {
         return db;
