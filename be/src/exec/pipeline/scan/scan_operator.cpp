@@ -233,7 +233,9 @@ StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         begin_pull_chunk(res);
         // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
         auto [tablet_id, is_eos] = _should_emit_eos(res);
-        eval_runtime_bloom_filters(res.get());
+        if (!_scan_node->support_push_down_runtime_filter_to_reader()) {
+            eval_runtime_bloom_filters(res.get());
+        }
         res->owner_info().set_owner_id(tablet_id, is_eos);
     }
 

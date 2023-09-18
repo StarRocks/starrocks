@@ -117,7 +117,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         has_filter = true;
     }
 
-    if (SIMD::contain_nonzero(chunk_filter) && _param.runtime_filter_collector) {
+    if (chunk_size > 0 && _param.runtime_filter_collector) {
         // bloom filter
         for (auto &it: _runtime_filter_by_slot) {
             const JoinRuntimeFilter *filter = it.second;
@@ -267,7 +267,7 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
             // cause of runtime filter min/max have been added to conjunct_ctxs_by_slot
             // so just check runtime filter exist and add to dict_filter_ctx
             if (_runtime_filter_by_slot.find(slot_id) != _runtime_filter_by_slot.end()) {
-                _dict_filter_ctx.use_as_dict_filter_column(read_col_idx, slot_id, _runtime_filter_by_slot.at(slot_id));
+                _dict_filter_ctx.use_as_dict_filter_column(slot_id, _runtime_filter_by_slot.at(slot_id));
             }
         } else {
             bool has_conjunct = false;
@@ -618,9 +618,9 @@ Status GroupReader::DictFilterContext::rewrite_conjunct_ctxs_to_predicates(
             ctx.use_merged_selection = false;
             ctx.merged_selection.assign(dict_value_column->size(), 1);
             join_filter->compute_hash({dict_value_column.get()}, &ctx);
-            filter->evaluate(dict_value_column.get(), &ctx);
+            join_filter->evaluate(dict_value_column.get(), &ctx);
             bool all_zero = false;
-            ColumnHelper::merge_two_filters(filter, ctx.merged_selection.data(), &all_zero);
+            ColumnHelper::merge_two_filters(&filter, ctx.merged_selection.data(), &all_zero);
             if (all_zero) {
                 *is_group_filtered = true;
                 return Status::OK();

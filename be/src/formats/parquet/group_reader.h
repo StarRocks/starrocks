@@ -165,7 +165,7 @@ private:
     // conjunct ctxs that eval after chunk is dict decoded
     std::vector<ExprContext*> _left_conjunct_ctxs;
 
-    std::unordered_map<SlotId, JoinRuntimeFilter*> _runtime_filter_by_slot;
+    std::unordered_map<SlotId, const JoinRuntimeFilter*> _runtime_filter_by_slot;
 
     // active columns that hold read_col index
     std::vector<int> _active_column_indices;
