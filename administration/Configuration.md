@@ -400,7 +400,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | max_runnings_transactions_per_txn_map                 | 100         | N/A    | 每个分区内部同时运行的最大事务数量。            |
 | tablet_max_pending_versions                           | 1000        | N/A    | Primary Key 表每个 tablet 上允许已提交 (committed) 但是未 apply 的最大版本数。    |
 | tablet_max_versions                           | 1000        | N/A    | 每个 tablet 上允许的最大版本数。如果超过该值，新的写入请求会失败。     |
-|alter_tablet_worker_count|3|进行 schema change 的线程数。自 2.5 版本起，该参数由静态变为动态。|
+|alter_tablet_worker_count|3| N/A    |进行 schema change 的线程数。自 2.5 版本起，该参数由静态变为动态。|
 | max_hdfs_file_handle                                  | 1000        | N/A    | 最多可以打开的 HDFS 文件句柄数量。                             |
 | be_exit_after_disk_write_hang_second                  | 60          | second | 磁盘挂起后触发 BE 进程退出的等待时间。                       |
 | min_cumulative_compaction_failure_interval_sec       | 30          | second | Cumulative Compaction 失败后的最小重试间隔。                      |
@@ -408,11 +408,11 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | size_tiered_level_multiple                            | 5           | N/A    | Size-tiered Compaction 策略中，相邻两个 level 之间相差的数据量的倍数。 |
 | size_tiered_min_level_size                            | 131072      | Byte   | Size-tiered Compaction 策略中，最小 level 的大小，小于此数值的 rowset 会直接触发 compaction。 |
 | storage_page_cache_limit | 20% | N/A | PageCache 的容量，STRING，可写为容量大小，例如： `20G`、`20480M`、`20971520K` 或 `21474836480B`。也可以写为 PageCache 占系统内存的比例，例如，`20%`。该参数仅在 `disable_storage_page_cache` 为 `false` 时生效。|
-|disable_storage_page_cache|FALSE|是否开启 PageCache。开启 PageCache 后，StarRocks 会缓存最近扫描过的数据，对于查询重复性高的场景，会大幅提升查询效率。`true` 表示不开启。自 2.4 版本起，该参数默认值由 `true` 变更为 `false`。自 3.1 版本起，该参数由静态变为动态。|
+|disable_storage_page_cache|FALSE|N/A  |是否开启 PageCache。开启 PageCache 后，StarRocks 会缓存最近扫描过的数据，对于查询重复性高的场景，会大幅提升查询效率。`true` 表示不开启。自 2.4 版本起，该参数默认值由 `true` 变更为 `false`。自 3.1 版本起，该参数由静态变为动态。|
 |max_compaction_concurrency|-1| N/A | Compaction 线程数上限（即 BaseCompaction + CumulativeCompaction 的最大并发）。该参数防止 Compaction 占用过多内存。 -1 代表没有限制。0 表示不允许 compaction。|
 | internal_service_async_thread_num | 10 | N/A | 单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。|
-|max_garbage_sweep_interval|3600|磁盘进行垃圾清理的最大间隔。自 3.0 版本起，该参数由静态变为动态。|
-|min_garbage_sweep_interval|180|磁盘进行垃圾清理的最小间隔。自 3.0 版本起，该参数由静态变为动态。|
+|max_garbage_sweep_interval|3600| s   |磁盘进行垃圾清理的最大间隔。自 3.0 版本起，该参数由静态变为动态。|
+|min_garbage_sweep_interval|180| s    |磁盘进行垃圾清理的最小间隔。自 3.0 版本起，该参数由静态变为动态。|
 
 ### 配置 BE 静态参数
 
