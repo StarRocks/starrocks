@@ -267,7 +267,7 @@ public:
     size_t num_columns() const { return _cols.size(); }
     size_t num_key_columns() const { return _num_key_columns; }
     size_t num_short_key_columns() const { return _num_short_key_columns; }
-    
+
     size_t num_rows_per_row_block() const { return _num_rows_per_row_block; }
     KeysType keys_type() const { return static_cast<KeysType>(_keys_type); }
     size_t next_column_unique_id() const { return _next_column_unique_id; }
@@ -280,7 +280,7 @@ public:
     void clear_columns();
     void copy_from(const std::shared_ptr<const TabletSchema>& tablet_schema);
 
-    // Please call the following function with caution. Most of the time, 
+    // Please call the following function with caution. Most of the time,
     // the following two functions should not be called explicitly.
     // When we do column partial update for primary key table which seperate primary keys
     // and sort keys, we will create a partial tablet schema for rowset writer. However,
@@ -294,9 +294,7 @@ public:
         _sort_key_idxes.clear();
         _sort_key_idxes.assign(sort_key_idxes.begin(), sort_key_idxes.end());
     }
-    void set_num_short_key_columns(uint16_t num_short_key_columns) { 
-        _num_short_key_columns = num_short_key_columns; 
-    }
+    void set_num_short_key_columns(uint16_t num_short_key_columns) { _num_short_key_columns = num_short_key_columns; }
 
     std::string debug_string() const;
 

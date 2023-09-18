@@ -199,8 +199,7 @@ Status DeltaWriter::_init() {
     _build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, _tablet->tablet_schema());
 
     // maybe partial update, change to partial tablet schema
-    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
-        partial_cols_num < _tablet_schema->num_columns()) {
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && partial_cols_num < _tablet_schema->num_columns()) {
         writer_context.referenced_column_ids.reserve(partial_cols_num);
         for (auto i = 0; i < partial_cols_num; ++i) {
             const auto& slot_col_name = (*_opt.slots)[i]->col_name();
@@ -235,7 +234,7 @@ Status DeltaWriter::_init() {
             writer_context.merge_condition = _opt.merge_condition;
         }
         auto partial_update_schema = TabletSchema::create(_tablet_schema, writer_context.referenced_column_ids);
-        // In column mode partial update, we need to modify sort key idxes and short key column num in partial 
+        // In column mode partial update, we need to modify sort key idxes and short key column num in partial
         // tablet schema
         if (_opt.partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE ||
             _opt.partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {

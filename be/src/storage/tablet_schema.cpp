@@ -429,7 +429,7 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
         for (auto i = 0; i < schema.sort_key_idxes_size(); ++i) {
             _sort_key_idxes.push_back(schema.sort_key_idxes(i));
             _sort_key_idxes_set.emplace(schema.sort_key_idxes(i));
-        }\
+        }
     }
     for (auto cid : _sort_key_idxes) {
         _cols[cid].set_is_sort_key(true);
