@@ -186,6 +186,8 @@ struct TQueryOptions {
   91: optional bool use_page_cache;
 
   102: optional bool enable_collect_table_level_scan_stats;
+
+  105: optional bool use_column_pool = true;
 }
 
 
