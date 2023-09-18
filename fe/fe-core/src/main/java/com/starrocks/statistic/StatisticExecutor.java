@@ -162,6 +162,11 @@ public class StatisticExecutor {
 
         Map<String, Database> dbs = Maps.newHashMap();
         ConnectContext context = StatisticUtils.buildConnectContext();
+        // The parallelism degree of low-cardinality dict collect task is uniformly set to 1 to
+        // prevent collection tasks from occupying a large number of be execution threads and scan threads.
+        context.getSessionVariable().setParallelExecInstanceNum(1);
+        context.getSessionVariable().setPipelineDop(1);
+
         StatementBase parsedStmt;
         try {
             parsedStmt = parseSQL(sql, context);
