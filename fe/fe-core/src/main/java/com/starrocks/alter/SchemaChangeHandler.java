@@ -853,7 +853,6 @@ public class SchemaChangeHandler extends AlterHandler {
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             List<Column> modIndexSchema = indexSchemaMap.get(baseIndexId);
             checkAndAddColumn(modIndexSchema, newColumn, columnPos, newColNameSet, true);
-            lightSchemaChange = false;
             if (targetIndexId != -1L) {
                 throw new DdlException("Can not add column: " + newColName + " to rollup index");
             }
