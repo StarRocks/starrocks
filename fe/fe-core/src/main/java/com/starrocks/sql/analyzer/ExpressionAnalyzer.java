@@ -262,7 +262,8 @@ public class ExpressionAnalyzer {
                     expr.setType(Type.ARRAY_INT); // Let it have item type.
                 }
                 if (!expr.getType().isArrayType()) {
-                    throw new SemanticException(i + "-th lambda input ( " + expr + " ) should be arrays");
+                    throw new SemanticException(i + "-th lambda input ( " + expr + " ) should be arrays, " +
+                            "but real type is " + expr.getType().toSql());
                 }
                 Type itemType = ((ArrayType) expr.getType()).getItemType();
                 scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
@@ -273,21 +274,21 @@ public class ExpressionAnalyzer {
             // map_apply(func, map)
             if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
                 if (!(expression.getChild(0).getChild(0) instanceof MapExpr)) {
-                    throw new SemanticException("The right part of map lambda function ( " +
-                            expression.getChild(0).toSql() + " ) should have key and value arguments",
+                    throw new SemanticException("Map lambda function (" +
+                            expression.getChild(0).toSql() + ") should be like (k,v) -> (f(k),f(v))",
                             expression.getChild(0).getPos());
                 }
             } else {
                 if (expression.getChild(0).getChild(0) instanceof MapExpr) {
-                    throw new SemanticException("The right part of map lambda function ( " +
-                            expression.getChild(0).toSql() + " ) should have only one arguments",
+                    throw new SemanticException("Map lambda function (" +
+                            expression.getChild(0).toSql() + ") should be like (k,v) -> f(k,v)",
                             expression.getChild(0).getPos());
                 }
             }
             if (expression.getChild(0).getChildren().size() != 3) {
                 Expr child = expression.getChild(0);
-                throw new SemanticException("The left part of map lambda function ( " +
-                        child.toSql() + " ) should have 2 arguments, but there are "
+                throw new SemanticException("The left part of map lambda function (" +
+                        child.toSql() + ") should have 2 arguments, but there are "
                         + (child.getChildren().size() - 1) + " arguments", child.getPos());
             }
             Expr expr = expression.getChild(1);
@@ -296,7 +297,8 @@ public class ExpressionAnalyzer {
                 expr.setType(Type.ANY_MAP); // Let it have item type.
             }
             if (!expr.getType().isMapType()) {
-                throw new SemanticException("Lambda input ( " + expr.toSql() + " ) should be maps");
+                throw new SemanticException("Lambda input ( " + expr.toSql() + " ) should be a map, but real type is "
+                        + expr.getType().toSql());
             }
             Type keyType = ((MapType) expr.getType()).getKeyType();
             Type valueType = ((MapType) expr.getType()).getValueType();
@@ -332,26 +334,18 @@ public class ExpressionAnalyzer {
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
         boolean hasLambdaFunc = false;
-        String originalSQL = expression.toSql();
         try {
             hasLambdaFunc = expression.hasLambdaFunction(expression);
         } catch (SemanticException e) {
-            if (e.canNested()) {
-                throw new SemanticException(e.getDetailMsg() + " in " + originalSQL, expression.getPos(), false);
-            } else {
-                throw e;
-            }
+            throw e.appendOnlyOnceMsg(expression.toSql(), expression.getPos());
         }
         if (hasLambdaFunc) {
+            String originalSQL = expression.toSql();
             try {
                 analyzeHighOrderFunction(visitor, expression, scope);
                 visitor.visit(expression, scope);
             } catch (SemanticException e) {
-                if (e.canNested()) {
-                    throw new SemanticException(e.getDetailMsg() + " in " + originalSQL, expression.getPos(), false);
-                } else {
-                    throw e;
-                }
+                throw e.appendOnlyOnceMsg(originalSQL, expression.getPos());
             }
         } else {
             for (Expr expr : expression.getChildren()) {
@@ -1184,21 +1178,25 @@ public class ExpressionAnalyzer {
                     break;
                 case FunctionSet.ARRAY_FILTER:
                     if (node.getChildren().size() != 2) {
-                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions",
+                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions, " +
+                                "but really have " + node.getChildren().size() + " inputs",
                                 node.getPos());
                     }
                     if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
                         throw new SemanticException(fnName + "'s first input " + node.getChild(0).toSql() +
-                                " should be an array or a lambda function", node.getPos());
+                                " should be an array or a lambda function, but real type is " +
+                                node.getChild(0).getType().toSql(), node.getPos());
                     }
                     if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
                         throw new SemanticException(fnName + "'s second input " + node.getChild(1).toSql() +
-                                " should be an array or a lambda function", node.getPos());
+                                " should be an array or a lambda function, but real type is " +
+                                node.getChild(1).getType().toSql(), node.getPos());
                     }
                     // force the second array be of Type.ARRAY_BOOLEAN
                     if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
                         throw new SemanticException(fnName + "'s second input " + node.getChild(1).toSql() +
-                                "  can't cast to ARRAY<BOOL>", node.getPos());
+                                " can't cast from " + node.getChild(1).getType().toSql() + " to ARRAY<BOOL>",
+                                node.getPos());
                     }
                     break;
                 case FunctionSet.ALL_MATCH:
@@ -1208,26 +1206,30 @@ public class ExpressionAnalyzer {
                     }
                     if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
                         throw new SemanticException(fnName + "'s input " + node.getChild(0).toSql() + " should be " +
-                                "an array", node.getPos());
+                                "an array, but real type is " + node.getChild(0).getType().toSql(), node.getPos());
                     }
                     // force the input array be of Type.ARRAY_BOOLEAN
                     if (!Type.canCastTo(node.getChild(0).getType(), Type.ARRAY_BOOLEAN)) {
                         throw new SemanticException(fnName + "'s input " +
-                                node.getChild(0).toSql() + "  can't cast to ARRAY<BOOL>", node.getPos());
+                                node.getChild(0).toSql() + " can't cast from " +
+                                node.getChild(0).getType().toSql() + " to ARRAY<BOOL>", node.getPos());
                     }
                     break;
                 case FunctionSet.ARRAY_SORTBY:
                     if (node.getChildren().size() != 2) {
-                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions",
+                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions, " +
+                                "but really have " + node.getChildren().size() + " inputs",
                                 node.getPos());
                     }
                     if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
                         throw new SemanticException(fnName + "'s first input " + node.getChild(0).toSql() +
-                                " should be an array or a lambda function", node.getPos());
+                                " should be an array or a lambda function, but real type is " +
+                                node.getChild(0).getType().toSql(), node.getPos());
                     }
                     if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
                         throw new SemanticException(fnName + "'s second input " + node.getChild(1).toSql() +
-                                " should be an array or a lambda function", node.getPos());
+                                " should be an array or a lambda function, but real type is " +
+                                node.getChild(1).getType().toSql(), node.getPos());
                     }
                     break;
                 case FunctionSet.ARRAY_GENERATE:
@@ -1251,16 +1253,18 @@ public class ExpressionAnalyzer {
                     }
                     if (!node.getChild(0).getType().isMapType() && !node.getChild(0).getType().isNull()) {
                         throw new SemanticException(fnName + "'s first input " + node.getChild(0).toSql() +
-                                " should be a map or a lambda function.");
+                                " should be a map or a lambda function, but real type is " +
+                                node.getChild(0).getType().toSql());
                     }
                     if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
                         throw new SemanticException(fnName + "'s second input " + node.getChild(1).toSql() +
-                                " should be an array or a lambda function.");
+                                " should be an array or a lambda function, but real type is " +
+                                node.getChild(1).getType().toSql());
                     }
                     // force the second array be of Type.ARRAY_BOOLEAN
                     if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
                         throw new SemanticException(fnName + "'s second input " + node.getChild(1).toSql() +
-                                "  can't cast to ARRAY<BOOL>");
+                                " can't cast from " + node.getChild(1).getType().toSql() + " to ARRAY<BOOL>");
                     }
                     break;
                 case FunctionSet.GROUP_CONCAT:
