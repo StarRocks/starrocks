@@ -84,7 +84,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: s
 - **Default**: 300
-- **Description**: The maximum duration by which the metadata on the follower and observer FEs can lag behind that on the leader FE. Unit: seconds. If this duration is exceeded, the non-leader FE stops providing services.
+- **Description**: The maximum duration by which the metadata on the follower and observer FEs can lag behind that on the leader FE. Unit: seconds. If this duration is exceeded, the non-leader FEs stops providing services.
 
 ##### drop_backend_after_decommission
 
@@ -96,7 +96,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: -
 - **Default**: FALSE
-- **Description**: Whether to view the profile of a query. If this parameter is set to `TRUE`, the system collects the profile of the query. If this parameter is set to `FALSE`, the system does not collect the profile of the query.
+- **Description**: Whether to collect the profile of a query. If this parameter is set to `TRUE`, the system collects the profile of the query. If this parameter is set to `FALSE`, the system does not collect the profile of the query.
 
 ##### enable_background_refresh_connector_metadata
 
@@ -170,7 +170,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - Unit: s
 - Default: 600
-- Description: The maximum timeout duration for creating a table, in seconds.
+- Description: The maximum timeout duration for creating a table.
 
 ##### create_table_max_serial_replicas
 
@@ -212,7 +212,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - Unit: LONG
 - Default: 107374182400
-- Description: The size of the largest partition for automatic collection to collect data. Unit: Byte. If a partition exceeds this value, full collection is discarded and sampled collection is performed instead.
+- Description: The size, in bytes, of the largest partition for the automatic collection of statistics. If a partition exceeds this value, then sampled collection is performed instead of full.
 
 ##### statistic_collect_max_row_count_per_query
 
@@ -224,7 +224,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - Unit: s
 - Default: 300
-- Description: The interval for checking data updates during automatic collection. Unit: seconds.
+- Description: The interval for checking data updates during automatic collection.
 
 ##### statistic_auto_analyze_start_time
 
@@ -272,7 +272,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - Unit: s
 - Default: 60
-- Description: The interval at which metadata is scheduled. Unit: seconds. The system performs the following operations based on this interval:
+- Description: The interval at which metadata is scheduled. The system performs the following operations based on this interval:
   - Create tables for storing statistics.
   - Delete statistics that have been deleted.
   - Delete expired statistics.
@@ -287,19 +287,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - Unit: s
 - Default: 259200
-- Description: The duration to retain the history of collection tasks. The default value is 3 days. Unit: seconds.
+- Description: The duration to retain the history of collection tasks. The default value is 3 days.
 
 ##### statistic_collect_concurrency
 
 - Unit: -
 - Default: 3
-- Description: The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled.
+- Description: The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collection tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled.
 
 ##### enable_local_replica_selection
 
 - Unit: -
 - Default: FALSE
-- Description: Whether to select local replicas for queries. Local replicas reduce the network transmission cost. If this parameter is set to TRUE, the CBO preferentially selects tablet replicas on BEs that have the same IP address as the current FE. If this parameter is set to FALSE, both local replicas and non-local replicas can be selected. The default value is FALSE.
+- Description: Whether to select local replicas for queries. Local replicas reduce the network transmission cost. If this parameter is set to TRUE, the CBO preferentially selects tablet replicas on BEs that have the same IP address as the current FE. If this parameter is set to `FALSE`, both local replicas and non-local replicas can be selected. The default value is FALSE.
 
 ##### max_distribution_pruner_recursion_depth
 
@@ -337,7 +337,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: s
 - **Default**: 259200
-- **Description**: The maximum timeout duration allowed for a load job. The load job fails if this limit is exceeded. This limit applies to all types of load jobs. Unit: seconds.
+- **Description**: The maximum timeout duration allowed for a load job. The load job fails if this limit is exceeded. This limit applies to all types of load jobs.
 
 ##### min_load_timeout_second
 
@@ -379,7 +379,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: s
 - **Default**: 259200
-- **Description**: The maximum duration the labels of load jobs that have been completed and are in the FINISHED or CANCELLED state can be retained in the StarRocks system. The default value is 3 days. After this duration expires, the labels will be deleted. This parameter applies to all types of load jobs. Unit: seconds. A value too large consumes a lot of memory.
+- **Description**: The maximum duration in seconds to keep the labels of load jobs that have been completed and are in the FINISHED or CANCELLED state. The default value is 3 days. After this duration expires, the labels will be deleted. This parameter applies to all types of load jobs. A value too large consumes a lot of memory.
 
 ##### max_routine_load_job_num
 
@@ -427,7 +427,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: Min
 - **Default**: 5
-- **Description**: The interval at which Routine Load jobs are automatically recovered, in minutes.
+- **Description**: The interval at which Routine Load jobs are automatically recovered.
 
 ##### spark_load_default_timeout_second
 
@@ -499,7 +499,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: -
 - **Default**: TRUE
-- **Description**: Whether to return an error message "all partitions have no load data" if no data is loaded. Values: TRUE: If no data is loaded, the system displays a failure message and returns an error "all partitions have no load data". FALSE: If no data is loaded, the system displays a success message and returns OK, instead of an error.
+- **Description**: Whether to return an error message "all partitions have no load data" if no data is loaded. Values:
+  - TRUE: If no data is loaded, the system displays a failure message and returns an error "all partitions have no load data".
+  - FALSE: If no data is loaded, the system displays a success message and returns OK, instead of an error.
 
 ##### external_table_commit_timeout_ms
 
@@ -667,7 +669,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: ms
 - **Default**: 86400*1000
-- **Description**: The timeout duration of a backup job, in ms. If this value is exceeded, the backup job fails.
+- **Description**: The timeout duration of a backup job. If this value is exceeded, the backup job fails.
 
 ##### report_queue_size
 
@@ -1112,8 +1114,8 @@ This section provides an overview of the static parameters that you can configur
 - **Default**: shared_nothing
 - **Description**: The running mode of the StarRocks cluster. Valid values: shared_data and shared_nothing (Default).
 
-shared_data indicates running StarRocks in shared-data mode.
-shared_nothing indicates running StarRocks in shared-nothing mode.
+  - shared_data indicates running StarRocks in shared-data mode.
+  - shared_nothing indicates running StarRocks in shared-nothing mode.
 CAUTION
 You cannot adopt the shared_data and shared_nothing modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.
 DO NOT change run_mode after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a shared-nothing cluster to a shared-data cluster or vice versa is not supported.
@@ -1121,7 +1123,7 @@ DO NOT change run_mode after the cluster is deployed. Otherwise, the cluster fai
 ##### cloud_native_meta_port
 
 - **Default**: 6090
-- **Description**: The cloud-native meta service RPC port. Default: 6090.
+- **Description**: The cloud-native meta service RPC port.
 
 ##### cloud_native_storage_type
 
@@ -1131,7 +1133,7 @@ DO NOT change run_mode after the cluster is deployed. Otherwise, the cluster fai
 ##### aws_s3_path
 
 - **Default**: N/A
-- **Description**: The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it, for example, testbucket/subpath.
+- **Description**: The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it, for example, `testbucket/subpath`.
 
 ##### aws_s3_endpoint
 
@@ -1141,7 +1143,7 @@ DO NOT change run_mode after the cluster is deployed. Otherwise, the cluster fai
 ##### aws_s3_region
 
 - **Default**: N/A
-- **Description**: The region in which your S3 bucket resides, for example, us-west-2.
+- **Description**: The region in which your S3 bucket resides, for example, `us-west-2`.
 
 ##### aws_s3_use_aws_sdk_default_behavior
 
@@ -1338,12 +1340,12 @@ BE dynamic parameters are as follows.
 
 #### scanner_thread_pool_queue_size
 
-- **Default:** 102,400 (Number of Tasks)
+- **Default:** 102,400
 - **Description:** The number of scan tasks supported by the storage engine.
 
 #### scanner_row_num
 
-- **Default:** 16,384 (Maximum Rows per Scan Thread)
+- **Default:** 16,384
 - **Description:** The maximum row count returned by each scan thread in a scan.
 
 #### max_scan_key_num
@@ -1353,7 +1355,7 @@ BE dynamic parameters are as follows.
 
 #### max_pushdown_conditions_per_column
 
-- **Default:** 1,024 (Maximum Number of Pushdown Conditions per Column)
+- **Default:** 1,024
 - **Description:** The maximum number of conditions that allow pushdown in each column. If the number of conditions exceeds this limit, the predicates are not pushed down to the storage layer.
 
 #### exchg_node_buffer_size_bytes
@@ -1543,7 +1545,7 @@ BE dynamic parameters are as follows.
 
 #### storage_flood_stage_usage_percent
 
-- **Default:** 95% (Storage Usage Threshold for Load and Restore Job Rejection)
+- **Default:** 95
 - **Description:** If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_flood_stage_left_capacity_bytes`, Load and Restore jobs are rejected.
 
 #### storage_flood_stage_left_capacity_bytes
