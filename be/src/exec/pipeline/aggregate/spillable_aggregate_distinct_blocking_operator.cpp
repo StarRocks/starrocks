@@ -112,7 +112,6 @@ Status SpillableAggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* 
 
 void SpillableAggregateDistinctBlockingSinkOperator::_add_streaming_chunk(ChunkPtr chunk) {
     _streaming_bytes += chunk->memory_usage();
-    _streaming_rows += chunk->num_rows();
     _streaming_chunks.push(std::move(chunk));
 }
 
@@ -199,6 +198,8 @@ std::function<StatusOr<ChunkPtr>()> SpillableAggregateDistinctBlockingSinkOperat
                 _aggregator->convert_hash_set_to_chunk(state->chunk_size(), &chunk);
                 return chunk;
             }
+            COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
+            COUNTER_UPDATE(_aggregator->rows_returned_counter(), _aggregator->hash_set_variant().size());
             COUNTER_UPDATE(_hash_set_spill_times, 1);
             RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr));
         }

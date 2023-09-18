@@ -68,7 +68,6 @@ private:
     std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state, bool should_spill_hash_set);
 
     std::queue<ChunkPtr> _streaming_chunks;
-    size_t _streaming_rows = 0;
     size_t _streaming_bytes = 0;
     int32_t _continuous_low_reduction_chunk_num = 0;
 
