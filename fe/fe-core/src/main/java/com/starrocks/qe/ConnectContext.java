@@ -842,7 +842,6 @@ public class ConnectContext {
             }
             row.add(stmt);
             row.add(Boolean.toString(isPending));
-            row.add(currentWarehouse);
             return row;
         }
     }
