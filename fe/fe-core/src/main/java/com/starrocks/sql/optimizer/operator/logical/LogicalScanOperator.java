@@ -128,6 +128,11 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         return canUseMinMaxCountOpt;
     }
 
+    // When using this method for related rules, you need to check the scan type first.
+    protected boolean noPartitionSelected() {
+        return false;
+    }
+
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         return new RowOutputInfo(colRefToColumnMetaMap.keySet().stream()

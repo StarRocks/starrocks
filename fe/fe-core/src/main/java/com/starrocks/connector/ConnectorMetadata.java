@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -165,7 +166,8 @@ public interface ConnectorMetadata {
                                           Map<ColumnRefOperator, Column> columns,
                                           List<PartitionKey> partitionKeys,
                                           ScalarOperator predicate,
-                                          long limit) {
+                                          long limit,
+                                          ScanOperatorPredicates scanNodePredicates) {
         return Statistics.builder().build();
     }
 

@@ -22,6 +22,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Test;
@@ -178,7 +179,7 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.getRemoteFileInfos(null, null, 0, null, null, -1);
                 connectorMetadata.getPartitions(null, null);
                 connectorMetadata.getMaterializedViewIndex("test_db", "test_tbl");
-                connectorMetadata.getTableStatistics(null, null, null, null, null, -1);
+                connectorMetadata.getTableStatistics(null, null, null, null, null, -1, new ScanOperatorPredicates());
             }
         };
 
@@ -213,6 +214,6 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.getRemoteFileInfos(null, null, 0, null, null, -1);
         catalogConnectorMetadata.getPartitions(null, null);
         catalogConnectorMetadata.getMaterializedViewIndex("test_db", "test_tbl");
-        catalogConnectorMetadata.getTableStatistics(null, null, null, null, null, -1);
+        catalogConnectorMetadata.getTableStatistics(null, null, null, null, null, -1, new ScanOperatorPredicates());
     }
 }
