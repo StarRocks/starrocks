@@ -121,7 +121,7 @@ public abstract class StarRocksHttpTestCase {
     public static int HTTP_PORT;
 
     protected static String URI;
-
+    protected static String BASE_URL;
     protected String rootAuth = Credentials.basic("root", "");
 
     @Mocked
@@ -373,6 +373,7 @@ public abstract class StarRocksHttpTestCase {
             socket = new ServerSocket(0);
             socket.setReuseAddress(true);
             HTTP_PORT = socket.getLocalPort();
+            BASE_URL = "http://localhost:" + HTTP_PORT;
             URI = "http://localhost:" + HTTP_PORT + "/api/" + DB_NAME + "/" + TABLE_NAME;
         } catch (Exception e) {
             throw new IllegalStateException("Could not find a free TCP/IP port to start HTTP Server on");
