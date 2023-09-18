@@ -128,11 +128,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
 ) engine=OLAP
 duplicate key(query_id, time, client_ip)
 partition by range(time) ()
-<<<<<<< HEAD
-distributed by hash(query_id) buckets 3
-=======
 distributed by hash(query_id) BUCKETS 3 
->>>>>>> 01f2a1266d ([Doc]Update table schema for version 2.4+ audit loader (#31239))
 properties(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
@@ -168,11 +164,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
 ) engine=OLAP
 DUPLICATE KEY(query_id, time, client_ip)
 PARTITION BY RANGE(time) ()
-<<<<<<< HEAD
 DISTRIBUTED BY HASH(query_id) BUCKETS 3
-=======
-DISTRIBUTED BY HASH(query_id) BUCKETS 3 
->>>>>>> 01f2a1266d ([Doc]Update table schema for version 2.4+ audit loader (#31239))
 PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
@@ -207,11 +199,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
 ) engine=OLAP
 DUPLICATE KEY(query_id, time, client_ip)
 PARTITION BY RANGE(time) ()
-<<<<<<< HEAD
 DISTRIBUTED BY HASH(query_id) BUCKETS 3
-=======
-DISTRIBUTED BY HASH(query_id) BUCKETS 3 
->>>>>>> 01f2a1266d ([Doc]Update table schema for version 2.4+ audit loader (#31239))
 PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
