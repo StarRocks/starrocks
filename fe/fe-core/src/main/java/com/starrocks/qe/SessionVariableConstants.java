@@ -23,4 +23,12 @@ public class SessionVariableConstants {
     public static final String FORCE_STREAMING = "force_streaming";
 
     public static final String FORCE_PREAGGREGATION = "force_preaggregation";
+
+    public static final String LIMITED = "limited";
+
+    public static final String PANIC = "panic";
+
+    public static final String DOUBLE = "double";
+
+    public static final String DECIMAL = "decimal";
 }
