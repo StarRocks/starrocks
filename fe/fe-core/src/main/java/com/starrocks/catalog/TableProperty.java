@@ -56,7 +56,6 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -393,18 +392,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
-    public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) {
-        QueryRewriteConsistencyMode res = EnumUtils.getEnumIgnoreCase(QueryRewriteConsistencyMode.class, value);
-        if (res == null) {
-            String allValues = EnumUtils.getEnumList(QueryRewriteConsistencyMode.class)
-                    .stream().map(Enum::name).collect(Collectors.joining(","));
-            throw new SemanticException(
-                    PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY + " could only be " + allValues + " but got " + value);
-        }
-        return res;
-    }
-
-    public static QueryRewriteConsistencyMode analyzeExternalTableQueryRewrite(String value) throws AnalysisException {
+    public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) throws AnalysisException {
         if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
             // old version use the boolean value
             boolean boolValue = Boolean.parseBoolean(value);
@@ -415,7 +403,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 String allValues = EnumUtils.getEnumList(QueryRewriteConsistencyMode.class)
                         .stream().map(Enum::name).collect(Collectors.joining(","));
                 throw new AnalysisException(
-                        "force_external_table_query_rewrite could only be " + allValues + " but got " + value);
+                        PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY +
+                                " could only be " + allValues + " but got " + value);
             }
             return res;
         }
@@ -426,13 +415,21 @@ public class TableProperty implements Writable, GsonPostProcessable {
         String value = properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
         forceExternalTableQueryRewrite = QueryRewriteConsistencyMode.defaultForExternalTable();
         if (value != null) {
-            forceExternalTableQueryRewrite = analyzeQueryRewriteMode(value);
+            try {
+                forceExternalTableQueryRewrite = analyzeQueryRewriteMode(value);
+            } catch (AnalysisException e) {
+                LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, e);
+            }
         }
 
         olapTableQueryRewrite = QueryRewriteConsistencyMode.defaultForOlapTable();
         value = properties.get(PropertyAnalyzer.PROPERTIES_OLAP_TABLE_QUERY_REWRITE);
         if (value != null) {
-            olapTableQueryRewrite = analyzeQueryRewriteMode(value);
+            try {
+                forceExternalTableQueryRewrite = analyzeQueryRewriteMode(value);
+            } catch (AnalysisException e) {
+                LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_OLAP_TABLE_QUERY_REWRITE, e);
+            }
         }
 
         return this;

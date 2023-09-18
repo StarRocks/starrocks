@@ -832,6 +832,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 .append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM).append("\" = \"");
         sb.append(getStorageMedium()).append("\"");
 
+        // storageCooldownTime
+        Map<String, String> properties = this.getTableProperty().getProperties();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
+                    .append("\" = \"");
+            sb.append(TimeUtils.longToTimeString(
+                    Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)))).append("\"");
+        }
     }
 
     public String getMaterializedViewDdlStmt(boolean simple) {
@@ -895,54 +903,86 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         // properties
         sb.append("\nPROPERTIES (\n");
-        boolean first = true;
+
+        // replicationNum
+        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
+        sb.append(getDefaultReplicationNum()).append("\"");
+
         Map<String, String> properties = this.getTableProperty().getProperties();
-        boolean hasStorageMedium = false;
-        boolean hasStaleness = false;
-        for (Map.Entry<String, String> entry : properties.entrySet()) {
-            String name = entry.getKey();
-            String value = entry.getValue();
-            if (!first) {
-                sb.append(",\n");
-            }
-            first = false;
-            if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
-                sb.append("\"")
-                        .append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
-                        .append("\" = \"")
-                        .append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(getForeignKeyConstraints()))
-                        .append("\"");
-            } else if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
-                sb.append("\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
-                        .append("\" = \"")
-                        .append(TimeUtils.longToTimeString(
-                                Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME))))
-                        .append("\"");
-            } else if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-                // handled in appendUniqueProperties
-                hasStorageMedium = true;
-                sb.append("\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
-                        .append("\" = \"")
-                        .append(getStorageMedium())
-                        .append("\"");
-            } else {
-                sb.append("\"").append(name).append("\"");
-                sb.append(" = ");
-                sb.append("\"").append(value).append("\"");
-            }
-            if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
-                hasStaleness = true;
-            }
+        // replicated storage
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)).append("\"");
         }
-        if (!hasStorageMedium) {
-            appendUniqueProperties(sb);
+
+        // partition TTL
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)).append("\"");
         }
-        if (!hasStaleness && maxMVRewriteStaleness > 0) {
-            sb.append(",\n\"")
-                    .append(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)
-                    .append("\" = \"")
-                    .append(maxMVRewriteStaleness)
+
+        // auto refresh partitions limit
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)).append("\"");
+        }
+
+        // partition refresh number
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)).append("\"");
+        }
+
+        // excluded trigger tables
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)).append("\"");
+        }
+
+        // force_external_table_query_rewrite
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
+                    PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE).append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)).append("\"");
+        }
+        // mv_rewrite_staleness
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
+                    PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND).append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)).append("\"");
+        }
+
+        // unique constraints
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)).append("\"");
+        }
+
+        // foreign keys constraints
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                    .append("\" = \"");
+            sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(getForeignKeyConstraints()))
                     .append("\"");
+        }
+
+        appendUniqueProperties(sb);
+
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(entry.getKey())
+                        .append("\" = \"").append(entry.getValue()).append("\"");
+            }
         }
 
         sb.append("\n)");
