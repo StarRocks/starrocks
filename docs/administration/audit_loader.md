@@ -18,38 +18,43 @@ Because the fields of audit logs vary among different StarRocks versions, you mu
 
 ```SQL
 CREATE DATABASE starrocks_audit_db__;
+
 CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
-  `queryId`        VARCHAR(48)            COMMENT "Unique query ID",
-  `timestamp`      DATETIME     NOT NULL  COMMENT "Query start time",
-  `clientIp`       VARCHAR(32)            COMMENT "Client IP address",
-  `user`           VARCHAR(64)            COMMENT "User who initiates the query",
-  `resourceGroup`  VARCHAR(64)            COMMENT "Resource group name",
-  `db`             VARCHAR(96)            COMMENT "Database that the query scans",
-  `state`          VARCHAR(8)             COMMENT "Query state (EOF, ERR, OK)",
-  `errorCode`      VARCHAR(96)            COMMENT "Error code",
-  `queryTime`      BIGINT                 COMMENT "Query latency in milliseconds",
-  `scanBytes`      BIGINT                 COMMENT "Size of the scanned data in bytes",
-  `scanRows`       BIGINT                 COMMENT "Row count of the scanned data",
-  `returnRows`     BIGINT                 COMMENT "Row count of the result",
-  `cpuCostNs`      BIGINT                 COMMENT "CPU resources consumption time for query in nanoseconds",
-  `memCostBytes`   BIGINT                 COMMENT "Memory cost for query in bytes",
-  `stmtId`         INT                    COMMENT "Incremental SQL statement ID",
-  `isQuery`        TINYINT                COMMENT "If the SQL is a query (0 and 1)",
-  `feIp`           VARCHAR(32)            COMMENT "IP address of FE that executes the SQL",
-  `stmt`           STRING                 COMMENT "SQL statement",
-  `digest`         VARCHAR(32)            COMMENT "SQL fingerprint",
-  `planCpuCosts`   DOUBLE                 COMMENT "CPU resources consumption time for planning in nanoseconds",
-  `planMemCosts`   DOUBLE                 COMMENT "Memory cost for planning in bytes"
+  `queryId` VARCHAR(48) COMMENT "查询的唯一ID",
+  `timestamp` DATETIME NOT NULL COMMENT "查询开始时间",
+  `queryType` VARCHAR(12) COMMENT "查询类型（query, slow_query）",
+  `clientIp` VARCHAR(32) COMMENT "客户端IP",
+  `user` VARCHAR(64) COMMENT "查询用户名",
+  `authorizedUser` VARCHAR(64) COMMENT "用户唯一标识，既user_identity",
+  `resourceGroup` VARCHAR(64) COMMENT "资源组名",
+  `catalog` VARCHAR(32) COMMENT "数据目录名",
+  `db` VARCHAR(96) COMMENT "查询所在数据库",
+  `state` VARCHAR(8) COMMENT "查询状态（EOF，ERR，OK）",
+  `errorCode` VARCHAR(96) COMMENT "错误码",
+  `queryTime` BIGINT COMMENT "查询执行时间（毫秒）",
+  `scanBytes` BIGINT COMMENT "查询扫描的字节数",
+  `scanRows` BIGINT COMMENT "查询扫描的记录行数",
+  `returnRows` BIGINT COMMENT "查询返回的结果行数",
+  `cpuCostNs` BIGINT COMMENT "查询CPU耗时（纳秒）",
+  `memCostBytes` BIGINT COMMENT "查询消耗内存（字节）",
+  `stmtId` INT COMMENT "SQL语句增量ID",
+  `isQuery` TINYINT COMMENT "SQL是否为查询（1或0）",
+  `feIp` VARCHAR(32) COMMENT "执行该语句的FE IP",
+  `stmt` STRING COMMENT "SQL原始语句",
+  `digest` VARCHAR(32) COMMENT "慢SQL指纹",
+  `planCpuCosts` DOUBLE COMMENT "查询规划阶段CPU占用（纳秒）",
+  `planMemCosts` DOUBLE COMMENT "查询规划阶段内存占用（字节）"
 ) ENGINE = OLAP
-DUPLICATE KEY (`queryId`, `timestamp`, `clientIp`)
-COMMENT "Audit log table"
+DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
+COMMENT "审计日志表"
 PARTITION BY RANGE (`timestamp`) ()
-DISTRIBUTED BY HASH (`queryId`)
+DISTRIBUTED BY HASH (`queryId`) BUCKETS 3 
 PROPERTIES (
   "dynamic_partition.time_unit" = "DAY",
   "dynamic_partition.start" = "-30",
   "dynamic_partition.end" = "3",
   "dynamic_partition.prefix" = "p",
+  "dynamic_partition.buckets" = "3",
   "dynamic_partition.enable" = "true",
   "replication_num" = "3"
 );
@@ -85,7 +90,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
 DUPLICATE KEY (`queryId`, `timestamp`, `clientIp`)
 COMMENT "Audit log table"
 PARTITION BY RANGE (`timestamp`) ()
-DISTRIBUTED BY HASH (`queryId`)
+DISTRIBUTED BY HASH (`queryId`) BUCKETS 3 
 PROPERTIES (
   "dynamic_partition.time_unit" = "DAY",
   "dynamic_partition.start" = "-30",
@@ -121,7 +126,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
     digest           VARCHAR(32)            COMMENT "SQL fingerprint"
 ) engine=OLAP
 duplicate key(query_id, time, client_ip)
-partition by range(time) ()
+partition by range(time) () BUCKETS 3 
 distributed by hash(query_id)
 properties(
     "dynamic_partition.time_unit" = "DAY",
@@ -156,7 +161,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
     digest          VARCHAR(32)           COMMENT "SQL fingerprint"
 ) engine=OLAP
 DUPLICATE KEY(query_id, time, client_ip)
-PARTITION BY RANGE(time) ()
+PARTITION BY RANGE(time) () BUCKETS 3 
 DISTRIBUTED BY HASH(query_id)
 PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
@@ -190,7 +195,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
     stmt            STRING                COMMENT "SQL statement"
 ) engine=OLAP
 DUPLICATE KEY(query_id, time, client_ip)
-PARTITION BY RANGE(time) ()
+PARTITION BY RANGE(time) () BUCKETS 3 
 DISTRIBUTED BY HASH(query_id)
 PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
