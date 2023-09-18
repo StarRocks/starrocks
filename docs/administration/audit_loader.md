@@ -14,16 +14,20 @@ Because the fields of audit logs vary among different StarRocks versions, you mu
 >
 > DO NOT change the table schema in the examples, or the log loading will fail.
 
-- StarRocks v2.4.0 and later minor versions:
+- StarRocks v2.4, v2.5, v3.0, v3.1, and later minor versions:
 
 ```SQL
 CREATE DATABASE starrocks_audit_db__;
+
 CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `queryId`        VARCHAR(48)            COMMENT "Unique query ID",
   `timestamp`      DATETIME     NOT NULL  COMMENT "Query start time",
+  `queryType`      VARCHAR(12)            COMMENT "Query type (query, slow_query)",
   `clientIp`       VARCHAR(32)            COMMENT "Client IP address",
   `user`           VARCHAR(64)            COMMENT "User who initiates the query",
+  `authorizedUser` VARCHAR(64)            COMMENT "user_identity",
   `resourceGroup`  VARCHAR(64)            COMMENT "Resource group name",
+  `catalog`        VARCHAR(32)            COMMENT "Catalog name",
   `db`             VARCHAR(96)            COMMENT "Database that the query scans",
   `state`          VARCHAR(8)             COMMENT "Query state (EOF, ERR, OK)",
   `errorCode`      VARCHAR(96)            COMMENT "Error code",
@@ -41,15 +45,16 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `planCpuCosts`   DOUBLE                 COMMENT "CPU resources consumption time for planning in nanoseconds",
   `planMemCosts`   DOUBLE                 COMMENT "Memory cost for planning in bytes"
 ) ENGINE = OLAP
-DUPLICATE KEY (`queryId`, `timestamp`, `clientIp`)
+DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "Audit log table"
 PARTITION BY RANGE (`timestamp`) ()
-DISTRIBUTED BY HASH (`queryId`)
+DISTRIBUTED BY HASH (`queryId`) BUCKETS 3 
 PROPERTIES (
   "dynamic_partition.time_unit" = "DAY",
   "dynamic_partition.start" = "-30",
   "dynamic_partition.end" = "3",
   "dynamic_partition.prefix" = "p",
+  "dynamic_partition.buckets" = "3",
   "dynamic_partition.enable" = "true",
   "replication_num" = "3"
 );
@@ -85,7 +90,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
 DUPLICATE KEY (`queryId`, `timestamp`, `clientIp`)
 COMMENT "Audit log table"
 PARTITION BY RANGE (`timestamp`) ()
-DISTRIBUTED BY HASH (`queryId`)
+DISTRIBUTED BY HASH (`queryId`) BUCKETS 3 
 PROPERTIES (
   "dynamic_partition.time_unit" = "DAY",
   "dynamic_partition.start" = "-30",
@@ -122,7 +127,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
 ) engine=OLAP
 duplicate key(query_id, time, client_ip)
 partition by range(time) ()
-distributed by hash(query_id)
+distributed by hash(query_id) BUCKETS 3 
 properties(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
@@ -157,7 +162,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
 ) engine=OLAP
 DUPLICATE KEY(query_id, time, client_ip)
 PARTITION BY RANGE(time) ()
-DISTRIBUTED BY HASH(query_id)
+DISTRIBUTED BY HASH(query_id) BUCKETS 3 
 PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
@@ -191,7 +196,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
 ) engine=OLAP
 DUPLICATE KEY(query_id, time, client_ip)
 PARTITION BY RANGE(time) ()
-DISTRIBUTED BY HASH(query_id)
+DISTRIBUTED BY HASH(query_id) BUCKETS 3 
 PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
