@@ -282,15 +282,12 @@ public class TableFunctionTable extends Table {
 
         TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
         if (code != TStatusCode.OK) {
-            throw new DdlException("failed to get file schema: " + result.status.errorMsgs);
+            throw new DdlException("failed to get file schema, path: " + path + ", error: " + result.status.errorMsgs);
         }
 
         List<Column> columns = new ArrayList<>();
         for (PSlotDescriptor slot : result.schema) {
             Type tp = Type.fromProtobuf(slot.slotType, 0);
-            if (tp == null) {
-                throw new DdlException("unsupported type:" + slot.slotType.toString() + " ,column name: " + slot.colName);
-            }
             columns.add(new Column(slot.colName, tp, true));
         }
         return columns;
