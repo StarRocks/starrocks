@@ -3818,9 +3818,13 @@ public class LocalMetastore implements ConnectorMetadata {
 
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             taskManager.createTask(task, false);
+<<<<<<< HEAD
             // for event triggered type, run task
             if (task.getType() == Constants.TaskType.EVENT_TRIGGERED ||
                     refreshMoment.equals(MaterializedView.RefreshMoment.IMMEDIATE)) {
+=======
+            if (refreshMoment.equals(MaterializedView.RefreshMoment.IMMEDIATE)) {
+>>>>>>> eab4553900 ([BugFix] fix immediate refresh semantic (#31258))
                 taskManager.executeTask(task.getName());
             }
         }

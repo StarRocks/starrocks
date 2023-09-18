@@ -2644,13 +2644,14 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testCreateImmediateDeferred(@Mocked TaskManager taskManager) throws Exception {
+    public void testCreateAsync_Deferred(@Mocked TaskManager taskManager) throws Exception {
         new Expectations() {
             {
                 taskManager.executeTask((String) any);
-                times = 1;
+                times = 0;
             }
         };
+<<<<<<< HEAD
         String createImmediate =
                 "create materialized view immediate_mv refresh deferred manual distributed by hash(c_1_9) as" +
                         " select c_1_9, c_1_4 from t1";
@@ -2660,6 +2661,64 @@ public class CreateMaterializedViewTest {
                 "create materialized view deferred_mv refresh immediate manual distributed by hash(c_1_9) as" +
                         " select c_1_9, c_1_4 from t1";
         starRocksAssert.withMaterializedView(createDeferred);
+=======
+        starRocksAssert.withMaterializedView(
+                "create materialized view deferred_async " +
+                        "refresh deferred async distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1");
+        starRocksAssert.withMaterializedView(
+                "create materialized view deferred_manual " +
+                        "refresh deferred manual distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1");
+        starRocksAssert.withMaterializedView(
+                "create materialized view deferred_scheduled " +
+                        "refresh deferred async every(interval 1 day) distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1");
+    }
+
+    @Test
+    public void testCreateAsync_Immediate(@Mocked TaskManager taskManager) throws Exception {
+        new Expectations() {
+            {
+                taskManager.executeTask((String) any);
+                times = 3;
+            }
+        };
+        starRocksAssert.withMaterializedView(
+                "create materialized view async_immediate " +
+                        "refresh immediate async distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1");
+        starRocksAssert.withMaterializedView(
+                "create materialized view manual_immediate " +
+                        "refresh immediate manual distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1");
+        starRocksAssert.withMaterializedView(
+                "create materialized view schedule_immediate " +
+                        "refresh immediate async every(interval 1 day) distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1");
+    }
+
+    @Test
+    public void testCreateAsync_Immediate_Implicit(@Mocked TaskManager taskManager) throws Exception {
+        new Expectations() {
+            {
+                taskManager.executeTask((String) any);
+                times = 3;
+            }
+        };
+        starRocksAssert.withMaterializedView(
+                "create materialized view async_immediate_implicit " +
+                        "refresh async distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1");
+        starRocksAssert.withMaterializedView(
+                "create materialized view manual_immediate_implicit " +
+                        "refresh manual distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1");
+        starRocksAssert.withMaterializedView(
+                "create materialized view schedule_immediate_implicit " +
+                        "refresh async every(interval 1 day) distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1");
+>>>>>>> eab4553900 ([BugFix] fix immediate refresh semantic (#31258))
     }
 
     private void testMVColumnAlias(String expr) throws Exception {
