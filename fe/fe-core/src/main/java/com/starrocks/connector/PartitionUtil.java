@@ -231,30 +231,22 @@ public class PartitionUtil {
     }
 
     public static List<String> getPartitionNames(Table table) {
+        if (table.isUnPartitioned()) {
+            return Lists.newArrayList(table.getName());
+        }
         List<String> partitionNames = null;
         if (table.isHiveTable() || table.isHudiTable()) {
             HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-            if (hmsTable.isUnPartitioned()) {
-                // return table name if table is unpartitioned
-                return Lists.newArrayList(hmsTable.getTableName());
-            }
             partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName());
         } else if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
-            if (icebergTable.isUnPartitioned()) {
-                // return table name if table is unpartitioned
-                return Lists.newArrayList(icebergTable.getRemoteTableName());
-            }
             partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     icebergTable.getCatalogName(), icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
         } else if (table.isJDBCTable()) {
             JDBCTable jdbcTable = (JDBCTable) table;
             partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     jdbcTable.getCatalogName(), jdbcTable.getDbName(), jdbcTable.getJdbcTable());
-            if (partitionNames.size() == 0) {
-                return Lists.newArrayList(jdbcTable.getJdbcTable());
-            }
         } else {
             Preconditions.checkState(false, "Do not support get partition names and columns for" +
                     "table type %s", table.getType());
