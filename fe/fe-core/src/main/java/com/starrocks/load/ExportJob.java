@@ -85,7 +85,6 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -725,20 +724,12 @@ public class ExportJob implements Writable, GsonPostProcessable {
             String host = address.getHostname();
             int port = address.getPort();
 
-            ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+            ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, port);
             if (node == null) {
-                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                    node = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, port);
-                }
-                if (node == null) {
-                    continue;
-                }
+                continue;
             }
-            long nodeId = node.getId();
-            if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(nodeId)) {
-                if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-                    continue;
-                }
+            if (!GlobalStateMgr.getCurrentSystemInfo().checkNodeAvailable(node)) {
+                continue;
             }
 
             AgentClient client = new AgentClient(host, port);
@@ -764,11 +755,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 TNetworkAddress address = location.getServer();
                 String host = address.getHostname();
                 int port = address.getPort();
-                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
-                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                    node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNodeWithBePort(host, port);
-                }
-                if (node == null) {
+                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNodeWithBePort(host, port);
+                if (!GlobalStateMgr.getCurrentSystemInfo().checkNodeAvailable(node)) {
                     continue;
                 }
                 try {

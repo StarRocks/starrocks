@@ -487,8 +487,10 @@ public class SystemInfoService implements GsonPostProcessable {
         return backend != null && backend.isAvailable();
     }
 
-    public boolean checkNodeAvailable(long nodeId) {
-        ComputeNode node = getBackendOrComputeNode(nodeId);
+    public boolean checkNodeAvailable(ComputeNode node) {
+        if (node instanceof Backend) {
+            return node != null && node.isAvailable();
+        }
         return node != null && node.isAlive();
     }
 
