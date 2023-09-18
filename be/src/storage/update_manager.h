@@ -138,6 +138,10 @@ public:
         return Status::OK();
     }
 
+    // Used in UT only
+    bool TEST_update_state_exist(Tablet* tablet, Rowset* rowset);
+    bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
+
 private:
     // default 6min
     int64_t _cache_expire_ms = 360000;

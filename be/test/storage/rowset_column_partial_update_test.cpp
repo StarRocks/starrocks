@@ -368,6 +368,12 @@ static void prepare_tablet(RowsetColumnPartialUpdateTest* self, const TabletShar
         ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
             return (int16_t)(k1 % 100 + 1) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
         }));
+        // check refcnt
+        for (const auto& rs_ptr : rowsets) {
+            ASSERT_FALSE(
+                    StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+        }
+        ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
         version_before_partial_update = version;
     }
 
@@ -390,6 +396,12 @@ static void prepare_tablet(RowsetColumnPartialUpdateTest* self, const TabletShar
         ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
             return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
         }));
+        // check refcnt
+        for (const auto& rs_ptr : rowsets) {
+            ASSERT_FALSE(
+                    StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+        }
+        ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
     }
 }
 
@@ -504,6 +516,11 @@ TEST_F(RowsetColumnPartialUpdateTest, partial_update_diff_column_and_check) {
     ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
         return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
     }));
+    // check refcnt
+    for (const auto& rs_ptr : rowsets) {
+        ASSERT_FALSE(StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+    }
+    ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
 }
 
 TEST_F(RowsetColumnPartialUpdateTest, partial_update_multi_segment_and_check) {
@@ -538,6 +555,11 @@ TEST_F(RowsetColumnPartialUpdateTest, partial_update_multi_segment_and_check) {
     ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
         return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
     }));
+    // check refcnt
+    for (const auto& rs_ptr : rowsets) {
+        ASSERT_FALSE(StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+    }
+    ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
 }
 
 TEST_F(RowsetColumnPartialUpdateTest, partial_update_multi_segment_preload_and_check) {
@@ -802,6 +824,12 @@ TEST_F(RowsetColumnPartialUpdateTest, test_upsert) {
         ASSERT_TRUE(check_tablet(tablet, version, 2 * N, [](int64_t k1, int64_t v1, int32_t v2) {
             return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
         }));
+        // check refcnt
+        for (const auto& rs_ptr : rowsets) {
+            ASSERT_FALSE(
+                    StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+        }
+        ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
     }
 }
 
