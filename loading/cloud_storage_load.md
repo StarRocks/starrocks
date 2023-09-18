@@ -1390,7 +1390,7 @@ WHERE LABEL = "label1";
 
 - `min_bytes_per_broker_scanner`：单个实例处理的最小数据量，默认为 64 MB。
 
-- `load_parallel_instance_num`：单个 BE 上每个作业允许的并发实例数，默认为 1 个。
+- `load_parallel_instance_num`：单个 BE 上每个作业允许的并发实例数，默认为 1 个。自 3.1 版本起弃用。
 
    可以使用如下公式计算单个子任务的实例总数：
 
