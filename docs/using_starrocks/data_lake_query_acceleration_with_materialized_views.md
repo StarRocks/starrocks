@@ -58,7 +58,7 @@ Materialized views, Data Cache, and native tables in StarRocks are all effective
       <td><ul><li>No need to modify query statements against the data lake</li><li>Leverages query rewrite to reuse precomputed results</li></ul></td>
       <td>Requires modification of query statements to query the native table</td>
     </tr>
-  <tbody>
+  </tbody>
 </table>
 
 <br>
