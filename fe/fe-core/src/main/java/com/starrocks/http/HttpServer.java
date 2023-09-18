@@ -86,7 +86,11 @@ import com.starrocks.http.rest.TableQueryPlanAction;
 import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
+<<<<<<< HEAD
 import com.starrocks.http.rest.WarehouseAction;
+=======
+import com.starrocks.http.rest.TriggerAction;
+>>>>>>> 16f4ebeeee ([Feature] Add http trigger for dynamic partition (#31160))
 import com.starrocks.leader.MetaHelper;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -166,6 +170,7 @@ public class HttpServer {
         ShowProcAction.registerAction(controller);
         ShowRuntimeInfoAction.registerAction(controller);
         GetLogFileAction.registerAction(controller);
+        TriggerAction.registerAction(controller);
         GetSmallFileAction.registerAction(controller);
         RowCountAction.registerAction(controller);
         CheckDecommissionAction.registerAction(controller);
