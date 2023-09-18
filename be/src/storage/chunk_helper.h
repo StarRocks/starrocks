@@ -57,7 +57,7 @@ public:
     // Create an empty chunk according to the |slots| and reserve it of size |n|.
     static std::shared_ptr<vectorized::Chunk> new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
 
-    static vectorized::Chunk* new_chunk_pooled(const vectorized::Schema& schema, size_t n, bool force = true);
+    static vectorized::Chunk* new_chunk_pooled(const vectorized::Schema& schema, size_t n, bool force);
 
     // Create a vectorized column from field .
     // REQUIRE: |type| must be scalar type.
