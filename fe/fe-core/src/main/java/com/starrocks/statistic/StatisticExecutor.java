@@ -162,6 +162,7 @@ public class StatisticExecutor {
 
         Map<String, Database> dbs = Maps.newHashMap();
         ConnectContext context = StatisticUtils.buildConnectContext();
+<<<<<<< HEAD
         StatementBase parsedStmt;
         try {
             parsedStmt = parseSQL(sql, context);
@@ -172,6 +173,21 @@ public class StatisticExecutor {
         } catch (Exception e) {
             LOG.warn("Parse statistic dict query {} fail.", sql, e);
             throw e;
+=======
+        // The parallelism degree of low-cardinality dict collect task is uniformly set to 1 to
+        // prevent collection tasks from occupying a large number of be execution threads and scan threads.
+        context.getSessionVariable().setPipelineDop(1);
+        context.setThreadLocalInfo();
+        StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+
+        ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
+        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
+        if (!sqlResult.second.ok()) {
+            return Pair.create(Collections.emptyList(), sqlResult.second);
+        } else {
+            return Pair.create(deserializerStatisticData(sqlResult.first), sqlResult.second);
+>>>>>>> 6a1675e841 ([Enhancement]Set the parallelism of low-cardinality field tasks to 1 (#31249))
         }
 
         try {
