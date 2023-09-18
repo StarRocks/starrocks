@@ -310,6 +310,7 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
             12, dateTimeExpr,           // MYSQL_TYPE_DATETIME
             15, varcharExpr,            // MYSQL_TYPE_VARCHAR
             17, dateTimeExpr,           // MYSQL_TYPE_TIMESTAMP2
+            246, decimal32Expr,         // MYSQL_TYPE_NEWDECIMAL
             253, stringExpr,            // MYSQL_TYPE_STRING
             254, stringExpr             // MYSQL_TYPE_STRING
     );
