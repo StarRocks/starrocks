@@ -166,6 +166,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // enable table pruning(CBO) in cardinality-preserving joins
     public static final String ENABLE_CBO_TABLE_PRUNE = "enable_cbo_table_prune";
+
+    // Table pruning on update statement is risky, so turn off in default.
+    public static final String ENABLE_TABLE_PRUNE_ON_UPDATE = "enable_table_prune_on_update";
+
     // if set to true, some of stmt will be forwarded to leader FE to get result
 
     // if set to true, some of stmt will be forwarded to leader FE to get result
@@ -831,6 +835,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_CBO_TABLE_PRUNE)
     private boolean enableCboTablePrune = false;
+
+    @VarAttr(name = ENABLE_TABLE_PRUNE_ON_UPDATE)
+    private boolean enableTablePruneOnUpdate = false;
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
 
@@ -1597,6 +1604,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableCboTablePrune() {
         return enableCboTablePrune;
+    }
+
+    public void setEnableTablePruneOnUpdate(boolean on) {
+        this.enableTablePruneOnUpdate = on;
+    }
+
+    public boolean isEnableTablePruneOnUpdate() {
+        return enableTablePruneOnUpdate;
     }
 
     public int getSpillMemTableSize() {
