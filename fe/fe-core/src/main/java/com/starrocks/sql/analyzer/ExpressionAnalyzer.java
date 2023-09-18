@@ -284,26 +284,18 @@ public class ExpressionAnalyzer {
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
         boolean hasLambdaFunc = false;
-        String originalSQL = expression.toSql();
         try {
             hasLambdaFunc = expression.hasLambdaFunction(expression);
         } catch (SemanticException e) {
-            if (e.canNested()) {
-                throw new SemanticException(e.getMessage() + " in " + originalSQL, false);
-            } else {
-                throw e;
-            }
+            throw e.appendOnlyOnceMsg(expression.toSql());
         }
         if (hasLambdaFunc) {
+            String originalSQL = expression.toSql();
             try {
                 analyzeHighOrderFunction(visitor, expression, scope);
                 visitor.visit(expression, scope);
             } catch (SemanticException e) {
-                if (e.canNested()) {
-                    throw new SemanticException(e.getMessage() + " in " + originalSQL, false);
-                } else {
-                    throw e;
-                }
+                throw e.appendOnlyOnceMsg(originalSQL);
             }
         } else {
             for (Expr expr : expression.getChildren()) {

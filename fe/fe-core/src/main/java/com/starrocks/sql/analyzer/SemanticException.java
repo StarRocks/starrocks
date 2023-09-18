@@ -22,15 +22,15 @@ import static java.lang.String.format;
 
 public class SemanticException extends StarRocksPlannerException {
 
-    protected boolean canNested = true;
+    protected boolean canAppend = true;
 
     public SemanticException(String formatString) {
         super(formatString, ErrorType.USER_ERROR);
     }
 
-    public SemanticException(String formatString, boolean canNested) {
+    public SemanticException(String formatString, boolean canAppend) {
         super(formatString, ErrorType.USER_ERROR);
-        this.canNested = canNested;
+        this.canAppend = canAppend;
     }
 
     public SemanticException(String formatString, Object... args) {
@@ -41,7 +41,12 @@ public class SemanticException extends StarRocksPlannerException {
         throw new SemanticException("Column '%s' cannot be resolved", node.toSql());
     }
 
-    boolean canNested() {
-        return canNested;
+    // append msg to previous exception msg, bug just only once.
+    SemanticException appendOnlyOnceMsg(String appendMsg) {
+        if (this.canAppend) {
+            return new SemanticException(this.getMessage() + " in " + appendMsg, false);
+        } else {
+            return this;
+        }
     }
 }
