@@ -104,8 +104,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |desired_max_waiting_jobs|1024|最多等待的任务数，适用于所有的任务，建表、导入、schema change。<br>如果 FE 中处于 PENDING 状态的作业数目达到该值，FE 会拒绝新的导入请求。该参数配置仅对异步执行的导入有效。从 2.5 版本开始，该参数默认值从 100 变为 1024。|
 |max_load_timeout_second|259200|导入作业的最大超时时间，适用于所有导入，单位为秒。|
 |min_load_timeout_second|1|导入作业的最小超时时间，适用于所有导入，单位为秒。|
-|max_running_txn_num_per_db|100|StarRocks 集群每个数据库中正在运行的导入相关事务的最大个数，默认值为 `100`。<br>当数据库中正在运行的导入相关事务超过最大个数限制时，后续的导入不会执行。如果是同步的导入作业请求，作业会被拒绝；如果是异步的导入作业请求，作业会在队列中等待。不建议调大该值，会增加系统负载。|
-|load_parallel_instance_num|1|单个 BE 上每个作业允许的最大并发实例数。|
+|max_running_txn_num_per_db|1000|StarRocks 集群每个数据库中正在运行的导入相关事务的最大个数，默认值为 `1000`。自 3.1 版本起，默认值由 100 变为 1000。<br>当数据库中正在运行的导入相关事务超过最大个数限制时，后续的导入不会执行。如果是同步的导入作业请求，作业会被拒绝；如果是异步的导入作业请求，作业会在队列中等待。不建议调大该值，会增加系统负载。|
+|load_parallel_instance_num|1|单个 BE 上每个作业允许的最大并发实例数。自 3.1 版本起弃用。|
 |disable_load_job|FALSE|是否禁用任何导入任务，集群出问题时的止损措施。|
 |history_job_keep_max_second|604800|历史任务最大的保留时长，例如 schema change 任务，单位为秒。|
 |label_keep_max_num|1000|一定时间内所保留导入任务的最大数量。超过之后历史导入作业的信息会被删除。|
@@ -142,7 +142,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |catalog_trash_expire_second|86400|删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以在恢复，单位为秒。|
 |alter_table_timeout_second|86400|Schema change 超时时间，单位为秒。|
 |recover_with_empty_tablet|FALSE|在 tablet 副本丢失/损坏时，是否使用空的 tablet 代替。<br>这样可以保证在有 tablet 副本丢失/损坏时，query 依然能被执行（但是由于缺失了数据，结果可能是错误的）。默认为 false，不进行替代，查询会失败。|
-|tablet_create_timeout_second|10|创建 tablet 的超时时长，单位为秒。|
+|tablet_create_timeout_second|10|创建 tablet 的超时时长，单位为秒。自 3.1 版本起，默认值由 1 改为 10。|
 |tablet_delete_timeout_second|2|删除 tablet 的超时时长，单位为秒。|
 |check_consistency_default_timeout_second|600|副本一致性检测的超时时间，单位为秒。|
 |tablet_sched_slot_num_per_path|8|一个 BE 存储目录能够同时执行 tablet 相关任务的数目。参数别名 `schedule_slot_num_per_path`。从 2.5 版本开始，该参数默认值从 2.4 版本的 `4` 变为 `8`。|
@@ -379,14 +379,14 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | min_compaction_failure_interval_sec                   | 120         | second | Tablet Compaction 失败之后，再次被调度的间隔。               |
 | periodic_counter_update_period_ms                     | 500         | ms     | Counter 统计信息的间隔。                                     |
 | load_error_log_reserve_hours                          | 48          | hour   | 导入数据信息保留的时长。                                     |
-| streaming_load_max_mb                                 | 10240       | MB     | 流式导入单个文件大小的上限。                                 |
+| streaming_load_max_mb                                 | 102400       | MB     | 流式导入单个文件大小的上限。 自 3.0 版本起，默认值由 10240 变为 102400。                               |
 | streaming_load_max_batch_size_mb                      | 100         | MB     | 流式导入单个 JSON 文件大小的上限。                             |
 | memory_maintenance_sleep_time_s                       | 10          | second | 触发 ColumnPool GC 任务的时间间隔。StarRocks 会周期运行 GC 任务，尝试将空闲内存返还给操作系统。 |
 | write_buffer_size                                     | 104857600   | Byte   | MemTable 在内存中的 buffer 大小，超过这个限制会触发 flush。      |
 | tablet_stat_cache_update_interval_second              | 300         | second | Tablet Stat Cache 的更新间隔。                                |
 | result_buffer_cancelled_interval_time                 | 300         | second | BufferControlBlock 释放数据的等待时间。                         |
 | thrift_rpc_timeout_ms                                 | 5000        | ms     | Thrift 超时的时长，单位为 ms。                               |
-| txn_commit_rpc_timeout_ms                             | 20000       | ms     | Txn 超时的时长，单位为 ms。                                  |
+| txn_commit_rpc_timeout_ms                             | 20000       | ms     | Txn 超时的时长，单位为 ms。 自 3.1 版本弃用，通过 `time_out` 设置事务超时时间。           |
 | max_consumer_num_per_group                            | 3           | N/A    | Routine load 中，每个consumer group 内最大的 consumer 数量。     |
 | max_memory_sink_batch_count                           | 20          | N/A    | Scan cache 的最大缓存批次数量。                                 |
 | scan_context_gc_interval_min                          | 5           | Minute | Scan context 的清理间隔。                                     |
@@ -400,6 +400,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | max_runnings_transactions_per_txn_map                 | 100         | N/A    | 每个分区内部同时运行的最大事务数量。            |
 | tablet_max_pending_versions                           | 1000        | N/A    | Primary Key 表每个 tablet 上允许已提交 (committed) 但是未 apply 的最大版本数。    |
 | tablet_max_versions                           | 1000        | N/A    | 每个 tablet 上允许的最大版本数。如果超过该值，新的写入请求会失败。     |
+|alter_tablet_worker_count|3|进行 schema change 的线程数。自 2.5 版本起，该参数由静态变为动态。|
 | max_hdfs_file_handle                                  | 1000        | N/A    | 最多可以打开的 HDFS 文件句柄数量。                             |
 | be_exit_after_disk_write_hang_second                  | 60          | second | 磁盘挂起后触发 BE 进程退出的等待时间。                       |
 | min_cumulative_compaction_failure_interval_sec       | 30          | second | Cumulative Compaction 失败后的最小重试间隔。                      |
@@ -407,8 +408,11 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | size_tiered_level_multiple                            | 5           | N/A    | Size-tiered Compaction 策略中，相邻两个 level 之间相差的数据量的倍数。 |
 | size_tiered_min_level_size                            | 131072      | Byte   | Size-tiered Compaction 策略中，最小 level 的大小，小于此数值的 rowset 会直接触发 compaction。 |
 | storage_page_cache_limit | 20% | N/A | PageCache 的容量，STRING，可写为容量大小，例如： `20G`、`20480M`、`20971520K` 或 `21474836480B`。也可以写为 PageCache 占系统内存的比例，例如，`20%`。该参数仅在 `disable_storage_page_cache` 为 `false` 时生效。|
+|disable_storage_page_cache|FALSE|是否开启 PageCache。开启 PageCache 后，StarRocks 会缓存最近扫描过的数据，对于查询重复性高的场景，会大幅提升查询效率。`true` 表示不开启。自 2.4 版本起，该参数默认值由 `true` 变更为 `false`。自 3.1 版本起，该参数由静态变为动态。|
 |max_compaction_concurrency|-1| N/A | Compaction 线程数上限（即 BaseCompaction + CumulativeCompaction 的最大并发）。该参数防止 Compaction 占用过多内存。 -1 代表没有限制。0 表示不允许 compaction。|
 | internal_service_async_thread_num | 10 | N/A | 单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。|
+|max_garbage_sweep_interval|3600|磁盘进行垃圾清理的最大间隔。自 3.0 版本起，该参数由静态变为动态。|
+|min_garbage_sweep_interval|180|磁盘进行垃圾清理的最小间隔。自 3.0 版本起，该参数由静态变为动态。|
 
 ### 配置 BE 静态参数
 
@@ -432,7 +436,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |push_worker_count_high_priority|3|导入线程数，处理 HIGH 优先级任务。|
 |transaction_publish_version_worker_count|0|生效版本的最大线程数。当该参数被设置为小于或等于 `0` 时，系统默认使用 CPU 核数的一半，以避免因使用固定值而导致在导入并行较高时线程资源不足。自 2.5 版本起，默认值由 `8` 变更为 `0`。|
 |clear_transaction_task_worker_count|1|清理事务的线程数。|
-|alter_tablet_worker_count|3|进行 schema change 的线程数。|
 |clone_worker_count|3|克隆的线程数。|
 |storage_medium_migrate_count|1|介质迁移的线程数，SATA 迁移到 SSD。|
 |check_consistency_worker_count|1|计算 tablet 的校验和 (checksum)。|
@@ -454,12 +457,9 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |max_length_for_to_base64|200000|to_base64() 函数输入值的最大长度。单位：字节。|
 |max_percentage_of_error_disk|0|磁盘错误达到一定比例，BE 退出。|
 |max_tablet_num_per_shard|1024|每个 shard 的 tablet 数目，用于划分 tablet，防止单个目录下 tablet 子目录过多。|
-|max_garbage_sweep_interval|3600|磁盘进行垃圾清理的最大间隔。|
-|min_garbage_sweep_interval|180|磁盘进行垃圾清理的最小间隔。|
 |file_descriptor_cache_capacity|16384|文件句柄缓存的容量。|
 |min_file_descriptor_number|60000|BE 进程的文件句柄 limit 要求的下线。|
 |index_stream_cache_capacity|10737418240|BloomFilter/Min/Max 等统计信息缓存的容量。|
-|disable_storage_page_cache|FALSE|是否开启 PageCache。开启 PageCache 后，StarRocks 会缓存最近扫描过的数据，对于查询重复性高的场景，会大幅提升查询效率。`true` 表示不开启。自 2.4 版本起，该参数默认值由 `true` 变更为 `false`。|
 |base_compaction_num_threads_per_disk|1|每个磁盘 BaseCompaction 线程的数目。|
 |base_cumulative_delta_ratio|0.3|BaseCompaction 触发条件之一：Cumulative 文件大小达到 Base 文件的比例。|
 |compaction_trace_threshold|60|单次 Compaction 打印 trace 的时间阈值，如果单次 compaction 时间超过该阈值就打印 trace，单位为秒。|

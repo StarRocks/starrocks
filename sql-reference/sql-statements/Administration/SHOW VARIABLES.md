@@ -54,7 +54,6 @@ mysql> SHOW VARIABLES LIKE '%imeou%';
 | query_delivery_timeout             | 300   |
 | query_queue_pending_timeout_second | 300   |
 | query_timeout                      | 300   |
-| tx_visible_wait_timeout            | 10    |
 | wait_timeout                       | 28800 |
 +------------------------------------+-------+
 9 rows in set (0.00 sec)
