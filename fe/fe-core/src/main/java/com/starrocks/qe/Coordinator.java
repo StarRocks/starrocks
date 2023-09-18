@@ -1929,6 +1929,10 @@ public class Coordinator {
             RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
             Preconditions.checkNotNull(commonMetrics);
 
+            if (commonMetrics.containsInfoString("IsChild")) {
+                continue;
+            }
+
             Counter closeTime = commonMetrics.getCounter("CloseTime");
             Counter minCloseTime = commonMetrics.getCounter("__MIN_OF_CloseTime");
             if (closeTime != null && closeTime.getValue() == 0 ||
@@ -2015,9 +2019,11 @@ public class Coordinator {
 
         // fake backendExecState, only user for stream load profile
         public BackendExecState(TUniqueId fragmentInstanceId, TNetworkAddress address) {
-            String name = "Instance " + DebugUtil.printId(fragmentInstanceId);
+            String instanceId = DebugUtil.printId(fragmentInstanceId);
+            String name = "Instance " + instanceId;
             this.profile = new RuntimeProfile(name);
             this.profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
+            this.profile.addInfoString("InstanceId", instanceId);
         }
 
         public BackendExecState(PlanFragmentId fragmentId, TNetworkAddress host, int profileFragmentId,
@@ -2040,11 +2046,11 @@ public class Coordinator {
             // if useComputeNode and it's olapScan now, backend is null ,need get from olapScanNodeIdToComputeNode
             this.backend = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(addressToBackendID.get(address));
 
-            String name =
-                    "Instance " + DebugUtil.printId(uniqueRpcParams.params.fragment_instance_id) + " (host=" + address +
-                            ")";
+            String instanceId = DebugUtil.printId(uniqueRpcParams.params.fragment_instance_id);
+            String name = "Instance " + instanceId + " (host=" + address + ")";
             this.profile = new RuntimeProfile(name);
             this.profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
+            this.profile.addInfoString("InstanceId", instanceId);
             this.hasCanceled = false;
             this.lastMissingHeartbeatTime = backend.getLastMissingHeartbeatTime();
         }

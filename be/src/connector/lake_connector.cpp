@@ -536,28 +536,15 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, segment_init_name);
     _seg_rt_filtered_counter =
-<<<<<<< HEAD
-            ADD_CHILD_COUNTER(_runtime_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
-    _zm_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, "SegmentInit");
-    _sk_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT, "SegmentInit");
-    _column_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnIteratorInit", "SegmentInit");
-    _bitmap_index_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexIteratorInit", "SegmentInit");
-    _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFiter", "SegmentInit");
-    _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", "SegmentInit");
-    _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", "SegmentInit");
-=======
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, segment_init_name);
     _zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, segment_init_name);
     _sk_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT, segment_init_name);
-    _rows_key_range_counter =
-            ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyRangeNumber", TUnit::UNIT, segment_init_name);
     _column_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnIteratorInit", segment_init_name);
     _bitmap_index_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexIteratorInit", segment_init_name);
     _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFiter", segment_init_name);
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", segment_init_name);
     _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", segment_init_name);
->>>>>>> d3a1c4642b ([Enhancement] Refine profile to support visualization refactor(3) (#30975))
 
     // SegmentRead
     const std::string segment_read_name = "SegmentRead";
@@ -606,19 +593,13 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _io_count_total_counter = ADD_CHILD_COUNTER(_runtime_profile, "IOCountTotal", TUnit::UNIT, io_statistics_name);
     _io_count_request_counter = ADD_CHILD_COUNTER(_runtime_profile, "IOCountRequest", TUnit::UNIT, io_statistics_name);
     // IO time
-<<<<<<< HEAD
-    _io_ns_local_disk_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeLocalDisk", "IOStatistics");
-    _io_ns_remote_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeRemote", "IOStatistics");
-    _io_ns_total_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeTotal", "IOStatistics");
-    // Prefetch
-    _prefetch_hit_counter = ADD_CHILD_COUNTER(_runtime_profile, "PrefetchHitCount", TUnit::UNIT, "IOStatistics");
-    _prefetch_wait_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchWaitFinishTime", "IOStatistics");
-    _prefetch_pending_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchPendingTime", "IOStatistics");
-=======
     _io_ns_local_disk_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeLocalDisk", io_statistics_name);
     _io_ns_remote_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeRemote", io_statistics_name);
     _io_ns_total_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeTotal", io_statistics_name);
->>>>>>> d3a1c4642b ([Enhancement] Refine profile to support visualization refactor(3) (#30975))
+    // Prefetch
+    _prefetch_hit_counter = ADD_CHILD_COUNTER(_runtime_profile, "PrefetchHitCount", TUnit::UNIT, io_statistics_name);
+    _prefetch_wait_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchWaitFinishTime", io_statistics_name);
+    _prefetch_pending_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchPendingTime", io_statistics_name);
 }
 
 void LakeDataSource::update_realtime_counter(Chunk* chunk) {
@@ -722,14 +703,10 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_io_ns_local_disk_timer, _reader->stats().io_ns_local_disk);
     COUNTER_UPDATE(_io_ns_remote_timer, _reader->stats().io_ns_remote);
     COUNTER_UPDATE(_io_ns_total_timer, _reader->stats().io_ns);
-<<<<<<< HEAD
-    COUNTER_UPDATE(_io_statistics_timer, _reader->stats().io_ns);
 
     COUNTER_UPDATE(_prefetch_hit_counter, _reader->stats().prefetch_hit_count);
     COUNTER_UPDATE(_prefetch_wait_finish_timer, _reader->stats().prefetch_wait_finish_ns);
     COUNTER_UPDATE(_prefetch_pending_timer, _reader->stats().prefetch_pending_ns);
-=======
->>>>>>> d3a1c4642b ([Enhancement] Refine profile to support visualization refactor(3) (#30975))
 }
 
 // ================================
