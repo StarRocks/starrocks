@@ -221,6 +221,7 @@ struct TQueryOptions {
   102: optional bool enable_collect_table_level_scan_stats;
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
+  105: optional bool use_column_pool = true;
 }
 
 
