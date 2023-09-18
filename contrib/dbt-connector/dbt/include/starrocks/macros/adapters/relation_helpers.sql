@@ -25,6 +25,13 @@
   {%- set buckets = config.get('buckets', 10) -%}
   {%- set distributed_by = config.get('distributed_by') -%}
   {%- set properties = config.get('properties') -%}
+  {%- set materialized = config.get('materialized', none) -%}
+  {%- set unique_key = config.get('unique_key', none) -%}
+
+  {%- if materialized == 'incremental' and unique_key is not none -%}
+    {%- set table_type = 'PRIMARY' -%}
+    {%- set keys = [unique_key] -%}
+  {%- endif -%}
 
   {%- if properties is none -%}
         {%- set properties = config.get('properties', {"replication_num":"1"}) -%}
