@@ -361,8 +361,12 @@ TEST_P(StarletFileSystemTest, test_delete_files) {
 
     EXPECT_OK(fs->path_exists(uri1));
     EXPECT_OK(fs->path_exists(uri2));
-    std::vector<std::string> paths{uri1, uri2};
 
+    std::vector<std::string> paths;
+    EXPECT_OK(fs->delete_files(paths));
+
+    paths.emplace_back(uri1);
+    paths.emplace_back(uri2);
     EXPECT_OK(fs->delete_files(paths));
     EXPECT_TRUE(fs->path_exists(uri1).is_not_found());
     EXPECT_TRUE(fs->path_exists(uri2).is_not_found());

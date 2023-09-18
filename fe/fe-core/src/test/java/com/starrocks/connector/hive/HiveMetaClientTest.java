@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.hive;
 
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -25,12 +26,16 @@ import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.MetaException;
+import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.thrift.TException;
+import org.apache.thrift.transport.TTransportException;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -38,12 +43,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
-
 public class HiveMetaClientTest {
     @Test
     public void testClientPool(@Mocked HiveMetaStoreClient metaStoreClient) throws Exception {
-        RecyclableClient.clear();
         new Expectations() {
             {
                 metaStoreClient.getTable(anyString, anyString);
@@ -67,7 +69,8 @@ public class HiveMetaClientTest {
         HiveConf hiveConf = new HiveConf();
         hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:9030");
         HiveMetaClient client = new HiveMetaClient(hiveConf);
-        int poolSize = RecyclableClient.MAX_HMS_CONNECTION_POOL_SIZE;
+        // NOTE: this is HiveMetaClient.MAX_HMS_CONNECTION_POOL_SIZE
+        int poolSize = 32;
 
         // call client method concurrently,
         // and make sure the number of hive clients will not exceed poolSize
@@ -104,9 +107,8 @@ public class HiveMetaClientTest {
         }
     }
 
-    public void testRecyclableClientWithType(@Mocked HiveMetaStoreClient metaStoreClient, String metaStoreType)
-            throws TException, InterruptedException {
-        RecyclableClient.clear();
+    @Test
+    public void testRecyclableClient(@Mocked HiveMetaStoreClient metaStoreClient) throws TException {
         new Expectations() {
             {
                 metaStoreClient.getTable(anyString, anyString);
@@ -125,7 +127,6 @@ public class HiveMetaClientTest {
         };
 
         HiveConf hiveConf = new HiveConf();
-        hiveConf.set(HIVE_METASTORE_TYPE, metaStoreType);
         hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
         HiveMetaClient client = new HiveMetaClient(hiveConf);
         try {
@@ -149,27 +150,6 @@ public class HiveMetaClientTest {
         client.getTable("db", "tbl");
         Assert.assertEquals(1, client.getClientSize());
 
-        Thread[] threads = new Thread[2 * RecyclableClient.MAX_HMS_CONNECTION_POOL_SIZE];
-        for (int i = 0; i < threads.length; i++) {
-            Thread r = new Thread(() -> {
-                client.getTable("db", "tbl");
-            });
-            threads[i] = r;
-        }
-        for (int i = 0; i < threads.length; i++) {
-            threads[i].start();
-        }
-        for (int i = 0; i < threads.length; i++) {
-            threads[i].join();
-        }
-    }
-
-    @Test
-    public void testRecyclableClient(@Mocked HiveMetaStoreClient metaStoreClient)
-            throws TException, InterruptedException {
-        testRecyclableClientWithType(metaStoreClient, RecyclableClient.DLF_HIVE_METASTORE);
-        testRecyclableClientWithType(metaStoreClient, RecyclableClient.GLUE_HIVE_METASTORE);
-        testRecyclableClientWithType(metaStoreClient, RecyclableClient.HADOOP_HIVE_METASTORE);
     }
 
     @Test
@@ -228,6 +208,61 @@ public class HiveMetaClientTest {
         hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
         HiveMetaClient client = new HiveMetaClient(hiveConf);
         client.dropTable("hive_db", "hive_table");
+    }
+
+    @Test
+    public void testForCoverage(@Mocked HiveMetaStoreClient metaStoreClient) throws TException {
+        Partition partition = new Partition();
+        String dbName = "hive_db";
+        String tblName = "hive_table";
+
+        new Expectations() {
+            {
+                metaStoreClient.alter_table(dbName, tblName, null);
+                result = any;
+
+                metaStoreClient.alter_partition(dbName, tblName, partition);
+                result = any;
+
+                metaStoreClient.listPartitionNames(dbName, tblName, (short) -1);
+                result = any;
+
+                metaStoreClient.listPartitionNames(dbName, tblName, new ArrayList<String>(), (short) -1);
+                result = any;
+
+                metaStoreClient.getPartitionsByNames(dbName, tblName, new ArrayList<>());
+                result = new TException("something wrong");
+
+                metaStoreClient.getPartitionsByNames(dbName, tblName, Arrays.asList("retry"));
+                result = new TTransportException("something wrong");
+
+                metaStoreClient.getTableColumnStatistics(dbName, tblName, new ArrayList<>());
+                result = any;
+
+                metaStoreClient.getPartitionColumnStatistics(dbName, tblName, new ArrayList<>(), new ArrayList<>());
+                result = any;
+
+                metaStoreClient.getNextNotification(0, 0, null);
+                result = any;
+            }
+        };
+        HiveConf hiveConf = new HiveConf();
+        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
+        HiveMetaClient client = new HiveMetaClient(hiveConf);
+        client.alterTable(dbName, tblName, null);
+        client.alterPartition("hive_db", "hive_table", partition);
+        client.getPartitionKeys(dbName, tblName);
+        client.getPartitionKeysByValue(dbName, tblName, new ArrayList<String>());
+
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> client.getPartitionsByNames(dbName, tblName, new ArrayList<>()));
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> client.getPartitionsByNames(dbName, tblName, Arrays.asList("retry")));
+
+        client.getTableColumnStats(dbName, tblName, new ArrayList<>());
+        client.getPartitionColumnStats(dbName, tblName, new ArrayList<>(), new ArrayList<>());
+        client.getNextNotification(0, 0, null);
+
     }
 }
 

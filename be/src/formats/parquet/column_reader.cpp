@@ -178,10 +178,10 @@ public:
         column = dict_code_column;
     }
 
-    void filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
-                            const size_t& layer) override {
+    Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+                              const size_t& layer) override {
         DCHECK_EQ(sub_field_path.size(), layer);
-        _dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data());
+        return _dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data());
     }
 
     Status fill_dst_column(ColumnPtr& dst, const ColumnPtr& src) override {
@@ -737,20 +737,39 @@ public:
         size_t origin_rows_to_skip = _opts.context->rows_to_skip;
 
         // Fill data for subfield column reader
+        bool first_read = true;
+        size_t real_read = 0;
         for (size_t i = 0; i < field_names.size(); i++) {
             const auto& field_name = field_names[i];
-            Column* child_column = struct_column->field_column(field_name).get();
             if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
                 if (_child_readers[field_name] != nullptr) {
+                    Column* child_column = struct_column->field_column(field_name).get();
                     _opts.context->next_row = origin_next_row;
                     _opts.context->rows_to_skip = origin_rows_to_skip;
                     RETURN_IF_ERROR(_child_readers[field_name]->prepare_batch(num_records, child_column));
-                } else {
-                    child_column->append_default(*num_records);
+                    size_t current_real_read = child_column->size();
+                    real_read = first_read ? current_real_read : real_read;
+                    first_read = false;
+                    if (UNLIKELY(real_read != current_real_read)) {
+                        return Status::InternalError(strings::Substitute("Unmatched row count, $0", field_name));
+                    }
                 }
             } else {
                 return Status::InternalError(
                         strings::Substitute("there is no match subfield reader for $1", field_name));
+            }
+        }
+
+        if (UNLIKELY(first_read)) {
+            return Status::InternalError(
+                    strings::Substitute("All used subfield of struct type $1 is not exist", _field->name));
+        }
+
+        for (size_t i = 0; i < field_names.size(); i++) {
+            const auto& field_name = field_names[i];
+            if (_child_readers[field_name] == nullptr) {
+                Column* child_column = struct_column->field_column(field_name).get();
+                child_column->append_default(real_read);
             }
         }
 
@@ -786,18 +805,33 @@ public:
         DCHECK_EQ(field_names.size(), _child_readers.size());
 
         // Fill data for subfield column reader
+        size_t real_read = 0;
+        bool first_read = true;
         for (size_t i = 0; i < field_names.size(); i++) {
             const auto& field_name = field_names[i];
-            Column* child_column = struct_column->field_column(field_name).get();
             if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
                 if (_child_readers[field_name] != nullptr) {
+                    Column* child_column = struct_column->field_column(field_name).get();
                     RETURN_IF_ERROR(_child_readers[field_name]->read_range(range, filter, child_column));
-                } else {
-                    child_column->append_default(range.span_size());
+                    real_read = child_column->size();
+                    first_read = false;
                 }
             } else {
                 return Status::InternalError(
                         strings::Substitute("there is no match subfield reader for $1", field_name));
+            }
+        }
+
+        if (UNLIKELY(first_read)) {
+            return Status::InternalError(
+                    strings::Substitute("All used subfield of struct type $1 is not exist", _field->name));
+        }
+
+        for (size_t i = 0; i < field_names.size(); i++) {
+            const auto& field_name = field_names[i];
+            if (_child_readers[field_name] == nullptr) {
+                Column* child_column = struct_column->field_column(field_name).get();
+                child_column->append_default(real_read);
             }
         }
 
@@ -880,8 +914,8 @@ public:
                                                            layer + 1);
     }
 
-    void filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
-                            const size_t& layer) override {
+    Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+                              const size_t& layer) override {
         const std::string& sub_field = sub_field_path[layer];
         StructColumn* struct_column = nullptr;
         if (column->is_nullable()) {

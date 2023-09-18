@@ -68,6 +68,7 @@ import com.starrocks.catalog.MetadataViewer;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -81,7 +82,6 @@ import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
@@ -195,6 +195,7 @@ import com.starrocks.sql.ast.ShowProcesslistStmt;
 import com.starrocks.sql.ast.ShowProfilelistStmt;
 import com.starrocks.sql.ast.ShowRepositoriesStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowResourceGroupUsageStmt;
 import com.starrocks.sql.ast.ShowResourcesStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
@@ -305,6 +306,8 @@ public class ShowExecutor {
             handleShowProfilelist();
         } else if (stmt instanceof ShowRunningQueriesStmt) {
             handleShowRunningQueries();
+        } else if (stmt instanceof ShowResourceGroupUsageStmt) {
+            handleShowResourceGroupUsage();
         } else if (stmt instanceof ShowEnginesStmt) {
             handleShowEngines();
         } else if (stmt instanceof ShowFunctionsStmt) {
@@ -747,6 +750,26 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
+    private void handleShowResourceGroupUsage() {
+        ShowResourceGroupUsageStmt showStmt = (ShowResourceGroupUsageStmt) stmt;
+        List<List<String>> rows = Lists.newArrayList();
+
+        GlobalStateMgr.getCurrentSystemInfo().backendAndComputeNodeStream()
+                .flatMap(worker -> worker.getResourceGroupUsages().stream()
+                        .map(usage -> new ShowResourceGroupUsageStmt.ShowItem(worker, usage)))
+                .filter(item -> showStmt.getGroupName() == null ||
+                        showStmt.getGroupName().equals(item.getUsage().getGroup().getName()))
+                .sorted()
+                .forEach(item -> {
+                    List<String> row = ShowResourceGroupUsageStmt.getColumnSuppliers().stream()
+                            .map(columnSupplier -> columnSupplier.apply(item))
+                            .collect(Collectors.toList());
+                    rows.add(row);
+                });
+
+        resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
+    }
+
     // Handle show authors
     private void handleEmpty() {
         // Only success
@@ -1089,10 +1112,8 @@ public class ShowExecutor {
         createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
-        }
-        String storageVolumeId = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeIdOfDb(db.getId());
-        if (!Strings.isNullOrEmpty(storageVolumeId)) {
-            String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeName(storageVolumeId);
+        } else if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
             createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
         }
         rows.add(Lists.newArrayList(showStmt.getDb(), createSqlBuilder.toString()));
@@ -1296,7 +1317,7 @@ public class ShowExecutor {
                 final String columnType = col.getType().canonicalName().toLowerCase();
                 final String isAllowNull = col.isAllowNull() ? "YES" : "NO";
                 final String isKey = col.isKey() ? "YES" : "NO";
-                String defaultValue = FeConstants.NULL_STRING;
+                String defaultValue = null;
                 if (!col.getType().isOnlyMetricType()) {
                     defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
                 }
@@ -1866,7 +1887,7 @@ public class ShowExecutor {
                     long indexSize = 0;
                     long indexReplicaCount = 0;
                     long indexRowCount = 0;
-                    for (Partition partition : olapTable.getAllPartitions()) {
+                    for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
                         MaterializedIndex mIndex = partition.getIndex(indexId);
                         indexSize += mIndex.getDataSize();
                         indexReplicaCount += mIndex.getReplicaCount();
@@ -1958,14 +1979,15 @@ public class ShowExecutor {
                     tableName = table.getName();
 
                     OlapTable olapTable = (OlapTable) table;
-                    Partition partition = olapTable.getPartition(partitionId);
-                    if (partition == null) {
+                    PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(partitionId);
+                    if (physicalPartition == null) {
                         isSync = false;
                         break;
                     }
+                    Partition partition = olapTable.getPartition(physicalPartition.getParentId());
                     partitionName = partition.getName();
 
-                    MaterializedIndex index = partition.getIndex(indexId);
+                    MaterializedIndex index = physicalPartition.getIndex(indexId);
                     if (index == null) {
                         isSync = false;
                         break;
@@ -2057,22 +2079,24 @@ public class ShowExecutor {
                     if (stop) {
                         break;
                     }
-                    for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
-                        if (indexId > -1 && index.getId() != indexId) {
-                            continue;
-                        }
-                        if (olapTable.isCloudNativeTableOrMaterializedView()) {
-                            LakeTabletsProcDir procNode = new LakeTabletsProcDir(db, olapTable, index);
-                            tabletInfos.addAll(procNode.fetchComparableResult());
-                        } else {
-                            LocalTabletsProcDir procDir = new LocalTabletsProcDir(db, olapTable, index);
-                            tabletInfos.addAll(procDir.fetchComparableResult(
-                                    showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState()));
-                        }
-                        if (sizeLimit > -1 && CollectionUtils.isEmpty(showStmt.getOrderByPairs())
-                                && tabletInfos.size() >= sizeLimit) {
-                            stop = true;
-                            break;
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                            if (indexId > -1 && index.getId() != indexId) {
+                                continue;
+                            }
+                            if (olapTable.isCloudNativeTableOrMaterializedView()) {
+                                LakeTabletsProcDir procNode = new LakeTabletsProcDir(db, olapTable, index);
+                                tabletInfos.addAll(procNode.fetchComparableResult());
+                            } else {
+                                LocalTabletsProcDir procDir = new LocalTabletsProcDir(db, olapTable, index);
+                                tabletInfos.addAll(procDir.fetchComparableResult(
+                                        showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState()));
+                            }
+                            if (sizeLimit > -1 && CollectionUtils.isEmpty(showStmt.getOrderByPairs())
+                                    && tabletInfos.size() >= sizeLimit) {
+                                stop = true;
+                                break;
+                            }
                         }
                     }
                 }
@@ -2644,7 +2668,7 @@ public class ShowExecutor {
                             if (!InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(row.get(0))) {
 
                                 try {
-                                    Authorizer.checkAnyActionOnOrInCatalog(
+                                    Authorizer.checkAnyActionOnCatalog(
                                             connectContext.getCurrentUserIdentity(),
                                             connectContext.getCurrentRoleIds(), row.get(0));
                                 } catch (AccessDeniedException e) {

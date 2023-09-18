@@ -59,6 +59,10 @@ public class AnalyticWindow implements ParseNode {
             new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING, null),
             new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.CURRENT_ROW, null));
 
+    public static final AnalyticWindow DEFAULT_UNBOUNDED_WINDOW = new AnalyticWindow(AnalyticWindow.Type.ROWS,
+            new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING, null),
+            new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING, null));
+
     public enum Type {
         ROWS("ROWS"),
         RANGE("RANGE");

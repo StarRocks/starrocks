@@ -276,7 +276,13 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
 
         // do evaluation with dictionary.
-        ExecNode::eval_conjuncts(_scanner_ctx.conjunct_ctxs_by_slot.at(slot_id), dict_value_chunk.get(), filter_ptr);
+        Status status = ExecNode::eval_conjuncts(_scanner_ctx.conjunct_ctxs_by_slot.at(slot_id), dict_value_chunk.get(),
+                                                 filter_ptr);
+        if (!status.ok()) {
+            LOG(WARNING) << "eval conjuncts fails: " << status.message();
+            return false;
+        }
+
         if (dict_value_chunk->num_rows() == 0) {
             // release memory early.
             _dict_filter_eval_cache.clear();
@@ -532,7 +538,7 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* stripe_number_counter = nullptr;
     RuntimeProfile* root = profile->runtime_profile;
 
-    ADD_COUNTER(root, kORCProfileSectionPrefix, TUnit::UNIT);
+    ADD_COUNTER(root, kORCProfileSectionPrefix, TUnit::NONE);
 
     delete_build_timer = ADD_CHILD_TIMER(root, "DeleteBuildTimer", kORCProfileSectionPrefix);
     delete_file_per_scan_counter = ADD_CHILD_COUNTER(root, "DeleteFilesPerScan", TUnit::UNIT, kORCProfileSectionPrefix);

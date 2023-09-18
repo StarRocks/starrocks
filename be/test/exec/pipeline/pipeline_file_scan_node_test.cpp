@@ -216,7 +216,8 @@ DescriptorTbl* PipeLineFileScanNodeTest::_create_table_desc(const std::vector<Ty
     tuple_desc_builder.build(&desc_tbl_builder);
 
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(_runtime_state, _pool, desc_tbl_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    CHECK(DescriptorTbl::create(_runtime_state, _pool, desc_tbl_builder.desc_tbl(), &tbl, config::vector_chunk_size)
+                  .ok());
 
     _runtime_state->set_desc_tbl(tbl);
     return tbl;
@@ -251,10 +252,12 @@ void PipeLineFileScanNodeTest::execute_pipeline() {
             [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
     ASSERT_TRUE(prepare_status.ok());
 
-    _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
-        exec_env->wg_driver_executor()->submit(driver.get());
-        return Status::OK();
-    });
+    ASSERT_TRUE(_fragment_ctx
+                        ->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
+                            exec_env->wg_driver_executor()->submit(driver.get());
+                            return Status::OK();
+                        })
+                        .ok());
 }
 
 void PipeLineFileScanNodeTest::generate_morse_queue(const std::vector<starrocks::ConnectorScanNode*>& scan_nodes,
@@ -333,7 +336,7 @@ class TestFileScanSinkOperator : public Operator {
 public:
     TestFileScanSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                              CounterPtr counter)
-            : Operator(factory, id, "test_sink", plan_node_id, driver_sequence), _counter(std::move(counter)) {}
+            : Operator(factory, id, "test_sink", plan_node_id, false, driver_sequence), _counter(std::move(counter)) {}
     ~TestFileScanSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override {
@@ -360,7 +363,6 @@ public:
 
 private:
     CounterPtr _counter;
-    bool _is_finishing = false;
     bool _is_finished = false;
 };
 

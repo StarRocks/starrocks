@@ -386,7 +386,7 @@ public class SchemaChangeHandler extends AlterHandler {
             Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
         Column modColumn = alterClause.getColumn();
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
-            if (olapTable.getBaseColumn(modColumn.getName()).isKey()) {
+            if (olapTable.getBaseColumn(modColumn.getName()) != null && olapTable.getBaseColumn(modColumn.getName()).isKey()) {
                 throw new DdlException("Can not modify key column: " + modColumn.getName() + " for primary key table");
             }
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
@@ -590,13 +590,30 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
 
+            String originalModColumnName = modColumn.getName();
+            if (typeChanged) {
+                /*
+                 * In new alter table process (AlterJobV2), any modified columns are treated as new columns.
+                 * But the modified columns' name does not changed. So in order to distinguish this, we will add
+                 * a prefix in the name of these modified columns.
+                 * This prefix only exist during the schema change process. Once the schema change is finished,
+                 * it will be removed.
+                 *
+                 * After adding this prefix, modify a column is just same as 'add' a column.
+                 *
+                 * And if the column type is not changed, the same column name is still to the same column type,
+                 * so no need to add prefix.
+                 */
+                modColumn.setName(SHADOW_NAME_PRFIX + originalModColumnName);
+            }
+
             if (KeysType.AGG_KEYS == olapTable.getKeysType() || KeysType.UNIQUE_KEYS == olapTable.getKeysType() ||
                     KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
                 for (Long otherIndexId : otherIndexIds) {
                     List<Column> otherIndexSchema = indexSchemaMap.get(otherIndexId);
                     modColIndex = -1;
                     for (int i = 0; i < otherIndexSchema.size(); i++) {
-                        if (otherIndexSchema.get(i).getName().equalsIgnoreCase(modColumn.getName())) {
+                        if (otherIndexSchema.get(i).getName().equalsIgnoreCase(originalModColumnName)) {
                             modColIndex = i;
                             break;
                         }
@@ -611,7 +628,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     List<Column> otherIndexSchema = indexSchemaMap.get(otherIndexId);
                     modColIndex = -1;
                     for (int i = 0; i < otherIndexSchema.size(); i++) {
-                        if (otherIndexSchema.get(i).getName().equalsIgnoreCase(modColumn.getName())) {
+                        if (otherIndexSchema.get(i).getName().equalsIgnoreCase(originalModColumnName)) {
                             modColIndex = i;
                             break;
                         }
@@ -631,23 +648,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
         } // end for handling other indices
-
-        if (typeChanged) {
-            /*
-             * In new alter table process (AlterJobV2), any modified columns are treated as new columns.
-             * But the modified columns' name does not changed. So in order to distinguish this, we will add
-             * a prefix in the name of these modified columns.
-             * This prefix only exist during the schema change process. Once the schema change is finished,
-             * it will be removed.
-             *
-             * After adding this prefix, modify a column is just same as 'add' a column.
-             *
-             * And if the column type is not changed, the same column name is still to the same column type,
-             * so no need to add prefix.
-             */
-            modColumn.setName(SHADOW_NAME_PRFIX + modColumn.getName());
-        }
-
     }
 
     private void processReorderColumn(ReorderColumnsClause alterClause, OlapTable olapTable,
@@ -1584,6 +1584,17 @@ public class SchemaChangeHandler extends AlterHandler {
         } else if (metaType == TTabletMetaType.REPLICATED_STORAGE) {
             metaValue = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE));
             if (metaValue == olapTable.enableReplicatedStorage()) {
+                return;
+            }
+        } else if (metaType == TTabletMetaType.BUCKET_SIZE) {
+            long bucketSize = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE));
+            if (bucketSize == olapTable.getAutomaticBucketSize()) {
+                return;
+            }
+        } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
+            int primaryIndexCacheExpireSec = Integer.parseInt(properties.get(
+                    PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
+            if (primaryIndexCacheExpireSec == olapTable.primaryIndexCacheExpireSec()) {
                 return;
             }
         } else {

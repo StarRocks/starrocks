@@ -223,7 +223,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return Joiner.on(":").join(name, createTime);
     }
 
-    public Map<String, String> getHiveProperties() {
+    @Override
+    public Map<String, String> getProperties() {
         // The user may alter the resource properties
         // So we do this to get the fresh properties
         Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);

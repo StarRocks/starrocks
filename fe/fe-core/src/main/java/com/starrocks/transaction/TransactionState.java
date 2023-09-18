@@ -44,7 +44,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
@@ -662,7 +662,7 @@ public class TransactionState implements Writable {
         indexIds.addAll(table.getIndexIdToMeta().keySet());
     }
 
-    public List<MaterializedIndex> getPartitionLoadedTblIndexes(long tableId, Partition partition) {
+    public List<MaterializedIndex> getPartitionLoadedTblIndexes(long tableId, PhysicalPartition partition) {
         List<MaterializedIndex> loadedIndex;
         if (loadedTblIndexes.isEmpty()) {
             loadedIndex = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);

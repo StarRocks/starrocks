@@ -57,40 +57,41 @@ public:
               _pool(),
               _num_rows(num_rows) {}
 
-    Status init(const ColumnIteratorOptions& opts) override;
+    [[nodiscard]] Status init(const ColumnIteratorOptions& opts) override;
 
-    Status seek_to_first() override {
+    [[nodiscard]] Status seek_to_first() override {
         _current_rowid = 0;
         return Status::OK();
     }
 
-    Status seek_to_ordinal(ordinal_t ord_idx) override {
+    [[nodiscard]] Status seek_to_ordinal(ordinal_t ord_idx) override {
         _current_rowid = ord_idx;
         return Status::OK();
     }
 
-    Status next_batch(size_t* n, Column* dst) override;
+    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const SparseRange<>& range, Column* dst) override;
+    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     ordinal_t get_current_ordinal() const override { return _current_rowid; }
 
-    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) override;
+    [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                                    const ColumnPredicate* del_predicate,
+                                                    SparseRange<>* row_ranges) override;
 
     bool all_page_dict_encoded() const override { return false; }
 
     int dict_lookup(const Slice& word) override { return -1; }
 
-    Status next_dict_codes(size_t* n, Column* dst) override {
+    [[nodiscard]] Status next_dict_codes(size_t* n, Column* dst) override {
         return Status::NotSupported("DefaultValueColumnIterator does not support");
     }
 
-    Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override {
+    [[nodiscard]] Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override {
         return Status::NotSupported("DefaultValueColumnIterator does not support");
     }
 
-    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+    [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
 private:
     bool _has_default_value;

@@ -19,7 +19,7 @@
     + [Check environment configurations](./deployment/environment_configurations.md)
     + [Prepare deployment files](./deployment/prepare_deployment_files.md)
   + Deploy
-    + Deploy classic StarRocks
+    + Deploy shared-nothing StarRocks
       + [Deploy StarRocks manually](./deployment/deploy_manually.md)
       + Deploy on Kubernetes
         + [Deploy StarRocks with Operator](./deployment/sr_operator.md)
@@ -53,9 +53,12 @@
   + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from HDFS](./loading/hdfs_load.md)
   + [Load data from cloud storage](./loading/cloud_storage_load.md)
+  + Load data from Apache Kafka®
+    + [Load data using Kafka connector](/loading/Kafka-connector-starrocks.md)
+    + [Load data using Routine Load](/loading/RoutineLoad.md)
   + [Continuously load data from Apache Kafka®](./loading/RoutineLoad.md)
-  + Load data using Apache Spark™
-    + [Load data using Spark Connector](./loading/Spark-connector-starrocks.md)
+  + Load data from Apache Spark™
+    + [Load data using Spark Connector (recommended)](./loading/Spark-connector-starrocks.md)
     + [Load data in bulk using Spark Load](./loading/SparkLoad.md)
   + [Load data using INSERT](./loading/InsertInto.md)
   + [Load data using Stream Load transaction interface](./loading/Stream_Load_transaction_interface.md)
@@ -85,8 +88,20 @@
   + [Data lake-related FAQ](./data_source/datalake_faq.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
-  + [Synchronous materialized view](./using_starrocks/Materialized_view-single_table.md)
-  + [Asynchronous materialized view](./using_starrocks/Materialized_view.md)
+  + [Synchronous materialized views](./using_starrocks/Materialized_view-single_table.md)
+  + Asynchronous materialized views
+    + [Overview](./using_starrocks/Materialized_view.md)
+    + Use cases
+      + [Data modeling](./using_starrocks/data_modeling_with_materialized_views.md)
+      + [Query rewrite](./using_starrocks/query_rewrite_with_materialized_views.md)
+      + [Data lake query acceleration](./using_starrocks/data_lake_query_acceleration_with_materialized_views.md)
+    + Usage
+      + [CREATE MATERIALIZED VIEW](./sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md)
+      + [ALTER MATERIALIZED VIEW](./sql-reference/sql-statements/data-definition/ALTER%20MATERIALIZED%20VIEW.md)
+      + [DROP MATERIALIZED VIEW](./sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md)
+      + [SHOW MATERIALIZED VIEWS](./sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md)
+      + [information_schema.materialized_views](./administration/information_schema.md#materialized_views)
+      + [Troubleshooting](./using_starrocks/troubleshooting_asynchronous_materialized_views.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + [Query Cache](./using_starrocks/query_cache.md)
@@ -97,14 +112,15 @@
     + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
     + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
   + [Sorted streaming aggregate](./using_starrocks/sorted_aggregate.md)
-+ Integration
++ Integrations
   + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
   + [Authenticate to Microsoft Azure Storage](./integrations/authenticate_to_azure_storage.md)
   + [Authenticate to Google Cloud Storage](./integrations/authenticate_to_gcs.md)
   + BI tools
+    + [Apache Superset](./integrations/BI_integrations/Superset.md)
+    + [FineBI](./integrations/BI_integrations/FineBI.md)
     + [Hex](./integrations/BI_integrations/Hex.md)
     + [Querybook](./integrations/BI_integrations/Querybook.md)
-    + [Apache Superset](./integrations/BI_integrations/Superset.md)
     + [Tableau Desktop](./integrations/BI_integrations/Tableau_Desktop.md)
   + IDE tools
     + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
@@ -136,6 +152,7 @@
     + [Overview of privileges](./administration/privilege_overview.md)
     + [Privileges](./administration/privilege_item.md)
     + [Manage user privileges](./administration/User_privilege.md)
+    + [Privilege FAQ](./administration/privilege_faq.md)
     + [Authentication](./administration/Authentication.md)
   + Performance Tuning
     + [Query planning](./administration/Query_planning.md)
@@ -668,9 +685,9 @@
     + Pattern Matching Functions
       + [like](./sql-reference/sql-functions/like_predicate-functions/like.md)
       + [regexp](./sql-reference/sql-functions/like_predicate-functions/regexp.md)
-      + [regexp_extract](./sql-reference/sql-functions/string-functions/regexp_extract.md)
+      + [regexp_extract](./sql-reference/sql-functions/like_predicate-functions/regexp_extract.md)
       + [regexp_extract_all](./sql-reference/sql-functions/like_predicate-functions/regexp_extract_all.md)
-      + [regexp_replace](./sql-reference/sql-functions/string-functions/regexp_replace.md)
+      + [regexp_replace](./sql-reference/sql-functions/like_predicate-functions/regexp_replace.md)
     + Percentile Functions
       + [percentile_approx_raw](./sql-reference/sql-functions/percentile-functions/percentile_approx_raw.md)
       + [percentile_empty](./sql-reference/sql-functions/percentile-functions/percentile_empty.md)
@@ -719,6 +736,8 @@
       + [Synchronize data from MySQL in real time](/faq/loading/synchronize_mysql_into_sr.md)
       + [Flink connector](./faq/loading/Flink_connector_faq.md)
     + [Data Unloading](./faq/Exporting_faq.md)
+  + [Privilege](./administration/privilege_faq.md)
+  + [Data lake](./data_source/datalake_faq.md)
   + [SQL](./faq/Sql_faq.md)
   + [query_dump](./faq/Dump_query.md)
   + [Other FAQs](./faq/Others.md)
@@ -739,6 +758,10 @@
     + [Build Handbook](./developers/build-starrocks/handbook.md)
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
++ Ecosystem Release Notes
+  + [Kafka connector](./ecosystem_release/kafka_connector.md)
+  + [Spark connector](./ecosystem_release/spark_connector.md)
+  + [Flink connector](./ecosystem_release/flink_connector.md)
 + Release Notes
   + [v3.1](./release_notes/release-3.1.md)
   + [v3.0](./release_notes/release-3.0.md)

@@ -18,7 +18,6 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
-#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -78,8 +77,9 @@ Status SchemaTablesScanner::start(RuntimeState* state) {
     get_tables_info_request.__set_auth_info(auth_info);
 
     if (nullptr != _param->ip && 0 != _param->port) {
+        int timeout_ms = state->query_options().query_timeout * 1000;
         RETURN_IF_ERROR(SchemaHelper::get_tables_info(*(_param->ip), _param->port, get_tables_info_request,
-                                                      &_tabls_info_response));
+                                                      &_tabls_info_response, timeout_ms));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }

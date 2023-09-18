@@ -209,6 +209,21 @@ public class DecimalTypeTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setNewPlanerAggStage(stage);
         }
+        try {
+            String sql = "select array_agg(distinct c_2_0) from tab2";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "array_agg_distinct");
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(stage);
+        }
+
+        try {
+            String sql = "select array_agg(distinct c_1_6) from tab1 group by c_1_0,c_1_1;";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "array_agg_distinct");
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(stage);
+        }
     }
 
     @Test
@@ -232,5 +247,24 @@ public class DecimalTypeTest extends PlanTestBase {
             starRocksAssert.dropTable("dec22");
         }
 
+    }
+
+    @Test
+    public void testDecimalV2Cast() throws Exception {
+        String sql = "select cast('12.367' as decimalv2(9,0));";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "12.367");
+
+        sql = "select cast('12.367' as decimalv2(9,1));";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "12.367");
+
+        sql = "select cast('12.367' as decimalv2(9,2));";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "12.367");
+
+        sql = "select cast(cast('12.56' as decimalv2(9,1)) as varchar);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "'12.56'");
     }
 }

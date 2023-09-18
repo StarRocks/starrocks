@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.ImmutableList;
@@ -195,14 +194,6 @@ public class HiveMetastore implements IHiveMetastore {
     @Override
     public void dropPartition(String dbName, String tableName, List<String> partValues, boolean deleteData) {
         client.dropPartition(dbName, tableName, partValues, deleteData);
-    }
-
-    @Override
-    public void alterPartition(HivePartitionWithStats partition) {
-        String dbName = partition.getHivePartition().getDatabaseName();
-        String tableName = partition.getHivePartition().getTableName();
-        org.apache.hadoop.hive.metastore.api.Partition hivePartition = toMetastoreApiPartition(partition);
-        client.alterPartition(dbName, tableName, hivePartition);
     }
 
     public HivePartitionStats getTableStatistics(String dbName, String tblName) {

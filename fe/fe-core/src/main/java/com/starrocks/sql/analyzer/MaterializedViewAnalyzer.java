@@ -121,16 +121,13 @@ public class MaterializedViewAnalyzer {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
     }
 
-    public static List<BaseTableInfo> getBaseTableInfos(QueryStatement queryStatement, boolean withCheck) {
-        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+    public static Set<BaseTableInfo> getBaseTableInfos(QueryStatement queryStatement, boolean withCheck) {
+        Set<BaseTableInfo> baseTableInfos = Sets.newHashSet();
         processBaseTables(queryStatement, baseTableInfos, withCheck);
-        Set<BaseTableInfo> baseTableInfoSet = Sets.newHashSet(baseTableInfos);
-        baseTableInfos.clear();
-        baseTableInfos.addAll(baseTableInfoSet);
         return baseTableInfos;
     }
 
-    private static void processBaseTables(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos,
+    private static void processBaseTables(QueryStatement queryStatement, Set<BaseTableInfo> baseTableInfos,
                                           boolean withCheck) {
         Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
         for (Map.Entry<TableName, Table> entry : tableNameTableMap.entrySet()) {
@@ -185,7 +182,7 @@ public class MaterializedViewAnalyzer {
         }
     }
 
-    private static void processViews(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos,
+    private static void processViews(QueryStatement queryStatement, Set<BaseTableInfo> baseTableInfos,
                                      boolean withCheck) {
         List<ViewRelation> viewRelations = AnalyzerUtils.collectViewRelations(queryStatement);
         if (viewRelations.isEmpty()) {
@@ -239,13 +236,13 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb(),
                         statement.getTableName().getPos());
             }
-            List<BaseTableInfo> baseTableInfos = getBaseTableInfos(queryStatement, true);
+            Set<BaseTableInfo> baseTableInfos = getBaseTableInfos(queryStatement, true);
             // now do not support empty base tables
             // will be relaxed after test
             if (baseTableInfos.isEmpty()) {
                 throw new SemanticException("Can not find base table in query statement");
             }
-            statement.setBaseTableInfos(baseTableInfos);
+            statement.setBaseTableInfos(Lists.newArrayList(baseTableInfos));
 
             // set the columns into createMaterializedViewStatement
             List<Column> mvColumns = genMaterializedViewColumns(statement);

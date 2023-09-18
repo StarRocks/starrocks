@@ -401,9 +401,9 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                 ImmutableList.of("l_shipdate=1998-01-02"));
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_2", "lineitem_par",
-                "PARTITION PREDICATES: (((23: l_shipdate < '1998-01-03') OR (23: l_shipdate >= '1998-01-06'))" +
-                        " AND (23: l_shipdate >= '1998-01-02')) OR (23: l_shipdate IS NULL)",
-                "NON-PARTITION PREDICATES: 21: l_orderkey > 100");
+                "PARTITION PREDICATES: (((22: l_shipdate < '1998-01-03') OR (22: l_shipdate >= '1998-01-06'))" +
+                        " AND (22: l_shipdate >= '1998-01-02')) OR (22: l_shipdate IS NULL)",
+                "NON-PARTITION PREDICATES: 20: l_orderkey > 100");
 
         dropMv("test", "hive_parttbl_mv_2");
 
@@ -654,7 +654,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
             String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                     "where l_shipdate >= '1998-01-04'";
-            PlanTestBase.assertNotContains(getFragmentPlan(query), mvName);
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
             dropMv("test", mvName);
         }
 
@@ -703,7 +703,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             refreshMaterializedView("test", mvName);
             query =
                     "SELECT `l_shipdate`, sum(`l_orderkey`)  FROM `hive0`.`partitioned_db`.`lineitem_par` GROUP BY l_shipdate";
-            PlanTestBase.assertNotContains(getFragmentPlan(query), mvName);
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
             dropMv("test", mvName);
 
         }

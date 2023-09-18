@@ -159,7 +159,7 @@ PARALLEL_TEST(JsonParserTest, test_json_document_stream_parser_with_jsonroot) {
     auto padded_size = input.size();
 
     std::vector<SimpleJsonPath> jsonroot;
-    JsonFunctions::parse_json_paths("$.key0", &jsonroot);
+    ASSERT_OK(JsonFunctions::parse_json_paths("$.key0", &jsonroot));
 
     simdjson::ondemand::parser simdjson_parser;
 
@@ -220,7 +220,7 @@ PARALLEL_TEST(JsonParserTest, test_json_array_parser_with_jsonroot) {
     auto padded_size = input.size();
 
     std::vector<SimpleJsonPath> jsonroot;
-    JsonFunctions::parse_json_paths("$.key0", &jsonroot);
+    ASSERT_OK(JsonFunctions::parse_json_paths("$.key0", &jsonroot));
 
     simdjson::ondemand::parser simdjson_parser;
 
@@ -281,7 +281,7 @@ PARALLEL_TEST(JsonParserTest, test_expanded_json_document_stream_parser_with_jso
     auto padded_size = input.size();
 
     std::vector<SimpleJsonPath> jsonroot;
-    JsonFunctions::parse_json_paths("$.key0", &jsonroot);
+    ASSERT_OK(JsonFunctions::parse_json_paths("$.key0", &jsonroot));
 
     simdjson::ondemand::parser simdjson_parser;
 
@@ -343,7 +343,7 @@ PARALLEL_TEST(JsonParserTest, test_expanded_json_array_parser_with_jsonroot) {
     auto padded_size = input.size();
 
     std::vector<SimpleJsonPath> jsonroot;
-    JsonFunctions::parse_json_paths("$.key0", &jsonroot);
+    ASSERT_OK(JsonFunctions::parse_json_paths("$.key0", &jsonroot));
 
     simdjson::ondemand::parser simdjson_parser;
 

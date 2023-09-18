@@ -24,6 +24,7 @@ COPY ${LOCAL_REPO_PATH}/fs_brokers/apache_hdfs_broker/output/apache_hdfs_broker 
 
 
 FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
+RUN rm -f /release/be_artifacts/be/lib/starrocks_be.debuginfo
 
 
 FROM registry.access.redhat.com/ubi8/ubi:8.7
@@ -49,6 +50,7 @@ COPY docker/dockerfiles/allin1/*.sh docker/dockerfiles/allin1/*.conf docker/dock
 COPY docker/dockerfiles/allin1/services/ $SR_HOME
 RUN cat be.conf >> $DEPLOYDIR/starrocks/be/conf/be.conf && \
     cat fe.conf >> $DEPLOYDIR/starrocks/fe/conf/fe.conf && \
-    mkdir -p $DEPLOYDIR/starrocks/fe/meta && mkdir -p $DEPLOYDIR/starrocks/be/storage && touch /.dockerenv
+    rm -f be.conf fe.conf && \
+    mkdir -p $DEPLOYDIR/starrocks/fe/meta $DEPLOYDIR/starrocks/be/storage && touch /.dockerenv
 
 CMD ./entrypoint.sh

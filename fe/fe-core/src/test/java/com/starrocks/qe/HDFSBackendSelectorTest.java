@@ -20,7 +20,6 @@ import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
-import com.starrocks.sql.PlannerProfile;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
@@ -29,8 +28,6 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
@@ -100,11 +97,6 @@ public class HDFSBackendSelectorTest {
 
     @Test
     public void testHdfsScanNodeHashRing() throws Exception {
-        new MockUp<PlannerProfile>() {
-            @Mock
-            public void addCustomProperties(String name, String value) {
-            }
-        };
         SessionVariable sessionVariable = new SessionVariable();
         new Expectations() {
             {
@@ -171,11 +163,6 @@ public class HDFSBackendSelectorTest {
 
     @Test
     public void testHdfsScanNodeScanRangeReBalance() throws Exception {
-        new MockUp<PlannerProfile>() {
-            @Mock
-            public void addCustomProperties(String name, String value) {
-            }
-        };
         SessionVariable sessionVariable = new SessionVariable();
         new Expectations() {
             {

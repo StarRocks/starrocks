@@ -21,7 +21,7 @@ namespace starrocks::pipeline {
 HashJoinProbeOperator::HashJoinProbeOperator(OperatorFactory* factory, int32_t id, const string& name,
                                              int32_t plan_node_id, int32_t driver_sequence, HashJoinerPtr join_prober,
                                              HashJoinerPtr join_builder)
-        : OperatorWithDependency(factory, id, name, plan_node_id, driver_sequence),
+        : OperatorWithDependency(factory, id, name, plan_node_id, false, driver_sequence),
           _join_prober(std::move(join_prober)),
           _join_builder(std::move(join_builder)) {}
 
@@ -75,7 +75,7 @@ bool HashJoinProbeOperator::is_ready() const {
 
 Status HashJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     RETURN_IF_ERROR(_reference_builder_hash_table_once());
-    _join_prober->push_chunk(state, std::move(const_cast<ChunkPtr&>(chunk)));
+    RETURN_IF_ERROR(_join_prober->push_chunk(state, std::move(const_cast<ChunkPtr&>(chunk))));
     return Status::OK();
 }
 
@@ -119,7 +119,7 @@ Status HashJoinProbeOperator::reset_state(RuntimeState* state, const vector<Chun
     _reference_builder_hash_table_once();
     // Reset probe state only when it has valid state after referencing the build hash table.
     if (_join_prober->has_referenced_hash_table()) {
-        _join_prober->reset_probe(state);
+        RETURN_IF_ERROR(_join_prober->reset_probe(state));
     }
     return Status::OK();
 }

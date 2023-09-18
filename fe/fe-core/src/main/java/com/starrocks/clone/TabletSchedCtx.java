@@ -903,6 +903,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     olapTable.getCopiedIndexes(),
                     olapTable.isInMemory(),
                     olapTable.enablePersistentIndex(),
+                    olapTable.primaryIndexCacheExpireSec(),
                     olapTable.getPartitionInfo().getTabletType(partitionId),
                     olapTable.getCompressionType(), indexMeta.getSortKeyIdxes());
             createReplicaTask.setIsRecoverTask(true);

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
@@ -56,8 +55,6 @@ public interface IHiveMetastore {
     Partition getPartition(String dbName, String tableName, List<String> partitionValues);
 
     void addPartitions(String dbName, String tableName, List<HivePartitionWithStats> partitions);
-
-    void alterPartition(HivePartitionWithStats partition);
 
     void dropPartition(String dbName, String tableName, List<String> partValues, boolean deleteData);
 

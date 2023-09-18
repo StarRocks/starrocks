@@ -15,9 +15,20 @@
 namespace cpp starrocks
 namespace java com.starrocks.thrift
 
+
+struct TResourceGroupUsage {
+    1: optional i64 group_id
+
+    2: optional i32 cpu_core_used_permille
+    3: optional i64 mem_used_bytes;
+    4: optional i32 num_running_queries;
+}
+
 struct TResourceUsage {
     1: optional i32 num_running_queries
     2: optional i64 mem_limit_bytes
     3: optional i64 mem_used_bytes
-    4: optional i32 cpu_used_permille;
+    4: optional i32 cpu_used_permille
+
+    100: optional list<TResourceGroupUsage> group_usages;
 }

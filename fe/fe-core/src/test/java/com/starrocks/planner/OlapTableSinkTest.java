@@ -37,7 +37,9 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -199,7 +201,7 @@ public class OlapTableSinkTest {
 
     @Test
     public void testCreateLocationWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-                                                  @Mocked SystemInfoService systemInfoService) {
+                                                  @Mocked SystemInfoService systemInfoService) throws Exception {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -263,9 +265,8 @@ public class OlapTableSinkTest {
             }
         };
 
-        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId),
-                TWriteQuorumType.MAJORITY, false, false, false);
-        TOlapTableLocationParam param = (TOlapTableLocationParam) Deencapsulation.invoke(sink, "createLocation", table);
+        TOlapTableLocationParam param = OlapTableSink.createLocation(
+                table, table.getClusterId(), Lists.newArrayList(partitionId), false);
         System.out.println(param);
 
         // Check
@@ -280,7 +281,7 @@ public class OlapTableSinkTest {
 
     @Test
     public void testReplicatedStorageWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-            @Mocked SystemInfoService systemInfoService) {
+            @Mocked SystemInfoService systemInfoService) throws Exception {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -347,9 +348,8 @@ public class OlapTableSinkTest {
             }
         };
 
-        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId),
-                TWriteQuorumType.MAJORITY, true, false, false);
-        TOlapTableLocationParam param = (TOlapTableLocationParam) Deencapsulation.invoke(sink, "createLocation", table);
+        TOlapTableLocationParam param = OlapTableSink.createLocation(
+                table, table.getClusterId(), Lists.newArrayList(partitionId), true);
         System.out.println(param);
 
         // Check
@@ -434,4 +434,42 @@ public class OlapTableSinkTest {
 
         Assert.assertTrue(sink.toThrift() instanceof TDataSink);
     }
+
+    @Test
+    public void testImmutablePartition() throws UserException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
+        Partition partition = new Partition(2, "p1", index, distInfo);
+
+        PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(3, 2, 0, index);
+        partition.addSubPartition(physicalPartition);
+
+        physicalPartition = new PhysicalPartitionImpl(4, 2, 0, index);
+        physicalPartition.setImmutable(true);
+        partition.addSubPartition(physicalPartition);
+
+        LOG.info("partition is {}", partition);
+
+        new Expectations() {{
+            dstTable.getId();
+            result = 1;
+            dstTable.getPartitionInfo();
+            result = partInfo;
+            dstTable.getPartitions();
+            result = Lists.newArrayList(partition);
+            dstTable.getPartition(2L);
+            result = partition;
+        }};
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+        LOG.info("sink is {}", sink.toThrift());
+        LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+    }
+
 }

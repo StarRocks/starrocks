@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
+import com.starrocks.jni.connector.SelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -66,6 +67,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
     private RecordReaderIterator<InternalRow> iterator;
     private final int fetchSize;
     private final ClassLoader classLoader;
+    private final String[] nestedFields;
 
     public PaimonSplitScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
@@ -75,6 +77,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
         this.databaseName = params.get("database_name");
         this.tableName = params.get("table_name");
         this.requiredFields = params.get("required_fields").split(",");
+        this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
         this.splitInfo = params.get("split_info");
         this.predicateInfo = params.get("predicate_info");
 
@@ -126,6 +129,17 @@ public class PaimonSplitScanner extends ConnectorScanner {
             String type = PaimonTypeUtils.fromPaimonType(dataType);
             requiredTypes[i] = new ColumnType(type);
             logicalTypes[i] = dataType;
+        }
+
+        // prune fields
+        SelectedFields ssf = new SelectedFields();
+        for (String nestField : nestedFields) {
+            ssf.addNestedPath(nestField);
+        }
+        for (int i = 0; i < requiredFields.length; i++) {
+            ColumnType type = requiredTypes[i];
+            String name = requiredFields[i];
+            type.pruneOnField(ssf, name);
         }
     }
 

@@ -29,15 +29,14 @@ RollingAsyncParquetWriter::RollingAsyncParquetWriter(
         std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> commit_func, RuntimeState* state,
         int32_t driver_id)
         : _table_info(std::move(tableInfo)),
+          _max_file_size(_table_info.max_file_size),
           _output_expr_ctxs(output_expr_ctxs),
           _parent_profile(parent_profile),
           _commit_func(std::move(commit_func)),
           _state(state),
-          _driver_id(driver_id) {
-    init_rolling_writer();
-}
+          _driver_id(driver_id) {}
 
-Status RollingAsyncParquetWriter::init_rolling_writer() {
+Status RollingAsyncParquetWriter::init() {
     ASSIGN_OR_RETURN(
             _fs, FileSystem::CreateUniqueFromString(_table_info.partition_location, FSOptions(&_table_info.cloud_conf)))
     _schema = _table_info.schema;
@@ -77,21 +76,17 @@ Status RollingAsyncParquetWriter::_new_file_writer() {
 }
 
 Status RollingAsyncParquetWriter::append_chunk(Chunk* chunk, RuntimeState* state) {
+    RETURN_IF_ERROR(get_io_status());
+
     if (_writer == nullptr) {
-        auto status = _new_file_writer();
-        if (!status.ok()) {
-            return status;
-        }
+        RETURN_IF_ERROR(_new_file_writer());
     }
     // exceed file size
-    if (_writer->file_size() > _max_file_size) {
-        auto st = close_current_writer(state);
-        if (st.ok()) {
-            _new_file_writer();
-        }
+    if (_max_file_size != -1 && _writer->file_size() > _max_file_size) {
+        RETURN_IF_ERROR(close_current_writer(state));
+        RETURN_IF_ERROR(_new_file_writer());
     }
-    auto st = _writer->write(chunk);
-    return st;
+    return _writer->write(chunk);
 }
 
 Status RollingAsyncParquetWriter::close_current_writer(RuntimeState* state) {
@@ -117,16 +112,25 @@ Status RollingAsyncParquetWriter::close(RuntimeState* state) {
 
 bool RollingAsyncParquetWriter::closed() {
     for (auto& writer : _pending_commits) {
-        if (writer != nullptr && writer->closed()) {
-            writer = nullptr;
-        }
-        if (writer != nullptr && (!writer->closed())) {
+        if (!writer->closed()) {
             return false;
+        }
+
+        auto st = writer->get_io_status();
+        if (!st.ok()) {
+            set_io_status(st);
         }
     }
 
     if (_writer != nullptr) {
-        return _writer->closed();
+        if (!_writer->closed()) {
+            return false;
+        }
+
+        auto st = _writer->get_io_status();
+        if (!st.ok()) {
+            set_io_status(st);
+        }
     }
 
     return true;

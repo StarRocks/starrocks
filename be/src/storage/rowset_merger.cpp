@@ -245,6 +245,11 @@ public:
         }
         timer.stop();
 
+        // update compaction metric
+        float divided = 1000 * 1000 * 1000;
+        StarRocksMetrics::instance()->update_compaction_task_cost_time_ns.set_value(timer.elapsed_time());
+        StarRocksMetrics::instance()->update_compaction_task_byte_per_second.set_value(
+                total_input_size / (timer.elapsed_time() / divided + 1));
         StarRocksMetrics::instance()->update_compaction_deltas_total.increment(rowsets.size());
         StarRocksMetrics::instance()->update_compaction_bytes_total.increment(total_input_size);
         StarRocksMetrics::instance()->update_compaction_outputs_total.increment(1);
@@ -469,7 +474,7 @@ private:
 
             CHECK_EQ(rowsets.size(), iterators.size());
             std::shared_ptr<ChunkIterator> iter = new_mask_merge_iterator(iterators, mask_buffer.get());
-            iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+            RETURN_IF_ERROR(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
             auto chunk = ChunkHelper::new_chunk(schema, _chunk_size);
             auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);

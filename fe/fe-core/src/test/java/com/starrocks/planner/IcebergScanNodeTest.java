@@ -5,19 +5,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TIcebergDeleteFile;
@@ -29,8 +22,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.apache.iceberg.BaseCombinedScanTask;
-import org.apache.iceberg.CombinedScanTask;
+import org.apache.iceberg.BaseFileScanTask;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DataTableScan;
@@ -40,16 +32,14 @@ import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
-import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SnapshotScan;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.exceptions.RuntimeIOException;
-import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.io.OutputFile;
-import org.apache.iceberg.types.Types;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -58,9 +48,10 @@ import org.junit.Test;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static org.apache.iceberg.TableProperties.SPLIT_SIZE_DEFAULT;
 
 public class IcebergScanNodeTest {
     private String dbName;
@@ -107,12 +98,13 @@ public class IcebergScanNodeTest {
         }
     }
 
-    class TestFileScanTask implements FileScanTask {
+    class TestFileScanTask extends BaseFileScanTask {
         private DataFile data;
 
         private DeleteFile[] deletes;
 
         public TestFileScanTask(DataFile data, DeleteFile[] deletes) {
+            super(data, deletes, null, null, null);
             this.data = data;
             this.deletes = deletes;
         }
@@ -136,24 +128,11 @@ public class IcebergScanNodeTest {
             return 0;
         }
 
-        @Override
-        public long length() {
-            return 0;
-        }
-
-        @Override
-        public Expression residual() {
-            return null;
-        }
-
-        @Override
-        public Iterable<FileScanTask> split(long l) {
-            return null;
-        }
     }
 
     private void setUpMock(boolean isPosDelete, com.starrocks.catalog.IcebergTable table,
                            Table iTable, Snapshot snapshot, DataTableScan dataTableScan) {
+
         new MockUp<DataTableScan>() {
             @Mock
             public DataTableScan useSnapshot(long var1) {
@@ -161,8 +140,8 @@ public class IcebergScanNodeTest {
             }
 
             @Mock
-            public CloseableIterable<CombinedScanTask> planTasks() {
-                List<CombinedScanTask> tasks = new ArrayList<CombinedScanTask>();
+            public CloseableIterable<FileScanTask> planFiles()  {
+                List<FileScanTask> tasks = new ArrayList<FileScanTask>();
                 DataFile data = DataFiles.builder(PartitionSpec.unpartitioned())
                         .withInputFile(new LocalFileIO().newInputFile("input.orc"))
                         .withRecordCount(1)
@@ -186,7 +165,7 @@ public class IcebergScanNodeTest {
 
 
                 FileScanTask scanTask = new TestFileScanTask(data, new DeleteFile[]{delete});
-                tasks.add(new BaseCombinedScanTask(scanTask));
+                tasks.add(scanTask);
 
                 return CloseableIterable.withNoopClose(tasks);
             }
@@ -207,6 +186,14 @@ public class IcebergScanNodeTest {
                 result = dataTableScan;
             }
         };
+
+        new Expectations(dataTableScan) {
+            {
+                dataTableScan.targetSplitSize();
+                result = SPLIT_SIZE_DEFAULT;
+            }
+        };
+
     }
 
     @Before
@@ -237,6 +224,35 @@ public class IcebergScanNodeTest {
         setUpMock(true, table, iTable, snapshot, dataTableScan);
 
         IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode");
+
+        new MockUp<SnapshotScan>() {
+            @Mock
+            public CloseableIterable<FileScanTask> planFiles()  {
+                List<FileScanTask> tasks = new ArrayList<>();
+                DataFile data = DataFiles.builder(PartitionSpec.unpartitioned())
+                        .withInputFile(new LocalFileIO().newInputFile("input.orc"))
+                        .withRecordCount(1)
+                        .withFileSizeInBytes(1024)
+                        .withFormat(FileFormat.ORC)
+                        .build();
+
+                FileMetadata.Builder builder;
+                    builder = FileMetadata.deleteFileBuilder(PartitionSpec.unpartitioned())
+                            .ofPositionDeletes();
+                DeleteFile delete = builder.withPath("delete.orc")
+                        .withFileSizeInBytes(1024)
+                        .withRecordCount(1)
+                        .withFormat(FileFormat.ORC)
+                        .build();
+
+
+                FileScanTask scanTask = new TestFileScanTask(data, new DeleteFile[]{delete});
+                tasks.add(scanTask);
+
+                return CloseableIterable.withNoopClose(tasks);
+            }
+        };
+
         scanNode.setupScanRangeLocations();
 
         List<TScanRangeLocations> result = scanNode.getScanRangeLocations(1);
@@ -249,88 +265,5 @@ public class IcebergScanNodeTest {
         TIcebergDeleteFile deleteFile = hdfsScanRange.delete_files.get(0);
         Assert.assertEquals("delete.orc", deleteFile.full_path);
         Assert.assertEquals(TIcebergFileContent.POSITION_DELETES, deleteFile.file_content);
-    }
-
-    @Test
-    public void testGetScanRangeLocationsWithEquality(@Mocked com.starrocks.catalog.IcebergTable table,
-                                                      @Mocked Table iTable,
-                                                      @Mocked Snapshot snapshot,
-                                                      @Mocked DataTableScan dataTableScan) throws Exception {
-        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
-        DescriptorTable descTable = analyzer.getDescTbl();
-        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        tupleDesc.setTable(table);
-
-        setUpMock(false, table, iTable, snapshot, dataTableScan);
-
-        IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode");
-        scanNode.setupScanRangeLocations();
-
-        List<TScanRangeLocations> result = scanNode.getScanRangeLocations(1);
-        TScanRange scanRange = result.get(0).scan_range;
-        THdfsScanRange hdfsScanRange = scanRange.hdfs_scan_range;
-        TIcebergDeleteFile deleteFile = hdfsScanRange.delete_files.get(0);
-        Assert.assertEquals(TIcebergFileContent.EQUALITY_DELETES, deleteFile.file_content);
-    }
-
-    @Test
-    public void testAppendEqualityColumns(@Mocked IcebergTable table,
-                                          @Mocked Table iTable,
-                                          @Mocked Snapshot snapshot,
-                                          @Mocked PhysicalIcebergScanOperator node,
-                                          @Mocked ColumnRefFactory columnRefFactory,
-                                          @Mocked ExecPlan context,
-                                          @Mocked DataTableScan dataTableScan) throws Exception {
-        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
-        DescriptorTable descTable = analyzer.getDescTbl();
-        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        tupleDesc.setTable(table);
-
-        setUpMock(false, table, iTable, snapshot, dataTableScan);
-
-        Map<ColumnRefOperator, Column> columnMap = new HashMap<>();
-        Map<ColumnRefOperator, Expr> columnRefOperatorExprMap = new HashMap<>();
-        DescriptorTable descriptorTable = new DescriptorTable();
-        List<Column> columns = new ArrayList<>();
-        Column column = new Column();
-        column.setName("test");
-        columns.add(column);
-        List<Types.NestedField> iColumns = new ArrayList<>();
-        Types.NestedField iColumn = Types.NestedField.of(1, false, "test", new Types.IntegerType());
-        iColumns.add(iColumn);
-        Schema schema = new Schema(iColumns);
-        new Expectations() {
-            {
-                node.getColRefToColumnMetaMap();
-                result = columnMap;
-
-                node.getTable();
-                result = table;
-
-                table.getFullSchema();
-                result = columns;
-
-                iTable.schema();
-                result = schema;
-
-                context.getColRefToExpr();
-                result = columnRefOperatorExprMap;
-
-                context.getDescTbl();
-                result = descriptorTable;
-            }
-        };
-
-        new MockUp<TupleDescriptor>() {
-            @Mock
-            public TableRef getRef() {
-                return new TableRef();
-            }
-        };
-
-        IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode");
-        scanNode.setupScanRangeLocations();
-        scanNode.appendEqualityColumns(node, columnRefFactory, context);
-        Assert.assertEquals(context.getColRefToExpr().size(), 1);
     }
 }

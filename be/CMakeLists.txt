@@ -277,7 +277,7 @@ set_target_properties(parquet PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib
 add_library(brpc STATIC IMPORTED GLOBAL)
 set_target_properties(brpc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrpc.a)
 
-add_library(rocksdb STATIC IMPORTED)
+add_library(rocksdb STATIC IMPORTED GLOBAL)
 set_target_properties(rocksdb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/librocksdb.a)
 
 add_library(sasl STATIC IMPORTED GLOBAL)
@@ -402,6 +402,12 @@ if (${WITH_CACHELIB} STREQUAL "ON")
     endforeach()
 endif()
 
+if (${WITH_STARCACHE} STREQUAL "ON")
+    add_library(starcache STATIC IMPORTED GLOBAL)
+    set_target_properties(starcache PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/starcache/lib/libstarcache.a)
+    include_directories(SYSTEM ${THIRDPARTY_DIR}/starcache/include)
+endif()
+
 if ("${USE_STAROS}" STREQUAL "ON")
     if (DEFINED ENV{STARLET_INSTALL_DIR})
         set(STARLET_INSTALL_DIR "$ENV{STARLET_INSTALL_DIR}")
@@ -430,6 +436,8 @@ if ("${USE_STAROS}" STREQUAL "ON")
     add_library(brpc::brpc ALIAS brpc)
     add_library(leveldb::leveldb ALIAS leveldb)
     add_library(CURL::libcurl ALIAS curl)
+    add_library(rocksdb::rocksdb ALIAS rocksdb)
+    add_library(starcache::starcache ALIAS starcache)
 
     set(absl_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
     find_package(absl CONFIG REQUIRED)
@@ -463,11 +471,6 @@ if ("${USE_STAROS}" STREQUAL "ON")
     find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
     set(AZURE_SDK_LIB Azure::azure-identity Azure::azure-storage-blobs Azure::azure-core Azure::azure-storage-common)
 
-    set(starcache_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake/starcache" CACHE PATH "starcachelib search path")
-    find_package(starcache CONFIG REQUIRED)
-    set_target_properties(starcache::starcache PROPERTIES IMPORTED_GLOBAL TRUE)
-    add_library(starcachelib ALIAS starcache::starcache)
-
     set(starlet_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake" CACHE PATH "starlet search path")
     find_package(starlet CONFIG REQUIRED)
     message(STATUS "Using starlet ${starlet_VERSION}")
@@ -484,7 +487,7 @@ if ("${USE_STAROS}" STREQUAL "ON")
        ${STARROCKS_DEPENDENCIES}
        starlet
        starlet_fslib_all
-       starcachelib
+       starcache
        ${AZURE_SDK_LIB}
        )
 endif()
@@ -591,6 +594,8 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         # ignore warning from apache-orc
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unsafe-buffer-usage")
     endif ()
+else ()
+    set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fcoroutines")
 endif()
 
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_DATE_TIME_POSIX_TIME_STD_CONFIG")
@@ -660,6 +665,12 @@ endif()
 if (ENABLE_FAULT_INJECTION)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DFIU_ENABLE")
     message(STATUS "enable fault injection")
+endif()
+
+option(ASSERT_STATUS_CHECKED "build with assert status checked" OFF)
+if (ASSERT_STATUS_CHECKED)
+    message(STATUS "Build with assert status checked")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_ASSERT_STATUS_CHECKED")
 endif()
 
 # For CMAKE_BUILD_TYPE=Debug
@@ -863,6 +874,16 @@ if (${WITH_CACHELIB} STREQUAL "ON")
     )
 endif()
 
+if (${WITH_STARCACHE} STREQUAL "ON")
+    set(STARROCKS_DEPENDENCIES
+        ${STARROCKS_DEPENDENCIES}
+        ${WL_START_GROUP}
+        brpc
+        starcache
+        ${WL_END_GROUP}
+    )
+endif()
+
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     set(STARROCKS_DEPENDENCIES
         ${STARROCKS_DEPENDENCIES}
@@ -1036,6 +1057,7 @@ install(FILES
     ${BASE_DIR}/../conf/cn.conf
     ${BASE_DIR}/../conf/hadoop_env.sh
     ${BASE_DIR}/../conf/log4j2.properties
+    ${BASE_DIR}/../conf/udf_security.policy
     DESTINATION ${OUTPUT_DIR}/conf)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")

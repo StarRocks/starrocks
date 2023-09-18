@@ -97,6 +97,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -124,7 +125,7 @@ public class Load {
      * @return
      * @throws UserException
      */
-    public static void checkMergeCondition(String mergeCondition, OlapTable table,
+    public static void checkMergeCondition(String mergeCondition, OlapTable table, List<Column> columns,
             boolean missAutoIncrementColumn) throws DdlException {
         if (mergeCondition == null || mergeCondition.isEmpty()) {
             return;
@@ -134,15 +135,20 @@ public class Load {
             throw new DdlException("Conditional update only support primary key table " + table.getName());
         }
 
-        if (table.getColumn(mergeCondition) != null) {
-            if (table.getColumn(mergeCondition).isKey()) {
+        Optional<Column> conditionCol = columns.stream().filter(c -> c.getName().equalsIgnoreCase(mergeCondition)).findFirst();
+        if (!conditionCol.isPresent()) {
+            throw new DdlException("Merge condition column " + mergeCondition + 
+                    " does not exist. If you are doing partial update with condition update, please check condition column" +
+                    " is in the given update columns. Otherwise please check condition column is in table " + table.getName());
+        } else {
+            if (conditionCol.get().isKey()) {
                 throw new DdlException("Merge condition column " + mergeCondition
                         + " should not be primary key!");
             }
-            if (missAutoIncrementColumn && table.getColumn(mergeCondition).isAutoIncrement()) {
+            if (missAutoIncrementColumn && conditionCol.get().isAutoIncrement()) {
                 throw new DdlException("Merge condition column can not be auto increment column in partial update");
             }
-            switch (table.getColumn(mergeCondition).getPrimitiveType()) {
+            switch (conditionCol.get().getPrimitiveType()) {
                 case CHAR:
                 case VARCHAR:
                 case PERCENTILE:
@@ -160,9 +166,6 @@ public class Load {
                 default:
                     return;
             }
-        } else {
-            throw new DdlException("Merge condition column " + mergeCondition
-                    + " should be a column of the table " + table.getName());
         }
     }
 

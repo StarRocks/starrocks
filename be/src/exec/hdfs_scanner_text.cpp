@@ -244,6 +244,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
 
     size_t rows_read = 0;
 
+    CSVReader::Fields fields{};
     for (; rows_read < chunk_size; rows_read++) {
         CSVReader::Record record{};
         Status status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
@@ -272,7 +273,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
             return Status::InternalError("Face csv invalidate UTF-8 character line.");
         }
 
-        CSVReader::Fields fields{};
+        fields.resize(0);
         _reader->split_record(record, &fields);
 
         size_t num_materialize_columns = _scanner_params.materialize_slots.size();
@@ -362,7 +363,7 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
         bool has_bom = false;
         if (scan_range->offset == 0) {
             CSVReader::Record first_line;
-            reader->next_record(&first_line);
+            RETURN_IF_ERROR(reader->next_record(&first_line));
             if (first_line.size >= 3 && (unsigned char)first_line.data[0] == 0xEF &&
                 (unsigned char)first_line.data[1] == 0xBB && (unsigned char)first_line.data[2] == 0xBF) {
                 has_bom = true;
@@ -384,6 +385,16 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
 }
 
 Status HdfsTextScanner::_build_hive_column_name_2_index() {
+    // For some table like file table, there is no hive_column_names at all.
+    // So we use slot order defined in table schema.
+    if (_scanner_params.hive_column_names->empty()) {
+        _materialize_slots_index_2_csv_column_index.resize(_scanner_params.materialize_slots.size());
+        for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
+            _materialize_slots_index_2_csv_column_index[i] = i;
+        }
+        return Status::OK();
+    }
+
     const bool case_sensitive = _scanner_params.case_sensitive;
 
     // The map's value is the position of column name in hive's table(Not in StarRocks' table)

@@ -79,9 +79,6 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
     public void testHiveSingleTableEqualPredicateRewrite() throws Exception {
         createAndRefreshMv("test", "hive_mv_1",
                 "create materialized view hive_mv_1 distributed by hash(s_suppkey) " +
-                        "PROPERTIES (\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                        ") " +
                         " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey = 5");
         String query = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey = 5";
         String plan = getFragmentPlan(query);
@@ -177,9 +174,6 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
         createAndRefreshMv("test", "hive_mv_1",
                 "create materialized view hive_mv_1 distributed by hash(s_suppkey) " +
-                        "PROPERTIES (\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                        ") " +
                         " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
         String query = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5";
         String plan = getFragmentPlan(query);
@@ -231,9 +225,6 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
     public void testHiveSingleTableResidualPredicateRewrite() throws Exception {
         createAndRefreshMv("test", "hive_mv_1",
                 "create materialized view hive_mv_1 distributed by hash(s_suppkey) " +
-                        "PROPERTIES (\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                        ") " +
                         " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where " +
                         "s_suppkey * s_acctbal > 100 and s_name like \"%abc%\"");
         String query = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where " +

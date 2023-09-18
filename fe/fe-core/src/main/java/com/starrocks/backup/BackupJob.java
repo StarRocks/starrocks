@@ -388,7 +388,7 @@ public class BackupJob extends AbstractJob {
                 status = new Status(ErrCode.NOT_FOUND, "table " + tblName + " does not exist");
                 return;
             }
-            if (!tbl.isOlapTable()) {
+            if (!tbl.isOlapTableOrMaterializedView()) {
                 status = new Status(ErrCode.COMMON_ERROR, "table " + tblName
                         + " is not OLAP table");
                 return;

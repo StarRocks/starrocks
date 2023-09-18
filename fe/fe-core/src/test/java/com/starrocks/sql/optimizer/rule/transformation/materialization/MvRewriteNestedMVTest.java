@@ -96,21 +96,12 @@ public class MvRewriteNestedMVTest extends MvRewriteTestBase {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         createAndRefreshMv("test", "hive_nested_mv_1",
                 "create materialized view hive_nested_mv_1 distributed by hash(s_suppkey) " +
-                        "PROPERTIES (\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                        ") " +
                         " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier");
         createAndRefreshMv("test", "hive_nested_mv_2",
                 "create materialized view hive_nested_mv_2 distributed by hash(s_suppkey) " +
-                        "PROPERTIES (\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                        ") " +
                         " as select s_suppkey, sum(s_acctbal) from hive0.tpch.supplier group by s_suppkey");
         createAndRefreshMv("test", "hive_nested_mv_3",
                 "create materialized view hive_nested_mv_3 distributed by hash(s_suppkey) " +
-                        "PROPERTIES (\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                        ") " +
                         " as select * from hive_nested_mv_2 where s_suppkey > 1");
         String query1 = "select s_suppkey, sum(s_acctbal) from hive0.tpch.supplier where s_suppkey > 1 group by s_suppkey ";
         String plan1 = getFragmentPlan(query1);

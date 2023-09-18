@@ -61,7 +61,9 @@ bool IcebergTableSinkOperator::is_finished() const {
 }
 
 Status IcebergTableSinkOperator::set_finishing(RuntimeState* state) {
-    state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+    if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+    }
 
     for (const auto& writer : _partition_writers) {
         if (!writer.second->closed()) {
@@ -98,6 +100,7 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
             tableInfo.partition_location = _iceberg_table_data_location;
             auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _common_metrics.get(),
                                                                       add_iceberg_commit_info, state, _driver_sequence);
+            RETURN_IF_ERROR(writer->init());
             _partition_writers.insert({ICEBERG_UNPARTITIONED_TABLE_LOCATION, std::move(writer)});
         }
 
@@ -133,6 +136,7 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
             tableInfo.partition_location = partition_location;
             auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _common_metrics.get(),
                                                                       add_iceberg_commit_info, state, _driver_sequence);
+            RETURN_IF_ERROR(writer->init());
             _partition_writers.insert({partition_location, std::move(writer)});
             return _partition_writers[partition_location]->append_chunk(chunk.get(), state);
         } else {
@@ -157,7 +161,7 @@ IcebergTableSinkOperatorFactory::IcebergTableSinkOperatorFactory(int32_t id, Fra
                                                                  IcebergTableDescriptor* iceberg_table,
                                                                  const TIcebergTableSink& thrift_sink,
                                                                  std::vector<ExprContext*> partition_expr_ctxs)
-        : OperatorFactory(id, "iceberg_table_sink", Operator::s_pseudo_plan_node_id_for_iceberg_table_sink),
+        : OperatorFactory(id, "iceberg_table_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _t_output_expr(std::move(t_output_expr)),
           _fragment_ctx(std::move(fragment_ctx)),
           _iceberg_table(iceberg_table),

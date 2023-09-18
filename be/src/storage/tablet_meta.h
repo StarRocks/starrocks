@@ -105,7 +105,8 @@ public:
     TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash, uint64_t shard_id,
                const TTabletSchema& tablet_schema, uint32_t next_unique_id, bool enable_persistent_index,
                const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id, const TabletUid& tablet_uid,
-               TTabletType::type tabletType, TCompressionType::type compression_type);
+               TTabletType::type tabletType, TCompressionType::type compression_type,
+               int32_t primary_index_cache_expire_sec);
 
     virtual ~TabletMeta();
 
@@ -120,7 +121,7 @@ public:
 
     [[nodiscard]] Status serialize(std::string* meta_binary);
     [[nodiscard]] Status deserialize(std::string_view data);
-    void init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaPB* ptablet_schema_pb = nullptr);
+    void init_from_pb(TabletMetaPB* ptablet_meta_pb);
 
     void to_meta_pb(TabletMetaPB* tablet_meta_pb);
     void to_json(std::string* json_string, json2pb::Pb2JsonOptions& options);
@@ -174,6 +175,8 @@ public:
     RowsetMetaSharedPtr acquire_inc_rs_meta_by_version(const Version& version) const;
     void delete_stale_rs_meta_by_version(const Version& version);
 
+    void reset_tablet_schema_for_restore(const TabletSchemaPB& schema_pb);
+
     void add_delete_predicate(const DeletePredicatePB& delete_predicate, int64_t version);
     void remove_delete_predicate_by_version(const Version& version);
     const DelPredicateArray& delete_predicates() const;
@@ -194,6 +197,11 @@ public:
 
     void set_enable_persistent_index(bool enable_persistent_index) {
         _enable_persistent_index = enable_persistent_index;
+    }
+
+    int32_t get_primary_index_cache_expire_sec() const { return _primary_index_cache_expire_sec; }
+    void set_primary_index_cache_expire_sec(int32_t primary_index_cache_expire_sec) {
+        _primary_index_cache_expire_sec = primary_index_cache_expire_sec;
     }
 
     std::shared_ptr<BinlogConfig> get_binlog_config() { return _binlog_config; }
@@ -230,6 +238,7 @@ private:
     int64_t _creation_time = 0;
     int64_t _cumulative_layer_point = 0;
     bool _enable_persistent_index = false;
+    int32_t _primary_index_cache_expire_sec = 0;
     TabletUid _tablet_uid;
     TabletTypePB _tablet_type = TabletTypePB::TABLET_TYPE_DISK;
 

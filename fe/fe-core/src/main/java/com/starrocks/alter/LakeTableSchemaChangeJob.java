@@ -343,8 +343,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         CreateReplicaTask createReplicaTask = new CreateReplicaTask(backendId, dbId, tableId, partitionId,
                                 shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0, Partition.PARTITION_INIT_VERSION,
                                 originKeysType, TStorageType.COLUMN, storageMedium, copiedShadowSchema, bfColumns, bfFpp,
-                                countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(),
-                                TTabletType.TABLET_TYPE_LAKE, table.getCompressionType(), copiedSortKeyIdxes);
+                                countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(), 
+                                table.primaryIndexCacheExpireSec(), TTabletType.TABLET_TYPE_LAKE, table.getCompressionType(), 
+                                copiedSortKeyIdxes);
 
                         Long baseTabletId = partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
                         assert baseTabletId != null;
@@ -535,13 +536,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         EditLog.waitInfinity(startWriteTs, editLogFuture);
 
         // Delete tablet and shards
-        List<Long> unusedShards = new ArrayList<>();
         for (MaterializedIndex droppedIndex : droppedIndexes) {
             List<Long> shards = droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList());
-            unusedShards.addAll(shards);
+            // TODO: what if unusedShards deletion is partially successful?
+            StarMgrMetaSyncer.dropTabletAndDeleteShard(shards, GlobalStateMgr.getCurrentStarOSAgent());
         }
-        // TODO: what if unusedShards deletion is partially successful?
-        StarMgrMetaSyncer.dropTabletAndDeleteShard(unusedShards, GlobalStateMgr.getCurrentStarOSAgent());
+
 
         if (span != null) {
             span.end();

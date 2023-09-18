@@ -1,0 +1,78 @@
+-- name: test_automatic_partition_ctas
+CREATE TABLE `lineorder` (
+  `lo_orderkey` int(11) NOT NULL COMMENT "",
+  `lo_linenumber` int(11) NOT NULL COMMENT "",
+  `lo_custkey` int(11) NOT NULL COMMENT "",
+  `lo_partkey` int(11) NOT NULL COMMENT "",
+  `lo_suppkey` int(11) NOT NULL COMMENT "",
+  `lo_orderdate` date NOT NULL COMMENT "",
+  `lo_orderpriority` varchar(16) NOT NULL COMMENT "",
+  `lo_shippriority` int(11) NOT NULL COMMENT "",
+  `lo_quantity` int(11) NOT NULL COMMENT "",
+  `lo_extendedprice` int(11) NOT NULL COMMENT "",
+  `lo_ordtotalprice` int(11) NOT NULL COMMENT "",
+  `lo_discount` int(11) NOT NULL COMMENT "",
+  `lo_revenue` int(11) NOT NULL COMMENT "",
+  `lo_supplycost` int(11) NOT NULL COMMENT "",
+  `lo_tax` int(11) NOT NULL COMMENT "",
+  `lo_commitdate` int(11) NOT NULL COMMENT "",
+  `lo_shipmode` varchar(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderkey`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`lo_orderdate`)
+(PARTITION p1 VALUES [("19920101"), ("19930101")),
+PARTITION p2 VALUES [("19930101"), ("19940101")),
+PARTITION p3 VALUES [("19940101"), ("19950101")),
+PARTITION p4 VALUES [("19950101"), ("19960101")),
+PARTITION p5 VALUES [("19960101"), ("19970101")),
+PARTITION p6 VALUES [("19970101"), ("19980101")),
+PARTITION p7 VALUES [("19980101"), ("19990101")))
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+INSERT INTO lineorder (lo_orderkey, lo_linenumber, lo_custkey, lo_partkey, lo_suppkey, lo_orderdate, lo_orderpriority,
+lo_shippriority, lo_quantity, lo_extendedprice, lo_ordtotalprice, lo_discount, lo_revenue, lo_supplycost,
+lo_tax, lo_commitdate, lo_shipmode)
+VALUES (1, 1, 1, 1, 1, 19920101, 'LOW', 1, 100, 200, 300, 10, 190, 100, 5, 19920201, 'AIR');
+INSERT INTO lineorder (lo_orderkey, lo_linenumber, lo_custkey, lo_partkey, lo_suppkey, lo_orderdate, lo_orderpriority,
+lo_shippriority, lo_quantity, lo_extendedprice, lo_ordtotalprice, lo_discount, lo_revenue, lo_supplycost,
+lo_tax, lo_commitdate, lo_shipmode)
+VALUES (2, 1, 2, 2, 2, 19930201, 'MEDIUM', 2, 110, 210, 310, 11, 200, 110, 6, 19930301, 'SHIP');
+INSERT INTO lineorder (lo_orderkey, lo_linenumber, lo_custkey, lo_partkey, lo_suppkey, lo_orderdate, lo_orderpriority,
+lo_shippriority, lo_quantity, lo_extendedprice, lo_ordtotalprice, lo_discount, lo_revenue, lo_supplycost,
+lo_tax, lo_commitdate, lo_shipmode)
+VALUES (3, 1, 3, 3, 3, 19940201, 'HIGH', 3, 120, 220, 320, 12, 210, 120, 7, 19940301, 'RAIL');
+INSERT INTO lineorder (lo_orderkey, lo_linenumber, lo_custkey, lo_partkey, lo_suppkey, lo_orderdate, lo_orderpriority,
+lo_shippriority, lo_quantity, lo_extendedprice, lo_ordtotalprice, lo_discount, lo_revenue, lo_supplycost,
+lo_tax, lo_commitdate, lo_shipmode)
+VALUES (4, 1, 4, 4, 4, 19950201, 'LOW', 1, 130, 230, 330, 13, 220, 130, 8, 19950301, 'TRUCK');
+INSERT INTO lineorder (lo_orderkey, lo_linenumber, lo_custkey, lo_partkey, lo_suppkey, lo_orderdate, lo_orderpriority,
+lo_shippriority, lo_quantity, lo_extendedprice, lo_ordtotalprice, lo_discount, lo_revenue, lo_supplycost,
+lo_tax, lo_commitdate, lo_shipmode)
+VALUES (5, 1, 5, 5, 5, 19960201, 'MEDIUM', 2, 140, 240, 340, 14, 230, 140, 9, 19960301, 'AIR');
+INSERT INTO lineorder (lo_orderkey, lo_linenumber, lo_custkey, lo_partkey, lo_suppkey, lo_orderdate, lo_orderpriority,
+lo_shippriority, lo_quantity, lo_extendedprice, lo_ordtotalprice, lo_discount, lo_revenue, lo_supplycost,
+lo_tax, lo_commitdate, lo_shipmode)
+VALUES (6, 1, 6, 6, 6, 19970201, 'HIGH', 3, 150, 250, 350, 15, 240, 150, 10, 19970301, 'SHIP');
+INSERT INTO lineorder (lo_orderkey, lo_linenumber, lo_custkey, lo_partkey, lo_suppkey, lo_orderdate, lo_orderpriority,
+lo_shippriority, lo_quantity, lo_extendedprice, lo_ordtotalprice, lo_discount, lo_revenue, lo_supplycost,
+lo_tax, lo_commitdate, lo_shipmode)
+VALUES (7, 1, 7, 7, 7, 19980201, 'LOW', 1, 160, 260, 360, 16, 250, 160, 11, 19980301, 'RAIL');
+CREATE TABLE lineorder_automatic
+PARTITION BY date_trunc('year', `LO_ORDERDATE`)
+AS SELECT * FROM lineorder;
+CREATE TABLE lineorder_automatic2
+PARTITION BY date_trunc('year', `LO_ORDERDATE`)
+(
+    START ("1992-01-01") END ("1999-01-01") EVERY (INTERVAL 1 YEAR)
+)
+DISTRIBUTED BY HASH (`LO_ORDERKEY`)
+AS SELECT * FROM lineorder;
+select count(*) from lineorder_automatic;
+select count(*) from lineorder_automatic2;

@@ -48,6 +48,7 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/stream_load_context.h"
+#include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
@@ -58,7 +59,6 @@ namespace starrocks {
 TLoadTxnBeginResult k_stream_load_begin_result;
 TLoadTxnCommitResult k_stream_load_commit_result;
 TLoadTxnRollbackResult k_stream_load_rollback_result;
-Status k_stream_load_plan_status;
 #endif
 
 static Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, StreamLoadContext* ctx);
@@ -151,7 +151,9 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
         return st;
     }
 #else
-    ctx->promise.set_value(k_stream_load_plan_status);
+    Status status;
+    TEST_SYNC_POINT_CALLBACK("StreamLoadExecutor::execute_plan_fragment:1", &status);
+    ctx->promise.set_value(status);
 #endif
     return Status::OK();
 }

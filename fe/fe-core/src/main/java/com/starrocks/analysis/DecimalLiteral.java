@@ -43,6 +43,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.optimizer.validate.ValidateException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TDecimalLiteral;
 import com.starrocks.thrift.TExprNode;
@@ -378,7 +380,12 @@ public class DecimalLiteral extends LiteralExpr {
         // use BigDecimal.toPlainString() instead of BigDecimal.toString()
         // to avoid outputting scientific representation which cannot be
         // parsed in BE that uses regex to validation decimals in string format.
-        return value.toPlainString();
+        // Different print styles help us distinguish decimalV2 and decimalV3 in plan.
+        if (type.isDecimalV2()) {
+            return value.stripTrailingZeros().toPlainString();
+        } else {
+            return value.toPlainString();
+        }
     }
 
     @Override
@@ -515,5 +522,20 @@ public class DecimalLiteral extends LiteralExpr {
     @Override
     public boolean equals(Object obj) {
         return super.equals(obj);
+    }
+
+    @Override
+    public void parseMysqlParam(ByteBuffer data) {
+        int len = getParamLen(data);
+        BigDecimal v;
+        try {
+            byte[] bytes = new byte[len];
+            data.get(bytes);
+            String value = new String(bytes);
+            v = new BigDecimal(value);
+        } catch (NumberFormatException e) {
+            throw new ValidateException("Invalid floating literal: " + value, ErrorType.USER_ERROR);
+        }
+        init(v);
     }
 }

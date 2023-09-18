@@ -344,7 +344,7 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
             ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
             auto seg_iterator = res.value();
 
-            seg_iterator->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+            ASSERT_TRUE(seg_iterator->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
             auto chunk = ChunkHelper::new_chunk(schema, 100);
             while (true) {
@@ -505,7 +505,7 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
             ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
 
             auto seg_iterator = res.value();
-            seg_iterator->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+            ASSERT_TRUE(seg_iterator->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
             auto chunk = ChunkHelper::new_chunk(seg_iterator->schema(), 100);
             while (true) {
                 auto st = seg_iterator->get_next(chunk.get());

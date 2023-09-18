@@ -61,11 +61,11 @@ static MemTracker* k_metadata_mem_tracker = nullptr;
 static MemTracker* k_schema_change_mem_tracker = nullptr;
 static std::string k_default_storage_root_path = "";
 
-static void set_up() {
+static void set_up(const std::string& sub_path) {
     config::mem_limit = "10g";
-    GlobalEnv::GetInstance()->init();
+    CHECK(GlobalEnv::GetInstance()->init().ok());
     k_default_storage_root_path = config::storage_root_path;
-    config::storage_root_path = std::filesystem::current_path().string() + "/data_test";
+    config::storage_root_path = std::filesystem::current_path().string() + "/" + sub_path;
     fs::remove_all(config::storage_root_path);
     fs::remove_all(string(getenv("STARROCKS_HOME")) + UNUSED_PREFIX);
     fs::create_directories(config::storage_root_path);
@@ -84,8 +84,8 @@ static void set_up() {
     ASSERT_TRUE(s.ok()) << s.to_string();
 }
 
-static void tear_down() {
-    config::storage_root_path = std::filesystem::current_path().string() + "/data_test";
+static void tear_down(const std::string& sub_path) {
+    config::storage_root_path = std::filesystem::current_path().string() + "/" + sub_path;
     fs::remove_all(config::storage_root_path);
     fs::remove_all(string(getenv("STARROCKS_HOME")) + UNUSED_PREFIX);
     k_metadata_mem_tracker->release(k_metadata_mem_tracker->consumption());
@@ -236,12 +236,14 @@ void set_create_duplicate_tablet_request(TCreateTabletReq* request) {
 
 class TestDeleteConditionHandler : public testing::Test {
 public:
-    static void SetUpTestSuite() { set_up(); }
-    static void TearDownTestSuite() { tear_down(); }
+    static const std::string kSubPath;
+
+    static void SetUpTestSuite() { set_up(std::string(kSubPath)); }
+    static void TearDownTestSuite() { tear_down(std::string(kSubPath)); }
 
 protected:
     void SetUp() override {
-        config::storage_root_path = std::filesystem::current_path().string() + "/data_delete_condition";
+        config::storage_root_path = std::filesystem::current_path().string() + std::string("/") + kSubPath;
         fs::remove_all(config::storage_root_path);
         ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
 
@@ -277,6 +279,8 @@ protected:
     TCreateTabletReq _create_dup_tablet;
     DeleteConditionHandler _delete_condition_handler;
 };
+
+const std::string TestDeleteConditionHandler::kSubPath = std::string("data_delete_condition");
 
 TEST_F(TestDeleteConditionHandler, StoreCondSucceed) {
     Status success_res;
@@ -397,12 +401,13 @@ TEST_F(TestDeleteConditionHandler, StoreCondNonexistentColumn) {
 // delete condition does not match
 class TestDeleteConditionHandler2 : public testing::Test {
 public:
-    static void SetUpTestSuite() { set_up(); }
-    static void TearDownTestSuite() { tear_down(); }
+    static const std::string kSubPath;
+    static void SetUpTestSuite() { set_up(std::string(kSubPath)); }
+    static void TearDownTestSuite() { tear_down(std::string(kSubPath)); }
 
 protected:
     void SetUp() override {
-        config::storage_root_path = std::filesystem::current_path().string() + "/data_delete_condition";
+        config::storage_root_path = std::filesystem::current_path().string() + std::string("/") + kSubPath;
         fs::remove_all(config::storage_root_path);
         ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
 
@@ -427,6 +432,8 @@ protected:
     TCreateTabletReq _create_tablet;
     DeleteConditionHandler _delete_condition_handler;
 };
+
+const std::string TestDeleteConditionHandler2::kSubPath = std::string("data_delete_condition2");
 
 TEST_F(TestDeleteConditionHandler2, ValidConditionValue) {
     Status res;

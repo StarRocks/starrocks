@@ -102,6 +102,21 @@ protected:
     void check_empty_hash_map(TJoinOp::type join_type, int num_probe_rows, int32_t expect_num_rows,
                               int32_t expect_num_colums);
 
+    void sort_results_from_coroutine(std::vector<uint32_t>& pid, std::vector<uint32_t>& bid, int size) {
+        std::vector<std::pair<int, int>> zipped;
+        for (auto i = 0; i < size; i++) {
+            zipped.push_back(std::make_pair(pid[i], bid[i]));
+        }
+        std::sort(std::begin(zipped), std::end(zipped), [&](const auto& a, const auto& b) {
+            if (a.first == b.first) return a.second > b.second;
+            return a.first < b.first;
+        });
+        for (auto i = 0; i < size; i++) {
+            pid[i] = zipped[i].first;
+            bid[i] = zipped[i].second;
+        }
+    }
+
     std::shared_ptr<ObjectPool> _object_pool = nullptr;
     std::shared_ptr<MemPool> _mem_pool = nullptr;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
@@ -697,11 +712,11 @@ void JoinHashMapTest::check_empty_hash_map(TJoinOp::type join_type, int num_prob
 
     Columns build_key_columns{build_chunk->columns()[0], build_chunk->columns()[1]};
     hash_table.append_chunk(runtime_state.get(), build_chunk, build_key_columns);
-    hash_table.build(runtime_state.get());
+    (void)hash_table.build(runtime_state.get());
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     bool eos = false;
-    hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+    (void)hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
 
     ASSERT_EQ(result_chunk->num_rows(), expect_num_rows);
     ASSERT_EQ(result_chunk->num_columns(), expect_num_colums);
@@ -773,7 +788,9 @@ std::shared_ptr<RowDescriptor> JoinHashMapTest::create_row_desc(RuntimeState* st
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0, 1};
     std::vector<bool> nullable_tuples = std::vector<bool>{nullable, nullable};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(state, object_pool.get(), table_desc_builder->desc_tbl(), &tbl, config::vector_chunk_size);
+    CHECK(DescriptorTbl::create(state, object_pool.get(), table_desc_builder->desc_tbl(), &tbl,
+                                config::vector_chunk_size)
+                  .ok());
 
     return std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
 }
@@ -785,7 +802,9 @@ std::shared_ptr<RowDescriptor> JoinHashMapTest::create_probe_desc(RuntimeState* 
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{nullable};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(state, object_pool.get(), probe_desc_builder->desc_tbl(), &tbl, config::vector_chunk_size);
+    CHECK(DescriptorTbl::create(state, object_pool.get(), probe_desc_builder->desc_tbl(), &tbl,
+                                config::vector_chunk_size)
+                  .ok());
 
     return std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
 }
@@ -797,7 +816,9 @@ std::shared_ptr<RowDescriptor> JoinHashMapTest::create_build_desc(RuntimeState* 
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{1};
     std::vector<bool> nullable_tuples = std::vector<bool>{nullable};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(state, object_pool.get(), build_desc_builder->desc_tbl(), &tbl, config::vector_chunk_size);
+    CHECK(DescriptorTbl::create(state, object_pool.get(), build_desc_builder->desc_tbl(), &tbl,
+                                config::vector_chunk_size)
+                  .ok());
 
     return std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
 }
@@ -1084,8 +1105,8 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
     ht.create(param);
     Columns key_columns{build_chunk->columns()[0]};
     ht.append_chunk(_runtime_state.get(), build_chunk, key_columns);
-    ht.build(_runtime_state.get());
-    ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+    (void)ht.build(_runtime_state.get());
+    (void)ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
 
     // check
     ASSERT_EQ(result_chunk->columns().size(), 2);
@@ -1150,8 +1171,8 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
     ht.create(param);
     Columns key_columns{build_chunk->columns()[0]};
     ht.append_chunk(_runtime_state.get(), build_chunk, key_columns);
-    ht.build(_runtime_state.get());
-    ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+    (void)ht.build(_runtime_state.get());
+    (void)ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
 
     // check
     ASSERT_EQ(result_chunk->columns().size(), 2);
@@ -1399,6 +1420,42 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
     probe_state.probe_pool.reset();
 }
 
+#define DO_TEST_PROBE(FUNC, FIRST, INIT)                                                                      \
+    for (auto& group : {2, 1, 0}) {                                                                           \
+        probe_state.probe_index.assign(4096 + 8, 0);                                                          \
+        probe_state.build_index.assign(4096 + 8, 0);                                                          \
+        probe_state.probe_match_index.assign(4096 + 8, 0);                                                    \
+        probe_state.has_null_build_tuple = false;                                                             \
+        if (group == 0) {                                                                                     \
+            join_hash_map->FUNC<FIRST>(runtime_state.get(), build_data, probe_data);                          \
+        } else {                                                                                              \
+            probe_state.handles.clear();                                                                      \
+            for (int i = 0; i < group; ++i) {                                                                 \
+                probe_state.handles.insert(join_hash_map->FUNC(runtime_state.get(), build_data, probe_data)); \
+            }                                                                                                 \
+            probe_state.active_coroutines = group;                                                            \
+            join_hash_map->_probe_coroutine<FIRST, INIT>(runtime_state.get(), build_data, probe_data);        \
+            sort_results_from_coroutine(probe_state.probe_index, probe_state.build_index, probe_state.count); \
+        }
+
+#define DO_TEST_PROBE_MID(FUNC)                                                                           \
+    if (group == 0) {                                                                                     \
+        join_hash_map->FUNC<false>(runtime_state.get(), build_data, probe_data);                          \
+    } else {                                                                                              \
+        join_hash_map->_probe_coroutine<false, false>(runtime_state.get(), build_data, probe_data);       \
+        sort_results_from_coroutine(probe_state.probe_index, probe_state.build_index, probe_state.count); \
+    }
+
+#define DO_TEST_PROBE_END()                                                              \
+    probe_state.has_remain = false;                                                      \
+    probe_state.cur_probe_index = 0;                                                     \
+    probe_state.cur_row_match_count = 0;                                                 \
+    for (auto it = probe_state.handles.begin(); it != probe_state.handles.end(); it++) { \
+        it->destroy();                                                                   \
+    }                                                                                    \
+    probe_state.handles.clear();                                                         \
+    }
+
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToOneAllMatch) {
     JoinHashTableItems table_items;
@@ -1430,8 +1487,8 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToOneAllMatch) {
     }
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht<true>(runtime_state.get(), build_data, probe_data);
 
+    DO_TEST_PROBE(_probe_from_ht, true, false)
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::ALL_MATCH_ONE);
     ASSERT_FALSE(probe_state.has_remain);
     ASSERT_EQ(probe_state.cur_probe_index, 0);
@@ -1441,6 +1498,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToOneAllMatch) {
         ASSERT_EQ(probe_state.probe_index[i], i);
         ASSERT_EQ(probe_state.build_index[i], i + 1);
     }
+    DO_TEST_PROBE_END()
 }
 
 // NOLINTNEXTLINE
@@ -1476,8 +1534,8 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToOneMostMatch) {
     }
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht<true>(runtime_state.get(), build_data, probe_data);
 
+    DO_TEST_PROBE(_probe_from_ht, true, false)
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::MOST_MATCH_ONE);
     ASSERT_FALSE(probe_state.has_remain);
     ASSERT_EQ(probe_state.cur_probe_index, 0);
@@ -1492,6 +1550,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToOneMostMatch) {
         ASSERT_EQ(probe_state.build_index[cur_index], i + 1);
         cur_index++;
     }
+    DO_TEST_PROBE_END()
 }
 
 // NOLINTNEXTLINE
@@ -1524,34 +1583,42 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToMany) {
     }
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht<true>(runtime_state.get(), build_data, probe_data);
+    DO_TEST_PROBE(_probe_from_ht, true, false)
+    std::vector<std::pair<uint32_t, uint32_t>> results;
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
     ASSERT_TRUE(probe_state.has_remain);
-    ASSERT_EQ(probe_state.cur_probe_index, 2048);
+    if (group == 0) {
+        ASSERT_EQ(probe_state.cur_probe_index, 2048);
+        ASSERT_EQ(probe_state.cur_row_match_count, 1);
+    } else {
+        ASSERT_GE(probe_state.cur_probe_index, 2048);
+    }
     ASSERT_EQ(probe_state.count, 4096);
-    ASSERT_EQ(probe_state.cur_row_match_count, 1);
-    for (uint32_t i = 0; i < 2048; i += 1) {
-        ASSERT_EQ(probe_state.probe_index[2 * i], i);
-        ASSERT_EQ(probe_state.build_index[2 * i], i + 1 + 4096);
-
-        ASSERT_EQ(probe_state.probe_index[2 * i + 1], i);
-        ASSERT_EQ(probe_state.build_index[2 * i + 1], i + 1);
+    for (uint32_t i = 0; i < probe_state.count; i += 1) {
+        results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
     }
 
-    join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht<false>(runtime_state.get(), build_data, probe_data);
+    DO_TEST_PROBE_MID(_probe_from_ht)
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
     ASSERT_FALSE(probe_state.has_remain);
     ASSERT_EQ(probe_state.cur_probe_index, 0);
     ASSERT_EQ(probe_state.count, 1904);
     ASSERT_EQ(probe_state.cur_row_match_count, 0);
-    for (uint32_t i = 0; i < 952; i += 1) {
-        ASSERT_EQ(probe_state.probe_index[2 * i], i + 2048);
-        ASSERT_EQ(probe_state.build_index[2 * i], i + 1 + 4096 + 2048);
-
-        ASSERT_EQ(probe_state.probe_index[2 * i + 1], i + 2048);
-        ASSERT_EQ(probe_state.build_index[2 * i + 1], i + 1 + 2048);
+    for (uint32_t i = 0; i < probe_state.count; i += 1) {
+        results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
     }
+    std::sort(results.begin(), results.end(), [&](auto& a, auto& b) {
+        if (a.first == b.first) return a.second > b.second;
+        return a.first < b.first;
+    });
+    for (uint32_t i = 0; i < 3000; i += 1) {
+        ASSERT_EQ(results[2 * i].first, i);
+        ASSERT_EQ(results[2 * i].second, i + 1 + 4096);
+
+        ASSERT_EQ(results[2 * i + 1].first, i);
+        ASSERT_EQ(results[2 * i + 1].second, i + 1);
+    }
+    DO_TEST_PROBE_END()
 }
 
 // NOLINTNEXTLINE
@@ -1587,36 +1654,44 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinFoundEmpty) {
     }
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_left_outer_join<true>(runtime_state.get(), build_data, probe_data);
+    DO_TEST_PROBE(_probe_from_ht_for_left_outer_join, true, false)
+    std::vector<std::pair<uint32_t, uint32_t>> results;
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
     ASSERT_TRUE(probe_state.has_remain);
-    ASSERT_EQ(probe_state.cur_probe_index, 2048);
+    if (group == 0) {
+        ASSERT_EQ(probe_state.cur_probe_index, 2048);
+        ASSERT_EQ(probe_state.cur_row_match_count, 1);
+    } else {
+        ASSERT_GE(probe_state.cur_probe_index, 2048);
+    }
     ASSERT_EQ(probe_state.count, 4096);
-    ASSERT_EQ(probe_state.cur_row_match_count, 1);
     ASSERT_FALSE(probe_state.has_null_build_tuple);
-    for (uint32_t i = 0; i < 2048; i += 1) {
-        ASSERT_EQ(probe_state.probe_index[2 * i], i);
-        ASSERT_EQ(probe_state.build_index[2 * i], i + 1 + 4096);
-
-        ASSERT_EQ(probe_state.probe_index[2 * i + 1], i);
-        ASSERT_EQ(probe_state.build_index[2 * i + 1], i + 1);
+    for (uint32_t i = 0; i < probe_state.count; i += 1) {
+        results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
     }
 
-    join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_left_outer_join<false>(runtime_state.get(), build_data, probe_data);
+    DO_TEST_PROBE_MID(_probe_from_ht_for_left_outer_join)
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
     ASSERT_FALSE(probe_state.has_remain);
     ASSERT_EQ(probe_state.cur_probe_index, 0);
     ASSERT_EQ(probe_state.count, 1904);
     ASSERT_EQ(probe_state.cur_row_match_count, 0);
     ASSERT_FALSE(probe_state.has_null_build_tuple);
-    for (uint32_t i = 0; i < 952; i += 1) {
-        ASSERT_EQ(probe_state.probe_index[2 * i], i + 2048);
-        ASSERT_EQ(probe_state.build_index[2 * i], i + 1 + 4096 + 2048);
-
-        ASSERT_EQ(probe_state.probe_index[2 * i + 1], i + 2048);
-        ASSERT_EQ(probe_state.build_index[2 * i + 1], i + 1 + 2048);
+    for (uint32_t i = 0; i < probe_state.count; i += 1) {
+        results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
     }
+    std::sort(results.begin(), results.end(), [&](auto& a, auto& b) {
+        if (a.first == b.first) return a.second > b.second;
+        return a.first < b.first;
+    });
+    for (uint32_t i = 0; i < 3000; i += 1) {
+        ASSERT_EQ(results[2 * i].first, i);
+        ASSERT_EQ(results[2 * i].second, i + 1 + 4096);
+
+        ASSERT_EQ(results[2 * i + 1].first, i);
+        ASSERT_EQ(results[2 * i + 1].second, i + 1);
+    }
+    DO_TEST_PROBE_END()
 }
 
 // NOLINTNEXTLINE
@@ -1635,11 +1710,63 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmpty) {
     this->prepare_probe_data(&probe_data, probe_row_count);
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_left_outer_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
-                                                                                probe_data);
-
+    join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<true>(
+            _runtime_state.get(), build_data, probe_data);
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count, false);
     this->check_match_index(probe_state.probe_match_index, 0, config::vector_chunk_size, match_count);
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmptyCoro) {
+    JoinHashTableItems table_items;
+    HashTableProbeState probe_state;
+    Buffer<int32_t> build_data;
+    Buffer<int32_t> probe_data;
+
+    uint32_t match_count = 3;
+    uint32_t probe_row_count = 2000;
+
+    this->prepare_table_items(&table_items, TJoinOp::LEFT_OUTER_JOIN, true, match_count);
+    this->prepare_build_data(&build_data, match_count);
+    this->prepare_probe_state(&probe_state, probe_row_count);
+    this->prepare_probe_data(&probe_data, probe_row_count);
+
+    auto& runtime_state = _runtime_state;
+
+    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
+    DO_TEST_PROBE(_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct, true, true)
+    std::vector<std::pair<uint32_t, uint32_t>> results;
+    ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
+    ASSERT_EQ(probe_state.count, 4096);
+    ASSERT_FALSE(probe_state.has_null_build_tuple);
+    for (uint32_t i = 0; i < probe_state.count; i += 1) {
+        results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
+    }
+
+    DO_TEST_PROBE_MID(_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct)
+    ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
+    ASSERT_FALSE(probe_state.has_remain);
+    ASSERT_EQ(probe_state.count, 1904);
+    for (uint32_t i = 0; i < probe_state.count; i += 1) {
+        results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
+    }
+    std::sort(results.begin(), results.end(), [&](auto& a, auto& b) {
+        if (a.first == b.first) return a.second > b.second;
+        return a.first < b.first;
+    });
+
+    for (uint32_t i = 0; i < 2000; i += 1) {
+        ASSERT_EQ(results[3 * i].first, i);
+        ASSERT_EQ(results[3 * i].second, i + 1 + 4096 + 4096);
+
+        ASSERT_EQ(results[3 * i + 1].first, i);
+        ASSERT_EQ(results[3 * i + 1].second, i + 1 + 4096);
+
+        ASSERT_EQ(results[3 * i + 2].first, i);
+        ASSERT_EQ(results[3 * i + 2].second, i + 1);
+        ASSERT_EQ(match_count, probe_state.probe_match_index[i]);
+    }
+    DO_TEST_PROBE_END()
 }
 
 // Test case for right semi join with other conjunct.
@@ -1647,98 +1774,89 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmpty) {
 // - All match.
 // - The build rows for one probe row, exist in different chunk
 // NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, ProbeFromHtForRightSemiJoinWithOtherConjunct) {
-    JoinHashTableItems table_items;
-    HashTableProbeState probe_state;
-    Buffer<int32_t> build_data;
-    Buffer<int32_t> probe_data;
+TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunct) {
+    for (auto& join_type : {TJoinOp::RIGHT_SEMI_JOIN, TJoinOp::RIGHT_OUTER_JOIN, TJoinOp::RIGHT_ANTI_JOIN}) {
+        JoinHashTableItems table_items;
+        HashTableProbeState probe_state;
+        Buffer<int32_t> build_data;
+        Buffer<int32_t> probe_data;
 
-    uint32_t match_count = 3;
-    uint32_t probe_row_count = 2000;
+        uint32_t match_count = 3;
+        uint32_t probe_row_count = 2000;
 
-    table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
-    this->prepare_table_items(&table_items, TJoinOp::RIGHT_SEMI_JOIN, true, match_count);
-    this->prepare_build_data(&build_data, match_count);
-    this->prepare_probe_state(&probe_state, probe_row_count);
-    this->prepare_probe_data(&probe_data, probe_row_count);
+        table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
+        this->prepare_table_items(&table_items, join_type, true, match_count);
+        this->prepare_build_data(&build_data, match_count);
+        this->prepare_probe_state(&probe_state, probe_row_count);
+        this->prepare_probe_data(&probe_data, probe_row_count);
 
-    // first probe
-    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_semi_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
-                                                                                probe_data);
-    this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count, false);
+        // first probe
+        auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
+        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<true>(
+                _runtime_state.get(), build_data, probe_data);
+        this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count,
+                                false);
 
-    // second probe
-    join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_semi_join_with_other_conjunct<false>(_runtime_state.get(), build_data,
-                                                                                 probe_data);
-    this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 1, match_count, probe_row_count, false);
+        // second probe
+        join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
+        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<false>(
+                _runtime_state.get(), build_data, probe_data);
+        this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 1, match_count, probe_row_count,
+                                false);
+    }
 }
 
-// Test case for right outer join with other conjunct.
-// - One probe row match three build row.
-// - All match.
-// - The build rows for one probe row, exist in different chunk
-// NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, ProbeFromHtForRightOuterJoinWithOtherConjunct) {
-    JoinHashTableItems table_items;
-    HashTableProbeState probe_state;
-    Buffer<int32_t> build_data;
-    Buffer<int32_t> probe_data;
+TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunctCoro) {
+    for (auto& join_type : {TJoinOp::RIGHT_SEMI_JOIN, TJoinOp::RIGHT_OUTER_JOIN, TJoinOp::RIGHT_ANTI_JOIN}) {
+        JoinHashTableItems table_items;
+        HashTableProbeState probe_state;
+        Buffer<int32_t> build_data;
+        Buffer<int32_t> probe_data;
 
-    uint32_t match_count = 3;
-    uint32_t probe_row_count = 2000;
+        uint32_t match_count = 3;
+        uint32_t probe_row_count = 2000;
 
-    table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
-    this->prepare_table_items(&table_items, TJoinOp::RIGHT_OUTER_JOIN, true, match_count);
-    this->prepare_build_data(&build_data, match_count);
-    this->prepare_probe_state(&probe_state, probe_row_count);
-    this->prepare_probe_data(&probe_data, probe_row_count);
+        this->prepare_table_items(&table_items, join_type, true, match_count);
+        this->prepare_build_data(&build_data, match_count);
+        this->prepare_probe_state(&probe_state, probe_row_count);
+        this->prepare_probe_data(&probe_data, probe_row_count);
 
-    // first probe
-    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_outer_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
-                                                                                 probe_data);
-    this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count, false);
+        auto& runtime_state = _runtime_state;
 
-    // second probe
-    join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_outer_join_with_other_conjunct<false>(_runtime_state.get(), build_data,
-                                                                                  probe_data);
-    this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 1, match_count, probe_row_count, false);
-}
+        auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
+        DO_TEST_PROBE(_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct, true, true)
+        std::vector<std::pair<uint32_t, uint32_t>> results;
+        ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
+        ASSERT_EQ(probe_state.count, 4096);
+        ASSERT_FALSE(probe_state.has_null_build_tuple);
+        for (uint32_t i = 0; i < probe_state.count; i += 1) {
+            results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
+        }
 
-// Test case for right anti join with other conjunct.
-// - One probe row match three build row.
-// - All match.
-// - The build rows for one probe row, exist in different chunk
-// NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, ProbeFromHtForRightAntiJoinWithOtherConjunct) {
-    JoinHashTableItems table_items;
-    HashTableProbeState probe_state;
-    Buffer<int32_t> build_data;
-    Buffer<int32_t> probe_data;
+        DO_TEST_PROBE_MID(_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct)
+        ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
+        ASSERT_FALSE(probe_state.has_remain);
+        ASSERT_EQ(probe_state.count, 1904);
+        for (uint32_t i = 0; i < probe_state.count; i += 1) {
+            results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
+        }
+        std::sort(results.begin(), results.end(), [&](auto& a, auto& b) {
+            if (a.first == b.first) return a.second > b.second;
+            return a.first < b.first;
+        });
 
-    uint32_t match_count = 3;
-    uint32_t probe_row_count = 2000;
+        for (uint32_t i = 0; i < 2000; i += 1) {
+            ASSERT_EQ(results[3 * i].first, i);
+            ASSERT_EQ(results[3 * i].second, i + 1 + 4096 + 4096);
 
-    table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
-    this->prepare_table_items(&table_items, TJoinOp::RIGHT_ANTI_JOIN, true, match_count);
-    this->prepare_build_data(&build_data, match_count);
-    this->prepare_probe_state(&probe_state, probe_row_count);
-    this->prepare_probe_data(&probe_data, probe_row_count);
+            ASSERT_EQ(results[3 * i + 1].first, i);
+            ASSERT_EQ(results[3 * i + 1].second, i + 1 + 4096);
 
-    // first probe
-    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_anti_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
-                                                                                probe_data);
-    this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count, false);
-
-    // second probe
-    join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_anti_join_with_other_conjunct<false>(_runtime_state.get(), build_data,
-                                                                                 probe_data);
-    this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 1, match_count, probe_row_count, false);
+            ASSERT_EQ(results[3 * i + 2].first, i);
+            ASSERT_EQ(results[3 * i + 2].second, i + 1);
+        }
+        DO_TEST_PROBE_END()
+    }
 }
 
 // NOLINTNEXTLINE
@@ -1781,12 +1899,12 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
 
     Columns build_keys_column{build_chunk->columns()[0]};
     hash_table.append_chunk(runtime_state.get(), build_chunk, build_keys_column);
-    hash_table.build(runtime_state.get());
+    (void)hash_table.build(runtime_state.get());
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     bool eos = false;
 
-    hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+    (void)hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
 
     ASSERT_EQ(result_chunk->num_columns(), 6);
 
@@ -1847,12 +1965,12 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     Columns build_key_columns;
     build_key_columns.emplace_back(build_chunk->columns()[0]);
     hash_table.append_chunk(runtime_state.get(), build_chunk, build_key_columns);
-    hash_table.build(runtime_state.get());
+    (void)hash_table.build(runtime_state.get());
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     bool eos = false;
 
-    hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+    (void)hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
 
     ASSERT_EQ(result_chunk->num_columns(), 6);
 
@@ -1915,12 +2033,12 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
 
     Columns build_key_columns{build_chunk->columns()[0], build_chunk->columns()[1]};
     hash_table.append_chunk(runtime_state.get(), build_chunk, build_key_columns);
-    hash_table.build(runtime_state.get());
+    (void)hash_table.build(runtime_state.get());
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     bool eos = false;
 
-    hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+    (void)hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
 
     ASSERT_EQ(result_chunk->num_columns(), 6);
 
@@ -1980,12 +2098,12 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
 
     Columns build_key_columns{build_chunk->columns()[0], build_chunk->columns()[1]};
     hash_table.append_chunk(runtime_state.get(), build_chunk, build_key_columns);
-    hash_table.build(runtime_state.get());
+    (void)hash_table.build(runtime_state.get());
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     bool eos = false;
 
-    hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+    (void)hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
 
     ASSERT_EQ(result_chunk->num_columns(), 6);
 

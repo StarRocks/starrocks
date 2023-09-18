@@ -76,10 +76,10 @@ int compare_chunk_row(const ChunkRow& lhs, const ChunkRow& rhs, const std::vecto
 
 struct MergeElement;
 // TODO: optimize it with vertical sort
-class ChunkMerger {
+class HeapChunkMerger {
 public:
-    explicit ChunkMerger(TabletSharedPtr tablet, std::vector<ColumnId> sort_key_idxes);
-    virtual ~ChunkMerger();
+    explicit HeapChunkMerger(TabletSharedPtr tablet, std::vector<ColumnId> sort_key_idxes);
+    virtual ~HeapChunkMerger();
 
     Status merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_writer);
     static void aggregate_chunk(ChunkAggregator& aggregator, ChunkPtr& chunk, RowsetWriter* rowset_writer);
@@ -103,7 +103,7 @@ struct MergeElement {
 
     Chunk* chunk;
     size_t row_index;
-    ChunkMerger* _merger;
+    HeapChunkMerger* _merger;
 };
 
 bool ChunkSorter::sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet) {
@@ -146,16 +146,16 @@ bool ChunkSorter::sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet) {
     return true;
 }
 
-ChunkMerger::ChunkMerger(TabletSharedPtr tablet, std::vector<ColumnId> sort_key_idxes)
+HeapChunkMerger::HeapChunkMerger(TabletSharedPtr tablet, std::vector<ColumnId> sort_key_idxes)
         : _tablet(std::move(tablet)), _aggregator(nullptr), _sort_key_idxes(std::move(sort_key_idxes)) {}
 
-ChunkMerger::~ChunkMerger() {
+HeapChunkMerger::~HeapChunkMerger() {
     if (_aggregator != nullptr) {
         _aggregator->close();
     }
 }
 
-void ChunkMerger::aggregate_chunk(ChunkAggregator& aggregator, ChunkPtr& chunk, RowsetWriter* rowset_writer) {
+void HeapChunkMerger::aggregate_chunk(ChunkAggregator& aggregator, ChunkPtr& chunk, RowsetWriter* rowset_writer) {
     aggregator.aggregate();
     while (aggregator.is_finish()) {
         (void)rowset_writer->add_chunk(*aggregator.aggregate_result());
@@ -174,7 +174,7 @@ void ChunkMerger::aggregate_chunk(ChunkAggregator& aggregator, ChunkPtr& chunk, 
     }
 }
 
-Status ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_writer) {
+Status HeapChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_writer) {
     auto process_err = [this] {
         VLOG(3) << "merge chunk failed";
         while (!_heap.empty()) {
@@ -232,7 +232,7 @@ Status ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset
     return Status::OK();
 }
 
-bool ChunkMerger::_make_heap(std::vector<ChunkPtr>& chunk_arr) {
+bool HeapChunkMerger::_make_heap(std::vector<ChunkPtr>& chunk_arr) {
     for (const auto& chunk : chunk_arr) {
         MergeElement element;
         element.chunk = chunk.get();
@@ -245,7 +245,7 @@ bool ChunkMerger::_make_heap(std::vector<ChunkPtr>& chunk_arr) {
     return true;
 }
 
-void ChunkMerger::_pop_heap() {
+void HeapChunkMerger::_pop_heap() {
     MergeElement element = _heap.top();
     _heap.pop();
 
@@ -612,7 +612,7 @@ Status SchemaChangeWithSorting::_internal_sorting(std::vector<ChunkPtr>& chunk_a
         sort_key_idxes.resize(tablet->tablet_schema()->num_key_columns());
         std::iota(sort_key_idxes.begin(), sort_key_idxes.end(), 0);
     }
-    ChunkMerger merger(std::move(tablet), std::move(sort_key_idxes));
+    HeapChunkMerger merger(std::move(tablet), std::move(sort_key_idxes));
     if (auto st = merger.merge(chunk_arr, new_rowset_writer); !st.ok()) {
         LOG(WARNING) << "merge chunk arr failed";
         return st;
@@ -770,11 +770,25 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         for (auto idx : new_sort_key_idxes) {
             new_sort_key_unique_ids.emplace_back(new_tablet->tablet_schema()->column(idx).unique_id());
         }
-        if (std::mismatch(new_sort_key_unique_ids.begin(), new_sort_key_unique_ids.end(),
-                          base_sort_key_unique_ids.begin())
-                    .first != new_sort_key_unique_ids.end()) {
-            sc_params.sc_directly = !(sc_params.sc_sorting = true);
+
+        if (new_sort_key_unique_ids.size() > base_sort_key_unique_ids.size()) {
+            // new sort keys' size is greater than base sort keys, must be sc_sorting
+            sc_params.sc_sorting = true;
+            sc_params.sc_directly = false;
+        } else {
+            auto base_iter = base_sort_key_unique_ids.cbegin();
+            auto new_iter = new_sort_key_unique_ids.cbegin();
+            // check wheather new sort keys are just subset of base sort keys
+            while (new_iter != new_sort_key_unique_ids.cend() && *base_iter == *new_iter) {
+                ++base_iter;
+                ++new_iter;
+            }
+            if (new_iter != new_sort_key_unique_ids.cend()) {
+                sc_params.sc_sorting = true;
+                sc_params.sc_directly = false;
+            }
         }
+
         if (sc_params.sc_directly) {
             status = new_tablet->updates()->convert_from(base_tablet, request.alter_version,
                                                          sc_params.chunk_changer.get(), _alter_msg_header);

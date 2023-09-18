@@ -44,6 +44,7 @@ QueryContext::QueryContext()
           _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
     _stream_epoch_manager = std::make_shared<StreamEpochManager>();
+    _lifetime_sw.start();
 }
 
 QueryContext::~QueryContext() noexcept {
@@ -84,7 +85,8 @@ void QueryContext::count_down_fragments() {
     // considering that this feature is generally used for debugging,
     // I think it should not have a big impact now
     if (query_trace != nullptr) {
-        query_trace->dump();
+        auto st = query_trace->dump();
+        st.permit_unchecked_error();
     }
 }
 
@@ -175,8 +177,8 @@ std::shared_ptr<QueryStatisticsRecvr> QueryContext::maintained_query_recv() {
 
 std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
     auto query_statistic = std::make_shared<QueryStatistics>();
-    // Not transmit delta if it's the result sink node
-    if (_is_result_sink) {
+    // Not transmit delta if it's the final sink
+    if (_is_final_sink) {
         return query_statistic;
     }
 
@@ -197,7 +199,7 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
 }
 
 std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
-    DCHECK(_is_result_sink) << "must be the result sink";
+    DCHECK(_is_final_sink) << "must be final sink";
     auto res = std::make_shared<QueryStatistics>();
     res->add_cpu_costs(cpu_cost());
     res->add_mem_costs(mem_cost_bytes());

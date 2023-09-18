@@ -25,6 +25,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.junit.rules.ExpectedException;
 
 public class AggregateTest extends PlanTestBase {
@@ -434,27 +435,27 @@ public class AggregateTest extends PlanTestBase {
                 "lineitem group by L_LINENUMBER, day";
         String plan = getFragmentPlan(sql);
         // check use three stage aggregate
-        assertContains(plan, "  5:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(19: count)\n" +
-                "  |  group by: 4: L_LINENUMBER, 18: date_trunc\n" +
+        assertContains(plan, "  4:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(18: count)\n" +
+                "  |  group by: 4: L_LINENUMBER, 11: L_SHIPDATE\n" +
                 "  |  \n" +
-                "  4:EXCHANGE\n" +
+                "  3:EXCHANGE\n" +
                 "\n" +
                 "PLAN FRAGMENT 2\n" +
                 " OUTPUT EXPRS:\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 04\n" +
-                "    HASH_PARTITIONED: 4: L_LINENUMBER, 18: date_trunc\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    HASH_PARTITIONED: 4: L_LINENUMBER, 11: L_SHIPDATE\n" +
                 "\n" +
-                "  3:AGGREGATE (update serialize)\n" +
+                "  2:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: count(1: L_ORDERKEY)\n" +
-                "  |  group by: 4: L_LINENUMBER, 18: date_trunc\n" +
+                "  |  group by: 4: L_LINENUMBER, 11: L_SHIPDATE\n" +
                 "  |  \n" +
-                "  2:AGGREGATE (update finalize)\n" +
-                "  |  group by: 4: L_LINENUMBER, 18: date_trunc, 1: L_ORDERKEY");
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 4: L_LINENUMBER, 11: L_SHIPDATE, 1: L_ORDERKEY");
         FeConstants.runningUnitTest = false;
     }
 
@@ -1652,6 +1653,7 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testSortedStreamingAggregate() throws Exception {
         connectContext.getSessionVariable().setEnableSortAggregate(true);
+        connectContext.getSessionVariable().setEnableQueryCache(false);
         String sql;
         String plan;
         {
@@ -2423,5 +2425,99 @@ public class AggregateTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 7: v3 <=> 9: v3\n" +
                 "  |  limit: 10");
+    }
+
+    @Test
+    public void testOrderByWithAgg() throws Exception {
+        String sql = "select round(count(t1e) * 100.0 / min(t1f), 4) as potential_customer_rate, " +
+                "min(t1f) as t1f, min(t1f) as t1f from test_all_type_not_null " +
+                "group by t1a, t1b " +
+                "order by round(count(t1e) * 100.0 / min(t1f) / min(t1f), 4), min(t1f), abs(t1f)";
+
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        assertCContains(plan, "1:AGGREGATE (update finalize)\n" +
+                        "  |  output: count(5: t1e), min(6: t1f)\n" +
+                        "  |  group by: 1: t1a, 2: t1b",
+                "order by: <slot 14> 14: round ASC, <slot 12> 12: min ASC, <slot 15> 15: abs ASC");
+    }
+
+    @Test
+    public void testApproxTopK() throws Exception {
+        {
+            String sql = "select approx_top_k(L_LINENUMBER) from lineitem";
+            getFragmentPlan(sql);
+            sql = "select approx_top_k(L_LINENUMBER, 10000) from lineitem";
+            getFragmentPlan(sql);
+            sql = "select approx_top_k(L_LINENUMBER, 100, 10000) from lineitem";
+            getFragmentPlan(sql);
+            sql = "select approx_top_k(L_LINENUMBER, 10000, 10000) from lineitem";
+            getFragmentPlan(sql);
+            sql = "select approx_top_k(L_LINENUMBER, 1, 1) from lineitem";
+            getFragmentPlan(sql);
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, '111') from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The second parameter of APPROX_TOP_K must be a constant positive integer";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 1, '111') from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The third parameter of APPROX_TOP_K must be a constant positive integer";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 10001) from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The maximum number of the second parameter is 10000";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 0) from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The second parameter of APPROX_TOP_K must be a constant positive integer";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 1, 10001) from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The maximum number of the third parameter is 10000";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 1, -1) from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The third parameter of APPROX_TOP_K must be a constant positive integer";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 100, 99) from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The second parameter must be smaller than or equal to the third parameter";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
     }
 }

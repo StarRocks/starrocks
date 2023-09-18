@@ -39,6 +39,7 @@
 #include "exec/pipeline/sink/iceberg_table_sink_operator.h"
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
+#include "exec/pipeline/sink/table_function_table_sink_operator.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
@@ -59,6 +60,7 @@
 #include "runtime/result_sink.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
+#include "runtime/table_function_table_sink.h"
 #include "util/debug/query_trace.h"
 #include "util/pretty_printer.h"
 #include "util/runtime_profile.h"
@@ -539,8 +541,10 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     std::unique_ptr<DataSink> datasink;
     if (request.isset_output_sink()) {
         const auto& tsink = request.output_sink();
-        if (tsink.type == TDataSinkType::RESULT_SINK) {
-            _query_ctx->set_result_sink(true);
+        if (tsink.type == TDataSinkType::RESULT_SINK || tsink.type == TDataSinkType::OLAP_TABLE_SINK ||
+            tsink.type == TDataSinkType::MEMORY_SCRATCH_SINK || tsink.type == TDataSinkType::ICEBERG_TABLE_SINK ||
+            tsink.type == TDataSinkType::HIVE_TABLE_SINK || tsink.type == TDataSinkType::EXPORT_SINK) {
+            _query_ctx->set_final_sink();
         }
         RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, tsink, fragment.output_exprs, params,
                                                    request.sender_id(), plan->row_desc(), &datasink));
@@ -638,9 +642,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                     ADD_CHILD_TIMER_THESHOLD(profile, "prepare-runtime-state", "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_runtime_state_timer, profiler.prepare_runtime_state_time);
 
-            auto* prepare_pipeline_driver_timer =
-                    ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver", "FragmentInstancePrepareTime", 10_ms);
-            COUNTER_SET(prepare_pipeline_driver_timer, profiler.prepare_runtime_state_time);
+            auto* prepare_pipeline_driver_timer = ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-factory",
+                                                                           "FragmentInstancePrepareTime", 10_ms);
+            COUNTER_SET(prepare_pipeline_driver_timer, profiler.prepare_pipeline_driver_time);
 
             auto* process_mem_counter = ADD_COUNTER(profile, "InitialProcessMem", TUnit::BYTES);
             COUNTER_SET(process_mem_counter, profiler.process_mem_bytes);
@@ -689,8 +693,16 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
         }
     });
 
-    RETURN_IF_ERROR(_fragment_ctx->iterate_drivers(
-            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); }));
+    auto* profile = _fragment_ctx->runtime_state()->runtime_profile();
+    auto* prepare_instance_timer = ADD_TIMER(profile, "FragmentInstancePrepareTime");
+    auto* prepare_driver_timer =
+            ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver", "FragmentInstancePrepareTime", 10_ms);
+    {
+        SCOPED_TIMER(prepare_instance_timer);
+        SCOPED_TIMER(prepare_driver_timer);
+        RETURN_IF_ERROR(_fragment_ctx->iterate_drivers(
+                [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); }));
+    }
     prepare_success = true;
 
     DCHECK(_fragment_ctx->enable_resource_group());
@@ -764,9 +776,9 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             op = std::make_shared<FileSinkOperatorFactory>(context->next_operator_id(), result_sink->get_output_exprs(),
                                                            result_sink->get_file_opts(), dop, fragment_ctx);
         } else {
-            op = std::make_shared<ResultSinkOperatorFactory>(context->next_operator_id(), result_sink->get_sink_type(),
-                                                             result_sink->get_format_type(),
-                                                             result_sink->get_output_exprs(), fragment_ctx);
+            op = std::make_shared<ResultSinkOperatorFactory>(
+                    context->next_operator_id(), result_sink->get_sink_type(), result_sink->isBinaryFormat(),
+                    result_sink->get_format_type(), result_sink->get_output_exprs(), fragment_ctx);
         }
         // Add result sink operator to last pipeline
         fragment_ctx->pipelines().back()->add_op_factory(op);
@@ -798,13 +810,11 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         auto mcast_local_exchanger = std::make_shared<MultiCastLocalExchanger>(runtime_state, sinks.size());
 
         // === create sink op ====
-        auto pseudo_plan_node_id = context->next_pseudo_plan_node_id();
         auto* upstream_pipeline = fragment_ctx->pipelines().back().get();
-        {
-            OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(
-                    context->next_operator_id(), pseudo_plan_node_id, mcast_local_exchanger);
-            upstream_pipeline->add_op_factory(sink_op);
-        }
+        int32_t upstream_plan_node_id = upstream_pipeline->get_op_factories().back()->plan_node_id();
+        OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(
+                context->next_operator_id(), upstream_plan_node_id, mcast_local_exchanger);
+        upstream_pipeline->add_op_factory(sink_op);
 
         // ==== create source/sink pipelines ====
         for (size_t i = 0; i < sinks.size(); i++) {
@@ -816,7 +826,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
 
             // source op
             auto source_op = std::make_shared<MultiCastLocalExchangeSourceOperatorFactory>(
-                    context->next_operator_id(), pseudo_plan_node_id, i, mcast_local_exchanger);
+                    context->next_operator_id(), upstream_plan_node_id, i, mcast_local_exchanger);
             source_op->set_degree_of_parallelism(dop);
             source_op->set_group_leader(upstream_pipeline->source_operator_factory());
 
@@ -867,8 +877,9 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                     down_cast<SourceOperatorFactory*>(fragment_ctx->pipelines().back()->get_op_factories()[0].get());
             max_input_dop += source_operator->degree_of_parallelism();
 
-            context->maybe_interpolate_local_passthrough_exchange_for_sink(runtime_state, tablet_sink_op, max_input_dop,
-                                                                           desired_tablet_sink_dop);
+            context->maybe_interpolate_local_passthrough_exchange_for_sink(
+                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, tablet_sink_op, max_input_dop,
+                    desired_tablet_sink_dop);
         } else {
             fragment_ctx->pipelines().back()->add_op_factory(tablet_sink_op);
         }
@@ -925,14 +936,15 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         if (iceberg_table_desc->is_unpartitioned_table() || thrift_sink.iceberg_table_sink.is_static_partition_sink) {
             if (desired_iceberg_sink_dop != source_operator_dop) {
                 context->maybe_interpolate_local_passthrough_exchange_for_sink(
-                        runtime_state, iceberg_table_sink_op, source_operator_dop, desired_iceberg_sink_dop);
+                        runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, iceberg_table_sink_op,
+                        source_operator_dop, desired_iceberg_sink_dop);
             } else {
                 fragment_ctx->pipelines().back()->get_op_factories().emplace_back(std::move(iceberg_table_sink_op));
             }
         } else {
-            context->maybe_interpolate_local_key_partition_exchange_for_sink(runtime_state, iceberg_table_sink_op,
-                                                                             partition_expr_ctxs, source_operator_dop,
-                                                                             desired_iceberg_sink_dop);
+            context->maybe_interpolate_local_key_partition_exchange_for_sink(
+                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, iceberg_table_sink_op,
+                    partition_expr_ctxs, source_operator_dop, desired_iceberg_sink_dop);
         }
     } else if (typeid(*datasink) == typeid(starrocks::HiveTableSink)) {
         auto* hive_table_sink = down_cast<starrocks::HiveTableSink*>(datasink.get());
@@ -957,13 +969,73 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         if (t_hive_sink.partition_column_names.size() == 0 || t_hive_sink.is_static_partition_sink) {
             if (source_operator_dop != desired_hive_sink_dop) {
                 context->maybe_interpolate_local_passthrough_exchange_for_sink(
-                        runtime_state, hive_table_sink_op, source_operator_dop, desired_hive_sink_dop);
+                        runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, hive_table_sink_op,
+                        source_operator_dop, desired_hive_sink_dop);
             } else {
                 fragment_ctx->pipelines().back()->get_op_factories().emplace_back(std::move(hive_table_sink_op));
             }
         } else {
             context->maybe_interpolate_local_key_partition_exchange_for_sink(
-                    runtime_state, hive_table_sink_op, partition_expr_ctxs, source_operator_dop, desired_hive_sink_dop);
+                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, hive_table_sink_op,
+                    partition_expr_ctxs, source_operator_dop, desired_hive_sink_dop);
+        }
+    } else if (typeid(*datasink) == typeid(starrocks::TableFunctionTableSink)) {
+        DCHECK(thrift_sink.table_function_table_sink.__isset.target_table);
+        DCHECK(thrift_sink.table_function_table_sink.__isset.cloud_configuration);
+
+        const auto& target_table = thrift_sink.table_function_table_sink.target_table;
+        DCHECK(target_table.__isset.path);
+        DCHECK(target_table.__isset.file_format);
+        DCHECK(target_table.__isset.columns);
+        DCHECK(target_table.__isset.write_single_file);
+        DCHECK(target_table.columns.size() == output_exprs.size());
+
+        std::vector<std::string> column_names;
+        for (const auto& column : target_table.columns) {
+            column_names.push_back(column.column_name);
+        }
+
+        std::vector<TExpr> partition_exprs;
+        std::vector<std::string> partition_column_names;
+        if (target_table.__isset.partition_column_ids) {
+            for (auto id : target_table.partition_column_ids) {
+                partition_exprs.push_back(output_exprs[id]);
+                partition_column_names.push_back(target_table.columns[id].column_name);
+            }
+        }
+        std::vector<ExprContext*> partition_expr_ctxs;
+        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
+                                                runtime_state));
+
+        std::vector<ExprContext*> output_expr_ctxs;
+        RETURN_IF_ERROR(
+                Expr::create_expr_trees(runtime_state->obj_pool(), output_exprs, &output_expr_ctxs, runtime_state));
+
+        auto op = std::make_shared<TableFunctionTableSinkOperatorFactory>(
+                context->next_operator_id(), target_table.path, target_table.file_format, target_table.compression_type,
+                output_expr_ctxs, partition_expr_ctxs, column_names, partition_column_names,
+                target_table.write_single_file, thrift_sink.table_function_table_sink.cloud_configuration,
+                fragment_ctx);
+
+        size_t source_dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+        size_t sink_dop = request.pipeline_sink_dop();
+
+        if (target_table.write_single_file) {
+            sink_dop = 1;
+        }
+
+        if (partition_expr_ctxs.empty()) {
+            if (sink_dop != source_dop) {
+                context->maybe_interpolate_local_passthrough_exchange_for_sink(
+                        runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, std::move(op), source_dop,
+                        sink_dop);
+            } else {
+                fragment_ctx->pipelines().back()->get_op_factories().emplace_back(std::move(op));
+            }
+        } else {
+            context->maybe_interpolate_local_key_partition_exchange_for_sink(
+                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, op, partition_expr_ctxs, source_dop,
+                    sink_dop);
         }
     }
 

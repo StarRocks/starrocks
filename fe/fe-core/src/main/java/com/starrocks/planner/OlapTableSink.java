@@ -61,6 +61,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
@@ -118,7 +119,6 @@ public class OlapTableSink extends DataSink {
     // set after init called
     private TDataSink tDataSink;
 
-    private final boolean enablePipelineLoad;
     private final TWriteQuorumType writeQuorum;
     private final boolean enableReplicatedStorage;
 
@@ -127,22 +127,15 @@ public class OlapTableSink extends DataSink {
     private int autoIncrementSlotId;
     private boolean enableAutomaticPartition;
     private TPartialUpdateMode partialUpdateMode;
+    private long automaticBucketSize = 0;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
-                         boolean nullExprInAutoIncrement, boolean enableAutomaticPartition) {
-        this(dstTable, tupleDescriptor, partitionIds, true, writeQuorum, enableReplicatedStorage,
-                nullExprInAutoIncrement, enableAutomaticPartition);
-    }
-
-    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
-                         boolean enablePipelineLoad, TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
                          boolean nullExprInAutoIncrement, boolean enableAutomaticPartition) {
         this.dstTable = dstTable;
         this.tupleDescriptor = tupleDescriptor;
         this.partitionIds = partitionIds;
         this.clusterId = dstTable.getClusterId();
-        this.enablePipelineLoad = enablePipelineLoad;
         this.writeQuorum = writeQuorum;
         this.enableReplicatedStorage = enableReplicatedStorage;
         this.nullExprInAutoIncrement = nullExprInAutoIncrement;
@@ -183,6 +176,7 @@ public class OlapTableSink extends DataSink {
         tSink.setKeys_type(dstTable.getKeysType().toThrift());
         tSink.setWrite_quorum_type(writeQuorum);
         tSink.setEnable_replicated_storage(enableReplicatedStorage);
+        tSink.setAutomatic_bucket_size(automaticBucketSize);
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {
             tSink.setDb_name(db.getFullName());
@@ -234,12 +228,13 @@ public class OlapTableSink extends DataSink {
         }
         tSink.setNum_replicas(numReplicas);
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
-        tSink.setSchema(createSchema(tSink.getDb_id(), dstTable));
-        tSink.setPartition(createPartition(tSink.getDb_id(), dstTable));
-        tSink.setLocation(createLocation(dstTable));
+        tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor));
+        tSink.setPartition(createPartition(tSink.getDb_id(), dstTable, enableAutomaticPartition, partitionIds));
+        tSink.setLocation(createLocation(dstTable, clusterId, partitionIds, enableReplicatedStorage));
         tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(clusterId));
         tSink.setPartial_update_mode(this.partialUpdateMode);
-        if (canUseColocateMVIndex()) {
+        tSink.setAutomatic_bucket_size(automaticBucketSize);
+        if (canUseColocateMVIndex(dstTable)) {
             tSink.setEnable_colocate_mv_index(true);
         }
     }
@@ -269,7 +264,7 @@ public class OlapTableSink extends DataSink {
         return tDataSink;
     }
 
-    private TOlapTableSchemaParam createSchema(long dbId, OlapTable table) {
+    public static TOlapTableSchemaParam createSchema(long dbId, OlapTable table, TupleDescriptor tupleDescriptor) {
         TOlapTableSchemaParam schemaParam = new TOlapTableSchemaParam();
         schemaParam.setDb_id(dbId);
         schemaParam.setTable_id(table.getId());
@@ -300,7 +295,7 @@ public class OlapTableSink extends DataSink {
         return schemaParam;
     }
 
-    private List<String> getDistColumns(DistributionInfo distInfo, OlapTable table) throws UserException {
+    private static List<String> getDistColumns(DistributionInfo distInfo, OlapTable table) throws UserException {
         List<String> distColumns = Lists.newArrayList();
         switch (distInfo.getType()) {
             case HASH: {
@@ -319,7 +314,9 @@ public class OlapTableSink extends DataSink {
         return distColumns;
     }
 
-    private TOlapTablePartitionParam createPartition(long dbId, OlapTable table) throws UserException {
+    public static TOlapTablePartitionParam createPartition(long dbId, OlapTable table,
+                                                            boolean enableAutomaticPartition,
+                                                            List<Long> partitionIds) throws UserException {
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         partitionParam.setDb_id(dbId);
         partitionParam.setTable_id(table.getId());
@@ -338,11 +335,16 @@ public class OlapTableSink extends DataSink {
                 DistributionInfo selectedDistInfo = null;
                 for (Long partitionId : partitionIds) {
                     Partition partition = table.getPartition(partitionId);
-                    TOlapTablePartition tPartition = new TOlapTablePartition();
-                    tPartition.setId(partition.getId());
-                    setRangeKeys(rangePartitionInfo, partition, tPartition);
-                    setIndexAndBucketNums(partition, tPartition);
-                    partitionParam.addToPartitions(tPartition);
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        if (physicalPartition.isImmutable()) {
+                            continue;
+                        }
+                        TOlapTablePartition tPartition = new TOlapTablePartition();
+                        tPartition.setId(physicalPartition.getId());
+                        setRangeKeys(rangePartitionInfo, partition, tPartition);
+                        setIndexAndBucketNums(physicalPartition, tPartition);
+                        partitionParam.addToPartitions(tPartition);
+                    }
                     selectedDistInfo = setDistributedColumns(partitionParam, selectedDistInfo, partition, table);
                 }
                 if (rangePartitionInfo instanceof ExpressionRangePartitionInfo) {
@@ -362,11 +364,16 @@ public class OlapTableSink extends DataSink {
                 DistributionInfo selectedDistInfo = null;
                 for (Long partitionId : partitionIds) {
                     Partition partition = table.getPartition(partitionId);
-                    TOlapTablePartition tPartition = new TOlapTablePartition();
-                    tPartition.setId(partition.getId());
-                    setListPartitionValues(listPartitionInfo, partition, tPartition);
-                    setIndexAndBucketNums(partition, tPartition);
-                    partitionParam.addToPartitions(tPartition);
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        if (physicalPartition.isImmutable()) {
+                            continue;
+                        }
+                        TOlapTablePartition tPartition = new TOlapTablePartition();
+                        tPartition.setId(physicalPartition.getId());
+                        setListPartitionValues(listPartitionInfo, partition, tPartition);
+                        setIndexAndBucketNums(physicalPartition, tPartition);
+                        partitionParam.addToPartitions(tPartition);
+                    }
                     selectedDistInfo = setDistributedColumns(partitionParam, selectedDistInfo, partition, table);
                 }
                 break;
@@ -384,11 +391,16 @@ public class OlapTableSink extends DataSink {
                     partition = table.getPartitions().iterator().next();
                 }
 
-                TOlapTablePartition tPartition = new TOlapTablePartition();
-                tPartition.setId(partition.getId());
-                // No lowerBound and upperBound for this range
-                setIndexAndBucketNums(partition, tPartition);
-                partitionParam.addToPartitions(tPartition);
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    if (physicalPartition.isImmutable()) {
+                        continue;
+                    }
+                    TOlapTablePartition tPartition = new TOlapTablePartition();
+                    tPartition.setId(physicalPartition.getId());
+                    // No lowerBound and upperBound for this range
+                    setIndexAndBucketNums(physicalPartition, tPartition);
+                    partitionParam.addToPartitions(tPartition);
+                }
                 partitionParam.setDistributed_columns(
                         getDistColumns(partition.getDistributionInfo(), table));
                 break;
@@ -400,20 +412,20 @@ public class OlapTableSink extends DataSink {
         return partitionParam;
     }
 
-    private List<TExprNode> literalExprsToTExprNodes(List<LiteralExpr> values) {
+    private static List<TExprNode> literalExprsToTExprNodes(List<LiteralExpr> values) {
         return values.stream()
                 .map(value -> value.treeToThrift().getNodes().get(0))
                 .collect(Collectors.toList());
     }
 
-    private void setListPartitionValues(ListPartitionInfo listPartitionInfo, Partition partition,
+    private static void setListPartitionValues(ListPartitionInfo listPartitionInfo, Partition partition,
                                         TOlapTablePartition tPartition) {
         List<List<TExprNode>> inKeysExprNodes = new ArrayList<>();
 
         List<List<LiteralExpr>> multiValues = listPartitionInfo.getMultiLiteralExprValues().get(partition.getId());
         if (multiValues != null && !multiValues.isEmpty()) {
             inKeysExprNodes = multiValues.stream()
-                    .map(this::literalExprsToTExprNodes)
+                    .map(OlapTableSink::literalExprsToTExprNodes)
                     .collect(Collectors.toList());
             tPartition.setIn_keys(inKeysExprNodes);
         }
@@ -421,7 +433,7 @@ public class OlapTableSink extends DataSink {
         List<LiteralExpr> values = listPartitionInfo.getLiteralExprValues().get(partition.getId());
         if (values != null && !values.isEmpty()) {
             inKeysExprNodes = values.stream()
-                    .map(value -> this.literalExprsToTExprNodes(Lists.newArrayList(value)))
+                    .map(value -> OlapTableSink.literalExprsToTExprNodes(Lists.newArrayList(value)))
                     .collect(Collectors.toList());
         }
 
@@ -435,7 +447,7 @@ public class OlapTableSink extends DataSink {
         }
     }
 
-    private void setRangeKeys(RangePartitionInfo rangePartitionInfo, Partition partition,
+    private static void setRangeKeys(RangePartitionInfo rangePartitionInfo, Partition partition,
                               TOlapTablePartition tPartition) {
         int partColNum = rangePartitionInfo.getPartitionColumns().size();
         Range<PartitionKey> range = rangePartitionInfo.getRange(partition.getId());
@@ -459,7 +471,7 @@ public class OlapTableSink extends DataSink {
         }
     }
 
-    private void setIndexAndBucketNums(Partition partition, TOlapTablePartition tPartition) {
+    private static void setIndexAndBucketNums(PhysicalPartition partition, TOlapTablePartition tPartition) {
         for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
             tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
                     index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
@@ -467,7 +479,7 @@ public class OlapTableSink extends DataSink {
         }
     }
 
-    private DistributionInfo setDistributedColumns(TOlapTablePartitionParam partitionParam,
+    private static DistributionInfo setDistributedColumns(TOlapTablePartitionParam partitionParam,
                                                    DistributionInfo selectedDistInfo,
                                                    Partition partition, OlapTable table) throws UserException {
         DistributionInfo distInfo = partition.getDistributionInfo();
@@ -483,7 +495,8 @@ public class OlapTableSink extends DataSink {
         return selectedDistInfo;
     }
 
-    private TOlapTableLocationParam createLocation(OlapTable table) throws UserException {
+    public static TOlapTableLocationParam createLocation(OlapTable table, int clusterId, List<Long> partitionIds,
+                                                          boolean enableReplicatedStorage) throws UserException {
         TOlapTableLocationParam locationParam = new TOlapTableLocationParam();
         // replica -> path hash
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
@@ -496,48 +509,49 @@ public class OlapTableSink extends DataSink {
             // `selectedBackedIds` keeps the selected backendIds for 1th index which will be used to choose the later index's
             // tablets' replica in colocate mv index optimization.
             List<Long> selectedBackedIds = Lists.newArrayList();
-            for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
-                for (int idx = 0; idx < index.getTablets().size(); ++idx) {
-                    Tablet tablet = index.getTablets().get(idx);
-                    if (table.isCloudNativeTableOrMaterializedView()) {
-                        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-                        long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
-                        locationParam.addToTablets(new TTabletLocation(tablet.getId(),
-                                Lists.newArrayList(((LakeTablet) tablet).getPrimaryComputeNodeId(workerGroupId))));
-                    } else {
-                        // we should ensure the replica backend is alive
-                        // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
-                        LocalTablet localTablet = (LocalTablet) tablet;
-                        Multimap<Replica, Long> bePathsMap =
-                                localTablet.getNormalReplicaBackendPathMap(table.getClusterId());
-                        if (bePathsMap.keySet().size() < quorum) {
-                            throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
-                                    "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                            + tablet.getId() + ", backends: " +
-                                            Joiner.on(",").join(localTablet.getBackends()));
-                        }
-
-                        List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
-                        if (enableReplicatedStorage) {
-                            int lowUsageIndex = findPrimaryReplica(bePrimaryMap, infoService, index,
-                                    selectedBackedIds, idx, replicas);
-                            if (lowUsageIndex != -1) {
-                                bePrimaryMap.put(replicas.get(lowUsageIndex).getBackendId(),
-                                        bePrimaryMap.getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
-                                                + 1);
-                                // replicas[0] will be the primary replica
-                                Collections.swap(replicas, 0, lowUsageIndex);
-                                selectedBackedIds.add(replicas.get(0).getBackendId());
-                            } else {
-                                LOG.warn("Tablet {} replicas {} all has write fail flag", tablet.getId(), replicas);
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                    for (int idx = 0; idx < index.getTablets().size(); ++idx) {
+                        Tablet tablet = index.getTablets().get(idx);
+                        if (table.isCloudNativeTableOrMaterializedView()) {
+                            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+                            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+                            locationParam.addToTablets(new TTabletLocation(tablet.getId(),
+                                    Lists.newArrayList(((LakeTablet) tablet).getPrimaryComputeNodeId(workerGroupId))));
+                        } else {
+                            // we should ensure the replica backend is alive
+                            // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
+                            LocalTablet localTablet = (LocalTablet) tablet;
+                            Multimap<Replica, Long> bePathsMap =
+                                    localTablet.getNormalReplicaBackendPathMap(table.getClusterId());
+                            if (bePathsMap.keySet().size() < quorum) {
+                                throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
+                                        "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
+                                                + tablet.getId() + ", backends: " +
+                                                Joiner.on(",").join(localTablet.getBackends()));
                             }
-                        }
-                        locationParam
-                                .addToTablets(
-                                        new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
-                                                .collect(Collectors.toList())));
-                        for (Map.Entry<Replica, Long> entry : bePathsMap.entries()) {
-                            allBePathsMap.put(entry.getKey().getBackendId(), entry.getValue());
+
+                            List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
+                            if (enableReplicatedStorage) {
+                                int lowUsageIndex = findPrimaryReplica(table, bePrimaryMap, infoService, index,
+                                        selectedBackedIds, idx, replicas);
+                                if (lowUsageIndex != -1) {
+                                    bePrimaryMap.put(replicas.get(lowUsageIndex).getBackendId(),
+                                            bePrimaryMap.getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
+                                                    + 1);
+                                    // replicas[0] will be the primary replica
+                                    Collections.swap(replicas, 0, lowUsageIndex);
+                                    selectedBackedIds.add(replicas.get(0).getBackendId());
+                                } else {
+                                    LOG.warn("Tablet {} replicas {} all has write fail flag", tablet.getId(), replicas);
+                                }
+                            }
+                            locationParam
+                                    .addToTablets(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
+                                    .collect(Collectors.toList())));
+                            for (Map.Entry<Replica, Long> entry : bePathsMap.entries()) {
+                                allBePathsMap.put(entry.getKey().getBackendId(), entry.getValue());
+                            }
                         }
                     }
                 }
@@ -553,14 +567,15 @@ public class OlapTableSink extends DataSink {
         return locationParam;
     }
 
-    private int findPrimaryReplica(Map<Long, Long> bePrimaryMap,
+    private static int findPrimaryReplica(OlapTable table,
+                                   Map<Long, Long> bePrimaryMap,
                                    SystemInfoService infoService,
                                    MaterializedIndex index,
                                    List<Long> selectedBackedIds,
                                    int idx,
                                    List<Replica> replicas) {
         // TODO: Check different index's tablet with the same `idx` must be colocate?
-        if (canUseColocateMVIndex() && selectedBackedIds.size() == index.getTablets().size()) {
+        if (canUseColocateMVIndex(table) && selectedBackedIds.size() == index.getTablets().size()) {
             for (int i = 0; i < replicas.size(); i++) {
                 if (replicas.get(i).getBackendId() == selectedBackedIds.get(idx)) {
                     return i;
@@ -587,12 +602,12 @@ public class OlapTableSink extends DataSink {
         return lowUsageIndex;
     }
 
-    private boolean canUseColocateMVIndex() {
-        return Config.enable_colocate_mv_index && dstTable.isEnableColocateMVIndex();
+    private static boolean canUseColocateMVIndex(OlapTable table) {
+        return Config.enable_colocate_mv_index && table.isEnableColocateMVIndex();
     }
 
     public boolean canUsePipeLine() {
-        return Config.enable_pipeline_load && enablePipelineLoad;
+        return true;
     }
 
     public int getClusterId() {
@@ -629,6 +644,14 @@ public class OlapTableSink extends DataSink {
 
     public boolean missAutoIncrementColumn() {
         return this.missAutoIncrementColumn;
+    }
+
+    public long getAutomaticBucketSize() {
+        return automaticBucketSize;
+    }
+
+    public void setAutomaticBucketSize(long automaticBucketSize) {
+        this.automaticBucketSize = automaticBucketSize;
     }
 }
 

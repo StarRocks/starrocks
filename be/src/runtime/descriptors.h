@@ -109,6 +109,8 @@ public:
 
     int32_t col_unique_id() const { return _col_unique_id; }
 
+    SlotDescriptor(const TSlotDescriptor& tdesc);
+
 private:
     friend class DescriptorTbl;
     friend class TupleDescriptor;
@@ -136,7 +138,6 @@ private:
     // @todo: replace _null_indicator_offset when remove _null_indicator_offset
     const bool _is_nullable;
 
-    SlotDescriptor(const TSlotDescriptor& tdesc);
     SlotDescriptor(const PSlotDescriptor& pdesc);
 };
 

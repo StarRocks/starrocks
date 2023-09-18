@@ -124,7 +124,7 @@ TEST_F(QueryCacheTest, testCacheManager) {
     ASSERT_EQ(cache_mgr->memory_usage(), 960);
 
     for (auto i = 20; i < 30; ++i) {
-        auto status = cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));
+        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));
     }
     ASSERT_LE(cache_mgr->memory_usage(), cache_mgr->capacity());
 
@@ -259,10 +259,12 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
         tasks[k].cache_operator->set_multilane_operators(std::move(multilane_operators));
 
         for (auto& i : upstream) {
-            i->prepare(state);
+            auto st = i->prepare(state);
+            st.permit_unchecked_error();
         }
 
-        tasks[k].downstream->prepare(state);
+        auto st = tasks[k].downstream->prepare(state);
+        st.permit_unchecked_error();
     }
     return tasks;
 }
@@ -275,7 +277,7 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_c
     int num_steps = 0;
     int first_unfinished_idx = 0;
     if (set_first_op_finished) {
-        first_op->set_finishing(state);
+        CHECK(first_op->set_finishing(state).ok());
     }
     for (; first_unfinished_idx < upstream.size() && upstream[first_unfinished_idx]->is_finished();
          ++first_unfinished_idx) {
@@ -285,7 +287,7 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_c
     }
 
     if (first_unfinished_idx > 0) {
-        upstream[first_unfinished_idx]->set_finishing(state);
+        CHECK(upstream[first_unfinished_idx]->set_finishing(state).ok());
     }
 
     while (true) {
@@ -294,7 +296,7 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_c
                                                 first_op->get_name(), input_chunk->num_rows(),
                                                 input_chunk->owner_info().owner_id(),
                                                 input_chunk->owner_info().is_last_chunk());
-            first_op->push_chunk(state, input_chunk);
+            CHECK(first_op->push_chunk(state, input_chunk).ok());
             pushed = true;
         }
         bool movable = false;
@@ -302,7 +304,7 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_c
             auto curr_op = upstream[i - 1];
             auto next_op = upstream[i];
             if (curr_op->is_finished()) {
-                next_op->set_finishing(state);
+                CHECK(next_op->set_finishing(state).ok());
                 movable = true;
                 first_unfinished_idx = i;
                 continue;
@@ -319,11 +321,11 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_c
                         "[EXEC] Transfer chunk: from_op=$0, to_op=$1, num_rows=$2, tablet_id=$3, eof=$4",
                         curr_op->get_name(), next_op->get_name(), chunk->num_rows(), chunk->owner_info().owner_id(),
                         chunk->owner_info().is_last_chunk());
-                next_op->push_chunk(state, chunk);
+                CHECK(next_op->push_chunk(state, chunk).ok());
                 num_steps += pushed;
                 if (curr_op->is_finished()) {
                     first_unfinished_idx = i;
-                    next_op->set_finishing(state);
+                    CHECK(next_op->set_finishing(state).ok());
                 }
             }
         }
@@ -447,7 +449,7 @@ void take_action(Task& task, const Action& action, RuntimeState* state) {
     if (ac_result == query_cache::AcquireResult::AR_PROBE) {
         auto probe_result = task.cache_operator->probe_cache(action.owner_id, action.version);
         ASSERT_EQ(probe_result, action.expect_probe_result);
-        task.cache_operator->reset_lane(state, action.owner_id);
+        ASSERT_TRUE(task.cache_operator->reset_lane(state, action.owner_id).ok());
         if (!probe_result) {
             exec_action(task, action, state);
             return;

@@ -36,6 +36,7 @@ package com.starrocks.qe;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.cluster.ClusterNamespace;
@@ -52,7 +53,6 @@ import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
@@ -195,7 +195,6 @@ public class ConnectContext {
     // The related db ids for current sql
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
 
-    protected PlannerProfile plannerProfile;
     protected StatementBase.ExplainLevel explainLevel;
 
     protected TWorkGroup resourceGroup;
@@ -207,6 +206,8 @@ public class ConnectContext {
     private ConnectContext parent;
 
     private boolean relationAliasCaseInsensitive = false;
+
+    private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
     public StmtExecutor getExecutor() {
         return executor;
@@ -243,7 +244,6 @@ public class ConnectContext {
         userVariables = new HashMap<>();
         command = MysqlCommand.COM_SLEEP;
         queryDetail = null;
-        plannerProfile = new PlannerProfile();
 
         mysqlChannel = new MysqlChannel(channel);
         if (channel != null) {
@@ -255,6 +255,18 @@ public class ConnectContext {
         if (shouldDumpQuery()) {
             this.dumpInfo = new QueryDumpInfo(this);
         }
+    }
+
+    public void putPreparedStmt(String stmtName, PrepareStmtContext ctx) {
+        this.preparedStmtCtxs.put(stmtName, ctx);
+    }
+
+    public PrepareStmtContext getPreparedStmt(String stmtName) {
+        return this.preparedStmtCtxs.get(stmtName);
+    }
+
+    public void removePreparedStmt(String stmtName) {
+        this.preparedStmtCtxs.remove(stmtName);
     }
 
     public long getStmtId() {
@@ -582,10 +594,6 @@ public class ConnectContext {
 
     public void setCurrentSqlDbIds(Set<Long> currentSqlDbIds) {
         this.currentSqlDbIds = currentSqlDbIds;
-    }
-
-    public PlannerProfile getPlannerProfile() {
-        return plannerProfile;
     }
 
     public StatementBase.ExplainLevel getExplainLevel() {

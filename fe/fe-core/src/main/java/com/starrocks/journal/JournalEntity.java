@@ -66,6 +66,8 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
+import com.starrocks.persist.AddSubPartitionsInfoV2;
+import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
@@ -137,9 +139,10 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
-import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.Backend;
@@ -279,6 +282,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_ADD_PARTITION_V2: {
                 data = PartitionPersistInfoV2.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_SUB_PARTITIONS_V2: {
+                data = AddSubPartitionsInfoV2.read(in);
                 isRead = true;
                 break;
             }
@@ -822,9 +830,11 @@ public class JournalEntity implements Writable {
             case OperationType.OP_MODIFY_REPLICATION_NUM:
             case OperationType.OP_MODIFY_WRITE_QUORUM:
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
+            case OperationType.OP_MODIFY_BUCKET_SIZE:
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
             case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
+            case OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC:
             case OperationType.OP_ALTER_TABLE_PROPERTIES:
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
                 data = ModifyTablePropertyOperationLog.read(in);
@@ -872,12 +882,12 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_ADD_ANALYZER_JOB: {
-                data = AnalyzeJob.read(in);
+                data = NativeAnalyzeJob.read(in);
                 isRead = true;
                 break;
             }
             case OperationType.OP_REMOVE_ANALYZER_JOB: {
-                data = AnalyzeJob.read(in);
+                data = NativeAnalyzeJob.read(in);
                 isRead = true;
                 break;
             }
@@ -888,6 +898,16 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_REMOVE_ANALYZE_STATUS: {
                 data = NativeAnalyzeStatus.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_EXTERNAL_ANALYZE_STATUS: {
+                data = ExternalAnalyzeStatus.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS: {
+                data = ExternalAnalyzeStatus.read(in);
                 isRead = true;
                 break;
             }
@@ -933,6 +953,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DROP_CATALOG: {
                 data = DropCatalogLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ALTER_CATALOG: {
+                data = AlterCatalogLog.read(in);
                 isRead = true;
                 break;
             }

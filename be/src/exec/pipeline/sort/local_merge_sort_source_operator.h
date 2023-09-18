@@ -33,7 +33,7 @@ class LocalMergeSortSourceOperator final : public SourceOperator {
 public:
     LocalMergeSortSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                  SortContext* sort_context)
-            : SourceOperator(factory, id, "local_merge_source", plan_node_id, driver_sequence),
+            : SourceOperator(factory, id, "local_merge_source", plan_node_id, false, driver_sequence),
               _sort_context(sort_context) {}
 
     ~LocalMergeSortSourceOperator() override = default;

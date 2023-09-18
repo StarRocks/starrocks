@@ -202,7 +202,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             func = get_window_function(real_fn_name, arg_type.type, return_type.type, is_input_nullable, fn.binary_type,
                                        state->func_version());
             if (func == nullptr) {
-                return Status::InternalError(strings::Substitute("Invalid window function plan: $0", real_fn_name));
+                return Status::InternalError(strings::Substitute(
+                        "Invalid window function plan: ($0, $1, $2, $3, $4, $5)", real_fn_name, arg_type.type,
+                        return_type.type, is_input_nullable, fn.binary_type, state->func_version()));
             }
             _agg_functions[i] = func;
             _agg_fn_types[i] = {return_type, is_input_nullable, desc.nodes[0].is_nullable};
@@ -301,6 +303,7 @@ Status Analytor::open(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_order_ctxs, state));
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
+        RETURN_IF_ERROR(_evaluate_const_columns(i));
     }
 
     _has_udaf = std::any_of(_fns.begin(), _fns.end(),
@@ -462,7 +465,11 @@ void Analytor::create_agg_result_columns(int64_t chunk_size) {
             // binary column cound't call resize method like Numeric Column,
             // so we only reserve it.
             if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
-                _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR) {
+                _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR ||
+                _agg_fn_types[i].result_type.type == LogicalType::TYPE_JSON ||
+                _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY ||
+                _agg_fn_types[i].result_type.type == LogicalType::TYPE_MAP ||
+                _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT) {
                 _result_window_columns[i]->reserve(chunk_size);
             } else {
                 _result_window_columns[i]->resize(chunk_size);
@@ -512,6 +519,21 @@ Status Analytor::add_chunk(const ChunkPtr& chunk) {
     update_input_rows(chunk_size);
     _input_chunks.emplace_back(chunk);
 
+    return Status::OK();
+}
+
+Status Analytor::_evaluate_const_columns(int i) {
+    if (i >= _agg_fn_ctxs.size() || _agg_fn_ctxs[i] == nullptr) {
+        // Only agg fn has this context
+        return Status::OK();
+    }
+    std::vector<ColumnPtr> const_columns;
+    const_columns.reserve(_agg_expr_ctxs[i].size());
+    for (auto& j : _agg_expr_ctxs[i]) {
+        ASSIGN_OR_RETURN(auto col, j->root()->evaluate_const(j));
+        const_columns.emplace_back(std::move(col));
+    }
+    _agg_fn_ctxs[i]->set_constant_columns(const_columns);
     return Status::OK();
 }
 

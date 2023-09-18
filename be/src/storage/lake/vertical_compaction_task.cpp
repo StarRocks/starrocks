@@ -71,7 +71,7 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
         bool is_key = (i == 0);
         if (!is_key) {
             // read mask buffer from the beginning
-            mask_buffer->flip_to_read();
+            RETURN_IF_ERROR(mask_buffer->flip_to_read());
         }
         RETURN_IF_ERROR(compact_column_group(is_key, i, column_group_size, column_groups[i], writer, mask_buffer.get(),
                                              source_masks.get(), progress, cancel_func));
@@ -133,7 +133,10 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                                     const CancelFunc& cancel_func) {
     ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size_for_column_group(column_group));
 
-    Schema schema = ChunkHelper::convert_schema(_tablet_schema, column_group);
+    Schema schema = column_group_index == 0 ? (_tablet_schema->sort_key_idxes().empty()
+                                                       ? ChunkHelper::convert_schema(_tablet_schema, column_group)
+                                                       : ChunkHelper::get_sort_key_schema(_tablet_schema))
+                                            : ChunkHelper::convert_schema(_tablet_schema, column_group);
     TabletReader reader(*_tablet, _version, schema, _input_rowsets, is_key, mask_buffer);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;

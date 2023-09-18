@@ -44,6 +44,10 @@ const TupleDescriptor* BinlogDataSourceProvider::tuple_descriptor(RuntimeState* 
 BinlogDataSource::BinlogDataSource(const BinlogDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.binlog_scan_range) {}
 
+std::string BinlogDataSource::name() const {
+    return "BinlogDataSource";
+}
+
 Status BinlogDataSource::open(RuntimeState* state) {
     const TBinlogScanNode& binlog_scan_node = _provider->_binlog_scan_node;
     _runtime_state = state;

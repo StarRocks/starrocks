@@ -75,6 +75,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -91,12 +92,14 @@ import com.starrocks.sql.parser.ParsingException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class MvUtils {
@@ -153,6 +156,29 @@ public class MvUtils {
             for (OptExpression child : root.getInputs()) {
                 getAllTables(child, tables);
             }
+        }
+    }
+
+    public static List<String> collectMaterializedViewNames(OptExpression optExpression) {
+        List<MaterializedView> mvs = new ArrayList<>();
+        collectMaterializedViewNames(optExpression, mvs);
+        return mvs.stream().map(Table::getName).collect(Collectors.toList());
+    }
+
+    private static void collectMaterializedViewNames(OptExpression optExpression, List<MaterializedView> mvs) {
+        if (optExpression == null) {
+            return;
+        }
+        Operator op = optExpression.getOp();
+        if (op instanceof PhysicalScanOperator) {
+            PhysicalScanOperator scanOperator = (PhysicalScanOperator) op;
+            if (scanOperator.getTable().isMaterializedView()) {
+                mvs.add((MaterializedView) scanOperator.getTable());
+            }
+        }
+
+        for (OptExpression child : optExpression.getInputs()) {
+            collectMaterializedViewNames(child, mvs);
         }
     }
 
@@ -375,9 +401,16 @@ public class MvUtils {
     }
 
     // get all predicates within and below root
+    public static List<ScalarOperator> getAllValidPredicates(OptExpression root) {
+        List<ScalarOperator> predicates = Lists.newArrayList();
+        getAllValidPredicates(root, predicates);
+        return predicates;
+    }
+
+    // get all predicates within and below root
     public static List<ScalarOperator> getAllPredicates(OptExpression root) {
         List<ScalarOperator> predicates = Lists.newArrayList();
-        getAllPredicates(root, predicates);
+        getAllPredicates(root, x -> true, predicates);
         return predicates;
     }
 
@@ -421,7 +454,7 @@ public class MvUtils {
 
     public static ScalarOperator rewriteOptExprCompoundPredicate(OptExpression root,
                                                                  ReplaceColumnRefRewriter columnRefRewriter) {
-        List<ScalarOperator> conjuncts = MvUtils.getAllPredicates(root);
+        List<ScalarOperator> conjuncts = MvUtils.getAllValidPredicates(root);
         ScalarOperator compoundPredicate = null;
         if (!conjuncts.isEmpty()) {
             compoundPredicate = Utils.compoundAnd(conjuncts);
@@ -437,33 +470,64 @@ public class MvUtils {
         return new ReplaceColumnRefRewriter(mvLineage, true);
     }
 
-    // pushdown predicates are excluded when calculating comppensation predicates,
-    // because they are derived from equivalence class, the original predicates have be considered
-    private static void collectValidPredicates(List<ScalarOperator> conjuncts, List<ScalarOperator> predicates) {
-        conjuncts.stream().filter(x -> !x.isRedundant() && !x.isPushdown()).forEach(predicates::add);
+    private static void collectPredicates(List<ScalarOperator> conjuncts,
+                                          Function<ScalarOperator, Boolean> supplier,
+                                          List<ScalarOperator> predicates) {
+        conjuncts.stream().filter(p -> supplier.apply(p)).forEach(predicates::add);
     }
 
-    private static void getAllPredicates(OptExpression root, List<ScalarOperator> predicates) {
+    // push-down predicates are excluded when calculating compensate predicates,
+    // because they are derived from equivalence class, the original predicates have be considered
+    private static void collectValidPredicates(List<ScalarOperator> conjuncts,
+                                               List<ScalarOperator> predicates) {
+        collectPredicates(conjuncts, MvUtils::isValidPredicate, predicates);
+    }
+
+    public static boolean isValidPredicate(ScalarOperator predicate) {
+        return !isRedundantPredicate(predicate);
+    }
+
+    public static boolean isRedundantPredicate(ScalarOperator predicate) {
+        return predicate.isPushdown() || predicate.isRedundant();
+    }
+
+    /**
+     * Get all predicates by filtering according the input `supplier`.
+     */
+    private static void getAllPredicates(OptExpression root,
+                                         Function<ScalarOperator, Boolean> supplier,
+                                         List<ScalarOperator> predicates) {
         Operator operator = root.getOp();
 
         // Ignore aggregation predicates, because aggregation predicates should be rewritten after
         // aggregation functions' rewrite and should not be pushed down into mv scan operator.
         if (operator.getPredicate() != null && !(operator instanceof LogicalAggregationOperator)) {
             List<ScalarOperator> conjuncts = Utils.extractConjuncts(operator.getPredicate());
-            collectValidPredicates(conjuncts, predicates);
+            collectPredicates(conjuncts, supplier, predicates);
         }
         if (operator instanceof LogicalJoinOperator) {
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
             if (joinOperator.getOnPredicate() != null) {
                 List<ScalarOperator> conjuncts = Utils.extractConjuncts(joinOperator.getOnPredicate());
-                collectValidPredicates(conjuncts, predicates);
+                collectPredicates(conjuncts, supplier, predicates);
             }
         }
         for (OptExpression child : root.getInputs()) {
-            getAllPredicates(child, predicates);
+            getAllPredicates(child, supplier, predicates);
         }
     }
 
+    /**
+     * Get all valid predicates from input opt expression. `valid` predicate means this predicate is not
+     * a pushed-down predicate or redundant predicate among others.
+     */
+    private static void getAllValidPredicates(OptExpression root, List<ScalarOperator> predicates) {
+        getAllPredicates(root, MvUtils::isValidPredicate, predicates);
+    }
+
+    /**
+     * Canonize the predicate into a normalized form to deduce the redundant predicates.
+     */
     public static ScalarOperator canonizePredicate(ScalarOperator predicate) {
         if (predicate == null) {
             return null;
@@ -472,6 +536,13 @@ public class MvUtils {
         return rewrite.rewrite(predicate, ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
     }
 
+    /**
+     * Canonize the predicate into a more normalized form to be compared better.
+     * NOTE:
+     * 1. `canonizePredicateForRewrite` will do more optimizations than `canonizePredicate`.
+     * 2. if you need to rewrite src predicate to target predicate, should use `canonizePredicateForRewrite`
+     *  both rather than one use `canonizePredicate` or `canonizePredicateForRewrite`.
+     */
     public static ScalarOperator canonizePredicateForRewrite(ScalarOperator predicate) {
         if (predicate == null) {
             return null;

@@ -24,7 +24,7 @@ class LocalExchangeSinkOperator final : public Operator {
 public:
     LocalExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                               const std::shared_ptr<LocalExchanger>& exchanger)
-            : Operator(factory, id, "local_exchange_sink", plan_node_id, driver_sequence), _exchanger(exchanger) {
+            : Operator(factory, id, "local_exchange_sink", plan_node_id, true, driver_sequence), _exchanger(exchanger) {
         _unique_metrics->add_info_string("Type", exchanger->name());
     }
 

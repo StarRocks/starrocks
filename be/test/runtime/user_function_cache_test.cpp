@@ -152,13 +152,14 @@ TEST_F(UserFunctionCacheTest, download_normal) {
     std::string lib_dir = "./be/test/runtime/test_data/user_function_cache/download";
     fs::remove_all(lib_dir);
     auto st = cache.init(lib_dir);
-    ASSERT_TRUE(st.ok());
+    ASSERT_TRUE(st.ok()) << st;
 
     {
         std::string libpath;
         int fid = 0;
         std::string URL = fmt::format("http://127.0.0.1:{}/test.jar", real_port);
-        cache.get_libpath(fid, URL, jar_md5sum, &libpath);
+        st = cache.get_libpath(fid, URL, jar_md5sum, &libpath);
+        st.permit_unchecked_error();
     }
 }
 
