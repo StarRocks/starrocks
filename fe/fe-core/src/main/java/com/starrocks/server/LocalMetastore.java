@@ -108,7 +108,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
-import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
@@ -119,6 +118,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.CountingLatch;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -463,39 +463,56 @@ public class LocalMetastore implements ConnectorMetadata {
     @Override
     public void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
         // 1. check if database exists
+        Database db;
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
-        List<Runnable> runnableList;
         try {
             if (!fullNameToDb.containsKey(dbName)) {
                 throw new MetaNotFoundException("Database not found");
             }
+            db = this.fullNameToDb.get(dbName);
+        } finally {
+            unlock();
+        }
 
-            // 2. drop tables in db
-            Database db = this.fullNameToDb.get(dbName);
-            db.writeLock();
-            try {
-                if (!isForceDrop && stateMgr.getGlobalTransactionMgr().existCommittedTxns(db.getId(), null, null)) {
-                    throw new DdlException(
-                            "There are still some transactions in the COMMITTED state waiting to be completed. " +
-                                    "The database [" + dbName +
-                                    "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
-                                    " please use \"DROP DATABASE <database> FORCE\".");
-                }
+        // optimization: wait out of db lock
+        try {
+            db.waitRunningMetaOpsFinish();
+        } catch (InterruptedException e) {
+            throw new DdlException("Waiting for running operation(s) on database " +
+                    db.getFullName() + "(" + db.getId() + ") finish failed", e);
+        }
 
-                // save table names for recycling
-                Set<String> tableNames = new HashSet(db.getTableNamesViewWithLock());
-                runnableList = unprotectDropDb(db, isForceDrop, false);
-                if (!isForceDrop) {
-                    recycleBin.recycleDatabase(db, tableNames);
-                } else {
-                    stateMgr.onEraseDatabase(db.getId());
-                }
-                db.setExist(false);
-            } finally {
-                db.writeUnlock();
+        List<Runnable> runnableList;
+        // 2. drop tables in db
+        db.writeLock();
+        try {
+            if (!db.isExist()) {
+                throw new MetaNotFoundException("Database not found");
             }
+            // must wait again, otherwise may cause the disorder of `drop db` and
+            // `create table`, hence edit log replay failure eventually.
+            // Here we also need to wait with timeout, otherwise deadlock may happen.
+            // Slightly sacrifice the performance of `drop database`.
+            db.waitRunningMetaOpsFinish(Config.catalog_try_lock_timeout_ms, TimeUnit.MILLISECONDS);
+            if (!isForceDrop && stateMgr.getGlobalTransactionMgr().existCommittedTxns(db.getId(), null, null)) {
+                throw new DdlException(
+                        "There are still some transactions in the COMMITTED state waiting to be completed. " +
+                                "The database [" + dbName +
+                                "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
+                                " please use \"DROP DATABASE <database> FORCE\".");
+            }
+
+            // save table names for recycling
+            Set<String> tableNames = new HashSet<>(db.getTableNamesViewWithLock());
+            runnableList = unprotectDropDb(db, isForceDrop, false);
+            if (!isForceDrop) {
+                recycleBin.recycleDatabase(db, tableNames);
+            } else {
+                stateMgr.onEraseDatabase(db.getId());
+            }
+            db.setExist(false);
 
             // 3. remove db from globalStateMgr
             idToDb.remove(db.getId());
@@ -515,8 +532,11 @@ public class LocalMetastore implements ConnectorMetadata {
             pipeManager.dropPipesOfDb(dbName, db.getId());
 
             LOG.info("finish drop database[{}], id: {}, is force : {}", dbName, db.getId(), isForceDrop);
+        } catch (InterruptedException e) {
+            throw new DdlException("Waiting for running operation(s) on database " +
+                    db.getFullName() + "(" + db.getId() + ") finish failed", e);
         } finally {
-            unlock();
+            db.writeUnlock();
         }
 
         for (Runnable runnable : runnableList) {
@@ -2173,17 +2193,41 @@ public class LocalMetastore implements ConnectorMetadata {
         table.setStorageInfo(pathInfo, dataCacheInfo);
     }
 
-    void onCreate(Database db, Table table, String storageVolumeId, boolean isSetIfNotExists) throws DdlException {
+    public void onCreate(Database db, Table table, String storageVolumeId, boolean isSetIfNotExists)
+            throws DdlException {
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
+            throw new DdlException("Failed to acquire globalStateMgr lock. " +
+                    "Try again or increasing value of `catalog_try_lock_timeout_ms` configuration.");
         }
 
         try {
+            /*
+             * When creating table or mv, we need to create the tablets and prepare some of the
+             * metadata first before putting this new table or mv in the database. So after the
+             * first step, we need to acquire the global lock and double check whether the db still
+             * exists because it maybe dropped by other concurrent client. And if we don't use the lock
+             * protection and handle the concurrency properly, the replay of table/mv creation may fail
+             * on restart or on follower.
+             *
+             * After acquire the db lock, we also need to acquire the db lock and write edit log. Since the
+             * db lock maybe under high contention and IO is busy, current thread can hold the global lock
+             * for quite a long time and make the other operation waiting for the global lock fail.
+             *
+             * So here after the confirmation of existence of modifying database, we release the global lock
+             * right away but mark the database as "under operation". So that when dropping database, we will
+             * check the number of concurrent operations modifying the metadata and wait for those operations done
+             */
             if (getDb(db.getId()) == null) {
-                throw new DdlException("Database has been dropped when creating table");
+                throw new DdlException("Database has been dropped when creating table/mv/view");
+            } else {
+                db.incrRunningMetaOps();
             }
+        } finally {
+            unlock();
+        }
 
+        try {
             if (db.isSystemDatabase()) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
                         "cannot create table in system database");
@@ -2191,6 +2235,9 @@ public class LocalMetastore implements ConnectorMetadata {
 
             db.writeLock();
             try {
+                if (!db.isExist()) {
+                    throw new DdlException("Database has been dropped when creating table/mv/view");
+                }
                 if (!db.registerTableUnlocked(table)) {
                     if (!isSetIfNotExists) {
                         if (table instanceof OlapTable) {
@@ -2215,9 +2262,8 @@ public class LocalMetastore implements ConnectorMetadata {
             } finally {
                 db.writeUnlock();
             }
-
         } finally {
-            unlock();
+            db.decrRunningMetaOps();
         }
     }
 
