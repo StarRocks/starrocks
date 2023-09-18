@@ -31,6 +31,7 @@ import org.junit.runners.MethodSorters;
 
 import java.io.IOException;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -83,6 +84,60 @@ public class TriggerActionTest extends StarRocksHttpTestCase {
             throw new RuntimeException(e);
         }
 
+    }
+
+    @Test
+    public void testTriggerDynamicFailed() throws IOException {
+        Request request = new Request.Builder()
+                .get()
+                .addHeader("Authorization", rootAuth)
+                .url(BASE_URL + "/api/trigger?type=dynamic_partition")
+                .build();
+        Response response = networkClient.newCall(request).execute();
+
+        assertFalse(response.isSuccessful());
+        Assert.assertNotNull(response.body());
+        String respStr = response.body().string();
+        Assert.assertNotNull(respStr);
+        Assert.assertEquals("Missing params. Need database name", respStr);
+
+        request = new Request.Builder()
+                .get()
+                .addHeader("Authorization", rootAuth)
+                .url(BASE_URL + "/api/trigger?type=abc")
+                .build();
+        response = networkClient.newCall(request).execute();
+        assertFalse(response.isSuccessful());
+        Assert.assertNotNull(response.body());
+        respStr = response.body().string();
+        Assert.assertNotNull(respStr);
+        Assert.assertEquals("trigger type: abc is invalid!only support dynamic_partition", respStr);
+
+
+        request = new Request.Builder()
+                .get()
+                .addHeader("Authorization", rootAuth)
+                .url(BASE_URL + "/api/trigger?type=dynamic_partition&db=test_not_exist")
+                .build();
+        response = networkClient.newCall(request).execute();
+        assertFalse(response.isSuccessful());
+        Assert.assertNotNull(response.body());
+        respStr = response.body().string();
+        Assert.assertNotNull(respStr);
+        Assert.assertEquals("Database[test_not_exist] does not exist", respStr);
+
+
+        request = new Request.Builder()
+                .get()
+                .addHeader("Authorization", rootAuth)
+                .url(BASE_URL + "/api/trigger?type=dynamic_partition&db=test_trigger&tbl=table_not_exist")
+                .build();
+        response = networkClient.newCall(request).execute();
+        assertFalse(response.isSuccessful());
+        Assert.assertNotNull(response.body());
+        respStr = response.body().string();
+        Assert.assertNotNull(respStr);
+        Assert.assertEquals("Table[table_not_exist] does not exist", respStr);
     }
 
     @Test
