@@ -394,11 +394,12 @@ Status RowsetColumnUpdateState::_read_chunk_from_update(const RowidsToUpdateRowi
             // meet different update file, handle this round.
             if (!_enable_preload_column_mode_update_data) {
                 _update_chunk_cache[cur_update_file_id]->reserve(4096);
+                // if already read from this update file, iterator will return end of file, and continue
                 RETURN_IF_ERROR(read_chunk_from_update_file(update_iterators[cur_update_file_id],
                                                             _update_chunk_cache[cur_update_file_id]));
+                DCHECK(_update_chunk_cache[cur_update_file_id]->num_rows() >= batch_append_rowids.size());
                 result_chunk->append_selective(*_update_chunk_cache[cur_update_file_id], batch_append_rowids.data(), 0,
                                                batch_append_rowids.size());
-                _update_chunk_cache[cur_update_file_id]->reset();
             } else {
                 result_chunk->append_selective(*_update_chunk_cache[cur_update_file_id], batch_append_rowids.data(), 0,
                                                batch_append_rowids.size());
@@ -412,11 +413,12 @@ Status RowsetColumnUpdateState::_read_chunk_from_update(const RowidsToUpdateRowi
         // finish last round.
         if (!_enable_preload_column_mode_update_data) {
             _update_chunk_cache[cur_update_file_id]->reserve(4096);
+            // if already read from this update file, iterator will return end of file, and continue
             RETURN_IF_ERROR(read_chunk_from_update_file(update_iterators[cur_update_file_id],
                                                         _update_chunk_cache[cur_update_file_id]));
+            DCHECK(_update_chunk_cache[cur_update_file_id]->num_rows() >= batch_append_rowids.size());
             result_chunk->append_selective(*_update_chunk_cache[cur_update_file_id], batch_append_rowids.data(), 0,
                                            batch_append_rowids.size());
-            _update_chunk_cache[cur_update_file_id]->reset();
         } else {
             result_chunk->append_selective(*_update_chunk_cache[cur_update_file_id], batch_append_rowids.data(), 0,
                                            batch_append_rowids.size());
