@@ -54,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -69,9 +70,13 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_PATH = "path";
     public static final String PROPERTY_FORMAT = "format";
 
+    public static final String PROPERTY_COLUMNS_FROM_PATH = "columns_from_path";
+
     private String path;
     private String format;
     private String compressionType;
+
+    private List<String> columnsFromPath = new ArrayList<>();
     private final Map<String, String> properties;
     @Nullable
     private List<Integer> partitionColumnIDs;
@@ -177,6 +182,14 @@ public class TableFunctionTable extends Table {
 
         if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc")) {
             throw new DdlException("not supported format: " + format);
+        }
+
+        String colsFromPathProp = properties.get(PROPERTY_COLUMNS_FROM_PATH);
+        if (!Strings.isNullOrEmpty(colsFromPathProp)) {
+            String[] colsFromPath = colsFromPathProp.split(",");
+            for (String col : colsFromPath) {
+                columnsFromPath.add(col.trim());
+            }
         }
     }
 
@@ -291,6 +304,16 @@ public class TableFunctionTable extends Table {
             PScalarType scalarType = slot.slotType.types.get(0).scalarType;
             columns.add(new Column(slot.colName, ScalarType.createType(scalarType), true));
         }
+
+        if (!columnsFromPath.isEmpty()) {
+            for (String colName : columnsFromPath) {
+                Optional<Column> column =  columns.stream().filter(col -> col.nameEquals(colName, false)).findFirst();
+                if (column.isPresent()) {
+                    throw new DdlException("duplicated name in columns from path, a column with same name already exists in the file table: " + colName);
+                }
+                columns.add(new Column(colName, ScalarType.createDefaultString(), true));
+            }
+        }
         return columns;
     }
 
@@ -301,6 +324,10 @@ public class TableFunctionTable extends Table {
             exprs.add(new ImportColumnDesc(column.getName()));
         }
         return exprs;
+    }
+
+    public List<String> getColumnsFromPath() {
+        return columnsFromPath;
     }
 
     @Override
