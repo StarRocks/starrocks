@@ -4042,7 +4042,7 @@ E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 26. D
 -- !result
 select all_match([[]]);
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: all_match's input [[]]  can't cast to ARRAY<BOOL>.")
+E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: all_match's input [[]] can't cast from array<array<NULL_TYPE>> to ARRAY<BOOL>.")
 -- !result
 select array_sum(array_map(x->not like(x, 'starRocks'),s_1)) from array_test order by 1;
 -- result:
