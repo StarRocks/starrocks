@@ -22,6 +22,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.utframe.StarRocksAssert;
@@ -63,7 +64,8 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
 
-        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, null, colRefToColumnMetaMap, -1);
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, null,
+                colRefToColumnMetaMap, -1, new ScanOperatorPredicates());
         Assert.assertEquals(2.0, statistics.getOutputRowCount(), 0.001);
     }
 
