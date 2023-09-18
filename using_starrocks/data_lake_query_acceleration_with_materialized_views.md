@@ -56,7 +56,7 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog 和
       <td><ul><li>无需修改针对湖数据的查询语句</li><li>利用查询改写重用预先计算的结果</li></ul></td>
       <td>需要修改查询语句以查询本地表</td>
     </tr>
-  <tbody>
+  </tbody>
 </table>
 
 <br>
