@@ -177,9 +177,12 @@ public class WebBaseAction extends BaseAction {
             authInfo = getAuthorizationInfo(request);
             UserIdentity currentUser = checkPassword(authInfo);
             if (needAdmin()) {
-                checkUserOwnsAdminRole(currentUser);
-                Authorizer.checkSystemAction(currentUser,
-                        currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, PrivilegeType.NODE);
+                try {
+                    Authorizer.checkSystemAction(currentUser,
+                            currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, PrivilegeType.NODE);
+                } catch (AccessDeniedException e) {
+                    checkUserOwnsAdminRole(currentUser);
+                }
             }
             request.setAuthorized(true);
             SessionValue value = new SessionValue();
@@ -215,10 +218,13 @@ public class WebBaseAction extends BaseAction {
             boolean authorized = false;
 
             try {
-                checkUserOwnsAdminRole(sessionValue.currentUser);
-                Authorizer.checkSystemAction(sessionValue.currentUser,
-                        sessionValue.currentUser.isEphemeral() ? sessionValue.currentUser.getMappedRoleIds() : null,
-                        PrivilegeType.NODE);
+                try {
+                    Authorizer.checkSystemAction(sessionValue.currentUser,
+                            sessionValue.currentUser.isEphemeral() ? sessionValue.currentUser.getMappedRoleIds() : null,
+                            PrivilegeType.NODE);
+                } catch (AccessDeniedException e) {
+                    checkUserOwnsAdminRole(sessionValue.currentUser);
+                }
                 authorized = true;
             } catch (AccessDeniedException e) {
                 // ignore
