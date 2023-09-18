@@ -39,10 +39,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
@@ -120,7 +118,7 @@ public class ResourceMgrTest {
         mgr.dropResource(stmt);
     }
 
-    @Test(expected = AccessDeniedException.class)
+    @Test
     public void testAlterResource(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr,
                                   @Injectable Auth auth) throws UserException {
         ResourceMgr mgr = new ResourceMgr();
@@ -136,7 +134,6 @@ public class ResourceMgrTest {
         properties.put("hive.metastore.uris", newThriftPath);
         AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        Authorizer.check(stmt, connectContext);
         mgr.alterResource(stmt);
 
         // assert
@@ -147,7 +144,7 @@ public class ResourceMgrTest {
         Assert.assertEquals(newThriftPath, metastoreURIs);
     }
 
-    @Test(expected = AccessDeniedException.class)
+    @Test(expected = DdlException.class)
     public void testAllowAlterHiveResourceOnly(@Injectable BrokerMgr brokerMgr, @Injectable EditLog editLog,
                                                @Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth)
             throws UserException {
@@ -161,11 +158,10 @@ public class ResourceMgrTest {
         properties.put("broker", "broker2");
         AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        Authorizer.check(stmt, connectContext);
         mgr.alterResource(stmt);
     }
 
-    @Test(expected = AccessDeniedException.class)
+    @Test(expected = DdlException.class)
     public void testAlterResourceNotExist(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr,
                                           @Injectable Auth auth) throws UserException {
         ResourceMgr mgr = new ResourceMgr();
@@ -181,11 +177,10 @@ public class ResourceMgrTest {
         String noExistName = "hive1";
         AlterResourceStmt stmt = new AlterResourceStmt(noExistName, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        Authorizer.check(stmt, connectContext);
         mgr.alterResource(stmt);
     }
 
-    @Test(expected = AccessDeniedException.class)
+    @Test(expected = DdlException.class)
     public void testAlterResourcePropertyNotExist(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr,
                                                   @Injectable Auth auth) throws UserException {
         ResourceMgr mgr = new ResourceMgr();
@@ -200,7 +195,6 @@ public class ResourceMgrTest {
         properties.put("hive.metastore.uris.xxx", "thrift://10.10.44.xxx:9083");
         AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        Authorizer.check(stmt, connectContext);
         mgr.alterResource(stmt);
     }
 

@@ -2,7 +2,9 @@
 
 package com.starrocks.epack.sql.analyzer;
 
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.epack.privilege.AuthorizerEPack;
+import com.starrocks.epack.privilege.ObjectTypeEPack;
 import com.starrocks.epack.privilege.PrivilegeTypeEPack;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
@@ -33,6 +35,8 @@ import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -116,26 +120,50 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
     public Void visitCreatePolicyStatement(CreatePolicyStmt statement, ConnectContext context) {
         PrivilegeType privilegeType = statement.getPolicyType().equals(PolicyType.MASKING) ?
                 PrivilegeTypeEPack.CREATE_MASKING_POLICY : PrivilegeTypeEPack.CREATE_ROW_ACCESS_POLICY;
-        Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
-                privilegeType);
+        try {
+            Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(), privilegeType);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    statement.getPolicyName().getCatalog(),
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    privilegeType.name(), ObjectType.DATABASE.name(), statement.getPolicyName().getDbName());
+        }
         return null;
     }
 
     @Override
     public Void visitDropPolicyStatement(DropPolicyStmt statement, ConnectContext context) {
-        AuthorizerEPack.checkPolicyAction(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), statement.getPolicyType(), statement.getPolicyName().getCatalog(),
-                statement.getPolicyName().getDbName(), statement.getPolicyName().getName(), PrivilegeType.DROP);
+        try {
+            AuthorizerEPack.checkPolicyAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getPolicyType(), statement.getPolicyName().getCatalog(),
+                    statement.getPolicyName().getDbName(), statement.getPolicyName().getName(), PrivilegeType.DROP);
+        } catch (AccessDeniedException e) {
+            ObjectType objectType = statement.getPolicyType().equals(PolicyType.MASKING) ? ObjectTypeEPack.MASKING_POLICY :
+                    ObjectTypeEPack.ROW_ACCESS_POLICY;
+
+            AccessDeniedException.reportAccessDenied(statement.getPolicyName().getCatalog(),
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.DROP.name(), objectType.name(), statement.getPolicyName().getName());
+        }
         return null;
     }
 
     @Override
     public Void visitAlterPolicyStatement(AlterPolicyStmt statement, ConnectContext context) {
-        AuthorizerEPack.checkPolicyAction(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), statement.getPolicyType(),
-                statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
-                statement.getPolicyName().getName(), PrivilegeType.ALTER);
+        try {
+            AuthorizerEPack.checkPolicyAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getPolicyType(),
+                    statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
+                    statement.getPolicyName().getName(), PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            ObjectType objectType = statement.getPolicyType().equals(PolicyType.MASKING) ? ObjectTypeEPack.MASKING_POLICY :
+                    ObjectTypeEPack.ROW_ACCESS_POLICY;
+
+            AccessDeniedException.reportAccessDenied(statement.getPolicyName().getCatalog(),
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), objectType.name(), statement.getPolicyName().getName());
+        }
         return null;
     }
 
@@ -146,31 +174,52 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
 
     @Override
     public Void visitShowCreatePolicyStatement(ShowCreatePolicyStmt statement, ConnectContext context) {
-        AuthorizerEPack.checkAnyActionOnPolicy(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), statement.getPolicyType(),
-                statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
-                statement.getPolicyName().getName());
+        try {
+            AuthorizerEPack.checkAnyActionOnPolicy(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getPolicyType(),
+                    statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
+                    statement.getPolicyName().getName());
+        } catch (AccessDeniedException e) {
+            ObjectType objectType = statement.getPolicyType().equals(PolicyType.MASKING) ? ObjectTypeEPack.MASKING_POLICY :
+                    ObjectTypeEPack.ROW_ACCESS_POLICY;
+
+            AccessDeniedException.reportAccessDenied(statement.getPolicyName().getCatalog(),
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), objectType.name(), statement.getPolicyName().getName());
+        }
         return null;
     }
 
     private void checkPolicyApply(List<WithColumnMaskingPolicy> withColumnMaskingPolicyMap,
-                                  List<WithRowAccessPolicy> withRowAccessPolicyList,
-                                  ConnectContext context) {
+                                  List<WithRowAccessPolicy> withRowAccessPolicyList, ConnectContext context) {
         if (withColumnMaskingPolicyMap != null) {
             for (WithColumnMaskingPolicy withColumnMaskingPolicy : withColumnMaskingPolicyMap) {
                 PolicyName policyName = withColumnMaskingPolicy.getPolicyName();
-                AuthorizerEPack.checkPolicyAction(context.getCurrentUserIdentity(),
-                        context.getCurrentRoleIds(), PolicyType.MASKING, policyName.getCatalog(), policyName.getDbName(),
-                        policyName.getName(), PrivilegeTypeEPack.APPLY);
+
+                try {
+                    AuthorizerEPack.checkPolicyAction(context.getCurrentUserIdentity(),
+                            context.getCurrentRoleIds(), PolicyType.MASKING, policyName.getCatalog(), policyName.getDbName(),
+                            policyName.getName(), PrivilegeTypeEPack.APPLY);
+                } catch (AccessDeniedException e) {
+                    AccessDeniedException.reportAccessDenied(policyName.getCatalog(),
+                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeTypeEPack.APPLY.name(), ObjectTypeEPack.MASKING_POLICY.name(), policyName.getName());
+                }
             }
         }
 
         if (withRowAccessPolicyList != null) {
             for (WithRowAccessPolicy withRowAccessPolicy : withRowAccessPolicyList) {
                 PolicyName policyName = withRowAccessPolicy.getPolicyName();
-                AuthorizerEPack.checkPolicyAction(context.getCurrentUserIdentity(),
-                        context.getCurrentRoleIds(), PolicyType.ROW_ACCESS, policyName.getCatalog(), policyName.getDbName(),
-                        policyName.getName(), PrivilegeTypeEPack.APPLY);
+                try {
+                    AuthorizerEPack.checkPolicyAction(context.getCurrentUserIdentity(),
+                            context.getCurrentRoleIds(), PolicyType.ROW_ACCESS, policyName.getCatalog(), policyName.getDbName(),
+                            policyName.getName(), PrivilegeTypeEPack.APPLY);
+                } catch (AccessDeniedException e) {
+                    AccessDeniedException.reportAccessDenied(policyName.getCatalog(),
+                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeTypeEPack.APPLY.name(), ObjectTypeEPack.ROW_ACCESS_POLICY.name(), policyName.getName());
+                }
             }
         }
     }
@@ -189,114 +238,197 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
 
     // ---------------------------------------- Security Integration Statement ---------------------------------------
     @Override
-    public Void visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement,
-                                                        ConnectContext context) {
-        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+    public Void visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement, ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY.name(), ObjectType.SYSTEM.name(), null);
+        }
         return null;
     }
 
     @Override
-    public Void visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement statement,
-                                                      ConnectContext context) {
-        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+    public Void visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement statement, ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY.name(), ObjectType.SYSTEM.name(), null);
+        }
         return null;
     }
 
     @Override
-    public Void visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement statement,
-                                                       ConnectContext context) {
-        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+    public Void visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement statement, ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY.name(), ObjectType.SYSTEM.name(), null);
+        }
         return null;
     }
 
     @Override
-    public Void visitShowSecurityIntegrationStatement(ShowSecurityIntegrationStatement statement,
-                                                      ConnectContext context) {
-        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+    public Void visitShowSecurityIntegrationStatement(ShowSecurityIntegrationStatement statement, ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY.name(), ObjectType.SYSTEM.name(), null);
+        }
         return null;
     }
 
     @Override
     public Void visitShowCreateSecurityIntegrationStatement(ShowCreateSecurityIntegrationStatement statement,
                                                             ConnectContext context) {
-        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY.name(), ObjectType.SYSTEM.name(), null);
+        }
         return null;
     }
 
     @Override
     public Void visitCreateRoleMappingStatement(CreateRoleMappingStatement statement, ConnectContext context) {
-        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY.name(), ObjectType.SYSTEM.name(), null);
+        }
         return null;
     }
 
     @Override
     public Void visitAlterRoleMappingStatement(AlterRoleMappingStatement statement, ConnectContext context) {
-        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY.name(), ObjectType.SYSTEM.name(), null);
+        }
         return null;
     }
 
     @Override
     public Void visitDropRoleMappingStatement(DropRoleMappingStatement statement, ConnectContext context) {
-        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY.name(), ObjectType.SYSTEM.name(), null);
+        }
         return null;
     }
 
     @Override
     public Void visitShowRoleMappingStatement(ShowRoleMappingStatement statement, ConnectContext context) {
-        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY.name(), ObjectType.SYSTEM.name(), null);
+        }
         return null;
     }
 
     @Override
     public Void visitRefreshRoleMappingStatement(RefreshRoleMappingStatement statement, ConnectContext context) {
-        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.SECURITY.name(), ObjectType.SYSTEM.name(), null);
+        }
         return null;
     }
 
     // --------------------------------- Warehouse Statement ---------------------------------
     @Override
     public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
-        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                PrivilegeTypeEPack.CREATE_WAREHOUSE);
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.CREATE_WAREHOUSE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.CREATE_WAREHOUSE.name(), ObjectType.SYSTEM.name(), null);
+        }
         return null;
     }
 
     @Override
     public Void visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, ConnectContext context) {
-        AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), statement.getWarehouseName(),
-                PrivilegeType.ALTER);
+        try {
+            AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), ObjectTypeEPack.WAREHOUSE.name(), statement.getWarehouseName());
+        }
         return null;
     }
 
     @Override
     public Void visitResumeWarehouseStatement(ResumeWarehouseStmt statement, ConnectContext context) {
-        AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), statement.getWarehouseName(),
-                PrivilegeType.ALTER);
+        try {
+            AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), ObjectTypeEPack.WAREHOUSE.name(), statement.getWarehouseName());
+        }
         return null;
     }
 
     public Void visitDropWarehouseStatement(DropWarehouseStmt statement, ConnectContext context) {
-        AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), statement.getWarehouseName(),
-                PrivilegeType.DROP);
+        try {
+            AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.DROP);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.DROP.name(), ObjectTypeEPack.WAREHOUSE.name(), statement.getWarehouseName());
+        }
         return null;
     }
 
     public Void visitSetWarehouseStatement(SetWarehouseStmt statement, ConnectContext context) {
-        AuthorizerEPack.checkWarehouseAction(
-                context.getCurrentUserIdentity(), context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.USAGE);
+        try {
+            AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.USAGE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.USAGE.name(), ObjectTypeEPack.WAREHOUSE.name(), statement.getWarehouseName());
+        }
         return null;
     }
 
@@ -307,8 +439,14 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
     }
 
     public Void visitShowClusterStatement(ShowClustersStmt statement, ConnectContext context) {
-        AuthorizerEPack.checkAnyActionOnWarehouse(context.getCurrentUserIdentity(),
-                context.getCurrentRoleIds(), statement.getWarehouseName());
+        try {
+            AuthorizerEPack.checkAnyActionOnWarehouse(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getWarehouseName());
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), ObjectTypeEPack.WAREHOUSE.name(), statement.getWarehouseName());
+        }
         return null;
     }
 

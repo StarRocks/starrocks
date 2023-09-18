@@ -3,29 +3,32 @@
 package com.starrocks.epack.privilege;
 
 import com.starrocks.epack.sql.ast.PolicyType;
-import com.starrocks.privilege.AccessControl;
+import com.starrocks.privilege.AccessController;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.Set;
 
-public interface AccessControlEPack extends AccessControl {
+public interface AccessControlEPack extends AccessController {
 
     default void checkPolicyAction(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
-                                   String db, String policy, PrivilegeType privilegeType) {
+                                   String db, String policy, PrivilegeType privilegeType) throws AccessDeniedException {
     }
 
     default void checkAnyActionOnPolicy(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
-                                        String db, String policy) {
+                                        String db, String policy) throws AccessDeniedException {
     }
 
     default void checkAnyActionOnAnyPolicy(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
-                                           String db) {
+                                           String db) throws AccessDeniedException {
     }
 
-    default void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType) {
+    default void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
     }
 
-    default void checkAnyActionOnWarehouse(UserIdentity currentUser, Set<Long> roleIds, String name) {
+    default void checkAnyActionOnWarehouse(UserIdentity currentUser, Set<Long> roleIds, String name)
+            throws AccessDeniedException {
     }
 }

@@ -20,7 +20,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -108,7 +107,7 @@ public class ExternalDbTablePrivTest {
         try {
             Authorizer.check(statement, ctx);
             Assert.fail();
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -126,7 +125,7 @@ public class ExternalDbTablePrivTest {
         try {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }

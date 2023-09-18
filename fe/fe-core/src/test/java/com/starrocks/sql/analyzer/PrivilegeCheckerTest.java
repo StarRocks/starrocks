@@ -33,6 +33,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.privilege.AccessDeniedException;
@@ -288,7 +289,7 @@ public class PrivilegeCheckerTest {
         try {
             Authorizer.check(statement, ctx);
             Assert.fail();
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -306,7 +307,7 @@ public class PrivilegeCheckerTest {
         try {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -322,7 +323,7 @@ public class PrivilegeCheckerTest {
         try {
             Authorizer.check(statement, ctx);
             Assert.fail();
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -356,7 +357,7 @@ public class PrivilegeCheckerTest {
         try {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -374,7 +375,7 @@ public class PrivilegeCheckerTest {
             // user 'test' not has GRANT/NODE privilege
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -388,10 +389,10 @@ public class PrivilegeCheckerTest {
         try {
             Authorizer.check(statement, ctx);
             Assert.fail();
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(
-                    "USAGE denied to user 'test'@'localhost' for resource '[my_spark]'"
+                    "Access denied; you need (at least one of) the USAGE privilege(s) on RESOURCE my_spark for this operation"
             ));
         }
         ctxToRoot();
@@ -404,7 +405,7 @@ public class PrivilegeCheckerTest {
                 sql,
                 "grant insert on db1.tbl1 to test",
                 "revoke insert on db1.tbl1 from test",
-                "INSERT command denied to user 'test'@'localhost' for table '[tbl1]'");
+                "Access denied; you need (at least one of) the INSERT privilege(s) on TABLE tbl1 for this operation");
     }
 
     @Test
@@ -417,9 +418,8 @@ public class PrivilegeCheckerTest {
         Authorizer.check(
                 UtFrameUtils.parseStmtWithNewParser("use 'catalog default_catalog'", ctx), ctx);
         try {
-            Authorizer.check(
-                    UtFrameUtils.parseStmtWithNewParser("use 'catalog test_ex_catalog'", ctx), ctx);
-        } catch (AccessDeniedException e) {
+            Authorizer.check(UtFrameUtils.parseStmtWithNewParser("use 'catalog test_ex_catalog'", ctx), ctx);
+        } catch (ErrorReportException e) {
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
         verifyGrantRevoke(
@@ -640,7 +640,7 @@ public class PrivilegeCheckerTest {
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db3.tbl1 to test");
         try {
             new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
@@ -666,7 +666,7 @@ public class PrivilegeCheckerTest {
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
         try {
             new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
@@ -688,7 +688,7 @@ public class PrivilegeCheckerTest {
         analyzeManager.addAnalyzeJob(nativeAnalyzeJob);
         try {
             new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
@@ -740,7 +740,7 @@ public class PrivilegeCheckerTest {
 
         try {
             new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
 
@@ -1002,12 +1002,12 @@ public class PrivilegeCheckerTest {
                 "grant select on db1.tbl1 to test",
                 "grant select on db1.tbl1 to test with grant option",
                 "revoke select on db1.tbl1 from test",
-                "Access denied; you need (at least one of) the GRANT privilege(s) for this operation");
+                "Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation");
         verifyGrantRevoke(
                 "revoke select on db1.tbl1 from test",
                 "grant select on db1.tbl1 to test with grant option",
                 "revoke select on db1.tbl1 from test",
-                "Access denied; you need (at least one of) the GRANT privilege(s) for this operation");
+                "Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation");
     }
 
     @Test
@@ -1432,7 +1432,7 @@ public class PrivilegeCheckerTest {
                             "revoke DROP on database " + testDbName + " from test",
                             "revoke CREATE DATABASE on catalog default_catalog from test;"),
                     "Access denied");
-        } catch (AccessDeniedException e) {
+        } catch (ErrorReportException e) {
             Assert.assertTrue(e.getMessage().contains("Access denied"));
         } finally {
             grantRevokeSqlAsRoot("revoke DROP on database " + testDbName + " from test");
@@ -1885,7 +1885,7 @@ public class PrivilegeCheckerTest {
         try {
             Authorizer.check(statement, ctx);
             Assert.fail();
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + createSql);
             Assert.assertTrue(e.getMessage().contains(
                     "Access denied; you need (at least one of) the USAGE privilege(s) on RESOURCE my_spark for this operation"
@@ -1902,7 +1902,7 @@ public class PrivilegeCheckerTest {
                 createSql,
                 "grant insert on db1.tbl1 to test",
                 "revoke insert on db1.tbl1 from test",
-                "INSERT command denied to user 'test'@'localhost' for table '[tbl1]'");
+                "Access denied; you need (at least one of) the INSERT privilege(s) on TABLE tbl1 for this operation");
 
         // create broker load
         createSql = "LOAD LABEL db1.job_name1" +
@@ -2072,7 +2072,7 @@ public class PrivilegeCheckerTest {
         try {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + createBackupSql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -2085,7 +2085,7 @@ public class PrivilegeCheckerTest {
         try {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + createBackupSql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -2165,7 +2165,7 @@ public class PrivilegeCheckerTest {
         try {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + restoreSql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -2177,7 +2177,7 @@ public class PrivilegeCheckerTest {
         try {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + restoreSql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -2324,7 +2324,7 @@ public class PrivilegeCheckerTest {
         ctxToTestUser();
         try {
             GlobalStateMgr.getCurrentState().dropMaterializedView(statement);
-        } catch (AccessDeniedException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains(
                     "Access denied; you need (at least one of) the DROP privilege(s)"));
@@ -2557,7 +2557,7 @@ public class PrivilegeCheckerTest {
             StatementBase statement = UtFrameUtils.parseStmtWithNewParser(selectSQL, starRocksAssert.getCtx());
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (AccessDeniedException e) {
+        } catch (ErrorReportException e) {
             System.out.println(e.getMessage() + ", sql: " + selectSQL);
             Assert.assertTrue(e.getMessage().contains("Access denied; you need (at least one of) the USAGE privilege(s) " +
                     "on GLOBAL FUNCTION my_udf_json_get(VARCHAR,VARCHAR) for this operation"));
@@ -2741,8 +2741,8 @@ public class PrivilegeCheckerTest {
                     "set default role r1 to u1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertEquals(e.getMessage(),
-                    "Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation");
+            Assert.assertTrue(e.getMessage().contains(
+                    "Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation"));
         }
 
         sql = "drop user u1";

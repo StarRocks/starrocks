@@ -45,6 +45,7 @@ import com.google.re2j.Pattern;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.ScalarType;
@@ -59,6 +60,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -1110,10 +1113,15 @@ public class ScalarOperatorFunctions {
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
-        Authorizer.checkAnyActionOnTable(
-                connectContext.getCurrentUserIdentity(),
-                connectContext.getCurrentRoleIds(),
-                tableName);
+        try {
+            Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                    tableName);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    tableName.getCatalog(),
+                    connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName.getTbl());
+        }
         return table;
     }
 
@@ -1123,10 +1131,17 @@ public class ScalarOperatorFunctions {
         Table table = db.tryGetTable(tableName.getTbl())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
-        Authorizer.checkAnyActionOnTable(
-                connectContext.getCurrentUserIdentity(),
-                connectContext.getCurrentRoleIds(),
-                tableName);
+        try {
+            Authorizer.checkAnyActionOnTable(
+                    connectContext.getCurrentUserIdentity(),
+                    connectContext.getCurrentRoleIds(),
+                    tableName);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    tableName.getCatalog(),
+                    connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName.getTbl());
+        }
         return Pair.of(db, table);
     }
 
@@ -1214,10 +1229,17 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "inspect_all_pipes", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator inspect_all_pipes() {
         ConnectContext connectContext = ConnectContext.get();
-        Authorizer.checkSystemAction(
-                connectContext.getCurrentUserIdentity(),
-                connectContext.getCurrentRoleIds(),
-                PrivilegeType.OPERATE);
+        try {
+            Authorizer.checkSystemAction(
+                    connectContext.getCurrentUserIdentity(),
+                    connectContext.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        }
         String currentDb = connectContext.getDatabase();
         Database db = GlobalStateMgr.getCurrentState().mayGetDb(connectContext.getDatabase())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, currentDb));

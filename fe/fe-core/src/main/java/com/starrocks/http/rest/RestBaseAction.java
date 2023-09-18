@@ -94,7 +94,7 @@ public class RestBaseAction extends BaseAction {
     }
 
     @Override
-    public void execute(BaseRequest request, BaseResponse response) throws DdlException {
+    public void execute(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
         ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
         // check password
         UserIdentity currentUser = checkPassword(authInfo);
@@ -114,7 +114,7 @@ public class RestBaseAction extends BaseAction {
     // If user password should be checked, the derived class should implement this method, NOT 'execute()',
     // otherwise, override 'execute()' directly
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response)
-            throws DdlException {
+            throws DdlException, AccessDeniedException {
         throw new DdlException("Not implemented");
     }
 

@@ -10,7 +10,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Type;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.NativeAccessControl;
+import com.starrocks.privilege.NativeAccessController;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
@@ -25,49 +25,41 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class NativeAccessControlEPack extends NativeAccessControl implements AccessControlEPack {
+public class NativeAccessControllerEPack extends NativeAccessController implements AccessControlEPack {
     @Override
     public void checkPolicyAction(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
-                                  String db, String policy, PrivilegeType privilegeType) {
+                                  String db, String policy, PrivilegeType privilegeType) throws AccessDeniedException {
         List<String> objectTokens = Lists.newArrayList(catalogName, db, policy);
         ObjectType objectType = policyType.equals(PolicyType.MASKING) ? ObjectTypeEPack.MASKING_POLICY :
                 ObjectTypeEPack.ROW_ACCESS_POLICY;
-        if (!checkObjectTypeAction(currentUser, roleIds, privilegeType, objectType, objectTokens)) {
-            AccessDeniedException.reportAccessDenied(privilegeType.name(), objectType, policy);
-        }
+        checkObjectTypeAction(currentUser, roleIds, privilegeType, objectType, objectTokens);
     }
 
     @Override
     public void checkAnyActionOnPolicy(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
-                                       String db, String policy) {
+                                       String db, String policy) throws AccessDeniedException {
         List<String> objectTokens = Lists.newArrayList(catalogName, db, policy);
         ObjectType objectType = policyType.equals(PolicyType.MASKING) ? ObjectTypeEPack.MASKING_POLICY :
                 ObjectTypeEPack.ROW_ACCESS_POLICY;
-        if (!checkAnyActionOnObject(currentUser, roleIds, objectType, objectTokens)) {
-            AccessDeniedException.reportAccessDenied("ANY", objectType, policy);
-        }
+        checkAnyActionOnObject(currentUser, roleIds, objectType, objectTokens);
     }
 
     @Override
     public void checkAnyActionOnAnyPolicy(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
-                                          String db) {
+                                          String db) throws AccessDeniedException {
         checkAnyActionOnPolicy(currentUser, roleIds, policyType, catalogName, db, "*");
     }
 
-
     @Override
-    public void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType) {
-        if (!checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectTypeEPack.WAREHOUSE,
-                Collections.singletonList(name))) {
-            AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectTypeEPack.WAREHOUSE, name);
-        }
+    public void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectTypeEPack.WAREHOUSE,
+                Collections.singletonList(name));
     }
 
     @Override
-    public void checkAnyActionOnWarehouse(UserIdentity currentUser, Set<Long> roleIds, String name) {
-        if (!checkAnyActionOnObject(currentUser, roleIds, ObjectTypeEPack.WAREHOUSE, Collections.singletonList(name))) {
-            AccessDeniedException.reportAccessDenied("ANY", ObjectTypeEPack.WAREHOUSE, name);
-        }
+    public void checkAnyActionOnWarehouse(UserIdentity currentUser, Set<Long> roleIds, String name) throws AccessDeniedException {
+        checkAnyActionOnObject(currentUser, roleIds, ObjectTypeEPack.WAREHOUSE, Collections.singletonList(name));
     }
 
     @Override
