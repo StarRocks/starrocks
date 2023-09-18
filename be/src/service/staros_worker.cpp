@@ -114,6 +114,14 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::get_shard_info(ShardId 
     return it->second.shard_info;
 }
 
+absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::retrieve_shard_info(ShardId id) {
+    auto st = get_shard_info(id);
+    if (absl::IsNotFound(st.status())) {
+        return _fetch_shard_info_from_remote(id);
+    }
+    return st;
+}
+
 std::vector<staros::starlet::ShardInfo> StarOSWorker::shards() const {
     std::vector<staros::starlet::ShardInfo> vec;
     vec.reserve(_shards.size());
@@ -183,8 +191,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
     }
 }
 
-absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,
-                                                                                            const Configuration& conf) {
+absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_remote(ShardId id) {
     static const int64_t kGetShardInfoTimeout = 5 * 1000 * 1000; // 5s (heartbeat interval)
     static const int64_t kCheckInterval = 10 * 1000;             // 10ms
     Awaitility wait;
@@ -195,7 +202,12 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
     }
 
     // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
-    auto info_or = g_starlet->get_shard_info(id);
+    return g_starlet->get_shard_info(id);
+}
+
+absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,
+                                                                                            const Configuration& conf) {
+    auto info_or = _fetch_shard_info_from_remote(id);
     if (!info_or.ok()) {
         return info_or.status();
     }
