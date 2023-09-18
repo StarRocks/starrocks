@@ -15,6 +15,7 @@
 #include "storage/lake/tablet_manager.h"
 
 #include <fmt/format.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <fstream>
@@ -32,6 +33,11 @@
 #include "testutil/id_generator.h"
 #include "util/filesystem_util.h"
 #include "util/lru_cache.h"
+
+// NOTE: intend to put the following header to the end of the include section
+// so that our `gutil/dynamic_annotations.h` takes precedence of the absl's.
+// NOLINTNEXTLINE
+#include "service/staros_worker.h"
 
 namespace starrocks {
 
@@ -493,5 +499,66 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         ASSERT_EQ("c2", schema->column(2).name());
     }
 }
+
+#ifdef USE_STAROS
+class MockStarOSWorker : public StarOSWorker {
+public:
+    MOCK_METHOD((absl::StatusOr<staros::starlet::ShardInfo>), _fetch_shard_info_from_remote,
+                (staros::starlet::ShardId id));
+};
+
+TEST_F(LakeTabletManagerTest, tablet_schema_load_from_remote) {
+    int64_t tablet_id = 12345;
+    int64_t schema_id = 10086;
+
+    TabletSchemaPB schema_pb;
+    schema_pb.set_id(10);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_rows_per_row_block(65535);
+    auto c0 = schema_pb.add_column();
+    {
+        c0->set_unique_id(0);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+    }
+    auto c1 = schema_pb.add_column();
+    {
+        c1->set_unique_id(1);
+        c1->set_name("c1");
+        c1->set_type("INT");
+        c1->set_is_key(false);
+        c1->set_is_nullable(false);
+    }
+    // prepare and set schema info in global_schema_cache
+    auto schema_ptr = TabletSchema::create(schema_pb);
+    _tablet_manager->TEST_set_global_schema_cache(schema_id, schema_ptr);
+
+    // prepare fake shard_info returned by mocked `_fetch_shard_info_from_remote()`
+    staros::starlet::ShardInfo shard_info;
+    shard_info.id = tablet_id;
+    shard_info.properties.emplace(std::make_pair("indexId", std::to_string(schema_id)));
+
+    // preserve original g_worker value, and reset it to our MockedWorker
+    std::shared_ptr<StarOSWorker> origin_worker = g_worker;
+    g_worker.reset(new MockStarOSWorker());
+    DeferOp op([origin_worker] { g_worker = origin_worker; });
+
+    // set mock function excepted call
+    MockStarOSWorker* worker = dynamic_cast<MockStarOSWorker*>(g_worker.get());
+    EXPECT_CALL(*worker, _fetch_shard_info_from_remote(tablet_id)).WillOnce(::testing::Return(shard_info));
+
+    // fire the testing
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    auto st = tablet.get_schema();
+    EXPECT_TRUE(st.ok());
+    EXPECT_EQ(st.value()->id(), 10);
+    EXPECT_EQ(st.value()->num_columns(), 2);
+    EXPECT_EQ(st.value()->column(0).name(), "c0");
+    EXPECT_EQ(st.value()->column(1).name(), "c1");
+}
+#endif // USE_STAROS
 
 } // namespace starrocks

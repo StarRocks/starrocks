@@ -151,6 +151,18 @@ public:
 
     Cache* metacache() { return _metacache.get(); }
 
+<<<<<<< HEAD
+=======
+    int64_t in_writing_data_size(int64_t tablet_id);
+
+    void set_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size);
+
+    void remove_in_writing_data_size(int64_t tablet_id, int64_t txn_id);
+
+    // only for TEST purpose
+    void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
+
+>>>>>>> f8507820d2 ([Enhancement] tablet manager ondemand fetch shard info from starmgr (#31060))
 private:
     using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr, DelVectorPtr>;
 
