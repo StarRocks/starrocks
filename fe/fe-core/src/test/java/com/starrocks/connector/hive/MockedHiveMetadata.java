@@ -55,7 +55,6 @@ import org.apache.hadoop.hive.metastore.api.Table;
 import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -157,7 +156,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames() {
-        return Arrays.asList("tpch", "tpcds", "ssb");
+        return new ArrayList<>(MOCK_TABLE_MAP.keySet());
     }
 
     @Override

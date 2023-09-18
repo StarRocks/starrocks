@@ -104,7 +104,7 @@ public class AnalyzeMgr implements Writable {
         GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeJob(job);
     }
 
-    public void updateAnalyzeJobWithoutLog(NativeAnalyzeJob job) {
+    public void updateAnalyzeJobWithoutLog(AnalyzeJob job) {
         analyzeJobMap.put(job.getId(), job);
     }
 
@@ -128,11 +128,16 @@ public class AnalyzeMgr implements Writable {
                 collect(Collectors.toList());
     }
 
-    public void replayAddAnalyzeJob(NativeAnalyzeJob job) {
+    public List<ExternalAnalyzeJob> getAllExternalAnalyzeJobList() {
+        return analyzeJobMap.values().stream().filter(job -> !job.isNative()).map(job -> (ExternalAnalyzeJob) job).
+                collect(Collectors.toList());
+    }
+
+    public void replayAddAnalyzeJob(AnalyzeJob job) {
         analyzeJobMap.put(job.getId(), job);
     }
 
-    public void replayRemoveAnalyzeJob(NativeAnalyzeJob job) {
+    public void replayRemoveAnalyzeJob(AnalyzeJob job) {
         analyzeJobMap.remove(job.getId());
     }
 
@@ -636,8 +641,8 @@ public class AnalyzeMgr implements Writable {
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         int analyzeJobSize = reader.readInt();
         for (int i = 0; i < analyzeJobSize; ++i) {
-            NativeAnalyzeJob nativeAnalyzeJob = reader.readJson(NativeAnalyzeJob.class);
-            replayAddAnalyzeJob(nativeAnalyzeJob);
+            AnalyzeJob analyzeJob = reader.readJson(AnalyzeJob.class);
+            replayAddAnalyzeJob(analyzeJob);
         }
 
         int analyzeStatusSize = reader.readInt();
