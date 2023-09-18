@@ -393,6 +393,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
+    public static final String ENABLE_ICEBERG_IDENTITY_PARTITION_COLUMN = "enable_iceberg_identity_partition_column";
+
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
         DEFAULT,            // default, choose the materialized view or not by cost optimizer
@@ -1115,6 +1117,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
     private boolean hudiMORForceJNIReader = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_ICEBERG_IDENTITY_PARTITION_COLUMN)
+    private boolean enableIcebergIdentityPartitionColumn = false;
 
     @VarAttr(name = ENABLE_QUERY_CACHE)
     private boolean enableQueryCache = false;
@@ -2575,6 +2580,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
         tResult.setUse_page_cache(usePageCache);
+
+        tResult.setEnable_iceberg_identity_partition_column(enableIcebergIdentityPartitionColumn);
 
         tResult.setEnable_connector_adaptive_io_tasks(enableConnectorAdaptiveIoTasks);
         tResult.setConnector_io_tasks_slow_io_latency_ms(connectorIoTasksSlowIoLatency);

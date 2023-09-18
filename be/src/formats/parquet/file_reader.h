@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 
 #include "column/chunk.h"
 #include "common/status.h"
@@ -64,6 +65,10 @@ private:
 
     // init row group readers.
     Status _init_group_readers();
+
+    Status _init_const_column_cache(size_t rg_index, int64_t rg_first_row);
+
+    void _update_const_column_of_chunk(ChunkPtr* chunk, size_t row_count);
 
     // filter row group by min/max conjuncts
     StatusOr<bool> _filter_group(const tparquet::RowGroup& row_group);
@@ -127,6 +132,9 @@ private:
     GroupReaderParam _group_reader_param;
     std::shared_ptr<MetaHelper> _meta_helper = nullptr;
     const std::set<int64_t>* _need_skip_rowids;
+
+    std::vector<GroupReaderParam::Column> _const_cols;
+    std::unordered_map<SlotId, ColumnPtr> _const_column_cache;
 };
 
 } // namespace starrocks::parquet

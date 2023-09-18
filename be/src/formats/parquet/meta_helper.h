@@ -36,7 +36,8 @@ public:
                                                  const std::vector<SlotDescriptor*>& slots) const = 0;
 
     virtual void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                                      std::vector<GroupReaderParam::Column>& read_cols) const = 0;
+                                      std::vector<GroupReaderParam::Column>& read_cols,
+                                      std::vector<GroupReaderParam::Column>& const_cols) const = 0;
 
     virtual const ParquetField* get_parquet_field(const std::string& col_name) const = 0;
 
@@ -91,7 +92,8 @@ public:
                                          const tparquet::RowGroup& row_group,
                                          const std::vector<SlotDescriptor*>& slots) const override;
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                              std::vector<GroupReaderParam::Column>& read_cols) const override;
+                              std::vector<GroupReaderParam::Column>& read_cols,
+                              std::vector<GroupReaderParam::Column>& const_cols) const override;
 
     const ParquetField* get_parquet_field(const std::string& col_name) const override;
 };
@@ -99,10 +101,17 @@ public:
 class IcebergMetaHelper : public MetaHelper {
 public:
     IcebergMetaHelper(std::shared_ptr<FileMetaData> file_metadata, bool case_sensitive,
-                      const TIcebergSchema* t_iceberg_schema) {
+                      const TIcebergSchema* t_iceberg_schema,
+                      const std::vector<std::string>* iceberg_partition_column_names) {
         _file_metadata = std::move(file_metadata);
         _case_sensitive = case_sensitive;
         _t_iceberg_schema = t_iceberg_schema;
+        if (iceberg_partition_column_names != nullptr) {
+            for (auto& item : *iceberg_partition_column_names) {
+                const std::string& format_col_name = _case_sensitive ? item : boost::algorithm::to_lower_copy(item);
+                _format_iceberg_partition_column_names.emplace_back(format_col_name);
+            }
+        }
         DCHECK(_t_iceberg_schema != nullptr);
         _init_field_mapping();
     }
@@ -114,12 +123,14 @@ public:
                                          const tparquet::RowGroup& row_group,
                                          const std::vector<SlotDescriptor*>& slots) const override;
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                              std::vector<GroupReaderParam::Column>& read_cols) const override;
+                              std::vector<GroupReaderParam::Column>& read_cols,
+                              std::vector<GroupReaderParam::Column>& const_cols) const override;
     const ParquetField* get_parquet_field(const std::string& col_name) const override;
 
 private:
     void _init_field_mapping();
     const TIcebergSchema* _t_iceberg_schema = nullptr;
+    std::vector<std::string> _format_iceberg_partition_column_names;
     // field name has already been formatted
     std::unordered_map<std::string, const TIcebergSchemaField*> _field_name_2_iceberg_field;
 };

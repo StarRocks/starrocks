@@ -16,6 +16,7 @@
 
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
@@ -24,6 +25,7 @@
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/metadata.h"
 #include "fs/fs.h"
+#include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 #include "util/coding.h"
@@ -51,7 +53,8 @@ Status FileReader::init(HdfsScannerContext* ctx) {
         // If we want read this parquet file with iceberg schema,
         // we also need to make sure it contains parquet field id.
         _meta_helper =
-                std::make_shared<IcebergMetaHelper>(_file_metadata, ctx->case_sensitive, _scanner_ctx->iceberg_schema);
+                std::make_shared<IcebergMetaHelper>(_file_metadata, ctx->case_sensitive, _scanner_ctx->iceberg_schema,
+                                                    _scanner_ctx->iceberg_partition_column_names);
     } else {
         _meta_helper = std::make_shared<ParquetMetaHelper>(_file_metadata, ctx->case_sensitive);
     }
@@ -423,7 +426,7 @@ bool FileReader::_is_integer_type(const tparquet::Type::type& type) {
 }
 
 void FileReader::_prepare_read_columns() {
-    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _group_reader_param.read_cols);
+    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _group_reader_param.read_cols, _const_cols);
     _no_materialized_column_scan = (_group_reader_param.read_cols.size() == 0);
 }
 
@@ -472,6 +475,13 @@ Status FileReader::_init_group_readers() {
                 continue;
             }
 
+            if (_row_group_readers.empty() && !_const_cols.empty()) {
+                RETURN_IF_ERROR(_init_const_column_cache(i, row_group_first_row));
+                if (_is_file_filtered) {
+                    break;
+                }
+            }
+
             auto row_group_reader =
                     std::make_shared<GroupReader>(_group_reader_param, i, _need_skip_rowids, row_group_first_row);
             _row_group_readers.emplace_back(row_group_reader);
@@ -504,6 +514,71 @@ Status FileReader::_init_group_readers() {
     return Status::OK();
 }
 
+Status FileReader::_init_const_column_cache(size_t rg_index, int64_t rg_first_row) {
+    auto const_group_reader_param = _group_reader_param;
+    const_group_reader_param.read_cols = _const_cols;
+    const_group_reader_param.conjunct_ctxs_by_slot.clear();
+    auto group_reader = std::make_shared<GroupReader>(const_group_reader_param, rg_index, nullptr, rg_first_row);
+    RETURN_IF_ERROR(group_reader->init());
+    if (config::parquet_coalesce_read_enable && _sb_stream != nullptr) {
+        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        int64_t end_offset = 0;
+        group_reader->collect_io_ranges(&ranges, &end_offset);
+        group_reader->set_end_offset(end_offset);
+        _sb_stream->set_io_ranges(ranges);
+        const_group_reader_param.sb_stream = _sb_stream;
+    }
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->columns().reserve(_const_cols.size());
+    std::vector<ExprContext*> conjuncts;
+    for (auto col : _const_cols) {
+        SlotId slot_id = col.slot_id;
+        ColumnPtr column = ColumnHelper::create_column(col.col_type_in_chunk, true);
+        chunk->append_column(column, slot_id);
+        if (_group_reader_param.conjunct_ctxs_by_slot.find(slot_id) !=
+            _group_reader_param.conjunct_ctxs_by_slot.end()) {
+            conjuncts.insert(conjuncts.end(), _group_reader_param.conjunct_ctxs_by_slot.at(slot_id).begin(),
+                             _group_reader_param.conjunct_ctxs_by_slot.at(slot_id).end());
+        }
+    }
+
+    size_t to_read = 1;
+    RETURN_IF_ERROR(group_reader->get_next(&chunk, &to_read));
+
+    Filter chunk_filter(chunk->num_rows(), 1);
+
+    ASSIGN_OR_RETURN(auto chunk_size, ExecNode::eval_conjuncts_into_filter(conjuncts, chunk.get(), &chunk_filter));
+
+    if (chunk_size == 0) {
+        _is_file_filtered = true;
+    } else {
+        for (auto col : _const_cols) {
+            auto const_col = chunk->get_column_by_slot_id(col.slot_id);
+            if (const_col->is_null(0)) {
+                _const_column_cache[col.slot_id] = ConstColumn::create(const_col, 1);
+            } else {
+                _const_column_cache[col.slot_id] =
+                        ConstColumn::create(down_cast<NullableColumn*>(const_col.get())->data_column(), 1);
+            }
+        }
+    }
+
+    if (_sb_stream != nullptr) {
+        _sb_stream->release();
+    }
+    group_reader->close();
+    return Status::OK();
+}
+
+void FileReader::_update_const_column_of_chunk(ChunkPtr* chunk, size_t row_count) {
+    for (const auto& it : _const_column_cache) {
+        ColumnPtr col_cache = it.second->clone_shared();
+        col_cache->resize(row_count);
+        (*chunk)->get_column_by_slot_id(it.first) = col_cache;
+    }
+}
+
 Status FileReader::get_next(ChunkPtr* chunk) {
     if (_is_file_filtered) {
         return Status::EndOfFile("");
@@ -518,6 +593,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
         Status status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
+                _update_const_column_of_chunk(chunk, row_count);
                 _scanner_ctx->update_not_existed_columns_of_chunk(chunk, row_count);
                 _scanner_ctx->update_partition_column_of_chunk(chunk, row_count);
                 _scan_row_count += (*chunk)->num_rows();
@@ -543,6 +619,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
 Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
         size_t read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
+        _update_const_column_of_chunk(chunk, read_size);
         _scanner_ctx->update_not_existed_columns_of_chunk(chunk, read_size);
         _scanner_ctx->update_partition_column_of_chunk(chunk, read_size);
         _scan_row_count += read_size;

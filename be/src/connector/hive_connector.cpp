@@ -511,6 +511,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (dynamic_cast<const IcebergTableDescriptor*>(_hive_table)) {
         auto tbl = dynamic_cast<const IcebergTableDescriptor*>(_hive_table);
         scanner_params.iceberg_schema = tbl->get_iceberg_schema();
+        if (state->query_options().__isset.enable_iceberg_identity_partition_column &&
+            state->query_options().enable_iceberg_identity_partition_column) {
+            scanner_params.iceberg_partition_column_names = tbl->get_partition_column_names();
+        }
     }
     scanner_params.use_block_cache = _use_block_cache;
     scanner_params.enable_populate_block_cache = _enable_populate_block_cache;

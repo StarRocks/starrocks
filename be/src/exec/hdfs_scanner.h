@@ -172,6 +172,8 @@ struct HdfsScannerParams {
 
     const TIcebergSchema* iceberg_schema = nullptr;
 
+    const std::vector<std::string>* iceberg_partition_column_names = nullptr;
+
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
     bool use_block_cache = false;
@@ -230,6 +232,8 @@ struct HdfsScannerContext {
     std::string timezone;
 
     const TIcebergSchema* iceberg_schema = nullptr;
+
+    const std::vector<std::string>* iceberg_partition_column_names = nullptr;
 
     HdfsScanStats* stats = nullptr;
 

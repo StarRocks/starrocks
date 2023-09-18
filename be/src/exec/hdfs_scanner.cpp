@@ -133,6 +133,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.can_use_min_max_count_opt = _scanner_params.can_use_min_max_count_opt;
     ctx.timezone = _runtime_state->timezone();
     ctx.iceberg_schema = _scanner_params.iceberg_schema;
+    ctx.iceberg_partition_column_names = _scanner_params.iceberg_partition_column_names;
     ctx.stats = &_stats;
 
     return Status::OK();

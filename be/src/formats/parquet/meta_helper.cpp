@@ -47,7 +47,8 @@ void ParquetMetaHelper::build_column_name_2_pos_in_meta(
 }
 
 void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                                             std::vector<GroupReaderParam::Column>& read_cols) const {
+                                             std::vector<GroupReaderParam::Column>& read_cols,
+                                             std::vector<GroupReaderParam::Column>& const_cols) const {
     for (auto& materialized_column : materialized_columns) {
         int32_t field_idx = _file_metadata->schema().get_field_idx_by_column_name(materialized_column.col_name);
         if (field_idx < 0) continue;
@@ -103,7 +104,8 @@ void IcebergMetaHelper::build_column_name_2_pos_in_meta(
 }
 
 void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                                             std::vector<GroupReaderParam::Column>& read_cols) const {
+                                             std::vector<GroupReaderParam::Column>& read_cols,
+                                             std::vector<GroupReaderParam::Column>& const_cols) const {
     for (auto& materialized_column : materialized_columns) {
         const std::string& format_col_name = _case_sensitive
                                                      ? materialized_column.col_name
@@ -120,10 +122,18 @@ void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
 
         auto parquet_type = _file_metadata->schema().get_stored_column_by_field_id(field_id)->physical_type;
 
+        bool is_const_column =
+                std::find(_format_iceberg_partition_column_names.begin(), _format_iceberg_partition_column_names.end(),
+                          format_col_name) != _format_iceberg_partition_column_names.end();
+
         GroupReaderParam::Column column =
                 _build_column(field_idx, materialized_column.col_idx, parquet_type, materialized_column.col_type,
                               materialized_column.slot_id, iceberg_it->second);
-        read_cols.emplace_back(column);
+        if (!is_const_column) {
+            read_cols.emplace_back(column);
+        } else {
+            const_cols.emplace_back(column);
+        }
     }
 }
 
