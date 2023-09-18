@@ -833,4 +833,59 @@ TEST_F(RowsetColumnPartialUpdateTest, test_upsert) {
     }
 }
 
+TEST_F(RowsetColumnPartialUpdateTest, partial_update_two_rowset_and_check) {
+    const int N = 100;
+    const int M = N / 2;
+    auto tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+
+    // create full rowsets first
+    std::vector<int64_t> keys(N);
+    std::vector<int64_t> keys1(M);
+    std::vector<int64_t> keys2(M);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+        if (i < M) {
+            keys1[i] = i;
+        } else {
+            keys2[i - M] = i;
+        }
+    }
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.reserve(2);
+    rowsets.emplace_back(create_rowset(tablet, keys1));
+    rowsets.emplace_back(create_rowset(tablet, keys2));
+    int64_t version = 1;
+    commit_rowsets(tablet, rowsets, version);
+    // check data
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
+        return (int16_t)(k1 % 100 + 1) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
+    }));
+
+    std::vector<int32_t> column_indexes = {0, 1};
+    auto v1_func = [](int64_t k1) { return (int16_t)(k1 % 100 + 3); };
+    auto v2_func = [](int64_t k1) { return (int32_t)(k1 % 1000 + 4); };
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+    RowsetSharedPtr partial_rowset =
+            create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schema, 1);
+    // check data of write column
+    RowsetColumnUpdateState state;
+    state.load(tablet.get(), partial_rowset.get(), _update_mem_tracker.get());
+    const std::vector<ColumnPartialUpdateState>& parital_update_states = state.parital_update_states();
+    ASSERT_EQ(parital_update_states.size(), 1);
+    ASSERT_EQ(parital_update_states[0].src_rss_rowids.size(), N);
+    ASSERT_EQ(parital_update_states[0].rss_rowid_to_update_rowid.size(), N);
+    for (int upt_id = 0; upt_id < parital_update_states[0].src_rss_rowids.size(); upt_id++) {
+        uint64_t src_rss_rowid = parital_update_states[0].src_rss_rowids[upt_id];
+        ASSERT_EQ(parital_update_states[0].rss_rowid_to_update_rowid.find(src_rss_rowid)->second, upt_id);
+    }
+    // commit partial update
+    auto st = tablet->rowset_commit(++version, partial_rowset, 10000);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    // check data
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
+        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
+    }));
+}
+
 } // namespace starrocks
