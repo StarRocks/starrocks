@@ -126,8 +126,8 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
     digest           VARCHAR(32)            COMMENT "SQL fingerprint"
 ) engine=OLAP
 duplicate key(query_id, time, client_ip)
-partition by range(time) () BUCKETS 3 
-distributed by hash(query_id)
+partition by range(time) ()
+distributed by hash(query_id) BUCKETS 3 
 properties(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
@@ -161,8 +161,8 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
     digest          VARCHAR(32)           COMMENT "SQL fingerprint"
 ) engine=OLAP
 DUPLICATE KEY(query_id, time, client_ip)
-PARTITION BY RANGE(time) () BUCKETS 3 
-DISTRIBUTED BY HASH(query_id)
+PARTITION BY RANGE(time) ()
+DISTRIBUTED BY HASH(query_id) BUCKETS 3 
 PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
@@ -195,8 +195,8 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
     stmt            STRING                COMMENT "SQL statement"
 ) engine=OLAP
 DUPLICATE KEY(query_id, time, client_ip)
-PARTITION BY RANGE(time) () BUCKETS 3 
-DISTRIBUTED BY HASH(query_id)
+PARTITION BY RANGE(time) ()
+DISTRIBUTED BY HASH(query_id) BUCKETS 3 
 PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
