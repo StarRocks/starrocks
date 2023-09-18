@@ -118,16 +118,20 @@ public class PaimonConnectorTest {
         String accessKeyValue = "s3_access_key";
         String secretKeyValue = "s3_secret_key";
         String endpointValue = "s3_endpoint";
+        String dynamicOptionValue = "dynamic_option";
         properties.put("aws.s3.access_key", accessKeyValue);
         properties.put("aws.s3.secret_key", secretKeyValue);
         properties.put("aws.s3.endpoint", endpointValue);
+        properties.put("paimon.option.fs.s3a.connection.maximum", dynamicOptionValue);
         PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
         Options paimonOptions = connector.getPaimonOptions();
         String accessKeyOption = paimonOptions.get("s3.access-key");
         String secretKeyOption = paimonOptions.get("s3.secret-key");
         String endpointOption = paimonOptions.get("s3.endpoint");
+        String dynamicOption = paimonOptions.get("fs.s3a.connection.maximum");
         Assert.assertEquals(accessKeyOption, accessKeyValue);
         Assert.assertEquals(secretKeyOption, secretKeyValue);
         Assert.assertEquals(endpointOption, endpointValue);
+        Assert.assertEquals(dynamicOption, dynamicOptionValue);
     }
 }
