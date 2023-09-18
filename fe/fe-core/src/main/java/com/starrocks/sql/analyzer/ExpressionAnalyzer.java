@@ -1212,7 +1212,7 @@ public class ExpressionAnalyzer {
                     // force the second array be of Type.ARRAY_BOOLEAN
                     if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
                         throw new SemanticException(fnName + "'s second input " + node.getChild(1).toSql() +
-                                "  can't cast from " + node.getChild(1).getType().toSql() + " to ARRAY<BOOL>",
+                                " can't cast from " + node.getChild(1).getType().toSql() + " to ARRAY<BOOL>",
                                 node.getPos());
                     }
                     break;
@@ -1228,7 +1228,7 @@ public class ExpressionAnalyzer {
                     // force the input array be of Type.ARRAY_BOOLEAN
                     if (!Type.canCastTo(node.getChild(0).getType(), Type.ARRAY_BOOLEAN)) {
                         throw new SemanticException(fnName + "'s input " +
-                                node.getChild(0).toSql() + "  can't cast from " +
+                                node.getChild(0).toSql() + " can't cast from " +
                                 node.getChild(0).getType().toSql() + " to ARRAY<BOOL>", node.getPos());
                     }
                     break;
@@ -1281,7 +1281,7 @@ public class ExpressionAnalyzer {
                     // force the second array be of Type.ARRAY_BOOLEAN
                     if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
                         throw new SemanticException(fnName + "'s second input " + node.getChild(1).toSql() +
-                                "  can't cast from " + node.getChild(1).getType().toSql() + " to ARRAY<BOOL>");
+                                " can't cast from " + node.getChild(1).getType().toSql() + " to ARRAY<BOOL>");
                     }
                     break;
                 case FunctionSet.GROUP_CONCAT:
