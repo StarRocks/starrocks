@@ -389,6 +389,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | storage_page_cache_limit | 20% | N/A | PageCache 的容量，STRING，可写为容量大小，例如： `20G`、`20480M`、`20971520K` 或 `21474836480B`。也可以写为 PageCache 占系统内存的比例，例如，`20%`。该参数仅在 `disable_storage_page_cache` 为 `false` 时生效。|
 |max_compaction_concurrency|-1| N/A | Compaction 线程数上限（即 BaseCompaction + CumulativeCompaction 的最大并发）。该参数防止 Compaction 占用过多内存。 -1 代表没有限制。0 表示不允许 compaction。|
 | internal_service_async_thread_num | 10 | N/A | 单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。|
+|alter_tablet_worker_count|3|进行 schema change 的线程数。自 2.5 版本起，该参数由静态变为动态。|
 
 ### 配置 BE 静态参数
 
@@ -408,7 +409,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |push_worker_count_high_priority|3|导入线程数，处理 HIGH 优先级任务。|
 |transaction_publish_version_worker_count|0|生效版本的最大线程数。当该参数被设置为小于或等于 `0` 时，系统默认使用 CPU 核数的一半，以避免因使用固定值而导致在导入并行较高时线程资源不足。自 2.5 版本起，默认值由 `8` 变更为 `0`。|
 |clear_transaction_task_worker_count|1|清理事务的线程数。|
-|alter_tablet_worker_count|3|进行 schema change 的线程数。|
 |clone_worker_count|3|克隆的线程数。|
 |storage_medium_migrate_count|1|介质迁移的线程数，SATA 迁移到 SSD。|
 |check_consistency_worker_count|1|计算 tablet 的校验和 (checksum)。|
