@@ -69,7 +69,7 @@ public class ShowWarehousesStmtTest {
         Assert.assertEquals("Id", metaData.getColumn(0).getName());
         Assert.assertEquals("Name", metaData.getColumn(1).getName());
         Assert.assertEquals("State", metaData.getColumn(2).getName());
-        Assert.assertEquals("Size", metaData.getColumn(3).getName());
+        Assert.assertEquals("NodeCount", metaData.getColumn(3).getName());
         Assert.assertEquals("CurrentClusterCount", metaData.getColumn(4).getName());
         Assert.assertEquals("MaxClusterCount", metaData.getColumn(5).getName());
         Assert.assertEquals("StartedClusters", metaData.getColumn(6).getName());

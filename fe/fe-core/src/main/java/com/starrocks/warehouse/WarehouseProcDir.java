@@ -30,7 +30,7 @@ public class WarehouseProcDir implements ProcDirInterface {
             .add("Id")
             .add("Name")
             .add("State")
-            .add("Size")
+            .add("NodeCount")
             .add("CurrentClusterCount")
             .add("MaxClusterCount")
             .add("StartedClusters")

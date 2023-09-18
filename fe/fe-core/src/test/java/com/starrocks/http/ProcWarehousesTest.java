@@ -66,7 +66,7 @@ public class ProcWarehousesTest extends StarRocksHttpTestCase {
 
         // list all warehouses
         sendHttpAndValidateResponse("/warehouses",
-                "\"Id\":\"0\",\"Name\":\"default_warehouse\",\"State\":\"AVAILABLE\",\"Size\":\"3\"," +
+                "\"Id\":\"0\",\"Name\":\"default_warehouse\",\"State\":\"AVAILABLE\",\"NodeCount\":\"3\"," +
                         "\"CurrentClusterCount\":\"1\",\"MaxClusterCount\":\"1\"," +
                         "\"StartedClusters\":\"1\",\"RunningSql\":\"0\",\"QueuedSql\":\"0\""
         );
@@ -105,7 +105,7 @@ public class ProcWarehousesTest extends StarRocksHttpTestCase {
 
         // list all warehouses
         sendHttpAndValidateResponse("/warehouses",
-                "\"Id\":\"0\",\"Name\":\"default_warehouse\",\"State\":\"AVAILABLE\",\"Size\":\"3\"," +
+                "\"Id\":\"0\",\"Name\":\"default_warehouse\",\"State\":\"AVAILABLE\",\"NodeCount\":\"3\"," +
                         "\"CurrentClusterCount\":\"1\",\"MaxClusterCount\":\"1\",\"StartedClusters\":\"1\"," +
                         "\"RunningSql\":\"0\",\"QueuedSql\":\"0\""
         );

@@ -62,7 +62,7 @@ public class LocalWarehouse extends Warehouse {
                 String.valueOf(this.getId()),
                 this.getName(),
                 this.getState().toString(),
-                String.valueOf(cluster.getAvailableComputeNodeIds().size()),
+                String.valueOf(cluster.getAllComputeNodes().size()),
                 String.valueOf(1L),
                 String.valueOf(1L),
                 String.valueOf(1L),

@@ -30,7 +30,7 @@ public class ShowWarehousesStmt extends ShowStmt {
                     .addColumn(new Column("Id", ScalarType.createVarchar(20)))
                     .addColumn(new Column("Name", ScalarType.createVarchar(256)))
                     .addColumn(new Column("State", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Size", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("NodeCount", ScalarType.createVarchar(20)))
                     .addColumn(new Column("CurrentClusterCount", ScalarType.createVarchar(20)))
                     .addColumn(new Column("MaxClusterCount", ScalarType.createVarchar(20)))
                     .addColumn(new Column("StartedClusters", ScalarType.createVarchar(20)))
