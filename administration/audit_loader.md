@@ -14,16 +14,20 @@ StarRocks 将其所有审计日志存储在本地文件 **fe/log/fe.audit.log** 
 >
 > 请勿更改示例中的表属性，否则将导致日志导入失败。
 
-- StarRocks v2.4.0 及其之后小版本：
+- StarRocks v2.4、v2.5、v3.0、v3.1 及其之后小版本：
 
 ```SQL
 CREATE DATABASE starrocks_audit_db__;
+
 CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `queryId`        VARCHAR(48)            COMMENT "查询的唯一ID",
   `timestamp`      DATETIME     NOT NULL  COMMENT "查询开始时间",
+  `queryType`      VARCHAR(12)            COMMENT "查询类型（query, slow_query）",
   `clientIp`       VARCHAR(32)            COMMENT "客户端IP",
   `user`           VARCHAR(64)            COMMENT "查询用户名",
+  `authorizedUser` VARCHAR(64)            COMMENT "用户唯一标识，既user_identity",
   `resourceGroup`  VARCHAR(64)            COMMENT "资源组名",
+  `catalog`        VARCHAR(32)            COMMENT "Catalog名",
   `db`             VARCHAR(96)            COMMENT "查询所在数据库",
   `state`          VARCHAR(8)             COMMENT "查询状态（EOF，ERR，OK）",
   `errorCode`      VARCHAR(96)            COMMENT "错误码",
@@ -41,10 +45,10 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `planCpuCosts`   DOUBLE                 COMMENT "查询规划阶段CPU占用（纳秒）",
   `planMemCosts`   DOUBLE                 COMMENT "查询规划阶段内存占用（字节）"
 ) ENGINE = OLAP
-DUPLICATE KEY (`queryId`, `timestamp`, `clientIp`)
+DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "审计日志表"
 PARTITION BY RANGE (`timestamp`) ()
-DISTRIBUTED BY HASH (`queryId`)
+DISTRIBUTED BY HASH (`queryId`) BUCKETS 3 
 PROPERTIES (
   "dynamic_partition.time_unit" = "DAY",
   "dynamic_partition.start" = "-30",
@@ -91,6 +95,7 @@ PROPERTIES (
   "dynamic_partition.start" = "-30",
   "dynamic_partition.end" = "3",
   "dynamic_partition.prefix" = "p",
+  "dynamic_partition.buckets" = "3",
   "dynamic_partition.enable" = "true",
   "replication_num" = "3"
 );
@@ -122,7 +127,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
 ) engine=OLAP
 duplicate key(query_id, time, client_ip)
 partition by range(time) ()
-distributed by hash(query_id)
+distributed by hash(query_id) BUCKETS 3 
 properties(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
@@ -157,7 +162,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
 ) engine=OLAP
 DUPLICATE KEY(query_id, time, client_ip)
 PARTITION BY RANGE(time) ()
-DISTRIBUTED BY HASH(query_id)
+DISTRIBUTED BY HASH(query_id) BUCKETS 3 
 PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
@@ -191,7 +196,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
 ) engine=OLAP
 DUPLICATE KEY(query_id, time, client_ip)
 PARTITION BY RANGE(time) ()
-DISTRIBUTED BY HASH(query_id)
+DISTRIBUTED BY HASH(query_id) BUCKETS 3 
 PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
