@@ -51,13 +51,32 @@ Status PageReader::next_header() {
         allowed_page_size = std::min(std::min(allowed_page_size, remaining), kMaxPageHeaderSize);
 
         std::vector<uint8_t> page_buffer;
-        page_buffer.reserve(allowed_page_size);
-        uint8_t* page_buf = page_buffer.data();
+        const uint8_t* page_buf = nullptr;
 
-        RETURN_IF_ERROR(_stream->read_at_fully(_offset, page_buf, allowed_page_size));
+        // prefer peek data instead to read data.
+        {
+            auto st = _stream->peek(allowed_page_size);
+            if (st.ok()) {
+                DCHECK_EQ(st.value().size(), allowed_page_size);
+                page_buf = (const uint8_t*)st.value().data();
+            } else {
+                page_buffer.reserve(allowed_page_size);
+                RETURN_IF_ERROR(_stream->read_at_fully(_offset, page_buffer.data(), allowed_page_size));
+                page_buf = page_buffer.data();
+            }
+        }
 
         header_length = allowed_page_size;
         auto st = deserialize_thrift_msg(page_buf, &header_length, TProtocolType::COMPACT, &_cur_header);
+
+        // we may requires more bytes than expected, and have to swallow back.
+        if (st.ok()) {
+            int64_t swallow_size = allowed_page_size - header_length;
+            (void)_stream->peek(-swallow_size);
+        } else {
+            (void)_stream->peek(-static_cast<int64_t>(allowed_page_size));
+        }
+
         if (st.ok()) {
             break;
         }

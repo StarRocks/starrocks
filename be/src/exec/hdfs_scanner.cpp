@@ -47,9 +47,13 @@ public:
     }
 
     StatusOr<std::string_view> peek(int64_t count) override {
+        if (count < 0) {
+            _stats->bytes_read += count;
+            return Status::OK();
+        }
+
         auto st = _stream->peek(count);
         if (st.ok()) {
-            _stats->io_count += 1;
             _stats->bytes_read += count;
         }
         return st;
