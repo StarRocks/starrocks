@@ -14,12 +14,14 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -259,6 +261,9 @@ public class ExpressionTest extends PlanTestBase {
 
         SlotRef slotRef = ((SlotRef) lexpr.getChild(1));
         Assert.assertTrue(slotRef.isFromLambda());
+
+        List<TupleId> tids = ImmutableList.of(new TupleId(111));
+        Assert.assertTrue(lexpr.getChild(1).isBoundByTupleIds(tids));
     }
 
     @Test
