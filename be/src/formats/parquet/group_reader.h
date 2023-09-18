@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include <unordered_map>
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/runtime_filter.h"
 #include "exprs/runtime_filter_bank.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/metadata.h"
@@ -94,6 +96,7 @@ private:
     public:
         void init(size_t column_number);
         void use_as_dict_filter_column(int col_idx, SlotId slot_id, const std::vector<ExprContext*>& conjunct_ctxs);
+        void use_as_dict_filter_column(SlotId slot_id, const JoinRuntimeFilter* runtime_filter);
         Status rewrite_conjunct_ctxs_to_predicates(
                 const GroupReaderParam& param,
                 std::unordered_map<SlotId, std::unique_ptr<ColumnReader>>& column_readers, ObjectPool* obj_pool,
@@ -122,6 +125,8 @@ private:
         std::vector<int> _dict_column_indices;
         // conjunct ctxs for each dict filter column
         std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
+        // runtime filter by slot
+        std::unordered_map<SlotId, const JoinRuntimeFilter*> _runtime_filter_by_slot;
         // preds transformed from `_conjunct_ctxs_by_slot` for each dict filter column
         std::unordered_map<SlotId, ColumnPredicate*> _predicates;
     };
@@ -133,6 +138,7 @@ private:
     ChunkPtr _create_read_chunk(const std::vector<int>& column_indices);
     // Extract dict filter columns and conjuncts
     void _process_columns_and_conjunct_ctxs();
+    void _process_runtime_filter();
     bool _can_use_as_dict_filter_column(const SlotDescriptor* slot, const SlotIdExprContextsMap& slot_conjunct_ctxs,
                                         const tparquet::ColumnMetaData& column_metadata);
     // Returns true if all of the data pages in the column chunk are dict encoded
@@ -158,6 +164,8 @@ private:
 
     // conjunct ctxs that eval after chunk is dict decoded
     std::vector<ExprContext*> _left_conjunct_ctxs;
+
+    std::unordered_map<SlotId, JoinRuntimeFilter*> _runtime_filter_by_slot;
 
     // active columns that hold read_col index
     std::vector<int> _active_column_indices;

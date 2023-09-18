@@ -22,6 +22,7 @@
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
+#include "exprs/runtime_filter.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "simd/batch_run_counter.h"
@@ -45,6 +46,7 @@ Status GroupReader::init() {
     // the calling order matters, do not change unless you know why.
     RETURN_IF_ERROR(_init_column_readers());
     _dict_filter_ctx.init(_param.read_cols.size());
+    _process_runtime_filter();
     _process_columns_and_conjunct_ctxs();
     RETURN_IF_ERROR(_dict_filter_ctx.rewrite_conjunct_ctxs_to_predicates(_param, _column_readers, &_obj_pool,
                                                                          &_is_group_filtered));
@@ -117,11 +119,9 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 
     if (SIMD::contain_nonzero(chunk_filter) && _param.runtime_filter_collector) {
         // bloom filter
-        for (auto &it: _param.runtime_filter_collector->descriptors()) {
-            RuntimeFilterProbeDescriptor *rf_desc = it.second;
-            const JoinRuntimeFilter *filter = rf_desc->runtime_filter();
-            SlotId probe_slot_id;
-            if (filter == nullptr || filter->has_null() || !rf_desc->is_probe_slot_ref(&probe_slot_id)) continue;
+        for (auto &it: _runtime_filter_by_slot) {
+            const JoinRuntimeFilter *filter = it.second;
+            SlotId probe_slot_id = it.first;
             if (!active_chunk->is_slot_exist(probe_slot_id)) {
                 LOG(WARNING) << "slot not in active chunk " << probe_slot_id;
                 continue;
@@ -140,6 +140,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             JoinRuntimeFilter::RunningContext ctx;
             ctx.use_merged_selection = false;
             ctx.merged_selection.assign(count, 1);
+            filter->compute_hash({column.get()}, &ctx);
             filter->evaluate(column.get(), &ctx);
             bool all_zero = false;
             ColumnHelper::merge_two_filters(&chunk_filter, ctx.merged_selection.data(), &all_zero);
@@ -263,6 +264,11 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
         if (_can_use_as_dict_filter_column(slots[chunk_index], conjunct_ctxs_by_slot, column_metadata)) {
             _dict_filter_ctx.use_as_dict_filter_column(read_col_idx, slot_id, conjunct_ctxs_by_slot.at(slot_id));
             _active_column_indices.emplace_back(read_col_idx);
+            // cause of runtime filter min/max have been added to conjunct_ctxs_by_slot
+            // so just check runtime filter exist and add to dict_filter_ctx
+            if (_runtime_filter_by_slot.find(slot_id) != _runtime_filter_by_slot.end()) {
+                _dict_filter_ctx.use_as_dict_filter_column(read_col_idx, slot_id, _runtime_filter_by_slot.at(slot_id));
+            }
         } else {
             bool has_conjunct = false;
             if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
@@ -281,6 +287,16 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     }
     if (_active_column_indices.empty()) {
         _active_column_indices.swap(_lazy_column_indices);
+    }
+}
+
+void GroupReader::_process_runtime_filter() {
+    for (auto &it: _param.runtime_filter_collector->descriptors()) {
+        RuntimeFilterProbeDescriptor *rf_desc = it.second;
+        const JoinRuntimeFilter *filter = rf_desc->runtime_filter();
+        SlotId probe_slot_id;
+        if (filter == nullptr || filter->has_null() || !rf_desc->is_probe_slot_ref(&probe_slot_id)) continue;
+        _runtime_filter_by_slot.insert({probe_slot_id, filter});
     }
 }
 
@@ -564,6 +580,11 @@ void GroupReader::DictFilterContext::use_as_dict_filter_column(int col_idx, Slot
     _conjunct_ctxs_by_slot[slot_id] = conjunct_ctxs;
 }
 
+void GroupReader::DictFilterContext::use_as_dict_filter_column(starrocks::SlotId slot_id,
+                                                               const JoinRuntimeFilter* runtime_filter) {
+    _runtime_filter_by_slot[slot_id] = runtime_filter;
+}
+
 Status GroupReader::DictFilterContext::rewrite_conjunct_ctxs_to_predicates(
         const GroupReaderParam& param, std::unordered_map<SlotId, std::unique_ptr<ColumnReader>>& column_readers,
         ObjectPool* obj_pool, bool* is_group_filtered) {
@@ -589,6 +610,21 @@ Status GroupReader::DictFilterContext::rewrite_conjunct_ctxs_to_predicates(
         if (dict_values_after_filter == 0) {
             *is_group_filtered = true;
             return Status::OK();
+        }
+
+        if (_runtime_filter_by_slot.find(slot_id) != _runtime_filter_by_slot.end()) {
+            const JoinRuntimeFilter* join_filter = _runtime_filter_by_slot.at(slot_id);
+            JoinRuntimeFilter::RunningContext ctx;
+            ctx.use_merged_selection = false;
+            ctx.merged_selection.assign(dict_value_column->size(), 1);
+            join_filter->compute_hash({dict_value_column.get()}, &ctx);
+            filter->evaluate(dict_value_column.get(), &ctx);
+            bool all_zero = false;
+            ColumnHelper::merge_two_filters(filter, ctx.merged_selection.data(), &all_zero);
+            if (all_zero) {
+                *is_group_filtered = true;
+                return Status::OK();
+            }
         }
 
         // ---------
