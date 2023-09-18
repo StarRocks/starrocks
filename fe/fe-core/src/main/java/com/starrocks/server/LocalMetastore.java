@@ -3112,9 +3112,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             taskManager.createTask(task, false);
-            // for event triggered type, run task
-            if (task.getType() == Constants.TaskType.EVENT_TRIGGERED &&
-                    !refreshMoment.equals(MaterializedView.RefreshMoment.DEFERRED)) {
+            if (refreshMoment.equals(MaterializedView.RefreshMoment.IMMEDIATE)) {
                 taskManager.executeTask(task.getName());
             }
         }
