@@ -1586,7 +1586,10 @@ public class StmtExecutor {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                             database.getId(), transactionId,
                             errMsg,
-                            TabletFailInfo.fromThrift(coord.getFailInfos()));
+                            // DML may fail before coord is initialized, such as dataSink.complete()
+                            // may throw exception if disk usage exceeds the limit, so need to check
+                            // if coord is null
+                            coord == null ? Lists.newArrayList() : TabletFailInfo.fromThrift(coord.getFailInfos()));
                 }
             } catch (Exception abortTxnException) {
                 // just print a log if abort txn failed. This failure do not need to pass to user.
