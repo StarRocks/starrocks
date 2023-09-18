@@ -21,7 +21,6 @@
 #include "util/compression/stream_compression.h"
 
 static constexpr int64_t ROW_FORMAT_ESTIMATED_MEMORY_USAGE = 32LL * 1024 * 1024;
-
 namespace starrocks {
 
 class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
@@ -47,15 +46,7 @@ public:
     }
 
     StatusOr<std::string_view> peek(int64_t count) override {
-        if (count < 0) {
-            _stats->bytes_read += count;
-            return Status::OK();
-        }
-
         auto st = _stream->peek(count);
-        if (st.ok()) {
-            _stats->bytes_read += count;
-        }
         return st;
     }
 

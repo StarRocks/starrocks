@@ -15,6 +15,8 @@
 #include "formats/parquet/page_reader.h"
 
 #include "common/config.h"
+#include "exec/hdfs_scanner.h"
+#include "formats/parquet/column_reader.h"
 #include "gutil/strings/substitute.h"
 #include "util/thrift_util.h"
 
@@ -26,8 +28,9 @@ static constexpr size_t kDefaultPageHeaderSize = 16 * 1024;
 // 16MB is borrowed from Arrow
 static constexpr size_t kMaxPageHeaderSize = 16 * 1024 * 1024;
 
-PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, uint64_t length, uint64_t num_values)
-        : _stream(stream), _finish_offset(start_offset + length), _num_values_total(num_values) {}
+PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, uint64_t length, uint64_t num_values,
+                       const ColumnReaderOptions& opts)
+        : _stream(stream), _finish_offset(start_offset + length), _num_values_total(num_values), _opts(opts) {}
 
 Status PageReader::next_header() {
     if (_offset != _next_header_pos) {
@@ -54,30 +57,32 @@ Status PageReader::next_header() {
         const uint8_t* page_buf = nullptr;
 
         // prefer peek data instead to read data.
+        bool peek_mode = false;
         {
             auto st = _stream->peek(allowed_page_size);
             if (st.ok()) {
                 DCHECK_EQ(st.value().size(), allowed_page_size);
                 page_buf = (const uint8_t*)st.value().data();
+                peek_mode = true;
             } else {
                 page_buffer.reserve(allowed_page_size);
                 RETURN_IF_ERROR(_stream->read_at_fully(_offset, page_buffer.data(), allowed_page_size));
                 page_buf = page_buffer.data();
+                st = _stream->peek(allowed_page_size);
+                if (st.ok()) {
+                    _opts.stats->bytes_read -= allowed_page_size;
+                    peek_mode = true;
+                }
             }
         }
 
         header_length = allowed_page_size;
         auto st = deserialize_thrift_msg(page_buf, &header_length, TProtocolType::COMPACT, &_cur_header);
 
-        // we may requires more bytes than expected, and have to swallow back.
         if (st.ok()) {
-            int64_t swallow_size = allowed_page_size - header_length;
-            (void)_stream->peek(-swallow_size);
-        } else {
-            (void)_stream->peek(-static_cast<int64_t>(allowed_page_size));
-        }
-
-        if (st.ok()) {
+            if (peek_mode) {
+                _opts.stats->bytes_read += header_length;
+            }
             break;
         }
 
