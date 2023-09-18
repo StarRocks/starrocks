@@ -151,6 +151,9 @@ public:
 
     Cache* metacache() { return _metacache.get(); }
 
+    // only for TEST purpose
+    void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
+
 private:
     using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr, DelVectorPtr>;
 
