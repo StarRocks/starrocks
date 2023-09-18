@@ -992,6 +992,8 @@ public class ReportHandler extends Daemon {
                 }
 
                 if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+                    LOG.debug("tablet:{} is primary key table, do not support migrate", tabletId);
+                    // Currently, primary key table doesn't support tablet migration between local disks.
                     continue;
                 }
 
