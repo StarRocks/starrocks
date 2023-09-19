@@ -358,9 +358,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Void computePaimonScanNode(Operator node, ExpressionContext context, Table table,
                                        Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
         if (context.getStatistics() == null) {
+            ScanOperatorPredicates scanOperatorPredicates = new ScanOperatorPredicates();
             String catalogName = ((PaimonTable) table).getCatalogName();
+            if (node instanceof LogicalPaimonScanOperator) {
+                scanOperatorPredicates = ((LogicalPaimonScanOperator) node).getScanOperatorPredicates();
+            }
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null, node.getPredicate());
+                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
+                    node.getPredicate(), -1, scanOperatorPredicates);
             context.setStatistics(stats);
         }
 
