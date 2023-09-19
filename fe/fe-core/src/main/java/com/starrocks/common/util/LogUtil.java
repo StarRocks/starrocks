@@ -15,9 +15,55 @@
 package com.starrocks.common.util;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class LogUtil {
+<<<<<<< HEAD
+=======
+
+    public static void logConnectionInfoToAuditLogAndQueryQueue(ConnectContext ctx, MysqlAuthPacket authPacket) {
+        boolean enableConnectionLog = false;
+        if (Config.audit_log_modules != null) {
+            for (String module : Config.audit_log_modules) {
+                if ("connection".equals(module)) {
+                    enableConnectionLog = true;
+                    break;
+                }
+            }
+        }
+        if (!enableConnectionLog) {
+            return;
+        }
+        AuditEvent.AuditEventBuilder builder = new AuditEvent.AuditEventBuilder()
+                .setEventType(AuditEvent.EventType.CONNECTION)
+                .setUser(authPacket == null ? "null" : authPacket.getUser())
+                .setAuthorizedUser(ctx.getCurrentUserIdentity() == null
+                        ? "null" : ctx.getCurrentUserIdentity().toString())
+                .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
+                .setDb(authPacket == null ? "null" : authPacket.getDb())
+                .setState(ctx.getState().toString())
+                .setErrorCode(ctx.getState().getErrorMessage());
+        GlobalStateMgr.getCurrentAuditEventProcessor().handleAuditEvent(builder.build());
+
+        QueryDetail queryDetail = new QueryDetail();
+        queryDetail.setQueryId(DebugUtil.printId(UUIDUtil.genUUID()));
+        queryDetail.setState(ctx.getState().isError() ?
+                QueryDetail.QueryMemState.FAILED : QueryDetail.QueryMemState.FINISHED);
+        queryDetail.setUser(authPacket == null ? "null" : authPacket.getUser());
+        queryDetail.setRemoteIP(ctx.getRemoteIP());
+        queryDetail.setDatabase(authPacket == null ? "null" : authPacket.getDb());
+        queryDetail.setErrorMessage(ctx.getState().getErrorMessage());
+        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
+    }
+
+    public static List<String> getCurrentStackTraceToList() {
+        return Arrays.stream(Thread.currentThread().getStackTrace())
+                .map(StackTraceElement::toString)
+                .collect(Collectors.toList());
+    }
+
+>>>>>>> 24ff937a0c ([Enhancement] Add debug log for colocate group bucket seq change (#31324))
     public static String getCurrentStackTrace() {
         return Arrays.stream(Thread.currentThread().getStackTrace())
                 .map(stack -> "        " + stack.toString())
