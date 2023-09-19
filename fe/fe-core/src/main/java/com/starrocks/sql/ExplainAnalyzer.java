@@ -36,13 +36,16 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TUnit;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -195,7 +198,8 @@ public class ExplainAnalyzer {
             if (sink.instanceOf(ResultSink.class) || sink.instanceOf(OlapTableSink.class)) {
                 NodeInfo resultNodeInfo = allNodeInfos.get(FINAL_SINK_PSEUDO_PLAN_NODE_ID);
                 if (resultNodeInfo == null) {
-                    resultNodeInfo = new NodeInfo(isRuntimeProfile, FINAL_SINK_PSEUDO_PLAN_NODE_ID, true, null, null);
+                    resultNodeInfo =
+                            new NodeInfo(isRuntimeProfile, FINAL_SINK_PSEUDO_PLAN_NODE_ID, true, null, null, null);
                     allNodeInfos.put(resultNodeInfo.planNodeId, resultNodeInfo);
                 }
                 resultNodeInfo.element = sink;
@@ -211,7 +215,7 @@ public class ExplainAnalyzer {
                     Preconditions.checkNotNull(peek);
                     NodeInfo nodeInfo = allNodeInfos.get(peek.getId());
                     if (nodeInfo == null) {
-                        nodeInfo = new NodeInfo(isRuntimeProfile, peek.getId(), true, null, null);
+                        nodeInfo = new NodeInfo(isRuntimeProfile, peek.getId(), true, null, null, null);
                         allNodeInfos.put(nodeInfo.planNodeId, nodeInfo);
                     }
                     nodeInfo.element = peek;
@@ -225,15 +229,42 @@ public class ExplainAnalyzer {
 
         allNodeInfos.values().forEach(NodeInfo::initState);
 
+        // Setup output rows
         allNodeInfos.values().forEach(nodeInfo -> {
             if (nodeInfo.planNodeId == FINAL_SINK_PSEUDO_PLAN_NODE_ID) {
-                nodeInfo.outputRowNums = searchMetricFromUpperLevel(nodeInfo, "CommonMetrics", "PushRowNum");
+                nodeInfo.outputRowNums = searchOutputRows(nodeInfo, "CommonMetrics", "PushRowNum");
             } else if (nodeInfo.element.instanceOf(UnionNode.class)) {
                 nodeInfo.outputRowNums = sumUpMetric(nodeInfo, false, false, "CommonMetrics", "PullRowNum");
             } else {
-                nodeInfo.outputRowNums = searchMetricFromUpperLevel(nodeInfo, "CommonMetrics", "PullRowNum");
+                nodeInfo.outputRowNums = searchOutputRows(nodeInfo, "CommonMetrics", "PullRowNum");
+            }
+
+            // Broadcast exchange
+            if (nodeInfo.element.instanceOf(ExchangeNode.class)) {
+                String partType = searchInfoString(nodeInfo, false, null, "UniqueMetrics", "PartType");
+                if (TPartitionType.UNPARTITIONED.name().equalsIgnoreCase(partType) &&
+                        nodeInfo.fragmentProfile != null) {
+                    Counter instanceNum = nodeInfo.fragmentProfile.getCounter("InstanceNum");
+                    if (instanceNum != null && instanceNum.getValue() > 0) {
+                        nodeInfo.outputRowNums.setValue(nodeInfo.outputRowNums.getValue() / instanceNum.getValue());
+                    }
+                }
             }
         });
+
+        // Setup mv hits
+        String mvContent = summaryProfile.getInfoString("HitMaterializedViews");
+        if (StringUtils.isNotBlank(mvContent)) {
+            HashSet<String> mvs = Sets.newHashSet(mvContent.split(","));
+            allNodeInfos.values().forEach(nodeInfo -> {
+                if (nodeInfo.element.instanceOf(ScanNode.class)) {
+                    String mv = searchInfoString(nodeInfo, false, null, "UniqueMetrics", "Rollup");
+                    if (StringUtils.isNotBlank(mv) && mvs.contains(mv)) {
+                        nodeInfo.element.addTitleAttribute("MV");
+                    }
+                }
+            });
+        }
 
         cumulativeOperatorTime = executionProfile.getCounter("QueryCumulativeOperatorTime").getValue();
         cumulativeScanTime = executionProfile.getCounter("QueryCumulativeScanTime");
@@ -565,8 +596,10 @@ public class ExplainAnalyzer {
         }
 
         // 5. Runtime Filters
-        Counter rfInputRows = searchMetricFromUpperLevel(nodeInfo, "CommonMetrics", "JoinRuntimeFilterInputRows");
-        Counter rfOutputRows = searchMetricFromUpperLevel(nodeInfo, "CommonMetrics", "JoinRuntimeFilterOutputRows");
+        Counter rfInputRows = searchMetric(nodeInfo, false, null, false,
+                "CommonMetrics", "JoinRuntimeFilterInputRows");
+        Counter rfOutputRows = searchMetric(nodeInfo, false, null, false,
+                "CommonMetrics", "JoinRuntimeFilterOutputRows");
         if (rfInputRows != null && rfOutputRows != null && rfInputRows.getValue() > 0) {
             appendDetailLine("RuntimeFilter: ", rfInputRows, " -> ", rfOutputRows, String.format(" (%.2f%%)",
                     100.0 * (rfInputRows.getValue() - rfOutputRows.getValue()) / rfInputRows.getValue()));
@@ -789,6 +822,29 @@ public class ExplainAnalyzer {
         appendDetailLine(items.toArray());
     }
 
+    private static String searchInfoString(NodeInfo nodeInfo, boolean searchSubordinateOperator, String pattern,
+                                           String... nameLevels) {
+        List<RuntimeProfile> profiles = Lists.newArrayList();
+        profiles.addAll(nodeInfo.operatorProfiles);
+        if (searchSubordinateOperator) {
+            profiles.addAll(nodeInfo.subordinateOperatorProfiles);
+        }
+        for (RuntimeProfile operatorProfile : profiles) {
+            if (pattern != null && !operatorProfile.getName().contains(pattern)) {
+                continue;
+            }
+            RuntimeProfile cur = getLastLevel(operatorProfile, nameLevels);
+            int lastIndex = nameLevels.length - 1;
+            String content = cur.getInfoString(nameLevels[lastIndex]);
+
+            if (content != null) {
+                return content;
+            }
+        }
+
+        return null;
+    }
+
     private static Counter searchMetric(NodeInfo nodeInfo, boolean searchSubordinateOperator, String pattern,
                                         boolean useMaxValue, String... nameLevels) {
         List<RuntimeProfile> profiles = Lists.newArrayList();
@@ -821,7 +877,7 @@ public class ExplainAnalyzer {
     // For example, we have an operator group including AGGREGATE_BLOCKING_SINK and AGGREGATE_BLOCKING_SOURCE
     // And the order between these operators are not stable, and we need to get the output rows information
     // form the AGGREGATE_BLOCKING_SOURCE, rather than AGGREGATE_BLOCKING_SINK
-    private static Counter searchMetricFromUpperLevel(NodeInfo nodeInfo, String... nameLevels) {
+    private static Counter searchOutputRows(NodeInfo nodeInfo, String... nameLevels) {
         for (int i = 0; i < nodeInfo.operatorProfiles.size(); i++) {
             RuntimeProfile operatorProfile = nodeInfo.operatorProfiles.get(i);
             if (i < nodeInfo.operatorProfiles.size() - 1 && (operatorProfile.getName().contains("_SINK (")
@@ -968,6 +1024,8 @@ public class ExplainAnalyzer {
         private final int planNodeId;
         private final boolean isIntegrated;
 
+        private final RuntimeProfile fragmentProfile;
+
         // One node in plan may be decomposed into multiply pipeline operators
         // like `aggregate -> (aggregate_sink_operator, aggregate_source_operator)`
         // as well as some subordinate operators, including local_exchange_operator and chunk_accumulate etc.
@@ -987,11 +1045,12 @@ public class ExplainAnalyzer {
         private boolean isSecondMostConsuming;
         private NodeState state;
 
-        public NodeInfo(boolean isRuntimeProfile, int planNodeId, boolean isIntegrated,
+        public NodeInfo(boolean isRuntimeProfile, int planNodeId, boolean isIntegrated, RuntimeProfile fragmentProfile,
                         List<RuntimeProfile> operatorProfiles, List<RuntimeProfile> subordinateOperatorProfiles) {
             this.isRuntimeProfile = isRuntimeProfile;
             this.planNodeId = planNodeId;
             this.isIntegrated = isIntegrated;
+            this.fragmentProfile = fragmentProfile;
             this.operatorProfiles = operatorProfiles == null ? Lists.newArrayList() : operatorProfiles;
             this.subordinateOperatorProfiles =
                     subordinateOperatorProfiles == null ? Lists.newArrayList() : subordinateOperatorProfiles;
@@ -1099,6 +1158,7 @@ public class ExplainAnalyzer {
     private static final class ProfileNodeParser {
         private final boolean isRuntimeProfile;
         private final boolean isIntegrated;
+        private final RuntimeProfile fragmentProfile;
         private final List<RuntimeProfile> pipelineProfiles;
         private int pipelineIdx;
         private int operatorIdx;
@@ -1106,6 +1166,7 @@ public class ExplainAnalyzer {
         public ProfileNodeParser(boolean isRuntimeProfile, RuntimeProfile fragmentProfile) {
             this.isRuntimeProfile = isRuntimeProfile;
             this.isIntegrated = !fragmentProfile.containsInfoString("NotIdentical");
+            this.fragmentProfile = fragmentProfile;
             this.pipelineProfiles = fragmentProfile.getChildList().stream()
                     .map(pair -> pair.first)
                     .collect(Collectors.toList());
@@ -1132,7 +1193,7 @@ public class ExplainAnalyzer {
                 }
                 moveForward();
 
-                NodeInfo node = new NodeInfo(isRuntimeProfile, planNodeId, isIntegrated,
+                NodeInfo node = new NodeInfo(isRuntimeProfile, planNodeId, isIntegrated, this.fragmentProfile,
                         operatorProfiles, subordinateOperatorProfiles);
                 if (nodes.containsKey(planNodeId)) {
                     NodeInfo existingNode = nodes.get(planNodeId);

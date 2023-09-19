@@ -273,7 +273,12 @@ void DataStreamRecvr::close() {
     _chunks_merger.reset();
     _cascade_merger.reset();
 
-    _closure_block_timer->update(_closure_block_timer->value() / std::max(1, _degree_of_parallelism));
+    ADD_CHILD_TIMER(_profile, "ClosureBlockTimeAvg", "ClosureBlockTime")
+            ->update(_closure_block_timer->value() / std::max(1, _degree_of_parallelism));
+    ADD_CHILD_TIMER(_profile, "DeserializeChunkTimeAvg", "DeserializeChunkTime")
+            ->update(_deserialize_chunk_timer->value() / std::max(1, _degree_of_parallelism));
+    ADD_CHILD_TIMER(_profile, "DecompressChunkTimeAvg", "DecompressChunkTime")
+            ->update(_decompress_chunk_timer->value() / std::max(1, _degree_of_parallelism));
     _close = true;
 }
 
