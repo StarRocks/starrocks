@@ -93,14 +93,18 @@ public class TableFunctionTable extends Table {
         parseProperties();
         parseFiles();
 
+
+        List<Column> columns = new ArrayList<>();
         if (path.startsWith(FAKE_PATH)) {
-            List<Column> columns = new ArrayList<>();
             columns.add(new Column("col_int", Type.INT));
             columns.add(new Column("col_string", Type.VARCHAR));
-            setNewFullSchema(columns);
         } else {
-            setNewFullSchema(getFileSchema());
+            columns = getFileSchema();
         }
+
+        columns.addAll(getSchemaFromPath());
+
+        setNewFullSchema(columns);
     }
 
     // Ctor for unload data via table function
@@ -197,6 +201,17 @@ public class TableFunctionTable extends Table {
         try {
             // fake:// is a faked path, for testing purpose
             if (path.startsWith("fake://")) {
+                TBrokerFileStatus file1 = new TBrokerFileStatus();
+                file1.isDir = false;
+                file1.path = "fake://some_bucket/some_dir/file1";
+                file1.size = 1024;
+                fileStatuses.add(file1);
+
+                TBrokerFileStatus file2 = new TBrokerFileStatus();
+                file2.isDir = false;
+                file2.path = "fake://some_bucket/some_dir/file2";
+                file2.size = 2048;
+                fileStatuses.add(file2);
                 return;
             }
             List<String> pieces = Splitter.on(",").trimResults().omitEmptyStrings().splitToList(path);
@@ -304,12 +319,16 @@ public class TableFunctionTable extends Table {
             PScalarType scalarType = slot.slotType.types.get(0).scalarType;
             columns.add(new Column(slot.colName, ScalarType.createType(scalarType), true));
         }
-
+        return columns;
+    }
+    private List<Column> getSchemaFromPath() throws DdlException {
+        List<Column> columns = new ArrayList<>();
         if (!columnsFromPath.isEmpty()) {
             for (String colName : columnsFromPath) {
                 Optional<Column> column =  columns.stream().filter(col -> col.nameEquals(colName, false)).findFirst();
                 if (column.isPresent()) {
-                    throw new DdlException("duplicated name in columns from path, a column with same name already exists in the file table: " + colName);
+                    throw new DdlException("duplicated name in columns from path, " +
+                            "a column with same name already exists in the file table: " + colName);
                 }
                 columns.add(new Column(colName, ScalarType.createDefaultString(), true));
             }
