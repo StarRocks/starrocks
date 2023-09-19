@@ -19,6 +19,7 @@
 #include "exprs/builtin_functions.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
+#include "runtime/datetime_value.h"
 #include "types/logical_type.h"
 #include "util/timezone_hsscan.h"
 namespace starrocks {
@@ -833,6 +834,12 @@ public:
         std::string fmt;
         int len;
         FormatType fmt_type;
+    };
+
+    struct ParseJodaState {
+        std::unique_ptr<joda::JodaFormat> joda;
+
+        Status prepare(std::string_view formt);
     };
 
 private:

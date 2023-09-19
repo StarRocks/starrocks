@@ -1779,6 +1779,14 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_uncommon(FunctionContext* context
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+Status TimeFunctions::ParseJodaState::prepare(std::string_view format_str) {
+    joda = std::make_unique<joda::JodaFormat>();
+    if (!joda->prepare(format_str)) {
+        return Status::InvalidArgument(fmt::format("invalid datetime format: {}", format_str));
+    }
+    return {};
+}
+
 Status TimeFunctions::parse_joda_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
@@ -1787,11 +1795,17 @@ Status TimeFunctions::parse_joda_prepare(FunctionContext* context, FunctionConte
     if (!context->is_notnull_constant_column(1)) {
         return Status::NotSupported("The 2rd argument must be literal");
     }
+    std::string_view format_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(1));
+    auto state = std::make_unique<ParseJodaState>();
+    RETURN_IF_ERROR(state->prepare(format_str));
+    context->set_function_state(scope, state.release());
 
     return Status::OK();
 }
 
 Status TimeFunctions::parse_joda_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    auto* fc = reinterpret_cast<ParseJodaState*>(context->get_function_state(scope));
+    if (fc) delete fc;
     return {};
 }
 
@@ -1799,14 +1813,12 @@ StatusOr<ColumnPtr> TimeFunctions::parse_datetime(FunctionContext* context, cons
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     size_t size = columns[0]->size(); // minimum number of rows.
-    std::string_view format_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[1]);
     ColumnBuilder<TYPE_DATETIME> result(size);
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
-    joda::JodaFormat formatter;
-    if (!formatter.prepare(format_str)) {
-        return Status::InvalidArgument("invalid datetime format");
-    }
+    auto state = reinterpret_cast<ParseJodaState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto& formatter = state->joda;
+    RETURN_IF(!formatter, Status::InternalError("unprepared"));
 
     for (size_t i = 0; i < size; ++i) {
         if (str_viewer.is_null(i)) {
@@ -1815,7 +1827,7 @@ StatusOr<ColumnPtr> TimeFunctions::parse_datetime(FunctionContext* context, cons
             std::string_view str(str_viewer.value(i));
 
             DateTimeValue date_time_value;
-            if (!formatter.parse(str, &date_time_value)) {
+            if (!formatter->parse(str, &date_time_value)) {
                 result.append_null();
             } else {
                 TimestampValue ts = TimestampValue::create(

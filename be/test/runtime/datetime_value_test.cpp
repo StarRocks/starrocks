@@ -1425,8 +1425,6 @@ TEST_P(ParseDateTimeTestFixture, parse_datetime) {
     auto& [datetime_str, format] = GetParam();
     DateTimeValue datetime;
     char str[50];
-    // bool res = datetime.from_joda_format(format, datetime_str);
-    // EXPECT_TRUE(res);
     joda::JodaFormat joda;
     EXPECT_TRUE(joda.prepare(format));
     EXPECT_TRUE(joda.parse(datetime_str, &datetime));
@@ -1479,6 +1477,57 @@ INSTANTIATE_TEST_SUITE_P(
                 TestParseDatetimeParam("1994-09-09 01:02:03 +08:00", "yyyy-MM-dd HH:mm:ss zzz"),
                 TestParseDatetimeParam("1994-09-09 01:02:03 America/Los_Angeles", "yyyy-MM-dd HH:mm:ss ZZZZ"),
                 TestParseDatetimeParam("1994-09-09 01:02:03 Asia/Shanghai", "yyyy-MM-dd HH:mm:ss ZZZZ")
+
+                // clang-format: on
+                ));
+
+using SpecialTestParseDatetimeParam = std::tuple<std::string, std::string, std::string>;
+class ParseDateTimeSpecialTestFixture : public ::testing::TestWithParam<SpecialTestParseDatetimeParam> {};
+
+TEST_P(ParseDateTimeSpecialTestFixture, parse_datetime) {
+    auto& [datetime_str, format, expected] = GetParam();
+    DateTimeValue datetime;
+    char str[50];
+    joda::JodaFormat joda;
+    EXPECT_TRUE(joda.prepare(format));
+    bool res = (joda.parse(datetime_str, &datetime));
+
+    // to joda format
+    if (format.find("z") != std::string::npos || format.find('Z') != std::string::npos) {
+        // to_joda does not output the timezone
+    } else {
+        EXPECT_TRUE(datetime.to_joda_format_string(format.data(), format.length(), str));
+        if (!res) {
+            strcpy(str, "NULL");
+        }
+        EXPECT_EQ(expected, str);
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        ParseDateTimeSpecialTest, ParseDateTimeSpecialTestFixture,
+        ::testing::Values(
+                // clang-format: off
+
+                // Halfday Hour
+                SpecialTestParseDatetimeParam("1994-09-09 12:02:03 AM", "yyyy-MM-dd hh:mm:ss aa",
+                                              "1994-09-09 12:02:03 PM"),
+                SpecialTestParseDatetimeParam("1994-09-09 12:02:03 PM", "yyyy-MM-dd hh:mm:ss aa",
+                                              "1994-09-09 12:02:03 PM"),
+                SpecialTestParseDatetimeParam("1994-09-09 12:02:03 AM", "yyyy-MM-dd KK:mm:ss aa",
+                                              "1994-09-09 00:02:03 PM"),
+                SpecialTestParseDatetimeParam("1994-09-09 12:02:03 PM", "yyyy-MM-dd KK:mm:ss aa",
+                                              "1994-09-09 00:02:03 PM"),
+                SpecialTestParseDatetimeParam("1994-09-09 00:02:03 AM", "yyyy-MM-dd KK:mm:ss aa",
+                                              "1994-09-09 00:02:03 AM"),
+                SpecialTestParseDatetimeParam("1994-09-09 00:02:03 PM", "yyyy-MM-dd KK:mm:ss aa",
+                                              "1994-09-09 00:02:03 PM"),
+
+                // Day Hour
+                SpecialTestParseDatetimeParam("1994-09-09 24:02:03", "yyyy-MM-dd HH:mm:ss", "NULL"),
+                SpecialTestParseDatetimeParam("1994-09-09 24:02:03", "yyyy-MM-dd kk:mm:ss", "NULL"),
+                SpecialTestParseDatetimeParam("1994-09-09 00:02:03", "yyyy-MM-dd HH:mm:ss", "1994-09-09 00:02:03"),
+                SpecialTestParseDatetimeParam("1994-09-09 00:02:03", "yyyy-MM-dd kk:mm:ss", "1994-09-09 24:02:03")
 
                 // clang-format: on
                 ));

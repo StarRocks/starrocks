@@ -82,11 +82,12 @@ namespace joda {
 //  d       day of month                 number        10
 
 //  a       halfday of day               text          PM
+
 //  K       hour of halfday (0~11)       number        0
 //  h       clockhour of halfday (1~12)  number        12
-
 //  H       hour of day (0~23)           number        0
 //  k       clockhour of day (1~24)      number        24
+
 //  m       minute of hour               number        30
 //  s       second of minute             number        55
 //  S       fraction of second           millis        978
@@ -315,18 +316,10 @@ bool JodaFormat::prepare(std::string_view format) {
                 if (!str_to_int64(val, &tmp, &int_value)) {
                     return false;
                 }
-                _hour = int_value - 1;
-                val = tmp;
-                time_part_used = true;
-                return true;
-            });
-            break;
-        case joda::JodaFormatChar::HOUR_OF_HALFDAY:
-        case joda::JodaFormatChar::HOUR_OF_DAY:
-            _token_parsers.emplace_back([&, repeat_count]() {
-                int64_t int_value = 0;
-                const char* tmp = val + std::min<int>(repeat_count, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
+                if (UNLIKELY(*ptr == joda::JodaFormatChar::CLOCKHOUR_OF_DAY && int_value > 23)) {
+                    return false;
+                }
+                if (UNLIKELY(*ptr == joda::JodaFormatChar::CLOCKHOUR_OF_HALFDAY && int_value > 11)) {
                     return false;
                 }
                 _hour = int_value;
@@ -335,6 +328,28 @@ bool JodaFormat::prepare(std::string_view format) {
                 return true;
             });
             break;
+        case joda::JodaFormatChar::HOUR_OF_HALFDAY:
+        case joda::JodaFormatChar::HOUR_OF_DAY: {
+            _token_parsers.emplace_back([&, repeat_count]() {
+                int64_t int_value = 0;
+                const char* tmp = val + std::min<int>(repeat_count, val_end - val);
+                if (!str_to_int64(val, &tmp, &int_value)) {
+                    return false;
+                }
+                if (UNLIKELY(*ptr == joda::JodaFormatChar::HOUR_OF_DAY && int_value > 24)) {
+                    return false;
+                }
+                if (UNLIKELY(*ptr == joda::JodaFormatChar::HOUR_OF_HALFDAY && int_value > 12)) {
+                    return false;
+                }
+
+                _hour = int_value;
+                val = tmp;
+                time_part_used = true;
+                return true;
+            });
+            break;
+        }
         case joda::JodaFormatChar::MINUTE_OF_HOUR:
             _token_parsers.emplace_back([&, repeat_count]() {
                 int64_t int_value = 0;
@@ -404,7 +419,9 @@ bool JodaFormat::prepare(std::string_view format) {
     }
 
     _token_parsers.emplace_back([&]() {
-        _hour += halfday;
+        if (halfday > 0) {
+            _hour = (_hour % 12) + halfday;
+        }
 
         // Year day
         if (yearday > 0) {
@@ -1296,7 +1313,7 @@ bool DateTimeValue::to_joda_format_string(const char* format, int len, char* to)
             break;
         case 'h':
             // hour (1..12)
-            pos = int_to_str(((_hour + 1) % 24 + 11) % 12 + 1, buf);
+            pos = int_to_str((_hour % 24 + 11) % 12 + 1, buf);
             buf_size = pos - buf;
             actual_size = std::max(buf_size, same_ch_size);
             if (write_size + actual_size >= buffer_size) return false;
