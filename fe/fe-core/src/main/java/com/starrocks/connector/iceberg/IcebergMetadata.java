@@ -43,7 +43,6 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -315,9 +314,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
-                                         long limit,
-                                         ScanOperatorPredicates scanNodePredicates) {
-        return statisticProvider.getTableStatistics((IcebergTable) table, predicate, columns, limit, scanNodePredicates);
+                                         long limit) {
+        return statisticProvider.getTableStatistics((IcebergTable) table, predicate, columns, limit);
     }
 
     @Override
