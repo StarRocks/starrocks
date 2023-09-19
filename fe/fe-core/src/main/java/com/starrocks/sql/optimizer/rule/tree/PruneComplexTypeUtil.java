@@ -125,8 +125,8 @@ public class PruneComplexTypeUtil {
             }
 
             if (!columnRefOperator.getType().equals(scalarOperator.getType())) {
-                LOG.warn("Complex type columnRefOperator and scalarOperator should has the same type.");
-                return false;
+                LOG.warn(String.format("Complex type columnRefOperator[%s] and scalarOperator[%s] should has the same " +
+                        "type", columnRefOperator.getType(), scalarOperator.getType()));
             }
             return true;
         }
