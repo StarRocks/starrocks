@@ -4009,12 +4009,10 @@ public abstract class FileSystem extends Configured
          * FileSystem.Cache.Key
          */
         static class Key {
-
             final String scheme;
             final String authority;
             final UserGroupInformation ugi;
             final long unique;   // an artificial way to make a key unique
-
             final String cloudConf;
 
             Key(URI uri, Configuration conf) throws IOException {
@@ -4062,7 +4060,6 @@ public abstract class FileSystem extends Configured
             public String toString() {
                 return "(ugi = " + ugi.toString() + ", cloudConf = " + cloudConf + ")@" + scheme + "://" + authority;
             }
-
         }
     }
 
