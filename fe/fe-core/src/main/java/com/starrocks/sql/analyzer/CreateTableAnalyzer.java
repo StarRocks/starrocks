@@ -435,7 +435,7 @@ public class CreateTableAnalyzer {
             }
 
             if (RunMode.allowCreateLakeTable()) {
-                throw new SemanticException("Table with Generated column can not be lake table");
+                throw new SemanticException("Does not support generated column in shared data cluster yet");
             }
 
             boolean found = false;
