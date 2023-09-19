@@ -15,13 +15,29 @@
 package com.starrocks.connector.paimon;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.optimizer.Memo;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
@@ -32,6 +48,12 @@ import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ReadBuilder;
+<<<<<<< HEAD
+=======
+import org.apache.paimon.table.source.Split;
+import org.apache.paimon.table.system.SchemasTable;
+import org.apache.paimon.types.BigIntType;
+>>>>>>> f2d39d1be4 ([Refactor] iceberg and paimon table adapt to partition prune (#31393))
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DateType;
@@ -44,12 +66,15 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.apache.paimon.io.DataFileMeta.DUMMY_LEVEL;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_KEY_STATS;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
+import static org.junit.Assert.assertEquals;
 
 public class PaimonMetadataTest {
     @Mocked
@@ -188,4 +213,76 @@ public class PaimonMetadataTest {
         CloudConfiguration cc = metadata.getCloudConfiguration();
         Assert.assertEquals(cc.getCloudType(), CloudType.DEFAULT);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testGetCreateTime(@Mocked SchemasTable schemasTable,
+                                  @Mocked ReadBuilder readBuilder,
+                                  @Mocked RecordReader<InternalRow> recordReader) throws Exception {
+        RowType rowType = new RowType(Arrays.asList(new DataField(0, "schema_id", new BigIntType(false)),
+                new DataField(1, "fields", SerializationUtils.newStringType(false)),
+                new DataField(2, "partition_keys", SerializationUtils.newStringType(false)),
+                new DataField(3, "primary_keys", SerializationUtils.newStringType(false)),
+                new DataField(4, "options", SerializationUtils.newStringType(false)),
+                new DataField(5, "comment", SerializationUtils.newStringType(true)),
+                new DataField(6, "update_time", new TimestampType(false, 3))));
+        RecordReaderIterator iterator = new RecordReaderIterator<>(recordReader);
+        PredicateBuilder predicateBuilder = new PredicateBuilder(rowType);
+        Predicate equal = predicateBuilder.equal(predicateBuilder.indexOf("schema_id"), 0);
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = schemasTable;
+                schemasTable.rowType();
+                result = rowType;
+                schemasTable.newReadBuilder().withProjection(new int[] {0, 6}).
+                        withFilter(equal).newRead().createReader(schemasTable.newScan().plan());
+                result = recordReader;
+                new RecordReaderIterator<>(recordReader);
+                result = iterator;
+            }
+        };
+
+        long creteTime = metadata.getTableCreateTime("db1", "tbl1");
+        Assert.assertEquals(0, creteTime);
+    }
+
+    @Test
+    public void testPrunePaimonPartition(@Mocked AbstractFileStoreTable paimonNativeTable,
+                                         @Mocked ReadBuilder readBuilder) {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys,
+                                                           long snapshotId, ScalarOperator predicate, List<String> fieldNames,
+                                                           long limit) {
+                return Lists.newArrayList(RemoteFileInfo.builder()
+                        .setFiles(Lists.newArrayList(RemoteFileDesc.createPamonRemoteFileDesc(
+                                new PaimonSplitsInfo(null, Lists.newArrayList((Split) splits.get(0))))))
+                        .build());
+            }
+        };
+        PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
+
+        ExternalScanPartitionPruneRule rule0 = ExternalScanPartitionPruneRule.PAIMON_SCAN;
+
+        ColumnRefOperator colRef1 = new ColumnRefOperator(1, Type.INT, "f2", true);
+        Column col1 = new Column("f2", Type.INT, true);
+        ColumnRefOperator colRef2 = new ColumnRefOperator(2, Type.STRING, "dt", true);
+        Column col2 = new Column("dt", Type.STRING, true);
+
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<>();
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = new HashMap<>();
+        colRefToColumnMetaMap.put(colRef1, col1);
+        colRefToColumnMetaMap.put(colRef1, col1);
+        columnMetaToColRefMap.put(col2, colRef2);
+        columnMetaToColRefMap.put(col2, colRef2);
+        OptExpression scan =
+                new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, columnMetaToColRefMap,
+                        -1, null));
+        rule0.transform(scan, new OptimizerContext(new Memo(), new ColumnRefFactory()));
+        assertEquals(1, ((LogicalPaimonScanOperator) scan.getOp()).getScanOperatorPredicates()
+                .getSelectedPartitionIds().size());
+    }
+>>>>>>> f2d39d1be4 ([Refactor] iceberg and paimon table adapt to partition prune (#31393))
 }
