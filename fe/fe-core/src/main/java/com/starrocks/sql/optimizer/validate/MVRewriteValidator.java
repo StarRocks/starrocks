@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.validate;
 
-import com.google.api.client.util.Lists;
 import com.google.common.base.Joiner;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.profile.Tracers;
@@ -34,6 +33,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.metric.MaterializedViewMetricsEntity.isUpdateMaterializedViewMetrics;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.collectMaterializedViews;
 
 public class MVRewriteValidator {
     private static final MVRewriteValidator INSTANCE = new MVRewriteValidator();
@@ -146,23 +146,6 @@ public class MVRewriteValidator {
             String logMessage = "Query has already been successfully rewritten by: "
                     + Joiner.on(",").join(mvNames) + ".";
             Tracers.log(Tracers.Module.MV, logMessage);
-        }
-    }
-
-    private static List<MaterializedView> collectMaterializedViews(OptExpression optExpression) {
-        List<MaterializedView> mvs = Lists.newArrayList();
-        collectMaterializedViews(optExpression, mvs);
-        return mvs;
-    }
-
-    private static void collectMaterializedViews(OptExpression optExpression, List<MaterializedView> mvs) {
-        if (optExpression == null) {
-            return;
-        }
-        collectMaterializedViews(optExpression, mvs);
-
-        for (OptExpression child : optExpression.getInputs()) {
-            collectMaterializedViews(child, mvs);
         }
     }
 }
