@@ -1276,62 +1276,53 @@ public class LeaderImpl {
 
     public TFailoverGroupHandshakeResponse failoverGroupHandshake(TFailoverGroupHandshakeRequest request) 
             throws TException {
-        TFailoverGroupHandshakeResponse response = null;
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-
         // if current node is follower, forward it to leader
         if (!globalStateMgr.isLeader()) {
             TNetworkAddress addr = masterAddr();
             try {
                 LOG.info("failoverGroupHandshake as follower, forward it to master. failover_group_name: {}, master: {}",
                         request.getFailover_group_name(), addr.toString());
-                response = FrontendServiceProxy.call(addr,
+                return FrontendServiceProxy.call(addr,
                         Config.thrift_rpc_timeout_ms,
                         Config.thrift_rpc_retry_times,
                         client -> client.failoverGroupHandshake(request));
             } catch (Exception e) {
-                LOG.warn("create thrift client failed during failoverGroupHandshake, failover_group_name: {}, exception: {}",
+                LOG.warn("create thrift client failed during failoverGroupHandshake, failover_group_name: {}, exception: ",
                         request.getFailover_group_name(), e);
-                response = new TFailoverGroupHandshakeResponse();
+                TFailoverGroupHandshakeResponse response = new TFailoverGroupHandshakeResponse();
                 TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
                 status.setError_msgs(Lists.newArrayList("forward request to fe master failed"));
                 response.setStatus(status);
+                return response;
             }
-            return response;
         }
 
-        response = new TFailoverGroupHandshakeResponse();
         try {
-            globalStateMgr.getFailoverGroupMgr().handleHandshakeRequest(request);
-            TStatus status = new TStatus(TStatusCode.OK);
-            response.setStatus(status);
+            return globalStateMgr.getFailoverGroupMgr().handleHandshakeRequest(request);
         } catch (Exception e) {
             LOG.warn("Failover group {} handle failoverGroupHandshake failed ", 
                     request.getFailover_group_name(), e);
+            TFailoverGroupHandshakeResponse response = new TFailoverGroupHandshakeResponse();
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             response.setStatus(status);
+            return response;
         }
-        
-        return response;
     }
 
     public TFailoverGroupRequestMetaResponse failoverGroupRequestMeta(TFailoverGroupRequestMetaRequest request) 
             throws TException {
-        TFailoverGroupRequestMetaResponse response = new TFailoverGroupRequestMetaResponse();
         try {
-            byte[] objectMeta = GlobalStateMgr.getCurrentState().getFailoverGroupMgr().handleRequestMetaRequest(request);
-            response.setReplicated_object_meta(objectMeta);
-            TStatus status = new TStatus(TStatusCode.OK);
-            response.setStatus(status);
+            return GlobalStateMgr.getCurrentState().getFailoverGroupMgr().handleRequestMetaRequest(request);
         } catch (Exception e) {
             LOG.warn("Failover group {} handle failoverGroupRequestMeta failed ", 
                     request.getFailover_group_name(), e);
+            TFailoverGroupRequestMetaResponse response = new TFailoverGroupRequestMetaResponse();
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             response.setStatus(status);
+            return response;
         }
-        
-        return response;
     }
 }

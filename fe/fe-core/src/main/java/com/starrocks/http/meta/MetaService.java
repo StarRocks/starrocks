@@ -173,6 +173,7 @@ public class MetaService {
         private static final String VERSION = "version";
         private static final String PORT = "port";
         private static final String SUBDIR = "subdir";
+        private static final String IS_FAILOVER_IMAGE = "is_failover_image";
 
         public PutAction(ActionController controller, File imageDir) {
             super(controller, imageDir);
@@ -209,38 +210,47 @@ public class MetaService {
             }
             long version = checkLongParam(versionStr);
 
-            // for master node, reject image put
-            if (GlobalStateMgr.getCurrentState().isLeader()) {
-                response.appendContent("this node is master, reject image put");
-                writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
-                LOG.error("this node is master, but receive image put from host{}, reject it", machine);
-                return;
-            }
+            String localSubDirStr = request.getSingleParameter(SUBDIR);
+            String remoteSubDirStr = localSubDirStr;
 
-            String subDirStr = request.getSingleParameter(SUBDIR);
-            long maxJournalId = 0;
-            if (Strings.isNullOrEmpty(subDirStr)) { // default GlobalStateMgr
-                subDirStr = "";
-                maxJournalId = GlobalStateMgr.getCurrentState().getMaxJournalId();
-            } else { // star mgr
-                maxJournalId = StarMgrServer.getCurrentState().getMaxJournalId();
-            }
+            String isFailoverImageStr = request.getSingleParameter(IS_FAILOVER_IMAGE);
+            boolean isFailoverImage = isFailoverImageStr != null && isFailoverImageStr.equals("true");
+            
+            if (isFailoverImage) {
+                remoteSubDirStr = "";
+            } else {
+                // for master node, reject image put
+                if (GlobalStateMgr.getCurrentState().isLeader()) {
+                    response.appendContent("this node is master, reject image put");
+                    writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+                    LOG.error("this node is master, but receive image put from host{}, reject it", machine);
+                    return;
+                }
 
-            // do not accept image whose version is bigger than max journalId
-            // if accepted, newly added log will not be replayed when restart
-            if (version > maxJournalId) {
-                response.appendContent("image version is bigger than local max journal id, reject image put");
-                writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
-                LOG.error("receive image whose version [{}] is bigger than local max journal id [{}] " +
-                        "in dir[{}], reject it.", version, maxJournalId, subDirStr);
-                return;
+                long maxJournalId = 0;
+                if (Strings.isNullOrEmpty(localSubDirStr)) { // default GlobalStateMgr
+                    localSubDirStr = "";
+                    maxJournalId = GlobalStateMgr.getCurrentState().getMaxJournalId();
+                } else { // star mgr
+                    maxJournalId = StarMgrServer.getCurrentState().getMaxJournalId();
+                }
+
+                // do not accept image whose version is bigger than max journalId
+                // if accepted, newly added log will not be replayed when restart
+                if (version > maxJournalId) {
+                    response.appendContent("image version is bigger than local max journal id, reject image put");
+                    writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+                    LOG.error("receive image whose version [{}] is bigger than local max journal id [{}] " +
+                            "in dir[{}], reject it.", version, maxJournalId, localSubDirStr);
+                    return;
+                }
             }
 
             String url = "http://" + machine + ":" + portStr
-                    + "/image?version=" + versionStr + "&subdir=" + subDirStr;
+                    + "/image?version=" + versionStr + "&subdir=" + remoteSubDirStr;
             String filename = Storage.IMAGE + "." + versionStr;
 
-            String realDir = GlobalStateMgr.getCurrentState().getImageDir() + subDirStr;
+            String realDir = GlobalStateMgr.getCurrentState().getImageDir() + localSubDirStr;
             File dir = new File(realDir);
             try {
                 OutputStream out = MetaHelper.getOutputStream(filename, dir);
@@ -257,7 +267,9 @@ public class MetaService {
                 return;
             }
 
-            GlobalStateMgr.getCurrentState().setImageJournalId(version);
+            if (!isFailoverImage) {
+                GlobalStateMgr.getCurrentState().setImageJournalId(version);
+            }
 
             // Delete old image files
             MetaCleaner cleaner = new MetaCleaner(realDir);

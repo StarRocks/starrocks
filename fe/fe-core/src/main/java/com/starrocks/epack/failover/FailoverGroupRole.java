@@ -41,27 +41,23 @@ public class FailoverGroupRole {
     public static final FailoverGroupRole PRIMARY = new FailoverGroupRole(TFailoverGroupRole.PRIMARY.ordinal());
     public static final FailoverGroupRole SECONDARY = new FailoverGroupRole(TFailoverGroupRole.SECONDARY.ordinal());
 
+    public static final Map<String, FailoverGroupRole> NAME_TO_ROLE = new ImmutableMap.Builder<String, FailoverGroupRole>()
+            .put("NONE", NONE)
+            .put("PRIMARY", PRIMARY)
+            .put("SECONDARY", SECONDARY)
+            .build();
 
-    public static final Map<String, FailoverGroupRole> NAME_TO_ROLE =
-            new ImmutableMap.Builder<String, FailoverGroupRole>()
-                    .put("NONE", NONE)
-                    .put("PRIMARY", PRIMARY)
-                    .put("SECONDARY", SECONDARY)
-                    .build();
+    public static final Map<Integer, String> ID_TO_NAME = new ImmutableMap.Builder<Integer, String>()
+            .put(NONE.getId(), "NONE")
+            .put(PRIMARY.getId(), "PRIMARY")
+            .put(SECONDARY.getId(), "SECONDARY")
+            .build();
 
-    public static final Map<Integer, String> ID_TO_NAME =
-            new ImmutableMap.Builder<Integer, String>()
-                    .put(NONE.getId(), "NONE")
-                    .put(PRIMARY.getId(), "PRIMARY")
-                    .put(SECONDARY.getId(), "SECONDARY")
-                    .build();
-
-    public static final Map<Integer, FailoverGroupRole> ID_TO_ROLE =
-            new ImmutableMap.Builder<Integer, FailoverGroupRole>()
-                .put(NONE.getId(), NONE)
-                .put(PRIMARY.getId(), PRIMARY)
-                .put(SECONDARY.getId(), SECONDARY)
-                .build();
+    public static final Map<Integer, FailoverGroupRole> ID_TO_ROLE = new ImmutableMap.Builder<Integer, FailoverGroupRole>()
+            .put(NONE.getId(), NONE)
+            .put(PRIMARY.getId(), PRIMARY)
+            .put(SECONDARY.getId(), SECONDARY)
+            .build();
 
     @Override
     public String toString() {

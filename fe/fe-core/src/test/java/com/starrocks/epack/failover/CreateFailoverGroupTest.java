@@ -48,7 +48,7 @@ public class CreateFailoverGroupTest {
 
         DDLStmtExecutor.execute(stmt2, starRocksAssert.getCtx());
 
-        assertThrows("Failover group exists", DdlException.class, () ->
+        assertThrows("Failover group 'test_group2' exists", DdlException.class, () ->
                 DDLStmtExecutor.execute(stmt2, starRocksAssert.getCtx()));
     }
 
@@ -60,7 +60,7 @@ public class CreateFailoverGroupTest {
 
         DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
 
-        assertThrows("Failover group exists", DdlException.class, () ->
+        assertThrows("Failover group 'testCreateSecondaryFailoverGroup' exists", DdlException.class, () ->
                 DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx()));
     }
 }

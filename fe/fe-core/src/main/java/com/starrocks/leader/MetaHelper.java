@@ -124,6 +124,12 @@ public class MetaHelper {
         }
     }
 
+    // alias for getRemoteFile, sometimes the name of getRemoteFile is confused
+    public static void getHttpOutput(String urlStr, int timeout, OutputStream out)
+            throws IOException {
+        getRemoteFile(urlStr, timeout, out);
+    }
+
     public static void checkMetaDir() throws InvalidMetaDirException,
                                              IOException {
         // check meta dir

@@ -77,7 +77,7 @@ public class NetworkAddress {
     }
 
     public static NetworkAddress getLocalLeaderAddress() {
-        Pair<String, Integer> leaderIpAndRpcPort = GlobalStateMgr.getCurrentState().getLeaderIpAndRpcPort();
+        Pair<String, Integer> leaderIpAndRpcPort = GlobalStateMgr.getServingState().getLeaderIpAndRpcPort();
         NetworkAddress leaderAddress = new NetworkAddress(leaderIpAndRpcPort.first, leaderIpAndRpcPort.second);
         return leaderAddress;
     }

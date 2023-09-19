@@ -55,13 +55,16 @@ import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.epack.persist.AlterPolicyLog;
 import com.starrocks.epack.persist.ApplyOrRevokeMaskingPolicyLog;
 import com.starrocks.epack.persist.ApplyOrRevokeRowAccessPolicyLog;
+import com.starrocks.epack.persist.CreateFailoverGroupLog;
 import com.starrocks.epack.persist.CreatePolicyLog;
 import com.starrocks.epack.persist.CreateTableInfoEPack;
+import com.starrocks.epack.persist.DropFailoverGroupLog;
 import com.starrocks.epack.persist.DropPolicyLog;
 import com.starrocks.epack.persist.DropWarehouseLog;
 import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.epack.persist.RoleMappingPersistInfo;
 import com.starrocks.epack.persist.SecurityIntegrationPersistInfo;
+import com.starrocks.epack.persist.UpdateFailoverGroupLog;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.leader.Checkpoint;
@@ -1143,6 +1146,18 @@ public class JournalEntity implements Writable {
                 break;
             case OperationTypeEPack.OP_DROP_WAREHOUSE:
                 data = DropWarehouseLog.read(in);
+                isRead = true;
+                break;
+            case OperationTypeEPack.OP_CREATE_FAILOVER_GROUP:
+                data = CreateFailoverGroupLog.read(in);
+                isRead = true;
+                break;
+            case OperationTypeEPack.OP_DROP_FAILOVER_GROUP:
+                data = DropFailoverGroupLog.read(in);
+                isRead = true;
+                break;
+            case OperationTypeEPack.OP_UPDATE_FAILOVER_GROUP:
+                data = UpdateFailoverGroupLog.read(in);
                 isRead = true;
                 break;
             default: {

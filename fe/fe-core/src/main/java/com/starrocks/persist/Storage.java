@@ -99,12 +99,20 @@ public class Storage {
     }
 
     public Storage(String metaDir) throws IOException {
+        this(metaDir, false);
+    }
+
+    public Storage(String metaDir, boolean createMetaDirIfNotExist) throws IOException {
         this.metaDir = metaDir;
 
-        reload();
+        reload(createMetaDirIfNotExist);
     }
 
     public void reload() throws IOException {
+        reload(false);
+    }
+
+    public void reload(boolean createMetaDirIfNotExist) throws IOException {
         // Read version file info
         Properties prop = new Properties();
         File versionFile = getVersionFile();
@@ -147,6 +155,10 @@ public class Storage {
                 } catch (Exception e) {
                     LOG.warn(name + " is not a validate meta file, ignore it");
                 }
+            }
+        } else if (createMetaDirIfNotExist) {
+            if (!dir.mkdirs()) {
+                throw new IOException("Create meta dir " + metaDir + " failed");
             }
         }
     }

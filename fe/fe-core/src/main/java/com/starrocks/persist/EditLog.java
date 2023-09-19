@@ -60,16 +60,20 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.epack.persist.AlterPolicyLog;
 import com.starrocks.epack.persist.ApplyOrRevokeMaskingPolicyLog;
 import com.starrocks.epack.persist.ApplyOrRevokeRowAccessPolicyLog;
+import com.starrocks.epack.persist.CreateFailoverGroupLog;
 import com.starrocks.epack.persist.CreatePolicyLog;
 import com.starrocks.epack.persist.CreateTableInfoEPack;
+import com.starrocks.epack.persist.DropFailoverGroupLog;
 import com.starrocks.epack.persist.DropPolicyLog;
 import com.starrocks.epack.persist.DropWarehouseLog;
 import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.epack.persist.RoleMappingPersistInfo;
 import com.starrocks.epack.persist.SecurityIntegrationPersistInfo;
+import com.starrocks.epack.persist.UpdateFailoverGroupLog;
 import com.starrocks.epack.privilege.DbUID;
 import com.starrocks.epack.privilege.Policy;
 import com.starrocks.epack.server.WarehouseManagerEpack;
@@ -1221,6 +1225,21 @@ public class EditLog {
                     warehouseMgr.replayAlterWarehouse(wh);
                     break;
                 }
+                case OperationTypeEPack.OP_CREATE_FAILOVER_GROUP: {
+                    CreateFailoverGroupLog createFailoverGroupLog = (CreateFailoverGroupLog) journal.getData();
+                    globalStateMgr.getFailoverGroupMgr().replayCreateFailoverGroup(createFailoverGroupLog.getFailoverGroup());
+                    break;
+                }
+                case OperationTypeEPack.OP_DROP_FAILOVER_GROUP: {
+                    DropFailoverGroupLog dropFailoverGroupLog = (DropFailoverGroupLog) journal.getData();
+                    globalStateMgr.getFailoverGroupMgr().replayDropFailoverGroup(dropFailoverGroupLog.getFailoverGroupId());
+                    break;
+                }
+                case OperationTypeEPack.OP_UPDATE_FAILOVER_GROUP: {
+                    UpdateFailoverGroupLog updateFailoverGroupLog = (UpdateFailoverGroupLog) journal.getData();
+                    globalStateMgr.getFailoverGroupMgr().replayUpdateFailoverGroup(updateFailoverGroupLog.getFailoverGroup());
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -2318,5 +2337,21 @@ public class EditLog {
 
     public void logAlterWarehouse(Warehouse wh) {
         logEdit(OperationTypeEPack.OP_ALTER_WAREHOUSE, wh);
+    }
+
+    // failover group
+    public void logCreateFailoverGroup(FailoverGroup failoverGroup) {
+        CreateFailoverGroupLog createFailoverGroupLog = new CreateFailoverGroupLog(failoverGroup);
+        logEdit(OperationTypeEPack.OP_CREATE_FAILOVER_GROUP, createFailoverGroupLog);
+    }
+
+    public void logDropFailoverGroup(long failoverGroupId) {
+        DropFailoverGroupLog dropFailoverGroupLog = new DropFailoverGroupLog(failoverGroupId);
+        logEdit(OperationTypeEPack.OP_DROP_FAILOVER_GROUP, dropFailoverGroupLog);
+    }
+
+    public void logUpdateFailoverGroup(FailoverGroup failoverGroup) {
+        UpdateFailoverGroupLog updateFailoverGroupLog = new UpdateFailoverGroupLog(failoverGroup);
+        logEdit(OperationTypeEPack.OP_UPDATE_FAILOVER_GROUP, updateFailoverGroupLog);
     }
 }

@@ -555,6 +555,8 @@ public class GlobalStateMgr {
     private PipeScheduler pipeScheduler;
     
     private FailoverGroupMgr failoverGroupMgr;
+    private static GlobalStateMgr FAILOVER_GROUP_STATE = null;
+    private static long failoverGroupThreadId = -1;
 
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
@@ -820,6 +822,12 @@ public class GlobalStateMgr {
         }
     }
 
+    public static void destroyFailoverGroupState() {
+        if (FAILOVER_GROUP_STATE != null) {
+            FAILOVER_GROUP_STATE = null;
+        }
+    }
+
     public static GlobalStateMgr getCurrentState() {
         if (isCheckpointThread()) {
             // only checkpoint thread itself will go here.
@@ -828,6 +836,11 @@ public class GlobalStateMgr {
                 CHECKPOINT = new GlobalStateMgr(true);
             }
             return CHECKPOINT;
+        } else if (isFailoverGroupThread()) {
+            if (FAILOVER_GROUP_STATE == null) {
+                FAILOVER_GROUP_STATE = new GlobalStateMgr(true);
+            }
+            return FAILOVER_GROUP_STATE;
         } else {
             return SingletonHolder.INSTANCE;
         }
@@ -956,6 +969,19 @@ public class GlobalStateMgr {
 
     public static boolean isCheckpointThread() {
         return Thread.currentThread().getId() == checkpointThreadId;
+    }
+
+    public static boolean isFailoverGroupThread() {
+        return failoverGroupThreadId != -1 &&
+                Thread.currentThread().getId() == failoverGroupThreadId;
+    }
+
+    public static void setFailoverGroupThread() {
+        failoverGroupThreadId = Thread.currentThread().getId();
+    }
+
+    public static void resetFailoverGroupThread() {
+        failoverGroupThreadId = -1;
     }
 
     public static PluginMgr getCurrentPluginMgr() {
@@ -1437,7 +1463,9 @@ public class GlobalStateMgr {
             safeModeChecker.start();
         }
 
+        failoverGroupThreadId = failoverGroupMgr.getId();
         failoverGroupMgr.start();
+        LOG.info("failover group thread id is {}", failoverGroupThreadId);
     }
 
     // start threads that should run on all FE
@@ -1520,8 +1548,8 @@ public class GlobalStateMgr {
             return;
         }
         replayedJournalId.set(storage.getImageJournalId());
-        LOG.info("start load image from {}. is ckpt: {}", curFile.getAbsolutePath(),
-                GlobalStateMgr.isCheckpointThread());
+        LOG.info("start load image from {}. is ckpt: {}, is failover group state: {}", curFile.getAbsolutePath(),
+                GlobalStateMgr.isCheckpointThread(), GlobalStateMgr.isFailoverGroupThread());
         long loadImageStartTime = System.currentTimeMillis();
         DataInputStream dis = new DataInputStream(new BufferedInputStream(Files.newInputStream(curFile.toPath())));
 
@@ -1563,6 +1591,7 @@ public class GlobalStateMgr {
                         .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                         .put(SRMetaBlockIDEPack.WAREHOUSE_MGR, warehouseMgr::load)
                         .put(SRMetaBlockIDEPack.SECURITY_POLICY_MGR, securityPolicyManager::load)
+                        .put(SRMetaBlockIDEPack.FAILOVER_GROUP_MGR, failoverGroupMgr::load)
                         .build();
                 try {
                     loadHeaderV2(dis);
@@ -1945,7 +1974,8 @@ public class GlobalStateMgr {
         }
 
         // save image does not need any lock. because only checkpoint thread will call this method.
-        LOG.info("start save image to {}. is ckpt: {}", curFile.getAbsolutePath(), GlobalStateMgr.isCheckpointThread());
+        LOG.info("start save image to {}. is ckpt: {}, is failover group state: {}", curFile.getAbsolutePath(),
+                GlobalStateMgr.isCheckpointThread(), GlobalStateMgr.isFailoverGroupThread());
 
         long saveImageStartTime = System.currentTimeMillis();
         try (DataOutputStream dos = new DataOutputStream(Files.newOutputStream(curFile.toPath()))) {
@@ -1984,6 +2014,7 @@ public class GlobalStateMgr {
                     storageVolumeMgr.save(dos);
                     warehouseMgr.save(dos);
                     securityPolicyManager.save(dos);
+                    failoverGroupMgr.save(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("Save meta block failed ", e);
                     throw new IOException("Save meta block failed ", e);

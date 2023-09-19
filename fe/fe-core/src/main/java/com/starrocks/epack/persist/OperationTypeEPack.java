@@ -28,4 +28,9 @@ public class OperationTypeEPack extends OperationType {
     public static final short OP_ALTER_SECURITY_INTEGRATION = 20272;
     public static final short OP_DROP_ROLE_MAPPING = 20273;
     public static final short OP_ALTER_ROLE_MAPPING = 20274;
+    
+    // failover group
+    public static final short OP_CREATE_FAILOVER_GROUP = 20301;
+    public static final short OP_DROP_FAILOVER_GROUP = 20302;
+    public static final short OP_UPDATE_FAILOVER_GROUP = 20303;
 }

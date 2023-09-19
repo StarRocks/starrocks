@@ -2,6 +2,7 @@
 
 package com.starrocks.epack.failover;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
@@ -15,11 +16,14 @@ import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DatabaseName;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 public class ReplicatedObjectMgr {
     private static final Logger LOG = LogManager.getLogger(ReplicatedObjectMgr.class);
@@ -97,7 +101,6 @@ public class ReplicatedObjectMgr {
     @SerializedName(value = "tableInfos")
     private final Map<Long, TableInfo> tableInfos = Maps.newConcurrentMap();
 
-
     public ReplicatedObjectMgr() {
 
     }
@@ -125,7 +128,7 @@ public class ReplicatedObjectMgr {
                     ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, databaseName.getCatalog());
                 }
 
-                Database database = GlobalStateMgr.getCurrentState().getDb(databaseName.getDatabase());
+                Database database = GlobalStateMgr.getServingState().getDb(databaseName.getDatabase());
                 if (database == null) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, databaseName.getDatabase());
                 }
@@ -145,7 +148,7 @@ public class ReplicatedObjectMgr {
                     ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, tableName.getCatalog());
                 }
 
-                Database database = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
+                Database database = GlobalStateMgr.getServingState().getDb(tableName.getDb());
                 if (database == null || databaseInfos.containsKey(database.getId())) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, tableName.getDb());
                 }
@@ -179,5 +182,61 @@ public class ReplicatedObjectMgr {
         TableInfo tableInfo = new TableInfo(catalogId, databaseId, tableId);
         TableInfo previous = tableInfos.putIfAbsent(tableInfo.getTableId(), tableInfo);
         return previous == null;
+    }
+
+    public void clearObjectIndex() {
+        // TODO
+    }
+
+    public ReplicatedObjectMeta saveToObjectMeta() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+
+        ReplicatedObjectMeta.SystemMeta systemMeta = new ReplicatedObjectMeta.SystemMeta(
+                globalStateMgr.getToken(), globalStateMgr.getClusterInfo());
+        ReplicatedObjectMeta objectMeta = new ReplicatedObjectMeta(systemMeta);
+
+        for (CatalogInfo catalogInfo : catalogInfos.values()) {
+            Preconditions.checkState(CatalogMgr.isInternalCatalog(catalogInfo.getCatalogId()));
+            ConcurrentHashMap<Long, Database> databases = globalStateMgr.getIdToDb();
+            // Filter system database
+            Map<Long, Database> normalDbs = databases.entrySet().stream().filter(
+                    entry -> entry.getKey() > GlobalStateMgr.NEXT_ID_INIT_VALUE &&
+                            !entry.getValue().getFullName().equals(StatsConstants.STATISTICS_DB_NAME))
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+            boolean ret = objectMeta.addCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID,
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, normalDbs);
+            Preconditions.checkState(ret);
+        }
+
+        for (DatabaseInfo databaseInfo : databaseInfos.values()) {
+            Preconditions.checkState(CatalogMgr.isInternalCatalog(databaseInfo.getCatalogId()));
+            Database database = globalStateMgr.getDb(databaseInfo.getDatabaseId());
+            if (database == null) {
+                LOG.warn("Database id = {} in failover group is not found", databaseInfo.getDatabaseId());
+                continue;
+            }
+            boolean ret = objectMeta.addDatabase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID,
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, database);
+            Preconditions.checkState(ret);
+        }
+
+        for (TableInfo tableInfo : tableInfos.values()) {
+            Preconditions.checkState(CatalogMgr.isInternalCatalog(tableInfo.getCatalogId()));
+            Database database = globalStateMgr.getDb(tableInfo.getDatabaseId());
+            if (database == null) {
+                LOG.warn("Database id = {} in failover group is not found", tableInfo.getDatabaseId());
+                continue;
+            }
+            Table table = database.getTable(tableInfo.getTableId());
+            if (table == null) {
+                LOG.warn("Table id = {} in failover group is not found", tableInfo.getTableId());
+                continue;
+            }
+            boolean ret = objectMeta.addTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID,
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, database, table);
+            Preconditions.checkState(ret);
+        }
+
+        return objectMeta;
     }
 }

@@ -338,7 +338,7 @@ public enum ErrorCode {
 
     ERR_BAD_FAILOVER_GROUP_STATEMENT(7000, new byte[] {'4', '2', '0', '0', '0'}, "Bad failover group statement: '%s'"),
     ERR_UNKNOWN_FAILOVER_GROUP(7001, new byte[] {'4', '2', '0', '0', '0'}, "Unknown failover group '%s'"),
-    ERR_FAILOVER_GROUP_EXISTS(7002, new byte[] {'4', '2', '0', '0', '0'}, "Failover group exists");
+    ERR_FAILOVER_GROUP_EXISTS(7002, new byte[] {'4', '2', '0', '0', '0'}, "Failover group '%s' exists");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

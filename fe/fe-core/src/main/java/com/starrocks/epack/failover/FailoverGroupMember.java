@@ -15,19 +15,16 @@ import java.util.Set;
 
 public class FailoverGroupMember {
     @SerializedName(value = "name")
-    private String name;
+    private volatile String name;
 
     @SerializedName(value = "addresses")
-    private Set<NetworkAddress> addresses;
+    private volatile Set<NetworkAddress> addresses;
 
     @SerializedName(value = "leader")
-    private NetworkAddress leader;
+    private volatile NetworkAddress leader;
 
     @SerializedName(value = "role")
-    private FailoverGroupRole role;
-
-    @SerializedName(value = "state")
-    private FailoverGroupState state;
+    private volatile FailoverGroupRole role;
 
     public String getName() {
         return name;
@@ -61,14 +58,6 @@ public class FailoverGroupMember {
         this.role = role;
     }
 
-    public FailoverGroupState getState() {
-        return state;
-    }
-
-    public void setState(FailoverGroupState state) {
-        this.state = state;
-    }
-
     public TFailoverGroupMember toThrift() {
         TFailoverGroupMember thriftMember = new TFailoverGroupMember();
         thriftMember.setName(name);
@@ -77,22 +66,19 @@ public class FailoverGroupMember {
         }
         thriftMember.setLeader(leader.toThrift());
         thriftMember.setRole(role.toThrift());
-        thriftMember.setState(state.toThrift());
         return thriftMember;
     }
 
     public static FailoverGroupMember fromThrift(TFailoverGroupMember thriftMember) {
         FailoverGroupMember member = new FailoverGroupMember();
         member.setName(thriftMember.getName());
-        Set<TNetworkAddress> thriftAddresses = thriftMember.getAddresses();
         Set<NetworkAddress> addresses = new HashSet<>();
-        for (TNetworkAddress thirftAddress : thriftAddresses) {
+        for (TNetworkAddress thirftAddress : thriftMember.getAddresses()) {
             addresses.add(NetworkAddress.fromThrift(thirftAddress));
         }
         member.setAddresses(addresses);
         member.setLeader(NetworkAddress.fromThrift(thriftMember.getLeader()));
         member.setRole(FailoverGroupRole.fromThrift(thriftMember.getRole()));
-        member.setState(FailoverGroupState.fromThrift(thriftMember.getState()));
         return member;
     }
 
@@ -108,13 +94,16 @@ public class FailoverGroupMember {
             return false;
         }
         FailoverGroupMember other = (FailoverGroupMember) obj;
-        return Objects.equals(name, other.name);
+        return Objects.equals(name, other.name) &&
+                Objects.equals(addresses, other.addresses) &&
+                Objects.equals(leader, other.leader) &&
+                Objects.equals(role, other.role);
     }
 
     @Override
     public String toString() {
         StringBuilder builder = new StringBuilder();
-        builder.append(name + "(" + role + "," + state + "): [");
+        builder.append(name + "(" + role + "): [");
 
         boolean isFirst = true;
         for (NetworkAddress address : addresses) {
@@ -135,11 +124,11 @@ public class FailoverGroupMember {
         return builder.toString();
     }
 
-    public static FailoverGroupMember getLocalMember(String name, FailoverGroupRole role, FailoverGroupState state) {
+    public static FailoverGroupMember getLocalMember(String name, FailoverGroupRole role) {
         NetworkAddress leaderAddress = NetworkAddress.getLocalLeaderAddress();
 
         Set<NetworkAddress> addresses = new HashSet<>();
-        List<Frontend> frontends = GlobalStateMgr.getCurrentState().getFrontends(null);
+        List<Frontend> frontends = GlobalStateMgr.getServingState().getFrontends(null);
         for (Frontend frontend : frontends) {
             addresses.add(new NetworkAddress(frontend.getHost(), frontend.getRpcPort()));
         }
@@ -147,13 +136,12 @@ public class FailoverGroupMember {
         if (!addresses.contains(leaderAddress)) {
             return null;
         }
-        
+
         FailoverGroupMember member = new FailoverGroupMember();
         member.setName(name);
         member.setAddresses(addresses);
         member.setLeader(leaderAddress);
         member.setRole(role);
-        member.setState(state);
 
         return member;
     }

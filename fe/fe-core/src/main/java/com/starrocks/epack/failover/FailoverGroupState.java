@@ -38,41 +38,39 @@ public class FailoverGroupState {
     }
 
     // Initial state
-    public static final FailoverGroupState INITIALIZING = new FailoverGroupState(TFailoverGroupState.INITIALIZING.ordinal());
+    public static final FailoverGroupState INITIALIZING = new FailoverGroupState(
+            TFailoverGroupState.INITIALIZING.ordinal());
 
     // Failover group is running after a successful handshake
     public static final FailoverGroupState RUNNING = new FailoverGroupState(TFailoverGroupState.RUNNING.ordinal());
 
     // Only for secondary, secondary is replicating data from primary
-    public static final FailoverGroupState REPLICATING = new FailoverGroupState(TFailoverGroupState.REPLICATING.ordinal());
+    public static final FailoverGroupState REPLICATING = new FailoverGroupState(
+            TFailoverGroupState.REPLICATING.ordinal());
 
     // Failover group has error
     public static final FailoverGroupState ERROR = new FailoverGroupState(TFailoverGroupState.ERROR.ordinal());
-    
 
-    public static final Map<String, FailoverGroupState> NAME_TO_STATE =
-            new ImmutableMap.Builder<String, FailoverGroupState>()
-                    .put("INITIALIZING", INITIALIZING)
-                    .put("RUNNING", RUNNING)
-                    .put("REPLICATING", REPLICATING)
-                    .put("ERROR", ERROR)
-                    .build();
+    public static final Map<String, FailoverGroupState> NAME_TO_STATE = new ImmutableMap.Builder<String, FailoverGroupState>()
+            .put("INITIALIZING", INITIALIZING)
+            .put("RUNNING", RUNNING)
+            .put("REPLICATING", REPLICATING)
+            .put("ERROR", ERROR)
+            .build();
 
-    public static final Map<Integer, String> ID_TO_NAME =
-            new ImmutableMap.Builder<Integer, String>()
-                    .put(INITIALIZING.getId(), "INITIALIZING")
-                    .put(RUNNING.getId(), "RUNNING")
-                    .put(REPLICATING.getId(), "REPLICATING")
-                    .put(ERROR.getId(), "ERROR")
-                    .build();
+    public static final Map<Integer, String> ID_TO_NAME = new ImmutableMap.Builder<Integer, String>()
+            .put(INITIALIZING.getId(), "INITIALIZING")
+            .put(RUNNING.getId(), "RUNNING")
+            .put(REPLICATING.getId(), "REPLICATING")
+            .put(ERROR.getId(), "ERROR")
+            .build();
 
-    public static final Map<Integer, FailoverGroupState> ID_TO_STATE =
-            new ImmutableMap.Builder<Integer, FailoverGroupState>()
-                .put(INITIALIZING.getId(), INITIALIZING)
-                .put(RUNNING.getId(), RUNNING)
-                .put(REPLICATING.getId(), REPLICATING)
-                .put(ERROR.getId(), ERROR)
-                .build();
+    public static final Map<Integer, FailoverGroupState> ID_TO_STATE = new ImmutableMap.Builder<Integer, FailoverGroupState>()
+            .put(INITIALIZING.getId(), INITIALIZING)
+            .put(RUNNING.getId(), RUNNING)
+            .put(REPLICATING.getId(), REPLICATING)
+            .put(ERROR.getId(), ERROR)
+            .build();
 
     @Override
     public String toString() {
