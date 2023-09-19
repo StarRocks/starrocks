@@ -1599,7 +1599,7 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select max(upper(S_ADDRESS)), min(upper(S_ADDRESS)), max(S_ADDRESS), sum(S_SUPPKEY + 1) from supplier";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                "  |  output: max(18: upper), min(18: upper), max(17: S_ADDRESS), sum(1: S_SUPPKEY), count(*)\n" +
+                "  |  output: max(18: upper), min(18: upper), max(17: S_ADDRESS), sum(1: S_SUPPKEY), count(1: S_SUPPKEY)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
