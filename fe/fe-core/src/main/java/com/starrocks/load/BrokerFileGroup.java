@@ -143,7 +143,7 @@ public class BrokerFileGroup implements Writable {
         this.fileFieldNames = new ArrayList<>();
 
         this.columnExprList = table.getColumnExprList();
-        this.columnsFromPath = new ArrayList<>();
+        this.columnsFromPath = table.getColumnsFromPath();
     }
 
     public BrokerFileGroup(DataDescription dataDescription) {
