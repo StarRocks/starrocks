@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.ScanOptimzeOption;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
