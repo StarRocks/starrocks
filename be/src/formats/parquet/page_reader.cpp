@@ -50,6 +50,8 @@ Status PageReader::next_header() {
     size_t remaining = _finish_offset - _offset;
     uint32_t header_length = 0;
 
+    RETURN_IF_ERROR(_stream->seek(_offset));
+
     do {
         allowed_page_size = std::min(std::min(allowed_page_size, remaining), kMaxPageHeaderSize);
 
@@ -60,15 +62,14 @@ Status PageReader::next_header() {
         bool peek_mode = false;
         {
             auto st = _stream->peek(allowed_page_size);
-            if (st.ok()) {
-                DCHECK_EQ(st.value().size(), allowed_page_size);
+            if (st.ok() && st.value().size() == allowed_page_size) {
                 page_buf = (const uint8_t*)st.value().data();
                 peek_mode = true;
             } else {
                 page_buffer.reserve(allowed_page_size);
                 RETURN_IF_ERROR(_stream->read_at_fully(_offset, page_buffer.data(), allowed_page_size));
                 page_buf = page_buffer.data();
-                st = _stream->peek(allowed_page_size);
+                auto st = _stream->peek(allowed_page_size);
                 if (st.ok()) {
                     _stats->bytes_read -= allowed_page_size;
                     peek_mode = true;
