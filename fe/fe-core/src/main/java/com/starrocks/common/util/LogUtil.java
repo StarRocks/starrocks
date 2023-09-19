@@ -15,9 +15,17 @@
 package com.starrocks.common.util;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class LogUtil {
+
+    public static List<String> getCurrentStackTraceToList() {
+        return Arrays.stream(Thread.currentThread().getStackTrace())
+                .map(StackTraceElement::toString)
+                .collect(Collectors.toList());
+    }
+
     public static String getCurrentStackTrace() {
         return Arrays.stream(Thread.currentThread().getStackTrace())
                 .map(stack -> "        " + stack.toString())
