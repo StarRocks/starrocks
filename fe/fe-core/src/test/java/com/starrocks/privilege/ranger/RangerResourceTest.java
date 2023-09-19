@@ -22,8 +22,11 @@ import org.junit.Test;
 public class RangerResourceTest {
     @Test
     public void testBasic() {
-        RangerStarRocksResource starRocksResource =
-                new RangerStarRocksResource(ObjectType.USER, Lists.newArrayList("u1"));
+        RangerStarRocksResource starRocksResource = new RangerStarRocksResource(ObjectType.SYSTEM, null);
+        Assert.assertEquals("[system]", starRocksResource.getKeys().toString());
+        Assert.assertEquals("*", starRocksResource.getValue("system"));
+
+        starRocksResource = new RangerStarRocksResource(ObjectType.USER, Lists.newArrayList("u1"));
         Assert.assertEquals("[user]", starRocksResource.getKeys().toString());
         Assert.assertEquals("u1", starRocksResource.getValue("user"));
 
