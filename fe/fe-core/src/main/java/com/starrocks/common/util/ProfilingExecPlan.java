@@ -391,6 +391,15 @@ public class ProfilingExecPlan {
                 name = "MERGE_" + name;
             }
         }
+        if (node instanceof SortNode) {
+            SortNode sortNode = (SortNode) node;
+            SortInfo sortInfo = sortNode.getSortInfo();
+            if (sortInfo != null && CollectionUtils.isNotEmpty(sortInfo.getPartitionExprs())) {
+                name = "PARTITION_TOP_N";
+            } else if (sortNode.isUseTopN()) {
+                name = "TOP_N";
+            }
+        }
         element.setDisplayName(name);
     }
 

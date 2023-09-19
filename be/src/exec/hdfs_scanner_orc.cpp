@@ -532,7 +532,7 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* stripe_number_counter = nullptr;
     RuntimeProfile* root = profile->runtime_profile;
 
-    ADD_COUNTER(root, kORCProfileSectionPrefix, TUnit::UNIT);
+    ADD_COUNTER(root, kORCProfileSectionPrefix, TUnit::NONE);
 
     delete_build_timer = ADD_CHILD_TIMER(root, "DeleteBuildTimer", kORCProfileSectionPrefix);
     delete_file_per_scan_counter = ADD_CHILD_COUNTER(root, "DeleteFilesPerScan", TUnit::UNIT, kORCProfileSectionPrefix);
