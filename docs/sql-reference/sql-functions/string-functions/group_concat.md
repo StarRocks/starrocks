@@ -2,7 +2,7 @@
 
 ## Description
 
-Concatenates non-null values from a group into a single string, with a `separator` argument, which is `,` by default if not specified. This function can be used to concatenate values from multiple rows of a column into one string.
+Concatenates non-null values from a group into a single string, with a `sep` argument, which is `,` by default if not specified. This function can be used to concatenate values from multiple rows of a column into one string.
 
 group_concat supports DISTINCT and ORDER BY in 3.0 versions later than 3.0.6 and 3.1 versions later than 3.1.3.
 
@@ -12,14 +12,14 @@ group_concat supports DISTINCT and ORDER BY in 3.0 versions later than 3.0.6 and
 VARCHAR GROUP_CONCAT([DISTINCT] expr [,expr ...]
              [ORDER BY {unsigned_integer | col_name | expr}
                  [ASC | DESC] [,col_name ...]]
-             [SEPARATOR str_val])
+             [SEPARATOR sep])
 ```
 
 ## Parameters
 
 - `expr`: the values to concatenate, with null values ignored. It must evaluate to VARCHAR. You can optionally specify `DISTINCT` to eliminate duplicate values from the output string. If you want to concatenate multiple `expr` directly, use [concat](./concat.md) or [concat_ws](./concat_ws.md) to specify formats.
 - Items in ORDER BY can be unsigned integers (starting from 1), column names, or normal expressions. The results are sorted in ascending order by default. You can also explicitly specify the ASC keyword. If you want to sort results in descending order, add the DESC keyword to the name of the column you are sorting.
-- `str_val`: the optional separator used to concatenate non-null values from different rows. If it is not specified, `,` (a comma) is used by default. To eliminate the separator, specify an empty string `''`.
+- `sep`: the optional separator used to concatenate non-null values from different rows. If it is not specified, `,` (a comma) is used by default. To eliminate the separator, specify an empty string `''`.
 
 ## Return value
 
