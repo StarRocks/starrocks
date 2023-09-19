@@ -47,6 +47,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.ColocatePersistInfo;
@@ -238,7 +239,11 @@ public class ColocateTableIndex implements Writable {
     public void addBackendsPerBucketSeq(GroupId groupId, List<List<Long>> backendsPerBucketSeq) {
         writeLock();
         try {
-            group2BackendsPerBucketSeq.put(groupId, backendsPerBucketSeq);
+            List<List<Long>> previous = group2BackendsPerBucketSeq.put(groupId, backendsPerBucketSeq);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Colocate group {} changed bucket seq from {} to {}, caller stack: {}",
+                        groupId, previous, backendsPerBucketSeq, LogUtil.getCurrentStackTraceToList());
+            }
         } finally {
             writeUnlock();
         }
