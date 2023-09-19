@@ -22,126 +22,95 @@ IAM User 支持通过 AWS IAM User 来实现对外部数据源的访问认证和
 
 ## 准备工作
 
-### 基于 Instance Profile 认证鉴权
+首先，找到 StarRocks 集群所在 EC2 实例所关联的 IAM 角色（以下简称“EC2 实例关联角色”），并获取该角色的 ARN。在使用基于 Instance Profile 的认证方式时，会用到该角色；在使用基于 Assumed Role 的认证方式时，会用到该角色及其 ARN。
 
-创建如下 IAM 策略用以授予特定 AWS 资源的访问权限。然后，将该策略添加到跟 StarRocks 集群所在 EC2 实例相关联的 IAM Role（简称“EC2 实例关联的 Role”）。
-
-#### 访问 AWS S3
-
-如果希望 StarRocks 能够访问特定的 S3 Bucket，您需要创建下述 IAM 策略，并将其绑定到 EC2 实例关联的 Role：
+下一步，根据要访问的 AWS 资源、以及与 StarRocks 集成的具体操作场景来创建 IAM 策略。IAM 策略用于声明特定 AWS 资源的一组访问权限。创建 IAM 策略后，您需要将创建好的策略添加到某个 IAM 用户或角色，从而使该 IAM 用户或角色拥有该策略中所声明的访问特定 AWS 资源的权限。
 
 > **注意**
 >
-> 您需要将 `bucket_name` 替换成您希望访问的 Bucket 名称。
+> 您必须拥有登录 [AWS IAM 控制台](https://us-east-1.console.aws.amazon.com/iamv2/home#/home)和编辑 IAM 用户及角色的权限才能完成上述准备工作。
 
-```JSON
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "s3",
-            "Effect": "Allow",
-            "Action": ["s3:GetObject"],
-            "Resource": ["arn:aws:s3:::<bucket_name>/*"]
-        },
-        {
-            "Sid": "s3list",
-            "Effect": "Allow",
-            "Action": ["s3:ListBucket"],
-            "Resource": ["arn:aws:s3:::<bucket_name>"]
-        }
-        ]
-}
-```
+关于访问特定 AWS 资源所需要创建的 IAM 策略，见如下内容：
 
-#### 访问 AWS Glue
+- [从 AWS S3 批量导入数据](../reference/aws_iam_policies.md#从-aws-s3-批量导入数据)
+- [从 AWS S3 读写数据](../reference/aws_iam_policies.md#从-aws-s3-读写数据)
+- [对接 AWS Glue](../reference/aws_iam_policies.md#对接-aws-glue)
 
-如果希望 StarRocks 访问 AWS Glue，您需要创建下述 IAM 策略，并将其绑定到 EC2 实例关联的 Role：
+### 基于 Instance Profile 认证鉴权
 
-```JSON
-{
-     "Version": "2012-10-17",
-     "Statement": [
-         {
-             "Effect": "Allow",
-             "Action": [
-                "glue:GetDatabase",
-                "glue:GetDatabases",
-                "glue:GetPartition",
-                "glue:GetPartitions",
-                "glue:GetTable",
-                "glue:GetTableVersions",
-                "glue:GetTables",
-                "glue:GetConnection",
-                "glue:GetConnections",
-                "glue:GetDevEndpoint",
-                "glue:GetDevEndpoints",
-                "glue:BatchGetPartition"
-            ],
-            "Resource": [
-                "*"
-            ]
-        }
-    ]
-}
-```
+把声明了访问特定 AWS 资源的 [IAM 策略](../reference/aws_iam_policies.md) 添加到 EC2 实例关联角色。
 
 ### 基于 Assumed Role 认证鉴权
 
-您需要创建一个用于访问 AWS S3 资源的 Assumed Role（例如，命名为 `s3_assumed_role`），并将本文“[访问 AWS S3](../integrations/authenticate_to_aws_resources.md#访问-aws-s3)”小节所述的 IAM 策略添加到该角色，保证该 Assumed Role 可以访问 AWS S3 资源。接下来，EC2 实例关联的 Role 可以通过担任该 Assumed Role，从而获得访问对应 AWS S3 资源的权限。
+#### 创建 IAM 角色并添加策略
 
-同样，如果您希望 StarRocks 访问您的 AWS Glue 资源，可以创建另外一个 Assumed Role（例如，命名为`glue_assumed_role`），后续流程同理。
+您可以根据需要访问的 AWS 资源选择创建一个或多个 IAM 角色。具体操作请参见 AWS 官网文档 [Creating IAM roles](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create.html)。然后，把声明了访问特定 AWS 资源的 [IAM 策略](../reference/aws_iam_policies.md) 添加到您所创建的 IAM 角色。
 
-完成上述操作后，还需要在创建好的 Assumed Role 及 EC2 实例关联的 Role 之间配置信任关系。具体操作步骤如下：
+这里假设您的操作场景需要 StarRocks 集群访问 AWS S3 和 AWS Glue。在这种情况下，您可以选择创建一个 IAM 角色（如 `s3_assumed_role`），然后把赋权访问 AWS S3 的策略和赋权访问 AWS Glue 的策略都添加到该角色。您也可以选择创建两个不同的 IAM 角色（如 `s3_assumed_role` 和 `glue_assumed_role`），然后把这些不同的策略分别添加到这两个角色（即，把赋权访问 AWS S3 的策略添加到 `s3_assumed_role`， 把赋权访问 AWS Glue 的策略添加到 `glue_assumed_role`）。
+
+StarRocks 集群的 EC2 实例关联角色通过承担您所创建和配置的 IAM 角色，便可以获得访问特定 AWS 资源的权限。
+
+本文假设您只创建了一个 Assumed Role `s3_assumed_role`，并且已把赋权访问 AWS S3 的策略和赋权访问 AWS Glue 的策略都添加到了该角色。
 
 #### 配置信任关系
 
-首先，按如下为创建好的 Assumed Role（例如 `s3_assumed_role`）配置信任关系：
+请按如下步骤配置 Assumed Role：
 
-> **注意**
->
-> 您需要将 `cluster_EC2_iam_role_ARN` 替换成跟 EC2 实例关联的 Role 的 ARN。该策略将会允许该 EC2 实例所关联的 Role 来代入 Assumed Role。
+1. 登录 [AWS IAM 控制台](https://us-east-1.console.aws.amazon.com/iamv2/home#/home)。
+2. 在左侧导航栏选择 **Access management** > **Roles**。
+3. 找到 Assumed Role (`s3_assumed_role`)，单击角色名称。
+4. 在角色详情页上，单击 **Trust relationships** 页签，然后在 **Trust relationships** 页签上单击 **Edit trust policy**。
+5. 在 **Edit trust policy** 页面上，删掉当前的 JSON 格式策略，然后拷贝并粘贴如下策略。注意您需要把下面策略中的 `<cluster_EC2_iam_role_ARN>` 替换为 EC2 实例关联角色的 ARN。最后，单击 **Update policy**。
 
-```JSON
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Principal": {
-                "AWS": "<cluster_EC2_iam_role_ARN>"
-            },
-            "Action": "sts:AssumeRole"
-        }
-    ]
-}
-```
+   ```JSON
+   {
+       "Version": "2012-10-17",
+       "Statement": [
+           {
+               "Effect": "Allow",
+               "Principal": {
+                   "AWS": "<cluster_EC2_iam_role_ARN>"
+               },
+               "Action": "sts:AssumeRole"
+           }
+       ]
+   }
+   ```
 
-然后，创建如下 IAM 策略，并绑定到 EC2 实例关联的 Role：
+如果您创建了不同的 Assumed Role 用以赋权访问不同的 AWS 资源，那么您需要参照上述操作步骤完成其他所有 Assumed Role 的配置。例如，您创建了 `s3_assumed_role` 和 `glue_assumed_role` 两个 Assumed Role，分别用于赋权访问 AWS S3 和 AWS Glue。在这种情况下，您需要重复上述操作步骤，完成对 `glue_assumed_role` 的配置。
 
-> **注意**
->
-> 您需要在 `Resource` 中填入 Assumed Role `s3_assumed_role` 的 ARN。另外，只有在选择了 AWS Glue 作为元数据服务并为 AWS Glue 创建了另一个 Assumed Role `glue_assumed_role` 时，才需要填入该 Assumed Role `glue_assumed_role` 的 ARN。
+请按如下步骤配置 EC2 实例关联角色：
 
-```JSON
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": ["sts:AssumeRole"],
-            "Resource": [
-                "<s3_assumed_role_ARN>",
-                "<glue_s3_assumed_role_ARN>"
-            ]
-        }
-    ]
-}
-```
+1. 登录 [AWS IAM 控制台](https://us-east-1.console.aws.amazon.com/iamv2/home#/home)。
+2. 在左侧导航栏选择 **Access management** > **Roles**。
+3. 找到 EC2 实例关联角色，单击角色名称。
+4. 在角色详情页的 **Permissions policies** 区域，单击 **Add permissions** 并选择 **Create inline policy**。
+5. 在 **Specify permissions** 步骤， 单击 **JSON** 页签，删掉当前的 JSON 格式策略，然后拷贝并粘贴如下策略。注意您需要把下面策略中的 `<s3_assumed_role_ARN>` 替换为 Assumed Role `s3_assumed_role` 的 ARN。最后，单击 **Review policy**。
+
+   ```JSON
+   {
+       "Version": "2012-10-17",
+       "Statement": [
+           {
+               "Effect": "Allow",
+               "Action": ["sts:AssumeRole"],
+               "Resource": [
+                   "<s3_assumed_role_ARN>"
+               ]
+           }
+       ]
+   }
+   ```
+
+   如果您创建了不同的 Assumed Role 用以赋权访问不同的 AWS 资源，那么您需要在上面策略的 **Resource** 字段中填入所有 Assumed Role 的 ARN。例如，您创建了 `s3_assumed_role` 和 `glue_assumed_role` 两个 Assumed Role，分别用于赋权访问 AWS S3 和 AWS Glue。在这种情况下，您需要在 **Resource** 字段中填入 `s3_assumed_role` 的 ARN 和 `glue_assumed_role` 的 ARN，格式如下：`"<s3_assumed_role_ARN>","<glue_assumed_role_ARN>"`。
+
+6. 在 **Review Policy** 步骤，输入策略名称，然后单击 **Create policy**。
 
 ### 基于 IAM User 认证鉴权
 
-创建一个 IAM User，并将本文“[访问 AWS S3](../integrations/authenticate_to_aws_resources.md#访问-aws-s3)”或“[访问 AWS Glue](../integrations/authenticate_to_aws_resources.md#访问-aws-glue)”小节所述的 IAM 策略添加到该 IAM User。并准备好该 IAM 用户的 Access Key 和 Secret Key。
+创建一个 IAM 用户。具体操作请参见 AWS 官网文档 [Creating an IAM user in your AWS account](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_create.html)。
+
+然后，把声明了访问特定 AWS 资源的 [IAM 策略](../reference/aws_iam_policies.md) 添加到创建好的 IAM 用户。
 
 ## 原理图
 
