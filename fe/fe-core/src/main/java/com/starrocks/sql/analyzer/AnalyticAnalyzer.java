@@ -56,7 +56,8 @@ public class AnalyticAnalyzer {
                     !analyticFunction.getFn().functionName().equals(FunctionSet.BITMAP_UNION_COUNT) &&
                     !analyticFunction.getFn().functionName().equals(FunctionSet.LEAD) &&
                     !analyticFunction.getFn().functionName().equals(FunctionSet.LAG)) {
-                throw new SemanticException("bitmap type could only used for bitmap_union_count/lead/lag window function");
+                throw new SemanticException(
+                        "bitmap type could only used for bitmap_union_count/lead/lag window function");
             } else if (e.getType().isHllType() &&
                     !analyticFunction.getFn().functionName().equals(AnalyticExpr.HLL_UNION_AGG) &&
                     !analyticFunction.getFn().functionName().equals(FunctionSet.LEAD) &&
@@ -95,13 +96,9 @@ public class AnalyticAnalyzer {
             }
         }
 
-        if (isStatisticFn(analyticFunction.getFn()) && (!analyticExpr.getOrderByElements().isEmpty())) {
-            throw new SemanticException("order by not allowed with '" + analyticFunction.toSql());
-        }
-
         if (analyticExpr.getWindow() != null) {
             if ((isRankingFn(analyticFunction.getFn()) || isOffsetFn(analyticFunction.getFn()) ||
-                    isHllAggFn(analyticFunction.getFn()) || isStatisticFn(analyticFunction.getFn()))) {
+                    isHllAggFn(analyticFunction.getFn()))) {
                 throw new SemanticException("Windowing clause not allowed with '" + analyticFunction.toSql());
             }
 
