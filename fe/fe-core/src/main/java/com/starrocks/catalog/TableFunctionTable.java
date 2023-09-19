@@ -54,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -69,9 +70,13 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_PATH = "path";
     public static final String PROPERTY_FORMAT = "format";
 
+    public static final String PROPERTY_COLUMNS_FROM_PATH = "columns_from_path";
+
     private String path;
     private String format;
     private String compressionType;
+
+    private List<String> columnsFromPath = new ArrayList<>();
     private final Map<String, String> properties;
     @Nullable
     private List<Integer> partitionColumnIDs;
@@ -88,14 +93,18 @@ public class TableFunctionTable extends Table {
         parseProperties();
         parseFiles();
 
+
+        List<Column> columns = new ArrayList<>();
         if (path.startsWith(FAKE_PATH)) {
-            List<Column> columns = new ArrayList<>();
             columns.add(new Column("col_int", Type.INT));
             columns.add(new Column("col_string", Type.VARCHAR));
-            setNewFullSchema(columns);
         } else {
-            setNewFullSchema(getFileSchema());
+            columns = getFileSchema();
         }
+
+        columns.addAll(getSchemaFromPath());
+
+        setNewFullSchema(columns);
     }
 
     // Ctor for unload data via table function
@@ -178,12 +187,31 @@ public class TableFunctionTable extends Table {
         if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc")) {
             throw new DdlException("not supported format: " + format);
         }
+
+        String colsFromPathProp = properties.get(PROPERTY_COLUMNS_FROM_PATH);
+        if (!Strings.isNullOrEmpty(colsFromPathProp)) {
+            String[] colsFromPath = colsFromPathProp.split(",");
+            for (String col : colsFromPath) {
+                columnsFromPath.add(col.trim());
+            }
+        }
     }
 
     private void parseFiles() throws DdlException {
         try {
             // fake:// is a faked path, for testing purpose
             if (path.startsWith("fake://")) {
+                TBrokerFileStatus file1 = new TBrokerFileStatus();
+                file1.isDir = false;
+                file1.path = "fake://some_bucket/some_dir/file1";
+                file1.size = 1024;
+                fileStatuses.add(file1);
+
+                TBrokerFileStatus file2 = new TBrokerFileStatus();
+                file2.isDir = false;
+                file2.path = "fake://some_bucket/some_dir/file2";
+                file2.size = 2048;
+                fileStatuses.add(file2);
                 return;
             }
             List<String> pieces = Splitter.on(",").trimResults().omitEmptyStrings().splitToList(path);
@@ -293,6 +321,20 @@ public class TableFunctionTable extends Table {
         }
         return columns;
     }
+    private List<Column> getSchemaFromPath() throws DdlException {
+        List<Column> columns = new ArrayList<>();
+        if (!columnsFromPath.isEmpty()) {
+            for (String colName : columnsFromPath) {
+                Optional<Column> column =  columns.stream().filter(col -> col.nameEquals(colName, false)).findFirst();
+                if (column.isPresent()) {
+                    throw new DdlException("duplicated name in columns from path, " +
+                            "a column with same name already exists in the file table: " + colName);
+                }
+                columns.add(new Column(colName, ScalarType.createDefaultString(), true));
+            }
+        }
+        return columns;
+    }
 
     public List<ImportColumnDesc> getColumnExprList() {
         List<ImportColumnDesc> exprs = new ArrayList<>();
@@ -301,6 +343,10 @@ public class TableFunctionTable extends Table {
             exprs.add(new ImportColumnDesc(column.getName()));
         }
         return exprs;
+    }
+
+    public List<String> getColumnsFromPath() {
+        return columnsFromPath;
     }
 
     @Override
