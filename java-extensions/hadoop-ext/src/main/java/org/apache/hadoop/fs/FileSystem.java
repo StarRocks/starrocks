@@ -13,8 +13,7 @@
 // limitations under the License.
 
 // This file is based on code available under the Apache license here:
-// https://github.com/apache/hadoop/blob/release-3.3.6-RC1/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/fs/FileSystem.java
-
+// https://github.com/apache/hadoop/blob/rel/release-3.3.6/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/fs/FileSystem.java
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
