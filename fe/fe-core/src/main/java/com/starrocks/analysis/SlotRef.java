@@ -278,7 +278,7 @@ public class SlotRef extends Expr {
     @Override
     public String toSqlImpl() {
         StringBuilder sb = new StringBuilder();
-        if (tblName != null) {
+        if (tblName != null && !isFromLambda()) {
             return tblName.toSql() + "." + "`" + col + "`";
         } else if (label != null) {
             return label;
@@ -429,6 +429,9 @@ public class SlotRef extends Expr {
     @Override
     public boolean isBoundByTupleIds(List<TupleId> tids) {
         Preconditions.checkState(desc != null);
+        if (isFromLambda()) {
+            return true;
+        }
         for (TupleId tid : tids) {
             if (tid.equals(desc.getParent().getId())) {
                 return true;
