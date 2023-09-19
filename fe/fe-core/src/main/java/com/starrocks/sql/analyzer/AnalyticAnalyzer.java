@@ -130,15 +130,10 @@ public class AnalyticAnalyzer {
             }
         }
 
-        if (isStatisticFn(analyticFunction.getFn()) && (!analyticExpr.getOrderByElements().isEmpty())) {
-            throw new SemanticException("order by not allowed with '" + analyticFunction.toSql() + "'",
-                    analyticExpr.getPos());
-        }
 
         if (analyticExpr.getWindow() != null) {
             if ((isRankingFn(analyticFunction.getFn()) || isCumeFn(analyticFunction.getFn()) ||
-                    isOffsetFn(analyticFunction.getFn()) || isHllAggFn(analyticFunction.getFn())) ||
-                    isStatisticFn(analyticFunction.getFn())) {
+                    isOffsetFn(analyticFunction.getFn()) || isHllAggFn(analyticFunction.getFn()))) {
                 throw new SemanticException("Windowing clause not allowed with '" + analyticFunction.toSql() + "'",
                         analyticExpr.getPos());
             }
