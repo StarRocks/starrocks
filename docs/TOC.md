@@ -723,6 +723,7 @@
   + [User-defined variables](./reference/user_defined_variables.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
+  + [AWS IAM policies](./reference/aws_iam_policies.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
