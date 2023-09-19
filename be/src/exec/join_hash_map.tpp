@@ -363,6 +363,7 @@ void FixedSizeJoinProbeFunc<LT>::_probe_nullable_column(const JoinHashTableItems
             probe_state->is_nulls[j] |= null_columns[i]->get_data()[j];
         }
     }
+    probe_state->null_array = &null_columns[0]->get_data();
 
     JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, probe_state->probe_key_column.get(), 0,
                                                            row_count);

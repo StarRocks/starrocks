@@ -31,6 +31,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -40,7 +41,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
-import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReplaceSubqueryRewriteRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
@@ -143,6 +143,27 @@ public class SubqueryUtils {
         return true;
     }
 
+    public static boolean checkUniqueCorrelation(ScalarOperator correlationPredicate, ColumnRefSet outerRefs) {
+        if (correlationPredicate == null) {
+            return true;
+        }
+        
+        if (!OperatorType.BINARY.equals(correlationPredicate.getOpType())) {
+            return false;
+        }
+
+        BinaryPredicateOperator bpo = ((BinaryPredicateOperator) correlationPredicate);
+        if (!BinaryType.EQ.equals(bpo.getBinaryType())) {
+            return false;
+        }
+
+        if (outerRefs.containsAny(bpo.getChild(0).getUsedColumns()) &&
+                outerRefs.containsAny(bpo.getChild(1).getUsedColumns())) {
+            return false;
+        }
+        return true;
+    }
+
     public static CallOperator createCountRowsOperator() {
         Function count = getAggregateFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT});
         return new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)),
@@ -203,21 +224,6 @@ public class SubqueryUtils {
         }
 
         return false;
-    }
-
-    /**
-     * rewrite the predicate and collect info according to your operatorShuttle
-     *
-     * @param correlationPredicate
-     * @param scalarOperatorShuttle
-     * @return
-     */
-    public static ScalarOperator rewritePredicateAndExtractColumnRefs(
-            ScalarOperator correlationPredicate, BaseScalarOperatorShuttle scalarOperatorShuttle) {
-        if (correlationPredicate == null) {
-            return null;
-        }
-        return correlationPredicate.clone().accept(scalarOperatorShuttle, null);
     }
 
     public static boolean existNonColumnRef(Collection<ScalarOperator> scalarOperators) {
