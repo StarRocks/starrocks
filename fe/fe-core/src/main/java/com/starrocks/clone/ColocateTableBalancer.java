@@ -683,6 +683,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
         return hasBad && st == TabletStatus.COLOCATE_REDUNDANT;
     }
 
+    private void logDebugInfoForColocateMismatch(Set<Long> bucketSeq, LocalTablet tablet) {
+        LOG.debug("Added tablet {} to scheduler queue, tablet replicas: {}, current bucket seq:{}",
+                tablet.getId(), tablet.getReplicaInfos(), bucketSeq);
+    }
+
     private long doMatchOneGroup(GroupId groupId,
                                  boolean isUrgent,
                                  GlobalStateMgr globalStateMgr,
@@ -806,6 +811,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
                                                 tabletScheduler.blockingAddTabletCtxToScheduler(db, tabletCtx,
                                                         needToForceRepair(st, tablet,
                                                         bucketsSeq) || isPartitionUrgent /* forcefully add or not */);
+                                        if (LOG.isDebugEnabled() && result.first &&
+                                                st == TabletStatus.COLOCATE_MISMATCH) {
+                                            logDebugInfoForColocateMismatch(bucketsSeq, tablet);
+                                        }
+
                                         waitTotalTimeMs += result.second;
                                         if (result.first && tabletCtx.getRelocationForRepair()) {
                                             LOG.info("add tablet relocation task to scheduler, tablet id: {}, " +
