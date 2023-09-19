@@ -117,8 +117,13 @@ fi
 mkdir ut_ports
 
 if [[ $FILTER_TEST != "" ]];then
+
+    if [[ ${DUMPCASE} -ne 1 ]]; then
+        FILTER_TEST="${FILTER_TEST},com.starrocks.sql.dump.QueryDumpRegressionTest"
+    fi
+
     FILTER_TEST=`echo $FILTER_TEST | sed -E 's/([^,]+)/!\1/g'`
-    TEST_NAME="$TEST_NAME, $FILTER_TEST"
+    TEST_NAME="$TEST_NAME,$FILTER_TEST"
 fi
 
 if [ ${COVERAGE} -eq 1 ]; then
