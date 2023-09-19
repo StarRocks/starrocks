@@ -287,4 +287,11 @@ public class StructTypePlanTest extends PlanTestBase {
     //    FeConstants.runningUnitTest = true;
     //    String sql = "select c2_struct.c2_sub1 from array_struct_nest, unnest(c2) as t(c2_struct), "
     //}
+    @Test
+    public void testAggCTE() throws Exception {
+        String sql = "with stream as (select array_agg(c1.a) as t1 from test group by " +
+                "c0) select t1 from stream";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "Pruned type: 8 <-> [STRUCT<a int(11)>]");
+    }
 }
