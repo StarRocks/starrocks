@@ -1450,7 +1450,11 @@ public class DatabaseTransactionMgr {
             TransactionLogApplier applier = txnLogApplierFactory.create(table);
             applier.applyVisibleLog(transactionState, tableCommitInfo, db);
         }
-        GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows(transactionState);
+        try {
+            GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows(transactionState);
+        } catch (Throwable t) {
+            LOG.warn("update load rows failed for txn: {}", transactionState, t);
+        }
         return true;
     }
 
