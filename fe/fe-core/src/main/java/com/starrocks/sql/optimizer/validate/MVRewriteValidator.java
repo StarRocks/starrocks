@@ -137,8 +137,7 @@ public class MVRewriteValidator {
                 throw new IllegalArgumentException(errorMessage);
             } else {
                 String logMessage = hasRewriteSuccess ?
-                        "Query cannot be rewritten, please check the trace logs or " +
-                                "set enable_mv_optimizer_trace_log=on to find more information." :
+                        "Query cannot be rewritten, please check the trace logs to find more information." :
                         "Query has already been successfully rewritten, but it is not chosen as the best plan by cost.";
                 Tracers.log(Tracers.Module.MV, logMessage);
             }
