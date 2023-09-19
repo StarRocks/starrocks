@@ -22,7 +22,9 @@ import java.util.List;
 
 public class RangerStarRocksResource extends RangerAccessResourceImpl {
     public RangerStarRocksResource(ObjectType objectType, List<String> objectTokens) {
-        if (objectType.equals(ObjectType.USER)) {
+        if (objectType.equals(ObjectType.SYSTEM)) {
+            setValue(convertToRangerType(ObjectType.SYSTEM), "*");
+        } else if (objectType.equals(ObjectType.USER)) {
             setValue(convertToRangerType(ObjectType.USER), objectTokens.get(0));
         } else if (objectType.equals(ObjectType.CATALOG)) {
             setValue(convertToRangerType(ObjectType.CATALOG), objectTokens.get(0));
@@ -64,7 +66,9 @@ public class RangerStarRocksResource extends RangerAccessResourceImpl {
     }
 
     private String convertToRangerType(ObjectType objectType) {
-        if (objectType.equals(ObjectType.USER)) {
+        if (objectType.equals(ObjectType.SYSTEM)) {
+            return "system";
+        } else if (objectType.equals(ObjectType.USER)) {
             return "user";
         } else if (objectType.equals(ObjectType.CATALOG)) {
             return "catalog";
