@@ -509,6 +509,44 @@ std::size_t hash_value(DateTimeValue const& value);
 
 } // namespace starrocks
 
+namespace starrocks::joda {
+
+class JodaFormat : public starrocks::DateTimeValue {
+public:
+    JodaFormat() = default;
+    ~JodaFormat() = default;
+
+    bool prepare(std::string_view format);
+    bool parse(std::string_view str, DateTimeValue* output);
+
+private:
+    // Token parsers
+    std::vector<std::function<bool()>> _token_parsers;
+
+    // Cursor
+    const char* val = nullptr;
+    const char* val_end = nullptr;
+
+    bool date_part_used = false;
+    bool time_part_used = false;
+    bool frac_part_used = false;
+
+    int halfday = 0;
+    int weekday = -1;
+    int yearday = -1;
+    int week_num = -1;
+
+    cctz::time_zone ctz; // default UTC
+    bool has_timezone = false;
+
+    const bool strict_week_number = false;
+    const bool sunday_first = false;
+    const bool strict_week_number_year_type = false;
+    const int strict_week_number_year = -1;
+};
+
+} // namespace starrocks::joda
+
 namespace std {
 template <>
 struct hash<starrocks::DateTimeValue> {
