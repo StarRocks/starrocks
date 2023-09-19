@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.ScanOptimzeOption;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -72,8 +73,10 @@ public class PruneScanColumnRule extends TransformationRule {
             canUseAnyColumn = false;
         }
 
+        ScanOptimzeOption scanOptimzeOption = scanOperator.getScanOptimzeOption();
+        scanOptimzeOption.setCanUseAnyColumn(canUseAnyColumn);
+
         if (scanOperator.getColRefToColumnMetaMap().keySet().equals(outputColumns)) {
-            scanOperator.setCanUseAnyColumn(canUseAnyColumn);
             return Collections.emptyList();
         } else {
             Map<ColumnRefOperator, Column> newColumnRefMap = outputColumns.stream()
@@ -84,11 +87,9 @@ public class PruneScanColumnRule extends TransformationRule {
                 LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
                 LogicalOlapScanOperator newScanOperator = builder.withOperator(olapScanOperator)
                         .setColRefToColumnMetaMap(newColumnRefMap).build();
-                newScanOperator.setCanUseAnyColumn(canUseAnyColumn);
                 return Lists.newArrayList(new OptExpression(newScanOperator));
             } else {
                 LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scanOperator);
-                scanOperator.setCanUseAnyColumn(canUseAnyColumn);
                 Operator newScanOperator =
                         builder.withOperator(scanOperator).setColRefToColumnMetaMap(newColumnRefMap).build();
                 return Lists.newArrayList(new OptExpression(newScanOperator));

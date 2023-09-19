@@ -24,6 +24,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.ScanOptimzeOption;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -113,8 +114,9 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
             canUseAnyColumn = false;
         }
 
+        ScanOptimzeOption scanOptimzeOption = scanOperator.getScanOptimzeOption();
+        scanOptimzeOption.setCanUseAnyColumn(canUseAnyColumn);
         if (scanOperator.getOutputColumns().equals(new ArrayList<>(scanColumns))) {
-            scanOperator.setCanUseAnyColumn(canUseAnyColumn);
             return Collections.emptyList();
         } else {
             try {
@@ -131,7 +133,6 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                                 scanOperator.getPredicate());
 
                 newScanOperator.setScanOperatorPredicates(scanOperator.getScanOperatorPredicates());
-                newScanOperator.setCanUseAnyColumn(canUseAnyColumn);
                 return Lists.newArrayList(new OptExpression(newScanOperator));
             } catch (Exception e) {
                 throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
