@@ -1619,6 +1619,7 @@ public class StmtExecutor {
                             FrontendOptions.getLocalHostAddress()),
                     sourceType,
                     context.getSessionVariable().getQueryTimeoutS());
+            execPlan = StatementPlanner.plan(stmt, context);
 
             // add table indexes to transaction state
             txnState = GlobalStateMgr.getCurrentGlobalTransactionMgr()
@@ -1700,7 +1701,7 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
             coord.exec();
             coord.setTopProfileSupplier(this::buildTopLevelProfile);
-            coord.setExecPlanSupplier(() -> execPlan);
+            coord.setExecPlanSupplier(execPlan);
 
             long jobDeadLineMs = System.currentTimeMillis() + context.getSessionVariable().getQueryTimeoutS() * 1000;
             coord.join(context.getSessionVariable().getQueryTimeoutS());

@@ -203,7 +203,7 @@ public class Coordinator {
     private PQueryStatistics auditStatistics;
 
     private Supplier<RuntimeProfile> topProfileSupplier;
-    private Supplier<ExecPlan> execPlanSupplier;
+    private ExecPlan execPlanSupplier;
     private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis());
 
     // only used for sync stream load profile
@@ -487,7 +487,7 @@ public class Coordinator {
         this.topProfileSupplier = topProfileSupplier;
     }
 
-    public void setExecPlanSupplier(Supplier<ExecPlan> execPlanSupplier) {
+    public void setExecPlanSupplier(ExecPlan execPlanSupplier) {
         this.execPlanSupplier = execPlanSupplier;
     }
 
@@ -1539,7 +1539,7 @@ public class Coordinator {
                 now - lastTime > (connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 950L) &&
                 lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
             RuntimeProfile profile = topProfileSupplier.get();
-            ExecPlan plan = execPlanSupplier.get();
+            ExecPlan plan = execPlanSupplier;
             profile.addChild(buildMergedQueryProfile());
             ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
             ProfileManager.getInstance().pushProfile(profilingPlan, profile);
@@ -1914,7 +1914,7 @@ public class Coordinator {
         querySpillBytes.setValue(maxQuerySpillBytes);
 
         if (execPlanSupplier != null) {
-            newQueryProfile.addInfoString("Topology", execPlanSupplier.get().getProfilingPlan().toTopologyJson());
+            newQueryProfile.addInfoString("Topology", execPlanSupplier.getProfilingPlan().toTopologyJson());
         }
         Counter processTimer =
                 newQueryProfile.addCounter("FrontendProfileMergeTime", TUnit.TIME_NS, null);
