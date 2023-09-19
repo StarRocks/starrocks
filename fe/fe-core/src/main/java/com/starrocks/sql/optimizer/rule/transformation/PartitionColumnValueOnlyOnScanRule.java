@@ -52,7 +52,7 @@ public class PartitionColumnValueOnlyOnScanRule extends TransformationRule {
         // we can only apply this rule to the queries met all the following conditions:
         // 1. only contain MIN/MAX/COUNT DISTINCT agg functions
         // 2. scan operator only output partition columns.(right now we only support 1 column)
-        if (!singlePartitionColumnInScanOperator(scanOperator)) {
+        if (!allPartitionColumnInScanOperator(scanOperator)) {
             return false;
         }
 
@@ -71,7 +71,7 @@ public class PartitionColumnValueOnlyOnScanRule extends TransformationRule {
         return allValid;
     }
 
-    private static boolean singlePartitionColumnInScanOperator(LogicalScanOperator scanOperator) {
+    private static boolean allPartitionColumnInScanOperator(LogicalScanOperator scanOperator) {
         int pc = 0;
         Set<String> partitionColumns = scanOperator.getPartitionColumns();
         for (ColumnRefOperator c : scanOperator.getOutputColumns()) {
@@ -84,7 +84,7 @@ public class PartitionColumnValueOnlyOnScanRule extends TransformationRule {
                 pc += 1;
             }
         }
-        return pc == 1;
+        return pc > 0;
     }
 
     @Override
