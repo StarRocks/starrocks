@@ -211,4 +211,12 @@ public class StructTypePlanTest extends PlanTestBase {
                 "  |  5 <-> 2: c1.b[111]",
                 "Pruned type: 2 <-> [STRUCT<b ARRAY<STRUCT<a int(11), b int(11)>>>]");
     }
+
+    @Test
+    public void testAggCTE() throws Exception {
+        String sql = "with stream as (select array_agg(c1.a) as t1 from test group by " +
+                "c0) select t1 from stream";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "Pruned type: 8 <-> [STRUCT<a int(11)>]");
+    }
 }
