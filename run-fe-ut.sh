@@ -31,19 +31,16 @@ usage() {
 Usage: $0 <options>
   Optional options:
      --test [TEST_NAME]         run specific test
-     --filter [TEST_NAME]       skip run specific test,
-                                multiple tests separated by commas and enclosed in quotation marks
      --dry-run                  dry-run unit tests
      --coverage                 run coverage statistic tasks
      --dumpcase [PATH]          run dump case and save to path
 
   Eg.
-    $0                                            run all unit tests
-    $0 --test com.starrocks.utframe.Demo          run demo test
-    $0 --filter com.starrocks.utframe.Demo#Test0  skip run demo test0
-    $0 --dry-run                                  dry-run unit tests
-    $0 --coverage                                 run coverage statistic tasks
-    $0 --dumpcase /home/disk1/                    run dump case and save to path
+    $0                                          run all unit tests
+    $0 --test com.starrocks.utframe.Demo        run demo test
+    $0 --dry-run                                dry-run unit tests
+    $0 --coverage                               run coverage statistic tasks
+    $0 --dumpcase /home/disk1/                  run dump case and save to path
   "
   exit 1
 }
@@ -53,7 +50,6 @@ OPTS=$(getopt \
   -n $0 \
   -o '' \
   -l 'test:' \
-  -l 'filter:' \
   -l 'dry-run' \
   -l 'coverage' \
   -l 'dumpcase' \
@@ -71,18 +67,16 @@ HELP=0
 DRY_RUN=0
 RUN_SPECIFIED_TEST=0
 TEST_NAME=*
-FILTER_TEST=""
 COVERAGE=0
 DUMPCASE=0
-while true; do
+while true; do 
     case "$1" in
         --coverage) COVERAGE=1 ; shift ;;
         --test) RUN_SPECIFIED_TEST=1; TEST_NAME=$2; shift 2;;
-        --filter) FILTER_TEST=$2; shift 2;;
         --run) shift ;; # only used for compatibility
         --dumpcase) DUMPCASE=1; shift ;;
         --dry-run) DRY_RUN=1 ; shift ;;
-        --help) HELP=1 ; shift ;;
+        --help) HELP=1 ; shift ;; 
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -116,25 +110,24 @@ fi
 
 mkdir ut_ports
 
-if [[ $FILTER_TEST != "" ]];then
-    FILTER_TEST=`echo $FILTER_TEST | sed -E 's/([^,]+)/!\1/g'`
-    TEST_NAME="$TEST_NAME, $FILTER_TEST"
-fi
-
 if [ ${COVERAGE} -eq 1 ]; then
     echo "Run coverage statistic tasks"
     ant cover-test
 elif [ ${DUMPCASE} -eq 1 ]; then
     ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test=com.starrocks.sql.dump.QueryDumpRegressionTest -D dumpJsonConfig=$1
 else
-    if [ $DRY_RUN -eq 0 ]; then
-        if [ ${RUN_SPECIFIED_TEST} -eq 1 ]; then
-            echo "Run test: $TEST_NAME"
-        else
-            echo "Run All Frontend Unittests"
+    if [ ${RUN_SPECIFIED_TEST} -eq 1 ]; then
+        echo "Run test: $TEST_NAME"
+        if [ $DRY_RUN -eq 0 ]; then
+            # ./run-fe-ut.sh --test com.starrocks.utframe.Demo
+            # ./run-fe-ut.sh --test com.starrocks.utframe.Demo#testCreateDbAndTable+test2
+            # set trimStackTrace to false to show full stack when debugging specified class or case
+            ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test=$TEST_NAME
         fi
-
-        # set trimStackTrace to false to show full stack when debugging specified class or case
-        ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test="$TEST_NAME"
-    fi
+    else    
+        echo "Run All Frontend Unittests"
+        if [ $DRY_RUN -eq 0 ]; then
+            ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false
+        fi
+    fi 
 fi
