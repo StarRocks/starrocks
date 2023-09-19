@@ -1636,4 +1636,46 @@ public class ExpressionTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: v2 = 5: v5");
     }
+
+    @Test
+    public void testDateAddReduce() throws Exception {
+        String sql = "select date_add(date_add(date_add(v2, 1), 2), 3) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "days_add(CAST(2: v2 AS DATETIME), 6)");
+
+        sql = "select date_add(date_add(date_add(v2, -1), -2), -3) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "days_sub(CAST(2: v2 AS DATETIME), 6)");
+
+        sql = "select years_add(years_sub(years_sub(v2, -1), -2), -3) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 4> : CAST(2: v2 AS DATETIME)");
+
+        sql = "select date_add(date_add(date_sub(v2, -1), -2), -3) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "days_sub(CAST(2: v2 AS DATETIME), 4)");
+
+        sql = "select date_add(weeks_add(date_sub(v2, -1), -2), 3) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "days_add(weeks_add(days_sub(CAST(2: v2 AS DATETIME), -1), -2), 3)");
+
+        sql = "select adddate(subdate(adddate(v2, -1), 2), -3) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "days_sub(CAST(2: v2 AS DATETIME), 6)");
+
+        sql = "select months_add(months_add(months_sub(v2, -1), 2), NULL) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 4> : NULL");
+    }
+
+    @Test
+    public void testDateTrunc() throws Exception {
+        String sql = "select date_trunc('day', cast(v2 as date)) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 4> : CAST(2: v2 AS DATE)");
+
+        sql = "select date_trunc('day', cast(v2 as datetime)) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 4> : date_trunc('day', CAST(2: v2 AS DATETIME))");
+    }
 }
