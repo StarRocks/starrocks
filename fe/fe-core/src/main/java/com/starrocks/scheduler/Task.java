@@ -72,6 +72,8 @@ public class Task implements Writable {
     @SerializedName("createUser")
     private String createUser = AuthenticationMgr.ROOT_USER;
 
+    public Task() {}
+
     public Task(String name) {
         this.name = name;
         this.createTime = System.currentTimeMillis();
