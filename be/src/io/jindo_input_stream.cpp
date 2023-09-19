@@ -21,6 +21,11 @@
 namespace starrocks::io {
 
 StatusOr<int64_t> JindoInputStream::read(void* out, int64_t count) {
+    if (UNLIKELY(_open_handle == nullptr)) {
+        std::string msg = fmt::format("Failed to open {}, _open_handle is null", _file_path);
+        LOG(WARNING) << msg;
+        return Status::IOError(msg);
+    }
     if (UNLIKELY(_size == -1)) {
         ASSIGN_OR_RETURN(_size, JindoInputStream::get_size());
     }
@@ -35,13 +40,12 @@ StatusOr<int64_t> JindoInputStream::read(void* out, int64_t count) {
         JdoContext_t jdo_read_ctx = jdo_createContext2(_jindo_client, _open_handle);
         bytes = jdo_pread(jdo_read_ctx, buffer + bytes_read, bytes_to_read, _offset);
         Status read_status = check_jindo_status(jdo_read_ctx);
+        jdo_freeContext(jdo_read_ctx);
         if (UNLIKELY(!read_status.ok())) {
             LOG(ERROR) << fmt::format("Failed to read the file {}, offset = {}, length = {}", _file_path, _offset,
                                       bytes_to_read);
-            jdo_freeContext(jdo_read_ctx);
             return read_status;
         }
-        jdo_freeContext(jdo_read_ctx);
         if (bytes < 0) {
             break;
         }
@@ -72,25 +76,33 @@ StatusOr<int64_t> JindoInputStream::position() {
 
 StatusOr<int64_t> JindoInputStream::get_size() {
     if (_size == -1) {
-        JdoContext_t jdo_ctx = jdo_createContext1(_jindo_client);
-        bool file_exist = jdo_exists(jdo_ctx, _file_path.c_str());
-        if (UNLIKELY(!file_exist)) {
-            std::string msg = fmt::format("File {} does not exist, request offset = {}", _file_path, _offset);
-            LOG(ERROR) << msg;
+        {
+            JdoContext_t jdo_ctx = jdo_createContext1(_jindo_client);
+            bool file_exist = jdo_exists(jdo_ctx, _file_path.c_str());
+            Status get_status = check_jindo_status(jdo_ctx);
             jdo_freeContext(jdo_ctx);
-            return Status::IOError(msg);
+            if (UNLIKELY(!get_status.ok())) {
+                LOG(ERROR) << "Failed to execute jdo_exists for " << _file_path;
+                return Status::IOError(_file_path);
+            }
+            if (UNLIKELY(!file_exist)) {
+                std::string msg = fmt::format("File {} does not exist, request offset = {}", _file_path, _offset);
+                LOG(ERROR) << msg;
+                return Status::IOError(msg);
+            }
         }
-
-        JdoFileStatus_t info;
-        jdo_getFileStatus(jdo_ctx, _file_path.c_str(), &info);
-        Status get_status = check_jindo_status(jdo_ctx);
-        if (UNLIKELY(!get_status.ok())) {
-            LOG(ERROR) << fmt::format("Failed to get the size of file {}", _file_path);
+        {
+            JdoFileStatus_t info;
+            JdoContext_t jdo_ctx = jdo_createContext1(_jindo_client);
+            jdo_getFileStatus(jdo_ctx, _file_path.c_str(), &info);
+            Status get_status = check_jindo_status(jdo_ctx);
             jdo_freeContext(jdo_ctx);
-            return get_status;
+            if (UNLIKELY(!get_status.ok())) {
+                LOG(ERROR) << fmt::format("Failed to get the size of file {}", _file_path);
+                return get_status;
+            }
+            _size = jdo_getFileStatusFileSize(info);
         }
-        jdo_freeContext(jdo_ctx);
-        _size = jdo_getFileStatusFileSize(info);
     }
     return _size;
 }

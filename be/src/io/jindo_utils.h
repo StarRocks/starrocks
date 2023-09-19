@@ -32,7 +32,6 @@ inline Status check_jindo_status(JdoContext_t jdo_ctx) {
         if (msg != nullptr) {
             error_msg.assign(msg);
         }
-        jdo_freeContext(jdo_ctx);
         std::string message = fmt::format("jindo error, code = {}, message = {}", code, error_msg);
         LOG(WARNING) << message;
         return Status::IOError(message);

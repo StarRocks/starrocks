@@ -29,12 +29,15 @@ public:
         JdoContext_t jdo_ctx = jdo_createContext1(_jindo_client);
         _write_handle = jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_CREATE | JDO_OPEN_FLAG_APPEND, 0777);
         Status init_status = io::check_jindo_status(jdo_ctx);
-        if (init_status.ok()) {
-            jdo_freeContext(jdo_ctx);
-        }
+        jdo_freeContext(jdo_ctx);
     }
 
-    ~JindoOutputStream() override = default;
+    ~JindoOutputStream() override {
+        if (_write_handle) {
+            jdo_freeHandle(_write_handle);
+            _write_handle = nullptr;
+        }
+    };
 
     // Disallow copy and assignment
     JindoOutputStream(const JindoOutputStream&) = delete;

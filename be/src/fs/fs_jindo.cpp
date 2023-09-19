@@ -96,6 +96,7 @@ bool JindoClientFactory::option_equals(const JdoOptions_t& left, const JdoOption
 }
 
 JindoClientFactory::JindoClientFactory() : _rand((int)::time(nullptr)) {
+    // Priority order: 1. jindosdk.cfg 2. be.conf
     std::lock_guard l(_lock);
     std::string jindosdk_conf_path = getenv("STARROCKS_HOME");
     jindosdk_conf_path.append("/conf/jindosdk.cfg");
@@ -115,7 +116,7 @@ JindoClientFactory::JindoClientFactory() : _rand((int)::time(nullptr)) {
 StatusOr<std::string> JindoClientFactory::get_local_user() {
     uid_t euid;
     int buf_size;
-    static struct passwd epwd, *result = nullptr;
+    struct passwd epwd, *result = nullptr;
     euid = geteuid();
     if ((buf_size = sysconf(_SC_GETPW_R_SIZE_MAX)) == -1) {
         std::string msg = "Invalid input: sysconf function failed to get the configure with key _SC_GETPW_R_SIZE_MAX.";
@@ -123,21 +124,28 @@ StatusOr<std::string> JindoClientFactory::get_local_user() {
     }
 
     std::vector<char> buffer(buf_size);
-
     if (getpwuid_r(euid, &epwd, &buffer[0], buf_size, &result) != 0 || !result) {
         std::string msg = "Invalid input: effective user name cannot be found with UID.";
         return Status::IOError(msg);
     }
 
-    static std::string username(epwd.pw_name);
+    std::string username(epwd.pw_name);
     return username;
 }
 
-std::tuple<std::string, std::string, std::string> JindoClientFactory::get_credentials(const S3URI& uri,
-                                                                                      const FSOptions& opts) {
+JdoOptions_t JindoClientFactory::get_jindo_options(const S3URI& uri, const FSOptions& opts) {
+    // Priority order: 1. properties in catalog definition 2. _jindo_config_map
     std::string endpoint = "";
     std::string ak_id = "";
     std::string ak_secret = "";
+
+    // load default configs from jindosdk.cfg and be.conf (_jindo_config_map)
+    JdoOptions_t jdo_options = jdo_createOptions();
+    for (auto& kv : _jindo_config_map) {
+        jdo_setOption(jdo_options, kv.first.c_str(), kv.second.c_str());
+    }
+
+    // load properties in catalog definition
     const THdfsProperties* hdfs_properties = opts.hdfs_properties();
     if ((hdfs_properties != nullptr && hdfs_properties->__isset.cloud_configuration) ||
         (opts.cloud_configuration != nullptr && opts.cloud_configuration->cloud_type != TCloudType::DEFAULT)) {
@@ -168,31 +176,26 @@ std::tuple<std::string, std::string, std::string> JindoClientFactory::get_creden
         }
     }
 
+    // The endpoint specified in the uri is always the first priority
     if (!uri.endpoint().empty()) {
         endpoint = uri.endpoint();
     }
-    return std::make_tuple(endpoint, ak_id, ak_secret);
-}
 
-StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSOptions& opts) {
-    std::lock_guard l(_lock);
-
-    auto jdo_options = jdo_createOptions();
-
-    auto [endpoint, access_key, secret_key] = get_credentials(uri, opts);
-
-    if (!access_key.empty() && !secret_key.empty()) {
-        jdo_setOption(jdo_options, OSS_ACCESS_KEY_ID, access_key.c_str());
-        jdo_setOption(jdo_options, OSS_ACCESS_KEY_SECRET, secret_key.c_str());
-    } else {
-        for (auto& kv : _jindo_config_map) {
-            jdo_setOption(jdo_options, kv.first.c_str(), kv.second.c_str());
-        }
+    if (!ak_id.empty()) {
+        jdo_setOption(jdo_options, OSS_ACCESS_KEY_ID, ak_id.c_str());
+    }
+    if (!ak_secret.empty()) {
+        jdo_setOption(jdo_options, OSS_ACCESS_KEY_SECRET, ak_secret.c_str());
     }
     if (!endpoint.empty()) {
         jdo_setOption(jdo_options, OSS_ENDPOINT_KEY, endpoint.c_str());
     }
+    return jdo_options;
+}
 
+StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSOptions& opts) {
+    std::lock_guard l(_lock);
+    auto jdo_options = get_jindo_options(uri, opts);
     std::string uri_prefix = uri.scheme() + "://" + uri.bucket();
 
     for (size_t i = 0; i < _items; i++) {
@@ -204,23 +207,27 @@ StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSO
 
     LOG(INFO) << "Creating jindo client for " << uri_prefix;
     JdoSystem_t client = jdo_createSystem(jdo_options, uri_prefix.c_str());
-    auto jdo_ctx = jdo_createContext1(client);
     ASSIGN_OR_RETURN(auto user_name, get_local_user())
     auto jdo_login_user = jdo_createLoginUser(user_name.c_str());
+    auto jdo_ctx = jdo_createContext1(client);
     jdo_init(jdo_ctx, jdo_login_user);
     Status init_status = io::check_jindo_status(jdo_ctx);
+    jdo_freeContext(jdo_ctx);
     if (UNLIKELY(!init_status.ok())) {
         LOG(ERROR) << fmt::format("Failed to init the jindo file system for {} and file {}.", uri_prefix, uri.key());
         if (client != nullptr) {
             LOG(INFO) << "Free invalid jindo client for " << uri_prefix;
             JdoContext_t ctx = jdo_createContext1(client);
             jdo_destroySystem(ctx);
+            Status destroy_status = io::check_jindo_status(ctx);
             jdo_freeContext(ctx);
+            if (UNLIKELY(!destroy_status.ok())) {
+                return destroy_status;
+            }
             jdo_freeSystem(client);
         }
         return init_status;
     }
-    jdo_freeContext(jdo_ctx);
 
     if (UNLIKELY(_items >= MAX_CLIENTS_ITEMS)) {
         int idx = _rand.Uniform(MAX_CLIENTS_ITEMS);
@@ -229,7 +236,11 @@ StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSO
         auto old_client = _clients[idx];
         JdoContext_t ctx = jdo_createContext1(old_client);
         jdo_destroySystem(ctx);
+        Status destroy_status = io::check_jindo_status(ctx);
         jdo_freeContext(ctx);
+        if (UNLIKELY(!destroy_status.ok())) {
+            return destroy_status;
+        }
         jdo_freeSystem(old_client);
 
         _configs[idx] = jdo_options;
@@ -295,11 +306,11 @@ Status JindoFileSystem::path_exists(const std::string& path) {
     auto jdo_ctx = jdo_createContext1(client);
     bool result = jdo_exists(jdo_ctx, path.c_str());
     Status status = io::check_jindo_status(jdo_ctx);
+    jdo_freeContext(jdo_ctx);
     if (UNLIKELY(!status.ok())) {
-        LOG(ERROR) << "Failed to get jdo_exists for " << path;
+        LOG(ERROR) << "Failed to execute jdo_exists for " << path;
         return Status::IOError(path);
     }
-    jdo_freeContext(jdo_ctx);
     return result ? Status::OK() : Status::NotFound(path);
 }
 
@@ -322,11 +333,11 @@ Status JindoFileSystem::iterate_dir(const std::string& dir, const std::function<
     auto jdo_ctx = jdo_createContext1(client);
     jdo_listDirectory(jdo_ctx, ndir.c_str(), false, &listResult);
     status = io::check_jindo_status(jdo_ctx);
+    jdo_freeContext(jdo_ctx);
     if (UNLIKELY(!status.ok())) {
         LOG(ERROR) << "Failed to execute jdo_listDirectory for " << dir;
         return Status::IOError(dir);
     }
-    jdo_freeContext(jdo_ctx);
 
     auto num_entries = jdo_getListDirectoryResultSize(listResult);
     for (int i = 0; i < num_entries; i++) {
@@ -372,11 +383,11 @@ Status JindoFileSystem::iterate_dir2(const std::string& dir, const std::function
     auto jdo_ctx = jdo_createContext1(client);
     jdo_listDirectory(jdo_ctx, ndir.c_str(), false, &listResult);
     status = io::check_jindo_status(jdo_ctx);
+    jdo_freeContext(jdo_ctx);
     if (UNLIKELY(!status.ok())) {
         LOG(ERROR) << "Failed to execute jdo_listDirectory for " << dir;
         return Status::IOError(dir);
     }
-    jdo_freeContext(jdo_ctx);
 
     auto num_entries = jdo_getListDirectoryResultSize(listResult);
     for (int i = 0; i < num_entries; i++) {
@@ -423,11 +434,11 @@ Status JindoFileSystem::remove_internal(const std::string& path, bool recursive)
     auto jdo_ctx = jdo_createContext1(client);
     bool result = jdo_remove(jdo_ctx, path.c_str(), recursive);
     status = io::check_jindo_status(jdo_ctx);
+    jdo_freeContext(jdo_ctx);
     if (UNLIKELY(!status.ok())) {
         LOG(ERROR) << "Failed to execute jdo_remove for " << path;
         return Status::IOError(path);
     }
-    jdo_freeContext(jdo_ctx);
     return result ? Status::OK() : Status::IOError(path);
 }
 
@@ -447,13 +458,13 @@ Status JindoFileSystem::create_dir_internal(const std::string& dirname, bool rec
     }
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
     auto jdo_ctx = jdo_createContext1(client);
-    bool result = jdo_mkdir(jdo_ctx, dirname.c_str(), recursive, 777);
+    bool result = jdo_mkdir(jdo_ctx, dirname.c_str(), recursive, 0777);
     status = io::check_jindo_status(jdo_ctx);
+    jdo_freeContext(jdo_ctx);
     if (UNLIKELY(!status.ok())) {
         LOG(ERROR) << "Failed to execute jdo_mkdir for " << dirname;
         return Status::IOError(dirname);
     }
-    jdo_freeContext(jdo_ctx);
     return result ? Status::OK() : Status::IOError(dirname);
 }
 
@@ -511,42 +522,55 @@ StatusOr<JdoFileStatus_t> JindoFileSystem::get_file_status(const std::string& pa
     }
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
 
-    auto jdo_ctx = jdo_createContext1(client);
-    bool has_cap_of_symlink = jdo_hasCapOf(jdo_ctx, path.c_str(), JDO_STORE_SYMLINK);
-    status = io::check_jindo_status(jdo_ctx);
-    if (UNLIKELY(!status.ok())) {
-        LOG(ERROR) << "Failed to execute jdo_hasCapOf for " << path;
-        return Status::IOError(path);
+    bool has_cap_of_symlink = false;
+    {
+        auto jdo_ctx = jdo_createContext1(client);
+        has_cap_of_symlink = jdo_hasCapOf(jdo_ctx, path.c_str(), JDO_STORE_SYMLINK);
+        status = io::check_jindo_status(jdo_ctx);
+        jdo_freeContext(jdo_ctx);
+        if (UNLIKELY(!status.ok())) {
+            LOG(ERROR) << "Failed to execute jdo_hasCapOf for " << path;
+            return Status::IOError(path);
+        }
     }
 
-    JdoFileStatus_t file_status;
-    if (!has_cap_of_symlink) {
-        jdo_getFileStatus(jdo_ctx, path.c_str(), &file_status);
-    } else {
-        jdo_getFileLinkStatus(jdo_ctx, path.c_str(), &file_status);
+    {
+        auto jdo_ctx = jdo_createContext1(client);
+        JdoFileStatus_t file_status;
+        if (!has_cap_of_symlink) {
+            jdo_getFileStatus(jdo_ctx, path.c_str(), &file_status);
+        } else {
+            jdo_getFileLinkStatus(jdo_ctx, path.c_str(), &file_status);
+        }
+        status = io::check_jindo_status(jdo_ctx);
+        jdo_freeContext(jdo_ctx);
+        if (UNLIKELY(!status.ok())) {
+            LOG(ERROR) << "Failed to execute jdo_getFileStatus for " << path;
+            return Status::IOError(path);
+        }
+        return file_status;
     }
-    status = io::check_jindo_status(jdo_ctx);
-    if (UNLIKELY(!status.ok())) {
-        LOG(ERROR) << "Failed to execute jdo_getFileStatus for " << path;
-        return Status::IOError(path);
-    }
-    jdo_freeContext(jdo_ctx);
-    return file_status;
 }
 
 StatusOr<bool> JindoFileSystem::is_directory(const std::string& path) {
     ASSIGN_OR_RETURN(auto file_status, get_file_status(path))
-    return jdo_getFileStatusFileType(file_status) == JDO_FILE_TYPE_DIRECTORY;
+    bool re = jdo_getFileStatusFileType(file_status) == JDO_FILE_TYPE_DIRECTORY;
+    jdo_freeFileStatus(file_status);
+    return re;
 }
 
 StatusOr<uint64_t> JindoFileSystem::get_file_size(const std::string& path) {
     ASSIGN_OR_RETURN(auto file_status, get_file_status(path))
-    return jdo_getFileStatusFileSize(file_status);
+    uint64_t re = jdo_getFileStatusFileSize(file_status);
+    jdo_freeFileStatus(file_status);
+    return re;
 }
 
 StatusOr<uint64_t> JindoFileSystem::get_file_modified_time(const std::string& path) {
     ASSIGN_OR_RETURN(auto file_status, get_file_status(path))
-    return jdo_getFileStatusMtime(file_status);
+    uint64_t re = jdo_getFileStatusMtime(file_status);
+    jdo_freeFileStatus(file_status);
+    return re;
 }
 
 Status JindoFileSystem::rename_file(const std::string& src, const std::string& target) {
@@ -567,11 +591,11 @@ Status JindoFileSystem::rename_file(const std::string& src, const std::string& t
     auto jdo_ctx = jdo_createContext1(client);
     bool result = jdo_rename(jdo_ctx, src.c_str(), target.c_str());
     status = io::check_jindo_status(jdo_ctx);
+    jdo_freeContext(jdo_ctx);
     if (UNLIKELY(!status.ok())) {
         LOG(ERROR) << "Failed to execute jdo_rename from " << src << " to " << target;
         return Status::IOError(src);
     }
-    jdo_freeContext(jdo_ctx);
     return result ? Status::OK() : Status::IOError(src);
 }
 

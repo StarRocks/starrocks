@@ -19,21 +19,25 @@
 namespace starrocks::io {
 
 Status JindoOutputStream::write(const void* data, int64_t size) {
+    if (UNLIKELY(_write_handle == nullptr)) {
+        std::string msg = fmt::format("Failed to open {}, _write_handle is null", _file_path);
+        LOG(WARNING) << msg;
+        return Status::IOError(msg);
+    }
     _buffer.append(static_cast<const char*>(data), size);
 
     JdoContext_t jdo_write_ctx = jdo_createContext2(_jindo_client, _write_handle);
     jdo_write(jdo_write_ctx, static_cast<const char*>(data), size);
     Status status = io::check_jindo_status(jdo_write_ctx);
+    jdo_freeContext(jdo_write_ctx);
     if (UNLIKELY(!status.ok())) {
         LOG(ERROR) << "Failed to execute jdo_write";
-        jdo_freeContext(jdo_write_ctx);
         return Status::IOError("");
     }
     // 128MB
     if (size > 134217728) {
         RETURN_IF_ERROR(flush());
     }
-    jdo_freeContext(jdo_write_ctx);
     return Status::OK();
 }
 
@@ -41,21 +45,23 @@ Status JindoOutputStream::flush() {
     JdoContext_t jdo_write_ctx = jdo_createContext2(_jindo_client, _write_handle);
     jdo_flush(jdo_write_ctx);
     Status status = io::check_jindo_status(jdo_write_ctx);
+    jdo_freeContext(jdo_write_ctx);
     if (UNLIKELY(!status.ok())) {
         LOG(ERROR) << "Failed to execute jdo_flush";
-        jdo_freeContext(jdo_write_ctx);
         return Status::IOError("");
     }
-    jdo_freeContext(jdo_write_ctx);
     return Status::OK();
 }
 
 Status JindoOutputStream::close() {
     auto jdo_ctx = jdo_createContext2(_jindo_client, _write_handle);
     jdo_close(jdo_ctx);
+    Status status = io::check_jindo_status(jdo_ctx);
     jdo_freeContext(jdo_ctx);
-    jdo_freeHandle(_write_handle);
-    _write_handle = nullptr;
+    if (UNLIKELY(!status.ok())) {
+        LOG(ERROR) << "Failed to execute jdo_close";
+        return Status::IOError("");
+    }
     return Status::OK();
 }
 
