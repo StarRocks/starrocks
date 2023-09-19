@@ -341,7 +341,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("col_int", "int", null));
         cols.add(new FieldSchema("col_struct", "struct<c0: int, c1: struct<c11: int>>", null));
         StorageDescriptor sd =
-                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                new StorageDescriptor(cols, "", "", "", false,
                         -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
 
         CaseInsensitiveMap<String, ColumnStatistic> regionStats = new CaseInsensitiveMap<>();
