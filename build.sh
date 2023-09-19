@@ -40,6 +40,31 @@ MACHINE_TYPE=$(uname -m)
 
 export STARROCKS_HOME=${ROOT}
 
+<<<<<<< HEAD
+=======
+if [ -z $BUILD_TYPE ]; then
+    export BUILD_TYPE=Release
+fi
+
+cd $STARROCKS_HOME
+if [ -z $STARROCKS_VERSION ]; then
+    tag_name=$(git describe --tags --exact-match 2>/dev/null)
+    branch_name=$(git symbolic-ref -q --short HEAD)
+    if [ ! -z $tag_name ]; then
+        export STARROCKS_VERSION=$tag_name
+    elif [ ! -z $branch_name ]; then
+        export STARROCKS_VERSION=$branch_name
+    else
+        export STARROCKS_VERSION=$(git rev-parse --short=7 HEAD)
+    fi
+fi
+
+if [ -z $STARROCKS_COMMIT_HASH]; then
+    export STARROCKS_COMMIT_HASH=$(git rev-parse --short=7 HEAD)
+fi
+
+set -eo pipefail
+>>>>>>> c047fdb69b ([Enhancement]Set the commit hash to a fixed length. (#31425))
 . ${STARROCKS_HOME}/env.sh
 
 if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/fast_float/fast_float.h ]]; then
