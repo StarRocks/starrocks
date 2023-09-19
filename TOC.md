@@ -719,6 +719,7 @@
   + [用户自定义变量](/reference/user_defined_variables.md)
   + [错误码](/reference/Error_code.md)
   + [系统限制](/reference/System_limit.md)
+  + [AWS IAM 策略](/reference/aws_iam_policies.md)
 + 常见问题解答
   + [部署运维](/faq/Deploy_faq.md)
   + 导入导出
