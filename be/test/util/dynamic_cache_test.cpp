@@ -68,4 +68,32 @@ TEST(DynamicCacheTest, cache) {
     ASSERT_TRUE(cache.get(19) == nullptr);
 }
 
+TEST(DynamicCacheTest, cache_expired_with_timeout) {
+    size_t N = 1000000;
+    DynamicCache<int32_t, int64_t> cache(N);
+    for (int i = 0; i < N; i++) {
+        auto e = cache.get_or_create(i);
+        cache.update_object_size(e, 1);
+        // make it already expire
+        e->update_expire_time(MonotonicMillis() - 10);
+        cache.release(e);
+    }
+    // try to clear expired cache
+    cache.clear_expired();
+    ASSERT_EQ(0, cache.size());
+    ASSERT_TRUE(cache.get(0) == nullptr);
+    ASSERT_TRUE(cache.get(N - 1) == nullptr);
+    // try to add again
+    for (int i = 0; i < N; i++) {
+        auto e = cache.get_or_create(i);
+        cache.update_object_size(e, 1);
+        // make it already expire
+        e->update_expire_time(MonotonicMillis() - 10);
+        cache.release(e);
+    }
+    // try to clear expired cache with timeout = 1ms
+    cache.clear_expired_with_timeout(1);
+    ASSERT_TRUE(cache.size() > 0);
+}
+
 } // namespace starrocks

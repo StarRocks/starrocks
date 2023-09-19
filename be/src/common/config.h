@@ -1054,4 +1054,8 @@ CONF_mBool(dump_metrics_with_bvar, "true");
 
 CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 
+// control the timeout of clearing expire state in primary key
+// 0 means no timeout
+CONF_mInt64(clear_expire_primary_key_state_timeout_millis, "0");
+
 } // namespace starrocks::config

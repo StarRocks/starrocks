@@ -236,26 +236,9 @@ public:
     }
 
     // clear all unused *and* expired objects
-    void clear_expired() {
-        int64_t now = MonotonicMillis();
-        std::lock_guard<std::mutex> lg(_lock);
-        auto itr = _list.begin();
-        while (itr != _list.end()) {
-            Entry* entry = (*itr);
-            if (entry->_ref == 1 && now >= entry->_expire_ms) {
-                // no usage, can remove
-                _map.erase(entry->key());
-                itr = _list.erase(itr);
-                _object_size--;
-                _size -= entry->_size;
-                if (_mem_tracker) _mem_tracker->release(entry->_size);
-                // TODO(cbl): delete without holding lock
-                delete entry;
-            } else {
-                itr++;
-            }
-        }
-    }
+    void clear_expired() { _clear_expired(0); }
+
+    void clear_expired_with_timeout(int64_t timeout_millis) { _clear_expired(timeout_millis); }
 
     // clear all currently unused objects
     void clear() {
@@ -329,6 +312,37 @@ private:
             }
         }
         return _size <= _capacity;
+    }
+
+    // clear all unused *and* expired objects, but make sure the time cost must less than
+    // `timeout_millis`, to avoid hold `_lock` too long.
+    // if `timeout_millis` <= 0, that means we can ignore it.
+    void _clear_expired(int64_t timeout_millis) {
+        int64_t now = MonotonicMillis();
+        std::lock_guard<std::mutex> lg(_lock);
+        auto itr = _list.begin();
+        while (itr != _list.end() && !_timeout(now, timeout_millis)) {
+            Entry* entry = (*itr);
+            if (entry->_ref == 1 && now >= entry->_expire_ms) {
+                // no usage, can remove
+                _map.erase(entry->key());
+                itr = _list.erase(itr);
+                _object_size--;
+                _size -= entry->_size;
+                if (_mem_tracker) _mem_tracker->release(entry->_size);
+                // TODO(cbl): delete without holding lock
+                delete entry;
+            } else {
+                itr++;
+            }
+        }
+    }
+
+    bool _timeout(int64_t from, int64_t timeout_millis) {
+        if (timeout_millis > 0 && from + timeout_millis < MonotonicMillis()) {
+            return true;
+        }
+        return false;
     }
 
     bool _evict() { return _evict(_capacity); }

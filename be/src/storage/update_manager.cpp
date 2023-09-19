@@ -367,12 +367,13 @@ void UpdateManager::expire_cache() {
                 [](const int& accumulated, const auto& p) { return accumulated + p.second->memory_usage(); }));
     }
     if (MonotonicMillis() - _last_clear_expired_cache_millis > _cache_expire_ms) {
-        _update_state_cache.clear_expired();
-        _update_column_state_cache.clear_expired();
+        // make sure clear expired cache won't hold lock too long
+        _update_state_cache.clear_expired_with_timeout(config::clear_expire_primary_key_state_timeout_millis);
+        _update_column_state_cache.clear_expired_with_timeout(config::clear_expire_primary_key_state_timeout_millis);
 
         ssize_t orig_size = _index_cache.size();
         ssize_t orig_obj_size = _index_cache.object_size();
-        _index_cache.clear_expired();
+        _index_cache.clear_expired_with_timeout(config::clear_expire_primary_key_state_timeout_millis);
         ssize_t size = _index_cache.size();
         ssize_t obj_size = _index_cache.object_size();
         LOG(INFO) << strings::Substitute("index cache expire: before:($0 $1) after:($2 $3) expire: ($4 $5)",
