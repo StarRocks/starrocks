@@ -23,6 +23,7 @@ import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class LogUtil {
@@ -60,6 +61,12 @@ public class LogUtil {
         queryDetail.setDatabase(authPacket == null ? "null" : authPacket.getDb());
         queryDetail.setErrorMessage(ctx.getState().getErrorMessage());
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
+    }
+
+    public static List<String> getCurrentStackTraceToList() {
+        return Arrays.stream(Thread.currentThread().getStackTrace())
+                .map(StackTraceElement::toString)
+                .collect(Collectors.toList());
     }
 
     public static String getCurrentStackTrace() {
