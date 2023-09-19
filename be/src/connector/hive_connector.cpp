@@ -19,6 +19,7 @@
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
+#include "exec/hdfs_scanner_partition.h"
 #include "exec/hdfs_scanner_text.h"
 #include "exec/jni_scanner.h"
 #include "exprs/expr.h"
@@ -593,8 +594,15 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.use_paimon_jni_reader) {
         use_paimon_jni_reader = scan_range.use_paimon_jni_reader;
     }
+    bool use_partition_column_value_only = false;
+    if (hdfs_scan_node.__isset.use_partition_column_value_only) {
+        use_partition_column_value_only = hdfs_scan_node.use_partition_column_value_only;
+    }
 
-    if (use_paimon_jni_reader) {
+    if (use_partition_column_value_only) {
+        DCHECK(_can_use_any_column);
+        scanner = _pool.add(new HdfsPartitionScanner());
+    } else if (use_paimon_jni_reader) {
         scanner = _create_paimon_jni_scanner(fsOptions);
     } else if (use_hudi_jni_reader) {
         scanner = _create_hudi_jni_scanner();
