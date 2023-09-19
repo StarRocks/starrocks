@@ -393,7 +393,7 @@ public class BrokerLoadJob extends BulkLoadJob {
             } catch (CommitRateExceededException e) {
                 // Sleep and retry.
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(Math.max(e.getAllowCommitTime() - System.currentTimeMillis(), 0));
-            } catch (Exception e) {
+            } catch (UserException e) {
                 LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
                         .add("database_id", dbId)
                         .add("error_msg", "Failed to commit txn with error:" + e.getMessage())
