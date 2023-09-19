@@ -87,7 +87,7 @@ SET [GLOBAL | SESSION] group_concat_max_len = <value>;
    +---------------------------+
   ```
 
- Example 2: Concatenate distinct names into a string with the default separator and with null values ignored. Duplicate names are removed.
+  Example 2: Concatenate distinct names into a string with the default separator and with null values ignored. Duplicate names are removed.
 
   ```sql
    select group_concat(distinct name) as res from ss;
