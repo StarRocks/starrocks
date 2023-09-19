@@ -223,7 +223,7 @@ public class ExpressionAnalyzer {
                 funcName = expression.toString();
             }
             throw new SemanticException(funcName + " can't use lambda functions, " +
-                    "as it is not a supported high-order function.");
+                    "as it is not a supported high-order function");
         }
         int childSize = expression.getChildren().size();
         // move the lambda function to the first if it is at the last.
@@ -247,7 +247,7 @@ public class ExpressionAnalyzer {
                     expr.setType(Type.ARRAY_INT); // Let it have item type.
                 }
                 if (!expr.getType().isArrayType()) {
-                    throw new SemanticException(i + "th lambda input should be arrays.");
+                    throw new SemanticException(i + "-th lambda input ( " + expr + " ) should be arrays");
                 }
                 Type itemType = ((ArrayType) expr.getType()).getItemType();
                 scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
@@ -269,7 +269,7 @@ public class ExpressionAnalyzer {
                 expr.setType(Type.ANY_MAP); // Let it have item type.
             }
             if (!expr.getType().isMapType()) {
-                throw new SemanticException("Lambda inputs should be maps.");
+                throw new SemanticException("Lambda input ( " + expr.toSql() + " ) should be maps");
             }
             Type keyType = ((MapType) expr.getType()).getKeyType();
             Type valueType = ((MapType) expr.getType()).getValueType();
@@ -283,14 +283,26 @@ public class ExpressionAnalyzer {
     }
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
-        if (expression.hasLambdaFunction(expression)) {
-            analyzeHighOrderFunction(visitor, expression, scope);
+        boolean hasLambdaFunc = false;
+        try {
+            hasLambdaFunc = expression.hasLambdaFunction(expression);
+        } catch (SemanticException e) {
+            throw e.appendOnlyOnceMsg(expression.toSql());
+        }
+        if (hasLambdaFunc) {
+            String originalSQL = expression.toSql();
+            try {
+                analyzeHighOrderFunction(visitor, expression, scope);
+                visitor.visit(expression, scope);
+            } catch (SemanticException e) {
+                throw e.appendOnlyOnceMsg(originalSQL);
+            }
         } else {
             for (Expr expr : expression.getChildren()) {
                 bottomUpAnalyze(visitor, expr, scope);
             }
+            visitor.visit(expression, scope);
         }
-        visitor.visit(expression, scope);
     }
 
     static class Visitor extends AstVisitor<Void, Scope> {
