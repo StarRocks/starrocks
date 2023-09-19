@@ -254,7 +254,11 @@ public class ShowMaterializedViewStatus {
 
     // Add a field to the result set
     private void addField(List<String> resultRow, Object field) {
-        resultRow.add(String.valueOf(field));
+        if (field == null) {
+            resultRow.add("");
+        } else {
+            resultRow.add(String.valueOf(field));
+        }
     }
 
     // Fill with empty fields

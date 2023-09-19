@@ -593,6 +593,10 @@ public class ShowExecutor {
             if (mvTable.getPartitionInfo() != null && mvTable.getPartitionInfo().getType() != null) {
                 mvStatus.setPartitionType(mvTable.getPartitionInfo().getType().toString());
             }
+            // row count
+            mvStatus.setRows(mvTable.getRowCount());
+            // materialized view ddl
+            mvStatus.setText(mvTable.getMaterializedViewDdlStmt(true));
             // task run status
             mvStatus.setLastTaskRunStatus(taskStatus);
             rowSets.add(mvStatus);
@@ -617,6 +621,8 @@ public class ShowExecutor {
                 Partition partition = olapTable.getPartitions().iterator().next();
                 MaterializedIndex index = partition.getIndex(mvId);
                 mvStatus.setRows(index.getRowCount());
+            } else {
+                mvStatus.setRows(0L);
             }
             if (mvMeta.getOriginStmt() == null) {
                 String mvName = olapTable.getIndexNameById(mvId);
