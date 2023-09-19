@@ -614,18 +614,25 @@ StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_
 }
 
 StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, int64_t* version_hint) {
-// TODO: Eliminate the explicit dependency on staros worker
+    // 1. direct lookup in cache, if there is schema info for the tablet
+    auto cache_key = tablet_schema_cache_key(tablet_id);
+    auto ptr = lookup_tablet_schema(cache_key);
+    RETURN_IF(ptr != nullptr, ptr);
+
+    // Cache miss, load tablet metadata from remote storage use the hint version
 #ifdef USE_STAROS
+    // TODO: Eliminate the explicit dependency on staros worker
+    // 2. leverage `indexId` to lookup the global_schema from cache and if missing from file.
     if (g_worker != nullptr) {
-        auto shard_info_or = g_worker->get_shard_info(tablet_id);
+        auto shard_info_or = g_worker->retrieve_shard_info(tablet_id);
         if (shard_info_or.ok()) {
             const auto& shard_info = shard_info_or.value();
             const auto& properties = shard_info.properties;
             auto index_id_iter = properties.find("indexId");
             if (index_id_iter != properties.end()) {
                 auto schema_id = std::atol(index_id_iter->second.data());
-                auto cache_key = global_schema_cache_key(schema_id);
-                auto schema = lookup_tablet_schema(cache_key);
+                auto global_cache_key = global_schema_cache_key(schema_id);
+                auto schema = lookup_tablet_schema(global_cache_key);
                 if (schema != nullptr) {
                     return schema;
                 }
@@ -637,7 +644,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
                     schema = std::move(schema_or).value();
                     // Save the schema into the in-memory cache, use the schema id as the cache key
                     auto cache_value = std::make_unique<CacheValue>(schema);
-                    fill_metacache(cache_key, cache_value.release(), 0);
+                    fill_metacache(global_cache_key, cache_value.release(), 0);
                     return std::move(schema);
                 } else if (schema_or.status().is_not_found()) {
                     // version 3.0 will not generate the tablet schema file, ignore the not found error and
@@ -652,21 +659,15 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
     }
 #endif // USE_STAROS
 
-    // Check in-memory cache first
-    auto cache_key = tablet_schema_cache_key(tablet_id);
-    auto ptr = lookup_tablet_schema(cache_key);
-    RETURN_IF(ptr != nullptr, ptr);
-
+    // 3. use version_hint to look from cache, and if miss, load from file
     TabletMetadataPtr metadata;
-
-    // Cache miss, load tablet metadata from remote storage use the hint version
     if (version_hint != nullptr && *version_hint > 0) {
         if (auto res = get_tablet_metadata(tablet_id, *version_hint); res.ok()) {
             metadata = std::move(res).value();
         }
     }
 
-    // version hint not works, get tablet metadata by list directory
+    // 4. version hint not works, get tablet metadata by list directory. The most expensive way!
     if (metadata == nullptr) {
         // TODO: limit the list size
         ASSIGN_OR_RETURN(TabletMetadataIter metadata_iter, list_tablet_metadata(tablet_id, true));
@@ -1003,6 +1004,12 @@ void TabletManager::update_metacache_limit(size_t new_capacity) {
         (void)_metacache->adjust_capacity(delta);
         VLOG(5) << "Changed metadache capacity from " << old_capacity << " to " << _metacache->get_capacity();
     }
+}
+
+void TabletManager::TEST_set_global_schema_cache(int64_t schema_id, TabletSchemaPtr schema) {
+    auto cache_key = global_schema_cache_key(schema_id);
+    auto cache_value = std::make_unique<CacheValue>(schema);
+    fill_metacache(cache_key, cache_value.release(), 0);
 }
 
 } // namespace starrocks::lake
