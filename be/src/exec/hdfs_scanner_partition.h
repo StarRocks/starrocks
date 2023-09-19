@@ -26,6 +26,9 @@ public:
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
+
+private:
+    bool _output = false;
 };
 
 } // namespace starrocks
