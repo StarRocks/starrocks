@@ -14,7 +14,7 @@
 
 package com.starrocks.scheduler;
 
-import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.gson.GsonUtils;
 import org.junit.Assert;
 import org.junit.Test;
@@ -25,7 +25,7 @@ public class TaskTest {
     public void testDeserialize() {
         Task task = GsonUtils.GSON.fromJson("{}", Task.class);
         Assert.assertEquals(Constants.TaskSource.CTAS, task.getSource());
-        Assert.assertEquals(AuthenticationMgr.ROOT_USER, task.getCreateUser());
+        Assert.assertEquals(Auth.ROOT_USER, task.getCreateUser());
         Assert.assertEquals(Constants.TaskState.UNKNOWN, task.getState());
         Assert.assertEquals(Constants.TaskType.MANUAL, task.getType());
     }
