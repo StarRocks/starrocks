@@ -300,6 +300,7 @@ void JoinHashTable::create(const HashTableParam& param) {
         for (const auto& slot : tuple_desc->slots()) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
+            hash_table_slot.ref_slot = -1;
             if (param.output_slots.empty()) {
                 hash_table_slot.need_output = true;
                 hash_table_slot.need_materialize = true;
@@ -332,12 +333,20 @@ void JoinHashTable::create(const HashTableParam& param) {
         for (const auto& slot : tuple_desc->slots()) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
+            hash_table_slot.ref_slot = -1;
             if (param.output_slots.empty()) {
                 hash_table_slot.need_output = true;
                 hash_table_slot.need_materialize = true;
                 _table_items->first_probe_column_count++;
             } else if (std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
                        param.predicate_slots.end()) {
+                auto iter = param.id_map.find(slot->id());
+                if (iter != param.id_map.end() && std::find(param.predicate_slots.begin(), param.predicate_slots.end(),
+                                                            iter->second) != param.predicate_slots.end()) {
+                    hash_table_slot.ref_slot = iter->second;
+                } else {
+                    hash_table_slot.ref_slot = -1;
+                }
                 hash_table_slot.need_output = true;
                 hash_table_slot.need_materialize = true;
                 _table_items->first_probe_column_count++;
@@ -553,8 +562,8 @@ StatusOr<ChunkPtr> JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk)
 
 Status JoinHashTable::lazy_materialize_remain(ChunkPtr* src_chunk, ChunkPtr* dest_chunk) {
     switch (_hash_map_type) {
-#define M(NAME)                                                          \
-    case JoinHashMapType::NAME:                                          \
+#define M(NAME)                                             \
+    case JoinHashMapType::NAME:                             \
         _##NAME->lazy_output_remain(src_chunk, dest_chunk); \
         break;
         APPLY_FOR_JOIN_VARIANTS(M)

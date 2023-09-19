@@ -732,10 +732,27 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
         SlotDescriptor* slot = hash_table_slot.slot;
         ColumnPtr& column = _table_items->build_chunk->columns()[i];
         if (hash_table_slot.need_materialize) {
-            if (!column->is_nullable()) {
-                _copy_build_column(column, chunk, slot, to_nullable);
+            if (hash_table_slot.ref_slot == -1) {
+                if (!column->is_nullable()) {
+                    _copy_build_column(column, chunk, slot, to_nullable);
+                } else {
+                    _copy_build_nullable_column(column, chunk, slot);
+                }
             } else {
-                _copy_build_nullable_column(column, chunk, slot);
+                if (!column->is_nullable()) {
+                    if (to_nullable) {
+                        ColumnPtr dest_column = NullableColumn::create(
+                                (*chunk)->get_column_by_slot_id(hash_table_slot.ref_slot)->clone(),
+                                NullColumn::create(_probe_state->count, 0));
+                        (*chunk)->append_column(dest_column, hash_table_slot.slot->id());
+                    } else {
+                        (*chunk)->append_column((*chunk)->get_column_by_slot_id(hash_table_slot.ref_slot)->clone(),
+                                                hash_table_slot.slot->id());
+                    }
+                } else {
+                    (*chunk)->append_column((*chunk)->get_column_by_slot_id(hash_table_slot.ref_slot)->clone(),
+                                            hash_table_slot.slot->id());
+                }
             }
         }
     }

@@ -148,15 +148,24 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     param->output_slots = _output_slots;
 
     std::set<SlotId> predicate_slots;
+    std::vector<SlotId> probe_slots;
     for (ExprContext* expr_context : _probe_expr_ctxs) {
         std::vector<SlotId> expr_slots;
         expr_context->root()->get_slot_ids(&expr_slots);
         predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+        for (size_t i = 0; i < expr_slots.size(); i++) {
+            probe_slots.emplace_back(expr_slots[i]);
+        }
     }
+    int tmp_i = 0;
     for (ExprContext* expr_context : _build_expr_ctxs) {
         std::vector<SlotId> expr_slots;
         expr_context->root()->get_slot_ids(&expr_slots);
         predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+        for (size_t i = 0; i < expr_slots.size(); i++) {
+            param->id_map[expr_slots[i]] = probe_slots[tmp_i];
+            tmp_i++;
+        }
     }
     for (ExprContext* expr_context : _conjunct_ctxs) {
         std::vector<SlotId> expr_slots;

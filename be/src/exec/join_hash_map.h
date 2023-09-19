@@ -92,6 +92,7 @@ struct HashTableSlotDescriptor {
     SlotDescriptor* slot;
     bool need_output;
     bool need_materialize;
+    SlotId ref_slot = -1;
 };
 
 struct JoinHashTableItems {
@@ -232,6 +233,7 @@ struct HashTableParam {
     const RowDescriptor* probe_row_desc = nullptr;
     std::set<SlotId> output_slots;
     std::set<SlotId> predicate_slots;
+    std::unordered_map<SlotId, SlotId> id_map;
     std::vector<JoinKeyDesc> join_keys;
 
     RuntimeProfile::Counter* search_ht_timer = nullptr;
