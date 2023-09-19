@@ -76,11 +76,17 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     public static final String MOCKED_TPCH_DB_NAME = "tpch";
     public static final String MOCKED_PARTITIONED_DB_NAME = "partitioned_db";
     public static final String MOCKED_PARTITIONED_DB_NAME2 = "partitioned_db2";
+    public static final String MOCKED_SUBFIELD_DB = "subfield_db";
 
     private static ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     static {
         mockTPCHTable();
         mockPartitionTable();
+<<<<<<< HEAD
+=======
+        mockView();
+        mockSubfieldTable();
+>>>>>>> 187a7c5ac3 ([Enhancement] Remove type checker when prune subfield in external catalog (#31345))
     }
 
     @Override
@@ -225,6 +231,95 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static void mockView() {
+        Map<String, HiveTableInfo> mockTables =
+                MOCK_TABLE_MAP.putIfAbsent(MOCKED_TPCH_DB_NAME, new CaseInsensitiveMap<>());
+        List<FieldSchema> cols = Lists.newArrayList();
+        cols.add(new FieldSchema("c_custkey", "int", null));
+        cols.add(new FieldSchema("c_name", "string", null));
+        cols.add(new FieldSchema("c_address", "string", null));
+        cols.add(new FieldSchema("c_nationkey", "int", null));
+        cols.add(new FieldSchema("c_phone", "string", null));
+        cols.add(new FieldSchema("c_mktsegment", "string", null));
+        cols.add(new FieldSchema("c_comment", "string", null));
+        StorageDescriptor sd =
+                new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
+                                      Maps.newHashMap());
+
+        Table hmsView1 =
+                new Table("customer_view", "tpch", null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null,
+                          "select c_custkey,c_name, c_address, c_nationkey, c_phone, c_mktsegment, c_comment from tpch.customer",
+                          "VIRTUAL_VIEW");
+        HiveView view1 = HiveMetastoreApiConverter.toHiveView(hmsView1, MOCKED_HIVE_CATALOG_NAME);
+        mockTables.put(hmsView1.getTableName(), new HiveTableInfo(view1));
+
+        cols = Lists.newArrayList();
+        cols.add(new FieldSchema("c_custkey", "int", null));
+        cols.add(new FieldSchema("c_name", "string", null));
+        cols.add(new FieldSchema("c_address", "string", null));
+        cols.add(new FieldSchema("c_nationkey", "int", null));
+        cols.add(new FieldSchema("n_nationkey", "int", null));
+        cols.add(new FieldSchema("n_name", "string", null));
+        cols.add(new FieldSchema("n_regionkey", "int", null));
+        sd = new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
+                                   Maps.newHashMap());
+
+        Table hmsView2 =
+                new Table("customer_nation_view", "tpch", null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(),
+                          null,
+                          "select c_custkey,c_name, c_address, c_nationkey, n_nationkey, n_name, n_regionkey from " +
+                                  "tpch.customer join tpch.nation on c_nationkey = n_nationkey", "VIRTUAL_VIEW");
+        HiveView view2 = HiveMetastoreApiConverter.toHiveView(hmsView2, MOCKED_HIVE_CATALOG_NAME);
+        mockTables.put(hmsView2.getTableName(), new HiveTableInfo(view2));
+
+        cols = Lists.newArrayList();
+        cols.add(new FieldSchema("c_custkey", "int", null));
+        cols.add(new FieldSchema("c_name", "string", null));
+        cols.add(new FieldSchema("c_address", "string", null));
+        cols.add(new FieldSchema("c_nationkey", "int", null));
+        cols.add(new FieldSchema("c_phone", "string", null));
+        cols.add(new FieldSchema("c_mktsegment", "string", null));
+        cols.add(new FieldSchema("c_comment", "string", null));
+        sd = new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
+                                   Maps.newHashMap());
+
+        Table hmsView3 =
+                new Table("customer_alias_view", "tpch", null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(),
+                          null,
+                          "select c_custkey, c_name, c_address, c_nationkey, c_phone, c_mktsegment, c_comment from " +
+                                  "(select * from tpch.customer)", "VIRTUAL_VIEW");
+        HiveView view3 = HiveMetastoreApiConverter.toHiveView(hmsView3, MOCKED_HIVE_CATALOG_NAME);
+        mockTables.put(hmsView3.getTableName(), new HiveTableInfo(view3));
+    }
+
+    private static void mockSubfieldTable() {
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_SUBFIELD_DB, new CaseInsensitiveMap<>());
+        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_SUBFIELD_DB);
+
+        // Mock table region
+        List<FieldSchema> cols = Lists.newArrayList();
+        cols.add(new FieldSchema("col_int", "int", null));
+        cols.add(new FieldSchema("col_struct", "struct<c0: int, c1: struct<c11: int>>", null));
+        StorageDescriptor sd =
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                        -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
+
+        CaseInsensitiveMap<String, ColumnStatistic> regionStats = new CaseInsensitiveMap<>();
+        regionStats.put("col_int", ColumnStatistic.unknown());
+        regionStats.put("col_struct", ColumnStatistic.unknown());
+
+        Table tbl =
+                new Table("subfield", MOCKED_SUBFIELD_DB, null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null, null,
+                        "EXTERNAL_TABLE");
+        mockTables.put(tbl.getTableName(),
+                new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(tbl, MOCKED_HIVE_CATALOG_NAME),
+                        ImmutableList.of(), 5, regionStats, MOCKED_FILES));
+
+    }
+
+>>>>>>> 187a7c5ac3 ([Enhancement] Remove type checker when prune subfield in external catalog (#31345))
     public static void mockTPCHTable() {
         MOCK_TABLE_MAP.putIfAbsent(MOCKED_TPCH_DB_NAME, new CaseInsensitiveMap<>());
         Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_TPCH_DB_NAME);
