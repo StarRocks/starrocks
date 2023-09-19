@@ -1,0 +1,29 @@
+-- name: test_rewrite_sum_by_associative_rule
+create table t0 (
+    c0 int,
+    c1 int not null
+) duplicate key(c0) distributed by hash(c0) buckets 3 properties("replication_num" = "1");
+create table t1 (
+    c0 int,
+    c1 int not null
+) duplicate key(c0) distributed by hash(c0) buckets 3 properties("replication_num" = "1");
+
+insert into t0 values (1,1),(2,2),(3,3);
+insert into t1 values (1,1),(2,2),(NULL,4);
+
+select sum(c0),sum(c0+1),sum(c0+2) from t1;
+select c1, sum(c0),sum(c0+1),sum(c0+2) from t1 group by c1 order by c1;
+select sum(c1),sum(c1+1),sum(c1+2) from t1;
+select c0, sum(c1),sum(c1+1),sum(c1+2) from t1 group by c0 order by c0;
+
+select sum(t0.c0+1),sum(t0.c1+1) from t0 left outer join t1 on t0.c1 = t1.c1;
+select t1.c0,sum(t0.c0+1),sum(t0.c1+1) from t0 left outer join t1 on t0.c1 = t1.c1 group by t1.c0 order by t1.c0;
+select sum(t1.c0+1),sum(t1.c1+1) from t0 left outer join t1 on t0.c0 = t1.c0;
+select t0.c0,sum(t1.c0+1),sum(t1.c1+1) from t0 left outer join t1 on t0.c0 = t1.c0 group by t0.c0 order by t0.c0;
+
+select sum(t0.c0+1),sum(t0.c1+1) from t0 right outer join t1 on t0.c1 = t1.c1;
+select t1.c0,sum(t0.c0+1),sum(t0.c1+1) from t0 right outer join t1 on t0.c1 = t1.c1 group by t1.c0 order by t1.c0;
+select sum(t1.c0+1),sum(t1.c1+1) from t0 right outer join t1 on t0.c0 = t1.c0;
+select t0.c0,sum(t1.c0+1),sum(t1.c1+1) from t0 right outer join t1 on t0.c0 = t1.c0 group by t0.c0 order by t0.c0;
+
+
