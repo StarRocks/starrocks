@@ -51,12 +51,12 @@ if [ -z $STARROCKS_VERSION ]; then
     elif [ ! -z $branch_name ]; then
         export STARROCKS_VERSION=$branch_name
     else
-        export STARROCKS_VERSION=$(git rev-parse --short HEAD)
+        export STARROCKS_VERSION=$(git rev-parse --short=7 HEAD)
     fi
 fi
 
 if [ -z $STARROCKS_COMMIT_HASH]; then
-    export STARROCKS_COMMIT_HASH=$(git rev-parse --short HEAD)
+    export STARROCKS_COMMIT_HASH=$(git rev-parse --short=7 HEAD)
 fi
 
 set -eo pipefail
