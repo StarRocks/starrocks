@@ -1723,7 +1723,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("01,05,2013"), v->get_data()[0]);
+        ASSERT_EQ(Slice("01,05,13"), v->get_data()[0]);
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyyMMdd"), 1);
@@ -1888,7 +1888,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("25,06,2020"), v->get_data()[0]);
+        ASSERT_EQ(Slice("25,06,20"), v->get_data()[0]);
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyyMMdd"), 1);
