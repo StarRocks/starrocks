@@ -95,6 +95,7 @@ public class AnalyticAnalyzer {
             }
         }
 
+<<<<<<< HEAD
         if (isStatisticFn(analyticFunction.getFn()) && (!analyticExpr.getOrderByElements().isEmpty())) {
             throw new SemanticException("order by not allowed with '" + analyticFunction.toSql());
         }
@@ -103,6 +104,14 @@ public class AnalyticAnalyzer {
             if ((isRankingFn(analyticFunction.getFn()) || isOffsetFn(analyticFunction.getFn()) ||
                     isHllAggFn(analyticFunction.getFn()) || isStatisticFn(analyticFunction.getFn()))) {
                 throw new SemanticException("Windowing clause not allowed with '" + analyticFunction.toSql());
+=======
+
+        if (analyticExpr.getWindow() != null) {
+            if ((isRankingFn(analyticFunction.getFn()) || isCumeFn(analyticFunction.getFn()) ||
+                    isOffsetFn(analyticFunction.getFn()) || isHllAggFn(analyticFunction.getFn()))) {
+                throw new SemanticException("Windowing clause not allowed with '" + analyticFunction.toSql() + "'",
+                        analyticExpr.getPos());
+>>>>>>> dc7b9cf883 ([Enhancement] allow statitics window funtion using order by and window clause (#30786))
             }
 
             verifyWindowFrame(analyticExpr);
