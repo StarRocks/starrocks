@@ -91,6 +91,11 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select v1 as location from t0");
 
         analyzeSuccess("select v1 as rank from t0");
+
+        analyzeSuccess("select v1 as running from t0");
+        analyzeSuccess("select v1 as queries from t0");
+        analyzeSuccess("show running queries");
+        analyzeSuccess("show running queries limit 10");
     }
 
     @Test
