@@ -1442,8 +1442,14 @@ INSTANTIATE_TEST_SUITE_P(
         ParseDateTimeTest, ParseDateTimeTestFixture,
         ::testing::Values(
                 // clang-format: off
+                // Components
+                TestParseDatetimeParam("1994", "yyyy"), TestParseDatetimeParam("04", "MM"),
+                TestParseDatetimeParam("04", "dd"),
+
                 TestParseDatetimeParam("1994-09-09", "yyyy-MM-dd"), TestParseDatetimeParam("1994 09 09", "yyyy MM dd"),
-                TestParseDatetimeParam("1994/09/09", "yyyy/MM/dd"),
+                TestParseDatetimeParam("1994/09/09", "yyyy/MM/dd"), TestParseDatetimeParam("1994-09", "yyyy-MM"),
+                TestParseDatetimeParam("1994 09", "yyyy MM"), TestParseDatetimeParam("1994/09", "yyyy/MM"),
+
                 TestParseDatetimeParam("1994-09-09 01:02:03", "yyyy-MM-dd HH:mm:ss"),
                 TestParseDatetimeParam("1994/09/09 01:02:03", "yyyy/MM/dd HH:mm:ss"),
 
@@ -1468,7 +1474,7 @@ INSTANTIATE_TEST_SUITE_P(
                 TestParseDatetimeParam("1994-09-09 02:02:03 PM", "yyyy-MM-dd KK:mm:ss aa"),
                 TestParseDatetimeParam("1994-09-09 02:02:03", "yyyy-MM-dd KK:mm:ss"),
 
-                //SECOND
+                // Second
                 TestParseDatetimeParam("1994-09-09 01:02:03.123", "yyyy-MM-dd HH:mm:ss.SSS"),
 
                 // Timezone

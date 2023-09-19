@@ -590,7 +590,7 @@ public:
     /**
      * Joda Time parse
      */
-    DEFINE_VECTORIZED_FN(parse_datetime);
+    DEFINE_VECTORIZED_FN(parse_jodatime);
     static Status parse_joda_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status parse_joda_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 

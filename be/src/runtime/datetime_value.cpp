@@ -495,9 +495,12 @@ bool JodaFormat::parse(std::string_view str, DateTimeValue* output) {
     date_part_used = false;
     time_part_used = false;
     frac_part_used = false;
+    _year = 2000;
+    _month = 1;
+    _day = 1;
     halfday = 0;
-    weekday = -1;
     yearday = -1;
+    weekday = -1;
     week_num = -1;
     has_timezone = false;
 

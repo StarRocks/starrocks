@@ -1809,7 +1809,7 @@ Status TimeFunctions::parse_joda_close(FunctionContext* context, FunctionContext
     return {};
 }
 
-StatusOr<ColumnPtr> TimeFunctions::parse_datetime(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::parse_jodatime(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     size_t size = columns[0]->size(); // minimum number of rows.

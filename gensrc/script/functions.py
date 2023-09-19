@@ -430,8 +430,8 @@ vectorized_functions = [
     [50243, 'str2date', 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str2date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
     
     # Joda Time parse & format
-    [50244, 'parse_datetime', 'DATETIME', ['VARCHAR', 'VARCHAR'], 
-            'TimeFunctions::parse_datetime', 
+    [50244, 'str_to_jodatime', 'DATETIME', ['VARCHAR', 'VARCHAR'], 
+            'TimeFunctions::parse_jodatime', 
             'TimeFunctions::parse_joda_prepare', 
             'TimeFunctions::parse_joda_close'],
             
