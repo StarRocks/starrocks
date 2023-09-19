@@ -169,9 +169,17 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";
 
-    public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
-
+    // Materialized View properties
     public static final String PROPERTIES_MV_REWRITE_STALENESS_SECOND = "mv_rewrite_staleness_second";
+
+    public static final String PROPERTIES_QUERY_REWRITE_CONSISTENCY = "query_rewrite_consistency";
+
+    /**
+     * Materialized View sort keys
+     */
+    public static final String PROPERTY_MV_SORT_KEYS = "mv_sort_keys";
+
+    public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties,
                                                    DataProperty inferredDataProperty,

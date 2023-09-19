@@ -3545,6 +3545,11 @@ public class LocalMetastore implements ConnectorMetadata {
                             distributionInfo, mvRefreshScheme);
         }
 
+        // sort keys
+        if (CollectionUtils.isNotEmpty(stmt.getSortKeys())) {
+            materializedView.setTableProperty(new TableProperty());
+            materializedView.getTableProperty().setMvSortKeys(stmt.getSortKeys());
+        }
         // set comment
         materializedView.setComment(stmt.getComment());
         // set baseTableIds
@@ -3757,6 +3762,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 setLakeStorageInfo(materializedView, properties);
             }
 
+            // session properties
             if (!properties.isEmpty()) {
                 // analyze properties
                 List<SetListItem> setListItems = Lists.newArrayList();
@@ -3819,8 +3825,7 @@ public class LocalMetastore implements ConnectorMetadata {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             taskManager.createTask(task, false);
             // for event triggered type, run task
-            if (task.getType() == Constants.TaskType.EVENT_TRIGGERED ||
-                    refreshMoment.equals(MaterializedView.RefreshMoment.IMMEDIATE)) {
+            if (refreshMoment.equals(MaterializedView.RefreshMoment.IMMEDIATE)) {
                 taskManager.executeTask(task.getName());
             }
         }

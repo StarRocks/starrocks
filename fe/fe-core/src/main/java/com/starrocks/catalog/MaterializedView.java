@@ -871,6 +871,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         DistributionInfo distributionInfo = this.getDefaultDistributionInfo();
         sb.append("\n").append(distributionInfo.toSql());
 
+        // order by
+        if (CollectionUtils.isNotEmpty(getTableProperty().getMvSortKeys())) {
+            String str = Joiner.on(",").join(getTableProperty().getMvSortKeys());
+            sb.append("\nORDER BY (").append(str).append(")");
+        }
+
         // refresh scheme
         MvRefreshScheme refreshScheme = this.getRefreshScheme();
         if (refreshScheme == null) {
