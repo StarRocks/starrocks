@@ -1772,7 +1772,7 @@ BE static parameters are as follows.
 
 - **Default**: SIZE-MB-1024
 - **Unit**: N/A
-- **Description**: The mode in which system logs are segmented into log rolls. Valid values include TIME-DAY, TIME-HOUR, and SIZE-MB-<size>. The default value indicates that logs are segmented into rolls, each of which is 1 GB.
+- **Description**: The mode in which system logs are segmented into log rolls. Valid values include `TIME-DAY`, `TIME-HOUR`, and `SIZE-MB-`size. The default value indicates that logs are segmented into rolls, each of which is 1 GB.
 
 #### sys_log_roll_num
 
