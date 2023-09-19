@@ -32,7 +32,6 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -215,8 +214,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
-                                         long limit,
-                                         ScanOperatorPredicates scanOperatorPredicates) {
+                                         long limit) {
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
@@ -232,13 +230,12 @@ public class PaimonMetadata implements ConnectorMetadata {
             builder.setOutputRowCount(1);
         } else {
             builder.setOutputRowCount(rowCount);
-            scanOperatorPredicates.getSelectedPartitionIds().add(0L);
         }
 
         return builder.build();
     }
 
-    long getRowCount(List<? extends Split> splits) {
+    public static long getRowCount(List<? extends Split> splits) {
         long rowCount = 0;
         for (Split split : splits) {
             DataSplit dataSplit = (DataSplit) split;

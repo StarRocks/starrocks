@@ -46,7 +46,6 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -130,9 +129,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
-                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
-                                         ScanOperatorPredicates scanOperatorPredicates) {
-        return normal.getTableStatistics(session, table, columns, partitionKeys, predicate, limit, scanOperatorPredicates);
+                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit) {
+        return normal.getTableStatistics(session, table, columns, partitionKeys, predicate, limit);
     }
 
     @Override

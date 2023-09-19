@@ -29,7 +29,6 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -145,10 +144,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
-                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
-                                         ScanOperatorPredicates scanOperatorPredicates) {
+                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit, scanOperatorPredicates);
+        return metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit);
     }
 
     @Override
