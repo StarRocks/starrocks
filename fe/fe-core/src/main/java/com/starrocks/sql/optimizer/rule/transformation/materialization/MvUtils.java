@@ -969,7 +969,7 @@ public class MvUtils {
             Collection<Long> selectPartitionIds = scanOperatorPredicates.getSelectedPartitionIds();
             // compensate nothing if selected partitions are the same with the total partitions.
             if (selectPartitionIds.size() == scanOperatorPredicates.getIdToPartitionKey().size() ||
-                selectPartitionIds.size() == 0) {
+                    selectPartitionIds.size() == 0) {
                 return false;
             }
 
