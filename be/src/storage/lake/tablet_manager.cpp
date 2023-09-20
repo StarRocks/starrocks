@@ -14,7 +14,6 @@
 
 #include "storage/lake/tablet_manager.h"
 
-#include <bthread/bthread.h>
 #include <butil/time.h>
 #include <bvar/bvar.h>
 
@@ -44,7 +43,6 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/metadata_util.h"
-#include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
 #include "testutil/sync_point.h"
 #include "util/lru_cache.h"
@@ -325,43 +323,18 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
         }
     }
 
-    if (req.__isset.base_tablet_id && req.base_tablet_id > 0) {
-        struct Finder {
-            std::string_view name;
-            bool operator()(const TabletColumn& c) const { return c.name() == name; }
-        };
-        ASSIGN_OR_RETURN(auto base_tablet, get_tablet(req.base_tablet_id));
-        ASSIGN_OR_RETURN(auto base_schema, base_tablet.get_schema());
-        std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
-        TTabletSchema mutable_new_schema = req.tablet_schema;
-        uint32_t next_unique_id = base_schema->next_column_unique_id();
-        const auto& old_columns = base_schema->columns();
-        auto& new_columns = mutable_new_schema.columns;
-        for (uint32_t i = 0, sz = new_columns.size(); i < sz; ++i) {
-            auto it = std::find_if(old_columns.begin(), old_columns.end(), Finder{new_columns[i].column_name});
-            if (it != old_columns.end() && it->has_default_value()) {
-                new_columns[i].__set_default_value(it->default_value());
-                col_idx_to_unique_id[i] = it->unique_id();
-            } else if (it != old_columns.end()) {
-                col_idx_to_unique_id[i] = it->unique_id();
-            } else {
-                col_idx_to_unique_id[i] = next_unique_id++;
-            }
-        }
-        RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
-                mutable_new_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb->mutable_schema(),
-                req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
-    } else {
-        std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
-        uint32_t next_unique_id = req.tablet_schema.columns.size();
-        for (uint32_t col_idx = 0; col_idx < next_unique_id; ++col_idx) {
-            col_idx_to_unique_id[col_idx] = col_idx;
-        }
-        RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
-                req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb->mutable_schema(),
-                req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
+    // Note: ignore the parameter "base_tablet_id" of `TCreateTabletReq`, because we don't support linked schema
+    // change, there is no need to keep the column unique id consistent between the new tablet and base tablet.
+    std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
+    uint32_t next_unique_id = req.tablet_schema.columns.size();
+    for (uint32_t col_idx = 0; col_idx < next_unique_id; ++col_idx) {
+        col_idx_to_unique_id[col_idx] = col_idx;
     }
+    RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
+            req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb->mutable_schema(),
+            req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     RETURN_IF_ERROR(create_schema_file(req.tablet_id, tablet_metadata_pb->schema()));
+
     return put_tablet_metadata(std::move(tablet_metadata_pb));
 }
 
