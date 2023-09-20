@@ -32,9 +32,8 @@ For detailed information on the properties that can be altered or added, see [CR
 Example 1: Disable the storage volume `my_s3_volume`.
 
 ```Plain
-MySQL > ALTER STORAGE VOLUME my_s3_volume
-    -> SET ("enabled" = "false");
-Query OK, 0 rows affected (0.01 sec)
+ALTER STORAGE VOLUME my_s3_volume
+SET ("enabled" = "false");
 ```
 
 Example 2: Alter the credential information of the storage volume `my_s3_volume`.
