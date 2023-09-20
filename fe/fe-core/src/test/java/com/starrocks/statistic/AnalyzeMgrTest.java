@@ -34,6 +34,8 @@ import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -42,6 +44,7 @@ import org.junit.Test;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.UUID;
 
 public class AnalyzeMgrTest {
@@ -78,7 +81,8 @@ public class AnalyzeMgrTest {
 
 
         AnalyzeMgr analyzeMgr = new AnalyzeMgr();
-        analyzeMgr.refreshConnectorTableBasicStatisticsCache(table, ImmutableList.of("c1", "c2"), true);
+        analyzeMgr.refreshConnectorTableBasicStatisticsCache("hive0", "partitioned_db", "t1",
+                ImmutableList.of("c1", "c2"), true);
 
         new Expectations() {
             {
@@ -90,7 +94,8 @@ public class AnalyzeMgrTest {
                 minTimes = 1;
             }
         };
-        analyzeMgr.refreshConnectorTableBasicStatisticsCache(table, ImmutableList.of("c1", "c2"), false);
+        analyzeMgr.refreshConnectorTableBasicStatisticsCache("hive0", "partitioned_db", "t1",
+                ImmutableList.of("c1", "c2"), false);
     }
 
     @Test
@@ -212,6 +217,45 @@ public class AnalyzeMgrTest {
         journalEntity.setData(externalAnalyzeJob2);
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(0, GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList().size());
+
+        // test analyze basic stats
+        ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta("hive0", "hive_db",
+                "t1", null, StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap());
+        analyzeMgr.addExternalBasicStatsMeta(externalBasicStatsMeta);
+
+        testImage = new UtFrameUtils.PseudoImage();
+        analyzeMgr.save(testImage.getDataOutputStream());
+        analyzeMgr.load(new SRMetaBlockReader(testImage.getDataInputStream()));
+        Assert.assertEquals(1, analyzeMgr.getExternalBasicStatsMetaMap().size());
+
+        ExternalBasicStatsMeta replayBasicStatsMeta = (ExternalBasicStatsMeta) UtFrameUtils.PseudoJournalReplayer.
+                replayNextJournal(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META);
+        Assert.assertEquals("hive0", replayBasicStatsMeta.getCatalogName());
+        Assert.assertEquals("hive_db", replayBasicStatsMeta.getDbName());
+        Assert.assertEquals("t1", replayBasicStatsMeta.getTableName());
+
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public void refreshConnectorTableBasicStatisticsCache(String catalogName, String dbName, String tableName,
+                                                                  List<String> columns, boolean async) {}
+        };
+        journalEntity.setOpCode(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META);
+        journalEntity.setData(externalBasicStatsMeta);
+        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        Assert.assertEquals(1, GlobalStateMgr.getCurrentAnalyzeMgr().getExternalBasicStatsMetaMap().size());
+
+        analyzeMgr.removeExternalBasicStatsMeta(externalBasicStatsMeta.getCatalogName(),
+                externalBasicStatsMeta.getDbName(), externalBasicStatsMeta.getTableName());
+        ExternalBasicStatsMeta replayBasicStatsMeta1 = (ExternalBasicStatsMeta) UtFrameUtils.PseudoJournalReplayer.
+                replayNextJournal(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META);
+        Assert.assertEquals("hive0", replayBasicStatsMeta1.getCatalogName());
+        Assert.assertEquals("hive_db", replayBasicStatsMeta1.getDbName());
+        Assert.assertEquals("t1", replayBasicStatsMeta1.getTableName());
+
+        journalEntity.setOpCode(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META);
+        journalEntity.setData(externalBasicStatsMeta);
+        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentAnalyzeMgr().getExternalBasicStatsMetaMap().size());
     }
 
     @Test
