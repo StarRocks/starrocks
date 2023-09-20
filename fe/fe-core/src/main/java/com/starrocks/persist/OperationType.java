@@ -414,6 +414,8 @@ public class OperationType {
     public static final short OP_REMOVE_EXTERNAL_ANALYZE_STATUS = 11201;
     public static final short OP_ADD_EXTERNAL_ANALYZER_JOB = 11202;
     public static final short OP_REMOVE_EXTERNAL_ANALYZER_JOB = 11203;
+    public static final short OP_ADD_EXTERNAL_BASIC_STATS_META = 11204;
+    public static final short OP_REMOVE_EXTERNAL_BASIC_STATS_META = 11205;
 
     //Database json format log
     public static final short OP_CREATE_DB_V2 = 12001;

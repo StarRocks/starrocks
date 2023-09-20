@@ -82,6 +82,7 @@ import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAuthorStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
+import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCharsetStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
@@ -99,6 +100,9 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.statistic.AnalyzeMgr;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
@@ -116,9 +120,11 @@ import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+import org.sparkproject.guava.collect.Maps;
 
 import java.io.IOException;
 import java.net.URL;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1204,6 +1210,28 @@ public class ShowExecutorTest {
         ShowCreateExternalCatalogStmt stmt = new ShowCreateExternalCatalogStmt("catalog_not_exist");
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Unknown catalog 'catalog_not_exist'", executor::execute);
+    }
+
+    @Test
+    public void testShowBasicStatsMeta() throws Exception {
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> map = new HashMap<>();
+                map.put(new AnalyzeMgr.StatsMetaKey("hive0", "testDb", "testTable"),
+                        new ExternalBasicStatsMeta("hive0", "testDb", "testTable", null,
+                                StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap()));
+                return map;
+            }
+        };
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ShowBasicStatsMetaStmt stmt = new ShowBasicStatsMetaStmt(null);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertEquals("hive0.testDb", resultSet.getResultRows().get(0).get(0));
+        Assert.assertEquals("testTable", resultSet.getResultRows().get(0).get(1));
+        Assert.assertEquals("ALL", resultSet.getResultRows().get(0).get(2));
+        Assert.assertEquals("FULL", resultSet.getResultRows().get(0).get(3));
     }
 
     @Test

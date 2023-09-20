@@ -103,6 +103,7 @@ import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
@@ -979,6 +980,25 @@ public class EditLog {
                 case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
                     HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeMgr().replayRemoveHistogramStatsMeta(histogramStatsMeta);
+                    break;
+                }
+                case OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META: {
+                    ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayAddExternalBasicStatsMeta(basicStatsMeta);
+                    // The follower replays the stats meta log, indicating that the master has re-completed
+                    // statistic, and the follower's should refresh cache here.
+                    // We don't need to refresh statistics when checkpointing
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeMgr().refreshConnectorTableBasicStatisticsCache(
+                                basicStatsMeta.getCatalogName(),
+                                basicStatsMeta.getDbName(), basicStatsMeta.getTableName(),
+                                basicStatsMeta.getColumns(), true);
+                    }
+                    break;
+                }
+                case OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META: {
+                    ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayRemoveExternalBasicStatsMeta(basicStatsMeta);
                     break;
                 }
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
@@ -1959,6 +1979,14 @@ public class EditLog {
 
     public void logRemoveHistogramStatsMeta(HistogramStatsMeta meta) {
         logEdit(OperationType.OP_REMOVE_HISTOGRAM_STATS_META, meta);
+    }
+
+    public void logAddExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
+        logEdit(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META, meta);
+    }
+
+    public void logRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
+        logEdit(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META, meta);
     }
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
