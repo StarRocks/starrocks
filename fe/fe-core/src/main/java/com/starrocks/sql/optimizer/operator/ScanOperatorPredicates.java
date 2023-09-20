@@ -75,7 +75,7 @@ public class ScanOperatorPredicates {
 
     public List<ScalarOperator> getPrunedPartitionConjuncts() {
         return partitionConjuncts.stream()
-                .filter(x -> nonPartitionConjuncts.contains(x)).collect(Collectors.toList());
+                .filter(x -> !nonPartitionConjuncts.contains(x)).collect(Collectors.toList());
     }
 
     public List<ScalarOperator> getNonPartitionConjuncts() {
