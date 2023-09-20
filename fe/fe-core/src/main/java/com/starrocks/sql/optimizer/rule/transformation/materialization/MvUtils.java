@@ -815,25 +815,16 @@ public class MvUtils {
         return true;
     }
 
-    public static List<ScalarOperator> compensatePartitionPredicateForHiveScan(LogicalHiveScanOperator scanOperator) {
+    public static List<ScalarOperator> compensatePartitionPredicateForHiveScan(LogicalHiveScanOperator scanOperator,
+                                                                               boolean isCompensate) {
+        ScanOperatorPredicates scanOperatorPredicates = scanOperator.getScanOperatorPredicates();
+        if (!isCompensate) {
+            return scanOperatorPredicates.getPrunedPartitionConjuncts();
+        }
+
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
         Preconditions.checkState(scanOperator.getTable().isHiveTable());
         HiveTable hiveTable = (HiveTable) scanOperator.getTable();
-
-        if (hiveTable.isUnPartitioned()) {
-            return partitionPredicates;
-        }
-
-        ScanOperatorPredicates scanOperatorPredicates = scanOperator.getScanOperatorPredicates();
-        if (scanOperatorPredicates.getSelectedPartitionIds().size() ==
-                scanOperatorPredicates.getIdToPartitionKey().size()) {
-            return partitionPredicates;
-        }
-
-        if (!supportCompensatePartitionPredicateForHiveScan(scanOperatorPredicates.getSelectedPartitionKeys())) {
-            return partitionPredicates;
-        }
-
         List<Range<PartitionKey>> ranges = Lists.newArrayList();
         for (PartitionKey selectedPartitionKey : scanOperatorPredicates.getSelectedPartitionKeys()) {
             try {
@@ -857,6 +848,24 @@ public class MvUtils {
         return partitionPredicates;
     }
 
+    // NOTE: It's not safe to get table's pruned partition predicates by
+    // `LogicalOlapScanOperator#getPrunedPartitionPredicates` :
+    //  - partitionPredicate is null if olap scan operator cannot prune partitions.
+    //  - partitionPredicate is not exact even if olap scan operator has pruned partitions.
+    // eg:
+    // t1:
+    //  PARTITION p1 VALUES [("0000-01-01"), ("2020-01-01")), has data
+    //  PARTITION p2 VALUES [("2020-01-01"), ("2020-02-01")), has data
+    //  PARTITION p3 VALUES [("2020-02-01"), ("2020-03-01")), has data
+    //  PARTITION p4 VALUES [("2020-03-01"), ("2020-04-01")), no data
+    //  PARTITION p5 VALUES [("2020-04-01"), ("2020-05-01")), no data
+    //
+    // query1 : SELECT k1, sum(v1) as sum_v1 FROM t1 group by k1;
+    // `partitionPredicate` : null
+    //
+    // query2 : SELECT k1, sum(v1) as sum_v1 FROM t1 where k1>='2020-02-01' group by k1;
+    // `partitionPredicate` : k1>='2020-02-11'
+    // however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
     public static ScalarOperator compensatePartitionPredicate(OptExpression plan,
                                                               ColumnRefFactory columnRefFactory,
                                                               boolean isCompensate) {
@@ -869,40 +878,11 @@ public class MvUtils {
         for (LogicalScanOperator scanOperator : scanOperators) {
             List<ScalarOperator> partitionPredicate = null;
             if (scanOperator instanceof LogicalOlapScanOperator) {
-                LogicalOlapScanOperator logicalOlapScanOperator = (LogicalOlapScanOperator) scanOperator;
-                List<ScalarOperator> partitionPrunedPredicates = logicalOlapScanOperator.getPrunedPartitionPredicates();
-                // Ignore all pushed-down predicates which are no need to compensate
-                boolean isAllPushedDown = partitionPrunedPredicates != null && !partitionPrunedPredicates.isEmpty()
-                        && partitionPrunedPredicates.stream().allMatch(MvUtils::isRedundantPredicate);
-                if (isAllPushedDown) {
-                    continue;
-                }
-                // NOTE: It's not safe to get table's pruned partition predicates by
-                // `LogicalOlapScanOperator#getPrunedPartitionPredicates` :
-                //  - partitionPredicate is null if olap scan operator cannot prune partitions.
-                //  - partitionPredicate is not exact even if olap scan operator has pruned partitions.
-                // eg:
-                // t1:
-                //  PARTITION p1 VALUES [("0000-01-01"), ("2020-01-01")), has data
-                //  PARTITION p2 VALUES [("2020-01-01"), ("2020-02-01")), has data
-                //  PARTITION p3 VALUES [("2020-02-01"), ("2020-03-01")), has data
-                //  PARTITION p4 VALUES [("2020-03-01"), ("2020-04-01")), no data
-                //  PARTITION p5 VALUES [("2020-04-01"), ("2020-05-01")), no data
-                //
-                // query1 : SELECT k1, sum(v1) as sum_v1 FROM t1 group by k1;
-                // `partitionPredicate` : null
-                //
-                // query2 : SELECT k1, sum(v1) as sum_v1 FROM t1 where k1>='2020-02-01' group by k1;
-                // `partitionPredicate` : k1>='2020-02-11'
-                // however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
-                if (isCompensate) {
-                    partitionPredicate = compensatePartitionPredicateForOlapScan(logicalOlapScanOperator,
-                            columnRefFactory);
-                } else {
-                    partitionPredicate = partitionPrunedPredicates;
-                }
+                partitionPredicate = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
+                        columnRefFactory, isCompensate);
             } else if (scanOperator instanceof LogicalHiveScanOperator) {
-                partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator);
+                partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator,
+                        isCompensate);
             } else {
                 continue;
             }
@@ -917,7 +897,7 @@ public class MvUtils {
 
     /**
      * Determine whether to compensate extra partition predicates,
-     * - if needs compensate, use `selectedPartitionIds` to compensate compelete partition ranges
+     * - if it needs compensate, use `selectedPartitionIds` to compensate complete partition ranges
      *  with lower and upper bound.
      * - if not compensate, use original pruned partition predicates as the compensated partition
      *  predicates.
@@ -970,12 +950,7 @@ public class MvUtils {
                 return false;
             }
 
-            // pruned partition predicates is not empty, can not determine whether query's partitions can be satisfied
-            // by materialized view.
-            List<ScalarOperator> prunedPartitionPredicates = olapScanOperator.getPrunedPartitionPredicates();
-            if (prunedPartitionPredicates != null && !prunedPartitionPredicates.isEmpty()) {
-                return true;
-            }
+            // determine whether query's partitions can be satisfied by materialized view.
             for (Long selectPartitionId : selectPartitionIds) {
                 Partition partition = olapTable.getPartition(selectPartitionId);
                 if (partition != null && mvPartitionNameToRefresh.contains(partition.getName())) {
@@ -984,7 +959,33 @@ public class MvUtils {
             }
             return false;
         } else if (scanOperator instanceof LogicalHiveScanOperator) {
-            return true;
+            HiveTable hiveTable = (HiveTable) scanOperator.getTable();
+            // If table's not partitioned, no need compensate
+            if (hiveTable.isUnPartitioned()) {
+                return false;
+            }
+            LogicalHiveScanOperator hiveScanOperator = (LogicalHiveScanOperator)  scanOperator;
+            ScanOperatorPredicates scanOperatorPredicates = hiveScanOperator.getScanOperatorPredicates();
+            Collection<Long> selectPartitionIds = scanOperatorPredicates.getSelectedPartitionIds();
+            // compensate nothing if selected partitions are the same with the total partitions.
+            if (selectPartitionIds.size() == scanOperatorPredicates.getIdToPartitionKey().size() ||
+                selectPartitionIds.size() == 0) {
+                return false;
+            }
+
+            if (!supportCompensatePartitionPredicateForHiveScan(scanOperatorPredicates.getSelectedPartitionKeys())) {
+                return false;
+            }
+
+            // determine whether query's partitions can be satisfied by materialized view.
+            List<PartitionKey> selectPartitionKeys = scanOperatorPredicates.getSelectedPartitionKeys();
+            for (PartitionKey partitionKey : selectPartitionKeys) {
+                String mvPartitionName = PartitionUtil.generateMVPartitionName(partitionKey);
+                if (mvPartitionNameToRefresh.contains(mvPartitionName)) {
+                    return true;
+                }
+            }
+            return false;
         } else {
             return true;
         }
@@ -998,27 +999,14 @@ public class MvUtils {
      * @return
      */
     private static List<ScalarOperator> compensatePartitionPredicateForOlapScan(LogicalOlapScanOperator olapScanOperator,
-                                                                                ColumnRefFactory columnRefFactory) {
+                                                                                ColumnRefFactory columnRefFactory,
+                                                                                boolean isCompensate) {
+        if (!isCompensate) {
+            return olapScanOperator.getPrunedPartitionPredicates();
+        }
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
         Preconditions.checkState(olapScanOperator.getTable().isNativeTableOrMaterializedView());
         OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
-
-        // compensate nothing for single partition table
-        if (olapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
-            return partitionPredicates;
-        }
-
-        // compensate nothing if selected partitions are the same with the total partitions.
-        if (olapScanOperator.getSelectedPartitionId() != null
-                && olapScanOperator.getSelectedPartitionId().size() == olapTable.getPartitions().size()) {
-            return partitionPredicates;
-        }
-
-        // if no partitions are selected, return pruned partition predicates directly.
-        if (olapScanOperator.getSelectedPartitionId().isEmpty()) {
-            return olapScanOperator.getPrunedPartitionPredicates();
-        }
-
         if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
             ExpressionRangePartitionInfo partitionInfo =
                     (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();

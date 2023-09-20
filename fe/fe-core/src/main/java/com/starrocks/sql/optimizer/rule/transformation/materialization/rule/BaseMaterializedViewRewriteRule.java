@@ -102,6 +102,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             MvRewriteContext mvRewriteContext =
                     new MvRewriteContext(mvContext, queryTables, queryExpression,
                         queryColumnRefRewriter, queryPredicateSplit, onPredicates, this, isCompensate);
+
             // rewrite query
             MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
             OptExpression candidate = mvRewriter.rewrite();
