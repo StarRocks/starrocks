@@ -300,6 +300,10 @@ Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数�
 
   转发到 Leader 可以查看 Leader FE 元数据中存储的相关 PROC 的信息。主要用于元数据比对。
 
+### group_concat_max_len
+
+[group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) 函数返回的字符串的最大长度，单位为字符. 默认值：1024。最小值：4。
+
 ### hash_join_push_down_right_table
 
 用于控制在 Join 查询中是否可以使用针对右表的过滤条件来过滤左表的数据，可以减少 Join 过程中需要处理的左表的数据量。取值为 true 时表示允许该操作，系统将根据实际情况决定是否能对左表进行过滤；取值为 false 表示禁用该操作。默认值为 true。
