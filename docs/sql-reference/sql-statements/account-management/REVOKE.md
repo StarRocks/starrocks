@@ -16,7 +16,7 @@ The privileges that can be revoked are object-specific. The following part descr
 
 ```SQL
 REVOKE
-    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | ALL [PRIVILEGES]} 
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE } 
     ON SYSTEM
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
