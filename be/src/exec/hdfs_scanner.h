@@ -28,9 +28,6 @@
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks::parquet {
-class FileReader;
-}
 namespace starrocks {
 
 class RuntimeFilterProbeCollector;
