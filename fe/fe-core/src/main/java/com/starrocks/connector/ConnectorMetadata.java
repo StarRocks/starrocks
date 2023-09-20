@@ -131,11 +131,13 @@ public interface ConnectorMetadata {
      * @param snapshotId selected snapshot id
      * @param predicate used to filter metadata for iceberg, etc
      * @param fieldNames all selected columns (including partition columns)
+     * @param limit scan limit nums if needed
      *
      * @return the remote file information of the query to scan.
      */
     default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                    long snapshotId, ScalarOperator predicate, List<String> fieldNames) {
+                                                    long snapshotId, ScalarOperator predicate,
+                                                    List<String> fieldNames, long limit) {
         return Lists.newArrayList();
     }
 
@@ -150,6 +152,7 @@ public interface ConnectorMetadata {
      * @param columns selected columns
      * @param partitionKeys selected partition keys
      * @param predicate used to filter metadata for iceberg, etc
+     * @param limit scan limit if needed, default value is -1
      *
      * @return the table statistics for the table.
      */
@@ -157,7 +160,8 @@ public interface ConnectorMetadata {
                                           Table table,
                                           Map<ColumnRefOperator, Column> columns,
                                           List<PartitionKey> partitionKeys,
-                                          ScalarOperator predicate) {
+                                          ScalarOperator predicate,
+                                          long limit) {
         return Statistics.builder().build();
     }
 

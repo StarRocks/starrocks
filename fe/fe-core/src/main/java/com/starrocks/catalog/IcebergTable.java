@@ -120,6 +120,10 @@ public class IcebergTable extends Table {
         }
     }
 
+    public boolean isV2Format() {
+        return ((BaseTable) getNativeTable()).operations().current().formatVersion() > 1;
+    }
+
     public List<Column> getPartitionColumns() {
         if (partitionColumns == null) {
             List<PartitionField> identityPartitionFields = this.getNativeTable().spec().fields().stream().
