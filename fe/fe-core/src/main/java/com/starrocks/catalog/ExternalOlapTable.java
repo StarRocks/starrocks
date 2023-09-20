@@ -26,7 +26,9 @@ import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
+import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
@@ -351,6 +353,18 @@ public class ExternalOlapTable extends OlapTable {
     }
 
     public void updateMeta(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas)
+            throws DdlException, IOException {
+        MetaContext metaContext = new MetaContext();
+        metaContext.setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
+        metaContext.setThreadLocalInfo();
+        try {
+            updateMetaInternal(dbName, meta, backendMetas);
+        } finally {
+            MetaContext.remove();
+        }
+    }
+
+    private void updateMetaInternal(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas)
             throws DdlException, IOException {
         // no meta changed since last time, do nothing
         if (lastExternalMeta != null && meta.compareTo(lastExternalMeta) == 0) {
