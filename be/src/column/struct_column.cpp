@@ -152,6 +152,16 @@ Status StructColumn::update_rows(const Column& src, const uint32_t* indexes) {
     return Status::OK();
 }
 
+void StructColumn::append_selective_fixed_size(const Column& src, const uint32_t* indexes, uint32_t from,
+                                               uint32_t size) {
+    DCHECK(src.is_struct());
+    const auto& src_column = down_cast<const StructColumn&>(src);
+    DCHECK_EQ(_fields.size(), src_column._fields.size());
+    for (size_t i = 0; i < _fields.size(); i++) {
+        _fields[i]->append_selective(*src_column._fields[i], indexes, from, size);
+    }
+}
+
 void StructColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     DCHECK(src.is_struct());
     const auto& src_column = down_cast<const StructColumn&>(src);

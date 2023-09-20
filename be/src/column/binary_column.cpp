@@ -61,6 +61,32 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
 }
 
 template <typename T>
+void BinaryColumnBase<T>::append_selective_fixed_size(const Column& src, const uint32_t* indexes, uint32_t from,
+                                                      uint32_t size) {
+    const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
+    const auto& src_offsets = src_column.get_offset();
+    const auto& src_bytes = src_column.get_bytes();
+
+    size_t cur_row_count = _offsets.size() - 1;
+    size_t cur_byte_size = _bytes.size();
+    if (size != 0) {
+        uint32_t row_idx = indexes[from];
+        size_t item_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
+
+        _offsets.resize(cur_row_count + size + 1);
+        _bytes.resize(cur_byte_size + item_size * size);
+
+        auto* dest_bytes = _bytes.data();
+        for (size_t i = 0; i < size; i++) {
+            uint32_t idx = indexes[from + i];
+            _offsets[cur_row_count + i + 1] = _offsets[cur_row_count] + (i + 1) * item_size;
+            strings::memcpy_inlined(dest_bytes + i * item_size, src_bytes.data() + (idx - 1) * item_size, item_size);
+        }
+    }
+    _slices_cache = false;
+}
+
+template <typename T>
 void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
     const auto& src_offsets = src_column.get_offset();
@@ -724,6 +750,20 @@ bool BinaryColumnBase<T>::has_large_column() const {
     } else {
         return false;
     }
+}
+
+template <typename T>
+bool BinaryColumnBase<T>::check_fixed_size(uint32_t from, uint32_t size) {
+    if (size != 0) {
+        uint32_t item_size = _offsets[from + 1] - _offsets[from];
+        for (size_t i = 0; i < size; i++) {
+            uint32_t tmp_size = _offsets[from + i + 1] - _offsets[from + i];
+            if (item_size != tmp_size) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 template <typename T>

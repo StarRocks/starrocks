@@ -420,6 +420,17 @@ Status JoinHashTable::build(RuntimeState* state) {
         }
     }
 
+    for (size_t i = 0; i < _table_items->build_slots.size(); i++) {
+        HashTableSlotDescriptor& slot = _table_items->build_slots[i];
+        if (slot.slot != nullptr && slot.slot->type().is_string_type() &&
+            _table_items->build_chunk->is_slot_exist(slot.slot->id())) {
+            auto column = _table_items->build_chunk->get_column_by_slot_id(slot.slot->id());
+            bool fixed = column->check_fixed_size(1, _table_items->row_count);
+            slot.is_fixed = fixed;
+        }
+        LOG(INFO) << "SLOT: " << slot.slot->debug_string() << ":" << (int)slot.is_fixed << std::endl;
+    }
+
     RETURN_IF_ERROR(_upgrade_key_columns_if_overflow());
 
     _hash_map_type = _choose_join_hash_map();
