@@ -14,7 +14,9 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import autovalue.shaded.com.google.common.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -27,6 +29,8 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class PushDownTopNBelowUnionRule extends TransformationRule {
@@ -54,24 +58,22 @@ public class PushDownTopNBelowUnionRule extends TransformationRule {
             return false;
         }
 
+        Set<Integer> unionAllOutputColumnRefIds = unionOperator.getOutputColumnRefOp().stream()
+                .map(colRef -> colRef.getId()).collect(Collectors.toSet());
+        if (topn.getOrderByElements().stream().anyMatch(colRef ->
+                !unionAllOutputColumnRefIds.contains(colRef.getColumnRef().getId()))) {
+            return false;
+        }
+
         List<OptExpression> unionChildren = childExpr.getInputs();
-        List<Integer> colIds = topn.getOrderByElements().stream()
-                .map(Ordering::getColumnRef)
-                .map(ColumnRefOperator::getId)
-                .collect(Collectors.toList());
-        if (unionChildren.stream().noneMatch(unionChild -> canPushDownTopNBelowUnionChild(topn, unionChild, colIds))) {
+        if (unionChildren.stream().noneMatch(unionChild -> canPushDownTopNBelowUnionChild(topn, unionChild))) {
             return false;
         }
         return true;
     }
 
     private boolean canPushDownTopNBelowUnionChild(LogicalTopNOperator topn,
-                                                   OptExpression unionChild,
-                                                   List<Integer> topNColIds) {
-        // all topn's col ids should be in union child's output
-        if (!unionChild.getOutputColumns().containsAll(topNColIds)) {
-            return false;
-        }
+                                                   OptExpression unionChild) {
         // if union child has limit and is less than the topn's limit, should not push down the topn's limit.
         if (topn.hasLimit() && unionChild.getOp().hasLimit() && topn.getLimit() >= unionChild.getOp().getLimit()) {
             return false;
@@ -85,14 +87,29 @@ public class PushDownTopNBelowUnionRule extends TransformationRule {
         OptExpression childExpr = input.inputAt(0);
         LogicalUnionOperator unionOperator = childExpr.getOp().cast();
         List<OptExpression> newUnionChildren = Lists.newArrayList();
-        List<Integer> topNColIds = topn.getOrderByElements().stream()
-                .map(Ordering::getColumnRef)
-                .map(ColumnRefOperator::getId)
+        List<ColumnRefOperator> unionAllOutputColumnRefs = unionOperator.getOutputColumnRefOp();
+        Map<Integer, Integer> unionAllOutputColumnRefIdToIndexMap = Maps.newHashMap();
+        for (int i = 0; i < unionAllOutputColumnRefs.size(); i++) {
+            unionAllOutputColumnRefIdToIndexMap.put(unionAllOutputColumnRefs.get(i).getId(), i);
+        }
+        List<Integer> orderByIndexes = topn.getOrderByElements().stream()
+                .map(x -> unionAllOutputColumnRefIdToIndexMap.get(x.getColumnRef().getId()))
                 .collect(Collectors.toList());
-        for (OptExpression unionChild : childExpr.getInputs()) {
-            if (canPushDownTopNBelowUnionChild(topn, unionChild, topNColIds)) {
+        List<List<ColumnRefOperator>> unionChildrenOutputColumns = unionOperator.getChildOutputColumns();
+        for (int i = 0; i < childExpr.getInputs().size(); i++) {
+            OptExpression unionChild = childExpr.inputAt(i);
+            if (canPushDownTopNBelowUnionChild(topn, unionChild)) {
+                List<Ordering> oldOrderings = topn.getOrderByElements();
+                Preconditions.checkState(oldOrderings.size() == orderByIndexes.size());
+                List<Ordering> newOrderings = Lists.newArrayList();
+                for (int j = 0; j < orderByIndexes.size(); j++) {
+                    ColumnRefOperator orderColumnRef = unionChildrenOutputColumns.get(i).get(j);
+                    Ordering oldOrdering = oldOrderings.get(j);
+                    Ordering newOrdering = new Ordering(orderColumnRef, oldOrdering.isAscending(), oldOrdering.isNullsFirst());
+                    newOrderings.add(newOrdering);
+                }
                 OptExpression newTopNOperator = OptExpression.create(new LogicalTopNOperator.Builder()
-                        .setOrderByElements(topn.getOrderByElements())
+                        .setOrderByElements(newOrderings)
                         .setLimit(topn.getLimit())
                         .setTopNType(topn.getTopNType())
                         .setSortPhase(topn.getSortPhase())
