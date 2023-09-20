@@ -3,6 +3,7 @@
 #pragma once
 
 #include <algorithm>
+#include <concepts>
 
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
@@ -59,6 +60,36 @@ struct SorterComparator<TimestampValue> {
             return x;
         } else {
             return x > 0 ? 1 : -1;
+        }
+    }
+};
+
+template <>
+struct SorterComparator<float> {
+    static int compare(float lhs, float rhs) {
+        lhs = std::isnan(lhs) ? 0 : lhs;
+        rhs = std::isnan(rhs) ? 0 : rhs;
+        if (lhs == rhs) {
+            return 0;
+        } else if (lhs < rhs) {
+            return -1;
+        } else {
+            return 1;
+        }
+    }
+};
+
+template <>
+struct SorterComparator<double> {
+    static int compare(double lhs, double rhs) {
+        lhs = std::isnan(lhs) ? 0 : lhs;
+        rhs = std::isnan(rhs) ? 0 : rhs;
+        if (lhs == rhs) {
+            return 0;
+        } else if (lhs < rhs) {
+            return -1;
+        } else {
+            return 1;
         }
     }
 };
