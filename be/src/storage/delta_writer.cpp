@@ -188,9 +188,17 @@ Status DeltaWriter::_init() {
             return _opt.slots->size();
         }
     }();
+<<<<<<< HEAD
     // maybe partial update, change to partial tablet schema
     if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS &&
         partial_cols_num < _tablet->tablet_schema().num_columns()) {
+=======
+
+    _build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, _tablet->tablet_schema());
+
+    // maybe partial update, change to partial tablet schema
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && partial_cols_num < _tablet_schema->num_columns()) {
+>>>>>>> 8cb7fbb423 ([BugFix] BE crash in ASAN mode when we do column mode partial update for primary key table which separate primary keys and sort keys (#31219))
         writer_context.referenced_column_ids.reserve(partial_cols_num);
         for (auto i = 0; i < partial_cols_num; ++i) {
             const auto& slot_col_name = (*_opt.slots)[i]->col_name();
@@ -211,6 +219,7 @@ Status DeltaWriter::_init() {
             // If tablet is a new created tablet and has no historical data, average_row_size is 0
             // And we use schema size as average row size. If there are complex type(i.e. BITMAP/ARRAY) or varchar,
             // we will consider it as 16 bytes.
+<<<<<<< HEAD
             average_row_size = _tablet->tablet_schema().estimate_row_size(16);
             _memtable_buffer_row = config::write_buffer_size / average_row_size;
         }
@@ -218,6 +227,13 @@ Status DeltaWriter::_init() {
         writer_context.partial_update_tablet_schema =
                 TabletSchema::create(_tablet->tablet_schema(), writer_context.referenced_column_ids);
         auto sort_key_idxes = _tablet->tablet_schema().sort_key_idxes();
+=======
+            average_row_size = _tablet_schema->estimate_row_size(16);
+            _memtable_buffer_row = config::write_buffer_size / average_row_size;
+        }
+
+        auto sort_key_idxes = _tablet_schema->sort_key_idxes();
+>>>>>>> 8cb7fbb423 ([BugFix] BE crash in ASAN mode when we do column mode partial update for primary key table which separate primary keys and sort keys (#31219))
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         if (!std::includes(writer_context.referenced_column_ids.begin(), writer_context.referenced_column_ids.end(),
                            sort_key_idxes.begin(), sort_key_idxes.end())) {
@@ -226,11 +242,32 @@ Status DeltaWriter::_init() {
         if (!_opt.merge_condition.empty()) {
             writer_context.merge_condition = _opt.merge_condition;
         }
+<<<<<<< HEAD
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
+=======
+        auto partial_update_schema = TabletSchema::create(_tablet_schema, writer_context.referenced_column_ids);
+        // In column mode partial update, we need to modify sort key idxes and short key column num in partial
+        // tablet schema
+        if (_opt.partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE ||
+            _opt.partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+            std::vector<ColumnId> sort_key_idxes(_tablet_schema->num_key_columns());
+            std::iota(sort_key_idxes.begin(), sort_key_idxes.end(), 0);
+            partial_update_schema->set_num_short_key_columns(1);
+            partial_update_schema->set_sort_key_idxes(sort_key_idxes);
+        }
+
+        writer_context.partial_update_tablet_schema = partial_update_schema;
+        writer_context.tablet_schema = writer_context.partial_update_tablet_schema;
+>>>>>>> 8cb7fbb423 ([BugFix] BE crash in ASAN mode when we do column mode partial update for primary key table which separate primary keys and sort keys (#31219))
         writer_context.partial_update_mode = _opt.partial_update_mode;
+        _tablet_schema = partial_update_schema;
     } else {
+<<<<<<< HEAD
         writer_context.tablet_schema = &_tablet->tablet_schema();
         if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
+=======
+        if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
+>>>>>>> 8cb7fbb423 ([BugFix] BE crash in ASAN mode when we do column mode partial update for primary key table which separate primary keys and sort keys (#31219))
             writer_context.merge_condition = _opt.merge_condition;
         }
     }
