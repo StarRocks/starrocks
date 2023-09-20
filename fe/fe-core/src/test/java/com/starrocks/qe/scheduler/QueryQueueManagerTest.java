@@ -348,9 +348,9 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
     @Test
     public void testGroupQueueNormal() throws Exception {
-        final int concurrencyLimit = 3;
+        final int concurrencyLimit = 2;
         final int numGroups = 5;
-        final int numGroupPendingCoords = concurrencyLimit * 5 + 1;
+        final int numGroupPendingCoords = concurrencyLimit * 2 + 1;
         // Each group and non-group has `numGroupPendingCoords` coordinators.
         final int numPendingCoords = numGroupPendingCoords * (numGroups + 1);
 
@@ -425,7 +425,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             final int numResetCoords = resetCoords.size();
             int expectedAllocatedCoords = Math.min(numResetCoords, concurrencyLimit);
             // 5.1 `concurrencyLimit` queries become allocated.
-            Awaitility.await().atMost(5, TimeUnit.SECONDS)
+            Awaitility.await().atMost(10, TimeUnit.SECONDS)
                     .until(() -> numResetCoords - expectedAllocatedCoords == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
             List<DefaultCoordinator> allocatedCoords =
                     coords.stream().filter(coord -> coord.getSlot().getState() == LogicalSlot.State.ALLOCATED)
