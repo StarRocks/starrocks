@@ -1694,10 +1694,7 @@ public class StmtExecutor {
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
-<<<<<<< HEAD
-=======
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
->>>>>>> f86b0b6f56 ([Feature] Throttle ingestion speed when compaction cannot keep up with ingestion (#29505))
         final Table targetTable;
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
             targetTable = ((InsertStmt) stmt).getTargetTable();
@@ -1980,15 +1977,9 @@ public class StmtExecutor {
                 context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos);
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_HIVE_SINK_LABEL";
-<<<<<<< HEAD
-=======
-            } else if (targetTable instanceof TableFunctionTable) {
-                txnStatus = TransactionStatus.VISIBLE;
-                label = "FAKE_TABLE_FUNCTION_TABLE_SINK_LABEL";
             } else if (isExplainAnalyze) {
                 transactionMgr.abortTransaction(database.getId(), transactionId, "Explain Analyze");
                 txnStatus = TransactionStatus.ABORTED;
->>>>>>> f86b0b6f56 ([Feature] Throttle ingestion speed when compaction cannot keep up with ingestion (#29505))
             } else {
                 VisibleStateWaiter visibleWaiter = transactionMgr.retryCommitOnRateLimitExceeded(
                         database,
