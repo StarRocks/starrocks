@@ -40,11 +40,10 @@ Query OK, 0 rows affected (0.01 sec)
 Example 2: Alter the credential information of the storage volume `my_s3_volume`.
 
 ```Plain
-MySQL > ALTER STORAGE VOLUME my_s3_volume
-    -> SET (
-    ->     "aws.s3.use_instance_profile" = "true"
-    -> );
-Query OK, 0 rows affected (0.00 sec)
+ALTER STORAGE VOLUME my_s3_volume
+SET (
+    "aws.s3.use_instance_profile" = "true"
+);
 ```
 
 ## Relevant SQL statements

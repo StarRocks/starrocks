@@ -27,8 +27,7 @@ SET <storage_volume_name> AS DEFAULT STORAGE VOLUME
 Example 1: Set the storage volume `my_s3_volume` as the default storage volume.
 
 ```SQL
-MySQL > SET my_s3_volume AS DEFAULT STORAGE VOLUME;
-Query OK, 0 rows affected (0.01 sec)
+SET my_s3_volume AS DEFAULT STORAGE VOLUME;
 ```
 
 ## Relevant SQL statements
