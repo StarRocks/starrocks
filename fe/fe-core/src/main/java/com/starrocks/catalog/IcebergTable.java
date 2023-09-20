@@ -50,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_LEGACY;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
