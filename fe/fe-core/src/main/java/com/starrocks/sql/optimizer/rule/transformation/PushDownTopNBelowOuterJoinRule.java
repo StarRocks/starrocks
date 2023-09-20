@@ -31,8 +31,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class OuterJoinAddRedundantTopNRule extends TransformationRule {
-    public OuterJoinAddRedundantTopNRule() {
+public class PushDownTopNBelowOuterJoinRule extends TransformationRule {
+    public PushDownTopNBelowOuterJoinRule() {
         super(RuleType.TF_PUSH_DOWN_TOPN_OUTER_JOIN,
                 Pattern.create(OperatorType.LOGICAL_TOPN).addChildren(
                         Pattern.create(OperatorType.LOGICAL_JOIN, OperatorType.PATTERN_LEAF, OperatorType.PATTERN_LEAF)));
