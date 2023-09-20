@@ -71,7 +71,7 @@ order by stock_symbol, closing_date
 
 The raw data was shown as follows:
 
-```Plain Text
+```plaintext
 +--------------+---------------+---------------------+
 | stock_symbol | closing_price | closing_date        |
 +--------------+---------------+---------------------+
@@ -99,7 +99,7 @@ from stock_ticker;
 
 The following data is obtained:
 
-```Plain Text
+```plaintext
 +--------------+---------------------+---------------+----------------+
 | stock_symbol | closing_date        | closing_price | moving_average |
 +--------------+---------------------+---------------+----------------+
@@ -141,7 +141,7 @@ from int_t
 where property in ('odd','even');
 ```
 
-```Plain Text
+```plaintext
 +----+----------+----------------+
 | x  | property | moving average |
 +----+----------+----------------+
@@ -181,7 +181,7 @@ select x, property,
 from int_t where property in ('odd','even');
 ```
 
-```Plain Text
+```plaintext
 +----+----------+------------------+
 | x  | property | cumulative count |
 +----+----------+------------------+
@@ -198,6 +198,51 @@ from int_t where property in ('odd','even');
 +----+----------+------------------+
 ```
 
+<<<<<<< HEAD
+=======
+### CUME_DIST()
+
+The CUME_DIST() function calculates the cumulative distribution of a value within a partition, indicating its relative position as a percentage of values less than or equal to the value in the current row. With a range of 0 to 1, it's useful for percentile calculations and data distribution analysis.
+
+Syntax:
+
+```SQL
+CUME_DIST() OVER (partition_by_clause order_by_clause)
+```
+
+**This function should be used with ORDER BY to sort partition rows into the desired order. Without ORDER BY, all rows are peers and have value N/N = 1, where N is the partition size.**
+
+CUME_DIST() contains NULL values and treats them as the lowest values.
+
+The following example shows the cumulative distribution of column y within each group of column x.
+
+```SQL
+SELECT x, y,
+    CUME_DIST()
+        OVER (
+            PARTITION BY x
+            ORDER BY y
+        ) AS `cume_dist`
+FROM int_t;
+```
+
+```plaintext
++---+---+--------------------+
+| x | y | cume_dist          |
++---+---+--------------------+
+| 1 | 1 | 0.3333333333333333 |
+| 1 | 2 |                  1 |
+| 1 | 2 |                  1 |
+| 2 | 1 | 0.3333333333333333 |
+| 2 | 2 | 0.6666666666666667 |
+| 2 | 3 |                  1 |
+| 3 | 1 | 0.6666666666666667 |
+| 3 | 1 | 0.6666666666666667 |
+| 3 | 2 |                  1 |
++---+---+--------------------+
+```
+
+>>>>>>> 240689c8c1 ([Doc] fix build error (#31541))
 ### DENSE_RANK()
 
 The DENSE_RANK() function is used to represent rankings. Unlike RANK(), DENSE_RANK()**does not have vacant** numbers. For example, if there are two tied 1s, the third number of DENSE_RANK() is still 2, whereas the third number of RANK() is 3.
@@ -220,7 +265,7 @@ select x, y,
 from int_t;
 ```
 
-```Plain Text
+```plaintext
 +---+---+------+
 | x | y | rank |
 +---+---+------+
@@ -247,9 +292,9 @@ About the size of the bucket:
 
 Syntax:
 
-```~SQL
+```SQL
 NTILE (num_buckets) OVER (partition_by_clause order_by_clause)
-```~
+```
 
 `num_buckets`: Number of the buckets to be created. The value must be a constant positive integer whose maximum is `2^63 - 1`.
 
@@ -261,7 +306,7 @@ Example:
 
 The following example divides all rows in the partition into 2 buckets.
 
-```~sql
+```sql
 select id, x, y,
     ntile(2)
         over (
@@ -269,9 +314,9 @@ select id, x, y,
             order by y
         ) as bucket_id
 from t1;
-```~
+```
 
-```~Plain Text
+```plaintext
 +------+------+------+-----------+
 | id   | x    | y    | bucket_id |
 +------+------+------+-----------+
@@ -286,7 +331,7 @@ from t1;
 |    9 |    2 |   88 |         2 |
 |   10 |    3 |   99 |         1 |
 +------+------+------+-----------+
-```~
+```
 
 As the above example shown, when `num_buckets` is `2`:
 
@@ -317,7 +362,7 @@ We have the following data:
  from mail_merge;
  ```
 
-```Plain Text
+```plaintext
 +---------+---------+--------------+
 | name    | country | greeting     |
 +---------+---------+--------------+
@@ -342,7 +387,7 @@ select country, name,
 from mail_merge;
 ```
 
-```Plain Text
+```plaintext
 +---------+---------+-----------+
 | country | name    | greeting  |
 +---------+---------+-----------+
@@ -405,7 +450,7 @@ Query data from this table, where `offset` is 2, which means traversing the prev
 
 Output:
 
-```Plain
+```plaintext
 SELECT col_1, col_2, LAG(col_2,2,0) OVER (ORDER BY col_1) 
 FROM test_tbl ORDER BY col_1;
 +-------+-------+---------------------------------------------+
@@ -479,7 +524,7 @@ select country, name,
 from mail_merge;
 ```
 
-```Plain Text
+```plaintext
 +---------+---------+--------------+
 | country | name    | greeting     |
 +---------+---------+--------------+
@@ -537,7 +582,7 @@ Query data from this table, where `offset` is 2, which means traversing the subs
 
 Output:
 
-```Plain
+```plaintext
 SELECT col_1, col_2, LEAD(col_2,2,0) OVER (ORDER BY col_1) 
 FROM test_tbl ORDER BY col_1;
 +-------+-------+----------------------------------------------+
@@ -612,7 +657,7 @@ from int_t
 where property in ('prime','square');
 ```
 
-```Plain Text
+```plaintext
 +---+----------+---------------+
 | x | property | local maximum |
 +---+----------+---------------+
@@ -665,7 +710,7 @@ from int_t
 where property in ('prime','square');
 ```
 
-```Plain Text
+```plaintext
 +---+----------+---------------+
 | x | property | local minimum |
 +---+----------+---------------+
@@ -693,6 +738,55 @@ from int_t
 where property in ('prime','square');
 ```
 
+<<<<<<< HEAD
+=======
+### PERCENT_RANK()
+
+The PERCENT_RANK() function calculates the relative rank of a row within a result set as a percentage. It returns the percentage of partition values less than the value in the current row, excluding the highest value. The return values range from 0 to 1. This function is useful for percentile calculations and analyzing data distribution.
+
+The PERCENT_RANK() function is calculated using the following formula, where rank represents the row rank and rows represents the number of partition rows:
+
+```plaintext
+(rank - 1) / (rows - 1)
+```
+
+Syntax:
+
+```SQL
+PERCENT_RANK() OVER (partition_by_clause order_by_clause)
+```
+
+**This function should be used with ORDER BY to sort partition rows into the desired order. Without ORDER BY, all rows are peers and have value (1 - 1)/(N - 1) = 0, where N is the partition size.**
+
+The following example shows the relative rank of column y within each group of column x.
+
+```SQL
+SELECT x, y,
+    PERCENT_RANK()
+        OVER (
+            PARTITION BY x
+            ORDER BY y
+        ) AS `percent_rank`
+FROM int_t;
+```
+
+```plaintext
++---+---+--------------+
+| x | y | percent_rank |
++---+---+--------------+
+| 1 | 1 |            0 |
+| 1 | 2 |          0.5 |
+| 1 | 2 |          0.5 |
+| 2 | 1 |            0 |
+| 2 | 2 |          0.5 |
+| 2 | 3 |            1 |
+| 3 | 1 |            0 |
+| 3 | 1 |            0 |
+| 3 | 2 |            1 |
++---+---+--------------+
+```
+
+>>>>>>> 240689c8c1 ([Doc] fix build error (#31541))
 ### RANK()
 
 The RANK() function is used to represent rankings. Unlike DENSE_RANK(), RANK() will **appear as a vacant** number. For example, if two tied 1s appear, the third number of RANK() will be 3 instead of 2.
@@ -712,7 +806,7 @@ select x, y, rank() over(partition by x order by y) as `rank`
 from int_t;
 ```
 
-```Plain Text
+```plaintext
 +---+---+------+
 | x | y | rank |
 +---+---+------+
@@ -745,7 +839,7 @@ select x, y, row_number() over(partition by x order by y) as `rank`
 from int_t;
 ```
 
-```Plain Text
+```plaintext
 +---+---+------+
 | x | y | rank |
 +---+---+------+
@@ -920,7 +1014,7 @@ select x, property,
 from int_t where property in ('odd','even');
 ```
 
-```Plain Text
+```plaintext
 +----+----------+--------------+
 | x  | property | moving total |
 +----+----------+--------------+
