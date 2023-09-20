@@ -105,6 +105,15 @@ public abstract class StatisticsCollectJob {
         return properties;
     }
 
+    protected void setDefaultSessionVariable(ConnectContext context) {
+        SessionVariable sessionVariable = context.getSessionVariable();
+        // Statistics collecting is not user-specific, which means response latency is not that important.
+        // Normally, if the page cache is enabled, the page cache must be full. Page cache is used for query
+        // acceleration, then page cache is better filled with the user's data.
+        sessionVariable.setUsePageCache(false);
+        sessionVariable.setEnableMaterializedViewRewrite(false);
+    }
+
     protected void collectStatisticSync(String sql, ConnectContext context) throws Exception {
         int count = 0;
         int maxRetryTimes = 5;
@@ -112,12 +121,10 @@ public abstract class StatisticsCollectJob {
             LOG.debug("statistics collect sql : {}", sql);
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
-            SessionVariable sessionVariable = context.getSessionVariable();
-            // Statistics collecting is not user-specific, which means response latency is not that important.
-            // Normally, if the page cache is enabled, the page cache must be full. Page cache is used for query 
-            // acceleration, then page cache is better filled with the user's data. 
-            sessionVariable.setUsePageCache(false);
-            sessionVariable.setEnableMaterializedViewRewrite(false);
+
+            // set default session variables for stats context
+            setDefaultSessionVariable(context);
+
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             context.setStartTime();
