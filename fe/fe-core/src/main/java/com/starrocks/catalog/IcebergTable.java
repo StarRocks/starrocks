@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
@@ -173,7 +172,11 @@ public class IcebergTable extends Table {
     }
 
     public IcebergCatalogType getCatalogType() {
-        return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG_TYPE));
+        String value = icebergProperties.get(ICEBERG_CATALOG_TYPE);
+        if (value == null) {
+            value = icebergProperties.get(ICEBERG_CATALOG_LEGACY);
+        }
+        return IcebergCatalogType.valueOf(value);
     }
 
     public String getTableLocation() {
