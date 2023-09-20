@@ -208,8 +208,15 @@ public class TabletInvertedIndex {
                                 TStorageMedium storageMedium = storageMediumMap.get(partitionId);
                                 if (storageMedium != null && backendTabletInfo.isSetStorage_medium()) {
                                     if (storageMedium != backendTabletInfo.getStorage_medium()) {
-                                        addToTabletMigrationMap(backendId, backendStorageTypeCnt, tabletId,
-                                                tabletMeta, tabletMigrationMap, storageMedium);
+                                        // If storage medium is less than 1, there is no need to send migration tasks to BE.
+                                        // Because BE will ignore this request.
+                                        if (backendStorageTypeCnt <= 1) {
+                                            LOG.debug("available storage medium type count is less than 1, " +
+                                                            "no need to send migrate task. tabletId={}, backendId={}.",
+                                                    tabletMeta, backendId);
+                                        } else {
+                                            tabletMigrationMap.put(storageMedium, tabletId);
+                                        }
                                     }
                                     if (storageMedium != tabletMeta.getStorageMedium()) {
                                         tabletMeta.setStorageMedium(storageMedium);
@@ -456,54 +463,6 @@ public class TabletInvertedIndex {
                 backendTabletNumReport.values().stream().mapToLong(p -> p.second).sum(),
                 numIgnoredTabletCausedByAbnormalState, ignoreTablets,
                 backendTabletNumReport);
-    }
-
-    private void addToTabletMigrationMap(long backendId, long backendStorageTypeCnt, long tabletId,
-                                         TabletMeta tabletMeta, ListMultimap<TStorageMedium, Long> tabletMigrationMap,
-                                         TStorageMedium storageMedium) {
-        // 1. If storage medium is less than 1, there is no need to send migration tasks to BE.
-        // Because BE will ignore this request.
-        if (backendStorageTypeCnt <= 1) {
-            LOG.debug("available storage medium type count is less than 1, " +
-                            "no need to send migrate task. tabletId={}, backendId={}.",
-                    tabletMeta, backendId);
-            return;
-        }
-
-        // 2. If size of tabletMigrationMap exceeds (Config.tablet_sched_max_migration_task_sent_once - running_tasks_on_be),
-        // dot not send more tasks. The number of tasks running on be cannot exceed Config.tablet_sched_max_migration_task_sent_once
-        if (tabletMigrationMap.size() >=
-                Config.tablet_sched_max_migration_task_sent_once
-                        - AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false)) {
-            LOG.debug("size of tabletMigrationMap + size of running tasks on BE is bigger than {}",
-                    Config.tablet_sched_max_migration_task_sent_once);
-            return;
-        }
-
-        // 3. If the task already running on be, do not send again
-        if (AgentTaskQueue.getTask(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, tabletId) != null) {
-            LOG.debug("migrate of tablet:{} is already running on BE", tabletId);
-            return;
-        }
-
-        //4. If the table is Primary key, do not send
-        Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
-        if (db == null) {
-            return;
-        }
-        db.readLock();
-        try {
-            OlapTable table = (OlapTable) db.getTable(tabletMeta.getTableId());
-            if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
-                LOG.debug("tablet:{} is primary key table, do not support migrate", tabletId);
-                // Currently, primary key table doesn't support tablet migration between local disks.
-                return;
-            }
-        } finally {
-            db.readUnlock();
-        }
-
-        tabletMigrationMap.put(storageMedium, tabletId);
     }
 
     public Long getTabletIdByReplica(long replicaId) {
