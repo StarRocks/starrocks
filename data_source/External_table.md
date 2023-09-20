@@ -4,47 +4,10 @@ StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源�
 
 > **NOTICE**
 >
-> 从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 和 JDBC 数据源的场景，推荐使用 Catalog。参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md) 和 [JDBC catalog](../data_source/catalog/jdbc_catalog.md)。
+> * 从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 数据源的场景，推荐使用 Catalog。参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md)。
+> * 从 3.1 版本起，对于查询 MySQL、PostgreSQL 的场景推荐使用 [JDBC catalog](../data_source/catalog/jdbc_catalog.md)，对于查询 Elasticsearch 的场景推荐使用 [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md)。
 
 从 2.5 版本开始，查询外部数据源时支持 Data Cache，提升对热数据的查询性能。参见[Data Cache](data_cache.md)。
-
-## MySQL 外部表
-
-星型模型中，数据一般划分为维度表 (dimension table) 和事实表 (fact table)。维度表数据量少，但会涉及 UPDATE 操作。目前 StarRocks 中还不直接支持 UPDATE 操作（可以通过 Unique/Primary 数据模型实现），在一些场景下，可以把维度表存储在 MySQL 中，查询时直接读取维度表。
-
-在使用 MySQL 的数据之前，需在 StarRocks 创建外部表 (CREATE EXTERNAL TABLE)，与之相映射。StarRocks 中创建 MySQL 外部表时需要指定 MySQL 的相关连接信息，如下所示。
-
-~~~sql
-CREATE EXTERNAL TABLE mysql_external_table
-(
-    k1 DATE,
-    k2 INT,
-    k3 SMALLINT,
-    k4 VARCHAR(2048),
-    k5 DATETIME
-)
-ENGINE=mysql
-PROPERTIES
-(
-    "host" = "127.0.0.1",
-    "port" = "3306",
-    "user" = "mysql_user",
-    "password" = "mysql_passwd",
-    "database" = "mysql_db_test",
-    "table" = "mysql_table_test"
-);
-~~~
-
-参数说明：
-
-* **host**：MySQL 连接地址
-* **port**：MySQL 连接端口号
-* **user**：MySQL 登录用户名
-* **password**：MySQL 登录密码
-* **database**：MySQL 数据库名
-* **table**：MySQL 数据库表名
-
-<br/>
 
 ## StarRocks 外部表
 
@@ -113,7 +76,229 @@ insert into external_t select * from other_table;
 * 创建外表语法和创建普通表一致，但其中的列名等信息请保持同其对应的目标表一致。
 * 外表会周期性从目标表同步元信息（同步周期为 10 秒），在目标表执行的 DDL 操作可能会延迟一定时间反应在外表上。
 
-## Elasticsearch 外部表
+## 更多数据库（JDBC）的外部表
+
+自 2.3.0 版本起，StarRocks 支持通过外部表的方式查询支持 JDBC 的数据库，无需将数据导入至 StarRocks，即可实现对这类数据库的极速分析。本文介绍如何在 StarRocks 创建外部表，查询支持 JDBC 的数据库中的数据。
+
+### 前提条件
+
+在您使用 JDBC 外表时， FE、BE 节点会下载 JDBC 驱动程序，因此 FE、BE 节点所在机器必须能够访问用于下载 JDBC 驱动程序 JAR 包的 URL，该 URL 由创建 JDBC 资源中的配置项 `driver_url` 指定。
+
+### 创建和管理 JDBC 资源
+
+#### 创建 JDBC 资源
+
+您需要提前在 StarRocks 中创建 JDBC 资源，用于管理数据库的相关连接信息。这里的数据库是指支持 JDBC 的数据库，以下简称为“目标数据库”。创建资源后，即可使用该资源创建外部表。
+
+例如目标数据库为 PostgreSQL，则可以执行如下语句，创建一个名为 `jdbc0` 的 JDBC 资源，用于访问 PostgreSQL：
+
+~~~SQL
+create external resource jdbc0
+properties (
+    "type" = "jdbc",
+    "user" = "postgres",
+    "password" = "changeme",
+    "jdbc_uri" = "jdbc:postgresql://127.0.0.1:5432/jdbc_test",
+    "driver_url" = "https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar",
+    "driver_class" = "org.postgresql.Driver"
+);
+~~~
+
+`properties` 的必填配置项：
+
+* `type`：资源类型，固定取值为 `jdbc`。
+
+* `user`：目标数据库用户名。
+
+* `password`：目标数据库用户登录密码。
+
+* `jdbc_uri`：JDBC 驱动程序连接目标数据库的 URI，需要满足目标数据库 URI 的语法。常见的目标数据库 URI，请参见 [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/use/#connecting-to-the-database)、[SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) 官网文档。
+
+    > **说明**
+    >
+    > 目标数据库 URI 中必须指定具体数据库的名称，如上示例中的 `jdbc_test`。
+
+* `driver_url`：用于下载 JDBC 驱动程序 JAR 包的 URL，支持使用 HTTP 协议 或者 file 协议。例如`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar`，`file:///home/disk1/postgresql-42.3.3.jar`。
+
+    > **说明**
+    >
+    > 不同目标数据库使用的 JDBC 驱动程序不同，使用其他数据库的 JDBC 驱动程序会有不兼容的问题，建议访问目标数据库官网，查询并使用其支持的 JDBC 驱动程序。常见的目标数据库的  JDBC 驱动程序下载地址，请参见 [MySQL](https://dev.mysql.com/downloads/connector/j/)、[Oracle](https://www.oracle.com/database/technologies/maven-central-guide.html)、[PostgreSQL](https://jdbc.postgresql.org/download/)、[SQL Server](https://learn.microsoft.com/en-us/sql/connect/jdbc/download-microsoft-jdbc-driver-for-sql-server?view=sql-server-ver16) 。
+
+* `driver_class`：JDBC 驱动程序的类名称。以下列举常见 JDBC 驱动程序的类名称：
+
+  * MySQL: com.mysql.jdbc.Driver（MySQL 5.x 及以下版本）、com.mysql.cj.jdbc.Driver （MySQL 8.x 及以上版本）
+  * SQL Server：com.microsoft.sqlserver.jdbc.SQLServerDriver
+  * Oracle: oracle.jdbc.driver.OracleDriver
+  * PostgreSQL：org.postgresql.Driver
+
+创建资源时，FE 通过 `driver_url` 下载 JDBC 驱动程序 JAR 包，生成 checksum 并保存起来，用于校验 BE 下载的 JDBC 驱动程序 JAR 包的正确性。
+
+> **说明**
+>
+> 如果下载 JDBC 驱动程序失败，则创建资源也会失败。
+
+BE 节点首次查询 JDBC 外部表时，如果发现所在机器上不存在相应的 JDBC 驱动程序 JAR 包，则会通过 `driver_url` 进行下载，所有的 JDBC 驱动程序 JAR 包都会保存在 **${STARROCKS_HOME}/lib/jdbc_drivers** 目录下。
+
+#### 查看 JDBC 资源
+
+执行如下语句，查看 StarRocks 中的所有 JDBC 资源：
+
+> **说明**
+>
+> `ResourceType` 列为 `jdbc`。
+
+~~~SQL
+SHOW RESOURCES;
+~~~
+
+#### 删除 JDBC 资源
+
+执行如下语句，删除名为 `jdbc0` 的 JDBC 资源：
+
+~~~SQL
+DROP RESOURCE "jdbc0";
+~~~
+
+> **说明**
+>
+> 删除 JDBC 资源会导致使用该 JDBC 资源创建的 JDBC 外部表不可用，但目标数据库的数据并不会丢失。如果您仍需要通过 StarRocks 查询目标数据库的数据，可以重新创建 JDBC 资源和 JDBC 外部表。
+
+### 创建数据库
+
+执行如下语句，在 StarRocks 中创建并进入名为 `jdbc_test` 的数据库：
+
+~~~SQL
+CREATE DATABASE jdbc_test; 
+USE jdbc_test; 
+~~~
+
+> **说明**
+>
+> 库名无需与目标数据库的名称保持一致。
+
+### 创建 JDBC 外部表
+
+执行如下语句，在数据库 `jdbc_test` 中，创建一张名为 `jdbc_tbl` 的 JDBC 外部表：
+
+~~~SQL
+create external table jdbc_tbl (
+    `id` bigint NULL, 
+    `data` varchar(200) NULL 
+) ENGINE=jdbc 
+properties (
+    "resource" = "jdbc0",
+    "table" = "dest_tbl"
+);
+~~~
+
+`properties` 配置项：
+
+* `resource`：所使用 JDBC 资源的名称，必填项。
+
+* `table`：目标数据库表名，必填项。
+
+支持的数据类型以及与 StarRocks 的数据类型映射关系，请参见[数据类型映射](#数据类型映射)。
+
+> **说明**
+>
+> * 不支持索引。
+> * 不支持通过 PARTITION BY、DISTRIBUTED BY 来指定数据分布规则。
+
+### 查询 JDBC 外部表
+
+查询 JDBC 外部表前，必须启用 Pipeline 引擎。
+
+> **说明**
+>
+> 如果已经启用 Pipeline 引擎，则可跳过本步骤。
+
+~~~SQL
+set enable_pipeline_engine=true;
+~~~
+
+执行如下语句，通过 JDBC 外部表查询目标数据库的数据：
+
+~~~SQL
+select * from jdbc_tbl;
+~~~
+
+StarRocks 支持对目标表进行谓词下推，把过滤条件推给目标表执行，让执行尽量靠近数据源，进而提高查询性能。目前支持下推运算符，包括二元比较运算符（`>`、`>=`、`=`、`<`、`<=`）、`IN`、`IS NULL` 和 `BETWEEN ... AND ...`，但是不支持下推函数。
+
+### 数据类型映射
+
+目前仅支持查询目标数据库中数字、字符串、时间、日期等基础类型的数据。如果目标数据库中的数据超出 StarRocks 中数据类型的表示范围，则查询会报错。
+
+如下以目标数据库 MySQL、Oracle、PostgreSQL、SQL Server 为例，说明支持查询的数据类型，以及与 StarRocks 数据类型的映射关系。
+
+#### 目标数据库为 MySQL
+
+| MySQL        | StarRocks |
+| ------------ | --------- |
+| BOOLEAN      | BOOLEAN   |
+| TINYINT      | TINYINT   |
+| SMALLINT     | SMALLINT  |
+| MEDIUMINTINT | INT       |
+| BIGINT       | BIGINT    |
+| FLOAT        | FLOAT     |
+| DOUBLE       | DOUBLE    |
+| DECIMAL      | DECIMAL   |
+| CHAR         | CHAR      |
+| VARCHAR      | VARCHAR   |
+| DATE         | DATE      |
+| DATETIME     | DATETIME  |
+
+#### 目标数据库为 Oracle
+
+| Oracle          | StarRocks |
+| --------------- | --------- |
+| CHAR            | CHAR      |
+| VARCHAR/VARCHAR2 | VARCHAR   |
+| DATE            | DATE      |
+| SMALLINT        | SMALLINT  |
+| INT             | INT       |
+| DATE            | DATETIME      |
+| NUMBER          | DECIMAL   |
+
+#### 目标数据库为 PostgreSQL
+
+| PostgreSQL          | StarRocks |
+| ------------------- | --------- |
+| SMALLINT/SMALLSERIAL | SMALLINT  |
+| INTEGER/SERIAL       | INT       |
+| BIGINT/BIGSERIAL     | BIGINT    |
+| BOOLEAN             | BOOLEAN   |
+| REAL                | FLOAT     |
+| DOUBLE PRECISION    | DOUBLE    |
+| DECIMAL             | DECIMAL   |
+| TIMESTAMP           | DATETIME  |
+| DATE                | DATE      |
+| CHAR                | CHAR      |
+| VARCHAR             | VARCHAR   |
+| TEXT                | VARCHAR   |
+
+#### 目标数据库为 SQL Server
+
+| SQL Server        | StarRocks |
+| ----------------- | --------- |
+| BIT           | BOOLEAN   |
+| TINYINT           | TINYINT   |
+| SMALLINT          | SMALLINT  |
+| INT               | INT       |
+| BIGINT            | BIGINT    |
+| FLOAT             | FLOAT/DOUBLE     |
+| REAL              | FLOAT    |
+| DECIMAL/NUMERIC    | DECIMAL   |
+| CHAR              | CHAR      |
+| VARCHAR           | VARCHAR   |
+| DATE              | DATE      |
+| DATETIME/DATETIME2 | DATETIME  |
+
+### 使用限制
+
+* 创建 JDBC 外部表时，不支持索引，也不支持通过 PARTITION BY、DISTRIBUTED BY 来指定数据分布规则。
+* 查询 JDBC 外部表时，不支持下推函数。
+
+## (Deprecated) Elasticsearch 外部表
 
 如要查询 Elasticsearch 中的数据，需要在 StarRocks 中创建 Elasticsearch 外部表，并将外部表与待查询的 Elasticsearch 表建立映射。StarRocks 与 Elasticsearch 都是目前流行的分析系统。StarRocks 擅长大规模分布式计算，且支持通过外部表查询 Elasticsearch。Elasticsearch 擅长全文检索。两者结合提供了一个更完善的 OLAP 解决方案。
 
@@ -369,228 +554,6 @@ StarRocks 支持对 Elasticsearch 表进行谓词下推，把过滤条件推给 
 * Elasticsearch 5.x 之前和之后的数据扫描方式不同，目前 StarRocks 只支持查询 5.x 之后的版本。
 * 支持查询使用 HTTP Basic 认证的 Elasticsearch 集群。
 * 一些通过 StarRocks 的查询会比直接请求 Elasticsearch 会慢很多，比如 count 相关查询。这是因为 Elasticsearch 内部会直接读取满足条件的文档个数相关的元数据，不需要对真实的数据进行过滤操作，使得 count 的速度非常快。
-
-## (Deprecated) 更多数据库（JDBC）的外部表
-
-自 2.3.0 版本起，StarRocks 支持通过外部表的方式查询支持 JDBC 的数据库，无需将数据导入至 StarRocks，即可实现对这类数据库的极速分析。本文介绍如何在 StarRocks 创建外部表，查询支持 JDBC 的数据库中的数据。
-
-### 前提条件
-
-在您使用 JDBC 外表时， FE、BE 节点会下载 JDBC 驱动程序，因此 FE、BE 节点所在机器必须能够访问用于下载 JDBC 驱动程序 JAR 包的 URL，该 URL 由创建 JDBC 资源中的配置项 `driver_url` 指定。
-
-### **创建和**管理**JDBC 资源**
-
-#### 创建 JDBC 资源
-
-您需要提前在 StarRocks 中创建 JDBC 资源，用于管理数据库的相关连接信息。这里的数据库是指支持 JDBC 的数据库，以下简称为“目标数据库”。创建资源后，即可使用该资源创建外部表。
-
-例如目标数据库为 PostgreSQL，则可以执行如下语句，创建一个名为 `jdbc0` 的 JDBC 资源，用于访问 PostgreSQL：
-
-~~~SQL
-create external resource jdbc0
-properties (
-    "type" = "jdbc",
-    "user" = "postgres",
-    "password" = "changeme",
-    "jdbc_uri" = "jdbc:postgresql://127.0.0.1:5432/jdbc_test",
-    "driver_url" = "https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar",
-    "driver_class" = "org.postgresql.Driver"
-);
-~~~
-
-`properties` 的必填配置项：
-
-* `type`：资源类型，固定取值为 `jdbc`。
-
-* `user`：目标数据库用户名。
-
-* `password`：目标数据库用户登录密码。
-
-* `jdbc_uri`：JDBC 驱动程序连接目标数据库的 URI，需要满足目标数据库 URI 的语法。常见的目标数据库 URI，请参见 [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/use/#connecting-to-the-database)、[SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) 官网文档。
-
-    > **说明**
-    >
-    > 目标数据库 URI 中必须指定具体数据库的名称，如上示例中的 `jdbc_test`。
-
-* `driver_url`：用于下载 JDBC 驱动程序 JAR 包的 URL，支持使用 HTTP 协议 或者 file 协议。例如`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar`，`file:///home/disk1/postgresql-42.3.3.jar`。
-
-    > **说明**
-    >
-    > 不同目标数据库使用的 JDBC 驱动程序不同，使用其他数据库的 JDBC 驱动程序会有不兼容的问题，建议访问目标数据库官网，查询并使用其支持的 JDBC 驱动程序。常见的目标数据库的  JDBC 驱动程序下载地址，请参见 [MySQL](https://dev.mysql.com/downloads/connector/j/)、[Oracle](https://www.oracle.com/database/technologies/maven-central-guide.html)、[PostgreSQL](https://jdbc.postgresql.org/download/)、[SQL Server](https://learn.microsoft.com/en-us/sql/connect/jdbc/download-microsoft-jdbc-driver-for-sql-server?view=sql-server-ver16) 。
-
-* `driver_class`：JDBC 驱动程序的类名称。以下列举常见 JDBC 驱动程序的类名称：
-
-  * MySQL: com.mysql.jdbc.Driver（MySQL 5.x 及以下版本）、com.mysql.cj.jdbc.Driver （MySQL 8.x 及以上版本）
-  * SQL Server：com.microsoft.sqlserver.jdbc.SQLServerDriver
-  * Oracle: oracle.jdbc.driver.OracleDriver
-  * PostgreSQL：org.postgresql.Driver
-
-创建资源时，FE 通过 `driver_url` 下载 JDBC 驱动程序 JAR 包，生成 checksum 并保存起来，用于校验 BE 下载的 JDBC 驱动程序 JAR 包的正确性。
-
-> **说明**
->
-> 如果下载 JDBC 驱动程序失败，则创建资源也会失败。
-
-BE 节点首次查询 JDBC 外部表时，如果发现所在机器上不存在相应的 JDBC 驱动程序 JAR 包，则会通过 `driver_url` 进行下载，所有的 JDBC 驱动程序 JAR 包都会保存在 **${STARROCKS_HOME}/lib/jdbc_drivers** 目录下。
-
-#### 查看 JDBC 资源
-
-执行如下语句，查看 StarRocks 中的所有 JDBC 资源：
-
-> **说明**
->
-> `ResourceType` 列为 `jdbc`。
-
-~~~SQL
-SHOW RESOURCES;
-~~~
-
-#### 删除 JDBC 资源
-
-执行如下语句，删除名为 `jdbc0` 的 JDBC 资源：
-
-~~~SQL
-DROP RESOURCE "jdbc0";
-~~~
-
-> **说明**
->
-> 删除 JDBC 资源会导致使用该 JDBC 资源创建的 JDBC 外部表不可用，但目标数据库的数据并不会丢失。如果您仍需要通过 StarRocks 查询目标数据库的数据，可以重新创建 JDBC 资源和 JDBC 外部表。
-
-### **创建数据库**
-
-执行如下语句，在 StarRocks 中创建并进入名为 `jdbc_test` 的数据库：
-
-~~~SQL
-CREATE DATABASE jdbc_test; 
-USE jdbc_test; 
-~~~
-
-> **说明**
->
-> 库名无需与目标数据库的名称保持一致。
-
-### **创建 JDBC 外部表**
-
-执行如下语句，在数据库 `jdbc_test` 中，创建一张名为 `jdbc_tbl` 的 JDBC 外部表：
-
-~~~SQL
-create external table jdbc_tbl (
-    `id` bigint NULL, 
-    `data` varchar(200) NULL 
-) ENGINE=jdbc 
-properties (
-    "resource" = "jdbc0",
-    "table" = "dest_tbl"
-);
-~~~
-
-`properties` 配置项：
-
-* `resource`：所使用 JDBC 资源的名称，必填项。
-
-* `table`：目标数据库表名，必填项。
-
-支持的数据类型以及与 StarRocks 的数据类型映射关系，请参见[数据类型映射](#数据类型映射)。
-
-> **说明**
->
-> * 不支持索引。
-> * 不支持通过 PARTITION BY、DISTRIBUTED BY 来指定数据分布规则。
-
-### **查询 JDBC 外部表**
-
-查询 JDBC 外部表前，必须启用 Pipeline 引擎。
-
-> **说明**
->
-> 如果已经启用 Pipeline 引擎，则可跳过本步骤。
-
-~~~SQL
-set enable_pipeline_engine=true;
-~~~
-
-执行如下语句，通过 JDBC 外部表查询目标数据库的数据：
-
-~~~SQL
-select * from jdbc_tbl;
-~~~
-
-StarRocks 支持对目标表进行谓词下推，把过滤条件推给目标表执行，让执行尽量靠近数据源，进而提高查询性能。目前支持下推运算符，包括二元比较运算符（`>`、`>=`、`=`、`<`、`<=`）、`IN`、`IS NULL` 和 `BETWEEN ... AND ...`，但是不支持下推函数。
-
-### 数据类型映射
-
-目前仅支持查询目标数据库中数字、字符串、时间、日期等基础类型的数据。如果目标数据库中的数据超出 StarRocks 中数据类型的表示范围，则查询会报错。
-
-如下以目标数据库 MySQL、Oracle、PostgreSQL、SQL Server 为例，说明支持查询的数据类型，以及与 StarRocks 数据类型的映射关系。
-
-#### **目标数据库为 MySQL**
-
-| MySQL        | StarRocks |
-| ------------ | --------- |
-| BOOLEAN      | BOOLEAN   |
-| TINYINT      | TINYINT   |
-| SMALLINT     | SMALLINT  |
-| MEDIUMINTINT | INT       |
-| BIGINT       | BIGINT    |
-| FLOAT        | FLOAT     |
-| DOUBLE       | DOUBLE    |
-| DECIMAL      | DECIMAL   |
-| CHAR         | CHAR      |
-| VARCHAR      | VARCHAR   |
-| DATE         | DATE      |
-| DATETIME     | DATETIME  |
-
-#### **目标数据库为 Oracle**
-
-| Oracle          | StarRocks |
-| --------------- | --------- |
-| CHAR            | CHAR      |
-| VARCHAR/VARCHAR2 | VARCHAR   |
-| DATE            | DATE      |
-| SMALLINT        | SMALLINT  |
-| INT             | INT       |
-| DATE            | DATETIME      |
-| NUMBER          | DECIMAL   |
-
-#### **目标数据库为 PostgreSQL**
-
-| PostgreSQL          | StarRocks |
-| ------------------- | --------- |
-| SMALLINT/SMALLSERIAL | SMALLINT  |
-| INTEGER/SERIAL       | INT       |
-| BIGINT/BIGSERIAL     | BIGINT    |
-| BOOLEAN             | BOOLEAN   |
-| REAL                | FLOAT     |
-| DOUBLE PRECISION    | DOUBLE    |
-| DECIMAL             | DECIMAL   |
-| TIMESTAMP           | DATETIME  |
-| DATE                | DATE      |
-| CHAR                | CHAR      |
-| VARCHAR             | VARCHAR   |
-| TEXT                | VARCHAR   |
-
-#### **目标数据库为 SQL Server**
-
-| SQL Server        | StarRocks |
-| ----------------- | --------- |
-| BIT           | BOOLEAN   |
-| TINYINT           | TINYINT   |
-| SMALLINT          | SMALLINT  |
-| INT               | INT       |
-| BIGINT            | BIGINT    |
-| FLOAT             | FLOAT/DOUBLE     |
-| REAL              | FLOAT    |
-| DECIMAL/NUMERIC    | DECIMAL   |
-| CHAR              | CHAR      |
-| VARCHAR           | VARCHAR   |
-| DATE              | DATE      |
-| DATETIME/DATETIME2 | DATETIME  |
-
-### 使用限制
-
-* 创建 JDBC 外部表时，不支持索引，也不支持通过 PARTITION BY、DISTRIBUTED BY 来指定数据分布规则。
-* 查询 JDBC 外部表时，不支持下推函数。
 
 ## (Deprecated) Hive 外部表
 
@@ -1177,6 +1140,42 @@ PROPERTIES (
 ~~~sql
 SELECT COUNT(*) FROM hudi_tbl;
 ~~~
+
+## (Deprecated) MySQL 外部表
+
+星型模型中，数据一般划分为维度表 (dimension table) 和事实表 (fact table)。维度表数据量少，但会涉及 UPDATE 操作。目前 StarRocks 中还不直接支持 UPDATE 操作（可以通过 Unique/Primary 数据模型实现），在一些场景下，可以把维度表存储在 MySQL 中，查询时直接读取维度表。
+
+在使用 MySQL 的数据之前，需在 StarRocks 创建外部表 (CREATE EXTERNAL TABLE)，与之相映射。StarRocks 中创建 MySQL 外部表时需要指定 MySQL 的相关连接信息，如下所示。
+
+~~~sql
+CREATE EXTERNAL TABLE mysql_external_table
+(
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    k4 VARCHAR(2048),
+    k5 DATETIME
+)
+ENGINE=mysql
+PROPERTIES
+(
+    "host" = "127.0.0.1",
+    "port" = "3306",
+    "user" = "mysql_user",
+    "password" = "mysql_passwd",
+    "database" = "mysql_db_test",
+    "table" = "mysql_table_test"
+);
+~~~
+
+参数说明：
+
+* **host**：MySQL 连接地址
+* **port**：MySQL 连接端口号
+* **user**：MySQL 登录用户名
+* **password**：MySQL 登录密码
+* **database**：MySQL 数据库名
+* **table**：MySQL 数据库表名
 
 ## 常见问题
 
