@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
@@ -70,6 +71,7 @@ public class AnalyzeMgr implements Writable {
     private final Map<Long, AnalyzeJob> analyzeJobMap;
     private final Map<Long, AnalyzeStatus> analyzeStatusMap;
     private final Map<Long, BasicStatsMeta> basicStatsMetaMap;
+    private final Map<StatsMetaKey, ExternalBasicStatsMeta> externalBasicStatsMetaMap;
     private final Map<Pair<Long, String>, HistogramStatsMeta> histogramStatsMetaMap;
 
     // ConnectContext of all currently running analyze tasks
@@ -86,6 +88,7 @@ public class AnalyzeMgr implements Writable {
         analyzeJobMap = Maps.newConcurrentMap();
         analyzeStatusMap = Maps.newConcurrentMap();
         basicStatsMetaMap = Maps.newConcurrentMap();
+        externalBasicStatsMetaMap = Maps.newConcurrentMap();
         histogramStatsMetaMap = Maps.newConcurrentMap();
     }
 
@@ -212,6 +215,30 @@ public class AnalyzeMgr implements Writable {
         basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
     }
 
+    public void addExternalBasicStatsMeta(ExternalBasicStatsMeta basicStatsMeta) {
+        externalBasicStatsMetaMap.put(new StatsMetaKey(basicStatsMeta.getCatalogName(),
+                basicStatsMeta.getDbName(), basicStatsMeta.getTableName()), basicStatsMeta);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddExternalBasicStatsMeta(basicStatsMeta);
+    }
+
+    public void replayAddExternalBasicStatsMeta(ExternalBasicStatsMeta basicStatsMeta) {
+        externalBasicStatsMetaMap.put(new StatsMetaKey(basicStatsMeta.getCatalogName(),
+                basicStatsMeta.getDbName(), basicStatsMeta.getTableName()), basicStatsMeta);
+    }
+
+    public void removeExternalBasicStatsMeta(String catalogName, String dbName, String tableName) {
+        StatsMetaKey key = new StatsMetaKey(catalogName, dbName, tableName);
+        if (externalBasicStatsMetaMap.containsKey(key)) {
+            ExternalBasicStatsMeta basicStatsMeta = externalBasicStatsMetaMap.remove(key);
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveExternalBasicStatsMeta(basicStatsMeta);
+        }
+    }
+
+    public void replayRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta basicStatsMeta) {
+        externalBasicStatsMetaMap.remove(new StatsMetaKey(basicStatsMeta.getCatalogName(),
+                basicStatsMeta.getDbName(), basicStatsMeta.getTableName()));
+    }
+
     public void refreshBasicStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
         Table table;
         try {
@@ -230,8 +257,12 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
-    public void refreshConnectorTableBasicStatisticsCache(Table table, List<String> columns, boolean async) {
-        if (table == null) {
+    public void refreshConnectorTableBasicStatisticsCache(String catalogName, String dbName, String tableName,
+                                                          List<String> columns, boolean async) {
+        Table table;
+        try {
+            table = MetaUtils.getTable(catalogName, dbName, tableName);
+        } catch (SemanticException e) {
             return;
         }
 
@@ -249,6 +280,10 @@ public class AnalyzeMgr implements Writable {
 
     public Map<Long, BasicStatsMeta> getBasicStatsMetaMap() {
         return basicStatsMetaMap;
+    }
+
+    public Map<StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+        return externalBasicStatsMetaMap;
     }
 
     public void addHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
@@ -611,7 +646,8 @@ public class AnalyzeMgr implements Writable {
         int numJson = 1 + analyzeJobMap.size()
                 + 1 + analyzeStatuses.size()
                 + 1 + basicStatsMetaMap.size()
-                + 1 + histogramStatsMetaMap.size();
+                + 1 + histogramStatsMetaMap.size()
+                + 1 + externalBasicStatsMetaMap.size();
 
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.ANALYZE_MGR, numJson);
 
@@ -633,6 +669,11 @@ public class AnalyzeMgr implements Writable {
         writer.writeJson(histogramStatsMetaMap.size());
         for (HistogramStatsMeta histogramStatsMeta : histogramStatsMetaMap.values()) {
             writer.writeJson(histogramStatsMeta);
+        }
+
+        writer.writeJson(externalBasicStatsMetaMap.size());
+        for (ExternalBasicStatsMeta basicStatsMeta : externalBasicStatsMetaMap.values()) {
+            writer.writeJson(basicStatsMeta);
         }
 
         writer.close();
@@ -662,6 +703,12 @@ public class AnalyzeMgr implements Writable {
             HistogramStatsMeta histogramStatsMeta = reader.readJson(HistogramStatsMeta.class);
             replayAddHistogramStatsMeta(histogramStatsMeta);
         }
+
+        int externalBasicStatsMetaSize = reader.readInt();
+        for (int i = 0; i < externalBasicStatsMetaSize; ++i) {
+            ExternalBasicStatsMeta basicStatsMeta = reader.readJson(ExternalBasicStatsMeta.class);
+            replayAddExternalBasicStatsMeta(basicStatsMeta);
+        }
     }
 
     private static class SerializeData {
@@ -676,5 +723,35 @@ public class AnalyzeMgr implements Writable {
 
         @SerializedName("histogramStatsMeta")
         public List<HistogramStatsMeta> histogramStatsMeta;
+    }
+
+    public static class StatsMetaKey {
+        String catalogName;
+        String dbName;
+        String tableName;
+        public StatsMetaKey(String catalogName, String dbName, String tableName) {
+            this.catalogName = catalogName;
+            this.dbName = dbName;
+            this.tableName = tableName;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof StatsMetaKey)) {
+                return false;
+            }
+            StatsMetaKey that = (StatsMetaKey) o;
+            return Objects.equal(catalogName, that.catalogName) &&
+                    Objects.equal(dbName, that.dbName) &&
+                    Objects.equal(tableName, that.tableName);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hashCode(catalogName, dbName, tableName);
+        }
     }
 }
