@@ -15,6 +15,7 @@
 
 package com.starrocks.privilege;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -22,6 +23,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
+import com.starrocks.persist.UserPrivilegeCollectionInfoDeprecated;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -47,6 +49,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -1544,5 +1547,35 @@ public class AuthorizationManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
         setCurrentUserAndRoles(ctx, new UserIdentity("u2", "%"));
         Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.OPERATE));
+    }
+
+    @Test
+    public void testUserPriUpgrade() throws IOException, InterruptedException, PrivilegeException {
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+
+        UserPrivilegeCollection collection = new UserPrivilegeCollection();
+        HashSet<Long> roleIds = new HashSet<>();
+        roleIds.add(1L);
+        collection.grantRoles(roleIds);
+        collection.setDefaultRoleIds(roleIds);
+        collection.grant(ObjectTypeDeprecate.SYSTEM, Lists.newArrayList(PrivilegeType.OPERATE),
+                Lists.newArrayList(new PEntryObject[] {null}), false);
+
+        UserPrivilegeCollectionInfoDeprecated deprecated = new UserPrivilegeCollectionInfoDeprecated(
+                new UserIdentity("u1", "%"),
+                collection,
+                (short) 1, (short) 1);
+
+        deprecated.write(emptyImage.getDataOutputStream());
+
+        UserPrivilegeCollectionInfo userPrivilegeCollectionInfo =
+                UserPrivilegeCollectionInfo.read(emptyImage.getDataInputStream());
+
+        Assert.assertEquals(new UserIdentity("u1", "%"), userPrivilegeCollectionInfo.getUserIdentity());
+        Assert.assertEquals(roleIds, userPrivilegeCollectionInfo.getPrivilegeCollection().getAllRoles());
+        Assert.assertEquals(roleIds, userPrivilegeCollectionInfo.getPrivilegeCollection().getDefaultRoleIds());
+        Assert.assertTrue(userPrivilegeCollectionInfo.getPrivilegeCollection()
+                .check(ObjectType.SYSTEM, PrivilegeType.OPERATE, null));
     }
 }
