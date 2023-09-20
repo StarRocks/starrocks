@@ -55,7 +55,7 @@ if [ -z $STARROCKS_VERSION ]; then
     fi
 fi
 
-if [ -z $STARROCKS_COMMIT_HASH]; then
+if [ -z $STARROCKS_COMMIT_HASH ] ; then
     export STARROCKS_COMMIT_HASH=$(git rev-parse --short=7 HEAD)
 fi
 
