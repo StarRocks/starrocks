@@ -59,7 +59,6 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.sys.GrantsTo;
@@ -952,7 +951,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private boolean setColumnDesc(List<TColumnDef> columns, Table table, long limit,
                                   boolean needSetDbAndTable, String db, String tbl) {
         String tableKeysType = "";
-        if (TableType.OLAP.equals(table.getType())) {
+        if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             tableKeysType = olapTable.getKeysType().name().substring(0, 3).toUpperCase();
         }
