@@ -116,10 +116,13 @@ fi
 
 mkdir ut_ports
 
-if [[ $FILTER_TEST != "" ]];then
+if [[ ${DUMPCASE} -ne 1 ]]; then
+    DUMP_FILTER_TEST="com.starrocks.sql.dump.QueryDumpRegressionTest,com.starrocks.sql.dump.QueryDumpCaseRewriter"
 
-    if [[ ${DUMPCASE} -ne 1 ]]; then
-        FILTER_TEST="${FILTER_TEST},com.starrocks.sql.dump.QueryDumpRegressionTest,com.starrocks.sql.dump.QueryDumpCaseRewriter"
+    if [[ $FILTER_TEST != "" ]];then
+        FILTER_TEST="${FILTER_TEST},${DUMP_FILTER_TEST}"
+    else
+        FILTER_TEST="${DUMP_FILTER_TEST}"
     fi
 
     FILTER_TEST=`echo $FILTER_TEST | sed -E 's/([^,]+)/!\1/g'`

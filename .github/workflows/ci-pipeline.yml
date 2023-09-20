@@ -203,12 +203,12 @@ jobs:
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
-      - name: Upload log
+      - name: Upload Log
         uses: actions/upload-artifact@v3
-        if: always()
+        if: always() && steps.run_ut.outcome == 'failure'
         with:
           name: BE UT LOG
-          path: ${{ steps.run_ut.outputs.RES_LOG }}
+          path: ${{ steps.run_ut.outputs.BE_LOG }}
           retention-days: 1
 
       - name: Clean ENV
@@ -216,6 +216,7 @@ jobs:
         run: |
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
+          rm -rf ${{ steps.run_ut.outputs.BE_LOG }}
           rm -rf ${{ github.workspace }}/*
 
   clang-tidy:
