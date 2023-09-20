@@ -47,7 +47,8 @@ Status ColumnChunkReader::init(int chunk_size) {
     }
     int64_t size = metadata().total_compressed_size;
     int64_t num_values = metadata().num_values;
-    _page_reader = std::make_unique<PageReader>(_opts.file->stream().get(), start_offset, size, num_values);
+    _stream = _opts.file->stream().get();
+    _page_reader = std::make_unique<PageReader>(_stream, start_offset, size, num_values, _opts.stats);
 
     // seek to the first page
     _page_reader->seek_to_offset(start_offset);
@@ -144,6 +145,7 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
     Slice read_data;
     auto ret = _page_reader->peek(read_size);
     if (ret.ok() && ret.value().size() == read_size) {
+        _opts.stats->bytes_read += read_size;
         // peek dos not advance offset.
         _page_reader->skip_bytes(read_size);
         read_data = Slice(ret.value().data(), read_size);
