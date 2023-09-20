@@ -1621,7 +1621,7 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitVariableExpr(VariableExpr node, Scope context) {
             try {
-                if (node.getSetType().equals(SetType.USER)) {
+                if (node.getSetType() != null && node.getSetType().equals(SetType.USER)) {
                     UserVariable userVariable = session.getUserVariables(node.getName());
                     // If referring to an uninitialized variable, its value is NULL and a string type.
                     if (userVariable == null) {
