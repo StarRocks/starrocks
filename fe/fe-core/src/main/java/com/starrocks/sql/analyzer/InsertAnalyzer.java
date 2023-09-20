@@ -16,10 +16,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.external.starrocks.TableMetaSyncer;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -157,18 +155,13 @@ public class InsertAnalyzer {
             lockTimes++;
         }
         try {
-            MetaContext metaContext = new MetaContext();
-            metaContext.setMetaVersion(FeConstants.meta_version);
-            metaContext.setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
-            metaContext.setThreadLocalInfo();
-            new TableMetaSyncer().syncTable(copiedTable);
+           new TableMetaSyncer().syncTable(copiedTable);
         }  catch (MetaNotFoundException e) {
             throw new SemanticException(e.getMessage());
         } finally {
             while (lockTimes-- > 0) {
                 database.readLock();
             }
-            MetaContext.remove();
         }
         return copiedTable;
     }
