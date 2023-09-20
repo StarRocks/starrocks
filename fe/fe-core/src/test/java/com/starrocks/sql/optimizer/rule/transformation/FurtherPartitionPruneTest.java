@@ -449,6 +449,10 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from less_than_tbl where k1 < str_to_date('20200801', '%Y%m%d')");
         sqlList.add("select * from less_than_tbl where k1 < '2020-08-01' and k1 is not null");
         sqlList.add("select * from less_than_tbl where k1 < '2020-08-01' and k1 is null");
+        sqlList.add("select * from ptest where date_trunc('year', d2) = '2020-01-01'");
+        sqlList.add("select * from less_than_tbl where date_trunc('year', k1) < '2020-08-01'");
+        sqlList.add("select * from less_than_tbl where datediff('2020-08-01', k1) = 1");
+
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 
@@ -467,7 +471,6 @@ class FurtherPartitionPruneTest extends PlanTestBase {
 
     private static Stream<Arguments> exprPrunePartitionSqls() {
         List<String> sqlList = Lists.newArrayList();
-        sqlList.add("select * from less_than_tbl where date_trunc('year', k1) < '2020-08-01'");
         sqlList.add("select * from less_than_tbl where date_trunc('year', k1) is null");
         sqlList.add(
                 "select * from less_than_tbl where date_trunc('year', k1) is null or k1 in " +
