@@ -133,16 +133,16 @@ public:
         _default_storage_root_path = config::storage_root_path;
         config::storage_root_path = "./data";
 
-        system("mkdir -p ./test_run/output/");
-        system("pwd");
-        system("cp -r ./be/test/runtime/test_data/ ./test_run/.");
+        [[maybe_unused]] auto res = system("mkdir -p ./test_run/output/");
+        res = system("pwd");
+        res = system("cp -r ./be/test/runtime/test_data/ ./test_run/.");
 
         init();
     }
 
     void TearDown() override {
         _obj_pool.clear();
-        system("rm -rf ./test_run");
+        [[maybe_unused]] auto res = system("rm -rf ./test_run");
         config::storage_root_path = _default_storage_root_path;
     }
 

@@ -59,7 +59,7 @@ bool SortContext::is_partition_ready() const {
 void SortContext::cancel() {}
 
 StatusOr<ChunkPtr> SortContext::pull_chunk() {
-    _init_merger();
+    RETURN_IF_ERROR(_init_merger());
 
     while (_required_rows > 0 && !_merger.is_eos()) {
         if (_current_chunk.empty()) {

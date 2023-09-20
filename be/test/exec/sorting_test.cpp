@@ -320,7 +320,7 @@ TEST(SortingTest, merge_sorted_chunks) {
 
     SortDescs sort_desc(std::vector<int>{1}, std::vector<int>{-1});
     SortedRuns output;
-    merge_sorted_chunks(sort_desc, &sort_exprs, input_chunks, &output);
+    ASSERT_OK(merge_sorted_chunks(sort_desc, &sort_exprs, input_chunks, &output));
     ASSERT_TRUE(output.is_sorted(sort_desc));
 }
 
@@ -373,10 +373,10 @@ TEST(SortingTest, merge_sorted_stream) {
     }
 
     std::vector<ChunkUniquePtr> output_chunks;
-    merge_sorted_cursor_cascade(sort_desc, std::move(input_cursors), [&](ChunkUniquePtr chunk) {
+    ASSERT_OK(merge_sorted_cursor_cascade(sort_desc, std::move(input_cursors), [&](ChunkUniquePtr chunk) {
         output_chunks.push_back(std::move(chunk));
         return Status::OK();
-    });
+    }));
 
     for (auto& chunk : output_chunks) {
         for (int i = 0; i < chunk->num_rows(); i++) {

@@ -68,10 +68,10 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
                         _topn_type, ChunksSorterTopn::tunning_buffered_chunks(_partition_limit)));
             },
             [this, state](size_t partition_idx, const ChunkPtr& chunk) {
-                _chunks_sorters[partition_idx]->update(state, chunk);
+                (void)_chunks_sorters[partition_idx]->update(state, chunk);
             });
     if (_chunks_partitioner->is_passthrough()) {
-        transfer_all_chunks_from_partitioner_to_sorters(state);
+        RETURN_IF_ERROR(transfer_all_chunks_from_partitioner_to_sorters(state));
     }
     return st;
 }

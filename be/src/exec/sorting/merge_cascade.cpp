@@ -285,8 +285,7 @@ Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
     MergeCursorsCascade merger;
     RETURN_IF_ERROR(merger.init(sort_desc, std::move(cursors)));
     CHECK(merger.is_data_ready());
-    merger.consume_all(std::move(consumer));
-    return Status::OK();
+    return merger.consume_all(std::move(consumer));
 }
 
 } // namespace starrocks
