@@ -45,6 +45,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo;
@@ -59,7 +60,12 @@ import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
+import com.starrocks.transaction.CommitRateExceededException;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TxnCommitAttachment;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -546,5 +552,49 @@ public class BrokerLoadJobTest {
         Assert.assertEquals(99, (int) Deencapsulation.getField(brokerLoadJob, "progress"));
         Assert.assertEquals(1, brokerLoadJob.getFinishTimestamp());
         Assert.assertEquals(JobState.LOADING, brokerLoadJob.getState());
+    }
+
+    @Test
+    public void testCommitRateExceeded(@Injectable BrokerLoadingTaskAttachment attachment1,
+                                       @Injectable LoadTask loadTask1,
+                                       @Mocked GlobalStateMgr globalStateMgr,
+                                       @Injectable Database database,
+                                       @Mocked GlobalTransactionMgr transactionMgr) throws UserException {
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        Deencapsulation.setField(brokerLoadJob, "state", JobState.LOADING);
+        Map<Long, LoadTask> idToTasks = Maps.newHashMap();
+        idToTasks.put(1L, loadTask1);
+        Deencapsulation.setField(brokerLoadJob, "idToTasks", idToTasks);
+        new Expectations() {
+            {
+                attachment1.getCounter(BrokerLoadJob.DPP_NORMAL_ALL);
+                minTimes = 0;
+                result = 10;
+                attachment1.getCounter(BrokerLoadJob.DPP_ABNORMAL_ALL);
+                minTimes = 0;
+                result = 0;
+                attachment1.getTaskId();
+                minTimes = 0;
+                result = 1L;
+                globalStateMgr.getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                globalStateMgr.getCurrentGlobalTransactionMgr();
+                result = transactionMgr;
+                transactionMgr.commitTransaction(anyLong, anyLong, (List<TabletCommitInfo>) any,
+                        (List<TabletFailInfo>) any, (TxnCommitAttachment) any);
+                result = new CommitRateExceededException(100, System.currentTimeMillis() + 10);
+                result = null;
+            }
+        };
+
+        brokerLoadJob.onTaskFinished(attachment1);
+        Set<Long> finishedTaskIds = Deencapsulation.getField(brokerLoadJob, "finishedTaskIds");
+        Assert.assertEquals(1, finishedTaskIds.size());
+        EtlStatus loadingStatus = Deencapsulation.getField(brokerLoadJob, "loadingStatus");
+        Assert.assertEquals("10", loadingStatus.getCounters().get(BrokerLoadJob.DPP_NORMAL_ALL));
+        Assert.assertEquals("0", loadingStatus.getCounters().get(BrokerLoadJob.DPP_ABNORMAL_ALL));
+        int progress = Deencapsulation.getField(brokerLoadJob, "progress");
+        Assert.assertEquals(99, progress);
     }
 }

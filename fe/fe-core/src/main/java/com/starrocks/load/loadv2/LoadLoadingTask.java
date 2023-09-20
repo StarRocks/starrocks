@@ -245,6 +245,7 @@ public class LoadLoadingTask extends LoadTask {
                     .add("msg", "begin to execute plan")
                     .build());
         }
+        long writeBeginTime = System.currentTimeMillis();
         curCoordinator.exec();
         if (curCoordinator.join(waitSecond)) {
             Status status = curCoordinator.getExecStatus();
@@ -254,7 +255,8 @@ public class LoadLoadingTask extends LoadTask {
                         curCoordinator.getTrackingUrl(),
                         TabletCommitInfo.fromThrift(curCoordinator.getCommitInfos()),
                         TabletFailInfo.fromThrift(curCoordinator.getFailInfos()),
-                        curCoordinator.getRejectedRecordPaths());
+                        curCoordinator.getRejectedRecordPaths(),
+                        System.currentTimeMillis() - writeBeginTime);
             } else {
                 throw new LoadException(status.getErrorMsg());
             }

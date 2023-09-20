@@ -272,6 +272,36 @@ public class TransactionState implements Writable {
     private long publishVersionTime = -1;
     private long publishVersionFinishTime = -1;
 
+    // The time of first commit attempt, i.e, the end time when ingestion write is completed.
+    // Measured in milliseconds since epoch.
+    // -1 means this field is unset.
+    //
+    // Protected by database lock.
+    //
+    // NOTE: This field is only used in shared data mode.
+    private long writeEndTimeMs = -1;
+
+    // The duration of the ingestion data write operation in milliseconds.
+    // This field is normally set automatically during commit based on
+    // writeEndTime and prepareTime. However, for cases like broker load
+    // with scheduling delays and concurrent ingestion, the auto calculated
+    // value may have large error compared to actual data write duration.
+    // In these cases, the upper ingestion job should set this field manually
+    // before commit.
+    //
+    // Protected by database lock.
+    //
+    // NOTE: This field is only used in shared data mode.
+    private long writeDurationMs = -1;
+
+    // The minimum time allowed to commit the transaction.
+    // Measured in milliseconds since epoch.
+    //
+    // Protected by database lock.
+    //
+    // NOTE: This field is only used in shared data mode.
+    private long allowCommitTimeMs = -1;
+
     @SerializedName("cb")
     private long callbackId = -1;
     @SerializedName("to")
@@ -691,6 +721,8 @@ public class TransactionState implements Writable {
         sb.append(", error replicas num: ").append(errorReplicas.size());
         sb.append(", replica ids: ").append(Joiner.on(",").join(errorReplicas.stream().limit(5).toArray()));
         sb.append(", prepare time: ").append(prepareTime);
+        sb.append(", write end time: ").append(writeEndTimeMs);
+        sb.append(", allow commit time: ").append(allowCommitTimeMs);
         sb.append(", commit time: ").append(commitTime);
         sb.append(", finish time: ").append(finishTime);
         if (commitTime > prepareTime) {
@@ -1022,5 +1054,32 @@ public class TransactionState implements Writable {
 
     public String getTraceParent() {
         return traceParent;
+    }
+
+    // A value of -1 indicates this field is not set.
+    public long getWriteEndTimeMs() {
+        return writeEndTimeMs;
+    }
+
+    public void setWriteEndTimeMs(long writeEndTimeMs) {
+        this.writeEndTimeMs = writeEndTimeMs;
+    }
+
+    // A value of -1 indicates this field is not set.
+    public long getAllowCommitTimeMs() {
+        return allowCommitTimeMs;
+    }
+
+    public void setAllowCommitTimeMs(long allowCommitTimeMs) {
+        this.allowCommitTimeMs = allowCommitTimeMs;
+    }
+
+    // A value of -1 indicates this field is not set.
+    public long getWriteDurationMs() {
+        return writeDurationMs;
+    }
+
+    public void setWriteDurationMs(long writeDurationMs) {
+        this.writeDurationMs = writeDurationMs;
     }
 }
