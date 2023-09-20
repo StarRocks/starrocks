@@ -255,9 +255,11 @@ public:
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
+
     size_t num_columns() const { return _cols.size(); }
     size_t num_key_columns() const { return _num_key_columns; }
     size_t num_short_key_columns() const { return _num_short_key_columns; }
+
     size_t num_rows_per_row_block() const { return _num_rows_per_row_block; }
     KeysType keys_type() const { return static_cast<KeysType>(_keys_type); }
     size_t next_column_unique_id() const { return _next_column_unique_id; }
@@ -268,6 +270,28 @@ public:
     // The in-memory property is no longer supported, but leave this API for compatibility.
     // Newly-added code should not rely on this method, it may be removed at any time.
     static bool is_in_memory() { return false; }
+
+    // Please call the following function with caution. Most of the time,
+    // the following two functions should not be called explicitly.
+    // When we do column partial update for primary key table which seperate primary keys
+    // and sort keys, we will create a partial tablet schema for rowset writer. However,
+    // the sort key columns maybe not exist in the partial tablet schema and the partial tablet
+    // schema will keep a wrong sort key idxes and short key column num. So BE will crash in ASAN
+    // mode. However, the sort_key_idxes and short_key_column_num in partial tablet schema is not
+    // important actually, because the update segment file does not depend on it and the update
+    // segment file will be rewrite to col file after apply. So these function are used to modify
+    // the sort_key_idxes and short_key_column_num in partial tablet schema to avoid BE crash so far.
+    void set_sort_key_idxes(std::vector<ColumnId> sort_key_idxes) {
+        for (auto idx : _sort_key_idxes) {
+            _cols[idx].set_is_sort_key(false);
+        }
+        _sort_key_idxes.clear();
+        _sort_key_idxes.assign(sort_key_idxes.begin(), sort_key_idxes.end());
+        for (auto idx : _sort_key_idxes) {
+            _cols[idx].set_is_sort_key(true);
+        }
+    }
+    void set_num_short_key_columns(uint16_t num_short_key_columns) { _num_short_key_columns = num_short_key_columns; }
 
     std::string debug_string() const;
 

@@ -226,8 +226,19 @@ Status DeltaWriter::_init() {
         if (!_opt.merge_condition.empty()) {
             writer_context.merge_condition = _opt.merge_condition;
         }
+        // In column mode partial update, we need to modify sort key idxes and short key column num in partial
+        // tablet schema
+        if (_opt.partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE ||
+            _opt.partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+            std::vector<ColumnId> sort_key_idxes(_tablet_schema->num_key_columns());
+            std::iota(sort_key_idxes.begin(), sort_key_idxes.end(), 0);
+            partial_update_schema->set_num_short_key_columns(1);
+            partial_update_schema->set_sort_key_idxes(sort_key_idxes);
+        }
+
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
         writer_context.partial_update_mode = _opt.partial_update_mode;
+        _tablet_schema = partial_update_schema;
     } else {
         writer_context.tablet_schema = &_tablet->tablet_schema();
         if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
