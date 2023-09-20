@@ -1297,8 +1297,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                 getPartitionKeyRange(snapshotTable, partitionColumn);
                         Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.
                                 getPartitionKeyRange(table, partitionColumn);
-                        System.out.println("snapshotPartitionMap +++++++++++ " + snapshotPartitionMap);
-                        System.out.println("currentPartitionMap +++++++++++ " + currentPartitionMap);
                         return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
                     }
                 }

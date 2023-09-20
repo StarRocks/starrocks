@@ -135,6 +135,36 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testJDBCSingleTableEqualPredicateRewriteUseVarchar() throws Exception {
+        createAndRefreshMv("test", "jdbc_mv_varchar",
+                "create materialized view jdbc_mv_varchar distributed by hash(a) " +
+                        "PROPERTIES (\n" +
+                        "\"force_external_table_query_rewrite\" = \"LOOSE\"\n" +
+                        ") " +
+                        " as select a, b, c, d from jdbc0.partitioned_db0.tbl1 where d = '20230803'");
+        String query = "select a, b, c, d from jdbc0.partitioned_db0.tbl1 where d = '20230803'";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "jdbc_mv_varchar");
+
+        String query2 = "select a, b, c, d from jdbc0.partitioned_db0.tbl1 where d = '20230804'";
+        String plan2 = getFragmentPlan(query2);
+        PlanTestBase.assertNotContains(plan2, "jdbc_mv_varchar");
+        String query3 = "select a, b, c, d from jdbc0.partitioned_db0.tbl1 where d > '20230803'";
+        String plan3 = getFragmentPlan(query3);
+        PlanTestBase.assertNotContains(plan3, "jdbc_mv_varchar");
+
+        String query4 = "select a, b, c, d from jdbc0.partitioned_db0.tbl1 where d < '20230803'";
+        String plan4 = getFragmentPlan(query4);
+        PlanTestBase.assertNotContains(plan4, "jdbc_mv_varchar");
+
+        String query5 = "select a + b, c, d from jdbc0.partitioned_db0.tbl1 where d = '20230803'";
+        String plan5 = getFragmentPlan(query5);
+        PlanTestBase.assertContains(plan5, "jdbc_mv_varchar");
+
+        dropMv("test", "jdbc_mv_varchar");
+    }
+
+    @Test
     public void testSingleTableRangePredicateRewrite() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
         createAndRefreshMv("test", "mv_1",
