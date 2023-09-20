@@ -490,6 +490,9 @@ public class OlapScanNode extends ScanNode {
             List<Replica> localReplicas = Lists.newArrayList();
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+                if (warehouse.getAnyAvailableCluster().getAllComputeNodes().isEmpty()) {
+                    throw new UserException(" no backend or compute node in warehouse " + warehouse.getName());
+                }
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
                         visibleVersion, localBeId, schemaHash, warehouse.getAnyAvailableCluster().getWorkerGroupId());
             } else {
