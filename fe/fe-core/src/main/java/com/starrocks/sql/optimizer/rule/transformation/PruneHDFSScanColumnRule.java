@@ -114,7 +114,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
         }
 
         if (scanOperator.getOutputColumns().equals(new ArrayList<>(scanColumns))) {
-            scanOperator.setCanUseAnyColumn(canUseAnyColumn);
+            scanOperator.getScanOptimzeOption().setCanUseAnyColumn(canUseAnyColumn);
             return Collections.emptyList();
         } else {
             try {
@@ -129,9 +129,8 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                                 scanOperator.getColumnMetaToColRefMap(),
                                 scanOperator.getLimit(),
                                 scanOperator.getPredicate());
-
+                newScanOperator.getScanOptimzeOption().setCanUseAnyColumn(canUseAnyColumn);
                 newScanOperator.setScanOperatorPredicates(scanOperator.getScanOperatorPredicates());
-                newScanOperator.setCanUseAnyColumn(canUseAnyColumn);
                 return Lists.newArrayList(new OptExpression(newScanOperator));
             } catch (Exception e) {
                 throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
