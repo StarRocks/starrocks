@@ -57,7 +57,13 @@ void OlapTableIndexSchema::to_protobuf(POlapTableIndexSchema* pindex) const {
     for (auto slot : slots) {
         pindex->add_columns(slot->col_name());
     }
-    column_param->to_protobuf(pindex->mutable_column_param());
+    if (column_param != nullptr) {
+        column_param->to_protobuf(pindex->mutable_column_param());
+        LOG(INFO) << "generate POlapTableIndexSchema";
+        for (auto uid : pindex->column_param().sort_key_uid()) {
+            LOG(INFO) << "sort key uid:" << uid;
+        }
+    }
 }
 
 Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
@@ -82,8 +88,8 @@ Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
             }
         }
 
-        auto col_param = _obj_pool.add(new OlapTableColumnParam());
         if (p_index.has_column_param()) {
+            auto col_param = _obj_pool.add(new OlapTableColumnParam());
             for (auto& pcolumn_desc : p_index.column_param().columns_desc()) {
                 TabletColumn* tc = _obj_pool.add(new TabletColumn());
                 tc->init_from_pb(pcolumn_desc);
@@ -93,8 +99,8 @@ Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
                 col_param->sort_key_uid.emplace_back(uid);
             }
             col_param->short_key_column_count = p_index.column_param().short_key_column_count();
+            index->column_param = col_param;
         }
-        index->column_param = col_param;
         _indexes.emplace_back(index);
     }
 
@@ -125,8 +131,9 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema) {
                 index->slots.emplace_back(it->second);
             }
         }
-        auto col_param = _obj_pool.add(new OlapTableColumnParam());
+        
         if (t_index.__isset.column_param) {
+            auto col_param = _obj_pool.add(new OlapTableColumnParam());
             for (auto& tcolumn_desc : t_index.column_param.columns) {
                 TabletColumn* tc = _obj_pool.add(new TabletColumn());
                 tc->init_from_thrift(tcolumn_desc);
@@ -136,8 +143,8 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema) {
                 col_param->sort_key_uid.emplace_back(uid);
             }
             col_param->short_key_column_count = t_index.column_param.short_key_column_count;
+            index->column_param = col_param;
         }
-        index->column_param = col_param;
         _indexes.emplace_back(index);
     }
 

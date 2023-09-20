@@ -198,14 +198,18 @@ Status DeltaWriter::_init() {
 
     // build tablet schema in request level
     auto tablet_schema_ptr = _tablet->tablet_schema();
+    LOG(INFO) << "tablet: " << _tablet->tablet_id() << " column num:" << tablet_schema_ptr->num_columns();
     RETURN_IF_ERROR(_build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, _tablet->tablet_schema()));
-
+    LOG(INFO) << "tablet: " << _tablet->tablet_id()
+              << " column num in builded schema:" << _tablet_schema->num_columns();
+    LOG(INFO) << "tablet: " << _tablet->tablet_id() << "partial update column: " << partial_cols_num
+              << "mode:" << _opt.partial_update_mode;
     // maybe partial update, change to partial tablet schema
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && partial_cols_num < _tablet_schema->num_columns()) {
         writer_context.referenced_column_ids.reserve(partial_cols_num);
         for (auto i = 0; i < partial_cols_num; ++i) {
             const auto& slot_col_name = (*_opt.slots)[i]->col_name();
-            int32_t index = tablet_schema_ptr->field_index(slot_col_name);
+            int32_t index = _tablet_schema->field_index(slot_col_name);
             if (index < 0) {
                 auto msg = strings::Substitute("Invalid column name: $0", slot_col_name);
                 LOG(WARNING) << msg;
@@ -214,6 +218,7 @@ Status DeltaWriter::_init() {
                 return st;
             }
             writer_context.referenced_column_ids.push_back(index);
+            LOG(INFO) << "partial update column[" << i << "] index in schema: " << index;
         }
         int64_t average_row_size = _tablet->updates()->get_average_row_size();
         if (average_row_size != 0) {
@@ -225,9 +230,11 @@ Status DeltaWriter::_init() {
             average_row_size = _tablet_schema->estimate_row_size(16);
             _memtable_buffer_row = config::write_buffer_size / average_row_size;
         }
-
         auto sort_key_idxes = _tablet_schema->sort_key_idxes();
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
+        for (auto idx : sort_key_idxes) {
+            LOG(INFO) << "sort key column index:" << idx;
+        }
         if (!std::includes(writer_context.referenced_column_ids.begin(), writer_context.referenced_column_ids.end(),
                            sort_key_idxes.begin(), sort_key_idxes.end())) {
             _partial_schema_with_sort_key = true;
@@ -508,7 +515,7 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
     for (; i < ptable_schema_param.indexes_size(); i++) {
         if (ptable_schema_param.indexes(i).id() == index_id) break;
     }
-    if (ptable_schema_param.indexes_size() > 0 && ptable_schema_param.indexes(0).has_column_param() != 0 &&
+    if (ptable_schema_param.indexes_size() > 0 && ptable_schema_param.indexes(0).has_column_param() &&
         ptable_schema_param.indexes(0).column_param().columns_desc_size() != 0 &&
         ptable_schema_param.indexes(0).column_param().columns_desc(0).unique_id() >= 0) {
         RETURN_IF_ERROR(_tablet_schema->build_current_tablet_schema(index_id, ptable_schema_param.version(),

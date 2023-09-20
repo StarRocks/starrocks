@@ -661,9 +661,10 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     return Status::OK();
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Schema& schema, KVStore* meta,
-                                                                       int64_t version, OlapReaderStatistics* stats,
-                                                                       KVStore* dcg_meta) {
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Schema& schema,
+                                                                       const TabletSchemaCSPtr& tablet_schema,
+                                                                       KVStore* meta, int64_t version,
+                                                                       OlapReaderStatistics* stats, KVStore* dcg_meta) {
     RETURN_IF_ERROR(load());
 
     SegmentReadOptions seg_options;
@@ -673,6 +674,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
     seg_options.version = version;
+    seg_options.tablet_schema = tablet_schema;
     seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(meta);
     seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(meta != nullptr ? meta : dcg_meta);
 

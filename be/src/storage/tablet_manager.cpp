@@ -1326,7 +1326,9 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
             col_idx_to_unique_id[col_idx] = col_idx;
         }
     } else {
-        size_t old_num_columns = base_tablet->num_columns_with_max_version();
+        auto base_tablet_schema = base_tablet->tablet_schema();
+        next_unique_id = base_tablet_schema->next_column_unique_id();
+        size_t old_num_columns = base_tablet_schema->num_columns();
         const auto& new_columns = request.tablet_schema.columns;
         for (uint32_t new_col_idx = 0; new_col_idx < new_columns.size(); ++new_col_idx) {
             const TColumn& column = new_columns[new_col_idx];
@@ -1337,16 +1339,27 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
             //    to the new column
             size_t old_col_idx = 0;
             for (old_col_idx = 0; old_col_idx < old_num_columns; ++old_col_idx) {
-                auto old_name = base_tablet->tablet_schema()->column(old_col_idx).name();
+                auto old_name = base_tablet_schema->column(old_col_idx).name();
                 if (old_name == column.column_name) {
                     uint32_t old_unique_id = base_tablet->tablet_schema()->column(old_col_idx).unique_id();
+                    if (column.col_unique_id > 0) {
+                        DCHECK(column.col_unique_id == old_unique_id);
+                        if (column.col_unique_id != old_unique_id) {
+                            std::string msg = strings::Substitute(
+                                    "Tablet[$0] column[$1] has different column unique id during schema change. $2(FE) "
+                                    "vs $3(BE)",
+                                    base_tablet->tablet_id(), old_col_idx, column.col_unique_id, old_unique_id);
+                            return Status::InternalError(msg);
+                        }
+                    }
+
                     col_idx_to_unique_id[new_col_idx] = old_unique_id;
                     // During linked schema change, the now() default value is stored in TabletMeta.
                     // When receiving a new schema change request, the last default value stored should be
                     // remained instead of changing.
-                    if (base_tablet->tablet_schema()->column(old_col_idx).has_default_value()) {
+                    if (base_tablet_schema->column(old_col_idx).has_default_value()) {
                         normal_request.tablet_schema.columns[new_col_idx].__set_default_value(
-                                base_tablet->tablet_schema()->column(old_col_idx).default_value());
+                                base_tablet_schema->column(old_col_idx).default_value());
                     }
                     break;
                 }

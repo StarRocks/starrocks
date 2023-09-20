@@ -286,7 +286,14 @@ public class OlapTableSink extends DataSink {
                 TColumn tColumn = column.toThrift();
                 column.setIndexFlag(tColumn, table.getIndexes());
                 columnsDesc.add(tColumn);
-                columnSortKeyUids.add(column.getUniqueId());
+            }
+            if (indexMeta.getSortKeyUniqueIds() != null) {
+                columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
+            }
+
+            LOG.info("generate TOlapTableSchema");
+            for (int uid : columnSortKeyUids) {
+                LOG.info("sort key column uid: {}", uid);
             }
             if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
                 columns.add(Load.LOAD_OP_COLUMN);

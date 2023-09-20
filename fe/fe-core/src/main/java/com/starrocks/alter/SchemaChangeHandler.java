@@ -707,12 +707,14 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void processReorderColumnOfPrimaryKey(ReorderColumnsClause alterClause, OlapTable olapTable,
-                                                  Map<Long, LinkedList<Column>> indexSchemaMap, List<Integer> sortKeyIdxes)
+                                                  Map<Long, LinkedList<Column>> indexSchemaMap, List<Integer> sortKeyIdxes,
+                                                  List<Integer> sortKeyUniqueIds)
             throws DdlException {
         LinkedList<Column> targetIndexSchema = indexSchemaMap.get(olapTable.getIndexIdByName(olapTable.getName()));
         // check sort key column list
         Set<String> colNameSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
 
+        boolean useSortKeyUniqueId = true;
         for (String colName : alterClause.getColumnsByPos()) {
             Optional<Column> oneCol = targetIndexSchema.stream().filter(c -> c.getName().equalsIgnoreCase(colName)).findFirst();
             if (!oneCol.isPresent()) {
@@ -723,6 +725,12 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             int sortKeyIdx = targetIndexSchema.indexOf(oneCol.get());
             sortKeyIdxes.add(sortKeyIdx);
+            if (useSortKeyUniqueId && oneCol.get().getUniqueId() > 0) {
+                sortKeyUniqueIds.add(oneCol.get().getUniqueId());
+            } else {
+                useSortKeyUniqueId = false;
+                sortKeyUniqueIds.clear();
+            }
             Type t = oneCol.get().getType();
             if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
                     t.isDatetime())) {
@@ -1243,8 +1251,13 @@ public class SchemaChangeHandler extends AlterHandler {
 
             // 5. calc short key
             List<Integer> sortKeyIdxes = new ArrayList<>();
+            List<Integer> sortKeyUniqueIds = new ArrayList<>();
             if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
                 MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(alterIndexId);
+                // if sortKeyUniqueIds is empty, the table maybe create in old version and we should use sortKeyIdxes
+                // to determine which columns are sort key columns
+                boolean useSortKeyUniqueId = (index.getSortKeyUniqueIds() != null) && 
+                                             (!index.getSortKeyUniqueIds().isEmpty());
                 if (index.getSortKeyIdxes() != null) {
                     List<Integer> originSortKeyIdxes = index.getSortKeyIdxes();
                     for (Integer colIdx : originSortKeyIdxes) {
@@ -1257,6 +1270,9 @@ public class SchemaChangeHandler extends AlterHandler {
                         }
                         int sortKeyIdx = alterSchema.indexOf(oneCol.get());
                         sortKeyIdxes.add(sortKeyIdx);
+                        if (useSortKeyUniqueId) {
+                            sortKeyUniqueIds.add(alterSchema.get(sortKeyIdx).getUniqueId());
+                        }
                     }
                 }
             }
@@ -1268,6 +1284,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 jobBuilder.withNewIndexShortKeyCount(alterIndexId,
                         newShortKeyCount).withNewIndexSchema(alterIndexId, alterSchema);
                 jobBuilder.withSortKeyIdxes(sortKeyIdxes);
+                jobBuilder.withSortKeyUniqueIds(sortKeyUniqueIds);
                 LOG.debug("schema change[{}-{}-{}] check pass.", dbId, tableId, alterIndexId);
             } else {
                 short newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema,
@@ -1284,7 +1301,8 @@ public class SchemaChangeHandler extends AlterHandler {
 
     private AlterJobV2 createJobForProcessReorderColumnOfPrimaryKey(long dbId, OlapTable olapTable,
                                                                     Map<Long, LinkedList<Column>> indexSchemaMap,
-                                                                    List<Integer> sortKeyIdxes) throws UserException {
+                                                                    List<Integer> sortKeyIdxes,
+                                                                    List<Integer> sortKeyUniqueIds) throws UserException {
         if (olapTable.getState() == OlapTableState.ROLLUP) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
         }
@@ -1298,7 +1316,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withDbId(dbId)
                 .withTimeoutSeconds(Config.alter_table_timeout_second)
                 .withStartTime(ConnectContext.get().getStartTime())
-                .withSortKeyIdxes(sortKeyIdxes);
+                .withSortKeyIdxes(sortKeyIdxes)
+                .withSortKeyUniqueIds(sortKeyUniqueIds);
 
         long tableId = olapTable.getId();
         for (Long alterIndexId : indexSchemaMap.keySet()) {
@@ -1502,9 +1521,11 @@ public class SchemaChangeHandler extends AlterHandler {
                 lightSchemaChange = false;
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
                     List<Integer> sortKeyIdxes = new ArrayList<>();
-                    processReorderColumnOfPrimaryKey((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap, sortKeyIdxes);
+                    List<Integer> sortKeyUniqueIds = new ArrayList<>();
+                    processReorderColumnOfPrimaryKey((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap, sortKeyIdxes,
+                                                     sortKeyUniqueIds);
                     return createJobForProcessReorderColumnOfPrimaryKey(db.getId(), olapTable,
-                            indexSchemaMap, sortKeyIdxes);
+                            indexSchemaMap, sortKeyIdxes, sortKeyUniqueIds);
                 } else {
                     processReorderColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap);
                 }

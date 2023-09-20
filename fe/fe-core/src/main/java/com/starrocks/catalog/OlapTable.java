@@ -496,6 +496,13 @@ public class OlapTable extends Table {
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
             int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
             OriginStatement origStmt, List<Integer> sortColumns) {
+        setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
+                origStmt, sortColumns, null);
+    }
+
+    public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
+            int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
+            OriginStatement origStmt, List<Integer> sortColumns, List<Integer> sortColumnUniqueIds) {
         // Nullable when meta comes from schema change log replay.
         // The replay log only save the index id, so we need to get name by id.
         if (indexName == null) {
@@ -518,7 +525,8 @@ public class OlapTable extends Table {
         }
 
         MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema, schemaVersion,
-                schemaHash, shortKeyColumnCount, storageType, keysType, origStmt, sortColumns);
+                schemaHash, shortKeyColumnCount, storageType, keysType, origStmt, sortColumns,
+                sortColumnUniqueIds);
         indexIdToMeta.put(indexId, indexMeta);
         indexNameToId.put(indexName, indexId);
     }

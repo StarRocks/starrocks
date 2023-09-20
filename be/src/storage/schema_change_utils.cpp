@@ -407,6 +407,8 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                 int base_index = _slot_id_to_index_map[ref_column];
                 const TypeInfoPtr& ref_type_info = base_schema.field(base_index)->type();
                 const TypeInfoPtr& new_type_info = new_schema.field(i)->type();
+                LOG(INFO) << "base_schema[" << base_index << "]:" << base_schema.field(base_index)->name()
+                          << " new_schema[" << i << "]:" << new_schema.field(i)->name();
 
                 int reftype_precision = ref_type_info->precision();
                 int reftype_scale = ref_type_info->scale();
@@ -460,7 +462,8 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                         CONVERT_FROM_TYPE(uint64_t);
                     default:
                         LOG(WARNING) << "the column type which was altered from was unsupported."
-                                     << " from_type=" << ref_type << ", to_type=" << new_type;
+                                     << " from_type=" << logical_type_to_string(ref_type)
+                                     << ", to_type=" << logical_type_to_string(new_type);
                         return false;
                     }
                     if (new_type < ref_type) {

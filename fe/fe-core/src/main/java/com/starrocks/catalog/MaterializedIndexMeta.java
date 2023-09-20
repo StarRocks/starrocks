@@ -83,9 +83,10 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @SerializedName(value = "isColocateMVIndex")
     private boolean isColocateMVIndex = false;
 
+
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
-                                 OriginStatement defineStmt, List<Integer> sortKeyIdxes) {
+                                 OriginStatement defineStmt, List<Integer> sortKeyIdxes, List<Integer> sortKeyUniqueIds) {
         this.indexId = indexId;
         Preconditions.checkState(schema != null);
         Preconditions.checkState(schema.size() != 0);
@@ -99,15 +100,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         this.keysType = keysType;
         this.defineStmt = defineStmt;
         this.sortKeyIdxes = sortKeyIdxes;
-        if (sortKeyIdxes != null) {
-            for (Integer id : sortKeyIdxes) {
-                // if column unique id is less than 0, this tablet maybe create in old version, skip it
-                if (schema.get(id).getUniqueId() < 0) {
-                    break;
-                }
-                sortKeyUniqueIds.add(schema.get(id).getUniqueId());
-            }
-        }
+        this.sortKeyUniqueIds = sortKeyUniqueIds;
+    }
+
+    public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
+                                 short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
+                                 OriginStatement defineStmt, List<Integer> sortKeyIdxes) {
+        this(indexId, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType, defineStmt,
+                sortKeyIdxes, null);        
     }
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
@@ -142,6 +142,10 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     public List<Integer> getSortKeyIdxes() {
         return sortKeyIdxes;
+    }
+
+    public List<Integer> getSortKeyUniqueIds() {
+        return sortKeyUniqueIds;
     }
 
     public int getSchemaHash() {
