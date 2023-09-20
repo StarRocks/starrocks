@@ -340,16 +340,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                             throw new AlterCancelException("No alive backend");
                         }
                         countDownLatch.addMark(backendId, shadowTabletId);
+                        // No need to set base tablet id for CreateReplicaTask
                         CreateReplicaTask createReplicaTask = new CreateReplicaTask(backendId, dbId, tableId, partitionId,
                                 shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0, Partition.PARTITION_INIT_VERSION,
                                 originKeysType, TStorageType.COLUMN, storageMedium, copiedShadowSchema, bfColumns, bfFpp,
                                 countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(), 
                                 table.primaryIndexCacheExpireSec(), TTabletType.TABLET_TYPE_LAKE, table.getCompressionType(), 
                                 copiedSortKeyIdxes);
-
-                        Long baseTabletId = partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
-                        assert baseTabletId != null;
-                        createReplicaTask.setBaseTablet(baseTabletId, 0/*unused*/);
                         batchTask.addTask(createReplicaTask);
                     }
                 }
@@ -536,13 +533,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         EditLog.waitInfinity(startWriteTs, editLogFuture);
 
         // Delete tablet and shards
-        List<Long> unusedShards = new ArrayList<>();
         for (MaterializedIndex droppedIndex : droppedIndexes) {
             List<Long> shards = droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList());
-            unusedShards.addAll(shards);
+            // TODO: what if unusedShards deletion is partially successful?
+            StarMgrMetaSyncer.dropTabletAndDeleteShard(shards, GlobalStateMgr.getCurrentStarOSAgent());
         }
-        // TODO: what if unusedShards deletion is partially successful?
-        StarMgrMetaSyncer.dropTabletAndDeleteShard(unusedShards, GlobalStateMgr.getCurrentStarOSAgent());
+
 
         if (span != null) {
             span.end();

@@ -161,11 +161,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SPILLABLE_OPERATOR_MASK = "spillable_operator_mask";
     // spill mode: auto, force
     public static final String SPILL_MODE = "spill_mode";
+    public static final String ENABLE_AGG_SPILL_PREAGGREGATION = "enable_agg_spill_preaggregation";
     // enable table pruning(RBO) in cardinality-preserving joins
     public static final String ENABLE_RBO_TABLE_PRUNE = "enable_rbo_table_prune";
 
     // enable table pruning(CBO) in cardinality-preserving joins
     public static final String ENABLE_CBO_TABLE_PRUNE = "enable_cbo_table_prune";
+
+    // Table pruning on update statement is risky, so turn off in default.
+    public static final String ENABLE_TABLE_PRUNE_ON_UPDATE = "enable_table_prune_on_update";
+
     // if set to true, some of stmt will be forwarded to leader FE to get result
 
     // if set to true, some of stmt will be forwarded to leader FE to get result
@@ -338,9 +343,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER =
             "enable_multicolumn_global_runtime_filter";
 
-    public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
-    public static final String ENABLE_MV_OPTIMIZER_TRACE_LOG = "enable_mv_optimizer_trace_log";
-
     // command, file
     public static final String TRACE_LOG_MODE = "trace_log_mode";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
@@ -371,7 +373,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS = "connector_io_tasks_slow_io_latency_ms";
     public static final String SCAN_USE_QUERY_MEM_RATIO = "scan_use_query_mem_ratio";
     public static final String CONNECTOR_SCAN_USE_QUERY_MEM_RATIO = "connector_scan_use_query_mem_ratio";
+
+    public static final String ENABLE_QUERY_CACHE_V2 = "enable_query_cache_v2";
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
+
+    public static final String QUERY_CACHE_DENY_OVERSIZE_RESULT = "query_cache_deny_oversize_result";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
     public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
@@ -387,6 +393,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
+
+    public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
@@ -846,11 +854,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SPILL_ENCODE_LEVEL)
     private int spillEncodeLevel = 7;
 
+    @VarAttr(name = ENABLE_AGG_SPILL_PREAGGREGATION, flag = VariableMgr.INVISIBLE)
+    public boolean enableAggSpillPreaggregation = true;
+
     @VarAttr(name = ENABLE_RBO_TABLE_PRUNE)
     private boolean enableRboTablePrune = false;
 
     @VarAttr(name = ENABLE_CBO_TABLE_PRUNE)
     private boolean enableCboTablePrune = false;
+
+    @VarAttr(name = ENABLE_TABLE_PRUNE_ON_UPDATE)
+    private boolean enableTablePruneOnUpdate = false;
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
 
@@ -1162,8 +1176,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
     private boolean hudiMORForceJNIReader = false;
 
-    @VarAttr(name = ENABLE_QUERY_CACHE)
-    private boolean enableQueryCache = false;
+    @VarAttr(name = ENABLE_QUERY_CACHE_V2, alias = ENABLE_QUERY_CACHE, show = ENABLE_QUERY_CACHE)
+    private boolean enableQueryCache = true;
+
+    @VarAttr(name = QUERY_CACHE_DENY_OVERSIZE_RESULT, flag = VariableMgr.INVISIBLE)
+    private boolean queryCacheDenyOversizeResult = true;
 
     @VarAttr(name = QUERY_CACHE_FORCE_POPULATE)
     private boolean queryCacheForcePopulate = false;
@@ -1344,6 +1361,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PRUNE_ICEBERG_MANIFEST)
     private boolean enablePruneIcebergManifest = true;
+
+    @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
+    private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
 
     public boolean isEnablePruneIcebergManifest() {
         return enablePruneIcebergManifest;
@@ -1694,6 +1714,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableCboTablePrune() {
         return enableCboTablePrune;
+    }
+
+    public void setEnableTablePruneOnUpdate(boolean on) {
+        this.enableTablePruneOnUpdate = on;
+    }
+
+    public boolean isEnableTablePruneOnUpdate() {
+        return enableTablePruneOnUpdate;
     }
 
     public int getSpillMemTableSize() {
@@ -2260,6 +2288,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         enableQueryCache = on;
     }
 
+    public void setQueryCacheDenyOversizeResult(boolean on) {
+        queryCacheDenyOversizeResult = on;
+    }
+
+    public boolean isQueryCacheDenyOversizeResult() {
+        return queryCacheDenyOversizeResult;
+    }
+
     public boolean isQueryCacheForcePopulate() {
         return queryCacheForcePopulate;
     }
@@ -2545,6 +2581,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return auditExecuteStmt;
     }
 
+    public void setLargeDecimalUnderlyingType(String type) {
+        if (type.equalsIgnoreCase(SessionVariableConstants.PANIC) ||
+                type.equalsIgnoreCase(SessionVariableConstants.DECIMAL) ||
+                type.equalsIgnoreCase(SessionVariableConstants.DOUBLE)) {
+            largeDecimalUnderlyingType = type.toLowerCase();
+        } else {
+            throw new IllegalArgumentException(
+                    "Legal values of large_decimal_underlying_type are panic|decimal|double");
+        }
+    }
+
+    public String getLargeDecimalUnderlyingType() {
+        return largeDecimalUnderlyingType;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -2583,6 +2634,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setSpill_revocable_max_bytes(spillRevocableMaxBytes);
             tResult.setSpill_encode_level(spillEncodeLevel);
             tResult.setSpillable_operator_mask(spillableOperatorMask);
+            tResult.setEnable_agg_spill_preaggregation(enableAggSpillPreaggregation);
         }
 
         // Compression Type

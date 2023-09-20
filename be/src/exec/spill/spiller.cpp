@@ -45,7 +45,7 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
     total_spill_bytes = total_spill_bytes_;
 
     std::string parent = "SpillStatistics";
-    ADD_TIMER(profile, parent);
+    ADD_COUNTER(profile, parent, TUnit::NONE);
 
     append_data_timer = ADD_CHILD_TIMER(profile, "AppendDataTime", parent);
     spill_rows = ADD_CHILD_COUNTER(profile, "RowsSpilled", TUnit::UNIT, parent);
@@ -63,6 +63,8 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
     input_stream_peak_memory_usage = profile->AddHighWaterMarkCounter(
             "InputStreamPeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES), parent);
 
+    sort_chunk_timer = ADD_CHILD_TIMER(profile, "SortChunkTime", parent);
+    materialize_chunk_timer = ADD_CHILD_TIMER(profile, "MaterializeChunkTime", parent);
     shuffle_timer = ADD_CHILD_TIMER(profile, "ShuffleTime", parent);
     split_partition_timer = ADD_CHILD_TIMER(profile, "SplitPartitionTime", parent);
     restore_from_mem_table_rows = ADD_CHILD_COUNTER(profile, "RowsRestoreFromMemTable", TUnit::UNIT, parent);

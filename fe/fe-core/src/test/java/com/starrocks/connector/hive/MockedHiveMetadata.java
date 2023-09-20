@@ -55,7 +55,6 @@ import org.apache.hadoop.hive.metastore.api.Table;
 import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -82,6 +81,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     public static final String MOCKED_TPCH_DB_NAME = "tpch";
     public static final String MOCKED_PARTITIONED_DB_NAME = "partitioned_db";
     public static final String MOCKED_PARTITIONED_DB_NAME2 = "partitioned_db2";
+    public static final String MOCKED_SUBFIELD_DB = "subfield_db";
 
     private static ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
@@ -89,6 +89,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         mockTPCHTable();
         mockPartitionTable();
         mockView();
+        mockSubfieldTable();
     }
 
     @Override
@@ -157,7 +158,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames() {
-        return Arrays.asList("tpch", "tpcds", "ssb");
+        return new ArrayList<>(MOCK_TABLE_MAP.keySet());
     }
 
     @Override
@@ -333,6 +334,31 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                                   "(select * from tpch.customer)", "VIRTUAL_VIEW");
         HiveView view3 = HiveMetastoreApiConverter.toHiveView(hmsView3, MOCKED_HIVE_CATALOG_NAME);
         mockTables.put(hmsView3.getTableName(), new HiveTableInfo(view3));
+    }
+
+    private static void mockSubfieldTable() {
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_SUBFIELD_DB, new CaseInsensitiveMap<>());
+        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_SUBFIELD_DB);
+
+        // Mock table region
+        List<FieldSchema> cols = Lists.newArrayList();
+        cols.add(new FieldSchema("col_int", "int", null));
+        cols.add(new FieldSchema("col_struct", "struct<c0: int, c1: struct<c11: int>>", null));
+        StorageDescriptor sd =
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                        -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
+
+        CaseInsensitiveMap<String, ColumnStatistic> regionStats = new CaseInsensitiveMap<>();
+        regionStats.put("col_int", ColumnStatistic.unknown());
+        regionStats.put("col_struct", ColumnStatistic.unknown());
+
+        Table tbl =
+                new Table("subfield", MOCKED_SUBFIELD_DB, null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null, null,
+                        "EXTERNAL_TABLE");
+        mockTables.put(tbl.getTableName(),
+                new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(tbl, MOCKED_HIVE_CATALOG_NAME),
+                        ImmutableList.of(), 5, regionStats, MOCKED_FILES));
+
     }
 
     public static void mockTPCHTable() {

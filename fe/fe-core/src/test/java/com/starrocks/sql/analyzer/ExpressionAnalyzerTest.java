@@ -26,11 +26,23 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExprNodeType;
 import org.junit.Assert;
 import org.junit.Test;
 
-public class ExpressionAnalyzerTest {
+public class ExpressionAnalyzerTest extends PlanTestBase {
+
+    @Test
+    public void testVariables() throws Exception {
+        String sql = "SELECT @@max_allowed_packet, @@SESSION.character_set_client,\n" +
+                "        @@GLOBAL.character_set_connection";
+        ExecPlan execPlan = getExecPlan(sql);
+        Assert.assertEquals("@@max_allowed_packet", execPlan.getColNames().get(0));
+        Assert.assertEquals("@@SESSION.character_set_client", execPlan.getColNames().get(1));
+        Assert.assertEquals("@@GLOBAL.character_set_connection", execPlan.getColNames().get(2));
+    }
 
     @Test
     public void testMapElementAnalyzer() throws Exception {

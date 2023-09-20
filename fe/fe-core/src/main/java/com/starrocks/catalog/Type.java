@@ -1341,6 +1341,8 @@ public abstract class Type implements Cloneable {
                 return new StructType(fields);
             }
         }
+        // NEVER REACH.
+        Preconditions.checkState(false);
         return null;
     }
 

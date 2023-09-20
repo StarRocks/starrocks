@@ -106,10 +106,24 @@ jobs:
     if: >
       !startsWith(github.event.pull_request.title, '[Doc]') && github.base_ref == 'main'
     steps:
+      - name: Format Check
+        id: check
+        if: >
+          (!contains(toJson(github.event.pull_request.body), '[ ] Yes, this PR will result in a change in behavior') &&
+          !contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior')) ||
+          (!contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior') &&
+          !contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')) ||
+          (contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
+          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior'))
+        run: |
+          echo "Please check the format of your pr body about the behavior change checkbox!" 
+          exit 1
+
       - name: Behavior Unchanged Label
         id: unchanged
         if: >
-          contains(toJson(github.event.pull_request.body), '[ ] Yes, this PR will result in a change in behavior')
+          steps.check.outcome == 'skipped' &&
+          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')
         uses: actions-ecosystem/action-remove-labels@v1
         with:
           labels: 'behavior_changed'
@@ -117,7 +131,7 @@ jobs:
       - name: Behavior Changed Check
         id: changed_check
         if: >
-          always() && steps.unchanged.outcome == 'skipped' &&
+          always() && steps.check.outcome == 'skipped' && steps.unchanged.outcome == 'skipped' &&
           contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
           contains(toJson(github.event.pull_request.body), '[ ] Interface/UI changes: syntax, type conversion, expression evaluation, display information') &&
           contains(toJson(github.event.pull_request.body), '[ ] Parameter changes: default values, similar parameters but with different default values') &&
@@ -130,19 +144,13 @@ jobs:
 
       - name: Behavior Changed Label
         if: >
-          always() && steps.unchanged.outcome == 'skipped' && steps.changed_check.outcome != 'failure'
+          always() &&
+          steps.check.outcome == 'skipped' &&
+          steps.unchanged.outcome == 'skipped' &&
+          steps.changed_check.outcome != 'failure'
         uses: actions-ecosystem/action-add-labels@v1
         with:
           labels: 'behavior_changed'
-
-      - name: Behavior Unchanged Label
-        if: >
-          always() &&
-          !contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
-          !contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')
-        run: |
-          echo "You must specify whether this PR entail a change in behavior!" 
-          exit 1
 
   automerge-check:
     runs-on: ubuntu-latest

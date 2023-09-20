@@ -117,6 +117,7 @@ import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
@@ -774,8 +775,12 @@ public class DDLStmtExecutor {
                             stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
                             LocalDateTime.MIN);
                 } else {
-                    // Todo: support external analyze job
-                    analyzeJob = null;
+                    analyzeJob = new ExternalAnalyzeJob(stmt.getTableName().getCatalog(), stmt.getTableName().getDb(),
+                            stmt.getTableName().getTbl(), stmt.getColumnNames(),
+                            stmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL,
+                            StatsConstants.ScheduleType.SCHEDULE,
+                            stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
+                            LocalDateTime.MIN);
                 }
                 context.getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(analyzeJob);
 

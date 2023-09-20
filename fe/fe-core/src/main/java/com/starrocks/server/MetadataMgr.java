@@ -358,6 +358,7 @@ public class MetadataMgr {
         return statistics.build();
     }
 
+
     public Statistics getTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,
@@ -368,8 +369,8 @@ public class MetadataMgr {
         Statistics statistics = getTableStatisticsFromInternalStatistics(table, columns);
         if (statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
             Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-            return connectorMetadata.map(metadata ->
-                    metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit)).orElse(null);
+            return connectorMetadata.map(metadata -> metadata.getTableStatistics(
+                    session, table, columns, partitionKeys, predicate, limit)).orElse(null);
         } else {
             return statistics;
         }

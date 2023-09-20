@@ -147,6 +147,12 @@ public class HiveMetadata implements ConnectorMetadata {
                         " 'Force' must be set when dropping a hive table." +
                         " Please execute 'drop table %s.%s.%s force'", stmt.getCatalogName(), dbName, tableName));
             }
+
+            if (getTable(dbName, tableName) == null && stmt.isSetIfExists()) {
+                LOG.warn("Table {}.{} doesn't exist", dbName, tableName);
+                return;
+            }
+
             hmsOps.dropTable(dbName, tableName);
         }
     }
@@ -273,6 +279,10 @@ public class HiveMetadata implements ConnectorMetadata {
 
     @Override
     public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos) {
+        if (commitInfos.isEmpty()) {
+            LOG.warn("No commit info on {}.{} after hive sink", dbName, tableName);
+            return;
+        }
         HiveTable table = (HiveTable) getTable(dbName, tableName);
         String stagingDir = commitInfos.get(0).getStaging_dir();
         boolean isOverwrite = commitInfos.get(0).isIs_overwrite();
