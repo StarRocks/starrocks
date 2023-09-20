@@ -280,15 +280,13 @@ public class TableFunctionTable extends Table {
             throw new DdlException("failed to get file schema", e);
         }
 
-        TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
-        if (code != TStatusCode.OK) {
+        if (TStatusCode.findByValue(result.status.statusCode) != TStatusCode.OK) {
             throw new DdlException("failed to get file schema, path: " + path + ", error: " + result.status.errorMsgs);
         }
 
         List<Column> columns = new ArrayList<>();
         for (PSlotDescriptor slot : result.schema) {
-            Type tp = Type.fromProtobuf(slot.slotType, 0);
-            columns.add(new Column(slot.colName, tp, true));
+            columns.add(new Column(slot.colName, Type.fromProtobuf(slot.slotType, 0), true));
         }
         return columns;
     }
