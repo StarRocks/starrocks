@@ -823,8 +823,19 @@ public class MvUtils {
         }
 
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
+
         Preconditions.checkState(scanOperator.getTable().isHiveTable());
         HiveTable hiveTable = (HiveTable) scanOperator.getTable();
+        if (hiveTable.isUnPartitioned()) {
+            return partitionPredicates;
+        }
+        if (scanOperatorPredicates.getSelectedPartitionIds().size() ==
+                scanOperatorPredicates.getIdToPartitionKey().size()) {
+            return partitionPredicates;
+        }
+        if (!supportCompensatePartitionPredicateForHiveScan(scanOperatorPredicates.getSelectedPartitionKeys())) {
+            return partitionPredicates;
+        }
         List<Range<PartitionKey>> ranges = Lists.newArrayList();
         for (PartitionKey selectedPartitionKey : scanOperatorPredicates.getSelectedPartitionKeys()) {
             try {
@@ -913,6 +924,14 @@ public class MvUtils {
             return false;
         }
 
+        // If ref table contains no partitions to refresh, no need compensate.
+        // If the mv is partitioned and non-ref table need refresh, then all partitions need to be refreshed,
+        // it can not be a candidate.
+        Set<String> refTablePartitionNameToRefresh = mvContext.getRefTableUpdatePartitionNames();
+        if (Objects.isNull(refTablePartitionNameToRefresh) || refTablePartitionNameToRefresh.isEmpty()) {
+            return false;
+        }
+
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(plan);
         // If no scan operator, no need compensate
         if (scanOperators.isEmpty()) {
@@ -941,19 +960,15 @@ public class MvUtils {
                 return false;
             }
 
-            // compensate nothing if selected partitions are the same with the total partitions.
             List<Long> selectPartitionIds = olapScanOperator.getSelectedPartitionId();
-            if (Objects.isNull(selectPartitionIds)) {
-                return false;
-            }
-            if (selectPartitionIds.size() == olapTable.getPartitions().size() || selectPartitionIds.size() == 0) {
+            if (Objects.isNull(selectPartitionIds) || selectPartitionIds.size() == 0) {
                 return false;
             }
 
             // determine whether query's partitions can be satisfied by materialized view.
             for (Long selectPartitionId : selectPartitionIds) {
                 Partition partition = olapTable.getPartition(selectPartitionId);
-                if (partition != null && mvPartitionNameToRefresh.contains(partition.getName())) {
+                if (partition != null && refTablePartitionNameToRefresh.contains(partition.getName())) {
                     return true;
                 }
             }
@@ -967,21 +982,14 @@ public class MvUtils {
             LogicalHiveScanOperator hiveScanOperator = (LogicalHiveScanOperator)  scanOperator;
             ScanOperatorPredicates scanOperatorPredicates = hiveScanOperator.getScanOperatorPredicates();
             Collection<Long> selectPartitionIds = scanOperatorPredicates.getSelectedPartitionIds();
-            // compensate nothing if selected partitions are the same with the total partitions.
-            if (selectPartitionIds.size() == scanOperatorPredicates.getIdToPartitionKey().size() ||
-                    selectPartitionIds.size() == 0) {
+            if (Objects.isNull(selectPartitionIds) || selectPartitionIds.size() == 0) {
                 return false;
             }
-
-            if (!supportCompensatePartitionPredicateForHiveScan(scanOperatorPredicates.getSelectedPartitionKeys())) {
-                return false;
-            }
-
             // determine whether query's partitions can be satisfied by materialized view.
             List<PartitionKey> selectPartitionKeys = scanOperatorPredicates.getSelectedPartitionKeys();
             for (PartitionKey partitionKey : selectPartitionKeys) {
                 String mvPartitionName = PartitionUtil.generateMVPartitionName(partitionKey);
-                if (mvPartitionNameToRefresh.contains(mvPartitionName)) {
+                if (refTablePartitionNameToRefresh.contains(mvPartitionName)) {
                     return true;
                 }
             }
@@ -1007,6 +1015,22 @@ public class MvUtils {
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
         Preconditions.checkState(olapScanOperator.getTable().isNativeTableOrMaterializedView());
         OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
+
+        // compensate nothing for single partition table
+        if (olapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
+            return partitionPredicates;
+        }
+
+        // compensate nothing if selected partitions are the same with the total partitions.
+        if (olapScanOperator.getSelectedPartitionId() != null
+                && olapScanOperator.getSelectedPartitionId().size() == olapTable.getPartitions().size()) {
+            return partitionPredicates;
+        }
+
+        // if no partitions are selected, return pruned partition predicates directly.
+        if (olapScanOperator.getSelectedPartitionId().isEmpty()) {
+            return olapScanOperator.getPrunedPartitionPredicates();
+        }
         if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
             ExpressionRangePartitionInfo partitionInfo =
                     (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();

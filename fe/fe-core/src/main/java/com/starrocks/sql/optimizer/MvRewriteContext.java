@@ -47,7 +47,9 @@ public class MvRewriteContext {
 
     private List<JoinDeriveContext> joinDeriveContexts;
 
-    private boolean isCompensate;
+    // Whether to compensate partition predicate from the plan's `selectedPartitionIds`,
+    // check `isNeedCompensatePartitionPredicate` to get more information.
+    private final boolean isCompensate;
 
     public MvRewriteContext(
             MaterializationContext materializationContext,
