@@ -5759,7 +5759,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     public static SetType getVariableType(StarRocksParser.VarTypeContext context) {
         if (context == null) {
-            return SetType.SESSION;
+            // this means select @@max_allowed_packet
+            return null;
         }
 
         if (context.GLOBAL() != null) {
