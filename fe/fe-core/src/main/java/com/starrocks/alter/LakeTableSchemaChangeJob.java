@@ -340,16 +340,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                             throw new AlterCancelException("No alive backend");
                         }
                         countDownLatch.addMark(backendId, shadowTabletId);
+                        // No need to set base tablet id for CreateReplicaTask
                         CreateReplicaTask createReplicaTask = new CreateReplicaTask(backendId, dbId, tableId, partitionId,
                                 shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0, Partition.PARTITION_INIT_VERSION,
                                 originKeysType, TStorageType.COLUMN, storageMedium, copiedShadowSchema, bfColumns, bfFpp,
                                 countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(), 
                                 table.primaryIndexCacheExpireSec(), TTabletType.TABLET_TYPE_LAKE, table.getCompressionType(), 
                                 copiedSortKeyIdxes);
-
-                        Long baseTabletId = partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
-                        assert baseTabletId != null;
-                        createReplicaTask.setBaseTablet(baseTabletId, 0/*unused*/);
                         batchTask.addTask(createReplicaTask);
                     }
                 }
