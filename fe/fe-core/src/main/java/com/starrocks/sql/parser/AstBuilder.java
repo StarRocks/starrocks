@@ -5099,7 +5099,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     public static SetType getVariableType(StarRocksParser.VarTypeContext context) {
         if (context == null) {
+<<<<<<< HEAD
             return SetType.DEFAULT;
+=======
+            // this means select @@max_allowed_packet
+            return null;
+>>>>>>> 0d1044b6e0 ([BugFix] Fix bug variables header return wrong (#31410))
         }
 
         if (context.GLOBAL() != null) {

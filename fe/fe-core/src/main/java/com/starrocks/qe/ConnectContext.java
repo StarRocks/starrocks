@@ -307,9 +307,15 @@ public class ConnectContext {
         this.currentRoleIds = roleIds;
     }
 
+<<<<<<< HEAD
     public void modifySessionVariable(SetVar setVar, boolean onlySetSessionVar) throws DdlException {
         VariableMgr.setVar(sessionVariable, setVar, onlySetSessionVar);
         if (!setVar.getType().equals(SetType.GLOBAL) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
+=======
+    public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
+        VariableMgr.setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
+        if (!SetType.GLOBAL.equals(setVar.getType()) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
+>>>>>>> 0d1044b6e0 ([BugFix] Fix bug variables header return wrong (#31410))
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
     }
