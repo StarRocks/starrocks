@@ -29,9 +29,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.external.starrocks.TableMetaSyncer;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
@@ -250,16 +248,11 @@ public class InsertAnalyzer {
             lockTimes++;
         }
         try {
-            MetaContext metaContext = new MetaContext();
-            metaContext.setMetaVersion(FeConstants.META_VERSION);
-            metaContext.setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
-            metaContext.setThreadLocalInfo();
             new TableMetaSyncer().syncTable(copiedTable);
         } finally {
             while (lockTimes-- > 0) {
                 database.readLock();
             }
-            MetaContext.remove();
         }
         return copiedTable;
     }
