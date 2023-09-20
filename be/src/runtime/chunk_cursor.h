@@ -71,7 +71,7 @@ public:
 
     [[nodiscard]] ChunkPtr clone_empty_chunk(size_t reserved_row_number) const;
 
-    Status chunk_supplier(Chunk**);
+    [[nodiscard]] Status chunk_supplier(Chunk**);
     bool chunk_probe_supplier(Chunk**);
     bool chunk_has_supplier();
 

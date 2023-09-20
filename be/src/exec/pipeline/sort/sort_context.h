@@ -69,13 +69,13 @@ public:
     bool is_partition_ready() const;
     void cancel();
 
-    StatusOr<ChunkPtr> pull_chunk();
+    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk();
 
     void set_runtime_filter_collector(RuntimeFilterHub* hub, int32_t plan_node_id,
                                       std::unique_ptr<RuntimeFilterCollector>&& collector);
 
 private:
-    Status _init_merger();
+    [[nodiscard]] Status _init_merger();
 
     RuntimeState* _state;
     const TTopNType::type _topn_type;
