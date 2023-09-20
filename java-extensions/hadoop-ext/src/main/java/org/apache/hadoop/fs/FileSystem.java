@@ -3727,8 +3727,7 @@ public abstract class FileSystem extends Configured
     private static FileSystem createFileSystem(URI uri, Configuration conf)
             throws IOException {
         HadoopExt.addConfigResourcesToConfiguration(conf);
-        LOGGER.info(String.format("%s FileSystem.createFileSystem. conf.XXX = %s", HadoopExt.LOGGER_MESSAGE_PREFIX,
-                conf.get("XXX", "null")));
+        LOGGER.info(String.format("%s FileSystem.createFileSystem", HadoopExt.LOGGER_MESSAGE_PREFIX));
         Tracer tracer = FsTracer.get(conf);
         try (TraceScope scope = tracer.newScope("FileSystem#createFileSystem");
                 DurationInfo ignored =
