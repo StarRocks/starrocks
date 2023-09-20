@@ -961,6 +961,9 @@ struct TLoadTxnCommitRequest {
 
 struct TLoadTxnCommitResult {
     1: required Status.TStatus status
+    // If the error code is SR_EAGAIN, the BE will retry
+    // the commit after waiting for retry_interval_ms
+    2: optional i64 retry_interval_ms
 }
 
 struct TLoadTxnRollbackRequest {

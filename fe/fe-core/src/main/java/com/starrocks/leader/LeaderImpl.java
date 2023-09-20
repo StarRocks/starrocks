@@ -133,6 +133,7 @@ import com.starrocks.thrift.TTableMeta;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletMeta;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
@@ -1195,12 +1196,13 @@ public class LeaderImpl {
             TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.getCommit_attachment());
             long timeoutMs = request.isSetCommit_timeout_ms() ? request.getCommit_timeout_ms() :
                     Config.external_table_commit_timeout_ms;
-            boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
-                    db, request.getTxn_id(),
+            GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+            boolean visible = transactionMgr.commitAndPublishTransaction(db, request.getTxn_id(),
                     TabletCommitInfo.fromThrift(request.getCommit_infos()),
                     TabletFailInfo.fromThrift(request.getFail_infos()),
-                    timeoutMs, attachment);
-            if (!ret) { // timeout
+                    timeoutMs,
+                    attachment);
+            if (!visible) { // timeout
                 TStatus status = new TStatus(TStatusCode.TIMEOUT);
                 status.setError_msgs(Lists.newArrayList("commit and publish txn timeout"));
                 response.setStatus(status);
