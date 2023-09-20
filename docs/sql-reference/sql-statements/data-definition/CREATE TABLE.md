@@ -10,7 +10,7 @@ Creates a new table in StarRocks.
 
 ## Syntax
 
-```Plain%20Text
+```plaintext
 CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...]
 [, index_definition1[, index_definition12,]])
@@ -105,7 +105,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For MySQL, specify the following properties:
 
-    ```Plain%20Text
+    ```plaintext
     PROPERTIES (
         "host" = "mysql_server_host",
         "port" = "mysql_server_port",
@@ -124,7 +124,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For Elasticsearch, specify the following properties:
 
-    ```Plain%20Text
+    ```plaintext
     PROPERTIES (
 
     "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
@@ -143,7 +143,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For Hive, specify the following properties:
 
-    ```Plain%20Text
+    ```plaintext
     PROPERTIES (
 
         "database" = "hive_db_name",
@@ -156,7 +156,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For JDBC, specify the following properties:
 
-    ```Plain%20Text
+    ```plaintext
     PROPERTIES (
     "resource"="jdbc0",
     "table"="dest_tbl"
@@ -167,7 +167,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For Iceberg, specify the following properties:
 
-   ```Plain%20Text
+   ```plaintext
     PROPERTIES (
     "resource" = "iceberg0", 
     "database" = "iceberg", 
@@ -179,7 +179,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For Hudi, specify the following properties:
 
-  ```Plain%20Text
+  ```plaintext
     PROPERTIES (
     "resource" = "hudi0", 
     "database" = "hudi", 
@@ -358,7 +358,7 @@ If the engine type is `olap`, you can specify storage medium, storage cooldown t
   >
   > `storage_cooldown_time` can be configured only when `storage_medium` is set to `SSD`. If you want to set `storage_medium` to SSD, make sure that your cluster uses SSD disks, that is, `storage_root_path` reported by BEs includes SSD. For more information about `storage_root_path`, see [Configuration](../../../administration/Configuration.md#configure-be-static-parameters).
 
-```Plain%20Text
+```plaintext
 PROPERTIES (
     "storage_medium" = "[SSD|HDD]",
     [ "storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss", ]
@@ -783,7 +783,7 @@ The dynamic partitioning function must be enabled ("dynamic_partition.enable" = 
 
 This example creates partitions for the next three days and deletes partitions created three days ago. For example, if today is 2020-01-08, partitions with the following names will be created: p20200108, p20200109, p20200110, p20200111, and their ranges are:
 
-```Plain%20Text
+```plaintext
 [types: [DATE]; keys: [2020-01-08]; ‥types: [DATE]; keys: [2020-01-09]; )
 [types: [DATE]; keys: [2020-01-09]; ‥types: [DATE]; keys: [2020-01-10]; )
 [types: [DATE]; keys: [2020-01-10]; ‥types: [DATE]; keys: [2020-01-11]; )
