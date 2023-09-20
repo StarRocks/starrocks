@@ -17,6 +17,8 @@ package com.starrocks.common.util;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.List;
+
 public class LogUtilTest {
     @Test
     public void testGetCurrentStackTrace() {
@@ -25,5 +27,12 @@ public class LogUtilTest {
         Assert.assertTrue(trace.startsWith("\n        "));
         Assert.assertTrue(trace.contains("java.lang.Thread.getStackTrace"));
         System.out.println("current stack trace: " + trace);
+    }
+
+    @Test
+    public void testGetCurrentStackTraceToList() {
+        List<String> trace = LogUtil.getCurrentStackTraceToList();
+        System.out.println(trace);
+        Assert.assertTrue(trace.get(0).contains("java.lang.Thread.getStackTrace"));
     }
 }
