@@ -132,6 +132,7 @@ public class TableMetaSyncerTest {
         // remove the thread local meta context
         MetaContext.remove();
         extTable.updateMeta(request.getDb_name(), response.getTable_meta(), response.getBackends());
+        Assert.assertNull(MetaContext.get());
         Assert.assertEquals(4, extTable.getPartitions().size());
     }
 }
