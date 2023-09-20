@@ -305,6 +305,10 @@ The commands affected by this variable are as follows:
 
 * Show PROC: Forwarding to the leader FE allows users to view the PROC information stored in the metadata. This is mainly used for metadata comparison.
 
+### group_concat_max_len
+
+The maximum length of string returned by the [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) function. Default value: 1024. Min value: 4. Unit: characters.
+
 ### hash_join_push_down_right_table
 
 Used to control whether the data of the left table can be filtered by using the filter condition against the right table in the Join query. If so, it can reduce the amount of data that needs to be processed during the query.
