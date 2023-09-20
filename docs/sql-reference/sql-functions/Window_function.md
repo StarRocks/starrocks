@@ -198,51 +198,6 @@ from int_t where property in ('odd','even');
 +----+----------+------------------+
 ```
 
-<<<<<<< HEAD
-=======
-### CUME_DIST()
-
-The CUME_DIST() function calculates the cumulative distribution of a value within a partition, indicating its relative position as a percentage of values less than or equal to the value in the current row. With a range of 0 to 1, it's useful for percentile calculations and data distribution analysis.
-
-Syntax:
-
-```SQL
-CUME_DIST() OVER (partition_by_clause order_by_clause)
-```
-
-**This function should be used with ORDER BY to sort partition rows into the desired order. Without ORDER BY, all rows are peers and have value N/N = 1, where N is the partition size.**
-
-CUME_DIST() contains NULL values and treats them as the lowest values.
-
-The following example shows the cumulative distribution of column y within each group of column x.
-
-```SQL
-SELECT x, y,
-    CUME_DIST()
-        OVER (
-            PARTITION BY x
-            ORDER BY y
-        ) AS `cume_dist`
-FROM int_t;
-```
-
-```plaintext
-+---+---+--------------------+
-| x | y | cume_dist          |
-+---+---+--------------------+
-| 1 | 1 | 0.3333333333333333 |
-| 1 | 2 |                  1 |
-| 1 | 2 |                  1 |
-| 2 | 1 | 0.3333333333333333 |
-| 2 | 2 | 0.6666666666666667 |
-| 2 | 3 |                  1 |
-| 3 | 1 | 0.6666666666666667 |
-| 3 | 1 | 0.6666666666666667 |
-| 3 | 2 |                  1 |
-+---+---+--------------------+
-```
-
->>>>>>> 240689c8c1 ([Doc] fix build error (#31541))
 ### DENSE_RANK()
 
 The DENSE_RANK() function is used to represent rankings. Unlike RANK(), DENSE_RANK()**does not have vacant** numbers. For example, if there are two tied 1s, the third number of DENSE_RANK() is still 2, whereas the third number of RANK() is 3.
@@ -413,7 +368,7 @@ Returns the value of the row that lags the current row by `offset` rows. This fu
 
 Syntax:
 
-~~~Haskell
+```Haskell
 LAG(expr[, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ```
@@ -428,7 +383,7 @@ Example:
 
 Calculate the `closing_price` of the previous day. In this example, `default` is set to 0, which means 0 is returned if no matching row is found.
 
-~~~SQL
+```SQL
 select stock_symbol, closing_date, closing_price,
     lag(closing_price, 1, 0)
     over(
@@ -437,12 +392,11 @@ select stock_symbol, closing_date, closing_price,
     ) as "yesterday closing"
 from stock_ticker
 order by closing_date;
-~~~
+```
 
 Output:
 
-<<<<<<< HEAD
-~~~Plain
+```plaintext
 +--------------+---------------------+---------------+-------------------+
 | stock_symbol | closing_date        | closing_price | yesterday closing |
 +--------------+---------------------+---------------+-------------------+
@@ -454,27 +408,7 @@ Output:
 | JDR          | 2014-09-18 00:00:00 | 14.75         | 14.03             |
 | JDR          | 2014-09-19 00:00:00 | 13.98         | 14.75             |
 +--------------+---------------------+---------------+-------------------+
-~~~
-=======
-```plaintext
-SELECT col_1, col_2, LAG(col_2,2,0) OVER (ORDER BY col_1) 
-FROM test_tbl ORDER BY col_1;
-+-------+-------+---------------------------------------------+
-| col_1 | col_2 | lag(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
-+-------+-------+---------------------------------------------+
-|     1 |  NULL |                                           0 |
-|     2 |     4 |                                           0 |
-|     3 |  NULL |                                        NULL |
-|     4 |     2 |                                           4 |
-|     5 |  NULL |                                        NULL |
-|     6 |     7 |                                           2 |
-|     7 |     6 |                                        NULL |
-|     8 |     5 |                                           7 |
-|     9 |  NULL |                                           6 |
-|    10 |  NULL |                                           5 |
-+-------+-------+---------------------------------------------+
 ```
->>>>>>> 240689c8c1 ([Doc] fix build error (#31541))
 
 The first row shows what happens when there is no previous row. The function returns the ***`default`*** value 0.
 
@@ -523,7 +457,7 @@ Data types that can be queried by `lead()` are the same as those supported by [l
 
 Syntax
 
-~~~Haskell
+```Haskell
 LEAD(expr[, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ```
@@ -538,7 +472,7 @@ Example:
 
 Calculate the trending of closing prices between two days, that is, whether the price of the next day is higher or lower. `default` is set to 0, which means 0 is returned if no matching row is found.
 
-~~~SQL
+```SQL
 select stock_symbol, closing_date, closing_price,
     case(lead(closing_price, 1, 0) 
          over (partition by stock_symbol
@@ -548,12 +482,11 @@ select stock_symbol, closing_date, closing_price,
     as "trending"
 from stock_ticker
 order by closing_date;
-~~~
+```
 
 Output
 
-<<<<<<< HEAD
-~~~Plain
+```plaintext
 +--------------+---------------------+---------------+---------------+
 | stock_symbol | closing_date        | closing_price | trending      |
 +--------------+---------------------+---------------+---------------+
@@ -565,62 +498,7 @@ Output
 | JDR          | 2014-09-18 00:00:00 | 14.75         | flat or lower |
 | JDR          | 2014-09-19 00:00:00 | 13.98         | flat or lower |
 +--------------+---------------------+---------------+---------------+
-~~~
-=======
-Query data from this table, where `offset` is 2, which means traversing the subsequent two rows; `default` is 0, which means 0 is returned if no matching rows are found.
-
-Output:
-
-```plaintext
-SELECT col_1, col_2, LEAD(col_2,2,0) OVER (ORDER BY col_1) 
-FROM test_tbl ORDER BY col_1;
-+-------+-------+----------------------------------------------+
-| col_1 | col_2 | lead(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
-+-------+-------+----------------------------------------------+
-|     1 |  NULL |                                         NULL |
-|     2 |     4 |                                            2 |
-|     3 |  NULL |                                         NULL |
-|     4 |     2 |                                            7 |
-|     5 |  NULL |                                            6 |
-|     6 |     7 |                                            5 |
-|     7 |     6 |                                         NULL |
-|     8 |     5 |                                         NULL |
-|     9 |  NULL |                                            0 |
-|    10 |  NULL |                                            0 |
-+-------+-------+----------------------------------------------+
 ```
-
-For the first row, the value two rows forward is NULL and NULL is returned because NULL values are allowed.
-
-For the last two rows, no subsequent two rows exist and the default value 0 is returned.
-
-Example 2: IGNORE NULLS is specified
-
-Use the preceding table and parameter settings.
-
-```SQL
-SELECT col_1, col_2, LEAD(col_2 IGNORE NULLS,2,0) OVER (ORDER BY col_1) 
-FROM test_tbl ORDER BY col_1;
-+-------+-------+----------------------------------------------+
-| col_1 | col_2 | lead(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
-+-------+-------+----------------------------------------------+
-|     1 |  NULL |                                            2 |
-|     2 |     4 |                                            7 |
-|     3 |  NULL |                                            7 |
-|     4 |     2 |                                            6 |
-|     5 |  NULL |                                            6 |
-|     6 |     7 |                                            5 |
-|     7 |     6 |                                            0 |
-|     8 |     5 |                                            0 |
-|     9 |  NULL |                                            0 |
-|    10 |  NULL |                                            0 |
-+-------+-------+----------------------------------------------+
-```
-
-For rows 7 to 10, the system cannot find two non-null values in the subsequent rows and the default value 0 is returned.
-
-For the first row, the value two rows forward is NULL and NULL is ignored because IGNORE NULLS is specified. The system continues to search for the second non-null value and 2 in row 4 is returned.
->>>>>>> 240689c8c1 ([Doc] fix build error (#31541))
 
 ### MAX()
 
@@ -728,55 +606,6 @@ from int_t
 where property in ('prime','square');
 ```
 
-<<<<<<< HEAD
-=======
-### PERCENT_RANK()
-
-The PERCENT_RANK() function calculates the relative rank of a row within a result set as a percentage. It returns the percentage of partition values less than the value in the current row, excluding the highest value. The return values range from 0 to 1. This function is useful for percentile calculations and analyzing data distribution.
-
-The PERCENT_RANK() function is calculated using the following formula, where rank represents the row rank and rows represents the number of partition rows:
-
-```plaintext
-(rank - 1) / (rows - 1)
-```
-
-Syntax:
-
-```SQL
-PERCENT_RANK() OVER (partition_by_clause order_by_clause)
-```
-
-**This function should be used with ORDER BY to sort partition rows into the desired order. Without ORDER BY, all rows are peers and have value (1 - 1)/(N - 1) = 0, where N is the partition size.**
-
-The following example shows the relative rank of column y within each group of column x.
-
-```SQL
-SELECT x, y,
-    PERCENT_RANK()
-        OVER (
-            PARTITION BY x
-            ORDER BY y
-        ) AS `percent_rank`
-FROM int_t;
-```
-
-```plaintext
-+---+---+--------------+
-| x | y | percent_rank |
-+---+---+--------------+
-| 1 | 1 |            0 |
-| 1 | 2 |          0.5 |
-| 1 | 2 |          0.5 |
-| 2 | 1 |            0 |
-| 2 | 2 |          0.5 |
-| 2 | 3 |            1 |
-| 3 | 1 |            0 |
-| 3 | 1 |            0 |
-| 3 | 2 |            1 |
-+---+---+--------------+
-```
-
->>>>>>> 240689c8c1 ([Doc] fix build error (#31541))
 ### RANK()
 
 The RANK() function is used to represent rankings. Unlike DENSE_RANK(), RANK() will **appear as a vacant** number. For example, if two tied 1s appear, the third number of RANK() will be 3 instead of 2.
