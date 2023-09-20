@@ -199,7 +199,6 @@ Tables in a shared-data StarRocks cluster support all types of queries provided 
 
 Currently, shared-data StarRocks clusters do not support [Synchronous materialized views](../using_starrocks/Materialized_view-single_table.md).
 
-
 ## What to do next
 
 After deploying and setting up your StarRocks cluster, you can then proceed to design tables that best work for your scenarios. See [Understand StarRocks table design](../table_design/Table_design.md) for detailed instructions on designing a table.
