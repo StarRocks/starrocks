@@ -88,6 +88,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentClient;
 import com.starrocks.thrift.TAgentResult;
@@ -724,11 +725,12 @@ public class ExportJob implements Writable, GsonPostProcessable {
             String host = address.getHostname();
             int port = address.getPort();
 
-            ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, port);
-            if (node == null) {
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+            if (backend == null) {
                 continue;
             }
-            if (!GlobalStateMgr.getCurrentSystemInfo().checkNodeAvailable(node)) {
+            long backendId = backend.getId();
+            if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
                 continue;
             }
 
