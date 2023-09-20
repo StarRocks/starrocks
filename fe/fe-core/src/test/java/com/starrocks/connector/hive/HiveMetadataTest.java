@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
@@ -259,7 +260,8 @@ public class HiveMetadataTest {
         columns.put(dataColumnRefOperator, null);
 
         Statistics statistics = hiveMetadata.getTableStatistics(
-                optimizerContext, hiveTable, columns, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1);
+                optimizerContext, hiveTable, columns, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2),
+                null, -1);
         Assert.assertEquals(1,  statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
 
@@ -332,6 +334,15 @@ public class HiveMetadataTest {
                 () -> hiveMetadata.dropTable(new DropTableStmt(false, tableName, false)));
 
         hiveMetadata.dropTable(new DropTableStmt(false, tableName, true));
+
+        new MockUp<HiveMetadata>() {
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return null;
+            }
+        };
+
+        hiveMetadata.dropTable(new DropTableStmt(true, tableName, true));
     }
 
     @Test(expected = StarRocksConnectorException.class)
@@ -346,6 +357,7 @@ public class HiveMetadataTest {
         tSinkCommitInfo.setStaging_dir(stagingDir);
         tSinkCommitInfo.setIs_overwrite(false);
         tSinkCommitInfo.setHive_file_info(fileInfo);
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList());
         hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
     }
 

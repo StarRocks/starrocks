@@ -243,6 +243,7 @@ void SerializedJoinProbeFunc::_probe_nullable_column(const JoinHashTableItems& t
         }
     }
 
+    probe_state->null_array = &null_columns[0]->get_data();
     for (uint32_t i = 0; i < row_count; i++) {
         if (probe_state->is_nulls[i] == 0) {
             probe_state->probe_slice[i] = JoinHashMapHelper::get_hash_key(data_columns, i, ptr);
@@ -458,7 +459,7 @@ Status JoinHashTable::build(RuntimeState* state) {
     return Status::OK();
 }
 
-Status JoinHashTable::reset_probe_state(starrocks::RuntimeState* state) {
+void JoinHashTable::reset_probe_state(starrocks::RuntimeState* state) {
     _hash_map_type = _choose_join_hash_map();
     switch (_hash_map_type) {
 #define M(NAME)                                                                                                       \
@@ -471,7 +472,6 @@ Status JoinHashTable::reset_probe_state(starrocks::RuntimeState* state) {
     default:
         assert(false);
     }
-    return Status::OK();
 }
 
 Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,

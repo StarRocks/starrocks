@@ -351,6 +351,8 @@ vectorized_functions = [
     [50041, 'dayofweek_iso', 'INT', ['DATETIME'], 'TimeFunctions::day_of_week_iso'],
     [50050, 'to_date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
     [50051, 'date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
+    [50052, 'to_tera_date', 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_tera_date', "TimeFunctions::to_tera_date_prepare", "TimeFunctions::to_tera_date_close"],
+    [50053, 'to_tera_timestamp', 'DATETIME', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_tera_timestamp', "TimeFunctions::to_tera_timestamp_prepare", "TimeFunctions::to_tera_timestamp_close"],
 
     [50057, 'day', 'TINYINT', ['DATE'], 'TimeFunctions::dayV3'],
     [50058, 'day', 'TINYINT', ['DATETIME'], 'TimeFunctions::dayV2'],
@@ -419,19 +421,26 @@ vectorized_functions = [
     [50221, 'current_date', 'DATE', [], 'TimeFunctions::curdate'],
     [50230, 'from_days', 'DATE', ['INT'], 'TimeFunctions::from_days'],
     [50231, 'to_days', 'INT', ['DATE'], 'TimeFunctions::to_days'],
+    [50241, 'date_format', 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::datetime_format', 'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
+    [50242, 'date_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::date_format', 'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
+     
+    # From string to DATE/DATETIME
+    # the function will call by FE getStrToDateFunction, and is invisible to user
     [50240, 'str_to_date', 'DATETIME', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str_to_date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
-    [50241, 'date_format', 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::datetime_format',
-     'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
-    [50242, 'date_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::date_format',
-     'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
-    # cast string to date, the function will call by FE getStrToDateFunction, and is invisible to user
     [50243, 'str2date', 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str2date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
-    [50250, 'time_to_sec', 'BIGINT', ['TIME'], 'TimeFunctions::time_to_sec'],
+    
+    # Joda Time parse & format
+    [50244, 'str_to_jodatime', 'DATETIME', ['VARCHAR', 'VARCHAR'], 
+            'TimeFunctions::parse_jodatime', 
+            'TimeFunctions::parse_joda_prepare', 
+            'TimeFunctions::parse_joda_close'],
+            
     [50260, 'jodatime_format', 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::jodadatetime_format', 'TimeFunctions::jodatime_format_prepare', 'TimeFunctions::jodatime_format_close'],
     [50261, 'jodatime_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::jodadate_format', 'TimeFunctions::jodatime_format_prepare', 'TimeFunctions::jodatime_format_close'],
 
     [50262, 'to_iso8601', 'VARCHAR', ['DATETIME'], 'TimeFunctions::datetime_to_iso8601'],
     [50263, 'to_iso8601', 'VARCHAR', ['DATE'], 'TimeFunctions::date_to_iso8601'],
+    [50250, 'time_to_sec', 'BIGINT', ['TIME'], 'TimeFunctions::time_to_sec'],
 
     # unix timestamp extended version to int64
     # be sure to put before int32 version, so fe will find signature in order.

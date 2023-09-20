@@ -51,12 +51,12 @@ if [ -z $STARROCKS_VERSION ]; then
     elif [ ! -z $branch_name ]; then
         export STARROCKS_VERSION=$branch_name
     else
-        export STARROCKS_VERSION=$(git rev-parse --short HEAD)
+        export STARROCKS_VERSION=$(git rev-parse --short=7 HEAD)
     fi
 fi
 
 if [ -z $STARROCKS_COMMIT_HASH]; then
-    export STARROCKS_COMMIT_HASH=$(git rev-parse --short HEAD)
+    export STARROCKS_COMMIT_HASH=$(git rev-parse --short=7 HEAD)
 fi
 
 set -eo pipefail
@@ -327,6 +327,18 @@ if [ ${BUILD_BE} -eq 1 ] ; then
       fi
       export STARLET_INSTALL_DIR
     fi
+
+    # Temporarily keep the default behavior same as before to avoid frequent thirdparty update.
+    # Once the starcache version is stable, we will turn on it by default.
+    if [[ -z ${WITH_STARCACHE} ]]; then
+      WITH_STARCACHE=${USE_STAROS}
+    fi
+
+    if [[ "${WITH_STARCACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/starcache/lib/libstarcache.a ]]; then
+        echo "Missing depdency libraries(starcache), you can download and extract it to thirdparty installed directory."
+        exit 1
+    fi
+
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
                   -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
                   -DSTARROCKS_HOME=${STARROCKS_HOME}                    \
@@ -340,8 +352,8 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DWITH_CACHELIB=${WITH_CACHELIB}                      \
+                  -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DUSE_STAROS=${USE_STAROS}                            \
-                  -DWITH_STARCACHE=${USE_STAROS}                        \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
 

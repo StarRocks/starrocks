@@ -146,4 +146,8 @@ public abstract class ScanNode extends PlanNode {
 
         return columnAccessPaths.stream().map(ColumnAccessPath::toThrift).collect(Collectors.toList());
     }
+
+    protected boolean supportTopNRuntimeFilter() {
+        return false;
+    }
 }

@@ -15,7 +15,9 @@
 package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.journal.JournalEntity;
@@ -27,6 +29,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -36,6 +41,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.UUID;
 
 public class AnalyzeMgrTest {
     public static ConnectContext connectContext;
@@ -143,15 +150,25 @@ public class AnalyzeMgrTest {
                 Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.PENDING,
                 LocalDateTime.MIN);
+        ExternalAnalyzeJob externalAnalyzeJob = new ExternalAnalyzeJob("hive0", "hive_db", "t1",
+                null, StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
         analyzeMgr.addAnalyzeJob(nativeAnalyzeJob);
+        analyzeMgr.addAnalyzeJob(externalAnalyzeJob);
 
         testImage = new UtFrameUtils.PseudoImage();
         analyzeMgr.save(testImage.getDataOutputStream());
         analyzeMgr.load(new SRMetaBlockReader(testImage.getDataInputStream()));
-        Assert.assertEquals(1, analyzeMgr.getAllAnalyzeJobList().size());
+        Assert.assertEquals(2, analyzeMgr.getAllAnalyzeJobList().size());
         NativeAnalyzeJob analyzeJob = (NativeAnalyzeJob) analyzeMgr.getAllAnalyzeJobList().get(0);
         Assert.assertEquals(123, analyzeJob.getDbId());
         Assert.assertEquals(1234, analyzeJob.getTableId());
+
+        ExternalAnalyzeJob analyzeJob1 = (ExternalAnalyzeJob) analyzeMgr.getAllAnalyzeJobList().get(1);
+        Assert.assertEquals("hive0", analyzeJob1.getCatalogName());
+        Assert.assertEquals("hive_db", analyzeJob1.getDbName());
+        Assert.assertEquals("t1", analyzeJob1.getTableName());
 
         NativeAnalyzeJob nativeAnalyzeJob1 = (NativeAnalyzeJob) UtFrameUtils.PseudoJournalReplayer.
                 replayNextJournal(OperationType.OP_ADD_ANALYZER_JOB);
@@ -163,7 +180,18 @@ public class AnalyzeMgrTest {
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(1, GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList().size());
 
-        analyzeMgr.removeAnalyzeJob(analyzeMgr.getAllAnalyzeJobList().get(0).getId());
+        ExternalAnalyzeJob externalAnalyzeJob1 = (ExternalAnalyzeJob) UtFrameUtils.PseudoJournalReplayer.
+                replayNextJournal(OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB);
+        Assert.assertEquals("hive0", externalAnalyzeJob1.getCatalogName());
+        Assert.assertEquals("hive_db", externalAnalyzeJob1.getDbName());
+        Assert.assertEquals("t1", externalAnalyzeJob1.getTableName());
+
+        journalEntity.setOpCode(OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB);
+        journalEntity.setData(externalAnalyzeJob1);
+        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        Assert.assertEquals(2, GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList().size());
+
+        analyzeMgr.removeAnalyzeJob(nativeAnalyzeJob.getId());
         NativeAnalyzeJob nativeAnalyzeJob2 = (NativeAnalyzeJob) UtFrameUtils.PseudoJournalReplayer.
                 replayNextJournal(OperationType.OP_REMOVE_ANALYZER_JOB);
         Assert.assertEquals(123, nativeAnalyzeJob2.getDbId());
@@ -171,6 +199,17 @@ public class AnalyzeMgrTest {
 
         journalEntity.setOpCode(OperationType.OP_REMOVE_ANALYZER_JOB);
         journalEntity.setData(nativeAnalyzeJob);
+        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+
+        analyzeMgr.removeAnalyzeJob(externalAnalyzeJob.getId());
+        ExternalAnalyzeJob externalAnalyzeJob2 = (ExternalAnalyzeJob) UtFrameUtils.PseudoJournalReplayer.
+                replayNextJournal(OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB);
+        Assert.assertEquals("hive0", externalAnalyzeJob2.getCatalogName());
+        Assert.assertEquals("hive_db", externalAnalyzeJob2.getDbName());
+        Assert.assertEquals("t1", externalAnalyzeJob2.getTableName());
+
+        journalEntity.setOpCode(OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB);
+        journalEntity.setData(externalAnalyzeJob2);
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(0, GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList().size());
     }
@@ -207,5 +246,21 @@ public class AnalyzeMgrTest {
 
         analyzeMgr.dropExternalAnalyzeStatus(table.getUUID());
         Assert.assertEquals(0, analyzeMgr.getAnalyzeStatusMap().size());
+    }
+
+    @Test
+    public void testUpdateLoadRowsWithTableDropped() {
+        long dbId = 11111L;
+        long tableId = 22222L;
+        GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(new Database(dbId, "test"));
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(dbId, tableId,
+                Lists.newArrayList("c1"), StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), new HashMap<>()));
+
+        UUID uuid = UUID.randomUUID();
+        TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        TransactionState transactionState = new TransactionState(dbId, Lists.newArrayList(tableId), 33333L, "xxx",
+                requestId, TransactionState.LoadJobSourceType.INSERT_STREAMING, null, 44444L, 10000);
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(0));
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateLoadRows(transactionState);
     }
 }

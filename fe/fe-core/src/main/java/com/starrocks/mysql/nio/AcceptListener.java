@@ -46,6 +46,7 @@ import org.xnio.StreamConnection;
 import org.xnio.channels.AcceptingChannel;
 
 import java.io.IOException;
+import java.net.SocketAddress;
 import javax.net.ssl.SSLContext;
 
 /**
@@ -68,12 +69,14 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
             if (connection == null) {
                 return;
             }
-            LOG.info("Connection established. remote={}", connection.getPeerAddress());
             // connection has been established, so need to call context.cleanup()
             // if exception happens.
             NConnectContext context = new NConnectContext(connection, sslContext);
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             connectScheduler.submit(context);
+            int connectionId = context.getConnectionId();
+            SocketAddress remoteAddr = connection.getPeerAddress();
+            LOG.info("Connection established. remote={}, connectionId={}", remoteAddr, connectionId);
 
             try {
                 channel.getWorker().execute(() -> {
@@ -81,6 +84,8 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                     try {
                         // Set thread local info
                         context.setThreadLocalInfo();
+                        LOG.info("Connection scheduled to worker thread {}. remote={}, connectionId={}",
+                                Thread.currentThread().getId(), remoteAddr, connectionId);
                         context.setConnectScheduler(connectScheduler);
                         // authenticate check failed.
                         result = MysqlProto.negotiate(context);

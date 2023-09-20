@@ -96,7 +96,6 @@ public class LoadLoadingTask extends LoadTask {
     private final String mergeConditionStr;
     private final TPartialUpdateMode partialUpdateMode;
 
-    private LoadingTaskPlanner planner;
     private final ConnectContext context;
 
     private LoadPlanner loadPlanner;

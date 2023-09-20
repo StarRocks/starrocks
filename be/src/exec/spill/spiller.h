@@ -94,7 +94,7 @@ public:
 
     // the number of blocks created
     RuntimeProfile::Counter* block_count = nullptr;
-    // spill task/ restore task
+    // flush/restore task count
     RuntimeProfile::Counter* flush_io_task_count = nullptr;
     RuntimeProfile::HighWaterMarkCounter* peak_flush_io_task_count = nullptr;
     RuntimeProfile::Counter* restore_io_task_count = nullptr;
@@ -116,9 +116,9 @@ public:
     const SpillProcessMetrics& metrics() { return _metrics; }
 
     // set partitions for spiller only works when spiller has partitioned spill writer
-    Status set_partition(const std::vector<const SpillPartitionInfo*>& parititons);
+    void set_partition(const std::vector<const SpillPartitionInfo*>& parititons);
     // init partition by `num_partitions`
-    Status set_partition(RuntimeState* state, size_t num_partitions);
+    void set_partition(RuntimeState* state, size_t num_partitions);
 
     // no thread-safe
     // TaskExecutor: Executor for runing io tasks

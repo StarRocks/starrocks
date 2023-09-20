@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -52,6 +53,7 @@ import static org.apache.iceberg.SnapshotSummary.TOTAL_RECORDS_PROP;
 
 public class IcebergStatisticProvider {
     private static final Logger LOG = LogManager.getLogger(IcebergStatisticProvider.class);
+    private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     public IcebergStatisticProvider() {
     }
@@ -109,6 +111,7 @@ public class IcebergStatisticProvider {
                 if (files.contains(dataFile.path().toString())) {
                     continue;
                 }
+
                 files.add(dataFile.path().toString());
                 if (icebergFileStats == null) {
                     icebergFileStats = new IcebergFileStats(dataFile.recordCount());

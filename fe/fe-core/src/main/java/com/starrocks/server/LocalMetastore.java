@@ -158,6 +158,8 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -2274,7 +2276,7 @@ public class LocalMetastore implements ConnectorMetadata {
         properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(index.getId()));
         int bucketNum = distributionInfo.getBucketNum();
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
-                table.getPartitionFilePathInfo(), table.getPartitionFileCacheInfo(partitionId), shardGroupId,
+                table.getPartitionFilePathInfo(partitionId), table.getPartitionFileCacheInfo(partitionId), shardGroupId,
                 properties);
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
@@ -2834,7 +2836,7 @@ public class LocalMetastore implements ConnectorMetadata {
     @Override
     public void createMaterializedView(CreateMaterializedViewStmt stmt)
             throws AnalysisException, DdlException {
-        stateMgr.getAlterJobMgr().processCreateMaterializedView(stmt);
+        stateMgr.getAlterJobMgr().processCreateSynchronousMaterializedView(stmt);
     }
 
     // TODO(murphy) refactor it into MVManager
@@ -2971,6 +2973,11 @@ public class LocalMetastore implements ConnectorMetadata {
                             baseDistribution, mvRefreshScheme);
         }
 
+        // sort keys
+        if (CollectionUtils.isNotEmpty(stmt.getSortKeys())) {
+            materializedView.setTableProperty(new TableProperty());
+            materializedView.getTableProperty().setMvSortKeys(stmt.getSortKeys());
+        }
         // set comment
         materializedView.setComment(stmt.getComment());
         // set baseTableIds
@@ -3199,6 +3206,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 String storageVolumeId = svm.getStorageVolumeIdOfTable(materializedView.getId());
                 setLakeStorageInfo(materializedView, storageVolumeId, properties);
             }
+
             // session properties
             if (!properties.isEmpty()) {
                 // analyze properties
@@ -3272,9 +3280,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             taskManager.createTask(task, false);
-            // for event triggered type, run task
-            if (task.getType() == Constants.TaskType.EVENT_TRIGGERED ||
-                    refreshMoment.equals(MaterializedView.RefreshMoment.IMMEDIATE)) {
+            if (refreshMoment.equals(MaterializedView.RefreshMoment.IMMEDIATE)) {
                 taskManager.executeTask(task.getName());
             }
         }
@@ -3294,8 +3300,16 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
         if (table instanceof MaterializedView) {
-            Authorizer.checkMaterializedViewAction(ConnectContext.get().getCurrentUserIdentity(),
-                    ConnectContext.get().getCurrentRoleIds(), stmt.getDbMvName(), PrivilegeType.DROP);
+            try {
+                Authorizer.checkMaterializedViewAction(ConnectContext.get().getCurrentUserIdentity(),
+                        ConnectContext.get().getCurrentRoleIds(), stmt.getDbMvName(), PrivilegeType.DROP);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        stmt.getDbMvName().getCatalog(),
+                        ConnectContext.get().getCurrentUserIdentity(),
+                        ConnectContext.get().getCurrentRoleIds(), PrivilegeType.DROP.name(), ObjectType.MATERIALIZED_VIEW.name(),
+                        stmt.getDbMvName().getTbl());
+            }
 
             MaterializedView mv = (MaterializedView) table;
             MaterializedViewMgr.getInstance().stopMaintainMV(mv);

@@ -40,7 +40,7 @@ public class ShowProcesslistStmtTest {
         ShowProcesslistStmt stmt = (ShowProcesslistStmt)UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assert.assertNotNull(metaData);
-        Assert.assertEquals(11, metaData.getColumnCount());
+        Assert.assertEquals(10, metaData.getColumnCount());
         Assert.assertEquals("Id", metaData.getColumn(0).getName());
         Assert.assertEquals("User", metaData.getColumn(1).getName());
         Assert.assertEquals("Host", metaData.getColumn(2).getName());

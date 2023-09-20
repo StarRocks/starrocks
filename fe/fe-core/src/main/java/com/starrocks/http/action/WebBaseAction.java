@@ -51,6 +51,7 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
@@ -176,8 +177,11 @@ public class WebBaseAction extends BaseAction {
             authInfo = getAuthorizationInfo(request);
             UserIdentity currentUser = checkPassword(authInfo);
             if (needAdmin()) {
-                checkUserOwnsAdminRole(currentUser);
-                checkActionOnSystem(currentUser, PrivilegeType.NODE);
+                try {
+                    Authorizer.checkSystemAction(currentUser, null, PrivilegeType.NODE);
+                } catch (AccessDeniedException e) {
+                    checkUserOwnsAdminRole(currentUser);
+                }
             }
             request.setAuthorized(true);
             SessionValue value = new SessionValue();
@@ -214,8 +218,11 @@ public class WebBaseAction extends BaseAction {
             boolean authorized = false;
 
             try {
-                checkUserOwnsAdminRole(sessionValue.currentUser);
-                checkActionOnSystem(sessionValue.currentUser, PrivilegeType.NODE);
+                try {
+                    Authorizer.checkSystemAction(sessionValue.currentUser, null, PrivilegeType.NODE);
+                } catch (AccessDeniedException e) {
+                    checkUserOwnsAdminRole(sessionValue.currentUser);
+                }
                 authorized = true;
             } catch (AccessDeniedException e) {
                 // ignore

@@ -38,6 +38,8 @@ public class PrivilegeType {
     public String name() {
         if (VALID_PRIVILEGE_TYPE.contains(this)) {
             return name;
+        } else if (this.equals(ANY)) {
+            return "ANY";
         } else {
             return "UNKNOWN";
         }
