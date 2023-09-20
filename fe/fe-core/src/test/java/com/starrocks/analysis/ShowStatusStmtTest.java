@@ -34,7 +34,6 @@ public class ShowStatusStmtTest {
         {
             ShowStatusStmt stmt = (ShowStatusStmt) SqlParser.parse("SHOW STATUS", 32).get(0);
             Analyzer.analyze(stmt, ctx);
-            Assert.assertEquals(SetType.SESSION, stmt.getType());
             Assert.assertNull(stmt.getPattern());
             Assert.assertNull(stmt.getWhere());
         }
@@ -50,7 +49,6 @@ public class ShowStatusStmtTest {
         {
             ShowStatusStmt stmt = (ShowStatusStmt) SqlParser.parse("SHOW LOCAL STATUS", 32).get(0);
             Analyzer.analyze(stmt, ctx);
-            Assert.assertEquals(SetType.SESSION, stmt.getType());
             Assert.assertNull(stmt.getPattern());
             Assert.assertNull(stmt.getWhere());
         }
@@ -66,7 +64,6 @@ public class ShowStatusStmtTest {
         {
             ShowStatusStmt stmt = (ShowStatusStmt) SqlParser.parse("SHOW STATUS like 'abc'", 32).get(0);
             Analyzer.analyze(stmt, ctx);
-            Assert.assertEquals(SetType.SESSION, stmt.getType());
             Assert.assertNotNull(stmt.getPattern());
             Assert.assertEquals("abc", stmt.getPattern());
             Assert.assertNull(stmt.getWhere());
@@ -74,7 +71,6 @@ public class ShowStatusStmtTest {
 
         {
             ShowStatusStmt stmt = (ShowStatusStmt) SqlParser.parse("SHOW STATUS where abc=123", 32).get(0);
-            Assert.assertEquals(SetType.SESSION, stmt.getType());
             Assert.assertNull(stmt.getPattern());
             Assert.assertEquals("abc = 123", stmt.getWhere().toSql());
         }

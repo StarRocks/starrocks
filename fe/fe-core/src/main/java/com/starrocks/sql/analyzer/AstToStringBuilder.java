@@ -1031,7 +1031,7 @@ public class AstToStringBuilder {
                 sb.append("@@");
                 if (node.getSetType() == SetType.GLOBAL) {
                     sb.append("GLOBAL.");
-                } else {
+                } else if (node.getSetType() != null) {
                     sb.append("SESSION.");
                 }
             }
