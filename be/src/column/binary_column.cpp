@@ -80,10 +80,7 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
 
     // enable prefetch if
     // 1) the input size is large enough
-    // 2) the src col is large enough
-    // 3) not only long strings.
-    bool need_prefetch =
-            (size > SEQUENTIAL_DISTINCT * 2) && (src_offsets.back() > (1 << 21)) && src_offsets.size() > 256;
+    bool need_prefetch = (size > SEQUENTIAL_DISTINCT * 2);
 
     size_t cur_row_count = _offsets.size() - 1;
     size_t cur_byte_size = _bytes.size();
