@@ -18,21 +18,29 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
+import com.google.common.collect.Sets;
 import com.google.common.collect.TreeRangeSet;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 // all ranges about one column ref
 // eg: a > 10 and a < 100 => a -> (10, 100)
 // (a > 10 and a < 100) or (a > 1000 and a <= 10000) => a -> (10, 100) or (1000, 10000]
 public class ColumnRangePredicate extends RangePredicate {
+
     private ColumnRefOperator columnRef;
     // the relation between each Range in RangeSet is 'or'
     private TreeRangeSet<ConstantOperator> columnRanges;
@@ -102,11 +110,40 @@ public class ColumnRangePredicate extends RangePredicate {
         if (canonicalColumnRanges.isEmpty()) {
             return ConstantOperator.FALSE;
         }
-        if (isUnbounded()) {
+
+        if (isUnbounded() || canonicalColumnRanges.isEmpty()) {
             return ConstantOperator.TRUE;
         }
+        // process ne
+        // for a < 100 || a > 100
+        RangeSet<ConstantOperator> complement = columnRanges.complement();
+        if (complement.asRanges().size() == 1 && isEqualRange(complement.asRanges().iterator().next())) {
+            // complement will be [100, 100]
+            Range<ConstantOperator> range = complement.asRanges().iterator().next();
+            return BinaryPredicateOperator.ne(columnRef, range.lowerEndpoint());
+        }
+
         List<ScalarOperator> orOperators = Lists.newArrayList();
-        for (Range<ConstantOperator> range : columnRanges.asRanges()) {
+        // process in predicates
+        Set<Range<ConstantOperator>> rangeSet = Sets.newCopyOnWriteArraySet(columnRanges.asRanges());
+        Set<Range<ConstantOperator>> equalRangeSet = rangeSet.stream().filter(r -> isEqualRange(r)).collect(Collectors.toSet());
+        if (equalRangeSet.size() > 1) {
+            List<ConstantOperator> constants = equalRangeSet.stream()
+                    .map(this::getValue)
+                    .filter(Optional::isPresent)
+                    .map(Optional::get)
+                    .sorted()
+                    .collect(Collectors.toList());
+
+            List<ScalarOperator> arguments = Lists.newLinkedList();
+            arguments.add(columnRef);
+            arguments.addAll(constants);
+
+            InPredicateOperator inPredicateOperator = new InPredicateOperator(false, arguments);
+            orOperators.add(inPredicateOperator);
+            rangeSet.removeAll(equalRangeSet);
+        }
+        for (Range<ConstantOperator> range : rangeSet) {
             List<ScalarOperator> andOperators = Lists.newArrayList();
             if (range.hasLowerBound() && range.hasUpperBound()) {
                 if (range.lowerBoundType() == BoundType.CLOSED
@@ -189,5 +226,64 @@ public class ColumnRangePredicate extends RangePredicate {
     @Override
     public int hashCode() {
         return Objects.hash(columnRef, columnRanges);
+    }
+
+    private boolean isEqualRange(Range<ConstantOperator> range) {
+        if (!range.hasUpperBound() || !range.hasLowerBound()) {
+            return false;
+        }
+        if (range.lowerBoundType() == BoundType.CLOSED
+                && range.upperBoundType() == BoundType.CLOSED
+                && range.upperEndpoint().equals(range.lowerEndpoint())) {
+            // 8 <= a <= 8
+            return true;
+        } else if (range.lowerBoundType() == BoundType.CLOSED
+                && range.upperBoundType() == BoundType.OPEN
+                && range.lowerEndpoint().successor().isPresent()
+                && range.upperEndpoint().equals(range.lowerEndpoint().successor().get())) {
+            // 8 <= a < 9
+            return true;
+        } else if (range.lowerBoundType() == BoundType.OPEN
+                && range.upperBoundType() == BoundType.CLOSED
+                && range.upperEndpoint().predecessor().isPresent()
+                && range.upperEndpoint().predecessor().get().equals(range.lowerEndpoint())) {
+            // 7 < a <= 8
+            return true;
+        } else if (range.lowerBoundType() == BoundType.OPEN
+                && range.upperBoundType() == BoundType.OPEN
+                && range.upperEndpoint().predecessor().isPresent()
+                && range.lowerEndpoint().successor().isPresent()) {
+            // 7 < a < 9
+            return range.upperEndpoint().predecessor().equals(range.lowerEndpoint().successor().get());
+        }
+        return false;
+    }
+
+    private Optional<ConstantOperator> getValue(Range<ConstantOperator> range) {
+        if (range.lowerBoundType() == BoundType.CLOSED
+                && range.upperBoundType() == BoundType.CLOSED
+                && range.upperEndpoint().equals(range.lowerEndpoint())) {
+            // 8 <= a <= 8
+            return Optional.of(range.lowerEndpoint());
+        } else if (range.lowerBoundType() == BoundType.CLOSED
+                && range.upperBoundType() == BoundType.OPEN
+                && range.lowerEndpoint().successor().isPresent()
+                && range.upperEndpoint().equals(range.lowerEndpoint().successor().get())) {
+            // 8 <= a < 9
+            return Optional.of(range.lowerEndpoint());
+        } else if (range.lowerBoundType() == BoundType.OPEN
+                && range.upperBoundType() == BoundType.CLOSED
+                && range.upperEndpoint().predecessor().isPresent()
+                && range.upperEndpoint().predecessor().get().equals(range.lowerEndpoint())) {
+            // 7 < a <= 8
+            return Optional.of(range.upperEndpoint());
+        } else if (range.lowerBoundType() == BoundType.OPEN
+                && range.upperBoundType() == BoundType.OPEN
+                && range.upperEndpoint().predecessor().isPresent()
+                && range.lowerEndpoint().successor().isPresent()) {
+            // 7 < a < 9
+            return Optional.of(range.lowerEndpoint().successor().get());
+        }
+        return Optional.empty();
     }
 }
