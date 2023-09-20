@@ -76,6 +76,10 @@ public interface IHiveMetastore {
         return Lists.newArrayList();
     }
 
+    default boolean refreshView(String hiveDbName, String hiveTblName) {
+        return true;
+    }
+
     default List<HivePartitionName> refreshTableBackground(String hiveDbName, String hiveTblName, boolean onlyCachedPartitions) {
         return Lists.newArrayList();
     }

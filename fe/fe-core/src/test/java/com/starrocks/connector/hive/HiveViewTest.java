@@ -15,15 +15,21 @@
 package com.starrocks.connector.hive;
 
 import com.starrocks.catalog.HiveView;
+import com.starrocks.catalog.Table;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
+import mockit.Expectations;
+import mockit.Mocked;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-public class HiveViewPlanTest extends PlanTestBase {
+import java.util.Optional;
+
+public class HiveViewTest extends PlanTestBase {
     @Rule
     public ExpectedException expectedException = ExpectedException.none();
 
@@ -85,5 +91,26 @@ public class HiveViewPlanTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         assertContains(sqlPlan, "0:HdfsScanNode\n" +
                 "     TABLE: customer");
+    }
+
+    @Test
+    public void testRefreshHiveView(@Mocked CachingHiveMetastore hiveMetastore) throws Exception {
+        CacheUpdateProcessor cacheUpdateProcessor = new CacheUpdateProcessor("hive0", hiveMetastore,
+                null, null, true, false);
+        HiveMetadata hiveMetadata = new HiveMetadata("hive0", null, null, null, null,
+                Optional.of(cacheUpdateProcessor), null, null);
+
+        Table hiveView = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "customer_view");
+        new Expectations() {
+            {
+                hiveMetastore.refreshView(anyString, anyString);
+                result = true;
+            }
+        };
+        try {
+            hiveMetadata.refreshTable("tpch", hiveView, null, false);
+        } catch (Exception e) {
+            Assert.fail();
+        }
     }
 }
