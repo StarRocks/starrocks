@@ -159,13 +159,13 @@ public class MvUtils {
         }
     }
 
-    public static List<String> collectMaterializedViewNames(OptExpression optExpression) {
+    public static List<MaterializedView> collectMaterializedViews(OptExpression optExpression) {
         List<MaterializedView> mvs = new ArrayList<>();
-        collectMaterializedViewNames(optExpression, mvs);
-        return mvs.stream().map(Table::getName).collect(Collectors.toList());
+        collectMaterializedViews(optExpression, mvs);
+        return mvs;
     }
 
-    private static void collectMaterializedViewNames(OptExpression optExpression, List<MaterializedView> mvs) {
+    private static void collectMaterializedViews(OptExpression optExpression, List<MaterializedView> mvs) {
         if (optExpression == null) {
             return;
         }
@@ -178,7 +178,7 @@ public class MvUtils {
         }
 
         for (OptExpression child : optExpression.getInputs()) {
-            collectMaterializedViewNames(child, mvs);
+            collectMaterializedViews(child, mvs);
         }
     }
 
