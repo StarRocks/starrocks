@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/query_context.h"
 
+#include <fmt/compile.h>
+
 #include <memory>
 #include <vector>
 
@@ -29,6 +31,7 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
 #include "util/thread.h"
+#include "util/uid_util.h"
 
 namespace starrocks::pipeline {
 
@@ -59,6 +62,9 @@ QueryContext::~QueryContext() noexcept {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
         _fragment_mgr.reset();
     }
+
+    LOG(INFO) << fmt::format("finished query_id:{} cpu costs:{} peak memusage:{} scan_bytes:{} spilled bytes:{}",
+                             print_id(query_id()), cpu_cost(), mem_cost_bytes(), get_scan_bytes(), get_spill_bytes());
 
     // Accounting memory usage during QueryContext's destruction should not use query-level MemTracker, but its released
     // in the mid of QueryContext destruction, so use process-level memory tracker
