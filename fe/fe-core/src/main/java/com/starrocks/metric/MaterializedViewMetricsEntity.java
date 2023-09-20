@@ -43,27 +43,45 @@ public final class MaterializedViewMetricsEntity {
     private final List<Metric> metrics = Lists.newArrayList();
 
     // refresh
+    // increased once the materialized view's refresh job is triggered.
     public LongCounterMetric counterRefreshJobTotal;
+    // increased only if the materialized view's refresh job is success refreshed.
     public LongCounterMetric counterRefreshJobSuccessTotal;
+    // increased once the materialized view's refresh job is failed.
     public LongCounterMetric counterRefreshJobFailedTotal;
+    // increased once the materialized view's refresh job is not be triggered because of the refreshed data is empty.
     public LongCounterMetric counterRefreshJobEmptyTotal;
+    // increased once the materialized view's refresh job checks whether the base table is changed or not.
     public LongCounterMetric counterRefreshJobRetryCheckChangedTotal;
 
     // query
-    // only record when the materialized view is not contained before rewriting
-    public LongCounterMetric counterQueryHitTotal;
+    // increased if the materialized view is considered in the preprocess for one query.
     public LongCounterMetric counterQueryConsideredTotal;
+    // increased if the materialized view is successes to be rewritten from query, but it may be missed in the
+    // final plan because of the cost.
     public LongCounterMetric counterQueryMatchedTotal;
-    // record once the materialized view is used in the final plan
+    // only increased if the materialized view is rewritten and not be queried directly
+    public LongCounterMetric counterQueryHitTotal;
+    // increased once the materialized view is used in the final plan no matter it is queried directly or rewritten.
     public LongCounterMetric counterQueryMaterializedViewTotal;
 
     // gauge
+    // the current pending refresh jobs for the materialized view
     public GaugeMetric<Long> counterRefreshPendingJobs;
+    // the current running refresh jobs for the materialized view
     public GaugeMetric<Long> counterRefreshRunningJobs;
+    // the current materialized view's row count
     public GaugeMetric<Long> counterRowNums;
+    // the current materialized view's storage size, unit: byte
     public GaugeMetric<Long> counterStorageSize;
+    // the current materialized view is active or not, 0: active, 1: inactive
+    public GaugeMetric<Integer> counterInactiveState;
+
+    // the current materialized view's partition count, 0 if the materialized view is not partitioned
+    public GaugeMetric<Integer> counterPartitionCount;
 
     // histogram
+    // record the materialized view's refresh job duration only if it's refreshed successfully.
     public Histogram histRefreshJobDuration;
 
     public MaterializedViewMetricsEntity(MetricRegistry metricRegistry, MvId mvId) {
@@ -211,6 +229,60 @@ public final class MaterializedViewMetricsEntity {
             }
         };
         metrics.add(counterStorageSize);
+
+        counterInactiveState = new GaugeMetric<Integer>("mv_inactive_state", MetricUnit.NOUNIT,
+                "current materialized view's inactive or not, 0: active, 1: inactive") {
+            @Override
+            public Integer getValue() {
+                Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
+                if (db == null) {
+                    return 0;
+                }
+                Table table = db.getTable(mvId.getId());
+                if (!table.isMaterializedView()) {
+                    return 0;
+                }
+                db.readLock();
+                try {
+                    MaterializedView mv = (MaterializedView) table;
+                    return mv.isActive() ? 0 : 1;
+                } catch (Exception e) {
+                    return 0;
+                } finally {
+                    db.readUnlock();
+                }
+            }
+        };
+        metrics.add(counterInactiveState);
+
+        counterPartitionCount = new GaugeMetric<Integer>("mv_partition_count", MetricUnit.NOUNIT,
+                "current materialized view's partition count, 0 if the materialized view is not partitioned") {
+            @Override
+            public Integer getValue() {
+                Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
+                if (db == null) {
+                    return 0;
+                }
+                Table table = db.getTable(mvId.getId());
+                if (!table.isMaterializedView()) {
+                    return 0;
+                }
+                MaterializedView mv = (MaterializedView) table;
+
+                db.readLock();
+                try {
+                    if (!mv.getPartitionInfo().isPartitioned()) {
+                        return 0;
+                    }
+                    return mv.getPartitions().size();
+                } catch (Exception e) {
+                    return 0;
+                } finally {
+                    db.readUnlock();
+                }
+            }
+        };
+        metrics.add(counterInactiveState);
     }
 
     public static boolean isUpdateMaterializedViewMetrics(ConnectContext connectContext) {

@@ -72,9 +72,13 @@ public class MetricsAction extends RestBaseAction {
 
 
     public final class RequestParams {
+        // Whether to collect per table metrics
         private final boolean collectTableMetrics;
+        // Whether to collect per table metrics in minified mode, Ignore some heavy metrics if true
         private final boolean minifyTableMetrics;
+        // Whether to collect per materialized view metrics
         private final boolean collectMVMetrics;
+        // Whether to collect per materialized view metrics in minified mode, Ignore some heavy metrics if true
         private final boolean minifyMVMetrics;
         RequestParams(boolean collectTableMetrics, boolean minifyTableMetrics,
                       boolean collectMVMetrics, boolean minifyMVMetrics) {
