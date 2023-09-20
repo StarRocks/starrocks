@@ -447,9 +447,9 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65536));
         ASSIGN_OR_ABORT(auto schema, tablet.get_schema());
         ASSERT_EQ(0, schema->column(0).unique_id());
-        ASSERT_EQ(3, schema->column(1).unique_id());
-        ASSERT_EQ(1, schema->column(2).unique_id());
-        ASSERT_EQ(2, schema->column(3).unique_id());
+        ASSERT_EQ(1, schema->column(1).unique_id());
+        ASSERT_EQ(2, schema->column(2).unique_id());
+        ASSERT_EQ(3, schema->column(3).unique_id());
         ASSERT_EQ(4, schema->next_column_unique_id());
 
         ASSERT_EQ("c0", schema->column(0).name());
@@ -490,9 +490,9 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65537));
         ASSIGN_OR_ABORT(auto schema, tablet.get_schema());
         ASSERT_EQ(0, schema->column(0).unique_id());
-        ASSERT_EQ(3, schema->column(1).unique_id());
+        ASSERT_EQ(1, schema->column(1).unique_id());
         ASSERT_EQ(2, schema->column(2).unique_id());
-        ASSERT_EQ(4, schema->next_column_unique_id());
+        ASSERT_EQ(3, schema->next_column_unique_id());
 
         ASSERT_EQ("c0", schema->column(0).name());
         ASSERT_EQ("c3", schema->column(1).name());
