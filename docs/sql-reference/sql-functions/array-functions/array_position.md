@@ -23,7 +23,7 @@ Returns the position of the specified element if the element can be found in the
 
 - Example 1: Obtain the position of an element in an array.
 
-```Plain%20Text
+```plaintext
 mysql> select array_position(["apple","orange","pear"], "orange");
 
 +-----------------------------------------------------+
@@ -41,9 +41,11 @@ mysql> select array_position(["apple","orange","pear"], "orange");
 
 - Example 2: Obtain the position of `NULL` in an array.
 
-```VBScript
+```sql
 mysql> select array_position([1, NULL], NULL);
+```
 
+```plaintext
 +--------------------------------+
 
 | array_position([1,NULL], NULL) |

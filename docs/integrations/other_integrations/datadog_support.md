@@ -19,13 +19,13 @@ Since Datadog does not provide the integration kit for StarRocks yet, you need t
 
 1. Launch a terminal, navigate to a local directory to which you have both read and write access, and run the following command to create a dedicated directory for StarRocks source code.
 
-    ```sh
+    ```shell
     mkdir -p starrocks
     ```
 
 2. Download the StarRocks source code package using the following command or on [GitHub](https://github.com/StarRocks/starrocks/tags) to the directory you created.
 
-    ```sh
+    ```shell
     cd starrocks
     # Replace <starrocks_ver> with the actual version of StarRocks, for example, "2.5.2".
     wget https://github.com/StarRocks/starrocks/archive/refs/tags/<starrocks_ver>.tar.gz
@@ -33,7 +33,7 @@ Since Datadog does not provide the integration kit for StarRocks yet, you need t
 
 3. Extract the files in the package.
 
-    ```sh
+    ```shell
     # Replace <starrocks_ver> with the actual version of StarRocks, for example, "2.5.2".
     tar -xzvf <starrocks_ver>.tar.gz --strip-components 1
     ```
@@ -42,13 +42,13 @@ Since Datadog does not provide the integration kit for StarRocks yet, you need t
 
 1. Install Datadog integration kit for FE using source code.
 
-    ```sh
+    ```shell
     /opt/datadog-agent/embedded/bin/pip install contrib/datadog-connector/starrocks_fe
     ```
 
 2. Create the FE integration configuration file **/etc/datadog-agent/conf.d/starrocks_fe.d/conf.yaml**.
 
-    ```sh
+    ```shell
     sudo mkdir -p /etc/datadog-agent/conf.d/starrocks_fe.d
     sudo cp contrib/datadog-connector/starrocks_fe/datadog_checks/starrocks_fe/data/conf.yaml.example /etc/datadog-agent/conf.d/starrocks_fe.d/conf.yaml
     ```
@@ -66,13 +66,13 @@ Since Datadog does not provide the integration kit for StarRocks yet, you need t
 
 1. Install Datadog integration kit for BE using source code.
 
-    ```sh
+    ```shell
     /opt/datadog-agent/embedded/bin/pip install contrib/datadog-connector/starrocks_be
     ```
 
 2. Create the BE integration configuration file **/etc/datadog-agent/conf.d/starrocks_be.d/conf.yaml**.
 
-    ```sh
+    ```shell
     sudo mkdir -p /etc/datadog-agent/conf.d/starrocks_be.d
     sudo cp contrib/datadog-connector/starrocks_be/datadog_checks/starrocks_be/data/conf.yaml.example /etc/datadog-agent/conf.d/starrocks_be.d/conf.yaml
     ```
@@ -90,7 +90,7 @@ Since Datadog does not provide the integration kit for StarRocks yet, you need t
 
 Restart Datadog Agent to allow the configuration to take effect.
 
-```sh
+```shell
 sudo systemctl stop datadog-agent
 sudo systemctl start datadog-agent
 ```
@@ -105,12 +105,12 @@ You can uninstall the integration kits when you no longer need them.
 
 - To uninstall FE integration kit, run the following command:
 
-  ```sh
+  ```shell
   /opt/datadog-agent/embedded/bin/pip uninstall datadog-starrocks-fe
   ```
 
 - To uninstall BE integration kit, run the following command:
 
-  ```sh
+  ```shell
   /opt/datadog-agent/embedded/bin/pip uninstall datadog-starrocks-be
   ```
