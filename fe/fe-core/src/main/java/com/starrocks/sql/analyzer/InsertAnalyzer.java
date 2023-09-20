@@ -13,10 +13,13 @@ import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+=======
+import com.starrocks.common.AnalysisException;
+>>>>>>> c675440c9d... [BugFix] Fix OLAP external table sync bug if the target table is partitioned (#30124)
 import com.starrocks.external.starrocks.TableMetaSyncer;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
@@ -179,10 +182,6 @@ public class InsertAnalyzer {
             lockTimes++;
         }
         try {
-            MetaContext metaContext = new MetaContext();
-            metaContext.setMetaVersion(FeConstants.meta_version);
-            metaContext.setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
-            metaContext.setThreadLocalInfo();
             new TableMetaSyncer().syncTable(copiedTable);
         }  catch (MetaNotFoundException e) {
             throw new SemanticException(e.getMessage());
@@ -190,7 +189,6 @@ public class InsertAnalyzer {
             while (lockTimes-- > 0) {
                 database.readLock();
             }
-            MetaContext.remove();
         }
         return copiedTable;
     }
