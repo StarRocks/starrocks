@@ -1005,10 +1005,10 @@ public class ReportHandler extends Daemon {
                 // 2. If the task already running on BE, do not send again
                 if (AgentTaskQueue.getTask(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, tabletId) != null) {
                     LOG.debug("migrate of tablet:{} is already running on BE", tabletId);
-                    break OUTER;
+                    break;
                 }
 
-                // 3. There are some limitations for primary table, details in migratableTablet()
+                // 3. primary key table is nor supported
                 Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
                 if (db == null) {
                     continue;
