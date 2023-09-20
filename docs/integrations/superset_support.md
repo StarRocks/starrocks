@@ -24,13 +24,13 @@ If you install `superset` with Docker, install `sqlalchemy-starrocks` with `root
 
 Install from [Source Code](https://github.com/StarRocks/starrocks/tree/main/contrib/starrocks-python-client/starrocks)
 
-```sh
+```shell
 pip install .
 ```
 
 Uninstall
 
-```sh
+```shell
 pip uninstall sqlalchemy-starrocks
 ```
 
@@ -38,7 +38,7 @@ pip uninstall sqlalchemy-starrocks
 
 To connect to StarRocks with SQLAlchemy, the following URL pattern can be used:
 
-```sh
+```shell
 starrocks://<username>:<password>@<host>:<port>/<database>[?charset=utf8]
 ```
 
@@ -60,6 +60,6 @@ df = pd.read_sql(sql, conn)
 
 In superset, use `Other` database, and set url as:
 
-```sh
+```shell
 starrocks://root:@x.x.x.x:9030/superset_db?charset=utf8
 ```

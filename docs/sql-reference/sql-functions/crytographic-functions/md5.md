@@ -4,7 +4,7 @@ Uses the MD5 Message-Digest Algorithm to calculate the 128-bit checksum of a str
 
 ## Syntax
 
-```Apache
+```sql
 md5(expr)
 ```
 
@@ -20,16 +20,24 @@ If the input is NULL, NULL is returned.
 
 ## Examples
 
-```Plain Text
-mysql> select md5('abc');
+```sql
+select md5('abc');
+```
+
+```plaintext
 +----------------------------------+
 | md5('abc')                       |
 +----------------------------------+
 | 900150983cd24fb0d6963f7d28e17f72 |
 +----------------------------------+
 1 row in set (0.01 sec)
+```
 
-mysql> select md5(null);
+```sql
+select md5(null);
+```
+
+```plaintext
 +-----------+
 | md5(NULL) |
 +-----------+

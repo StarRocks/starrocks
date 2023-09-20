@@ -24,7 +24,7 @@ The json_each function is a table function that returns a table. The returned ta
 
 ## Examples
 
-```Plain%20Text
+```plaintext
 -- A table named tj is used as an example. In the tj table, the j column is a JSON object.
 mysql> SELECT * FROM tj;
 +------+------------------+

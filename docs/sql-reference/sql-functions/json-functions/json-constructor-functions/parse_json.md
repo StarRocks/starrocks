@@ -24,7 +24,7 @@ Returns a JSON value.
 
 Example 1: Convert a STRING value of `1` to a JSON value of `1`.
 
-```Plain%20Text
+```plaintext
 mysql> SELECT parse_json('1');
 +-----------------+
 | parse_json('1') |
@@ -35,7 +35,7 @@ mysql> SELECT parse_json('1');
 
 Example 2: Convert an array of the STRING data type to a JSON array.
 
-```Plain%20Text
+```plaintext
 mysql> SELECT parse_json('[1,2,3]');
 +-----------------------+
 | parse_json('[1,2,3]') |
@@ -46,7 +46,7 @@ mysql> SELECT parse_json('[1,2,3]');
 
 Example 3: Convert an object of the STRING data type to a JSON object.
 
-```Plain%20Text
+```plaintext
 mysql> SELECT parse_json('{"star": "rocks"}');
 +---------------------------------+
 | parse_json('{"star": "rocks"}') |
@@ -57,7 +57,7 @@ mysql> SELECT parse_json('{"star": "rocks"}');
 
 Example 4: Construct a JSON value of `NULL`.
 
-```Plain%20Text
+```plaintext
 mysql> SELECT parse_json('null');
 +--------------------+
 | parse_json('null') |
@@ -68,7 +68,7 @@ mysql> SELECT parse_json('null');
 
 Example 5: If the string cannot be parsed into a standard JSON value, the PARSE_JSON function returns `NULL`. In this example, `star` is not enclosed in double quotation marks ("). Therefore, the PARSE_JSON function returns `NULL`.
 
-```Plain%20Text
+```plaintext
 mysql> SELECT parse_json('{star: "rocks"}');
 +-------------------------------+
 | parse_json('{star: "rocks"}') |

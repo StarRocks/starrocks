@@ -20,7 +20,7 @@ Returns an arbitrary row from each aggregated group. The return value is non-det
 
 ## Examples
 
-```Plain%20Text
+```plaintext
 // Original data
 mysql> select * from any_value_test;
 +------+------+------+
