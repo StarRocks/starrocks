@@ -72,7 +72,7 @@ order by stock_symbol, closing_date
 
 The raw data was shown as follows:
 
-```Plain Text
+```plaintext
 +--------------+---------------+---------------------+
 | stock_symbol | closing_price | closing_date        |
 +--------------+---------------+---------------------+
@@ -100,7 +100,7 @@ from stock_ticker;
 
 The following data is obtained:
 
-```Plain Text
+```plaintext
 +--------------+---------------------+---------------+----------------+
 | stock_symbol | closing_date        | closing_price | moving_average |
 +--------------+---------------------+---------------+----------------+
@@ -142,7 +142,7 @@ from int_t
 where property in ('odd','even');
 ```
 
-```Plain Text
+```plaintext
 +----+----------+----------------+
 | x  | property | moving average |
 +----+----------+----------------+
@@ -182,7 +182,7 @@ select x, property,
 from int_t where property in ('odd','even');
 ```
 
-```Plain Text
+```plaintext
 +----+----------+------------------+
 | x  | property | cumulative count |
 +----+----------+------------------+
@@ -225,7 +225,7 @@ SELECT x, y,
 FROM int_t;
 ```
 
-```Plain Text
+```plaintext
 +---+---+--------------------+
 | x | y | cume_dist          |
 +---+---+--------------------+
@@ -263,7 +263,7 @@ select x, y,
 from int_t;
 ```
 
-```Plain Text
+```plaintext
 +---+---+------+
 | x | y | rank |
 +---+---+------+
@@ -290,9 +290,9 @@ About the size of the bucket:
 
 Syntax:
 
-```~SQL
+```SQL
 NTILE (num_buckets) OVER (partition_by_clause order_by_clause)
-```~
+```
 
 `num_buckets`: Number of the buckets to be created. The value must be a constant positive integer whose maximum is `2^63 - 1`.
 
@@ -304,7 +304,7 @@ Example:
 
 The following example divides all rows in the partition into 2 buckets.
 
-```~sql
+```sql
 select id, x, y,
     ntile(2)
         over (
@@ -312,9 +312,9 @@ select id, x, y,
             order by y
         ) as bucket_id
 from t1;
-```~
+```
 
-```~Plain Text
+```plaintext
 +------+------+------+-----------+
 | id   | x    | y    | bucket_id |
 +------+------+------+-----------+
@@ -329,7 +329,7 @@ from t1;
 |    9 |    2 |   88 |         2 |
 |   10 |    3 |   99 |         1 |
 +------+------+------+-----------+
-```~
+```
 
 As the above example shown, when `num_buckets` is `2`:
 
@@ -360,7 +360,7 @@ We have the following data:
  from mail_merge;
  ```
 
-```Plain Text
+```plaintext
 +---------+---------+--------------+
 | name    | country | greeting     |
 +---------+---------+--------------+
@@ -385,7 +385,7 @@ select country, name,
 from mail_merge;
 ```
 
-```Plain Text
+```plaintext
 +---------+---------+-----------+
 | country | name    | greeting  |
 +---------+---------+-----------+
@@ -448,7 +448,7 @@ Query data from this table, where `offset` is 2, which means traversing the prev
 
 Output:
 
-```Plain
+```plaintext
 SELECT col_1, col_2, LAG(col_2,2,0) OVER (ORDER BY col_1) 
 FROM test_tbl ORDER BY col_1;
 +-------+-------+---------------------------------------------+
@@ -522,7 +522,7 @@ select country, name,
 from mail_merge;
 ```
 
-```Plain Text
+```plaintext
 +---------+---------+--------------+
 | country | name    | greeting     |
 +---------+---------+--------------+
@@ -580,7 +580,7 @@ Query data from this table, where `offset` is 2, which means traversing the subs
 
 Output:
 
-```Plain
+```plaintext
 SELECT col_1, col_2, LEAD(col_2,2,0) OVER (ORDER BY col_1) 
 FROM test_tbl ORDER BY col_1;
 +-------+-------+----------------------------------------------+
@@ -655,7 +655,7 @@ from int_t
 where property in ('prime','square');
 ```
 
-```Plain Text
+```plaintext
 +---+----------+---------------+
 | x | property | local maximum |
 +---+----------+---------------+
@@ -708,7 +708,7 @@ from int_t
 where property in ('prime','square');
 ```
 
-```Plain Text
+```plaintext
 +---+----------+---------------+
 | x | property | local minimum |
 +---+----------+---------------+
@@ -742,7 +742,7 @@ The PERCENT_RANK() function calculates the relative rank of a row within a resul
 
 The PERCENT_RANK() function is calculated using the following formula, where rank represents the row rank and rows represents the number of partition rows:
 
-```Plain Text
+```plaintext
 (rank - 1) / (rows - 1)
 ```
 
@@ -766,7 +766,7 @@ SELECT x, y,
 FROM int_t;
 ```
 
-```Plain Text
+```plaintext
 +---+---+--------------+
 | x | y | percent_rank |
 +---+---+--------------+
@@ -801,7 +801,7 @@ select x, y, rank() over(partition by x order by y) as `rank`
 from int_t;
 ```
 
-```Plain Text
+```plaintext
 +---+---+------+
 | x | y | rank |
 +---+---+------+
@@ -834,7 +834,7 @@ select x, y, row_number() over(partition by x order by y) as `rank`
 from int_t;
 ```
 
-```Plain Text
+```plaintext
 +---+---+------+
 | x | y | rank |
 +---+---+------+
@@ -1009,7 +1009,7 @@ select x, property,
 from int_t where property in ('odd','even');
 ```
 
-```Plain Text
+```plaintext
 +----+----------+--------------+
 | x  | property | moving total |
 +----+----------+--------------+

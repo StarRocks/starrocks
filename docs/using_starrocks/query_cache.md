@@ -483,7 +483,7 @@ In the multi-version caching mechanism, `CachePopulate` metrics and `CacheProbe`
 
   This API operation is used to query the metrics related to the query cache.
 
-  ```Apache
+  ```shell
   curl -s  http://<be_host>:<be_http_port>/metrics |grep query_cache
   
   # TYPE starrocks_be_query_cache_capacity gauge
@@ -504,7 +504,7 @@ In the multi-version caching mechanism, `CachePopulate` metrics and `CacheProbe`
 
   This API operation is used to query the usage of the query cache.
 
-  ```Bash
+  ```shell
   curl  http://<be_host>:<be_http_port>/api/query_cache/stat
   {
       "capacity": 536870912,
@@ -520,7 +520,7 @@ In the multi-version caching mechanism, `CachePopulate` metrics and `CacheProbe`
 
   This API operation is used to clear the query cache.
 
-  ```Bash
+  ```shell
   curl  -XPUT http://<be_host>:<be_http_port>/api/query_cache/invalidate_all
   
   {
