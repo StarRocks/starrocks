@@ -13,7 +13,8 @@ PARTITION BY RANGE(`d2`)
 (PARTITION p202001 VALUES [('1000-01-01'), ('2020-01-01')),
 PARTITION p202004 VALUES [('2020-01-01'), ('2020-04-01')),
 PARTITION p202007 VALUES [('2020-04-01'), ('2020-07-01')),
-PARTITION p202012 VALUES [('2020-07-01'), (MAXVALUE)))
+PARTITION p202008 VALUES [('2020-07-01'), ('2020-07-29')),
+PARTITION p202012 VALUES [('2020-08-01'), (MAXVALUE)))
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
@@ -53,6 +54,9 @@ select k1, d2 from ptest where date_trunc('day', date_trunc('day', d2)) in ('202
 select k1, d2 from ptest where (days_add(d2, 1) in ('1000-01-02', '1999-03-22') or d2 > '2020-07-01') and v2 is null and v3 is null order by k1;
 select k1, d2 from ptest where date_trunc('day', d2) > days_sub(d2, 4) order by k1;
 select k1, d2 from ptest where datediff('2020-08-01', d2) < 0 order by k1;
+select k1, d2 from ptest where date_trunc('month', d2) = '2020-07-01' order by k1;
+
+
 
 select k1, d2 from ptest_expr where date_trunc('day', d2) is null order by k1;
 select k1, d2 from ptest_expr where date_trunc('day', d2) in ('2020-01-01', '2020-06-30') order by k1;
@@ -62,5 +66,7 @@ select k1, d2 from ptest_expr where date_trunc('day', date_trunc('day', d2)) in 
 select k1, d2 from ptest_expr where (days_add(d2, 1) in ('1000-01-02', '1999-03-22') or d2 > '2020-07-01') and v2 is null and v3 is null order by k1;
 select k1, d2 from ptest_expr where date_trunc('day', d2) > days_sub(d2, 4) order by k1;
 select k1, d2 from ptest_expr where datediff('2020-08-01', d2) < 0 order by k1;
+
+
 
 
