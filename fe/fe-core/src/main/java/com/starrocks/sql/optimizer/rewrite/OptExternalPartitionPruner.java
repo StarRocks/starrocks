@@ -343,8 +343,8 @@ public class OptExternalPartitionPruner {
                     partitionKeyToId.putIfAbsent(partition, partitionId++);
 
                     files.add(dataFile.path().toString());
-                    scanOperatorPredicates.getSelectedPartitionIds().addAll(partitionKeyToId.values());
                 }
+                scanOperatorPredicates.getSelectedPartitionIds().addAll(partitionKeyToId.values());
             }
         } else if (table instanceof PaimonTable) {
             PaimonTable paimonTable = (PaimonTable) table;
