@@ -132,6 +132,7 @@ private:
     const ColumnReaderOptions& _opts;
     std::unique_ptr<PageReader> _page_reader;
     const BlockCompressionCodec* _compress_codec = nullptr;
+    io::SeekableInputStream* _stream;
 
     LevelDecoder _def_level_decoder;
     LevelDecoder _rep_level_decoder;
