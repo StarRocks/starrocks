@@ -56,6 +56,7 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -915,7 +916,81 @@ public class MvUtils {
     }
 
     /**
-     *
+     * Determine whether to compensate extra partition predicates,
+     * - if needs compensate, use `selectedPartitionIds` to compensate compelete partition ranges
+     *  with lower and upper bound.
+     * - if not compensate, use original pruned partition predicates as the compensated partition
+     *  predicates.
+     * @param plan : query opt expression
+     * @param mvContext : materialized view context
+     * @return
+     */
+    public static boolean isNeedCompensatePartitionPredicate(OptExpression plan,
+                                                             MaterializationContext mvContext) {
+        Set<String> mvPartitionNameToRefresh = mvContext.getMvPartitionNamesToRefresh();
+        // If mv contains no partitions to refresh, no need compensate
+        if (Objects.isNull(mvPartitionNameToRefresh) || mvPartitionNameToRefresh.isEmpty()) {
+            return false;
+        }
+
+        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(plan);
+        // If no scan operator, no need compensate
+        if (scanOperators.isEmpty()) {
+            return false;
+        }
+
+        // If no partition table and columns, no need compensate
+        MaterializedView mv = mvContext.getMv();
+        Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
+        if (partitionTableAndColumns == null) {
+            return false;
+        }
+        Table refBaseTable = partitionTableAndColumns.first;
+        Optional<LogicalScanOperator> optRefScanOperator =
+                scanOperators.stream().filter(x -> isRefBaseTable(x, refBaseTable)).findFirst();
+        if (!optRefScanOperator.isPresent()) {
+            return false;
+        }
+
+        LogicalScanOperator scanOperator = optRefScanOperator.get();
+        if (scanOperator instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
+            OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
+            // If table's not partitioned, no need compensate
+            if (olapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
+                return false;
+            }
+
+            // compensate nothing if selected partitions are the same with the total partitions.
+            List<Long> selectPartitionIds = olapScanOperator.getSelectedPartitionId();
+            if (Objects.isNull(selectPartitionIds)) {
+                return false;
+            }
+            if (selectPartitionIds.size() == olapTable.getPartitions().size() || selectPartitionIds.size() == 0) {
+                return false;
+            }
+
+            // pruned partition predicates is not empty, can not determine whether query's partitions can be satisfied
+            // by materialized view.
+            List<ScalarOperator> prunedPartitionPredicates = olapScanOperator.getPrunedPartitionPredicates();
+            if (prunedPartitionPredicates != null && !prunedPartitionPredicates.isEmpty()) {
+                return true;
+            }
+            for (Long selectPartitionId : selectPartitionIds) {
+                Partition partition = olapTable.getPartition(selectPartitionId);
+                if (partition != null && mvPartitionNameToRefresh.contains(partition.getName())) {
+                    return true;
+                }
+            }
+            return false;
+        } else if (scanOperator instanceof LogicalHiveScanOperator) {
+            return true;
+        } else {
+            return true;
+        }
+    }
+
+    /**
      * Compensate olap table's partition predicates from olap scan operator which may be pruned by optimizer before or not.
      *
      * @param olapScanOperator   : olap scan operator that needs to compensate partition predicates.
@@ -1030,9 +1105,7 @@ public class MvUtils {
         List<OptExpression> scanExprs = MvUtils.collectScanExprs(mvPlan);
         for (OptExpression scanExpr : scanExprs) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) scanExpr.getOp();
-            Table scanTable = scanOperator.getTable();
-
-            if (!isRefBaseTable(scanTable, refBaseTable)) {
+            if (!isRefBaseTable(scanOperator, refBaseTable)) {
                 continue;
             }
 
@@ -1044,7 +1117,8 @@ public class MvUtils {
         return null;
     }
 
-    private static boolean isRefBaseTable(Table scanTable, Table refBaseTable) {
+    private static boolean isRefBaseTable(LogicalScanOperator scanOperator, Table refBaseTable) {
+        Table scanTable = scanOperator.getTable();
         if (scanTable.isNativeTableOrMaterializedView() && !scanTable.equals(refBaseTable)) {
             return false;
         }

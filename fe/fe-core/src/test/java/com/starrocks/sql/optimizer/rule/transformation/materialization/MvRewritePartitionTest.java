@@ -122,14 +122,14 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
         Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
         createAndRefreshMv("test", "test_partition_tbl_mv1",
                 "CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
-                        "               PARTITION BY k1\n" +
-                        "               DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                        "               REFRESH ASYNC\n" +
-                        "               PROPERTIES(\n" +
-                        "               \"partition_ttl_number\"=\"5\",\n" +
-                        "               \"auto_refresh_partitions_limit\"=\"4\"\n" +
-                        "               )\n" +
-                        "               AS SELECT k1, sum(v1) as sum_v1 FROM test_partition_tbl1 group by k1;");
+                        " PARTITION BY k1\n" +
+                        " DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                        " REFRESH ASYNC\n" +
+                        " PROPERTIES(\n" +
+                        " \"partition_ttl_number\"=\"5\",\n" +
+                        " \"auto_refresh_partitions_limit\"=\"4\"\n" +
+                        " )\n" +
+                        " AS SELECT k1, sum(v1) as sum_v1 FROM test_partition_tbl1 group by k1;");
         {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-11' group by k1;";
             String plan = getFragmentPlan(query);
@@ -178,10 +178,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
             String pr = Tracers.printLogs();
             System.out.println(pr);
             Tracers.close();
-            // It's ok that this can not be rewritten because result is empty.
-            // Compensate range predicates failed,srcPr:1: k1 >= 2020-06-01,
-            // targetPr:1: k1 >= 2020-01-01 AND 1: k1 < 2020-06-01
-            PlanTestBase.assertNotContains(plan, "test_partition_tbl_mv1");
+            PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
         }
         starRocksAssert.dropMaterializedView("test_partition_tbl_mv1");
     }

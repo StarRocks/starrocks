@@ -673,7 +673,7 @@ public class MaterializedViewRewriter {
     // rewrite.
     private ScalarOperator compensateMVPartitionPredicate(List<ScalarOperator> mvPredicates,
                                                           ReplaceColumnRefRewriter mvColumnRefRewriter) {
-        if (materializationContext.getMvPartialPartitionPredicate() != null) {
+        if (mvRewriteContext.isCompensate() && materializationContext.getMvPartialPartitionPredicate() != null) {
             List<ScalarOperator> partitionPredicates =
                     getPartitionRelatedPredicates(mvPredicates, mvRewriteContext.getMaterializationContext().getMv());
             if (partitionPredicates.stream().noneMatch(p -> (p instanceof IsNullPredicateOperator)

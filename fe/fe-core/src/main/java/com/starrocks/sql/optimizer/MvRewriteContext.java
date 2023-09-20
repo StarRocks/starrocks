@@ -47,13 +47,17 @@ public class MvRewriteContext {
 
     private List<JoinDeriveContext> joinDeriveContexts;
 
+    private boolean isCompensate;
+
     public MvRewriteContext(
             MaterializationContext materializationContext,
             List<Table> queryTables,
             OptExpression queryExpression,
             ReplaceColumnRefRewriter queryColumnRefRewriter,
             PredicateSplit queryPredicateSplit,
-            List<ScalarOperator> onPredicates, Rule rule) {
+            List<ScalarOperator> onPredicates,
+            Rule rule,
+            boolean isCompensate) {
         this.materializationContext = materializationContext;
         this.queryTables = queryTables;
         this.queryExpression = queryExpression;
@@ -62,6 +66,7 @@ public class MvRewriteContext {
         this.onPredicates = onPredicates;
         this.rule = rule;
         this.joinDeriveContexts = Lists.newArrayList();
+        this.isCompensate = isCompensate;
     }
 
     public MaterializationContext getMaterializationContext() {
@@ -114,5 +119,9 @@ public class MvRewriteContext {
 
     public void setEnforcedColumns(List<ColumnRefOperator> enforcedColumns) {
         this.enforcedColumns = enforcedColumns;
+    }
+
+    public boolean isCompensate() {
+        return this.isCompensate;
     }
 }
