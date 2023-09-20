@@ -397,8 +397,9 @@ public:
     }
 
     void set_type(int type);
+    TimeType type() const { return (TimeType)_type; }
 
-private:
+protected:
     // Used to make sure sizeof DateTimeValue
     friend class UnusedClass;
 
