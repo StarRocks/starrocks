@@ -110,10 +110,18 @@ struct TypeDescriptor {
         return res;
     }
 
-    static TypeDescriptor create_array_type(TypeDescriptor children) {
+    static TypeDescriptor create_array_type(const TypeDescriptor& children) {
         TypeDescriptor res;
         res.type = TYPE_ARRAY;
         res.children.push_back(children);
+        return res;
+    }
+
+    static TypeDescriptor create_map_type(const TypeDescriptor& key, const TypeDescriptor& value) {
+        TypeDescriptor res;
+        res.type = TYPE_MAP;
+        res.children.push_back(key);
+        res.children.push_back(value);
         return res;
     }
 

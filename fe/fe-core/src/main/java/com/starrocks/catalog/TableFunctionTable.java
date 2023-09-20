@@ -23,9 +23,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.proto.PGetFileSchemaResult;
-import com.starrocks.proto.PScalarType;
 import com.starrocks.proto.PSlotDescriptor;
-import com.starrocks.proto.PTypeNode;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.server.GlobalStateMgr;
@@ -42,6 +40,7 @@ import com.starrocks.thrift.TGetFileSchemaRequest;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
@@ -309,15 +308,13 @@ public class TableFunctionTable extends Table {
             throw new DdlException("failed to get file schema", e);
         }
 
+        if (TStatusCode.findByValue(result.status.statusCode) != TStatusCode.OK) {
+            throw new DdlException("failed to get file schema, path: " + path + ", error: " + result.status.errorMsgs);
+        }
+
         List<Column> columns = new ArrayList<>();
         for (PSlotDescriptor slot : result.schema) {
-
-            List<PTypeNode> types = slot.slotType.types;
-            if (types.size() != 1) {
-                throw new DdlException("non-scalar type is not supported: " + slot.colName);
-            }
-            PScalarType scalarType = slot.slotType.types.get(0).scalarType;
-            columns.add(new Column(slot.colName, ScalarType.createType(scalarType), true));
+            columns.add(new Column(slot.colName, Type.fromProtobuf(slot.slotType, 0), true));
         }
         return columns;
     }
