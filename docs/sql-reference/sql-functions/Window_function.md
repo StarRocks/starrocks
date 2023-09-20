@@ -198,51 +198,6 @@ from int_t where property in ('odd','even');
 +----+----------+------------------+
 ```
 
-<<<<<<< HEAD
-=======
-### CUME_DIST()
-
-The CUME_DIST() function calculates the cumulative distribution of a value within a partition, indicating its relative position as a percentage of values less than or equal to the value in the current row. With a range of 0 to 1, it's useful for percentile calculations and data distribution analysis.
-
-Syntax:
-
-```SQL
-CUME_DIST() OVER (partition_by_clause order_by_clause)
-```
-
-**This function should be used with ORDER BY to sort partition rows into the desired order. Without ORDER BY, all rows are peers and have value N/N = 1, where N is the partition size.**
-
-CUME_DIST() contains NULL values and treats them as the lowest values.
-
-The following example shows the cumulative distribution of column y within each group of column x.
-
-```SQL
-SELECT x, y,
-    CUME_DIST()
-        OVER (
-            PARTITION BY x
-            ORDER BY y
-        ) AS `cume_dist`
-FROM int_t;
-```
-
-```plaintext
-+---+---+--------------------+
-| x | y | cume_dist          |
-+---+---+--------------------+
-| 1 | 1 | 0.3333333333333333 |
-| 1 | 2 |                  1 |
-| 1 | 2 |                  1 |
-| 2 | 1 | 0.3333333333333333 |
-| 2 | 2 | 0.6666666666666667 |
-| 2 | 3 |                  1 |
-| 3 | 1 | 0.6666666666666667 |
-| 3 | 1 | 0.6666666666666667 |
-| 3 | 2 |                  1 |
-+---+---+--------------------+
-```
-
->>>>>>> 240689c8c1 ([Doc] fix build error (#31541))
 ### DENSE_RANK()
 
 The DENSE_RANK() function is used to represent rankings. Unlike RANK(), DENSE_RANK()**does not have vacant** numbers. For example, if there are two tied 1s, the third number of DENSE_RANK() is still 2, whereas the third number of RANK() is 3.
@@ -738,55 +693,6 @@ from int_t
 where property in ('prime','square');
 ```
 
-<<<<<<< HEAD
-=======
-### PERCENT_RANK()
-
-The PERCENT_RANK() function calculates the relative rank of a row within a result set as a percentage. It returns the percentage of partition values less than the value in the current row, excluding the highest value. The return values range from 0 to 1. This function is useful for percentile calculations and analyzing data distribution.
-
-The PERCENT_RANK() function is calculated using the following formula, where rank represents the row rank and rows represents the number of partition rows:
-
-```plaintext
-(rank - 1) / (rows - 1)
-```
-
-Syntax:
-
-```SQL
-PERCENT_RANK() OVER (partition_by_clause order_by_clause)
-```
-
-**This function should be used with ORDER BY to sort partition rows into the desired order. Without ORDER BY, all rows are peers and have value (1 - 1)/(N - 1) = 0, where N is the partition size.**
-
-The following example shows the relative rank of column y within each group of column x.
-
-```SQL
-SELECT x, y,
-    PERCENT_RANK()
-        OVER (
-            PARTITION BY x
-            ORDER BY y
-        ) AS `percent_rank`
-FROM int_t;
-```
-
-```plaintext
-+---+---+--------------+
-| x | y | percent_rank |
-+---+---+--------------+
-| 1 | 1 |            0 |
-| 1 | 2 |          0.5 |
-| 1 | 2 |          0.5 |
-| 2 | 1 |            0 |
-| 2 | 2 |          0.5 |
-| 2 | 3 |            1 |
-| 3 | 1 |            0 |
-| 3 | 1 |            0 |
-| 3 | 2 |            1 |
-+---+---+--------------+
-```
-
->>>>>>> 240689c8c1 ([Doc] fix build error (#31541))
 ### RANK()
 
 The RANK() function is used to represent rankings. Unlike DENSE_RANK(), RANK() will **appear as a vacant** number. For example, if two tied 1s appear, the third number of RANK() will be 3 instead of 2.
