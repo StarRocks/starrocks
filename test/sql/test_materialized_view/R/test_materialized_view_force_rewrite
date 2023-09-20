@@ -124,7 +124,7 @@ None
 -- !result
 SELECT t1.t1_id, count(distinct t1.t1_age) FROM t1 INNER JOIN t2 ON t1.t1_t2_id=t2.t2_id INNER JOIN t3 ON t1.t1_t3_id=t3.t3_id group by t1.t1_id order by t1.t1_id;
 -- result:
-E: (1064, 'no executable plan with materialized view for this sql in default_or_error mode because ofcost.')
+E: (1064, 'no executable plan with materialized view for this sql in default_or_error mode because of cost.')
 -- !result
 SELECT t1.t1_id, bitmap_union_count(to_bitmap(t1.t1_age + 1)) FROM t1 INNER JOIN t2 ON t1.t1_t2_id=t2.t2_id INNER JOIN t3 ON t1.t1_t3_id=t3.t3_id group by t1.t1_id order by t1.t1_id;
 -- result:
