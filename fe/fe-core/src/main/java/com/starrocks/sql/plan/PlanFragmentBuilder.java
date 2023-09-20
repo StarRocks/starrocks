@@ -711,7 +711,7 @@ public class PlanFragmentBuilder {
 
             List<ColumnAccessPath> paths = Lists.newArrayList();
             SubfieldAccessPathNormalizer normalizer = new SubfieldAccessPathNormalizer();
-            collector.getComplexExpressions().forEach(normalizer::add);
+            normalizer.collect(collector.getComplexExpressions());
 
             for (ColumnRefOperator key : scan.getColRefToColumnMetaMap().keySet()) {
                 if (!key.getType().isComplexType()) {
