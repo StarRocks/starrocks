@@ -3,6 +3,7 @@
 #pragma once
 
 #include <algorithm>
+#include <concepts>
 
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
@@ -63,6 +64,7 @@ struct SorterComparator<TimestampValue> {
     }
 };
 
+<<<<<<< HEAD:be/src/exec/vectorized/sorting/sort_helper.h
 template <class PermutationType>
 static std::string dubug_column(const Column* column, const PermutationType& permutation) {
     if (column == nullptr) {
@@ -74,6 +76,25 @@ static std::string dubug_column(const Column* column, const PermutationType& per
     }
     return res;
 }
+=======
+template <typename T>
+concept FloatingPoint = std::is_floating_point_v<T>;
+
+template <FloatingPoint T>
+struct SorterComparator<T> {
+    static int compare(T lhs, T rhs) {
+        lhs = std::isnan(lhs) ? 0 : lhs;
+        rhs = std::isnan(rhs) ? 0 : rhs;
+        if (lhs == rhs) {
+            return 0;
+        } else if (lhs < rhs) {
+            return -1;
+        } else {
+            return 1;
+        }
+    }
+};
+>>>>>>> 8106789332 ([BugFix] Fix order by nan column overflow (#30759)):be/src/exec/sorting/sort_helper.h
 
 // TODO: reduce duplicate code
 template <class NullPred>
