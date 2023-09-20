@@ -45,7 +45,6 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -240,7 +239,7 @@ public class HiveMetadataTest {
         columns.put(partColumnRefOperator, null);
         columns.put(dataColumnRefOperator, null);
         Statistics statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1, new ScanOperatorPredicates());
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1);
         Assert.assertEquals(1, statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
         Assert.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
@@ -262,13 +261,13 @@ public class HiveMetadataTest {
 
         Statistics statistics = hiveMetadata.getTableStatistics(
                 optimizerContext, hiveTable, columns, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2),
-                null, -1, new ScanOperatorPredicates());
+                null, -1);
         Assert.assertEquals(1,  statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
 
         cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1", "col1=2"));
         statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1, new ScanOperatorPredicates());
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1);
 
         Assert.assertEquals(100, statistics.getOutputRowCount(), 0.001);
         Map<ColumnRefOperator, ColumnStatistic> columnStatistics = statistics.getColumnStatistics();

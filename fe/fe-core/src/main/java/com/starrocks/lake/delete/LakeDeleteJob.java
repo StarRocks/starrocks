@@ -52,6 +52,7 @@ import com.starrocks.transaction.TabletCommitInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
@@ -192,7 +193,7 @@ public class LakeDeleteJob extends DeleteJob {
         }
 
         return GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                .commitAndPublishTransaction(db, getTransactionId(), tabletCommitInfos, Lists.newArrayList(),
+                .commitAndPublishTransaction(db, getTransactionId(), tabletCommitInfos, Collections.emptyList(),
                         timeoutMs);
     }
 }
