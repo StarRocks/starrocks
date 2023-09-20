@@ -26,6 +26,7 @@ import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -131,5 +132,6 @@ public class TableMetaSyncerTest {
         // remove the thread local meta context
         MetaContext.remove();
         extTable.updateMeta(request.getDb_name(), response.getTable_meta(), response.getBackends());
+        Assert.assertEquals(4, extTable.getPartitions().size());
     }
 }
