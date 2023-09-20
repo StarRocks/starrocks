@@ -309,7 +309,7 @@ public class ConnectContext {
 
     public void modifySessionVariable(SetVar setVar, boolean onlySetSessionVar) throws DdlException {
         VariableMgr.setVar(sessionVariable, setVar, onlySetSessionVar);
-        if (!setVar.getType().equals(SetType.GLOBAL) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
+        if (!SetType.GLOBAL.equals(setVar.getType()) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
     }
