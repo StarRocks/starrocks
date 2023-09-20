@@ -318,7 +318,6 @@ public class TableFunctionTable extends Table {
         }
         return columns;
     }
-  
     private List<Column> getSchemaFromPath() throws DdlException {
         List<Column> columns = new ArrayList<>();
         if (!columnsFromPath.isEmpty()) {
