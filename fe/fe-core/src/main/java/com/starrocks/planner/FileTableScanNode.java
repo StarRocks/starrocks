@@ -15,7 +15,6 @@
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.FileTable;
@@ -28,7 +27,6 @@ import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
-import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -173,41 +171,15 @@ public class FileTableScanNode extends ScanNode {
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
         msg.hdfs_scan_node = tHdfsScanNode;
 
-        // put non-partition conjuncts into conjuncts
-        if (msg.isSetConjuncts()) {
-            msg.conjuncts.clear();
-        }
-
-        List<Expr> nonPartitionConjuncts = scanNodePredicates.getNonPartitionConjuncts();
-        for (Expr expr : nonPartitionConjuncts) {
-            msg.addToConjuncts(expr.treeToThrift());
-        }
-        String sqlPredicate = getExplainString(nonPartitionConjuncts);
-        msg.hdfs_scan_node.setSql_predicates(sqlPredicate);
-
-        List<Expr> minMaxConjuncts = scanNodePredicates.getMinMaxConjuncts();
-        if (!minMaxConjuncts.isEmpty()) {
-            String minMaxSqlPredicate = getExplainString(minMaxConjuncts);
-            for (Expr expr : minMaxConjuncts) {
-                msg.hdfs_scan_node.addToMin_max_conjuncts(expr.treeToThrift());
-            }
-            msg.hdfs_scan_node.setMin_max_tuple_id(scanNodePredicates.getMinMaxTuple().getId().asInt());
-            msg.hdfs_scan_node.setMin_max_sql_predicates(minMaxSqlPredicate);
-        }
-
         if (fileTable != null) {
-            // don't set column_name so that be will get the column by name not by position
+            // don't set column_name so that the BE will get the column by name not by position
             msg.hdfs_scan_node.setTable_name(fileTable.getName());
         }
 
-        if (cloudConfiguration != null) {
-            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
-            cloudConfiguration.toThrift(tCloudConfiguration);
-            msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
-        }
-
-        msg.hdfs_scan_node.setCan_use_any_column(canUseAnyColumn);
-        msg.hdfs_scan_node.setCan_use_min_max_count_opt(canUseMinMaxCountOpt);
+        HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
+        HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
+        HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
+        HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
     }
 
     @Override
