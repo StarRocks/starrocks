@@ -315,7 +315,15 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
   Used for MySQL client compatibility. No practical usage.
 
+<<<<<<< HEAD
 * io_tasks_per_scan_operator (2.5 and later)
+=======
+### group_concat_max_len
+
+The maximum length of string returned by the [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) function. Default value: 1024. Min value: 4. Unit: characters.
+
+### hash_join_push_down_right_table
+>>>>>>> 963067a43a ([Doc] group_concat supports distinct (#31390))
 
   The number of concurrent I/O tasks that can be issued by a scan operator. Increase this value if you want to access remote storage systems such as HDFS or S3 but the latency is high. However, a larger value causes more memory consumption.
 
