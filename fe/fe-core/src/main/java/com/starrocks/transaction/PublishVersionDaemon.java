@@ -109,31 +109,27 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return;
             }
 
-            if (!RunMode.allowCreateLakeTable()) {
+            if (!RunMode.allowCreateLakeTable()) { // share_nothing mode
                 publishVersionForOlapTable(readyTransactionStates);
-                return;
-            }
-
-            if (!RunMode.allowCreateOlapTable()) {
+            } else if (!RunMode.allowCreateOlapTable()) { // share_data mode
                 publishVersionForLakeTable(readyTransactionStates);
-                return;
-            }
-
-            List<TransactionState> olapTransactions = new ArrayList<>();
-            List<TransactionState> lakeTransactions = new ArrayList<>();
-            for (TransactionState txnState : readyTransactionStates) {
-                if (isLakeTableTransaction(txnState)) {
-                    lakeTransactions.add(txnState);
-                } else {
-                    olapTransactions.add(txnState);
+            } else { // hybrid mode
+                List<TransactionState> olapTransactions = new ArrayList<>();
+                List<TransactionState> lakeTransactions = new ArrayList<>();
+                for (TransactionState txnState : readyTransactionStates) {
+                    if (isLakeTableTransaction(txnState)) {
+                        lakeTransactions.add(txnState);
+                    } else {
+                        olapTransactions.add(txnState);
+                    }
                 }
-            }
 
-            if (!olapTransactions.isEmpty()) {
-                publishVersionForOlapTable(olapTransactions);
-            }
-            if (!lakeTransactions.isEmpty()) {
-                publishVersionForLakeTable(lakeTransactions);
+                if (!olapTransactions.isEmpty()) {
+                    publishVersionForOlapTable(olapTransactions);
+                }
+                if (!lakeTransactions.isEmpty()) {
+                    publishVersionForLakeTable(lakeTransactions);
+                }
             }
         } catch (Throwable t) {
             LOG.error("errors while publish version to all backends", t);
