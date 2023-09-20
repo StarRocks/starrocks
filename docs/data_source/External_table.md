@@ -4,45 +4,10 @@ StarRocks supports access to other data sources by using external tables. Extern
 
 > **NOTICE**
 >
-> Since v3.0, we recommend that you use catalogs to query data from Hive, Iceberg, Hudi, and JDBC data sources. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../data_source/catalog/hudi_catalog.md), and [JDBC catalog](../data_source/catalog/jdbc_catalog.md).
+> * From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, and Hudi. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
+> * From v3.1 onwards, we recommend that you use [JDBC catalog](../data_source/catalog/jdbc_catalog.md) to query data from MySQL and PostgreSQL and use [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) to query data from Elasticsearch.
 
 From 2.5 onwards, StarRocks provides the Data Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Data Cache](data_cache.md).
-
-## MySQL external table
-
-In the star schema, data is generally divided into dimension tables and fact tables. Dimension tables have less data but involve UPDATE operations. Currently, StarRocks does not support direct UPDATE operations (update can be implemented by using the Unique Key table). In some scenarios, you can store dimension tables in MySQL for direct data read.
-
-To query MySQL data, you must create an external table in StarRocks and map it to the table in your MySQL database. You need to specify the MySQL connection information when creating the table.
-
-~~~sql
-CREATE EXTERNAL TABLE mysql_external_table
-(
-    k1 DATE,
-    k2 INT,
-    k3 SMALLINT,
-    k4 VARCHAR(2048),
-    k5 DATETIME
-)
-ENGINE=mysql
-PROPERTIES
-(
-    "host" = "127.0.0.1",
-    "port" = "3306",
-    "user" = "mysql_user",
-    "password" = "mysql_passwd",
-    "database" = "mysql_db_test",
-    "table" = "mysql_table_test"
-);
-~~~
-
-Parameters:
-
-* **host**: the connection address of the MySQL database
-* **port**: the port number of the MySQL database
-* **user**: the username to log in to MySQL
-* **password**: the password to log in to MySQL
-* **database**: the name of the MySQL database
-* **table**: the name of the table in the MySQL database
 
 ## StarRocks external table
 
@@ -109,6 +74,215 @@ The following limits apply when you use a StarRocks external table:
 * You can only run the INSERT INTO and SHOW CREATE TABLE commands on a StarRocks external table. Other data writing methods are not supported. In addition, you cannot query data from a StarRocks external table or perform DDL operations on the external table.
 * The syntax of creating an external table is the same as creating a normal table, but the column names and other information in the external table must be the same as the destination table.
 * The external table synchronizes table metadata from the destination table every 10 seconds. If a DDL operation is performed on the destination table, there may be a delay for data synchronization between the two tables.
+
+## External table for a JDBC-compatible database
+
+From v2.3.0, StarRocks provides external tables to query JDBC-compatible databases. This way, you can analyze the data of such databases in a blazing fast manner without the need to import the data into StarRocks. This section describes how to create an external table in StarRocks and query data in JDBC-compatible databases.
+
+### Prerequisites
+
+Before you use a JDBC external table to query data, make sure that the FEs and BEs have access to the download URL of the JDBC driver. The download URL is specified by the `driver_url` parameter in the statement used for creating the JDBC resource.
+
+### Create and manage JDBC resources
+
+#### Create a JDBC resource
+
+Before you create an external table to query data from a database, you need to create a JDBC resource in StarRocks to manage the connection information of the database. The database must support the JDBC driver and is referred as the "target database". After creating the resource, you can use it to create external tables.
+
+Execute the following statement to create a JDBC resource named `jdbc0`:
+
+~~~SQL
+create external resource jdbc0
+properties (
+    "type"="jdbc",
+    "user"="postgres",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:postgresql://127.0.0.1:5432/jdbc_test",
+    "driver_url"="https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar",
+    "driver_class"="org.postgresql.Driver"
+);
+~~~
+
+The required parameters in `properties` are as follows:
+
+* `type`: the type of the resource. Set the value to `jdbc`.
+
+* `user`: the username that is used to connect to the target database.
+
+* `password`: the password that is used to connect to the target database.
+
+* `jdbc_uri`: the URI that the JDBC driver uses to connect to the target database. The URI format must satisfy the database URI syntax. For the URI syntax of some common databases, visit the official websites of [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html), [Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E), [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html), [SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16).
+
+> Note: The URI must include the name of the target database. For example, in the preceding code example, `jdbc_test` is the name of the target database that you want to connect.
+
+* `driver_url`:  the download URL of the JDBC driver JAR package. An HTTP URL or file URL is supported, for example, `https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` or `file:///home/disk1/postgresql-42.3.3.jar`.
+
+* `driver_class`: the class name of the JDBC driver. The JDBC driver class names of common databases are as follows:
+  * MySQL: com.mysql.jdbc.Driver (MySQL 5.x and earlier), com.mysql.cj.jdbc.Driver (MySQL 6.x and later)
+  * SQL Server: com.microsoft.sqlserver.jdbc.SQLServerDriver
+  * Oracle: oracle.jdbc.driver.OracleDriver
+  * PostgreSQL: org.postgresql.Driver
+
+When the resource is being created, the FE downloads the JDBC driver JAR package by using the URL that is specified in the `driver_url` parameter, generates a checksum, and uses the checksum to verify the JDBC driver downloaded by BEs.
+
+> Note: If the download of  the JDBC driver JAR package fails, the creation of the resource also fails.
+
+When BEs query the JDBC external table for the first time and find that the corresponding JDBC driver JAR package does not exist on their machines, BEs download the JDBC driver JAR package by using the URL that is specified in the `driver_url` parameter, and all JDBC driver JAR packages are saved in the `${STARROCKS_HOME}/lib/jdbc_drivers` directory.
+
+#### View JDBC resources
+
+Execute the following statement to view all JDBC resources in StarRocks:
+
+~~~SQL
+SHOW RESOURCES;
+~~~
+
+> Note: The `ResourceType` column is `jdbc`.
+
+#### Delete a JDBC resource
+
+Execute the following statement to delete the JDBC resource named `jdbc0`:
+
+~~~SQL
+DROP RESOURCE "jdbc0";
+~~~
+
+> Note: After a JDBC resource is deleted, all JDBC external tables that are created by using that JDBC resource are unavailable. However, the data in the target database is not lost. If you still need to use StarRocks to query data in the target database, you can create the JDBC resource and the JDBC external tables again.
+
+### Create a database
+
+Execute the following statement to create and access a database named `jdbc_test` in StarRocks:
+
+~~~SQL
+CREATE DATABASE jdbc_test; 
+USE jdbc_test; 
+~~~
+
+> Note: The database name that you specify in the preceding statement does not need to be same as the name of the target database.
+
+### Create a JDBC external table
+
+Execute the following statement to create a JDBC external table named `jdbc_tbl` in the database `jdbc_test`:
+
+~~~SQL
+create external table jdbc_tbl (
+    `id` bigint NULL, 
+    `data` varchar(200) NULL 
+) ENGINE=jdbc 
+properties (
+    "resource" = "jdbc0",
+    "table" = "dest_tbl"
+);
+~~~
+
+The required parameters in `properties` are as follows:
+
+* `resource`: the name of the JDBC resource used to create the external table.
+
+* `table`: the target table name in the database.
+
+For supported data types and data type mapping between StarRocks and target databases, see [Data type mapping](External_table.md#Data type mapping).
+
+> Note:
+>
+> * Indexes are not supported.
+> * You cannot use PARTITION BY or DISTRIBUTED BY to specify data distribution rules.
+
+### Query a JDBC external table
+
+Before you query JDBC external tables, you must execute the following statement to enable the Pipeline engine:
+
+~~~SQL
+set enable_pipeline_engine=true;
+~~~
+
+> Note: If the Pipeline engine is already enabled, you can skip this step.
+
+Execute the following statement to query the data in the target database by using JDBC external tables.
+
+~~~SQL
+select * from JDBC_tbl;
+~~~
+
+StarRocks supports predicate pushdown by pushing down filter conditions to the target table. Executing filter conditions as close as possible to the data source can improve query performance. Currently, StarRocks can push down operators, including the binary comparison operators (`>`, `>=`, `=`, `<`, and `<=`), `IN`, `IS NULL`, and `BETWEEN ... AND ...` . However, StarRocks can not push down functions.
+
+### Data type mapping
+
+Currently, StarRocks can only query data of basic types in the target database, such as NUMBER, STRING, TIME, and DATE. If the ranges of data values in the target database are not supported by StarRocks, the query reports an error.
+
+The mapping between the target database and StarRocks varies based on the type of the target database.
+
+#### **MySQL and StarRocks**
+
+| MySQL        | StarRocks |
+| ------------ | --------- |
+| BOOLEAN      | BOOLEAN   |
+| TINYINT      | TINYINT   |
+| SMALLINT     | SMALLINT  |
+| MEDIUMINTINT | INT       |
+| BIGINT       | BIGINT    |
+| FLOAT        | FLOAT     |
+| DOUBLE       | DOUBLE    |
+| DECIMAL      | DECIMAL   |
+| CHAR         | CHAR      |
+| VARCHAR      | VARCHAR   |
+| DATE         | DATE      |
+| DATETIME     | DATETIME  |
+
+#### **Oracle and StarRocks**
+
+| Oracle          | StarRocks |
+| --------------- | --------- |
+| CHAR            | CHAR      |
+| VARCHARVARCHAR2 | VARCHAR   |
+| DATE            | DATE      |
+| SMALLINT        | SMALLINT  |
+| INT             | INT       |
+| BINARY_FLOAT    | FLOAT     |
+| BINARY_DOUBLE   | DOUBLE    |
+| DATE            | DATE      |
+| DATETIME        | DATETIME  |
+| NUMBER          | DECIMAL   |
+
+#### **PostgreSQL and StarRocks**
+
+| PostgreSQL          | StarRocks |
+| ------------------- | --------- |
+| SMALLINTSMALLSERIAL | SMALLINT  |
+| INTEGERSERIAL       | INT       |
+| BIGINTBIGSERIAL     | BIGINT    |
+| BOOLEAN             | BOOLEAN   |
+| REAL                | FLOAT     |
+| DOUBLE PRECISION    | DOUBLE    |
+| DECIMAL             | DECIMAL   |
+| TIMESTAMP           | DATETIME  |
+| DATE                | DATE      |
+| CHAR                | CHAR      |
+| VARCHAR             | VARCHAR   |
+| TEXT                | VARCHAR   |
+
+#### **SQL Server and StarRocks**
+
+| SQL Server        | StarRocks |
+| ----------------- | --------- |
+| BOOLEAN           | BOOLEAN   |
+| TINYINT           | TINYINT   |
+| SMALLINT          | SMALLINT  |
+| INT               | INT       |
+| BIGINT            | BIGINT    |
+| FLOAT             | FLOAT     |
+| REAL              | DOUBLE    |
+| DECIMALNUMERIC    | DECIMAL   |
+| CHAR              | CHAR      |
+| VARCHAR           | VARCHAR   |
+| DATE              | DATE      |
+| DATETIMEDATETIME2 | DATETIME  |
+
+### Limits
+
+* When you create JDBC external tables, you cannot create indexes on the tables or use PARTITION BY and DISTRIBUTED BY to specify data distribution rules for the tables.
+
+* When you query JDBC external tables, StarRocks cannot push down functions to the tables.
 
 ## (Deprecated) Elasticsearch external table
 
@@ -367,215 +541,6 @@ select * from es_table where esquery(k4, ' {
 * Elasticsearch earlier than 5.x scans data in a different way than that later than 5.x. Currently, **only versions later than 5.x** are supported.
 * Elasticsearch clusters with HTTP basic authentication enabled are supported.
 * Querying data from StarRocks may not be as fast as directly querying data from Elasticsearch, such as count-related queries. The reason is that Elasticsearch directly reads the metadata of target documents without the need to filter the real data, which accelerates the count query.
-
-## (Deprecated) External table for a JDBC-compatible database
-
-From v2.3.0, StarRocks provides external tables to query JDBC-compatible databases. This way, you can analyze the data of such databases in a blazing fast manner without the need to import the data into StarRocks. This section describes how to create an external table in StarRocks and query data in JDBC-compatible databases.
-
-### Prerequisites
-
-Before you use a JDBC external table to query data, make sure that the FEs and BEs have access to the download URL of the JDBC driver. The download URL is specified by the `driver_url` parameter in the statement used for creating the JDBC resource.
-
-### Create and manage JDBC resources
-
-#### Create a JDBC resource
-
-Before you create an external table to query data from a database, you need to create a JDBC resource in StarRocks to manage the connection information of the database. The database must support the JDBC driver and is referred as the "target database". After creating the resource, you can use it to create external tables.
-
-Execute the following statement to create a JDBC resource named `jdbc0`:
-
-~~~SQL
-create external resource jdbc0
-properties (
-    "type"="jdbc",
-    "user"="postgres",
-    "password"="changeme",
-    "jdbc_uri"="jdbc:postgresql://127.0.0.1:5432/jdbc_test",
-    "driver_url"="https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar",
-    "driver_class"="org.postgresql.Driver"
-);
-~~~
-
-The required parameters in `properties` are as follows:
-
-* `type`: the type of the resource. Set the value to `jdbc`.
-
-* `user`: the username that is used to connect to the target database.
-
-* `password`: the password that is used to connect to the target database.
-
-* `jdbc_uri`: the URI that the JDBC driver uses to connect to the target database. The URI format must satisfy the database URI syntax. For the URI syntax of some common databases, visit the official websites of [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html), [Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E), [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html), [SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16).
-
-> Note: The URI must include the name of the target database. For example, in the preceding code example, `jdbc_test` is the name of the target database that you want to connect.
-
-* `driver_url`:  the download URL of the JDBC driver JAR package. An HTTP URL or file URL is supported, for example, `https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` or `file:///home/disk1/postgresql-42.3.3.jar`.
-
-* `driver_class`: the class name of the JDBC driver. The JDBC driver class names of common databases are as follows:
-  * MySQL: com.mysql.jdbc.Driver (MySQL 5.x and earlier), com.mysql.cj.jdbc.Driver (MySQL 6.x and later)
-  * SQL Server: com.microsoft.sqlserver.jdbc.SQLServerDriver
-  * Oracle: oracle.jdbc.driver.OracleDriver
-  * PostgreSQL: org.postgresql.Driver
-
-When the resource is being created, the FE downloads the JDBC driver JAR package by using the URL that is specified in the `driver_url` parameter, generates a checksum, and uses the checksum to verify the JDBC driver downloaded by BEs.
-
-> Note: If the download of  the JDBC driver JAR package fails, the creation of the resource also fails.
-
-When BEs query the JDBC external table for the first time and find that the corresponding JDBC driver JAR package does not exist on their machines, BEs download the JDBC driver JAR package by using the URL that is specified in the `driver_url` parameter, and all JDBC driver JAR packages are saved in the `${STARROCKS_HOME}/lib/jdbc_drivers` directory.
-
-#### View JDBC resources
-
-Execute the following statement to view all JDBC resources in StarRocks:
-
-~~~SQL
-SHOW RESOURCES;
-~~~
-
-> Note: The `ResourceType` column is `jdbc`.
-
-#### Delete a JDBC resource
-
-Execute the following statement to delete the JDBC resource named `jdbc0`:
-
-~~~SQL
-DROP RESOURCE "jdbc0";
-~~~
-
-> Note: After a JDBC resource is deleted, all JDBC external tables that are created by using that JDBC resource are unavailable. However, the data in the target database is not lost. If you still need to use StarRocks to query data in the target database, you can create the JDBC resource and the JDBC external tables again.
-
-### Create a database
-
-Execute the following statement to create and access a database named `jdbc_test` in StarRocks:
-
-~~~SQL
-CREATE DATABASE jdbc_test; 
-USE jdbc_test; 
-~~~
-
-> Note: The database name that you specify in the preceding statement does not need to be same as the name of the target database.
-
-### Create a JDBC external table
-
-Execute the following statement to create a JDBC external table named `jdbc_tbl` in the database `jdbc_test`:
-
-~~~SQL
-create external table jdbc_tbl (
-    `id` bigint NULL, 
-    `data` varchar(200) NULL 
-) ENGINE=jdbc 
-properties (
-    "resource" = "jdbc0",
-    "table" = "dest_tbl"
-);
-~~~
-
-The required parameters in `properties` are as follows:
-
-* `resource`: the name of the JDBC resource used to create the external table.
-
-* `table`: the target table name in the database.
-
-For supported data types and data type mapping between StarRocks and target databases, see [Data type mapping](External_table.md#Data type mapping).
-
-> Note:
->
-> * Indexes are not supported.
-> * You cannot use PARTITION BY or DISTRIBUTED BY to specify data distribution rules.
-
-### Query a JDBC external table
-
-Before you query JDBC external tables, you must execute the following statement to enable the Pipeline engine:
-
-~~~SQL
-set enable_pipeline_engine=true;
-~~~
-
-> Note: If the Pipeline engine is already enabled, you can skip this step.
-
-Execute the following statement to query the data in the target database by using JDBC external tables.
-
-~~~SQL
-select * from JDBC_tbl;
-~~~
-
-StarRocks supports predicate pushdown by pushing down filter conditions to the target table. Executing filter conditions as close as possible to the data source can improve query performance. Currently, StarRocks can push down operators, including the binary comparison operators (`>`, `>=`, `=`, `<`, and `<=`), `IN`, `IS NULL`, and `BETWEEN ... AND ...` . However, StarRocks can not push down functions.
-
-### Data type mapping
-
-Currently, StarRocks can only query data of basic types in the target database, such as NUMBER, STRING, TIME, and DATE. If the ranges of data values in the target database are not supported by StarRocks, the query reports an error.
-
-The mapping between the target database and StarRocks varies based on the type of the target database.
-
-#### **MySQL and StarRocks**
-
-| MySQL        | StarRocks |
-| ------------ | --------- |
-| BOOLEAN      | BOOLEAN   |
-| TINYINT      | TINYINT   |
-| SMALLINT     | SMALLINT  |
-| MEDIUMINTINT | INT       |
-| BIGINT       | BIGINT    |
-| FLOAT        | FLOAT     |
-| DOUBLE       | DOUBLE    |
-| DECIMAL      | DECIMAL   |
-| CHAR         | CHAR      |
-| VARCHAR      | VARCHAR   |
-| DATE         | DATE      |
-| DATETIME     | DATETIME  |
-
-#### **Oracle and StarRocks**
-
-| Oracle          | StarRocks |
-| --------------- | --------- |
-| CHAR            | CHAR      |
-| VARCHARVARCHAR2 | VARCHAR   |
-| DATE            | DATE      |
-| SMALLINT        | SMALLINT  |
-| INT             | INT       |
-| BINARY_FLOAT    | FLOAT     |
-| BINARY_DOUBLE   | DOUBLE    |
-| DATE            | DATE      |
-| DATETIME        | DATETIME  |
-| NUMBER          | DECIMAL   |
-
-#### **PostgreSQL and StarRocks**
-
-| PostgreSQL          | StarRocks |
-| ------------------- | --------- |
-| SMALLINTSMALLSERIAL | SMALLINT  |
-| INTEGERSERIAL       | INT       |
-| BIGINTBIGSERIAL     | BIGINT    |
-| BOOLEAN             | BOOLEAN   |
-| REAL                | FLOAT     |
-| DOUBLE PRECISION    | DOUBLE    |
-| DECIMAL             | DECIMAL   |
-| TIMESTAMP           | DATETIME  |
-| DATE                | DATE      |
-| CHAR                | CHAR      |
-| VARCHAR             | VARCHAR   |
-| TEXT                | VARCHAR   |
-
-#### **SQL Server and StarRocks**
-
-| SQL Server        | StarRocks |
-| ----------------- | --------- |
-| BOOLEAN           | BOOLEAN   |
-| TINYINT           | TINYINT   |
-| SMALLINT          | SMALLINT  |
-| INT               | INT       |
-| BIGINT            | BIGINT    |
-| FLOAT             | FLOAT     |
-| REAL              | DOUBLE    |
-| DECIMALNUMERIC    | DECIMAL   |
-| CHAR              | CHAR      |
-| VARCHAR           | VARCHAR   |
-| DATE              | DATE      |
-| DATETIMEDATETIME2 | DATETIME  |
-
-### Limits
-
-* When you create JDBC external tables, you cannot create indexes on the tables or use PARTITION BY and DISTRIBUTED BY to specify data distribution rules for the tables.
-
-* When you query JDBC external tables, StarRocks cannot push down functions to the tables.
 
 ## (Deprecated) Hive external table
 
@@ -1054,3 +1019,39 @@ After you create a Hudi external table associated with a specific Hudi managed t
 ~~~SQL
 SELECT COUNT(*) FROM hudi_tbl;
 ~~~
+
+## (Deprecated) MySQL external table
+
+In the star schema, data is generally divided into dimension tables and fact tables. Dimension tables have less data but involve UPDATE operations. Currently, StarRocks does not support direct UPDATE operations (update can be implemented by using the Unique Key table). In some scenarios, you can store dimension tables in MySQL for direct data read.
+
+To query MySQL data, you must create an external table in StarRocks and map it to the table in your MySQL database. You need to specify the MySQL connection information when creating the table.
+
+~~~sql
+CREATE EXTERNAL TABLE mysql_external_table
+(
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    k4 VARCHAR(2048),
+    k5 DATETIME
+)
+ENGINE=mysql
+PROPERTIES
+(
+    "host" = "127.0.0.1",
+    "port" = "3306",
+    "user" = "mysql_user",
+    "password" = "mysql_passwd",
+    "database" = "mysql_db_test",
+    "table" = "mysql_table_test"
+);
+~~~
+
+Parameters:
+
+* **host**: the connection address of the MySQL database
+* **port**: the port number of the MySQL database
+* **user**: the username to log in to MySQL
+* **password**: the password to log in to MySQL
+* **database**: the name of the MySQL database
+* **table**: the name of the table in the MySQL database
