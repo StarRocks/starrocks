@@ -58,6 +58,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadTaskInfo;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
@@ -117,6 +118,7 @@ public class GlobalTransactionMgrTest {
 
         masterTransMgr = masterGlobalStateMgr.getGlobalTransactionMgr();
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
+        MetricRepo.init();
     }
 
     @Test
