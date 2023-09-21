@@ -216,7 +216,7 @@ The refresh moment of the materialized view. Default value: `IMMEDIATE`. Valid v
 The refresh strategy of the asynchronous materialized view. Valid values:
 
 - `ASYNC`: Asynchronous refresh mode. Each time the base table data changes, the materialized view is automatically refreshed according to the pre-defined refresh interval. You can further specify the refresh start time as `START('yyyy-MM-dd hh:mm:ss')`, and specify the refresh interval as `EVERY (interval n day/hour/minute/second)` using the following units: `DAY`, `HOUR`, `MINUTE`, and `SECOND`. Example: `ASYNC START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`. If you do not specify the interval, the default value `10 MINUTE` is used.
-- `MANUAL`: Manual refresh mode. The materialized view will not be automatically refreshed. The refresh tasks can be only triggered manually by users.
+- `MANUAL`: Manual refresh mode. The materialized view will not be automatically refreshed. The refresh tasks can only be triggered manually by users.
 
 If this parameter is not specified, the default value `MANUAL` is used.
 
@@ -254,7 +254,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
 - `mv_rewrite_staleness_second`: If the materialized view's last refresh is within the time interval specified in this property, this materialized view can be used directly for query rewrite, regardless of whether the data in the base tables changes. If the last refresh is before this time interval, StarRocks checks whether the base tables have been updated to determine whether the materialized view can be used for query rewrite. Unit: Second. This property is supported from v3.0.
 - `colocate_with`: The colocation group of the asynchronous materialized view. See [Colocate Join](../../../using_starrocks/Colocate_join.md) for further information. This property is supported from v3.0.
 - `unique_constraints` and `foreign_key_constraints`: The Unique Key constraints and Foreign Key constraints when you create an asynchronous materialized view for query rewrite in the View Delta Join scenario. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/Materialized_view.md#rewrite-queries-in-view-delta-join-scenario) for further information. This property is supported from v3.0.
-- `resource_group`: The resource group to which the refresh tasks of the materialized view belong to. For more about resource groups see [Resource group](../../../administration/resource_group.md).
+- `resource_group`: The resource group to which the refresh tasks of the materialized view belong. For more about resource groups see [Resource group](../../../administration/resource_group.md).
 
 > **CAUTION**
 >
