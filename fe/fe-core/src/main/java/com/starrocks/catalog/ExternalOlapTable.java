@@ -296,7 +296,8 @@ public class ExternalOlapTable extends OlapTable {
     public void updateMeta(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas)
             throws DdlException, IOException {
         MetaContext metaContext = new MetaContext();
-        metaContext.setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
+        metaContext.setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
+        metaContext.setMetaVersion(FeConstants.meta_version);
         metaContext.setThreadLocalInfo();
         try {
             updateMetaInternal(dbName, meta, backendMetas);
