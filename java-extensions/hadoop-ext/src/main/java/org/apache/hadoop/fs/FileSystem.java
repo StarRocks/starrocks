@@ -83,7 +83,6 @@ import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.file.FileAlreadyExistsException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -597,6 +596,7 @@ public abstract class FileSystem extends Configured
             LOGGER.debug("Bypassing cache to create filesystem {}", uri);
             return createFileSystem(uri, conf);
         }
+
         return CACHE.get(uri, conf);
     }
 
@@ -3796,7 +3796,6 @@ public abstract class FileSystem extends Configured
 
         FileSystem get(URI uri, Configuration conf) throws IOException {
             Key key = new Key(uri, conf);
-            LOGGER.info(String.format("%s FileSystem.get. key = %s", HadoopExt.LOGGER_MESSAGE_PREFIX, key.toString()));
             return getInternal(uri, conf, key);
         }
 

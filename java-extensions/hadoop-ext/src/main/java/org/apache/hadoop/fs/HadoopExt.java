@@ -25,7 +25,7 @@ class HadoopExt {
         }
         final String STARROCKS_HOME_DIR = System.getenv(STARROCKS_HOME_ENV);
         if (STARROCKS_HOME_DIR == null) {
-            LOGGER.info(String.format("%s env '%s' is not defined", LOGGER_MESSAGE_PREFIX, STARROCKS_HOME_ENV));
+            LOGGER.warn(String.format("%s env '%s' is not defined", LOGGER_MESSAGE_PREFIX, STARROCKS_HOME_ENV));
             return;
         }
         String[] parts = configResources.split(",");
