@@ -198,12 +198,7 @@ Status DeltaWriter::_init() {
 
     // build tablet schema in request level
     auto tablet_schema_ptr = _tablet->tablet_schema();
-    LOG(INFO) << "tablet: " << _tablet->tablet_id() << " column num:" << tablet_schema_ptr->num_columns();
     RETURN_IF_ERROR(_build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, _tablet->tablet_schema()));
-    LOG(INFO) << "tablet: " << _tablet->tablet_id()
-              << " column num in builded schema:" << _tablet_schema->num_columns();
-    LOG(INFO) << "tablet: " << _tablet->tablet_id() << "partial update column: " << partial_cols_num
-              << "mode:" << _opt.partial_update_mode;
     // maybe partial update, change to partial tablet schema
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && partial_cols_num < _tablet_schema->num_columns()) {
         writer_context.referenced_column_ids.reserve(partial_cols_num);
@@ -218,7 +213,6 @@ Status DeltaWriter::_init() {
                 return st;
             }
             writer_context.referenced_column_ids.push_back(index);
-            LOG(INFO) << "partial update column[" << i << "] index in schema: " << index;
         }
         int64_t average_row_size = _tablet->updates()->get_average_row_size();
         if (average_row_size != 0) {
@@ -232,9 +226,6 @@ Status DeltaWriter::_init() {
         }
         auto sort_key_idxes = _tablet_schema->sort_key_idxes();
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
-        for (auto idx : sort_key_idxes) {
-            LOG(INFO) << "sort key column index:" << idx;
-        }
         if (!std::includes(writer_context.referenced_column_ids.begin(), writer_context.referenced_column_ids.end(),
                            sort_key_idxes.begin(), sort_key_idxes.end())) {
             _partial_schema_with_sort_key = true;

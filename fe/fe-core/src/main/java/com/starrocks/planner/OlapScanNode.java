@@ -785,30 +785,6 @@ public class OlapScanNode extends ScanNode {
 
         if (selectedIndexId != -1) {
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
-            /*
-            if (indexMeta != null) 
-                if (KeysType.PRIMARY_KEYS == olapTable.getKeysType() && indexMeta.getSortKeyIdxes() != null) {
-                    for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
-                        Column col = indexMeta.getSchema().get(sortKeyIdx);
-                        keyColumnNames.add(col.getName());
-                        keyColumnTypes.add(col.getPrimitiveType().toThrift());
-                    }
-                } else {
-                    for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
-                        TColumn tColumn = col.toThrift();
-                        col.setIndexFlag(tColumn, olapTable.getIndexes());
-                        columnsDesc.add(tColumn);
-
-                        if (!col.isKey()) {
-                            continue;
-                        }
-
-                        keyColumnNames.add(col.getName());
-                        keyColumnTypes.add(col.getPrimitiveType().toThrift());
-                    }
-                }
-            }
-            */
             if (indexMeta != null) {
                 for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
                     TColumn tColumn = col.toThrift();

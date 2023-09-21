@@ -59,10 +59,6 @@ void OlapTableIndexSchema::to_protobuf(POlapTableIndexSchema* pindex) const {
     }
     if (column_param != nullptr) {
         column_param->to_protobuf(pindex->mutable_column_param());
-        LOG(INFO) << "generate POlapTableIndexSchema";
-        for (auto uid : pindex->column_param().sort_key_uid()) {
-            LOG(INFO) << "sort key uid:" << uid;
-        }
     }
 }
 

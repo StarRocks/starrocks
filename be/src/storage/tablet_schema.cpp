@@ -424,17 +424,6 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
         _num_columns++;
     }
 
-    if (!schema.sort_key_unique_ids().empty()) {
-        for (auto uid : schema.sort_key_unique_ids()) {
-            LOG(INFO) << "schemaPB sort key uid: " << uid;
-        }
-    }
-    if (!schema.sort_key_idxes().empty()) {
-        for (auto cid : schema.sort_key_idxes()) {
-            LOG(INFO) << "schemaPB sort key cid: " << cid;
-        }
-    }
-
     // There are three conditions:
     // 1. sort_key_unique_ids is not empty, sort key column should be located by unique id
     // 2. sort_key_unique_ids is empty but sort_key_idxes is not empty. This table maybe create in
@@ -459,17 +448,6 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
         }
     }
 
-    if (!_sort_key_uids.empty()) {
-        for (auto uid : _sort_key_uids) {
-            LOG(INFO) << "builded schema sort key uid: " << uid;
-        }
-    }
-    if (!_sort_key_idxes.empty()) {
-        for (auto cid : _sort_key_idxes) {
-            LOG(INFO) << "builded schema sort key cid: " << cid;
-        }
-    }
-
     for (auto cid : _sort_key_idxes) {
         _cols[cid].set_is_sort_key(true);
     }
@@ -488,12 +466,6 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
 
 Status TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t version, const POlapTableIndexSchema& index,
                                                  const TabletSchemaCSPtr& ori_tablet_schema) {
-    for (auto idx : _sort_key_idxes) {
-        LOG(INFO) << "tablet schema sort key index: " << idx;
-    }
-    for (auto uid : index.column_param().sort_key_uid()) {
-        LOG(INFO) << "sort key uid:" << uid;
-    }
     // copy from ori_tablet_schema
     _keys_type = ori_tablet_schema->keys_type();
     _num_short_key_columns = index.column_param().short_key_column_count();
@@ -551,12 +523,6 @@ Status TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t versi
     } else {
         _has_bf_fpp = false;
         _bf_fpp = BLOOM_FILTER_DEFAULT_FPP;
-    }
-    for (auto idx : _sort_key_idxes) {
-        LOG(INFO) << "after tablet schema sort key index: " << idx;
-    }
-    for (auto uid : _sort_key_uids) {
-        LOG(INFO) << "after tablet schema sort key uid:" << uid;
     }
     return Status::OK();
 }

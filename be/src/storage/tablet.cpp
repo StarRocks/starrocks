@@ -1720,7 +1720,6 @@ const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
 }
 
 void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
-    LOG(INFO) << "update max version schema";
     std::lock_guard wrlock(_schema_lock);
     // Double Check for concurrent update
     if (!_max_version_schema || tablet_schema->schema_version() > _max_version_schema->schema_version()) {

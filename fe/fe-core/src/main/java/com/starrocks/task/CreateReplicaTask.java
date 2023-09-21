@@ -140,7 +140,7 @@ public class CreateReplicaTask extends AgentTask {
 
         this(backendId, dbId, tableId, partitionId, indexId, tabletId, shortKeyColumnCount, schemaHash, version,
                 keysType, storageType, storageMedium, columns, bfColumns, bfFpp, latch, indexes, isInMemory,
-                enablePersistentIndex, primaryIndexCacheExpireSectabletType, compressionType, sortKeyIdxes, sortKeyUniqueIds);
+                enablePersistentIndex, primaryIndexCacheExpireSec, tabletType, compressionType, sortKeyIdxes, sortKeyUniqueIds);
         this.binlogConfig = binlogConfig;
     }
 
