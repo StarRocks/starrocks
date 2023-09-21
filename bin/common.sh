@@ -88,9 +88,14 @@ export_mem_limit_from_conf() {
     fi
 
     if [ -f /.dockerenv ] && [ "$cgroup_version" == "cgroup2fs" ]; then
-        mem_limit=$(cat /sys/fs/cgroup/memory.max | awk '{printf $1}')
+        if [ -f /sys/fs/cgroup/memory.max ]; then
+            mem_limit=$(cat /sys/fs/cgroup/memory.max | awk '{printf $1}')
+        fi
+        if [ -f /sys/fs/cgroup/kubepods/memory.max ]; then
+            mem_limit=$(cat /sys/fs/cgroup/kubepods/memory.max | awk '{printf $1}')
+        fi
         if [ "$mem_limit" == "" ]; then
-            echo "can't get mem info from /sys/fs/cgroup/memory.max"
+            echo "can't get mem info from /sys/fs/cgroup/memory.max or /sys/fs/cgroup/kubepods/memory.max"
             return 1
         fi
         if [ "$mem_limit" != "max" ]; then
