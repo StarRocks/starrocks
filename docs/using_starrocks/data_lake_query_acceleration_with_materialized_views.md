@@ -90,7 +90,7 @@ Creating a materialized view on tables in external catalogs is similar to creati
 
 ### Choose a suitable refresh strategy
 
-Currently, StarRocks cannot detect partition-level data changes in Hudi catalogs and Iceberg catalogs. Therefore, a full-size refresh is performed once the task is triggered.
+Currently, StarRocks cannot detect partition-level data changes in Hudi catalogs, Iceberg catalogs, and JDBC catalogs. Therefore, a full-size refresh is performed once the task is triggered.
 
 For Hive catalogs, you can enable the Hive metadata cache refresh feature to allow StarRocks to detect data changes at the partition level. Please note that the partitioning keys of the materialized view must be included in that of the base table. When this feature is enabled, StarRocks periodically accesses the Hive Metastore Service (HMS) or AWS Glue to check the metadata information of recently queried hot data. As a result, StarRocks can:
 
@@ -112,7 +112,22 @@ To enable the Hive metadata cache refresh feature, you can set the following FE 
 
 ### Enable query rewrite for external catalog-based materialized views
 
-By default, StarRocks disables the query rewrite for materialized views based on Hudi and Iceberg catalogs due to the lack of strong consistency in their results. You can enable this feature by setting the property `force_external_table_query_rewrite` to `true` when creating the materialized view. For materialized views built on tables in Hive catalogs, the query rewrite is enabled by default.
+By default, StarRocks does not support query rewrite for materialized views built on Hudi, Iceberg, and JDBC catalogs because query rewrite in this scenario cannot ensure a strong consistency of results. You can enable this feature by setting the property `force_external_table_query_rewrite` to `true` when creating the materialized view. For materialized views built on tables in Hive catalogs, the query rewrite is enabled by default.
+
+Example:
+
+```SQL
+CREATE MATERIALIZED VIEW ex_mv_par_tbl
+PARTITION BY emp_date
+DISTRIBUTED BY hash(empid)
+PROPERTIES (
+"force_external_table_query_rewrite" = "true"
+) 
+AS
+select empid, deptno, emp_date
+from `hive_catalog`.`emp_db`.`emps_par_tbl`
+where empid < 5;
+```
 
 In scenarios involving query rewriting, if you use a very complex query statement to build a materialized view, we recommend that you split the query statement and construct multiple simple materialized views in a nested manner. Nested materialized views are more versatile and can accommodate a broader range of query patterns.
 

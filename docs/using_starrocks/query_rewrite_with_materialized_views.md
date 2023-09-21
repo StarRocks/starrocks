@@ -20,6 +20,10 @@ The query rewrite feature based on asynchronous materialized views is particular
 
   Building an external catalog-based materialized view can easily accelerate queries against data in your data lake.
 
+  > **NOTE**
+  >
+  > Asynchronous materialized views created on base tables in a JDBC catalog do not support query rewrite.
+
 ### Features
 
 StarRocks' asynchronous materialized view-based automatic query rewrite features the following attributes:
@@ -487,7 +491,7 @@ The following sections expound on the scenarios where the Aggregation Rewrite fe
 
 ### Aggregation Rollup rewrite
 
-StarRocks supports rewriting queries with Aggregation Rollup. For example, the following query can be rewritten using `agg_mv1`:
+StarRocks supports rewriting queries with Aggregation Rollup, that is, StarRocks can rewrite aggregate queries with a `GROUP BY a` clause using an asynchronous materialized view created with a `GROUP BY a,b` clause. For example, the following query can be rewritten using `agg_mv1`:
 
 ```SQL
 SELECT 
@@ -507,6 +511,44 @@ Its original query plan and the one after the rewrite are as follows:
 > **NOTE**
 >
 > Currently, rewriting the grouping set, grouping set with rollup, or grouping set with cube is not supported.
+
+Only certain aggregate functions support query rewrite with Aggregate Rollup. In the preceding example, if the materialized view `order_agg_mv` uses `count(distinct client_id)` instead of `bitmap_union(to_bitmap(client_id))`, StarRocks cannot rewrite the queries with Aggregate Rollup.
+
+The following table shows the correspondence between the aggregate functions in the original query and the aggregate function used to build the materialized view. You can select the corresponding aggregate functions to build a materialized view according to your business scenario.
+
+| **Aggregate function suppprted in original queries**   | **Function supported Aggregate Rollup in materialized view** |
+| ------------------------------------------------------ | ------------------------------------------------------------ |
+| sum                                                    | sum                                                          |
+| count                                                  | count                                                        |
+| min                                                    | min                                                          |
+| max                                                    | max                                                          |
+| avg                                                    | sum / count                                                  |
+| bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union                                                 |
+| hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                                    |
+| percentile_approx, percentile_union                    | percentile_union                                             |
+
+DISTINCT aggregates without the corresponding GROUP BY column cannot be rewritten with Aggregate Rollup. However, from StarRocks v3.1 onwards, if a query with an Aggregate Rollup DISTINCT aggregate function does not have a GROUP BY column but an equal predicate, it can also be rewritten by the relevant materialized view because StarRocks can convert the equal predicates into a GROUP BY constant expression.
+
+In the following example, StarRocks can rewrite the query with the materialized view `order_agg_mv1`.
+
+```SQL
+CREATE MATERIALIZED VIEW order_agg_mv1
+DISTRIBUTED BY HASH(`order_id`) BUCKETS 12
+REFRESH ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)
+AS
+SELECT
+    order_date,
+    count(distinct client_id) 
+FROM order_list 
+GROUP BY order_date;
+
+
+-- Query
+SELECT
+    order_date,
+    count(distinct client_id) 
+FROM order_list WHERE order_date='2023-07-03';
+```
 
 ### COUNT DISTINCT rewrite
 
@@ -697,9 +739,62 @@ During query rewrite, queries against `customer_view1` and `lineorder_view1` are
 
 StarRocks supports building asynchronous materialized views on Hive catalogs, Hudi catalogs, and Iceberg catalogs, and transparently rewriting queries with them. External catalog-based materialized views support most of the query rewrite capabilities, but there are some limitations:
 
-- Hudi or Iceberg catalog-based materialized views do not support Union rewrite.
-- Hudi or Iceberg catalog-based materialized views do not support View Delta Join rewrite.
-- Hudi or Iceberg catalog-based materialized views do not support the incremental refresh of partitions.
+- Hudi, Iceberg, or JDBC catalog-based materialized views do not support Union rewrite.
+- Hudi, Iceberg, or JDBC catalog-based materialized views do not support View Delta Join rewrite.
+- Hudi, Iceberg, or JDBC catalog-based materialized views do not support the incremental refresh of partitions.
+
+## Configure query rewrite
+
+You can configure the asynchronous materialized view query rewrite through the following session variables:
+
+| **Variable**                                | **Default** | **Description**                                              |
+| ------------------------------------------- | ----------- | ------------------------------------------------------------ |
+| enable_materialized_view_union_rewrite      | true        | Boolean value to control if to enable materialized view Union query rewrite. |
+| enable_rule_based_materialized_view_rewrite | true        | Boolean value to control if to enable rule-based materialized view query rewrite. This variable is mainly used in single-table query rewrite. |
+| nested_mv_rewrite_max_level                 | 3           | The maximum levels of nested materialized views that can be used for query rewrite. Type: INT. Range: [1, +∞). The value of `1` indicates that materialized views created on other materialized views will not be used for query rewrite. |
+
+## Check if a query is rewritten
+
+You can check if your query is rewritten by viewing its query plan using the EXPLAIN statement. If the field `TABLE` under the section `OlapScanNode` shows the name of the corresponding materialized view, it means that the query has been rewritten based on the materialized view.
+
+```Plain
+mysql> EXPLAIN SELECT 
+    order_id, sum(goods.price) AS total 
+    FROM order_list INNER JOIN goods 
+    ON goods.item_id1 = order_list.item_id2 
+    GROUP BY order_id;
++------------------------------------+
+| Explain String                     |
++------------------------------------+
+| PLAN FRAGMENT 0                    |
+|  OUTPUT EXPRS:1: order_id | 8: sum |
+|   PARTITION: RANDOM                |
+|                                    |
+|   RESULT SINK                      |
+|                                    |
+|   1:Project                        |
+|   |  <slot 1> : 9: order_id        |
+|   |  <slot 8> : 10: total          |
+|   |                                |
+|   0:OlapScanNode                   |
+|      TABLE: order_mv               |
+|      PREAGGREGATION: ON            |
+|      partitions=1/1                |
+|      rollup: order_mv              |
+|      tabletRatio=0/12              |
+|      tabletList=                   |
+|      cardinality=3                 |
+|      avgRowSize=4.0                |
+|      numNodes=0                    |
++------------------------------------+
+20 rows in set (0.01 sec)
+```
+
+## Disable query rewrite
+
+By default, StarRocks enables query rewrite for asynchronous materialized views created based on the default catalog. You can disable this feature by setting the session variable `enable_materialized_view_rewrite` to `false`.
+
+For asynchronous materialized views created based on an external catalog, you can disable this feature by setting the materialized view property `force_external_table_query_rewrite` to `false` using [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER%20MATERIALIZED%20VIEW.md).
 
 ## Limitations
 
@@ -709,3 +804,4 @@ In terms of materialized view-based query rewrite, StarRocks currently has the f
 - StarRocks does not support rewriting queries with window functions.
 - Materialized views defined with statements containing LIMIT, ORDER BY, UNION, EXCEPT, INTERSECT, MINUS, GROUPING SETS, WITH CUBE, or WITH ROLLUP cannot be used for query rewrite.
 - Strong consistency of query results is not guaranteed between base tables and materialized views built on external catalogs.
+- Asynchronous materialized views created on base tables in a JDBC catalog do not support query rewrite.
