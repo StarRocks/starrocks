@@ -64,6 +64,7 @@ set(EXEC_FILES
     hash_join_node.cpp
     hash_join_components.cpp
     join_hash_map.cpp
+    sorted_join_hash_map.cpp
     topn_node.cpp
     chunks_sorter.cpp
     chunks_sorter_heap_sort.cpp

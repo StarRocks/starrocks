@@ -61,6 +61,7 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _join_type(param._hash_join_node.join_op),
           _is_null_safes(param._is_null_safes),
           _build_expr_ctxs(param._build_expr_ctxs),
+          _range_keys(param._range_conjunct_ctxs),
           _probe_expr_ctxs(param._probe_expr_ctxs),
           _other_join_conjunct_ctxs(param._other_join_conjunct_ctxs),
           _conjunct_ctxs(param._conjunct_ctxs),
@@ -158,15 +159,19 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     }
     param->predicate_slots = std::move(predicate_slots);
 
+    param->join_expr.resize(_build_expr_ctxs.size());
     for (auto i = 0; i < _build_expr_ctxs.size(); i++) {
         Expr* expr = _build_expr_ctxs[i]->root();
         if (expr->is_slotref()) {
+            param->join_expr[i] = _build_expr_ctxs[i];
             param->join_keys.emplace_back(JoinKeyDesc{&expr->type(), _is_null_safes[i], down_cast<ColumnRef*>(expr)});
         } else {
             param->join_keys.emplace_back(JoinKeyDesc{&expr->type(), _is_null_safes[i], nullptr});
         }
     }
+    param->range_keys = _range_keys;
 }
+
 Status HashJoiner::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk) {
     if (_phase != HashJoinPhase::BUILD) {
         return Status::OK();
