@@ -20,8 +20,12 @@
 #include <memory>
 
 #include "column/vectorized_fwd.h"
+#include "common/object_pool.h"
 #include "common/statusor.h"
+#include "exec/chunks_sorter.h"
 #include "exec/hash_join_node.h"
+#include "exec/sorting/sorting.h"
+#include "exprs/expr_context.h"
 #include "serde/column_array_serde.h"
 #include "simd/simd.h"
 
@@ -359,6 +363,11 @@ void JoinHashTable::create(const HashTableParam& param) {
             _table_items->key_columns.emplace_back(key_column);
         }
     }
+    _range_join = !param.range_keys.empty();
+    if (_range_join) {
+        _table_items->probe_range_key_id = param.range_keys[0]->root()->get_child(0)->get_column_ref()->slot_id();
+        _table_items->range_keys = param.range_keys;
+    }
 }
 
 int64_t JoinHashTable::mem_usage() const {
@@ -384,6 +393,43 @@ int64_t JoinHashTable::mem_usage() const {
 Status JoinHashTable::build(RuntimeState* state) {
     RETURN_IF_ERROR(_table_items->build_chunk->upgrade_if_overflow());
     _table_items->has_large_column = _table_items->build_chunk->has_large_column();
+
+    // range join need do sort in build stage
+    ObjectPool pool;
+    if (!_table_items->range_keys.empty()) {
+        auto build_chunk = _table_items->build_chunk;
+        std::vector<ExprContext*> order_by_ctxs;
+
+        for (auto join_key : _table_items->join_keys) {
+            if (join_key.col_ref == nullptr) {
+                return Status::InternalError("range join predicate should slotref");
+            }
+            auto ref = join_key.col_ref->clone(&pool);
+            auto context = pool.add(new ExprContext(ref));
+            RETURN_IF_ERROR(context->prepare(state));
+            RETURN_IF_ERROR(context->open(state));
+            order_by_ctxs.push_back(context);
+        }
+        for (auto expr_ctx : _table_items->range_keys) {
+            auto ref = expr_ctx->root()->get_child(1)->clone(&pool);
+            auto context = pool.add(new ExprContext(ref));
+            RETURN_IF_ERROR(context->prepare(state));
+            RETURN_IF_ERROR(context->open(state));
+            order_by_ctxs.push_back(context);
+        }
+
+        const SortDescs sort_desc = SortDescs::asc_null_first(order_by_ctxs.size());
+        Permutation permutation;
+
+        DataSegment segment(&order_by_ctxs, build_chunk);
+        auto& order_bys = segment.order_by_columns;
+        RETURN_IF_ERROR(sort_and_tie_columns(state->cancelled_ref(), order_bys, sort_desc, &permutation));
+
+        ChunkPtr sorted_chunk = build_chunk->clone_empty_with_slot(build_chunk->num_rows());
+        materialize_by_permutation(sorted_chunk.get(), {build_chunk}, permutation);
+
+        _table_items->build_chunk = sorted_chunk;
+    }
 
     // If the join key is column ref of build chunk, fetch from build chunk directly
     size_t join_key_count = _table_items->join_keys.size();
@@ -608,6 +654,10 @@ JoinHashMapType JoinHashTable::_choose_join_hash_map() {
         if (!_table_items->key_columns[i]->has_null()) {
             _table_items->join_keys[i].is_null_safe_equal = false;
         }
+    }
+
+    if (_range_join) {
+        return JoinHashMapType::range_key_string;
     }
 
     if (size == 1 && !_table_items->join_keys[0].is_null_safe_equal) {
