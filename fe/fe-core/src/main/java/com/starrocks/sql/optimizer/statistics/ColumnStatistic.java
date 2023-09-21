@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
@@ -42,6 +41,11 @@ public class ColumnStatistic {
     private final Histogram histogram;
     private final StatisticType type;
 
+    // for iceberg test
+    // @todo refactor this!
+    private String minString = null;
+    private String maxString = null;
+
     // TODO deal with string max, min
     public ColumnStatistic(
             double minValue,
@@ -66,6 +70,22 @@ public class ColumnStatistic {
                            double averageRowSize,
                            double distinctValuesCount) {
         this(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, null, StatisticType.ESTIMATE);
+    }
+
+    public String getMinString() {
+        return minString;
+    }
+
+    public void setMinString(String minString) {
+        this.minString = minString;
+    }
+
+    public String getMaxString() {
+        return maxString;
+    }
+
+    public void setMaxString(String maxString) {
+        this.maxString = maxString;
     }
 
     public double getMinValue() {
@@ -179,6 +199,8 @@ public class ColumnStatistic {
         private double distinctValuesCount = NaN;
         private Histogram histogram;
         private StatisticType type = StatisticType.ESTIMATE;
+        private String minString = null;
+        private String maxString = null;
 
         private Builder() {
         }
@@ -235,8 +257,22 @@ public class ColumnStatistic {
             return this;
         }
 
+        public Builder setMinString(String minString) {
+            this.minString = minString;
+            return this;
+        }
+
+        public Builder setMaxString(String maxString) {
+            this.maxString = maxString;
+            return this;
+        }
+
         public ColumnStatistic build() {
-            return new ColumnStatistic(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, histogram, type);
+            ColumnStatistic columnStatistic = new ColumnStatistic(
+                    minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, histogram, type);
+            columnStatistic.setMaxString(maxString);
+            columnStatistic.setMinString(minString);
+            return columnStatistic;
         }
     }
 }

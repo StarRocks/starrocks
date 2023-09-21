@@ -302,6 +302,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
 
+    public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
+
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -506,6 +508,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_EXPR_PRUNE_PARTITION = "enable_expr_prune_partition";
 
+    public static final String ENABLE_ICEBERG_NDV = "enable_iceberg_ndv";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -699,6 +703,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // The current time zone
     @VariableMgr.VarAttr(name = TIME_ZONE)
     private String timeZone = TimeUtils.getSystemTimeZone().getID();
+
+    @VariableMgr.VarAttr(name = ENABLE_ICEBERG_NDV)
+    private boolean enableIcebergNdv = true;
 
     @VariableMgr.VarAttr(name = INNODB_READ_ONLY)
     private boolean innodbReadOnly = true;
@@ -1089,6 +1096,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableParallelMerge = enableParallelMerge;
     }
 
+    public boolean isEnableIcebergNdv() {
+        return enableIcebergNdv;
+    }
+
+    public void setEnableIcebergNdv(boolean enableIcebergNdv) {
+        this.enableIcebergNdv = enableIcebergNdv;
+    }
+
     @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
     private boolean useScanBlockCache = false;
 
@@ -1279,6 +1294,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
+
+
+    @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
+    private boolean cboDeriveRangeJoinPredicate = false;
+
+    public boolean enableCboDeriveRangeJoinPredicate() {
+        return cboDeriveRangeJoinPredicate;
+    }
+
+    public void setCboDeriveRangeJoinPredicate(boolean cboDeriveRangeJoinPredicate) {
+        this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
+    }
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
