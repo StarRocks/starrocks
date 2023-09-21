@@ -19,7 +19,6 @@ import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.task.ExportPendingTask;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -36,7 +35,7 @@ public class ExportCheckerTest {
     public void testCheckBeStatus() throws NoSuchFieldException, SecurityException, 
         IllegalArgumentException, IllegalAccessException, NoSuchMethodException, InvocationTargetException {
 
-        new MockUp<ExportPendingTask>() {
+        new MockUp<ExportJob>() {
             @Mock
             public synchronized void cancel(ExportFailMsg.CancelType type, String msg) throws UserException {
             }
