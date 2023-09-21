@@ -461,7 +461,16 @@ Status FileReader::_init_group_readers() {
             auto row_group_reader =
                     std::make_shared<GroupReader>(_group_reader_param, i, _need_skip_rowids, row_group_first_row);
             _row_group_readers.emplace_back(row_group_reader);
-            _total_row_count += _file_metadata->t_metadata().row_groups[i].num_rows;
+            int64_t num_rows = _file_metadata->t_metadata().row_groups[i].num_rows;
+            // for iceberg v2 pos delete
+            if (_need_skip_rowids != nullptr && !_need_skip_rowids->empty()) {
+                auto start_str = _need_skip_rowids->lower_bound(row_group_first_row);
+                auto end_str = _need_skip_rowids->upper_bound(row_group_first_row + num_rows - 1);
+                for (; start_str != end_str; start_str++) {
+                    num_rows--;
+                }
+            }
+            _total_row_count += num_rows;
         } else {
             continue;
         }

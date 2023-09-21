@@ -892,7 +892,7 @@ TEST_F(FileReaderTest, TestGetNextWithSkipID) {
     auto chunk = _create_chunk();
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
-    ASSERT_EQ(4, chunk->num_rows());
+    ASSERT_EQ(3, chunk->num_rows());
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.is_end_of_file());

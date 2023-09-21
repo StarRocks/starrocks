@@ -26,6 +26,8 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.io.Text;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
@@ -33,6 +35,7 @@ import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -51,6 +54,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -82,6 +86,7 @@ public class IcebergTable extends Table {
     private List<Column> partitionColumns;
 
     private Optional<Snapshot> snapshot = Optional.empty();
+    private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     // used for recording the last snapshot time when refresh mv based on mv.
     private long refreshSnapshotTime = -1L;
@@ -175,6 +180,10 @@ public class IcebergTable extends Table {
         return partitionColumns;
     }
 
+    public long nextPartitionId() {
+        return partitionIdGen.getAndIncrement();
+    }
+
     public List<Integer> partitionColumnIndexes() {
         List<Column> partitionCols = getPartitionColumns();
         return partitionCols.stream().map(col -> fullSchema.indexOf(col)).collect(Collectors.toList());
@@ -257,6 +266,16 @@ public class IcebergTable extends Table {
 
         tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(nativeTable.schema()));
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
+
+        for (int i = 0; i < partitions.size(); i++) {
+            DescriptorTable.ReferencedPartitionInfo info = partitions.get(i);
+            PartitionKey key = info.getKey();
+            long partitionId = info.getId();
+            THdfsPartition tPartition = new THdfsPartition();
+            List<LiteralExpr> keys = key.getKeys();
+            tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
+            tIcebergTable.putToPartitions(partitionId, tPartition);
+        }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.ICEBERG_TABLE,
                 fullSchema.size(), 0, remoteTableName, remoteDbName);
