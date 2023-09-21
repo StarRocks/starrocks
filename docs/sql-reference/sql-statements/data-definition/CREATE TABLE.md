@@ -378,32 +378,79 @@ Since version 3.0, the primary key and sort key are decoupled in the Primary Key
 
 #### Specify storage medium, storage cooldown time, replica number
 
-If the engine type is `olap`, you can specify storage medium, storage cooldown time, and replica number when you create a table.
+If the engine type is `OLAP`, you can specify storage medium (`storage_medium`), storage cooldown time or time interval (`storage_cooldown_time` or `storage_cooldown_ttl`), and replica number (`replication_num`) when you create a table.
 
   > **NOTE**
   >
   > `storage_cooldown_time` can be configured only when `storage_medium` is set to `SSD`. If you want to set `storage_medium` to SSD, make sure that your cluster uses SSD disks, that is, `storage_root_path` reported by BEs includes SSD. For more information about `storage_root_path`, see [Configuration](../../../administration/Configuration.md#configure-be-static-parameters).
 
-```plaintext
+The scope where the properties take effect: If the table has only one partition, the properties belong to the table. If the table has two levels of partitions, the properties belong to each partition. And when you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](../data-definition/ALTER%20TABLE.md) after table creation.
+
+**Set the initial storage medium and storage cooldown time**
+
+```sql
 PROPERTIES (
     "storage_medium" = "[SSD|HDD]",
-    [ "storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss", ]
-    [ "replication_num" = "3" ]
+    { "storage_cooldown_ttl" = "<num> { YEAR | MONTH | DAY | HOUR } "
+    | "storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss" }
 )
 ```
 
-**storage_medium**: the initial storage medium, which can be set to SSD or HDD.
+- `storage_medium`: the initial storage medium, which can be set to `SSD` or `HDD`. Make sure that the type of storage medium you explicitly specified is consistent with the BE disk type for your StarRocks cluster specified in the BE static parameter `storage_root_path`.<br>
 
-> **NOTE**
->
-> - From 2.5.1, the system automatically infers storage medium based on BE disk type if `storage_medium` is not explicitly specified. Inference mechanism: If `storage_root_path` reported by BEs contain only SSD, the system automatically sets this parameter to SSD. If `storage_root_path` reported by BEs contain only HDD, the system automatically sets this parameter to HDD. If `storage_root_path` reported by BEs contain both SSD and HDD, the system automatically sets this parameter to SSD. From 2.3.10, 2.4.5, 2.5.4 onwards, if `storage_root_path` reported by BEs contain both SSD and HDD and the property `storage_cooldown_time` is specified, `storage_medium` is set to SSD; if the property `storage_cooldown_time` is not specified, `storage_medium` is set to HDD.
-> - If the FE configuration item `enable_strict_storage_medium_check` is set to `true`, the system strictly checks BE disk type when you create a table. If the storage medium you specified in CREATE TABLE is inconsistent with BE disk type, an error "Failed to find enough host in all backends with storage medium is SSD|HDD." is returned and table creation fails. If `enable_strict_storage_medium_check` is set to `false`, the system ignores this error and forcibly creates the table. However, cluster disk space may be unevenly distributed after data is loaded.
+    If the FE configuration item `enable_strict_storage_medium_check` is set to `true`, the system strictly checks BE disk type when you create a table. If the storage medium you specified in CREATE TABLE is inconsistent with BE disk type, an error "Failed to find enough host in all backends with storage medium is SSD|HDD." is returned and table creation fails. If `enable_strict_storage_medium_check` is set to `false`, the system ignores this error and forcibly creates the table. However, cluster disk space may be unevenly distributed after data is loaded.<br>
 
-**storage_cooldown_time**: the storage cooldown time for a partition. If the storage medium is SSD, SSD is switched to HDD after the time specified by this parameter. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this parameter is not explicitly specified, storage cooldown is not performed by default.
+    From 2.3.6, 2.4.2, 2.5.1, and 3.0 onwards, the system automatically infers storage medium based on BE disk type if `storage_medium` is not explicitly specified.<br>
 
-**replication_num**: number of replicas in the specified partition. Default number: 3.
+  - The system automatically sets this parameter to SSD in the following scenarios:
 
-If the table has only one partition, the properties belong to the table. If the table has two levels of partitions, the properties belong to each partition. You can also specify different properties for different partitions by using ALTER TABLE ADD PARTITION or ALTER TABLE MODIFY PARTITION.
+    - If `storage_root_path` reported by BEs contain only SSD.
+    - If `storage_root_path` reported by BEs contain both SSD and HDD, the system automatically sets this parameter to SSD. From 2.3.10, 2.4.5, 2.5.4, and 3.0 onwards, if `storage_root_path` reported by BEs contain both SSD and HDD and the property `storage_cooldown_time` is specified, `storage_medium` is set to SSD.
+
+  - The system automatically sets this parameter to HDD in the following scenarios:
+
+    - If `storage_root_path` reported by BEs contain only HDD.
+    - From 2.3.10, 2.4.5, 2.5.4, and 3.0 onwards, if `storage_root_path` reported by BEs contain both SSD and HDD and the property `storage_cooldown_time` is not specified.
+
+- `storage_cooldown_ttl` or `storage_cooldown_time`: the storage cooldown time or time interval. Automatic storage cooldown refers to automatically migrate data from SSD to HDD. This feature is only effective when the initial storage medium is SSD.
+
+<!--检查  分区-->
+  - `storage_cooldown_ttl`：the **time interval** of storage cooldown for  the partitions in this table. If you need to retain the most recent partitions on SSD and automatically cool down older partitions to HDD after a certain time interval, you can use this parameter. The cold storage time for each partition is calculated as the value of this parameter plus the upper time bound of the partition.
+
+  The value is supported to be `<num> YEAR`, `<num> MONTH`, `<num> DAY`, or `<num> HOUR`. `<num>` is a non-negative integer. The default value is null, indicating that storage cooldown is not performed.
+
+  For example, you specify the value as `"storage_cooldown_ttl"="1 DAY"` when creating the table, and a partition `p20230801` with a range of `[2023-08-01 00:00:00,2023-08-02 00:00:00)` exists. The storage cooldown time for this partition is `2023-08-03 00:00:00`, which is `2023-08-02 00:00:00 + 1 DAY`. If you specify the value as `"storage_cooldown_ttl"="0 DAY"` when creating the table, the storage cooldown time for this partition is `2023-08-02 00:00:00`.
+
+  - `storage_cooldown_time`: the storage cooldown time (**absolute time**) when data is cooled down from SSD to HDD. The specified time must be later than the current time. Format: "yyyy-MM-dd HH:mm:ss".
+
+**Usages:**
+
+- The comparison between the parameters related to storage cooldown is as follows:
+  - `storage_cooldown_ttl`: A table property that specifies the time interval of storage cooldown for partitions in the table. the system automatically cool down a partition at the time `this value + xxx `. so storage cooldown is performed at the partition granularity, which is more flexible.
+  - `storage_cooldown_time`: A table property that specifies the storage cooldown time for this table. When you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](../data-definition/ALTER%20TABLE.md).
+  - `storage_cooldown_second`: A static FE parameter that specifies the storage cooldown time for all tables within the cluster.
+
+- The table properties `storage_cooldown_ttl` or `storage_cooldown_time` take precedence over the FE static parameter `storage_cooldown_second`.
+- When configuring these parameters, you must specify `"storage_medium = "SSD"`.
+- If you do not configure these parameters, automatic storage cooldown is not be performed.
+- Execute `SHOW PARTITIONS FROM <table_name>` to view the storage cooldown time for each partition.
+
+**Limit:**
+
+- Expression and List partitioning are not supported.
+- The partition column need to be of date type.
+- Multiple partition columns are not supported.
+- Primary key tables are not supported.
+
+**Set the number of table replicas for partitions**
+
+`replication_num`: number of table replicas for partitions. Default number: `3`.
+
+```sql
+PROPERTIES (
+    "replication_num" = "<num>"
+)
+```
 
 #### Add bloom filter index for a column
 
