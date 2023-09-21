@@ -13,12 +13,7 @@ import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
-=======
-import com.starrocks.common.AnalysisException;
->>>>>>> c675440c9d... [BugFix] Fix OLAP external table sync bug if the target table is partitioned (#30124)
 import com.starrocks.external.starrocks.TableMetaSyncer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DefaultValueExpr;
