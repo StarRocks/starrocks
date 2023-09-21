@@ -197,6 +197,12 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
                         ", maybe version is not compatible.";
         return Status::InternalError("no brpc destination");
     }
+    _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
+    if (UNLIKELY(_brpc_stub == nullptr)) {
+        auto msg = fmt::format("The brpc stub of {}:{} is null.", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
 
     // initialize brpc request
     _finst_id.set_hi(_fragment_instance_id.hi);
@@ -220,7 +226,6 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
         _is_inited = true;
         return Status::OK();
     }
-    _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
 
     _need_close = true;
     _is_inited = true;
