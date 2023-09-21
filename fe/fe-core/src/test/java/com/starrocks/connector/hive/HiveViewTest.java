@@ -16,10 +16,13 @@ package com.starrocks.connector.hive;
 
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -27,6 +30,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import java.util.List;
 import java.util.Optional;
 
 public class HiveViewTest extends PlanTestBase {
@@ -109,8 +113,28 @@ public class HiveViewTest extends PlanTestBase {
         };
         try {
             hiveMetadata.refreshTable("tpch", hiveView, null, false);
+            Assert.assertTrue(hiveView.isHiveView());
+            HiveView view = (HiveView) hiveView;
+            Assert.assertEquals("hive0", view.getCatalogName());
         } catch (Exception e) {
             Assert.fail();
+        }
+        HiveMetastore hiveMetastore1 = new HiveMetastore(null, "hive0");
+        Assert.assertTrue(hiveMetastore1.refreshView("tpch", "customer_view"));
+
+        Table table  = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "customer");
+
+        new Expectations() {
+            {
+                hiveMetastore.refreshTable(anyString, anyString, anyBoolean);
+                result = true;
+            }
+        };
+
+        try {
+            hiveMetadata.refreshTable("tpch", table, null, true);
+        } catch (Exception e) {
+            assertContains(e.getMessage(), "\"path\" is null");
         }
     }
 }
