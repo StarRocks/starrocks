@@ -14,6 +14,8 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -122,6 +124,11 @@ public class HiveViewTest extends PlanTestBase {
 
         new Expectations() {
             {
+                hiveMetastore.getPartition(anyString, anyString, Lists.newArrayList());
+                result = new Partition(Maps.newHashMap(), RemoteFileInputFormat.PARQUET,
+                        new TextFileFormatDesc("", "", "", ""),
+                        "hdfs://emr_host/test_path", false);
+
                 hiveMetastore.refreshTable(anyString, anyString, anyBoolean);
                 result = true;
             }
@@ -130,7 +137,7 @@ public class HiveViewTest extends PlanTestBase {
         try {
             hiveMetadata.refreshTable("tpch", table, null, true);
         } catch (Exception e) {
-            // pass
+            Assert.fail();
         }
     }
 }
