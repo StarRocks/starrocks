@@ -360,10 +360,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(), 
                                 table.primaryIndexCacheExpireSec(), TTabletType.TABLET_TYPE_LAKE, table.getCompressionType(), 
                                 copiedSortKeyIdxes);
-
-                        Long baseTabletId = partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
-                        assert baseTabletId != null;
-                        createReplicaTask.setBaseTablet(baseTabletId, 0/*unused*/);
                         batchTask.addTask(createReplicaTask);
                     }
                 }
