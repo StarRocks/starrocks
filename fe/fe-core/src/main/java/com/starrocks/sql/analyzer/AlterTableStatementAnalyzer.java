@@ -15,17 +15,21 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_BF_COLUMNS;
 
 public class AlterTableStatementAnalyzer {
     private static final Logger LOG = LogManager.getLogger(AlterTableStatementAnalyzer.class);
@@ -33,16 +37,35 @@ public class AlterTableStatementAnalyzer {
     public static void analyze(AlterTableStmt statement, ConnectContext context) {
         TableName tbl = statement.getTbl();
         MetaUtils.normalizationTableName(context, tbl);
-        Table table = MetaUtils.getTable(context, tbl);
         MetaUtils.checkNotSupportCatalog(tbl.getCatalog(), "ALTER");
         List<AlterClause> alterClauseList = statement.getOps();
         if (alterClauseList == null || alterClauseList.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
+        }
+
+        Table table = MetaUtils.getTable(context, tbl);
+        if (table instanceof MaterializedView) {
+            if (!indexCluase(alterClauseList.get(0))) {
+                String msg = String.format("The '%s' cannot be alter by 'ALTER TABLE', because it is a materialized view," +
+                        "you can use 'ALTER MATERIALIZED VIEW' to alter it.", tbl.getTbl());
+                throw new SemanticException(msg, tbl.getPos());
+            }
         }
         AlterTableClauseVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseVisitor();
         alterTableClauseAnalyzerVisitor.setTable(table);
         for (AlterClause alterClause : alterClauseList) {
             alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
         }
+    }
+
+    public static boolean indexCluase(AlterClause alterClause) {
+        if (alterClause instanceof CreateIndexClause) {
+            return true;
+        }
+
+        if (alterClause.getProperties().containsKey(PROPERTIES_BF_COLUMNS)) {
+            return true;
+        }
+        return false;
     }
 }
