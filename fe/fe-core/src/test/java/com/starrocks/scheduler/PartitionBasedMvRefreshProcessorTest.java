@@ -1250,7 +1250,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     }
 
     @Test
-    public void testRangePartitionChangeWithJDBCTableUseStr2Date() throws Exception {
+    public void testRangePartitionWithJDBCTableUseStr2Date() throws Exception {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
         MockedJDBCMetadata mockedJDBCMetadata =
                 (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
@@ -1268,22 +1268,13 @@ public class PartitionBasedMvRefreshProcessorTest {
         taskRun.executeTaskRun();
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(3, partitions.size());
-        Assert.assertNotNull(materializedView.getPartition("P20230801"));
-        Assert.assertNotNull(materializedView.getPartition("P20230802"));
-        Assert.assertNotNull(materializedView.getPartition("P20230803"));
-
-        mockedJDBCMetadata.addPartitions();
-        taskRun.executeTaskRun();
-        Collection<Partition> incrementalPartitions = materializedView.getPartitions();
-        Assert.assertEquals(4, incrementalPartitions.size());
-        Assert.assertNotNull(materializedView.getPartition("P20230802"));
-        Assert.assertNotNull(materializedView.getPartition("P20230803"));
-        Assert.assertNotNull(materializedView.getPartition("P20230804"));
-        Assert.assertNotNull(materializedView.getPartition("P20230805"));
+        Assert.assertNotNull(materializedView.getPartition("p20230801"));
+        Assert.assertNotNull(materializedView.getPartition("p20230802"));
+        Assert.assertNotNull(materializedView.getPartition("p20230803"));
     }
 
     @Test
-    public void testRangePartitionChangeWithJDBCTableUseStr2DateForError() {
+    public void testRangePartitionWithJDBCTableUseStr2DateForError() {
         try {
             Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
             MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv2"));
@@ -1296,12 +1287,12 @@ public class PartitionBasedMvRefreshProcessorTest {
             taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
             taskRun.executeTaskRun();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Invalid range value format"));
+            Assert.assertTrue(e.getMessage().contains("Text '1234567' could not be parsed"));
         }
     }
 
     @Test
-    public void testRangePartitionChangeWithJDBCTableUseStr2Date2() throws Exception {
+    public void testRangePartitionWithJDBCTableUseStr2Date2() throws Exception {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
         MockedJDBCMetadata mockedJDBCMetadata =
                 (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
@@ -1322,15 +1313,6 @@ public class PartitionBasedMvRefreshProcessorTest {
         Assert.assertNotNull(materializedView.getPartition("P20230801"));
         Assert.assertNotNull(materializedView.getPartition("P20230802"));
         Assert.assertNotNull(materializedView.getPartition("P20230803"));
-
-        mockedJDBCMetadata.addPartitions();
-        taskRun.executeTaskRun();
-        Collection<Partition> incrementalPartitions = materializedView.getPartitions();
-        Assert.assertEquals(4, incrementalPartitions.size());
-        Assert.assertNotNull(materializedView.getPartition("P20230802"));
-        Assert.assertNotNull(materializedView.getPartition("P20230803"));
-        Assert.assertNotNull(materializedView.getPartition("P20230804"));
-        Assert.assertNotNull(materializedView.getPartition("P20230805"));
     }
 
     @Test

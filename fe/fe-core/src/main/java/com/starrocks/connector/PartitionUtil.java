@@ -51,7 +51,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -67,8 +66,6 @@ import org.apache.iceberg.StructLike;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -493,20 +490,41 @@ public class PartitionUtil {
 
         Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
         for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
-            if (index == 0) {
+            if (entry.getValue().getKeys().get(0) instanceof StringLiteral) {
+                if (index == 0) {
+                    lastPartitionKey = entry.getValue();
+                    PartitionKey infinityPartitionKey =
+                            PartitionKey.createInfinityPartitionKey(ImmutableList.of(partitionColumn), false);
+                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(infinityPartitionKey, entry.getValue()));
+                    ++index;
+                    continue;
+                }
+                Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
+                if (entry.getValue().getKeys().get(0).getStringValue().equals("MAXVALUE")) {
+                    PartitionKey endKey = new PartitionKey();
+                    endKey.pushColumn(StringLiteral.create("9999-12-31", partitionColumn.getType()),
+                            partitionColumn.getPrimitiveType());
+                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(lastPartitionKey, endKey));
+                } else {
+                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(lastPartitionKey, entry.getValue()));
+                }
+                lastPartitionKey = entry.getValue();
+            } else {
+                if (index == 0) {
+                    lastPartitionName = entry.getKey();
+                    lastPartitionKey = entry.getValue();
+                    if (lastPartitionKey.getKeys().get(0).isNullable()) {
+                        // If partition key is NULL literal, rewrite it to min value.
+                        lastPartitionKey = PartitionKey.createInfinityPartitionKey(ImmutableList.of(partitionColumn), false);
+                    }
+                    ++index;
+                    continue;
+                }
+                Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
+                mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, entry.getValue()));
                 lastPartitionName = entry.getKey();
                 lastPartitionKey = entry.getValue();
-                if (lastPartitionKey.getKeys().get(0).isNullable()) {
-                    // If partition key is NULL literal, rewrite it to min value.
-                    lastPartitionKey = PartitionKey.createInfinityPartitionKey(ImmutableList.of(partitionColumn), false);
-                }
-                ++index;
-                continue;
             }
-            Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
-            mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, entry.getValue()));
-            lastPartitionName = entry.getKey();
-            lastPartitionKey = entry.getValue();
         }
         if (lastPartitionName != null) {
             PartitionKey endKey = new PartitionKey();
@@ -595,17 +613,6 @@ public class PartitionUtil {
             return new IntLiteral(intLiteral.getLongValue() + offset);
         } else if (expr instanceof MaxLiteral) {
             return MaxLiteral.MAX_VALUE;
-        } else if (expr instanceof StringLiteral) {
-            StringLiteral lowerString = (StringLiteral) expr;
-            //如果可以转成时间，转成时间返回
-            try {
-                DateTimeFormatter formatter = DateUtils.probeFormat(lowerString.getStringValue());
-                LocalDateTime lowerDateTime = DateUtils.parseStringWithDefaultHSM(lowerString.getStringValue(), formatter);
-                return new StringLiteral(lowerDateTime.plusDays(offset).format(formatter));
-            } catch (Exception e) {
-                LOG.info("Problem converting string to time, returning string.");
-                return new StringLiteral(lowerString.getStringValue());
-            }
         } else {
             return null;
         }
