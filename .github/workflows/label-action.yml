@@ -1,7 +1,7 @@
 name: LABEL ACTION
 
 on:
-  pull_request:
+  pull_request_target:
     types:
       - labeled
 
@@ -36,4 +36,4 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.PAT }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{ github.repository }}/pulls/${PULL_NUMBER}/requested_reviewers \
-            -d '{"reviewers":["huailiu1122"]}'
+            -d '{"reviewers":["huailiu1122"]}' 2>/dev/null
