@@ -533,7 +533,7 @@ FROM KAFKA
 > - If the outermost layer of the JSON-formatted data is an array structure, you need to set `"strip_outer_array"="true"` in `PROPERTIES` to strip the outermost array structure. Additionally, when you need to specify `jsonpaths`, the root element of the entire JSON-formatted data is the flattened JSON object because the outermost array structure of the JSON-formatted data is stripped.
 > - You can use `json_root` to specify the root element of the JSON-formatted data.
 
-#### StarRocks table column names different from JSON key names
+#### StarRocks table contains derived columns generated using expressions on JSON data
 
 ##### Prepare a dataset
 
@@ -588,6 +588,75 @@ FROM KAFKA
 >
 > - If the outermost layer of the JSON data is an array structure, you need to set `"strip_outer_array"="true"` in the `PROPERTIES` to strip the outermost array structure. Additionally, when you need to specify `jsonpaths`, the root element of the entire JSON data is the flattened JSON object because the outermost array structure of the JSON data is stripped.
 > - You can use `json_root` to specify the root element of the JSON-formatted data.
+
+#### StarRocks table contains derived columns generated using CASE expression on JSON data
+
+You need to use the matched mode for the Routine Load job. That is, you need to specify `jsonpaths` and `COLUMNS` parameters when creating the Routine Load job. The `jsonpaths` parameter specifies the keys of the JSON data to be loaded, and the `COLUMNS` parameter specifies the expressions.
+
+**Prepare a dataset**
+
+For example, the following JSON-formatted data exists in the Kafka topic `topic-expr-test3`.
+
+```JSON
+{"key1":1, "key2": 21, "key3": {"key4": 41}}
+{"key1":12, "key2": 22, "key3": {"key4": 42}}
+{"key1":13, "key2": 23, "key3": {"key4": 43}}
+{"key1":14, "key2": 24, "key3": {"key4": 44}}
+```
+
+**Target database and table**
+
+Create a table named `tbl_expr_test`  in the database `example_db` in the StarRocks cluster. The target table `tbl_expr_test` contains four columns, where the values of three columns need to be computed by using expressions on JSON data.
+
+```SQL
+CREATE TABLE tbl_expr_test (
+    col1 string, col2 string, col3 json, col4 string)
+DISTRIBUTED BY HASH (col1);
+```
+
+**Routine Load job**
+
+You can use the matched mode for the Routine Load job. You need to specify the keys of the JSON-formatted data to be loaded. Also, the values of three columns, `col2`, `col3`, and `col4`, in the target table need to be derived from JSON data using expressions. For example, the values in the `col4` column are generated using a CASE expression. So you need to specify the corresponding expressions in the `COLUMNS` parameter .
+
+```SQL
+CREATE ROUTINE LOAD rl_expr_test ON tbl_expr_test
+COLUMNS (
+      key1,
+      key2,
+      key3,
+      col1 = key1,
+      col2 = if(key1 = "1", "12345", key1),
+      col3 = parse_json(key3),
+      col4 = CASE WHEN key1 = "1" THEN "key1=1" 
+                  WHEN key1 = "12" THEN "key2=21"
+                  ELSE "nothing" END) 
+PROPERTIES
+(
+    "format" = "json",
+    "jsonpaths" = "[\"$.key1\",\"$.key2\",\"$.key3\"]")
+FROM KAFKA
+(
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_topic" = "topic-expr-test3"
+);
+```
+
+**Query StarRocks table**
+
+Query the StarRocks table. The result shows that the values of three columns, `col2`, `col3`, and `col4`, are all calculated by using expressions. For example, the values in the `col4` column are the output of the CASE expression.
+
+```SQL
+MySQL [example_db]> SELECT * FROM tbl_expr_test;
++------+-------+--------------+---------+
+| col1 | col2  | col3         | col4    |
++------+-------+--------------+---------+
+| 1    | 12345 | {"key4": 41} | key1=1  |
+| 12   | 12    | {"key4": 42} | key2=21 |
+| 13   | 13    | {"key4": 43} | nothing |
+| 14   | 14    | {"key4": 44} | nothing |
++------+-------+--------------+---------+
+4 rows in set (0.015 sec)
+```
 
 #### Specify the root element of the JSON-formatted data to be loaded
 
