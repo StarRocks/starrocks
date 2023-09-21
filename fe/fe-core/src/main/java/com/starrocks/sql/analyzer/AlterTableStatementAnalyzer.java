@@ -45,7 +45,7 @@ public class AlterTableStatementAnalyzer {
 
         Table table = MetaUtils.getTable(context, tbl);
         if (table instanceof MaterializedView) {
-            if (!indexCluase(alterClauseList.get(0))) {
+            if (alterClauseList != null && !indexCluase(alterClauseList.get(0))) {
                 String msg = String.format("The '%s' cannot be alter by 'ALTER TABLE', because it is a materialized view," +
                         "you can use 'ALTER MATERIALIZED VIEW' to alter it.", tbl.getTbl());
                 throw new SemanticException(msg, tbl.getPos());
