@@ -303,7 +303,16 @@ public class PartitionBasedMvRefreshProcessorTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\"\n" +
                         ") " +
-                        "as select a, b, c, d from jdbc0.partitioned_db0.tbl1;");
+                        "as select a, b, c, d from jdbc0.partitioned_db0.tbl1;")
+                .withMaterializedView("create materialized view jdbc_parttbl_mv5 " +
+                        "partition by str2date(d,'%Y%m%d') " +
+                        "distributed by hash(a) buckets 10 " +
+                        "REFRESH DEFERRED MANUAL " +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ") " +
+                        "as select a, b, c, d from jdbc0.partitioned_db0.tbl3;");
+
 
         new MockUp<StmtExecutor>() {
             @Mock
@@ -1313,6 +1322,30 @@ public class PartitionBasedMvRefreshProcessorTest {
         Assert.assertNotNull(materializedView.getPartition("P20230801"));
         Assert.assertNotNull(materializedView.getPartition("P20230802"));
         Assert.assertNotNull(materializedView.getPartition("P20230803"));
+    }
+
+    @Test
+    public void testRangePartitionWithJDBCTableUseStr2DateWithMaxValue() throws Exception {
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
+        MockedJDBCMetadata mockedJDBCMetadata =
+                (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
+        mockedJDBCMetadata.initPartitions();
+
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv5"));
+        HashMap<String, String> taskRunProperties = new HashMap<>();
+        taskRunProperties.put(PARTITION_START, "20230801");
+        taskRunProperties.put(TaskRun.PARTITION_END, "20230805");
+        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        Collection<Partition> partitions = materializedView.getPartitions();
+        Assert.assertEquals(3, partitions.size());
+        Assert.assertNotNull(materializedView.getPartition("p20230801"));
+        Assert.assertNotNull(materializedView.getPartition("p20230802"));
+        Assert.assertNotNull(materializedView.getPartition("pmaxvalue"));
     }
 
     @Test

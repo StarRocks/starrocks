@@ -37,6 +37,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public static final String MOCKED_PARTITIONED_TABLE_NAME0 = "tbl0";
     public static final String MOCKED_PARTITIONED_TABLE_NAME1 = "tbl1";
     public static final String MOCKED_PARTITIONED_TABLE_NAME2 = "tbl2";
+    public static final String MOCKED_PARTITIONED_TABLE_NAME3 = "tbl3";
     private Map<String, String> properties;
     private Map<String, JDBCTable> tables = new HashMap<>();
 
@@ -70,6 +71,9 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
                 } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
                     tables.put(tblName, new JDBCTable(100002, MOCKED_PARTITIONED_TABLE_NAME2, getSchema(tblName),
                             getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
+                    tables.put(tblName, new JDBCTable(100002, MOCKED_PARTITIONED_TABLE_NAME3, getSchema(tblName),
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
                 }
             }
             return tables.get(tblName);
@@ -87,6 +91,9 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
             if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME0)) {
                 return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
                         new Column("c", Type.INT), new Column("d", Type.INT));
+            } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
+                return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
+                        new Column("c", Type.INT), new Column("d", Type.CHAR));
             } else {
                 return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
                         new Column("c", Type.INT), new Column("d", Type.VARCHAR));
@@ -102,6 +109,9 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         try {
             if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME0)) {
                 return Arrays.asList(new Column("d", Type.INT));
+            }
+            if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
+                return Arrays.asList(new Column("d", Type.CHAR));
             } else {
                 return Arrays.asList(new Column("d", Type.VARCHAR));
             }
@@ -136,6 +146,8 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         try {
             if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
                 return Arrays.asList("1234567", "1234568", "1234569");
+            } else if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
+                return Arrays.asList("20230801", "20230802", "MAXVALUE");
             } else {
                 return partitionNames;
             }

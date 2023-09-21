@@ -88,11 +88,4 @@ public class PartitionRange implements Comparable<PartitionRange> {
         return Objects.hash(partitionName, partitionKeyRange);
     }
 
-    @Override
-    public String toString() {
-        return "partitionName : " + partitionName + " ; partitionKeyRange lowerEndpoint : "
-                + partitionKeyRange.lowerEndpoint().toSql()
-                + " ; partitionKeyRange upperEndpoint : "
-                + partitionKeyRange.upperEndpoint().toSql();
-    }
 }
