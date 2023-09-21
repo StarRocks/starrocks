@@ -896,7 +896,7 @@ public class StmtExecutor {
 
         coord.exec();
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
-        coord.setExecPlanSupplier(() -> execPlan);
+        coord.setExecPlan(execPlan);
 
         // send result
         // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,
@@ -1620,6 +1620,15 @@ public class StmtExecutor {
                     sourceType,
                     context.getSessionVariable().getQueryTimeoutS());
 
+            // The metadata may be changed between plan() and beginTransaction().
+            // When to beginTransaction(), the plan is not ready and the tablet is dropped by balance.
+            // So we need to get txn first, to make the dropping tablet procedure to wait.
+            // This is the re-plan of the insert to fix the issue
+
+            if (Config.replan_on_insert) {
+                execPlan = StatementPlanner.plan(stmt, context);
+            }
+
             // add table indexes to transaction state
             txnState = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .getTransactionState(database.getId(), transactionId);
@@ -1700,7 +1709,7 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
             coord.exec();
             coord.setTopProfileSupplier(this::buildTopLevelProfile);
-            coord.setExecPlanSupplier(() -> execPlan);
+            coord.setExecPlan(execPlan);
 
             long jobDeadLineMs = System.currentTimeMillis() + context.getSessionVariable().getQueryTimeoutS() * 1000;
             coord.join(context.getSessionVariable().getQueryTimeoutS());

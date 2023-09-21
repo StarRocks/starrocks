@@ -203,7 +203,7 @@ public class Coordinator {
     private PQueryStatistics auditStatistics;
 
     private Supplier<RuntimeProfile> topProfileSupplier;
-    private Supplier<ExecPlan> execPlanSupplier;
+    private ExecPlan execPlan;
     private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis());
 
     // only used for sync stream load profile
@@ -487,8 +487,8 @@ public class Coordinator {
         this.topProfileSupplier = topProfileSupplier;
     }
 
-    public void setExecPlanSupplier(Supplier<ExecPlan> execPlanSupplier) {
-        this.execPlanSupplier = execPlanSupplier;
+    public void setExecPlan(ExecPlan execPlan) {
+        this.execPlan = execPlan;
     }
 
     public boolean isUsingBackend(Long backendID) {
@@ -1531,7 +1531,7 @@ public class Coordinator {
         // current batch, the previous reported state will be synchronized to the profile manager.
         long now = System.currentTimeMillis();
         long lastTime = lastRuntimeProfileUpdateTime.get();
-        if (topProfileSupplier != null && execPlanSupplier != null && connectContext != null &&
+        if (topProfileSupplier != null && execPlan != null && connectContext != null &&
                 connectContext.getSessionVariable().isEnableProfile() &&
                 // If it's the last done report, avoiding duplicate trigger
                 (!execState.done || profileDoneSignal.getLeftMarks().size() > 1) &&
@@ -1539,7 +1539,7 @@ public class Coordinator {
                 now - lastTime > (connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 950L) &&
                 lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
             RuntimeProfile profile = topProfileSupplier.get();
-            ExecPlan plan = execPlanSupplier.get();
+            ExecPlan plan = execPlan;
             profile.addChild(buildMergedQueryProfile());
             ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
             ProfileManager.getInstance().pushProfile(profilingPlan, profile);
@@ -1913,8 +1913,8 @@ public class Coordinator {
         Counter querySpillBytes = newQueryProfile.addCounter("QuerySpillBytes", TUnit.BYTES, null);
         querySpillBytes.setValue(maxQuerySpillBytes);
 
-        if (execPlanSupplier != null) {
-            newQueryProfile.addInfoString("Topology", execPlanSupplier.get().getProfilingPlan().toTopologyJson());
+        if (execPlan != null) {
+            newQueryProfile.addInfoString("Topology", execPlan.getProfilingPlan().toTopologyJson());
         }
         Counter processTimer =
                 newQueryProfile.addCounter("FrontendProfileMergeTime", TUnit.TIME_NS, null);
