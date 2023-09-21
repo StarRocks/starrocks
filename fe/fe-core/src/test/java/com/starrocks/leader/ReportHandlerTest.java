@@ -388,7 +388,7 @@ public class ReportHandlerTest {
 
         // finish 30 tablets migration
         for (int i = 0; i < 30; i++) {
-            AgentTaskQueue.removeTask(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, allTablets.get(i));
+            AgentTaskQueue.removeTask(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, allTablets.get(49 - i));
         }
         // limit the batch size to 30
         Config.tablet_sched_max_migration_task_sent_once = 30;
