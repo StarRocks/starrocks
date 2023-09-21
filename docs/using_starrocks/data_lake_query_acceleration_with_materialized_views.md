@@ -112,7 +112,7 @@ To enable the Hive metadata cache refresh feature, you can set the following FE 
 
 ### Enable query rewrite for external catalog-based materialized views
 
-By default, StarRocks disables the query rewrite for materialized views based on Hudi, Iceberg, and JDBC catalogs due to the lack of strong consistency in their results. You can enable this feature by setting the property `force_external_table_query_rewrite` to `true` when creating the materialized view. For materialized views built on tables in Hive catalogs, the query rewrite is enabled by default.
+By default, StarRocks does not support query rewrite for materialized views built on Hudi, Iceberg, and JDBC catalogs because query rewrite in this scenario cannot ensure a strong consistency of results. You can enable this feature by setting the property `force_external_table_query_rewrite` to `true` when creating the materialized view. For materialized views built on tables in Hive catalogs, the query rewrite is enabled by default.
 
 Example:
 
