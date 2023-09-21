@@ -40,7 +40,7 @@ The following table compares the asynchronous materialized views (ASYNC MV) and 
   Currently, StarRocks supports two generic refreshing strategies:
 
   - ASYNC: Asynchronous refresh mode. Each time the base table data changes, the materialized view is automatically refreshed according to the pre-defined refresh interval.
-  - MANUAL: Manual refresh mode. The materialized view will not be automatically refreshed. The refresh tasks can be only triggered manually by users.
+  - MANUAL: Manual refresh mode. The materialized view will not be automatically refreshed. The refresh tasks can only be triggered manually by users.
 
 - **Query rewrite**
 
@@ -190,7 +190,7 @@ GROUP BY order_id;
 
   > **CAUTION**
   >
-  > To prevent exhaustive system resource consumption and potential task failures during full refresh operations, it is recommended to create partitioned materialized views based on partitioned base tables. This ensures that when data updates occur within a base table partition, only the corresponding partition of the materialized view will be refreshed, rather than refreshing the entire materialized view. For more information, please refer to [Data Modeling with Materialized Views - Partitioned Modeling](./data_modeling_with_materialized_views.md#partitioned-modeling).
+  > To prevent full refresh operations from exhausting system resources and causing task failures, it is recommended to create partitioned materialized views based on partitioned base tables. This ensures that when data updates occur within a base table partition, only the corresponding partition of the materialized view are refreshed, rather than refreshing the entire materialized view. For more information, please refer to [Data Modeling with Materialized Views - Partitioned Modeling](./data_modeling_with_materialized_views.md#partitioned-modeling).
 
 - **About nested materialized views**
 
@@ -198,7 +198,7 @@ GROUP BY order_id;
 
 - **About external catalog materialized views**
 
-  StarRocks supports building asynchronous materialized views based on Hive Catalog (since v2.5), Hudi Catalog (since v2.5), Iceberg Catalog (since v2.5), and JDBC Catalog (since v3.0). Creating a materialized view on external catalogs is similar to crating a regular asynchronous materialized view, but with some usage restrictions. For more information, please refer to [Data lake query acceleration with materialized views](./data_lake_query_acceleration_with_materialized_views.md).
+  StarRocks supports building asynchronous materialized views based on Hive Catalog (since v2.5), Hudi Catalog (since v2.5), Iceberg Catalog (since v2.5), and JDBC Catalog (since v3.0). Creating a materialized view on external catalogs is similar to creating an asynchronous materialized view on the default catalog, but with some usage restrictions. For more information, please refer to [Data lake query acceleration with materialized views](./data_lake_query_acceleration_with_materialized_views.md).
 
 ## Manually refresh an asynchronous materialized view
 
@@ -237,7 +237,7 @@ MySQL > SELECT * FROM order_mv;
 
 StarRocks v2.5 supports automatic and transparent query rewrite based on the SPJG-type asynchronous materialized views. The SPJG-type materialized views query rewrite includes single table query rewrite, Join query rewrite, aggregation query rewrite, Union query rewrite and query rewrite based on nested materialized views. For more information, please refer to [Query Rewrite with Materialized Views](./query_rewrite_with_materialized_views.md).
 
-Currently, StarRocks supports rewriting queries on asynchronous materialized views that are created on the default catalog or an external catalog such as a Hive catalog, Hudi catalog, or Iceberg catalog. When querying data in the default catalog, StarRocks ensures strong consistency of results between the rewritten query and the original query by excluding materialized views whose data is inconsistent with the base table. When the data in a materialized view expires, the materialized view will not be used as a candidate materialized view. When querying data in external catalogs, StarRocks does not ensure a strong consistency of the results because StarRocks cannot perceive the data changes in external catalogs. For more about asynchronous materialized views based on an external catalog, please refer to [Data lake query acceleration with materialized views](./data_lake_query_acceleration_with_materialized_views.md).
+Currently, StarRocks supports rewriting queries on asynchronous materialized views that are created on the default catalog or an external catalog such as a Hive catalog, Hudi catalog, or Iceberg catalog. When querying data in the default catalog, StarRocks ensures strong consistency of results between the rewritten query and the original query by excluding materialized views whose data is inconsistent with the base table. When the data in a materialized view expires, the materialized view will not be used as a candidate materialized view. When querying data in external catalogs, StarRocks does not ensure a strong consistency of the results because StarRocks cannot perceive the data changes in external catalogs. For more about asynchronous materialized views that are created based on an external catalog, please refer to [Data lake query acceleration with materialized views](./data_lake_query_acceleration_with_materialized_views.md).
 
 > **NOTE**
 >
