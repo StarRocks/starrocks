@@ -500,9 +500,10 @@ public class PartitionUtil {
                     continue;
                 }
                 Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
-                if (entry.getValue().getKeys().get(0).getStringValue().equals("MAXVALUE")) {
+                if (entry.getValue().getKeys().get(0).getStringValue().equals(FeConstants.MYSQL_PARTITION_MAXVALUE)) {
                     PartitionKey endKey = new PartitionKey();
-                    endKey.pushColumn(StringLiteral.create("9999-12-31", partitionColumn.getType()),
+                    endKey.pushColumn(StringLiteral.create(FeConstants.PARTITION_USE_STR2DATE_MAXVALUE,
+                            partitionColumn.getType()),
                             partitionColumn.getPrimitiveType());
                     mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(lastPartitionKey, endKey));
                 } else {
