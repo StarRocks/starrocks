@@ -179,12 +179,14 @@ public class ScalarType extends Type implements Cloneable {
     /**
      * Unified decimal is used for parser, which creating default decimal from name
      */
-    public static ScalarType createUnifiedDecimalType() throws AnalysisException {
-        throw decimalParseError("both precision and scale are absent");
+    public static ScalarType createUnifiedDecimalType() {
+        // for mysql compatibility
+        return createUnifiedDecimalType(10, 0);
     }
 
-    public static ScalarType createUnifiedDecimalType(int precision) throws AnalysisException {
-        throw decimalParseError("scale is absent");
+    public static ScalarType createUnifiedDecimalType(int precision) {
+        // for mysql compatibility
+        return createUnifiedDecimalType(precision, 0);
     }
 
     public static ScalarType createUnifiedDecimalType(int precision, int scale) {
