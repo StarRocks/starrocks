@@ -16,8 +16,12 @@ package com.starrocks.jni.connector;
 
 import com.starrocks.utils.Platform;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -317,6 +321,29 @@ public class OffHeapColumnVector {
         Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, null, data + rowId, count);
     }
 
+    public int appendDecimal(BigDecimal value) {
+        reserve(elementsAppended + 1);
+        putDecimal(elementsAppended, value);
+        return elementsAppended++;
+    }
+
+    private void putDecimal(int rowId, BigDecimal value) {
+        int typeSize = type.getPrimitiveTypeValueSize();
+        byte[] bytes = getDecimalBytes(value, type.getScale(), typeSize);
+        Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, null, data + (long) rowId * typeSize, typeSize);
+    }
+
+    public byte[] getDecimalBytes(int rowId) {
+        int typeSize = type.getPrimitiveTypeValueSize();
+        byte[] bytes = new byte[typeSize];
+        Platform.copyMemory(null, data + (long) rowId * typeSize, bytes, Platform.BYTE_ARRAY_OFFSET, typeSize);
+        return bytes;
+    }
+
+    public BigDecimal getDecimal(int rowId) {
+        return getDecimal(getDecimalBytes(rowId), type.getScale());
+    }
+
     private byte[] getBytes(int rowId, int count) {
         byte[] array = new byte[count];
         Platform.copyMemory(null, data + rowId, array, Platform.BYTE_ARRAY_OFFSET, count);
@@ -472,8 +499,11 @@ public class OffHeapColumnVector {
                 break;
             case STRING:
             case DATE:
-            case DECIMAL:
-                appendString(o.getString(typeValue));
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+                appendDecimal(o.getDecimal());
                 break;
             case DATETIME:
             case DATETIME_MICROS:
@@ -561,8 +591,11 @@ public class OffHeapColumnVector {
             case DATETIME:
             case DATETIME_MICROS:
             case DATETIME_MILLIS:
-            case DECIMAL:
-                sb.append(getUTF8String(i));
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+                sb.append(getDecimal(i));
                 break;
             case ARRAY: {
                 int begin = getArrayOffset(i);
@@ -645,5 +678,32 @@ public class OffHeapColumnVector {
         } else {
             checker.check(context + "#data", data);
         }
+    }
+
+    public static byte[] changeByteOrder(byte[] bytes) {
+        int length = bytes.length;
+        for (int i = 0; i < length / 2; ++i) {
+            byte temp = bytes[i];
+            bytes[i] = bytes[length - 1 - i];
+            bytes[length - 1 - i] = temp;
+        }
+        return bytes;
+    }
+
+    public static byte[] getDecimalBytes(BigDecimal value, int scale, int size) {
+        BigInteger data = value.setScale(scale, RoundingMode.HALF_EVEN).unscaledValue();
+        byte[] bytes = changeByteOrder(data.toByteArray());
+        byte[] newValue = new byte[size];
+        if (data.signum() == -1) {
+            Arrays.fill(newValue, (byte) -1);
+        }
+
+        System.arraycopy(bytes, 0, newValue, 0, Math.min(bytes.length, newValue.length));
+        return newValue;
+    }
+
+    public static BigDecimal getDecimal(byte[] bytes, int scale) {
+        BigInteger value = new BigInteger(changeByteOrder(bytes));
+        return new BigDecimal(value, scale);
     }
 }

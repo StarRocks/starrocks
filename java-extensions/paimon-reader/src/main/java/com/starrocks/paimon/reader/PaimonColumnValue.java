@@ -16,6 +16,7 @@ package com.starrocks.paimon.reader;
 
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
+import org.apache.paimon.data.Decimal;
 import org.apache.paimon.data.InternalArray;
 import org.apache.paimon.data.InternalMap;
 import org.apache.paimon.data.Timestamp;
@@ -27,6 +28,7 @@ import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.InternalRowUtils;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -148,5 +150,10 @@ public class PaimonColumnValue implements ColumnValue {
             PaimonColumnValue cv = new PaimonColumnValue(InternalRowUtils.get(array, i, dataType), dataType);
             values.add(cv);
         }
+    }
+
+    @Override
+    public BigDecimal getDecimal() {
+        return ((Decimal) fieldData).toBigDecimal();
     }
 }
