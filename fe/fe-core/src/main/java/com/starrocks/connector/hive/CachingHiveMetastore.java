@@ -276,8 +276,16 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     private List<String> loadPartitionKeys(HivePartitionValue hivePartitionValue) {
-        return metastore.getPartitionKeysByValue(hivePartitionValue.getHiveTableName().getDatabaseName(),
-                hivePartitionValue.getHiveTableName().getTableName(), hivePartitionValue.getPartitionValues());
+        String dbName = hivePartitionValue.getHiveTableName().getDatabaseName();
+        String tableName = hivePartitionValue.getHiveTableName().getTableName();
+        List<Optional<String>> partitionValues = hivePartitionValue.getPartitionValues();
+        if (hivePartitionValue.getPartitionValues().isEmpty()) {
+            HiveTableName hiveTableName = HiveTableName.of(dbName, tableName);
+            Table table = loadTable(hiveTableName);
+            partitionValues = table.getPartitionColumnNames().stream()
+                    .map(columnName -> Optional.of("")).collect(Collectors.toList());
+        }
+        return metastore.getPartitionKeysByValue(dbName, tableName, partitionValues);
     }
 
     public Database getDb(String dbName) {

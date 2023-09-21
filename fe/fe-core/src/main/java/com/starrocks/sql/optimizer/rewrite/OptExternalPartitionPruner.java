@@ -217,16 +217,10 @@ public class OptExternalPartitionPruner {
                 // check if the partition predicate could be used for filter partition names
                 List<Optional<ScalarOperator>> effectivePartitionPredicate =
                         getEffectivePartitionPredicate(operator, partitionColumns, operator.getPredicate());
-                if (effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)) {
-                    List<Optional<String>> partitionValues = getPartitionValue(effectivePartitionPredicate);
-                    partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                            .listPartitionNamesByValue(hmsTable.getCatalogName(), hmsTable.getDbName(),
-                                    hmsTable.getTableName(), partitionValues);
-                } else {
-                    partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                            .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(),
-                                    hmsTable.getTableName());
-                }
+                List<Optional<String>> partitionValues = getPartitionValue(effectivePartitionPredicate);
+                partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .listPartitionNamesByValue(hmsTable.getCatalogName(), hmsTable.getDbName(),
+                                hmsTable.getTableName(), partitionValues);
 
                 List<PartitionKey> keys = new ArrayList<>();
                 for (String partName : partitionNames) {
