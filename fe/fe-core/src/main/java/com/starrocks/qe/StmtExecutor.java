@@ -1625,7 +1625,9 @@ public class StmtExecutor {
             // So we need to get txn first, to make the dropping tablet procedure to wait.
             // This is the re-plan of the insert to fix the issue
 
-            execPlan = StatementPlanner.plan(stmt, context);
+            if (Config.replan_on_insert) {
+                execPlan = StatementPlanner.plan(stmt, context);
+            }
 
             // add table indexes to transaction state
             txnState = GlobalStateMgr.getCurrentGlobalTransactionMgr()
