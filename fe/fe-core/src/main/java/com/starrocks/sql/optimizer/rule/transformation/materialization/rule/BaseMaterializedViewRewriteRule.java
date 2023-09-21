@@ -95,13 +95,17 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         onPredicates = onPredicates.stream().map(MvUtils::canonizePredicateForRewrite).collect(Collectors.toList());
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         for (MaterializationContext mvContext : mvCandidateContexts) {
-            // check whether to need compensate or not
-            boolean isCompensate = MvUtils.isNeedCompensatePartitionPredicate(queryExpression, mvContext);
+            // 1. check whether to need compensate or not
+            // 2. `queryPredicateSplit` is different for each materialized view, so we can not cache it anymore.
+            boolean isCompensatePartitionPredicate = MvUtils.isNeedCompensatePartitionPredicate(queryExpression, mvContext);
             PredicateSplit queryPredicateSplit = getQuerySplitPredicate(context, queryExpression, queryColumnRefFactory,
-                    queryColumnRefRewriter, isCompensate);
+                    queryColumnRefRewriter, isCompensatePartitionPredicate);
+            if (queryPredicateSplit == null) {
+                continue;
+            }
             MvRewriteContext mvRewriteContext =
                     new MvRewriteContext(mvContext, queryTables, queryExpression,
-                        queryColumnRefRewriter, queryPredicateSplit, onPredicates, this, isCompensate);
+                        queryColumnRefRewriter, queryPredicateSplit, onPredicates, this, isCompensatePartitionPredicate);
 
             // rewrite query
             MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
@@ -144,6 +148,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                     "from pruned partitions failed.");
             return null;
         }
+        // only add valid predicates into query split predicate
         List<ScalarOperator> queryConjuncts = MvUtils.getAllValidPredicates(queryExpression);
         if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
             queryConjuncts.addAll(MvUtils.getAllValidPredicates(queryPartitionPredicate));

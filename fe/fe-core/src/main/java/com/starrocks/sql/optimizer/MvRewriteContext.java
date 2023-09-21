@@ -49,7 +49,7 @@ public class MvRewriteContext {
 
     // Whether to compensate partition predicate from the plan's `selectedPartitionIds`,
     // check `isNeedCompensatePartitionPredicate` to get more information.
-    private final boolean isCompensate;
+    private final boolean isCompensatePartitionPredicate;
 
     public MvRewriteContext(
             MaterializationContext materializationContext,
@@ -59,7 +59,7 @@ public class MvRewriteContext {
             PredicateSplit queryPredicateSplit,
             List<ScalarOperator> onPredicates,
             Rule rule,
-            boolean isCompensate) {
+            boolean isCompensatePartitionPredicate) {
         this.materializationContext = materializationContext;
         this.queryTables = queryTables;
         this.queryExpression = queryExpression;
@@ -68,7 +68,7 @@ public class MvRewriteContext {
         this.onPredicates = onPredicates;
         this.rule = rule;
         this.joinDeriveContexts = Lists.newArrayList();
-        this.isCompensate = isCompensate;
+        this.isCompensatePartitionPredicate = isCompensatePartitionPredicate;
     }
 
     public MaterializationContext getMaterializationContext() {
@@ -123,7 +123,7 @@ public class MvRewriteContext {
         this.enforcedColumns = enforcedColumns;
     }
 
-    public boolean isCompensate() {
-        return this.isCompensate;
+    public boolean isCompensatePartitionPredicate() {
+        return this.isCompensatePartitionPredicate;
     }
 }

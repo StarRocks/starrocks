@@ -540,6 +540,7 @@ public class MvUtils {
         if (predicate == null) {
             return null;
         }
+        // do not change original predicate, clone it here
         ScalarOperator cloned = predicate.clone();
         ScalarOperatorRewriter rewrite = new ScalarOperatorRewriter();
         return rewrite.rewrite(cloned, ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
@@ -556,6 +557,7 @@ public class MvUtils {
         if (predicate == null) {
             return null;
         }
+        // do not change original predicate, clone it here
         ScalarOperator cloned = predicate.clone();
         ScalarOperatorRewriter rewrite = new ScalarOperatorRewriter();
         return rewrite.rewrite(cloned, ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
@@ -859,24 +861,31 @@ public class MvUtils {
         return partitionPredicates;
     }
 
-    // NOTE: It's not safe to get table's pruned partition predicates by
-    // `LogicalOlapScanOperator#getPrunedPartitionPredicates` :
-    //  - partitionPredicate is null if olap scan operator cannot prune partitions.
-    //  - partitionPredicate is not exact even if olap scan operator has pruned partitions.
-    // eg:
-    // t1:
-    //  PARTITION p1 VALUES [("0000-01-01"), ("2020-01-01")), has data
-    //  PARTITION p2 VALUES [("2020-01-01"), ("2020-02-01")), has data
-    //  PARTITION p3 VALUES [("2020-02-01"), ("2020-03-01")), has data
-    //  PARTITION p4 VALUES [("2020-03-01"), ("2020-04-01")), no data
-    //  PARTITION p5 VALUES [("2020-04-01"), ("2020-05-01")), no data
-    //
-    // query1 : SELECT k1, sum(v1) as sum_v1 FROM t1 group by k1;
-    // `partitionPredicate` : null
-    //
-    // query2 : SELECT k1, sum(v1) as sum_v1 FROM t1 where k1>='2020-02-01' group by k1;
-    // `partitionPredicate` : k1>='2020-02-11'
-    // however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
+    /**
+     * - if `isCompensate` is true, use `selectedPartitionIds` to compensate complete partition ranges
+     *  with lower and upper bound.
+     * - otherwise use original pruned partition predicates as the compensated partition
+     *  predicates.
+     * NOTE: When MV has enough partitions for the query, no need to compensate anymore for both mv and the query's plan.
+     *       A query can be rewritten just by the original SQL.
+     * NOTE: It's not safe if `isCompensate` is always false:
+     *      - partitionPredicate is null if olap scan operator cannot prune partitions.
+     *      - partitionPredicate is not exact even if olap scan operator has pruned partitions.
+     * eg:
+     *      t1:
+     *       PARTITION p1 VALUES [("0000-01-01"), ("2020-01-01")), has data
+     *       PARTITION p2 VALUES [("2020-01-01"), ("2020-02-01")), has data
+     *       PARTITION p3 VALUES [("2020-02-01"), ("2020-03-01")), has data
+     *       PARTITION p4 VALUES [("2020-03-01"), ("2020-04-01")), no data
+     *       PARTITION p5 VALUES [("2020-04-01"), ("2020-05-01")), no data
+     *
+     *      query1 : SELECT k1, sum(v1) as sum_v1 FROM t1 group by k1;
+     *      `partitionPredicate` : null
+     *
+     *      query2 : SELECT k1, sum(v1) as sum_v1 FROM t1 where k1>='2020-02-01' group by k1;
+     *      `partitionPredicate` : k1>='2020-02-11'
+     *      however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
+     */
     public static ScalarOperator compensatePartitionPredicate(OptExpression plan,
                                                               ColumnRefFactory columnRefFactory,
                                                               boolean isCompensate) {

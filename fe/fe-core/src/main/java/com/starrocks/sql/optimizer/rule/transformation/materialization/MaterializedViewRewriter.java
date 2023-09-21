@@ -668,12 +668,15 @@ public class MaterializedViewRewriter {
         }
     }
 
-    // If materialized view has to-refreshed partitions, need to add compensated partition predicate
-    // into materialized view's predicate split. so it can be used for predicate compensate or union all
-    // rewrite.
+    /**
+     * If materialized view has to-refreshed partitions, need to add compensated partition predicate
+     * into materialized view's predicate split. so it can be used for predicate compensate or union all
+     * rewrite.
+     */
     private ScalarOperator compensateMVPartitionPredicate(List<ScalarOperator> mvPredicates,
                                                           ReplaceColumnRefRewriter mvColumnRefRewriter) {
-        if (mvRewriteContext.isCompensate() && materializationContext.getMvPartialPartitionPredicate() != null) {
+        if (mvRewriteContext.isCompensatePartitionPredicate()
+                && materializationContext.getMvPartialPartitionPredicate() != null) {
             List<ScalarOperator> partitionPredicates =
                     getPartitionRelatedPredicates(mvPredicates, mvRewriteContext.getMaterializationContext().getMv());
             if (partitionPredicates.stream().noneMatch(p -> (p instanceof IsNullPredicateOperator)
