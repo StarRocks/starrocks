@@ -151,6 +151,7 @@ public class PaimonColumnValue implements ColumnValue {
             values.add(cv);
         }
     }
+
     @Override
     public BigDecimal getDecimal() {
         return ((Decimal) fieldData).toBigDecimal();
