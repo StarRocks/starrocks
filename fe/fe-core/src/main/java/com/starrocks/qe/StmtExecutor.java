@@ -184,6 +184,7 @@ import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
@@ -1932,6 +1933,24 @@ public class StmtExecutor {
                     }
                     context.getState().setError("Insert has filtered data in strict mode, txn_id = " + transactionId +
                             " tracking sql = " + trackingSql);
+                    insertError = true;
+                    return;
+                }
+            }
+
+            if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
+                    || stmt instanceof UpdateStmt)) {
+                // when the target table is not ExternalOlapTable or OlapTable
+                // if there is no data to load, the result of the insert statement is success
+                // otherwise, the result of the insert statement is failed
+                GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+                String errorMsg = TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG;
+                if (!(targetTable instanceof ExternalOlapTable || targetTable instanceof OlapTable)) {
+                    if (!(targetTable instanceof SystemTable || targetTable instanceof IcebergTable)) {
+                        // schema table and iceberg table does not need txn
+                        mgr.abortTransaction(database.getId(), transactionId, errorMsg);
+                    }
+                    context.getState().setOk();
                     insertError = true;
                     return;
                 }
