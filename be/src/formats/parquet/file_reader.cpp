@@ -211,7 +211,6 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
                 return true;
             }
 
-            // additional min/max check
             if (min_chunk->columns()[0]->equals(0, *max_chunk->columns()[0], 0)) {
                 ColumnPtr& chunk_part_column = min_chunk->columns()[0];
                 JoinRuntimeFilter::RunningContext ctx;
@@ -220,12 +219,9 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
                 selection.assign(chunk_part_column->size(), 1);
                 filter->compute_hash({chunk_part_column.get()}, &ctx);
                 filter->evaluate(chunk_part_column.get(), &ctx);
-
                 if (selection[0] == 0) {
-                    LOG(INFO) << "row group filtered by runtime filter";
                     return true;
                 }
-                // LOG(INFO) << "row group is not filtered by runtime filter";
             }
         }
     }
@@ -414,8 +410,8 @@ bool FileReader::_can_use_min_max_stats(const tparquet::ColumnMetaData& column_m
         column_meta.statistics.min_value == column_meta.statistics.max_value) {
         return true;
     }
-    if (!column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.min &&
-        column_meta.statistics.__isset.max && column_meta.statistics.min == column_meta.statistics.max) {
+    if (column_meta.statistics.__isset.min && column_meta.statistics.__isset.max &&
+        column_meta.statistics.min == column_meta.statistics.max) {
         return true;
     }
 
