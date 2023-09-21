@@ -718,6 +718,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final int PIPELINE_BATCH_SIZE = 4096;
 
+    public static final String ENABLE_RANGE_JOIN = "enable_range_join";
+
     // auto, force_streaming, force_preaggregation
     @VariableMgr.VarAttr(name = STREAMING_PREAGGREGATION_MODE)
     private String streamingPreaggregationMode = SessionVariableConstants.AUTO;
@@ -765,6 +767,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
+
+    @VariableMgr.VarAttr(name = ENABLE_RANGE_JOIN)
+    private boolean enableRangeJoin = false;
 
     @VariableMgr.VarAttr(name = PIPELINE_SINK_DOP)
     private int pipelineSinkDop = 0;
@@ -1314,6 +1319,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setDistinctColumnBuckets(int buckets) {
         distinctColumnBuckets = buckets;
+    }
+
+    public boolean isEnableRangeJoin() {
+        return enableRangeJoin;
+    }
+
+    public void setEnableRangeJoin(boolean enableRangeJoin) {
+        this.enableRangeJoin = enableRangeJoin;
     }
 
     public int getDistinctColumnBuckets() {
