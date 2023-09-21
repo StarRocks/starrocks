@@ -40,7 +40,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.task.ExportExportingTask;
 import com.starrocks.task.ExportPendingTask;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -171,25 +171,25 @@ public final class ExportChecker extends FrontendDaemon {
 
         boolean beHasErr = false;
         String errMsg = "";
-        for (Long beId : job.getBeStartTimeMap().keySet()) {
-            Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
-            if (null == be) {
+        for (Long nodeId : job.getBeStartTimeMap().keySet()) {
+            ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+            if (null == node) {
                 // The current implementation, if the be in the job is not found, 
                 // the job will be cancelled
                 beHasErr = true;
-                errMsg = "be not found during exec export job. be:" + beId;
+                errMsg = "Be or cn not found during exec export job. Node:" + nodeId;
                 LOG.warn(errMsg + " job: {}", job);
                 break;
             }
-            if (!be.isAlive()) {
+            if (!node.isAlive()) {
                 beHasErr = true;
-                errMsg = "be not alive during exec export job. be:" + beId;
+                errMsg = "Be or cn not alive during exec export job. Node:" + nodeId;
                 LOG.warn(errMsg + " job: {}", job);
                 break;
             }
-            if (be.getLastStartTime() > job.getBeStartTimeMap().get(beId)) {
+            if (node.getLastStartTime() > job.getBeStartTimeMap().get(nodeId)) {
                 beHasErr = true;
-                errMsg = "be has rebooted during exec export job. be:" + beId;
+                errMsg = "Be or cn has rebooted during exec export job. Node:" + nodeId;
                 LOG.warn(errMsg + " job: {}", job);
                 break;
             }

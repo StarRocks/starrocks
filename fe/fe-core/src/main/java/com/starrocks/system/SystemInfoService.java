@@ -487,6 +487,13 @@ public class SystemInfoService implements GsonPostProcessable {
         return backend != null && backend.isAvailable();
     }
 
+    public boolean checkNodeAvailable(ComputeNode node) {
+        if (node instanceof Backend) {
+            return node != null && node.isAvailable();
+        }
+        return node != null && node.isAlive();
+    }
+
     public boolean checkBackendAlive(long backendId) {
         Backend backend = idToBackendRef.get(backendId);
         return backend != null && backend.isAlive();
@@ -576,6 +583,14 @@ public class SystemInfoService implements GsonPostProcessable {
             }
         }
         return null;
+    }
+
+    public ComputeNode getBackendOrComputeNodeWithBePort(String host, int bePort) {
+        ComputeNode node = getBackendWithBePort(host, bePort);
+        if (node == null) {
+            node = getComputeNodeWithBePort(host, bePort);
+        }
+        return node;
     }
 
     public List<Backend> getBackendOnlyWithHost(String host) {
