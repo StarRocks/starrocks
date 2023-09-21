@@ -88,7 +88,7 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog 和
 
 ### 选择合适的刷新策略
 
-目前，StarRocks 无法检测 Hudi Catalog 和 Iceberg Catalog 中的分区级别数据更改。因此，一旦触发刷新任务，将执行全量刷新。
+目前，StarRocks 无法检测 Hudi Catalog、Iceberg Catalog 和 JDBC Catalog 中的分区级别数据更改。因此，一旦触发刷新任务，将执行全量刷新。
 
 对于 Hive Catalog，您可以启用 Hive 元数据缓存刷新功能，允许 StarRocks 在分区级别检测数据更改。请注意，物化视图的分区键必须包含在基表的分区键中。启用此功能后，StarRocks 定期访问 Hive 元数据存储服务（HMS）或 AWS Glue，以检查最近查询的热数据的元数据信息。从而，StarRocks 可以：
 
@@ -109,7 +109,22 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog 和
 
 ### 启用 External Catalog 物化视图的查询改写
 
-由于不保证数据的强一致性，StarRocks 默认禁用 Hudi 和 Iceberg Catalog 物化视图的查询改写功能。您可以通过在创建物化视图时将 Property `force_external_table_query_rewrite` 设置为 `true` 来启用此功能。对于基于 Hive Catalog 中的表创建的物化视图，查询改写功能默认开启。 在涉及查询改写的情况下，如果您使用非常复杂的查询语句来构建物化视图，我们建议您拆分查询语句并以嵌套方式构建多个简单的物化视图。嵌套的物化视图更加灵活，可以适应更广泛的查询模式。
+由于不保证数据的强一致性，StarRocks 默认禁用 Hudi、Iceberg 和 JDBC Catalog 物化视图的查询改写功能。您可以通过在创建物化视图时将 Property `force_external_table_query_rewrite` 设置为 `true` 来启用此功能。对于基于 Hive Catalog 中的表创建的物化视图，查询改写功能默认开启。在涉及查询改写的情况下，如果您使用非常复杂的查询语句来构建物化视图，我们建议您拆分查询语句并以嵌套方式构建多个简单的物化视图。嵌套的物化视图更加灵活，可以适应更广泛的查询模式。
+
+示例：
+
+```SQL
+CREATE MATERIALIZED VIEW ex_mv_par_tbl
+PARTITION BY emp_date
+DISTRIBUTED BY hash(empid)
+PROPERTIES (
+"force_external_table_query_rewrite" = "true"
+) 
+AS
+select empid, deptno, emp_date
+from `hudi_catalog`.`emp_db`.`emps_par_tbl`
+where empid < 5;
+```
 
 ## 最佳实践
 
