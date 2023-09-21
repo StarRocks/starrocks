@@ -39,7 +39,7 @@ public class CreateTableWithDecimalTypesTest {
         starRocksAssert.withDatabase("db1").useDatabase("db1");
     }
 
-    public void createTableFail(boolean enableDecimalV3, String columnType) throws Exception {
+    public void createTable(boolean enableDecimalV3, String columnType) throws Exception {
         if (enableDecimalV3) {
             Config.enable_decimal_v3 = true;
         } else {
@@ -63,56 +63,54 @@ public class CreateTableWithDecimalTypesTest {
 
     @Test(expected = Exception.class)
     public void createTableWithDecimalV3p39s12() throws Exception {
-        createTableFail(true, "DECIMAL(39, 12)");
+        createTable(true, "DECIMAL(39, 12)");
         Assert.fail("should throw an exception");
     }
 
     @Test(expected = Exception.class)
     public void createTableWithDecimalV3p9s10() throws Exception {
-        createTableFail(true, "DECIMAL(9, 10)");
+        createTable(true, "DECIMAL(9, 10)");
         Assert.fail("should throw an exception");
     }
 
     @Test(expected = Exception.class)
     public void createTableWithDecimalV3p0s1() throws Exception {
-        createTableFail(true, "DECIMAL(0, 1)");
+        createTable(true, "DECIMAL(0, 1)");
         Assert.fail("should throw an exception");
     }
 
-    @Test(expected = Exception.class)
+    @Test
     public void createTableWithDecimalV3ScaleAbsent() throws Exception {
-        createTableFail(true, "DECIMAL(9)");
-        Assert.fail("should throw an exception");
+        createTable(true, "DECIMAL(9)");
     }
 
     @Test(expected = Exception.class)
     public void createTableWithDecimalV2p28s9() throws Exception {
-        createTableFail(false, "DECIMAL(28, 9)");
+        createTable(false, "DECIMAL(28, 9)");
         Assert.fail("should throw an exception");
     }
 
     @Test(expected = Exception.class)
     public void createTableWithDecimalV2p27s10() throws Exception {
-        createTableFail(false, "DECIMAL(27, 10)");
+        createTable(false, "DECIMAL(27, 10)");
         Assert.fail("should throw an exception");
     }
 
     @Test(expected = Exception.class)
     public void createTableWithDecimalV2p9s10() throws Exception {
-        createTableFail(false, "DECIMAL(9, 10)");
+        createTable(false, "DECIMAL(9, 10)");
         Assert.fail("should throw an exception");
     }
 
     @Test(expected = Exception.class)
     public void createTableWithDecimalV2p0s1() throws Exception {
-        createTableFail(false, "DECIMAL(0, 1)");
+        createTable(false, "DECIMAL(0, 1)");
         Assert.fail("should throw an exception");
     }
 
-    @Test(expected = Exception.class)
+    @Test
     public void createTableWithDecimalV2ScaleAbsent() throws Exception {
-        createTableFail(false, "DECIMAL(9)");
-        Assert.fail("should throw an exception");
+        createTable(false, "DECIMAL(9)");
     }
 }
 
