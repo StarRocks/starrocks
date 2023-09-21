@@ -68,61 +68,12 @@ public class InsertAnalyzer {
         /*
          *  Target table
          */
-        MetaUtils.normalizationTableName(session, insertStmt.getTableName());
-        String catalogName = insertStmt.getTableName().getCatalog();
-        String dbName = insertStmt.getTableName().getDb();
-        String tableName = insertStmt.getTableName().getTbl();
+        Table table = getTargetTable(insertStmt, session);
 
-        try {
-            MetaUtils.checkCatalogExistAndReport(catalogName);
-        } catch (AnalysisException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
-        }
-
-        Database database = MetaUtils.getDatabase(catalogName, dbName);
-        Table table = MetaUtils.getTable(catalogName, dbName, tableName);
-
-        if (table instanceof ExternalOlapTable) {
-            table = getOLAPExternalTableMeta(database, (ExternalOlapTable) table);
-        }
-
-        if (table instanceof MaterializedView && !insertStmt.isSystem()) {
-            throw new SemanticException(
-                    "The data of '%s' cannot be inserted because '%s' is a materialized view," +
-                            "and the data of materialized view must be consistent with the base table.",
-                    insertStmt.getTableName().getTbl(), insertStmt.getTableName().getTbl());
-        }
-
-        if (insertStmt.isOverwrite()) {
-            if (!(table instanceof OlapTable) && !table.isIcebergTable() && !table.isHiveTable()) {
-                throw unsupportedException("Only support insert overwrite olap/iceberg/hive table");
-            }
-            if (table instanceof OlapTable && ((OlapTable) table).getState() != NORMAL) {
-                String msg =
-                        String.format("table state is %s, please wait to insert overwrite util table state is normal",
-                                ((OlapTable) table).getState());
-                throw unsupportedException(msg);
-            }
-        }
-
-        if (!table.supportInsert()) {
-            if (table.isIcebergTable() || table.isHiveTable()) {
-                throw unsupportedException(String.format("Only support insert into %s table with parquet file format",
-                        table.getType()));
-            }
-            throw unsupportedException("Only support insert into olap/mysql/iceberg/hive table");
-        }
-
-        if ((table.isHiveTable() || table.isIcebergTable()) && CatalogMgr.isInternalCatalog(catalogName)) {
-            throw unsupportedException(String.format("Doesn't support %s table sink in the internal catalog. " +
-                    "You need to use %s catalog.", table.getType(), table.getType()));
-        }
-
-        List<Long> targetPartitionIds = Lists.newArrayList();
-        PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
         if (table instanceof OlapTable) {
             OlapTable olapTable = (OlapTable) table;
-            targetPartitionNames = insertStmt.getTargetPartitionNames();
+            List<Long> targetPartitionIds = Lists.newArrayList();
+            PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
 
             if (insertStmt.isSpecifyPartitionNames()) {
                 if (targetPartitionNames.getPartitionNames().isEmpty()) {
@@ -161,6 +112,7 @@ public class InsertAnalyzer {
                             olapTable.getName());
                 }
             }
+            insertStmt.setTargetPartitionIds(targetPartitionIds);
         }
 
         if (table.isIcebergTable() || table.isHiveTable()) {
@@ -168,6 +120,7 @@ public class InsertAnalyzer {
                     HiveWriteUtils.isS3Url(table.getTableLocation()) && insertStmt.isOverwrite()) {
                 throw new SemanticException("Unsupported insert overwrite hive unpartitioned table with s3 location");
             }
+            PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
             List<String> tablePartitionColumnNames = table.getPartitionColumnNames();
             if (insertStmt.getTargetColumnNames() != null) {
                 for (String partitionColName : tablePartitionColumnNames) {
@@ -265,10 +218,9 @@ public class InsertAnalyzer {
         }
 
         insertStmt.setTargetTable(table);
-        insertStmt.setTargetPartitionIds(targetPartitionIds);
         insertStmt.setTargetColumns(targetColumns);
         if (session.getDumpInfo() != null) {
-            session.getDumpInfo().addTable(database.getFullName(), table);
+            session.getDumpInfo().addTable(insertStmt.getTableName().getDb(), table);
         }
     }
 
@@ -342,6 +294,64 @@ public class InsertAnalyzer {
             }
         }
         return copiedTable;
+    }
+
+    private static Table getTargetTable(InsertStmt insertStmt, ConnectContext session) {
+        if (insertStmt.useTableFunctionAsTargetTable()) {
+            return insertStmt.makeTableFunctionTable();
+        }
+
+        MetaUtils.normalizationTableName(session, insertStmt.getTableName());
+        String catalogName = insertStmt.getTableName().getCatalog();
+        String dbName = insertStmt.getTableName().getDb();
+        String tableName = insertStmt.getTableName().getTbl();
+
+        try {
+            MetaUtils.checkCatalogExistAndReport(catalogName);
+        } catch (AnalysisException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+        }
+
+        Database database = MetaUtils.getDatabase(catalogName, dbName);
+        Table table = MetaUtils.getTable(catalogName, dbName, tableName);
+
+        if (table instanceof ExternalOlapTable) {
+            table = getOLAPExternalTableMeta(database, (ExternalOlapTable) table);
+        }
+
+        if (table instanceof MaterializedView && !insertStmt.isSystem()) {
+            throw new SemanticException(
+                    "The data of '%s' cannot be inserted because '%s' is a materialized view," +
+                            "and the data of materialized view must be consistent with the base table.",
+                    insertStmt.getTableName().getTbl(), insertStmt.getTableName().getTbl());
+        }
+
+        if (insertStmt.isOverwrite()) {
+            if (!(table instanceof OlapTable) && !table.isIcebergTable() && !table.isHiveTable()) {
+                throw unsupportedException("Only support insert overwrite olap/iceberg/hive table");
+            }
+            if (table instanceof OlapTable && ((OlapTable) table).getState() != NORMAL) {
+                String msg =
+                        String.format("table state is %s, please wait to insert overwrite util table state is normal",
+                                ((OlapTable) table).getState());
+                throw unsupportedException(msg);
+            }
+        }
+
+        if (!table.supportInsert()) {
+            if (table.isIcebergTable() || table.isHiveTable()) {
+                throw unsupportedException(String.format("Only support insert into %s table with parquet file format",
+                        table.getType()));
+            }
+            throw unsupportedException("Only support insert into olap/mysql/iceberg/hive table");
+        }
+
+        if ((table.isHiveTable() || table.isIcebergTable()) && CatalogMgr.isInternalCatalog(catalogName)) {
+            throw unsupportedException(String.format("Doesn't support %s table sink in the internal catalog. " +
+                    "You need to use %s catalog.", table.getType(), table.getType()));
+        }
+
+        return table;
     }
 
     public static boolean isUnSupportedPartitionColumnType(Type type) {
