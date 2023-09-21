@@ -23,6 +23,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.TStatusCode;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -47,6 +48,11 @@ public class ExportPendingTaskTest {
             public ComputeNode getBackendOrComputeNode(long backendId) {
                 return node;
             }
+
+            @Mock
+            public ComputeNode getBackendOrComputeNodeWithBePort(String host, int bePort) {
+                return node;
+            }
         };
 
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
@@ -61,6 +67,10 @@ public class ExportPendingTaskTest {
                 job.getTabletLocations();
                 result = Collections.singletonList(scanRangeLocations);
                 minTimes = 0;
+
+                job.exportLakeTable();
+                result = true;
+                minTimes = 0;
             }
         };
 
@@ -71,6 +81,10 @@ public class ExportPendingTaskTest {
 
         Status status = (Status) method.invoke(task, null);
         Assert.assertEquals(Status.CANCELLED, status);
+
+        node.setAlive(true);
+        status = (Status) method.invoke(task, null);
+        Assert.assertEquals(TStatusCode.CANCELLED, status.getErrorCode());
     }
 }
 
