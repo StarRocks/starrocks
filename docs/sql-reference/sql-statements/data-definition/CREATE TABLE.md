@@ -376,7 +376,7 @@ Since version 3.0, the primary key and sort key are decoupled in the Primary Key
 
 ### PROPERTIES
 
-#### Specify initial storage medium, automatic storage cooldown time, replica number per tablet
+#### Specify initial storage medium, automatic storage cooldown time, replica number
 
 If the engine type is `OLAP`, you can specify initial storage medium (`storage_medium`), automatic storage cooldown time or time interval (`storage_cooldown_time` or `storage_cooldown_ttl`), and replica number (`replication_num`) when you create a table.
 
