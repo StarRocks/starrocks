@@ -245,6 +245,22 @@ class ParserTest {
     }
 
     @Test
+    void testDecimalTypeDeclarationMysqlCompatibility() {
+        String sql = "select cast(1 as decimal(65)),cast(1 as decimal)";
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        SessionVariable sessionVariable = ctx.getSessionVariable();
+        sessionVariable.setSqlDialect("sr");
+        sessionVariable.setLargeDecimalUnderlyingType("decimal");
+        QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
+        Analyzer.analyze(stmt, ctx);
+        Type type1 = stmt.getQueryRelation().getOutputExpression().get(0).getType();
+        Type type2 = stmt.getQueryRelation().getOutputExpression().get(1).getType();
+        Assert.assertEquals(type1, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+        Assert.assertEquals(type2, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 0));
+    }
+
+    @Test
     void testSettingSqlMode() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(2);
         Object lock = new Object();
