@@ -452,6 +452,9 @@ struct TIcebergTable {
 
     // partition column names
     4: optional list<string> partition_column_names
+
+    // Map from partition id to partition metadata.
+    5: optional map<i64, THdfsPartition> partitions
 }
 
 struct THudiTable {

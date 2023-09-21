@@ -148,6 +148,10 @@ HdfsPartitionDescriptor::HdfsPartitionDescriptor(const TDeltaLakeTable& thrift_t
           _location(thrift_partition.location.suffix),
           _thrift_partition_key_exprs(thrift_partition.partition_key_exprs) {}
 
+HdfsPartitionDescriptor::HdfsPartitionDescriptor(const TIcebergTable& thrift_table,
+                                                 const THdfsPartition& thrift_partition)
+        : _thrift_partition_key_exprs(thrift_partition.partition_key_exprs) {}
+
 Status HdfsPartitionDescriptor::create_part_key_exprs(RuntimeState* state, ObjectPool* pool, int32_t chunk_size) {
     RETURN_IF_ERROR(Expr::create_expr_trees(pool, _thrift_partition_key_exprs, &_partition_key_value_evals, state));
     RETURN_IF_ERROR(Expr::prepare(_partition_key_value_evals, state));
@@ -218,6 +222,10 @@ IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, Ob
     _columns = tdesc.icebergTable.columns;
     _t_iceberg_schema = tdesc.icebergTable.iceberg_schema;
     _partition_column_names = tdesc.icebergTable.partition_column_names;
+    for (const auto& entry : tdesc.icebergTable.partitions) {
+        auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.icebergTable, entry.second));
+        _partition_id_to_desc_map[entry.first] = partition;
+    }
 }
 
 std::vector<int32_t> IcebergTableDescriptor::partition_index_in_schema() {
@@ -622,7 +630,9 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
             break;
         }
         case TTableType::ICEBERG_TABLE: {
-            desc = pool->add(new IcebergTableDescriptor(tdesc, pool));
+            auto* iceberg_desc = pool->add(new IcebergTableDescriptor(tdesc, pool));
+            RETURN_IF_ERROR(iceberg_desc->create_key_exprs(state, pool, chunk_size));
+            desc = iceberg_desc;
             break;
         }
         case TTableType::DELTALAKE_TABLE: {

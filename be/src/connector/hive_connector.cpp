@@ -159,7 +159,7 @@ Status HiveDataSource::_init_partition_values() {
     const auto& partition_values = partition_desc->partition_key_value_evals();
     _partition_values = partition_values;
 
-    if (_has_partition_conjuncts) {
+    if (_has_partition_conjuncts || _has_scan_range_indicate_const_column) {
         ChunkPtr partition_chunk = ChunkHelper::new_chunk(_partition_slots, 1);
         // append partition data
         for (int i = 0; i < _partition_slots.size(); i++) {
@@ -178,12 +178,37 @@ Status HiveDataSource::_init_partition_values() {
         }
 
         // eval conjuncts and skip if no rows.
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
+        if (_has_scan_range_indicate_const_column) {
+            std::vector<ExprContext*> ctxs;
+            for (SlotId slotId : _scan_range.identity_partition_slot_ids) {
+                if (_conjunct_ctxs_by_slot.find(slotId) != _conjunct_ctxs_by_slot.end()) {
+                    ctxs.insert(ctxs.end(), _conjunct_ctxs_by_slot.at(slotId).begin(),
+                                _conjunct_ctxs_by_slot.at(slotId).end());
+                }
+            }
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(ctxs, partition_chunk.get()));
+        } else {
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
+        }
+
         if (!partition_chunk->has_rows()) {
             _filter_by_eval_partition_conjuncts = true;
         }
     }
     return Status::OK();
+}
+
+int32_t HiveDataSource::is_scan_range_indicate_const_column(SlotId id) const {
+    if (!_scan_range.__isset.identity_partition_slot_ids) {
+        return -1;
+    }
+    auto it = std::find(_scan_range.identity_partition_slot_ids.begin(), _scan_range.identity_partition_slot_ids.end(),
+                        id);
+    if (it == _scan_range.identity_partition_slot_ids.end()) {
+        return -1;
+    } else {
+        return it - _scan_range.identity_partition_slot_ids.begin();
+    }
 }
 
 void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
@@ -200,6 +225,12 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
             _partition_index_in_chunk.push_back(i);
             _partition_index_in_hdfs_partition_columns.push_back(_hive_table->get_partition_col_index(slots[i]));
             _has_partition_columns = true;
+        } else if (int32_t index = is_scan_range_indicate_const_column(slots[i]->id()); index >= 0) {
+            _partition_slots.push_back(slots[i]);
+            _partition_index_in_chunk.push_back(i);
+            _partition_index_in_hdfs_partition_columns.push_back(index);
+            _has_partition_columns = true;
+            _has_scan_range_indicate_const_column = true;
         } else {
             _materialize_slots.push_back(slots[i]);
             _materialize_index_in_chunk.push_back(i);
