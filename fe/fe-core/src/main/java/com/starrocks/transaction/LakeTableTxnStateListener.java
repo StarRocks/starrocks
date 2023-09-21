@@ -28,7 +28,6 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.lake.CommitRateLimiter;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.proto.AbortTxnRequest;
@@ -51,7 +50,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     private static final Logger LOG = LogManager.getLogger(LakeTableTxnStateListener.class);
     private final DatabaseTransactionMgr dbTxnMgr;
     // lake table or lake materialized view
-    private final LakeTable table;
+    private final OlapTable table;
 
     private Set<Long> dirtyPartitionSet;
     private Set<String> invalidDictCacheColumns;
@@ -60,8 +59,10 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     public LakeTableTxnStateListener(@NotNull DatabaseTransactionMgr dbTxnMgr, @NotNull OlapTable table) {
         this.dbTxnMgr = Objects.requireNonNull(dbTxnMgr, "dbTxnMgr is null");
-        this.table = (LakeTable) Objects.requireNonNull(table, "table is null");
+        this.table = Objects.requireNonNull(table, "table is null");
         this.compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
+        Preconditions.checkState(this.table.isCloudNativeTableOrMaterializedView(),
+                "expect LakeTable or LakeMaterializedView but real type is " + this.table.getClass().getName());
     }
 
     @Override
