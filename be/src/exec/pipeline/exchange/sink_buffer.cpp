@@ -364,7 +364,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             }
             --_total_in_flight_rpc;
             std::string err_msg = fmt::format("transmit chunk rpc failed:{}", print_id(ctx.instance_id));
-            _fragment_ctx->cancel(Status::InternalError(err_msg));
+            _fragment_ctx->cancel(Status::ThriftRpcError(err_msg));
             LOG(WARNING) << err_msg;
         });
         closure->addSuccessHandler([this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
