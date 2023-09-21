@@ -12,8 +12,13 @@ StarRocks supports asynchronous materialized views from v2.4. The major differen
 
 |                       | **Single-table aggregation** | **Multi-table join** | **Query rewrite** | **Refresh strategy** | **Base table** |
 | --------------------- | ---------------------------- | -------------------- | ----------------- | -------------------- | -------------- |
+<<<<<<< HEAD
 | **ASYNC MV** | Yes | Yes | Yes | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from:<ul><li>Default catalog</li><li>External catalogs (v2.5)</li><li>Existing materialized views (v2.5)</li><li>Existing views (v3.1)</li></ul> |
 | **SYNC MV (Rollup)**  | Limited choices of [aggregate functions](#correspondence-of-aggregate-functions) | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
+=======
+| **ASYNC MV** | Yes | Yes | Yes | <ul><li>Asynchronous refresh</li><li>Manual refresh</li></ul> | Multiple tables from:<ul><li>Default catalog</li><li>External catalogs (v2.5)</li><li>Existing materialized views (v2.5)</li><li>Existing views (v3.1)</li></ul> |
+| **SYNC MV (Rollup)**  | Limited choices of aggregate functions | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
+>>>>>>> dad7c38faa ([Doc] Remake MV - Part 2 (#31405))
 
 In StarRocks v2.5, asynchronous async refresh materialized views support query rewrite, nested materialized views, and creating materialized views based on Hive catalog, Hudi catalog, and Iceberg catalog.
 
@@ -58,8 +63,145 @@ SELECT select_expr[, select_expr ...]
 
   All columns in the query statement, that is, all columns in the materialized view schema. This parameter supports the following values:
 
+<<<<<<< HEAD
   - Single column or aggregated column: a statement in the form of `SELECT a, b, c FROM table_a` (applicable to creating a single table materialized view) or `SELECT table_a.a, table_a.b, table_b.d,` (applicable to creating an asynchronous materialized view in StarRocks 2.4 or above only), where `a`, `b`, `c`, and `d` are the column names of the base tables. If you do not specify column names for the materialized view in the statement, the column names in the materialized view are also `a`, `b`, `c`, and `d`.
   - Expression: an expression in the form of `SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a`, where `a+1`, `b+2` and `c*c` are expressions that contain the column names of the base tables, and `x`, `y` and `z` are the new column names of the materialized view.
+=======
+  - Simple columns or aggregate columns such as `SELECT a, abs(b), min(c) FROM table_a`, where `a`, `b`, and `c` are the names of columns in the base table. If you do not specify column names for the materialized view, StarRocks automatically assigns names to the columns.
+  - Expressions such as `SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a`, where `a+1`, `b+2` and `c*c` are the expressions that reference the columns in the base tables, and `x`, `y` and `z` are the aliases assigned to the columns in the materialized view.
+
+  > **NOTE**
+  >
+  > - You must specify at least one column in `select_expr`.
+  > - Synchronous materialized views only support aggregate functions on a single column. Query statements in the form of `sum(a+b)` are not supported.
+  > - When creating a synchronous materialized view with an aggregate function, you must specify the GROUP BY clause, and specify at least one GROUP BY column in `select_expr`.
+  > - Synchronous materialized views do not support clauses such as JOIN, WHERE, and the HAVING clause of GROUP BY.
+  > - From v3.1 onwards, each synchronous materialized view can support more than one aggregate function for each column of the base table, for example, query statements such as `select b, sum(a), min(a) from table group by b`.
+  > - From v3.1 onwards, synchronous materialized views support complex expressions for SELECT and aggregate functions, for example, query statements such as `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` or `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table`. The following restrictions are imposed on the complex expression used for synchronous materialized views:
+  >   - Each complex expression must have an alias and different aliases must be assigned to different complex expressions among all the synchronous materialized views of a base table. For example, query statements `select b, sum(a + 1) as sum_a from table group by b` and `select b, sum(a) as sum_a from table group by b` cannot be used to create synchronous materialized views for a same base table.
+  >   - Each complex expression can reference only one column. Query statements such as `a + b as col1` are not supported.
+  >   - You can check whether your queries are rewritten by the synchronous materialized views created with complex expressions by executing `EXPLAIN <sql_statement>`. For more information, see [Query analysis](../../../administration/Query_planning.md).
+
+- GROUP BY (optional)
+
+  The GROUP BY column of the query. If this parameter is not specified, the data will not be grouped by default.
+
+- ORDER BY (optional)
+
+  The ORDER BY column of the query.
+
+  - Columns in the ORDER BY clause must be declared in the same order as the columns in `select_expr`.
+  - If the query statement contains a GROUP BY clause, the ORDER BY columns must be identical to the GROUP BY columns.
+  - If this parameter is not specified, the system will automatically supplement the ORDER BY column according to the following rules:
+    - If the materialized view is the AGGREGATE type, all GROUP BY columns are automatically used as sort keys.
+    - If the materialized view is not the AGGREGATE type, StarRocks automatically selects sort keys based on the prefix columns.
+
+### Query a synchronous materialized view
+
+Because a synchronous materialized view is essentially an index of the base table rather than a physical table, you can only query a synchronous materialized view using the hint `[_SYNC_MV_]`:
+
+```SQL
+-- Do not omit the brackets [] in the hint.
+SELECT * FROM <mv_name> [_SYNC_MV_];
+```
+
+> **CAUTION**
+>
+> Currently, StarRocks automatically generates names for columns in a synchronous materialized view even if you have specified aliases for them.
+
+### Automatic query rewrite with synchronous materialized view
+
+When a query that follows the pattern of a synchronous materialized view is executed, the original query statement is automatically rewritten and the intermediate results stored in the materialized view are used. 
+
+The following table shows the correspondence between the aggregate function in the original query and the aggregate function used to construct the materialized view. You can select the corresponding aggregate function to build a materialized view according to your business scenario.
+
+| **aggregate function in the original query**           | **aggregate function of the materialized view** |
+| ------------------------------------------------------ | ----------------------------------------------- |
+| sum                                                    | sum                                             |
+| min                                                    | min                                             |
+| max                                                    | max                                             |
+| count                                                  | count                                           |
+| bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union                                    |
+| hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                       |
+| percentile_approx, percentile_union                    | percentile_union                                |
+
+## Asynchronous materialized view
+
+### Syntax
+
+```SQL
+CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
+[COMMENT ""]
+-- distribution_desc
+[DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]]
+-- refresh_desc
+[REFRESH 
+-- refresh_moment
+    [IMMEDIATE | DEFERRED]
+-- refresh_scheme
+    [ASYNC [START (<start_time>)] [EVERY INTERVAL (<refresh_interval>)] | MANUAL]
+]
+-- partition_expression
+[PARTITION BY 
+    {<date_column> | date_trunc(fmt, <date_column>)}
+]
+-- order_by_expression
+[ORDER BY (<sort_key>)]
+[PROPERTIES ("key"="value", ...)]
+AS 
+<query_statement>
+```
+
+Parameters in brackets [] are optional.
+
+### Parameters
+
+**mv_name** (required)
+
+The name of the materialized view. The naming requirements are as follows:
+
+- The name must consist of letters (a-z or A-Z), digits (0-9), or underscores (\_), and it can only start with a letter.
+- The length of the name cannot exceed 64 characters.
+- The name is case-sensitive.
+
+> **CAUTION**
+>
+> Multiple materialized views can be created on the same base table, but the names of the materialized views in the same database cannot be duplicated.
+
+**COMMENT** (optional)
+
+Comment on the materialized view. Note that `COMMENT` must be placed after `mv_name`. Otherwise, the materialized view cannot be created.
+
+**distribution_desc** (optional)
+
+The bucketing strategy of the asynchronous materialized view. StarRocks supports hash bucketing and random bucketing (from v3.1 onwards). If you do not specify this parameter, StarRocks uses the random bucketing strategy and automatically sets the number of buckets.
+
+> **NOTE**
+>
+> While creating an asynchronous materialized view, you must specify either `distribution_desc` or `refresh_scheme`, or both.
+
+- **Hash bucketing**:
+
+  Syntax
+
+  ```SQL
+  DISTRIBUTED BY HASH (<bucket_key1>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
+  ```
+
+  For more information, see [Data distribution](../../../table_design/Data_distribution.md#data-distribution).
+
+  > **NOTE**
+  >
+  > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
+
+- **Random bucketing**:
+
+  If you choose the random bucketing strategy and allow StarRocks to set the number of buckets automatically, you do not need to specify `distribution_desc`. However, if you want to set the number of buckets manually, you can refer to the following syntax:
+
+  ```SQL
+  DISTRIBUTED BY RANDOM BUCKETS <bucket_number>
+  ```
+>>>>>>> dad7c38faa ([Doc] Remake MV - Part 2 (#31405))
 
   > **CAUTION**
   >
@@ -82,12 +224,17 @@ SELECT select_expr[, select_expr ...]
 
 The bucketing strategy of the materialized view, in the form of `DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]`.
 
+<<<<<<< HEAD
 **refresh_scheme_desc** (optional)
 
 The refresh strategy of the materialized view. This parameter supports the following values:
 
 - `ASYNC`: Asynchronous refresh mode. For fixed-interval automatic refresh, you need to specify the refresh start time, refresh interval using the following units: `DAY`, `HOUR`, `MINUTE`, and `SECOND`. If you do not specify the interval, the materialized view refreshes each time the data in the base tables changes.
 - `MANUAL`: Manual refresh mode.
+=======
+- `ASYNC`: Asynchronous refresh mode. Each time the base table data changes, the materialized view is automatically refreshed according to the pre-defined refresh interval. You can further specify the refresh start time as `START('yyyy-MM-dd hh:mm:ss')`, and specify the refresh interval as `EVERY (interval n day/hour/minute/second)` using the following units: `DAY`, `HOUR`, `MINUTE`, and `SECOND`. Example: `ASYNC START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`. If you do not specify the interval, the default value `10 MINUTE` is used.
+- `MANUAL`: Manual refresh mode. The materialized view will not be automatically refreshed. The refresh tasks can only be triggered manually by users.
+>>>>>>> dad7c38faa ([Doc] Remake MV - Part 2 (#31405))
 
 If this parameter is not specified, the default value `MANUAL` is used.
 
@@ -109,11 +256,46 @@ Comment on the materialized view.
 Properties of the materialized view.
 
 - `replication_num`: The number of materialized view replicas to create.
+<<<<<<< HEAD
 - `storage_medium`: Storage medium type. `HDD` and `SSD` are supported.
 - `partition_ttl_number`: The number of most recent materialized view partitions to keep. After the number of partitions exceeds this value, expired partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_check_interval_seconds`, and automatically delete expired partitions. When the value is `-1`, all partitions of the materialized view will be preserved. Default: `-1`.
 - `partition_refresh_number`: In a single refresh, the maximum number of partitions to refresh. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. Only when the previous batch of partitions is refreshed successfully, StarRocks will continue to refresh the next batch of partitions until all partitions are refreshed. If any of the partitions fails to be refreshed, no subsequent refresh tasks will be generated. When the value is `-1`, the refresh task will not be split. Default: `-1`.
 - `excluded_trigger_tables`: If a base table of the materialized view is listed here, automatic refresh task will not be triggered when the data in the base table is changed. This parameter only applies to load-triggered refresh strategy, and is usually used together with the property `auto_refresh_partitions_limit`. Format: `[db_name.]table_name`. When the value is an empty string, any data change in all base tables triggers the refresh of the corresponding materialized view. Default is an empty string.
 - `auto_refresh_partitions_limit`: The number of most recent materialized view partitions that need to be refreshed when a materialized view refresh is triggered. You can use this property to limit the refresh range and reduce the refresh cost. However, because not all the partitions are refreshed, the data in the materialized view may not be consistent with the base table. Default: `-1`. When the value is `-1`, all partitions will be refreshed. When the value is a positive integer N, StarRocks sorts the existing partitions in chronological order, and refreshes N partitions from the most recent partition. If the number of partitions is less than N, StarRocks refreshes all existing partitions. If there are dynamic partitions created in advance in your materialized view, StarRocks refreshes the pre-created partitions first, and then the existing partitions. Therefore, when setting this parameter, make sure that you have reserved margins for pre-created dynamic partitions.
+=======
+- `storage_medium`: Storage medium type. Valid values: `HDD` and `SSD`.
+- `storage_cooldown_time`: the storage cooldown time for a partition. If both HDD and SSD storage mediums are used, data in the SSD storage is moved to the HDD storage after the time specified by this property. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this property is not explicitly specified, the storage cooldown is not performed by default.
+- `partition_ttl_number`: The number of most recent materialized view partitions to keep. For the partitions with a start time earlier than the current time, after the number of these partitions exceeds this value, less recent partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_check_interval_seconds`, and automatically delete expired partitions. If you enabled the [dynamic partitioning](../../../table_design/dynamic_partitioning.md) strategy, the partitions created in advance are not counted in. When the value is `-1`, all partitions of the materialized view will be preserved. Default: `-1`.
+- `partition_refresh_number`: In a single refresh, the maximum number of partitions to refresh. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. Only when the previous batch of partitions is refreshed successfully, StarRocks will continue to refresh the next batch of partitions until all partitions are refreshed. If any of the partitions fail to be refreshed, no subsequent refresh tasks will be generated. When the value is `-1`, the refresh task will not be split. Default: `-1`.
+- `excluded_trigger_tables`: If a base table of the materialized view is listed here, the automatic refresh task will not be triggered when the data in the base table is changed. This parameter only applies to load-triggered refresh strategy, and is usually used together with the property `auto_refresh_partitions_limit`. Format: `[db_name.]table_name`. When the value is an empty string, any data change in all base tables triggers the refresh of the corresponding materialized view. The default value is an empty string.
+- `auto_refresh_partitions_limit`: The number of most recent materialized view partitions that need to be refreshed when a materialized view refresh is triggered. You can use this property to limit the refresh range and reduce the refresh cost. However, because not all the partitions are refreshed, the data in the materialized view may not be consistent with the base table. Default: `-1`. When the value is `-1`, all partitions will be refreshed. When the value is a positive integer N, StarRocks sorts the existing partitions in chronological order, and refreshes N partitions from the most recent partition. If the number of partitions is less than N, StarRocks refreshes all existing partitions. If there are dynamic partitions created in advance in your materialized view, StarRocks refreshes the pre-created partitions first, and then the existing partitions. Therefore, when setting this parameter, make sure that you have reserved margins for pre-created dynamic partitions.
+- `mv_rewrite_staleness_second`: If the materialized view's last refresh is within the time interval specified in this property, this materialized view can be used directly for query rewrite, regardless of whether the data in the base tables changes. If the last refresh is before this time interval, StarRocks checks whether the base tables have been updated to determine whether the materialized view can be used for query rewrite. Unit: Second. This property is supported from v3.0.
+- `colocate_with`: The colocation group of the asynchronous materialized view. See [Colocate Join](../../../using_starrocks/Colocate_join.md) for further information. This property is supported from v3.0.
+- `unique_constraints` and `foreign_key_constraints`: The Unique Key constraints and Foreign Key constraints when you create an asynchronous materialized view for query rewrite in the View Delta Join scenario. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/Materialized_view.md#rewrite-queries-in-view-delta-join-scenario) for further information. This property is supported from v3.0.
+- `resource_group`: The resource group to which the refresh tasks of the materialized view belong. For more about resource groups see [Resource group](../../../administration/resource_group.md).
+
+> **CAUTION**
+>
+> The Unique Key constraints and Foreign Key constraints are only used for query rewrite. The Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
+
+**query_statement** (required)
+
+The query statement to create the asynchronous materialized view.
+
+> **CAUTION**
+>
+> Currently, StarRocks does not support creating asynchronous materialized views with base tables created with the list partitioning strategy.
+
+### Query an asynchronous materialized view
+
+An asynchronous materialized view is a physical table. You can operate it as any regular table **except that you cannot directly load data into an asynchronous materialized view**.
+
+### Automatic query rewrite with asynchronous materialized view
+
+StarRocks v2.5 supports automatic and transparent query rewrite based on the SPJG-type asynchronous materialized views. The SPJG-type materialized views refer to materialized views whose plan only includes Scan, Filter, Project, and Aggregate types of operators. The SPJG-type materialized views query rewrite includes single table query rewrite, Join query rewrite, aggregation query rewrite, Union query rewrite and query rewrite based on nested materialized views.
+
+See [Asynchronous materialized view -  Rewrite queries with the asynchronous materialized view](../../../using_starrocks/Materialized_view.md#rewrite_queries_with_the_asynchronous_materialized_view) for further information.
+>>>>>>> dad7c38faa ([Doc] Remake MV - Part 2 (#31405))
 
 ### Supported data types
 
