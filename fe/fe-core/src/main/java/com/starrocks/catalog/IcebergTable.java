@@ -38,6 +38,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
@@ -49,6 +50,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
@@ -77,6 +79,8 @@ public class IcebergTable extends Table {
 
     private org.apache.iceberg.Table nativeTable; // actual iceberg table
     private List<Column> partitionColumns;
+
+    private Optional<Snapshot> snapshot = Optional.empty();
 
     public IcebergTable() {
         super(TableType.ICEBERG);
@@ -108,6 +112,15 @@ public class IcebergTable extends Table {
 
     public String getRemoteTableName() {
         return remoteTableName;
+    }
+
+    public Optional<Snapshot> getSnapshot() {
+        if (snapshot.isPresent()) {
+            return snapshot;
+        } else {
+            snapshot = Optional.ofNullable(getNativeTable().currentSnapshot());
+            return snapshot;
+        }
     }
 
     @Override

@@ -119,12 +119,16 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.statistic.StatisticUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -184,6 +188,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             limit = physical.getLimit();
         }
 
+        predicate = removePartitionPredicate(predicate, node);
         Statistics statistics = context.getStatistics();
         if (null != predicate) {
             statistics = estimateStatistics(ImmutableList.of(predicate), statistics);
@@ -288,6 +293,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, colRefToColumnMetaMap, null, node.getPredicate());
             context.setStatistics(stats);
+            if (node.isLogical()) {
+                boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
+                        .anyMatch(ColumnStatistic::isUnknown);
+                ((LogicalIcebergScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
+            }
         }
 
         return visitOperator(node, context);
@@ -1352,4 +1362,50 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         context.setStatistics(context.getChildStatistics(0));
         return visitOperator(node, context);
     }
+
+
+    // avoid use partition cols filter rows twice
+    private ScalarOperator removePartitionPredicate(ScalarOperator predicate, Operator operator) {
+        if (operator instanceof LogicalIcebergScanOperator) {
+            LogicalIcebergScanOperator icebergScanOperator = operator.cast();
+            List<String> partitionColNames = icebergScanOperator.getTable().getPartitionColumnNames();
+            List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+            List<ScalarOperator> newPredicates = Lists.newArrayList();
+            for (ScalarOperator scalarOperator : conjuncts) {
+                if (scalarOperator instanceof BinaryPredicateOperator) {
+                    BinaryPredicateOperator bop = scalarOperator.cast();
+                    if (bop.getBinaryType().isEqualOrRange()
+                            && bop.getChild(1).isConstantRef()
+                            && shouldRemove(bop.getChild(0), partitionColNames)) {
+                        // do nothing
+                    } else {
+                        newPredicates.add(scalarOperator);
+                    }
+                } else if (scalarOperator instanceof InPredicateOperator) {
+                    InPredicateOperator inOp = scalarOperator.cast();
+                    if (!inOp.isNotIn()
+                            && inOp.getChildren().stream().skip(1).allMatch(ScalarOperator::isConstant)
+                            && shouldRemove(inOp.getChild(0), partitionColNames)) {
+                        // do nothing
+                    } else {
+                        newPredicates.add(scalarOperator);
+                    }
+                }
+            }
+            return newPredicates.size() < 1 ? ConstantOperator.TRUE : Utils.compoundAnd(newPredicates);
+        }
+        return predicate;
+    }
+
+    private boolean shouldRemove(ScalarOperator scalarOperator, Collection<String> partitionColumns) {
+        if (scalarOperator.isColumnRef()) {
+            String colName = ((ColumnRefOperator) scalarOperator).getName();
+            return partitionColumns.contains(StringUtils.lowerCase(colName));
+        } else if (scalarOperator instanceof CastOperator && scalarOperator.getChild(0).isColumnRef()) {
+            String colName = ((ColumnRefOperator) scalarOperator.getChild(0)).getName();
+            return partitionColumns.contains(StringUtils.lowerCase(colName));
+        }
+        return false;
+    }
+
 }

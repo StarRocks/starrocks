@@ -162,6 +162,8 @@ public enum RuleType {
 
     TF_GROUP_BY_COUNT_DISTINCT_DATA_SKEW_ELIMINATE_RULE,
 
+    TF_DERIVE_RANGE_JOIN_PREDICATE,
+
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
     IMP_HIVE_LSCAN_TO_PSCAN,
