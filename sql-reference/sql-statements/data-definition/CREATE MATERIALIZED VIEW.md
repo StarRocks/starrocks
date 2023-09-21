@@ -14,7 +14,7 @@ StarRocks 自 v2.4 起支持异步物化视图。异步物化视图与先前版�
 
 |                              | **单表聚合** | **多表关联** | **查询改写** | **刷新策略** | **基表** |
 | ---------------------------- | ----------- | ---------- | ----------- | ---------- | -------- |
-| **异步物化视图** | 是 | 是 | 是 | <ul><li>异步定时刷新</li><li>手动刷新</li></ul> | 支持多表构建。基表可以来自：<ul><li>Default Catalog</li><li>External Catalog（v2.5）</li><li>已有异步物化视图（v2.5）</li><li>已有视图（v3.1）</li></ul> |
+| **异步物化视图** | 是 | 是 | 是 | <ul><li>异步刷新</li><li>手动刷新</li></ul> | 支持多表构建。基表可以来自：<ul><li>Default Catalog</li><li>External Catalog（v2.5）</li><li>已有异步物化视图（v2.5）</li><li>已有视图（v3.1）</li></ul> |
 | **同步物化视图（Rollup）** | 仅部分聚合函数 | 否 | 是 | 导入同步刷新 | 仅支持基于 Default Catalog 的单表构建 |
 
 ## 同步物化视图
@@ -129,7 +129,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 -- refresh_moment
     [IMMEDIATE | DEFERRED]
 -- refresh_scheme
-    [ASYNC | ASYNC (START <start_time>) EVERY INTERVAL <refresh_interval> | MANUAL]
+    [ASYNC [START (<start_time>)] [EVERY INTERVAL (<refresh_interval>)] | MANUAL]
 ]
 -- partition_expression
 [PARTITION BY 
@@ -211,8 +211,8 @@ AS
 
 物化视图的刷新方式。该参数支持如下值：
 
-- `ASYNC`：异步的刷新方式。如需设置为定时刷新，您需要指定刷新开始时间和刷新间隔 `START('yyyy-MM-dd hh:mm:ss') EVERY (interval n day/hour/minute/second)`。刷新间隔仅支持：`DAY`、`HOUR`、`MINUTE` 以及 `SECOND`。如不指定刷新间隔，物化视图将采用导入触发刷新方式。
-- `MANUAL`：手动的刷新方式。
+- `ASYNC`：异步刷新模式。每当基表数据发生变化，物化视图将根据预定义的刷新间隔自动进行刷新。您可以进一步指定刷新开始时间 `START('yyyy-MM-dd hh:mm:ss')` 和刷新间隔  `EVERY (interval n day/hour/minute/second)`。刷新间隔仅支持：`DAY`、`HOUR`、`MINUTE` 以及 `SECOND`。例如：`ASYNC START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`。如不指定刷新间隔，将使用默认值 `10 MINUTE`。
+- `MANUAL`：手动刷新模式。物化视图不会自动刷新。刷新任务只能由用户手动触发。
 
 如果不指定该参数，则默认使用 MANUAL 方式。
 
@@ -243,13 +243,14 @@ AS
 - `replication_num`：创建物化视图副本数量。
 - `storage_medium`：存储介质类型。有效值：`HDD` 和 `SSD`。
 - `storage_cooldown_time`: 当设置存储介质为 SSD 时，指定该分区在该时间点之后从 SSD 降冷到 HDD，设置的时间必须大于当前时间。如不指定该属性，默认不进行自动降冷。取值格式为："yyyy-MM-dd HH:mm:ss"。
-- `partition_ttl_number`：需要保留的最近的物化视图分区数量。分区数量超过该值后，过期分区将被删除。StarRocks 将根据 FE 配置项 `dynamic_partition_check_interval_seconds` 中的时间间隔定期检查物化视图分区，并自动删除过期分区。默认值：`-1`。当值为 `-1` 时，将保留物化视图所有分区。
+- `partition_ttl_number`：需要保留的最近的物化视图分区数量。对于分区开始时间小于当前时间的分区，当数量超过该值之后，多余的分区将会被删除。StarRocks 将根据 FE 配置项 `dynamic_partition_check_interval_seconds` 中的时间间隔定期检查物化视图分区，并自动删除过期分区。在[动态分区](../../../table_design/dynamic_partitioning.md)场景下，提前创建的未来分区将不会被纳入 TTL 考虑。默认值：`-1`。当值为 `-1` 时，将保留物化视图所有分区。
 - `partition_refresh_number`：单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。仅当前一批分区刷新成功时，StarRocks 会继续刷新下一批分区，直至所有分区刷新完成。如果其中有分区刷新失败，将不会产生后续的刷新任务。默认值：`-1`。当值为 `-1` 时，将不会拆分刷新任务。
 - `excluded_trigger_tables`：在此项属性中列出的基表，其数据产生变化时不会触发对应物化视图自动刷新。该参数仅针对导入触发式刷新，通常需要与属性 `auto_refresh_partitions_limit` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
 - `auto_refresh_partitions_limit`：当触发物化视图刷新时，需要刷新的最近的物化视图分区数量。您可以通过该属性限制刷新的范围，降低刷新代价，但因为仅有部分分区刷新，有可能导致物化视图数据与基表无法保持一致。默认值：`-1`。当参数值为 `-1` 时，StarRocks 将刷新所有分区。当参数值为正整数 N 时，StarRocks 会将已存在的分区按时间先后排序，并从最近分区开始刷新 N 个分区。如果分区数不足 N，则刷新所有已存在的分区。如果您的动态分区物化视图中存在预创建的未来时段动态分区，StarRocks 会优先刷新这些未来时段的分区，然后刷新已有的分区。因此设定此参数时请确保已为预创建的未来时段动态分区保留余量。
 - `mv_rewrite_staleness_second`：如果当前物化视图的上一次刷新在此属性指定的时间间隔内，则此物化视图可直接用于查询重写，无论基表数据是否更新。如果上一次刷新时间早于此属性指定的时间间隔，StarRocks 通过检查基表数据是否变更决定该物化视图能否用于查询重写。单位：秒。该属性自 v3.0 起支持。
 - `colocate_with`：异步物化视图的 Colocation Group。更多信息请参阅 [Colocate Join](../../../using_starrocks/Colocate_join.md)。该属性自 v3.0 起支持。
 - `unique_constraints` 和 `foreign_key_constraints`：创建 View Delta Join 查询改写的异步物化视图时的 Unique Key 约束和外键约束。更多信息请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/Materialized_view.md#基于-view-delta-join-场景改写查询)。该属性自 v3.0 起支持。
+- `resource_group`: 为物化视图刷新任务设置资源组。更多关于资源组信息，请参考[资源隔离](../../../administration/resource_group.md)。
 
   > **注意**
   >

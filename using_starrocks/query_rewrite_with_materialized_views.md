@@ -20,6 +20,10 @@ StarRocks 的异步物化视图采用了主流的基于 SPJG（select-project-jo
 
   构建基于 External Catalog 的物化视图可以轻松加速针对数据湖中数据的查询。
 
+> **说明**
+>
+> 基于 JDBC Catalog 表构建的异步物化视图暂不支持查询改写。
+
 ### 功能特点
 
 StarRocks 的异步物化视图自动查询改写功能具有以下特点：
@@ -487,7 +491,7 @@ GROUP BY lo_orderkey, lo_linenumber, c_name;
 
 ### 聚合上卷改写
 
-StarRocks 支持通过聚合上卷改写查询。例如，`agg_mv1` 可以改写以下查询：
+StarRocks 支持通过聚合上卷改写查询，即 StarRocks 可以使用通过 `GROUP BY a,b` 子句创建的异步物化视图改写带有 `GROUP BY a` 子句的聚合查询。例如，`agg_mv1` 可以改写以下查询：
 
 ```SQL
 SELECT 
@@ -507,6 +511,42 @@ GROUP BY lo_orderkey, c_name;
 > **说明**
 >
 > 当前暂不支持 grouping set、grouping set with rollup 以及 grouping set with cube 的改写。
+
+仅有部分聚合函数支持聚合上卷查询改写。下表展示了原始查询中的聚合函数与用于构建物化视图的聚合函数之间的对应关系。您可以根据自己的业务场景，选择相应的聚合函数构建物化视图。
+
+| **原始查询聚合函数**                                      | **支持 Aggregate Rollup 的物化视图构建聚合函数**                 |
+| ------------------------------------------------------ | ------------------------------------------------------------ |
+| sum                                                    | sum                                                          |
+| count                                                  | count                                                        |
+| min                                                    | min                                                          |
+| max                                                    | max                                                          |
+| avg                                                    | sum / count                                                  |
+| bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union                                                 |
+| hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                                    |
+| percentile_approx, percentile_union                    | percentile_union                                             |
+
+没有相应 GROUP BY 列的 DISTINCT 聚合无法使用聚合上卷查询改写。但是，从 StarRocks v3.1 开始，如果聚合上卷对应 DISTINCT 聚合函数的查询没有 GROUP BY 列，但有等价的谓词，该查询也可以被相关物化视图重写，因为 StarRocks 可以将等价谓词转换为 GROUP BY 常量表达式。
+
+在以下示例中，StarRocks 可以使用物化视图 `order_agg_mv1` 改写对应查询 Query：
+
+```SQL
+CREATE MATERIALIZED VIEW order_agg_mv1
+DISTRIBUTED BY HASH(`order_id`) BUCKETS 12
+REFRESH ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)
+AS
+SELECT
+    order_date,
+    count(distinct client_id) 
+FROM order_list 
+GROUP BY order_date;
+
+
+-- Query
+SELECT
+    order_date,
+    count(distinct client_id) 
+FROM order_list WHERE order_date='2023-07-03';
+```
 
 ### COUNT DISTINCT 改写
 
@@ -697,9 +737,62 @@ ON lo_custkey = c_custkey;
 
 StarRocks 支持基于 Hive Catalog、Hudi Catalog 和 Iceberg Catalog 的外部数据源上构建异步物化视图，并支持透明地改写查询。基于 External Catalog 的物化视图支持大多数查询改写功能，但存在以下限制：
 
-- 基于 Hudi 或 Iceberg Catalog 创建的物化视图不支持 Union 改写。
-- 基于 Hudi 或 Iceberg Catalog 创建的物化视图不支持 View Delta Join 改写。
-- 基于 Hudi 或 Iceberg Catalog 创建的物化视图不支持分区增量刷新。
+- 基于 Hudi、Iceberg 和 JDBC Catalog 创建的物化视图不支持 Union 改写。
+- 基于 Hudi、Iceberg 和 JDBC Catalog 创建的物化视图不支持 View Delta Join 改写。
+- 基于 Hudi、Iceberg 和 JDBC Catalog 创建的物化视图不支持分区增量刷新。
+
+## 设置物化视图查询改写
+
+您可以通过以下 Session 变量设置异步物化视图查询改写。
+
+| **变量**                                    | **默认值** | **描述**                                                     |
+| ------------------------------------------- | ---------- | ------------------------------------------------------------ |
+| enable_materialized_view_union_rewrite | true | 是否开启物化视图 Union 改写。  |
+| enable_rule_based_materialized_view_rewrite | true | 是否开启基于规则的物化视图查询改写功能，主要用于处理单表查询改写。 |
+| nested_mv_rewrite_max_level | 3 | 可用于查询改写的嵌套物化视图的最大层数。类型：INT。取值范围：[1, +∞)。取值为 `1` 表示只可使用基于基表创建的物化视图来进行查询改写。 |
+
+## 验证查询改写是否生效
+
+您可以使用 EXPLAIN 语句查看对应 Query Plan。如果其中 `OlapScanNode` 项目下的 `TABLE` 为对应异步物化视图名称，则表示该查询已基于异步物化视图改写。
+
+```Plain
+mysql> EXPLAIN SELECT 
+    order_id, sum(goods.price) AS total 
+    FROM order_list INNER JOIN goods 
+    ON goods.item_id1 = order_list.item_id2 
+    GROUP BY order_id;
++------------------------------------+
+| Explain String                     |
++------------------------------------+
+| PLAN FRAGMENT 0                    |
+|  OUTPUT EXPRS:1: order_id | 8: sum |
+|   PARTITION: RANDOM                |
+|                                    |
+|   RESULT SINK                      |
+|                                    |
+|   1:Project                        |
+|   |  <slot 1> : 9: order_id        |
+|   |  <slot 8> : 10: total          |
+|   |                                |
+|   0:OlapScanNode                   |
+|      TABLE: order_mv               |
+|      PREAGGREGATION: ON            |
+|      partitions=1/1                |
+|      rollup: order_mv              |
+|      tabletRatio=0/12              |
+|      tabletList=                   |
+|      cardinality=3                 |
+|      avgRowSize=4.0                |
+|      numNodes=0                    |
++------------------------------------+
+20 rows in set (0.01 sec)
+```
+
+## 禁用查询改写
+
+StarRocks 默认开启基于 Default Catalog 创建的异步物化视图查询改写。您可以通过将 Session 变量 `enable_materialized_view_rewrite` 设置为 `false` 禁用该功能。
+
+对于基于 External Catalog 创建的异步物化视图，你可以通过 [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER%20MATERIALIZED%20VIEW.md) 将物化视图 Property `force_external_table_query_rewrite` 设置为 `false` 来禁用此功能。
 
 ## 限制
 
@@ -709,3 +802,4 @@ StarRocks 支持基于 Hive Catalog、Hudi Catalog 和 Iceberg Catalog 的外部
 - StarRocks 不支持窗口函数的改写。
 - 如果物化视图定义语句中包含 LIMIT、ORDER BY、UNION、EXCEPT、INTERSECT、MINUS、GROUPING SETS、WITH CUBE 或 WITH ROLLUP，则无法用于改写。
 - 基于 External Catalog 的物化视图不保证查询结果强一致。
+- 基于 JDBC Catalog 表构建的异步物化视图暂不支持查询改写。
