@@ -302,6 +302,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
 
+    public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -1060,6 +1061,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
     private int consistentHashVirtualNodeNum = 32;
+
+    @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
+    private boolean cboDeriveRangeJoinPredicate = false;
+
+    public boolean enableCboDeriveRangeJoinPredicate() {
+        return cboDeriveRangeJoinPredicate;
+    }
+
+    public void setCboDeriveRangeJoinPredicate(boolean cboDeriveRangeJoinPredicate) {
+        this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
+    }
 
     public void setPartialUpdateMode(String mode) {
         this.partialUpdateMode = mode;
