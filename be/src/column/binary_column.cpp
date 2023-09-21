@@ -24,6 +24,7 @@
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
+#include "simd/simd.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
 #include "util/raw_container.h"
@@ -60,6 +61,15 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
     _slices_cache = false;
 }
 
+bool check_zero(const uint32_t* indexes, uint32_t from, uint32_t size) {
+    for (size_t i = 0; i < size; i++) {
+        if (indexes[from + i] == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 template <typename T>
 void BinaryColumnBase<T>::append_selective_fixed_size(const Column& src, const uint32_t* indexes, uint32_t from,
                                                       uint32_t size) {
@@ -76,11 +86,29 @@ void BinaryColumnBase<T>::append_selective_fixed_size(const Column& src, const u
         _offsets.resize(cur_row_count + size + 1);
         _bytes.resize(cur_byte_size + item_size * size);
 
-        auto* dest_bytes = _bytes.data();
-        for (size_t i = 0; i < size; i++) {
-            uint32_t idx = indexes[from + i];
-            _offsets[cur_row_count + i + 1] = _offsets[cur_row_count] + (i + 1) * item_size;
-            strings::memcpy_inlined(dest_bytes + i * item_size, src_bytes.data() + (idx - 1) * item_size, item_size);
+        bool have_zero = check_zero(indexes, from, size);
+        if (!have_zero) {
+            auto* dest_bytes = _bytes.data();
+            uint32_t cur_offset = _offsets[cur_row_count];
+            for (size_t i = 0; i < size; i++) {
+                uint32_t idx = indexes[from + i];
+                _offsets[cur_row_count + i + 1] = cur_offset + (i + 1) * item_size;
+                strings::memcpy_inlined(dest_bytes + i * item_size, src_bytes.data() + (idx - 1) * item_size,
+                                        item_size);
+            }
+        } else {
+            auto* dest_bytes = _bytes.data();
+            for (size_t i = 0; i < size; i++) {
+                uint32_t idx = indexes[from + i];
+                if (idx != 0) {
+                    _offsets[cur_row_count + i + 1] = _offsets[cur_row_count + i] + item_size;
+                    strings::memcpy_inlined(dest_bytes + i * item_size, src_bytes.data() + (idx - 1) * item_size,
+                                            item_size);
+                } else {
+                    _offsets[cur_row_count + i + 1] = _offsets[cur_row_count + i];
+                }
+            }
+            _bytes.resize(_offsets.back());
         }
     }
     _slices_cache = false;

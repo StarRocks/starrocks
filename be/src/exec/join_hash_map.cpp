@@ -428,7 +428,7 @@ Status JoinHashTable::build(RuntimeState* state) {
             bool fixed = column->check_fixed_size(1, _table_items->row_count);
             slot.is_fixed = fixed;
         }
-        LOG(INFO) << "SLOT: " << slot.slot->debug_string() << ":" << (int)slot.is_fixed << std::endl;
+        //LOG(INFO) << "SLOT: " << slot.slot->debug_string() << ":" << (int)slot.is_fixed << std::endl;
     }
 
     RETURN_IF_ERROR(_upgrade_key_columns_if_overflow());

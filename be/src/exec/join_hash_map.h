@@ -651,7 +651,7 @@ private:
     void _lazy_probe_null_output(ChunkPtr* src_chunk, ChunkPtr* chunk, size_t count);
     void _probe_null_output(ChunkPtr* chunk, size_t count);
 
-    void _build_output(ChunkPtr* chunk);
+    void _build_output(ChunkPtr* chunk, bool copy);
     void _build_tuple_output(ChunkPtr* chunk);
     void _build_default_output(ChunkPtr* chunk, size_t count);
     void _lazy_build_default_output(ChunkPtr* src_chunk, ChunkPtr* chunk, size_t count);
