@@ -10,12 +10,14 @@ on:
       - opened
       - reopened
       - edited
+      - synchronize
 
 jobs:
 
   sync-checker:
     runs-on: ubuntu-latest
     if: >
+      github.event.pull_request.action != 'synchronize' &&
       !contains(github.event.pull_request.title, '(sync #') &&
       !contains(github.event.pull_request.labels.*.name, 'sync') &&
       (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
@@ -37,8 +39,9 @@ jobs:
     needs: title-check
     runs-on: ubuntu-latest
     if: >
+      github.event.pull_request.action != 'synchronize' &&
       (startsWith(github.event.pull_request.title, '[BugFix]') ||
-       startsWith(github.event.pull_request.title, '[Enhancement]'))&&
+       startsWith(github.event.pull_request.title, '[Enhancement]')) &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     steps:
@@ -104,7 +107,7 @@ jobs:
   behavior-check:
     runs-on: ubuntu-latest
     if: >
-      !startsWith(github.event.pull_request.title, '[Doc]') && github.base_ref == 'main'
+      !startsWith(github.event.pull_request.title, '[Doc]') && github.base_ref == 'main' && github.event.pull_request.action != 'synchronize'
     steps:
       - name: Format Check
         id: check
@@ -178,6 +181,8 @@ jobs:
   changelist-check:
     runs-on: [self-hosted, normal]
     if: >
+      (github.event.pull_request.action == 'opened' ||
+      github.event.pull_request.action == 'synchronize') &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     env:
