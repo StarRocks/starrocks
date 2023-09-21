@@ -25,6 +25,9 @@ public class ColumnType {
     public static final String FIELD_0_NAME = FIELD_PREFIX + "0";
     public static final String FIELD_1_NAME = FIELD_PREFIX + "1";
 
+    public static final int MAX_DECIMAL32_PRECISION = 9;
+    public static final int MAX_DECIMAL64_PRECISION = 18;
+
     public enum TypeValue {
         UNKNOWN,
         BYTE,
@@ -43,7 +46,10 @@ public class ColumnType {
         DATETIME_MICROS,
         // INT64 timestamp type, TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS)
         DATETIME_MILLIS,
-        DECIMAL,
+        DECIMALV2,
+        DECIMAL32,
+        DECIMAL64,
+        DECIMAL128,
         ARRAY,
         MAP,
         STRUCT,
@@ -55,7 +61,8 @@ public class ColumnType {
     List<String> childNames;
     List<ColumnType> childTypes;
     List<Integer> fieldIndex;
-
+    int precision = -1;
+    int scale = -1;
     private static final Map<String, TypeValue> PRIMITIVE_TYPE_VALUE_MAPPING = new HashMap<>();
     private static final Map<TypeValue, Integer> PRIMITIVE_TYPE_VALUE_SIZE = new HashMap<>();
 
@@ -73,7 +80,10 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp", TypeValue.DATETIME);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-micros", TypeValue.DATETIME_MICROS);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-millis", TypeValue.DATETIME_MILLIS);
-        PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal", TypeValue.DECIMAL);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("decimalv2", TypeValue.DECIMALV2);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal32", TypeValue.DECIMAL32);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal64", TypeValue.DECIMAL64);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal128", TypeValue.DECIMAL128);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("tinyint", TypeValue.TINYINT);
 
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BYTE, 1);
@@ -84,6 +94,10 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.LONG, 8);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DOUBLE, 8);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.TINYINT, 1);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMALV2, 16);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL32, 4);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL64, 8);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL128, 16);
     }
 
     @Override
@@ -101,11 +115,13 @@ public class ColumnType {
         }
 
         int indexOf(char... args) {
-            for (int i = offset; i < s.length(); i++) {
-                char c = s.charAt(i);
-                for (char ch : args) {
-                    if (c == ch) {
-                        return i;
+            if (!s.startsWith("decimal")) {
+                for (int i = offset; i < s.length(); i++) {
+                    char c = s.charAt(i);
+                    for (char ch : args) {
+                        if (c == ch) {
+                            return i;
+                        }
                     }
                 }
             }
@@ -193,7 +209,31 @@ public class ColumnType {
             default: {
                 // convert decimal(x,y) to decimal
                 if (t.startsWith("decimal")) {
-                    t = "decimal";
+                    int s = t.indexOf('(');
+                    int e = t.indexOf(')');
+                    if (s != -1 && e != -1) {
+                        String[] ps = t.substring(s + 1, e).split(",");
+                        precision = Integer.parseInt(ps[0].trim());
+                        scale = Integer.parseInt(ps[1].trim());
+                        if (t.startsWith("decimalv2")) {
+                            typeValue = TypeValue.DECIMALV2;
+                        } else if (t.startsWith("decimal32")) {
+                            typeValue = TypeValue.DECIMAL32;
+                        } else if (t.startsWith("decimal64")) {
+                            typeValue = TypeValue.DECIMAL64;
+                        } else if (t.startsWith("decimal128")) {
+                            typeValue = TypeValue.DECIMAL128;
+                        } else {
+                            if (precision <= MAX_DECIMAL32_PRECISION) {
+                                typeValue = TypeValue.DECIMAL32;
+                            } else if (precision <= MAX_DECIMAL64_PRECISION) {
+                                typeValue = TypeValue.DECIMAL64;
+                            } else {
+                                typeValue = TypeValue.DECIMAL128;
+                            }
+                        }
+                    }
+                    return;
                 }
                 typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
             }
@@ -220,7 +260,7 @@ public class ColumnType {
     }
 
     public boolean isByteStorageType() {
-        return typeValue == TypeValue.STRING || typeValue == TypeValue.DATE || typeValue == TypeValue.DECIMAL
+        return typeValue == TypeValue.STRING || typeValue == TypeValue.DATE
                 || typeValue == TypeValue.BINARY || typeValue == TypeValue.DATETIME
                 || typeValue == TypeValue.DATETIME_MICROS || typeValue == TypeValue.DATETIME_MILLIS;
     }
@@ -272,7 +312,10 @@ public class ColumnType {
             }
             case STRING:
             case BINARY:
-            case DECIMAL:
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
             case DATE:
             case DATETIME:
             case DATETIME_MICROS:
@@ -369,5 +412,13 @@ public class ColumnType {
             sb.append(top);
             sb.append(',');
         }
+    }
+
+    public int getPrecision() {
+        return precision;
+    }
+
+    public int getScale() {
+        return scale;
     }
 }

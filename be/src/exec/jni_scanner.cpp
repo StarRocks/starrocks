@@ -182,7 +182,6 @@ Status JniScanner::_append_string_data(const FillColumnArgs& args) {
 
 template <LogicalType type>
 Status JniScanner::_append_decimal_data(const FillColumnArgs& args) {
-    int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
     char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
 
     using ColumnType = typename starrocks::RunTimeColumnType<type>;
@@ -191,23 +190,7 @@ Status JniScanner::_append_decimal_data(const FillColumnArgs& args) {
     runtime_column->resize_uninitialized(args.num_rows);
     CppType* runtime_data = runtime_column->get_data().data();
 
-    int precision = args.slot_type.precision;
-    int scale = args.slot_type.scale;
-
-    for (int i = 0; i < args.num_rows; i++) {
-        if (args.nulls && args.nulls[i]) {
-            // NULL
-        } else {
-            std::string decimal_str(column_ptr + offset_ptr[i], column_ptr + offset_ptr[i + 1]);
-            CppType cpp_val;
-            if (DecimalV3Cast::from_string<CppType>(&cpp_val, precision, scale, decimal_str.data(),
-                                                    decimal_str.size())) {
-                return Status::DataQualityError(
-                        fmt::format("Invalid value occurs in column[{}], value is [{}]", args.slot_name, decimal_str));
-            }
-            runtime_data[i] = cpp_val;
-        }
-    }
+    memcpy(runtime_data, column_ptr, sizeof(CppType) * args.num_rows);
     return Status::OK();
 }
 
