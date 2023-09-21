@@ -44,7 +44,11 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadManager;
 import com.starrocks.load.routineload.RoutineLoadTaskInfo;
+<<<<<<< HEAD
 import com.starrocks.meta.MetaContext;
+=======
+import com.starrocks.metric.MetricRepo;
+>>>>>>> 23b794eab3 ([BugFix] Fix transaction stream load LOAD_FINISHED metrics (#30063))
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
@@ -106,7 +110,18 @@ public class GlobalTransactionMgrTest {
         masterTransMgr.setEditLog(masterGlobalStateMgr.getEditLog());
 
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
+<<<<<<< HEAD
         slaveTransMgr.setEditLog(slaveGlobalStateMgr.getEditLog());
+=======
+        MetricRepo.init();
+
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @After
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
+>>>>>>> 23b794eab3 ([BugFix] Fix transaction stream load LOAD_FINISHED metrics (#30063))
     }
 
     @Test

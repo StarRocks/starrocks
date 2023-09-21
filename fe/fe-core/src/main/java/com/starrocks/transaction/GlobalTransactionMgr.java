@@ -32,7 +32,16 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
+<<<<<<< HEAD
 import com.starrocks.persist.EditLog;
+=======
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
+>>>>>>> 23b794eab3 ([BugFix] Fix transaction stream load LOAD_FINISHED metrics (#30063))
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
@@ -421,6 +430,7 @@ public class GlobalTransactionMgr implements Writable {
             db.writeUnlock();
         }
 
+        MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
         stopWatch.stop();
         long publishTimeoutMillis = timeoutMillis - stopWatch.getTime();
         if (publishTimeoutMillis < 0) {
