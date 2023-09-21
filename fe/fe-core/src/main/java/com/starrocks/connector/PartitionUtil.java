@@ -231,30 +231,22 @@ public class PartitionUtil {
     }
 
     public static List<String> getPartitionNames(Table table) {
+        if (table.isUnPartitioned()) {
+            return Lists.newArrayList(table.getName());
+        }
         List<String> partitionNames = null;
         if (table.isHiveTable() || table.isHudiTable()) {
             HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-            if (hmsTable.isUnPartitioned()) {
-                // return table name if table is unpartitioned
-                return Lists.newArrayList(hmsTable.getTableName());
-            }
             partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName());
         } else if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
-            if (icebergTable.isUnPartitioned()) {
-                // return table name if table is unpartitioned
-                return Lists.newArrayList(icebergTable.getRemoteTableName());
-            }
             partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     icebergTable.getCatalogName(), icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
         } else if (table.isJDBCTable()) {
             JDBCTable jdbcTable = (JDBCTable) table;
             partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     jdbcTable.getCatalogName(), jdbcTable.getDbName(), jdbcTable.getJdbcTable());
-            if (partitionNames.size() == 0) {
-                return Lists.newArrayList(jdbcTable.getJdbcTable());
-            }
         } else {
             Preconditions.checkState(false, "Do not support get partition names and columns for" +
                     "table type %s", table.getType());
@@ -301,6 +293,18 @@ public class PartitionUtil {
                     "table type %s", table.getType());
         }
         return partitionColumns;
+    }
+
+    // partition name such like p1=1/p2=__HIVE_DEFAULT_PARTITION__, this function will convert it to
+    // p1=1/p2=NULL
+    public static String normalizePartitionName(String partitionName, List<String> partitionColumnNames, String nullValue) {
+        List<String> partitionValues = Lists.newArrayList(toPartitionValues(partitionName));
+        for (int i = 0; i < partitionValues.size(); ++i) {
+            if (partitionValues.get(i).equals(nullValue)) {
+                partitionValues.set(i, "NULL");
+            }
+        }
+        return toHivePartitionName(partitionColumnNames, partitionValues);
     }
 
     /**
@@ -627,5 +631,24 @@ public class PartitionUtil {
         } else {
             throw UnsupportedException.unsupportedException("unsupported partition expr:" + partitionExpr);
         }
+    }
+
+    public static String getPartitionName(String basePath, String partitionPath) {
+        String basePathWithSlash = getPathWithSlash(basePath);
+        String partitionPathWithSlash = getPathWithSlash(partitionPath);
+
+        if (basePathWithSlash.equals(partitionPathWithSlash)) {
+            return "";
+        }
+
+        Preconditions.checkState(partitionPath.startsWith(basePathWithSlash),
+                "Can't infer partition name. base path: %s, partition path: %s", basePath, partitionPath);
+
+        partitionPath = partitionPath.endsWith("/") ? partitionPath.substring(0, partitionPath.length() - 1) : partitionPath;
+        return partitionPath.substring(basePathWithSlash.length());
+    }
+
+    public static String getPathWithSlash(String path) {
+        return path.endsWith("/") ? path : path + "/";
     }
 }

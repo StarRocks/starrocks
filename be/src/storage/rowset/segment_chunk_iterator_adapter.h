@@ -31,8 +31,9 @@ namespace starrocks {
 class SegmentChunkIteratorAdapter final : public ChunkIterator {
 public:
     // |schema| is the output fields.
-    explicit SegmentChunkIteratorAdapter(const TabletSchema& tablet_schema, const std::vector<LogicalType>& new_types,
-                                         const Schema& out_schema, int chunk_size);
+    explicit SegmentChunkIteratorAdapter(const TabletSchemaCSPtr& tablet_schema,
+                                         const std::vector<LogicalType>& new_types, const Schema& out_schema,
+                                         int chunk_size);
 
     ~SegmentChunkIteratorAdapter() override = default;
 
@@ -45,22 +46,20 @@ public:
 
     void set_iterator(std::shared_ptr<ChunkIterator> iterator) { _inner_iter = std::move(iterator); }
 
-    Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
-        _inner_iter->init_encoded_schema(dict_maps);
-        ChunkIterator::init_encoded_schema(dict_maps);
-        return Status::OK();
+    [[nodiscard]] Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+        RETURN_IF_ERROR(_inner_iter->init_encoded_schema(dict_maps));
+        return ChunkIterator::init_encoded_schema(dict_maps);
     }
-    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
-        _inner_iter->init_output_schema(unused_output_column_ids);
-        ChunkIterator::init_output_schema(unused_output_column_ids);
-        return Status::OK();
+    [[nodiscard]] Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+        RETURN_IF_ERROR(_inner_iter->init_output_schema(unused_output_column_ids));
+        return ChunkIterator::init_output_schema(unused_output_column_ids);
     }
 
 protected:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) override;
 
-    const TabletSchema& _tablet_schema;
+    const TabletSchemaCSPtr _tablet_schema;
     const std::vector<LogicalType>& _new_types;
 
     Schema _in_schema;

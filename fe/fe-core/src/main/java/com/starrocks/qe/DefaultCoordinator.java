@@ -47,6 +47,9 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThriftServer;
 import com.starrocks.common.UserException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
@@ -57,6 +60,7 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.proto.PPlanFragmentCancelReason;
+import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.QueryRuntimeProfile;
@@ -69,7 +73,6 @@ import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
-import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
@@ -77,6 +80,7 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TQueryType;
+import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TRuntimeFilterDestination;
 import com.starrocks.thrift.TRuntimeFilterProberParams;
@@ -124,6 +128,8 @@ public class DefaultCoordinator extends Coordinator {
      * <p> Set to the first reported fragment error status or to CANCELLED, if {@link #cancel()} is called.
      */
     private Status queryStatus = new Status();
+
+    private PQueryStatistics auditStatistics;
 
     private final QueryRuntimeProfile queryProfile;
 
@@ -441,15 +447,15 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public void startScheduling(boolean needDeploy) throws Exception {
-        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Pending")) {
+        try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Pending")) {
             QueryQueueManager.getInstance().maybeWait(connectContext, this);
         }
 
-        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Prepare")) {
+        try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Prepare")) {
             prepareExec();
         }
 
-        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Deploy")) {
+        try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
             deliverExecFragments(needDeploy);
         }
 
@@ -873,6 +879,16 @@ public class DefaultCoordinator extends Coordinator {
         updateJobProgress(params);
     }
 
+    @Override
+    public synchronized void updateAuditStatistics(TReportAuditStatisticsParams params) {
+        PQueryStatistics newAuditStatistics = AuditStatisticsUtil.toProtobuf(params.audit_statistics);
+        if (auditStatistics == null) {
+            auditStatistics = newAuditStatistics;
+        } else {
+            AuditStatisticsUtil.mergeProtobuf(newAuditStatistics, auditStatistics);
+        }
+    }
+
     private void updateJobProgress(TReportExecStatusParams params) {
         if (params.isSetLoad_type()) {
             TLoadJobType loadJobType = params.getLoad_type();
@@ -1001,6 +1017,11 @@ public class DefaultCoordinator extends Coordinator {
     @Override
     public List<QueryStatisticsItem.FragmentInstanceInfo> getFragmentInstanceInfos() {
         return executionDAG.getFragmentInstanceInfos();
+    }
+
+    @Override
+    public PQueryStatistics getAuditStatistics() {
+        return auditStatistics;
     }
 
     @Override

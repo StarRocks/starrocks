@@ -115,3 +115,12 @@ if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
     addition_args="--logconsole"
 fi
 $STARROCKS_HOME/bin/start_be.sh $addition_args
+ret=$?
+if [[ $ret -ne 0 && "x$LOG_CONSOLE" != "x1" ]] ; then
+    nol=50
+    log_stderr "Last $nol lines of be.INFO ..."
+    tail -n $nol $STARROCKS_HOME/log/be.INFO
+    log_stderr "Last $nol lines of be.out ..."
+    tail -n $nol $STARROCKS_HOME/log/be.out
+fi
+exit $ret

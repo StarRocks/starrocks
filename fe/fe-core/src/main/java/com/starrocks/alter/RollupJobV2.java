@@ -265,6 +265,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                 tbl.getCopiedIndexes(),
                                 tbl.isInMemory(),
                                 tbl.enablePersistentIndex(),
+                                tbl.primaryIndexCacheExpireSec(),
                                 tabletType, tbl.getCompressionType(), index.getSortKeyIdxes());
                         createReplicaTask.setBaseTablet(tabletIdMap.get(rollupTabletId), baseSchemaHash);
                         batchTask.addTask(createReplicaTask);
@@ -856,10 +857,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     public Map<Long, MaterializedIndex> getPartitionIdToRollupIndex() {
         return partitionIdToRollupIndex;
-    }
-
-    public void setJobState(JobState jobState) {
-        this.jobState = jobState;
     }
 
     private void setColumnsDefineExpr(Map<String, Expr> columnNameToDefineExpr) {

@@ -343,8 +343,9 @@ public:
 
         _all_global_rf_ready_or_timeout =
                 _precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns || // Timeout,
-                std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(),
-                            [](auto* rf_desc) { return rf_desc->runtime_filter() != nullptr; }); // or ready.
+                std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(), [](auto* rf_desc) {
+                    return rf_desc->is_local() || rf_desc->runtime_filter() != nullptr;
+                }); // or all the remote RFs are ready.
 
         return !_all_global_rf_ready_or_timeout;
     }
@@ -523,8 +524,6 @@ protected:
 
     // Schedule counters
     // Record global schedule count during this driver lifecycle
-    RuntimeProfile::Counter* _global_schedule_counter = nullptr;
-    RuntimeProfile::Counter* _global_schedule_timer = nullptr;
     RuntimeProfile::Counter* _schedule_counter = nullptr;
     RuntimeProfile::Counter* _yield_by_time_limit_counter = nullptr;
     RuntimeProfile::Counter* _yield_by_preempt_counter = nullptr;

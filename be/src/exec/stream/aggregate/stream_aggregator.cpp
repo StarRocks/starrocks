@@ -197,7 +197,7 @@ Status StreamAggregator::output_changes(int32_t chunk_size, StreamChunkPtr* resu
 }
 
 Status StreamAggregator::reset_state(RuntimeState* state) {
-    return _reset_state(state);
+    return _reset_state(state, true);
 }
 
 Status StreamAggregator::reset_epoch(RuntimeState* state) {

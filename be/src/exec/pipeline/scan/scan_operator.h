@@ -79,6 +79,7 @@ public:
     void set_query_ctx(const QueryContextPtr& query_ctx);
 
     virtual int available_pickup_morsel_count() { return _io_tasks_per_scan_operator; }
+    bool output_chunk_by_bucket() const { return _output_chunk_by_bucket; }
     void begin_pull_chunk(const ChunkPtr& res) {
         _op_pull_chunks += 1;
         _op_pull_rows += res->num_rows();
@@ -102,6 +103,7 @@ protected:
     virtual size_t num_buffered_chunks() const = 0;
     virtual size_t buffer_size() const = 0;
     virtual size_t buffer_capacity() const = 0;
+    virtual size_t buffer_memory_usage() const = 0;
     virtual size_t default_buffer_capacity() const = 0;
     virtual ChunkBufferTokenPtr pin_chunk(int num_chunks) = 0;
     virtual bool is_buffer_full() const = 0;
@@ -139,6 +141,7 @@ protected:
 protected:
     ScanNode* _scan_node = nullptr;
     const int32_t _dop;
+    const bool _output_chunk_by_bucket;
     const int _io_tasks_per_scan_operator;
     // ScanOperator may do parallel scan, so each _chunk_sources[i] needs to hold
     // a profile indenpendently, to be more specificly, _chunk_sources[i] will go through
@@ -188,9 +191,13 @@ private:
     RuntimeProfile::Counter* _buffer_capacity_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_size_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_scan_task_queue_size_counter = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* _peak_buffer_memory_usage = nullptr;
     // The total number of the original tablets in this fragment instance.
     RuntimeProfile::Counter* _tablets_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_io_tasks_counter = nullptr;
+
+    RuntimeProfile::Counter* _prepare_chunk_source_timer = nullptr;
+    RuntimeProfile::Counter* _submit_io_task_timer = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {

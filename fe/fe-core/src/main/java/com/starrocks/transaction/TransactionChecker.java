@@ -18,7 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 
 import java.util.ArrayList;
@@ -100,7 +100,7 @@ public class TransactionChecker {
             }
             for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
                 long partitionId = partitionCommitInfo.getPartitionId();
-                Partition partition = table.getPartition(partitionId);
+                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 if (partition == null) {
                     continue;
                 }

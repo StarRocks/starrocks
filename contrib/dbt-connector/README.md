@@ -7,13 +7,13 @@
 This project is **under development**.
 
 
-The `dbt-starrocks` package contains all the code enabling [dbt](https://getdbt.com) to work with [StarRocks](https://www.starrocks.io).
+The `dbt-starrocks` package contains all the code to enable [dbt](https://getdbt.com) to work with [StarRocks](https://www.starrocks.io).
 
 This is an experimental plugin:
 - We have not tested it extensively
-- Requirements at least StarRocks version 2.5.0+  
+- Requires StarRocks version 2.5.0 or higher  
   - version 3.1.x is recommended
-  - Previous versions will no longer support
+  - StarRocks versions 2.4 and below are no longer supported
 
 
 ## Installation
@@ -39,8 +39,8 @@ $ pip install dbt-starrocks
 
 ### Notice
 1. When StarRocks Version < 2.5, `Create table as` can only set engine='OLAP' and table_type='DUPLICATE'
-2. When StarRocks Version >= 2.5, `Create table as` support table_type='PRIMARY'
-3. When StarRocks Version < 3.1 distributed_by is must
+2. When StarRocks Version >= 2.5, `Create table as` supports table_type='PRIMARY'
+3. When StarRocks Version < 3.1 distributed_by is required
 
 ## Profile Configuration
 
@@ -85,19 +85,23 @@ models:
   partition_by: ['some_date']
   partition_by_init: ["PARTITION p1 VALUES [('1971-01-01 00:00:00'), ('1991-01-01 00:00:00')),PARTITION p1972 VALUES [('1991-01-01 00:00:00'), ('1999-01-01 00:00:00'))"]
   properties: [{"replication_num":"1", "in_memory": "true"}]
+  refresh_method: 'async' // only for materialized view default manual
 ```
   
 ### dbt run config:
 #### Example configuration:
 ```
 {{ config(materialized='view') }}
-{{ config(materialized='materialized_view') }}        
 {{ config(materialized='table', engine='OLAP', buckets=32, distributed_by=['id']) }}
 {{ config(materialized='incremental', table_type='PRIMARY', engine='OLAP', buckets=32, distributed_by=['id']) }}
+{{ config(materialized='materialized_view') }}
+{{ config(materialized='materialized_view', properties={"storage_medium":"SSD"}) }}
+{{ config(materialized='materialized_view', refresh_method="ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)") }}
 ```
+For materialized view only support partition_by、buckets、distributed_by、properties、refresh_method configuration.
 
 ## Test Adapter
 consult [the project](https://github.com/dbt-labs/dbt-adapter-tests)
 
 ## Contributing
-Welcome to contribute for dbt-starrocks. See [Contributing Guide](https://github.com/StarRocks/starrocks/blob/main/CONTRIBUTING.md) for more information.
+We welcome you to contribute to dbt-starrocks. Please see the [Contributing Guide](https://github.com/StarRocks/starrocks/blob/main/CONTRIBUTING.md) for more information.

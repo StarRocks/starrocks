@@ -102,8 +102,14 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
             DeletePredicatePB del_pred;
             DeleteConditionHandler del_cond_handler;
             tablet_var.tablet->obtain_header_rdlock();
-            res = del_cond_handler.generate_delete_predicate(tablet_var.tablet->tablet_schema(),
-                                                             request.delete_conditions, &del_pred);
+            auto tablet_schema = TabletSchema::copy(tablet_var.tablet->thread_safe_get_tablet_schema());
+            if (!request.columns_desc.empty() && request.columns_desc[0].col_unique_id >= 0) {
+                tablet_schema->clear_columns();
+                for (const auto& column_desc : request.columns_desc) {
+                    tablet_schema->append_column(TabletColumn(column_desc));
+                }
+            }
+            res = del_cond_handler.generate_delete_predicate(*tablet_schema, request.delete_conditions, &del_pred);
             del_preds.push(del_pred);
             tablet_var.tablet->release_header_lock();
             if (!res.ok()) {
@@ -114,12 +120,20 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
         }
     }
 
+    auto tablet_schema = std::shared_ptr<TabletSchema>(TabletSchema::copy(tablet_vars->at(0).tablet->tablet_schema()));
+    if (!request.columns_desc.empty() && request.columns_desc[0].col_unique_id >= 0) {
+        tablet_schema->clear_columns();
+        for (const auto& column_desc : request.columns_desc) {
+            tablet_schema->append_column(TabletColumn(column_desc));
+        }
+    }
+
     Status st = Status::OK();
     if (push_type == PUSH_NORMAL_V2) {
-        st = _load_convert(tablet_vars->at(0).tablet, &(tablet_vars->at(0).rowset_to_add));
+        st = _load_convert(tablet_vars->at(0).tablet, &(tablet_vars->at(0).rowset_to_add), tablet_schema);
     } else {
         DCHECK_EQ(push_type, PUSH_FOR_DELETE);
-        st = _delete_convert(tablet_vars->at(0).tablet, &(tablet_vars->at(0).rowset_to_add));
+        st = _delete_convert(tablet_vars->at(0).tablet, &(tablet_vars->at(0).rowset_to_add), tablet_schema);
     }
 
     if (!st.ok()) {
@@ -180,7 +194,8 @@ void PushHandler::_get_tablet_infos(const std::vector<TabletVars>& tablet_vars,
     }
 }
 
-Status PushHandler::_delete_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset) {
+Status PushHandler::_delete_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset,
+                                    const TabletSchemaCSPtr& tablet_schema) {
     Status st = Status::OK();
     PUniqueId load_id;
     load_id.set_hi(0);
@@ -199,7 +214,7 @@ Status PushHandler::_delete_convert(const TabletSharedPtr& cur_tablet, RowsetSha
         context.partition_id = _request.partition_id;
         context.tablet_schema_hash = cur_tablet->schema_hash();
         context.rowset_path_prefix = cur_tablet->schema_hash_path();
-        context.tablet_schema = &cur_tablet->tablet_schema();
+        context.tablet_schema = tablet_schema;
         context.rowset_state = PREPARED;
         context.txn_id = _request.transaction_id;
         context.load_id = load_id;
@@ -236,7 +251,8 @@ Status PushHandler::_delete_convert(const TabletSharedPtr& cur_tablet, RowsetSha
     return st;
 }
 
-Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset) {
+Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset,
+                                  const TabletSchemaCSPtr& tablet_schema) {
     Status st;
     size_t num_rows = 0;
     PUniqueId load_id;
@@ -247,7 +263,7 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
 
     // 1. init RowsetBuilder of cur_tablet for current push
     VLOG(3) << "init rowset builder. tablet=" << cur_tablet->full_name()
-            << ", block_row_size=" << cur_tablet->num_rows_per_row_block();
+            << ", block_row_size=" << tablet_schema->num_rows_per_row_block();
     RowsetWriterContext context;
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
     context.tablet_uid = cur_tablet->tablet_uid();
@@ -255,7 +271,7 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
     context.partition_id = _request.partition_id;
     context.tablet_schema_hash = cur_tablet->schema_hash();
     context.rowset_path_prefix = cur_tablet->schema_hash_path();
-    context.tablet_schema = &(cur_tablet->tablet_schema());
+    context.tablet_schema = tablet_schema;
     context.rowset_state = PREPARED;
     context.txn_id = _request.transaction_id;
     context.load_id = load_id;
@@ -297,7 +313,7 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
 
         // read data from broker and write into Rowset of cur_tablet
         VLOG(3) << "start to convert etl file to delta.";
-        auto schema = ChunkHelper::convert_schema(cur_tablet->tablet_schema());
+        auto schema = ChunkHelper::convert_schema(tablet_schema);
         ChunkPtr chunk = ChunkHelper::new_chunk(schema, 0);
         while (!reader->eof()) {
             st = reader->next_chunk(&chunk);

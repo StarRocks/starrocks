@@ -18,6 +18,9 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.metric.MaterializedViewMetricsEntity;
+import com.starrocks.metric.MaterializedViewMetricsRegistry;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -40,6 +43,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Predicate
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.starrocks.metric.MaterializedViewMetricsEntity.isUpdateMaterializedViewMetrics;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 
 public abstract class BaseMaterializedViewRewriteRule extends TransformationRule {
@@ -107,8 +111,9 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                     queryColumnRefRewriter, false);
         }
         List<ScalarOperator> onPredicates = MvUtils.collectOnPredicate(queryExpression);
-        onPredicates = onPredicates.stream().map(MvUtils::canonizePredicate).collect(Collectors.toList());
+        onPredicates = onPredicates.stream().map(MvUtils::canonizePredicateForRewrite).collect(Collectors.toList());
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
+        ConnectContext connectContext = ConnectContext.get();
         for (MaterializationContext mvContext : mvCandidateContexts) {
             MvRewriteContext mvRewriteContext;
             if (mvContext.getMv().getRefreshScheme().isSync()) {
@@ -140,7 +145,14 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             }
 
             results.add(candidate);
+
+            // update metrics
             mvContext.updateMVUsedCount();
+            if (isUpdateMaterializedViewMetrics(connectContext)) {
+                MaterializedViewMetricsEntity mvEntity =
+                        MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mvContext.getMv().getMvId());
+                mvEntity.increaseQueryMatchedCount(1L);
+            }
         }
 
         return results;
@@ -169,7 +181,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         }
         ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
         if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
-            queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
+            queryPredicate = MvUtils.canonizePredicateForRewrite(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
         }
         return PredicateSplit.splitPredicate(queryPredicate);
     }

@@ -60,7 +60,7 @@ public:
 
         auto metadata = new_tablet_metadata(10086);
         _tablet_schema = TabletSchema::create(metadata->schema());
-        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
 
         // init _open_request
         _open_request.set_is_lake_tablet(true);
@@ -212,7 +212,7 @@ protected:
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
         auto path = _location_provider->segment_location(tablet_id, filename);
 
-        ASSIGN_OR_ABORT(auto seg, Segment::open(fs, path, 0, _tablet_schema.get()));
+        ASSIGN_OR_ABORT(auto seg, Segment::open(fs, path, 0, _tablet_schema));
 
         OlapReaderStatistics statistics;
         SegmentReadOptions opts;

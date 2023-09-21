@@ -46,6 +46,7 @@ import mockit.Mocked;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -154,6 +155,9 @@ public class DistributionPrunerRuleTest {
             {
                 olapTable.getPartition(anyLong);
                 result = partition;
+
+                partition.getSubPartitions();
+                result = Arrays.asList(partition);
 
                 partition.getIndex(anyLong);
                 result = index;

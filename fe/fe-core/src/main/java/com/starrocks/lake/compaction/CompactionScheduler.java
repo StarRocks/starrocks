@@ -49,6 +49,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -62,10 +63,10 @@ import javax.validation.constraints.NotNull;
 public class CompactionScheduler extends Daemon {
     private static final Logger LOG = LogManager.getLogger(CompactionScheduler.class);
     private static final String HOST_NAME = FrontendOptions.getLocalHostAddress();
-    private static final long LOOP_INTERVAL_MS = 500L;
+    private static final long LOOP_INTERVAL_MS = 200L;
     private static final long TXN_TIMEOUT_SECOND = 86400L;
-    private static final long MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS = 3000L;
-    private static final long MIN_COMPACTION_INTERVAL_MS_ON_FAILURE = 6000L;
+    private static final long MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS = LOOP_INTERVAL_MS * 2;
+    private static final long MIN_COMPACTION_INTERVAL_MS_ON_FAILURE = LOOP_INTERVAL_MS * 10;
     private static final long PARTITION_CLEAN_INTERVAL_SECOND = 30;
     private final CompactionMgr compactionManager;
     private final SystemInfoService systemInfoService;
@@ -394,7 +395,8 @@ public class CompactionScheduler extends Daemon {
         VisibleStateWaiter waiter;
         db.writeLock();
         try {
-            waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList, Lists.newArrayList());
+            waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
+                    Collections.emptyList(), null);
         } finally {
             db.writeUnlock();
         }

@@ -55,6 +55,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.load.loadv2.LoadMgr;
@@ -74,6 +75,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -727,6 +729,16 @@ public final class MetricRepo {
         };
         queryCoordinatorCount.addLabel(new MetricLabel("type", "query_coordinator_count"));
         STARROCKS_METRIC_REGISTER.addMetric(queryCoordinatorCount);
+
+        GaugeMetric<Long> agentTaskCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of agent task") {
+            @Override
+            public Long getValue() {
+                return (long) AgentTaskQueue.getTaskNum();
+            }
+        };
+        agentTaskCount.addLabel(new MetricLabel("type", "agent_task_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(agentTaskCount);
     }
 
     // to generate the metrics related to tablets of each backends
@@ -855,8 +867,7 @@ public final class MetricRepo {
         GAUGE_ROUTINE_LOAD_LAGS = routineLoadLags;
     }
 
-    public static synchronized String getMetric(MetricVisitor visitor, boolean collectTableMetrics,
-                                                boolean minifyTableMetrics) {
+    public static synchronized String getMetric(MetricVisitor visitor, MetricsAction.RequestParams requestParams) {
         if (!isInit) {
             return "";
         }
@@ -878,8 +889,13 @@ public final class MetricRepo {
         collectDatabaseMetrics(visitor);
 
         // table metrics
-        if (collectTableMetrics) {
-            collectTableMetrics(visitor, minifyTableMetrics);
+        if (requestParams.isCollectTableMetrics()) {
+            collectTableMetrics(visitor, requestParams.isMinifyTableMetrics());
+        }
+
+        // materialized view metrics
+        if (requestParams.isCollectMVMetrics()) {
+            MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, requestParams.isMinifyMVMetrics());
         }
 
         // histogram

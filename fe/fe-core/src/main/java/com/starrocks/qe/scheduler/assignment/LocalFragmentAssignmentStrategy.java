@@ -159,6 +159,11 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         boolean assignPerDriverSeq = usePipeline && workerIdToBucketSeqs.values().stream()
                 .allMatch(bucketSeqs -> enableAssignScanRangesPerDriverSeq(bucketSeqs, pipelineDop));
 
+        if (!assignPerDriverSeq) {
+            // these optimize depend on assignPerDriverSeq.
+            fragment.disablePhysicalPropertyOptimize();
+        }
+
         workerIdToBucketSeqs.forEach((workerId, bucketSeqsOfWorker) -> {
             ComputeNode worker = workerProvider.getWorkerById(workerId);
 
@@ -228,6 +233,7 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
 
                     if (!enableAssignScanRangesPerDriverSeq(fragment, scanRanges)) {
                         instance.addScanRanges(scanId, scanRanges);
+                        fragment.disablePhysicalPropertyOptimize();
                     } else {
                         int expectedDop = Math.max(1, Math.min(pipelineDop, scanRanges.size()));
                         List<List<TScanRangeParams>> scanRangesPerDriverSeq;

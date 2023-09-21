@@ -62,7 +62,7 @@ Status VerticalCompactionTask::_vertical_compaction_data(Statistics* statistics)
             _tablet.get(), max_rows_per_segment, _task_info.algorithm, _task_info.output_version, &output_rs_writer));
 
     std::vector<std::vector<uint32_t>> column_groups;
-    CompactionUtils::split_column_into_groups(_tablet->num_columns(), _tablet->tablet_schema().sort_key_idxes(),
+    CompactionUtils::split_column_into_groups(_tablet->num_columns(), _tablet->tablet_schema()->sort_key_idxes(),
                                               config::vertical_compaction_max_columns_per_group, &column_groups);
     _task_info.column_group_size = column_groups.size();
 
@@ -169,6 +169,10 @@ StatusOr<int32_t> VerticalCompactionTask::_calculate_chunk_size_for_column_group
         total_num_rows += rowset->num_rows();
         for (auto& segment : rowset->segments()) {
             for (uint32_t column_index : column_group) {
+                if (!segment->is_valid_column(_tablet->tablet_schema()->column(column_index).unique_id())) {
+                    continue;
+                }
+
                 const auto* column_reader = segment->column(column_index);
                 if (column_reader == nullptr) {
                     continue;

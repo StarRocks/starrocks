@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SortInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRuntimeFilterBuildJoinMode;
@@ -73,6 +74,8 @@ public class RuntimeFilterDescription {
     // join's equal conjuncts size > 1.
     private final Map<Integer, List<Expr>> nodeIdToParitionByExprs = Maps.newHashMap();
 
+    private SortInfo sortInfo;
+
     public RuntimeFilterDescription(SessionVariable sv) {
         nodeIdToProbeExpr = new HashMap<>();
         mergeNodes = new ArrayList<>();
@@ -122,8 +125,16 @@ public class RuntimeFilterDescription {
         this.type = type;
     }
 
+    public SortInfo getSortInfo() {
+        return sortInfo;
+    }
+
+    public void setSortInfo(SortInfo sortInfo) {
+        this.sortInfo = sortInfo;
+    }
+
     public boolean canProbeUse(PlanNode node) {
-        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && !(node instanceof OlapScanNode)) {
+        if (!canAcceptFilter(node)) {
             return false;
         }
         // if we don't across exchange node, that's to say this is in local fragment instance.
@@ -144,6 +155,28 @@ public class RuntimeFilterDescription {
         long buildCard = Math.max(0, buildCardinality);
         float sel = (1.0f - buildCard * 1.0f / card);
         return !(sel < sessionVariable.getGlobalRuntimeFilterProbeMinSelectivity());
+    }
+
+    // return true if Node could accept the Filter
+    public boolean canAcceptFilter(PlanNode node) {
+        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
+            if (node instanceof ScanNode) {
+                ScanNode scanNode = (ScanNode) node;
+                return scanNode.supportTopNRuntimeFilter();
+            } else {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public boolean isNullLast() {
+        if (sortInfo != null) {
+            return !sortInfo.getNullsFirst().get(0);
+        } else {
+            return false;
+        }
     }
 
     public void enterExchangeNode() {

@@ -400,7 +400,7 @@ void OrcChunkReader::_try_implicit_cast(TypeDescriptor* from, const TypeDescript
         } else {
             from->type = LogicalType::TYPE_DECIMAL32;
         }
-    } else if (_broker_load_mode && !_strict_mode && is_string_type(t1) && is_string_type(t2)) {
+    } else if (_broker_load_mode && is_string_type(t1) && is_string_type(t2)) {
         // For broker load, the orc field length is larger than the maximum length of the starrocks field
         // will cause load failure in non-strict mode. Here we keep the maximum length of the orc field
         // the same as the maximum length of the starrocks field.
@@ -509,8 +509,7 @@ Status OrcChunkReader::read_next(orc::RowReader::ReadPosition* pos) {
             return Status::EndOfFile("");
         }
     } catch (std::exception& e) {
-        auto s = strings::Substitute("OrcChunkReader::read_next failed. reason = $0, file = $1", e.what(),
-                                     _current_file_name);
+        auto s = strings::Substitute("ORC reader read file $0 failed. Reason is $1.", _current_file_name, e.what());
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }
@@ -564,7 +563,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
             }
         }
         ColumnPtr& col = (*chunk)->get_column_by_slot_id(slot_desc->id());
-        _column_readers[src_index]->get_next(cvb, col, 0, _batch->numElements);
+        RETURN_IF_ERROR(_column_readers[src_index]->get_next(cvb, col, 0, _batch->numElements));
     }
 
     if (_broker_load_mode) {
@@ -905,7 +904,7 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
             CHECK(false) << "unexpected op_type in compound_pred type. op_type = " << std::to_string(op_type);
         }
         for (Expr* c : conjunct->children()) {
-            _add_conjunct(c, builder);
+            RETURN_IF_ERROR(_add_conjunct(c, builder));
         }
         builder->end();
         return Status::OK();

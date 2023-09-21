@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -52,15 +53,16 @@ import static org.apache.iceberg.SnapshotSummary.TOTAL_RECORDS_PROP;
 
 public class IcebergStatisticProvider {
     private static final Logger LOG = LogManager.getLogger(IcebergStatisticProvider.class);
+    private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     public IcebergStatisticProvider() {
     }
 
     public Statistics getTableStatistics(IcebergTable icebergTable, ScalarOperator predicate,
-                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap, long limit) {
         LOG.debug("Begin to make iceberg table statistics!");
         Table nativeTable = icebergTable.getNativeTable();
-        IcebergFileStats icebergFileStats = generateIcebergFileStats(icebergTable, predicate);
+        IcebergFileStats icebergFileStats = generateIcebergFileStats(icebergTable, predicate, limit);
 
         Statistics.Builder statisticsBuilder = Statistics.builder();
         double recordCount = Math.max(icebergFileStats == null ? 0 : icebergFileStats.getRecordCount(), 1);
@@ -70,7 +72,7 @@ public class IcebergStatisticProvider {
         return statisticsBuilder.build();
     }
 
-    private IcebergFileStats generateIcebergFileStats(IcebergTable icebergTable, ScalarOperator icebergPredicate) {
+    private IcebergFileStats generateIcebergFileStats(IcebergTable icebergTable, ScalarOperator icebergPredicate, long limit) {
         Optional<Snapshot> snapshot = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot());
         if (!snapshot.isPresent()) {
             return null;
@@ -81,7 +83,7 @@ public class IcebergStatisticProvider {
         String catalogName = icebergTable.getCatalogName();
 
         List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                catalogName, icebergTable, null, snapshotId, icebergPredicate, null);
+                catalogName, icebergTable, null, snapshotId, icebergPredicate, null, limit);
 
         if (splits.isEmpty()) {
             return new IcebergFileStats(1);
@@ -109,6 +111,7 @@ public class IcebergStatisticProvider {
                 if (files.contains(dataFile.path().toString())) {
                     continue;
                 }
+
                 files.add(dataFile.path().toString());
                 if (icebergFileStats == null) {
                     icebergFileStats = new IcebergFileStats(dataFile.recordCount());

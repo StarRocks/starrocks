@@ -29,11 +29,13 @@ import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
@@ -53,7 +55,6 @@ import org.apache.hadoop.hive.metastore.api.Table;
 import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -65,6 +66,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.common.util.DateUtils.DATE_FORMATTER_UNIX;
 import static com.starrocks.connector.hive.CachingHiveMetastore.createCatalogLevelInstance;
+import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.POSITIVE_INFINITY;
@@ -79,6 +81,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     public static final String MOCKED_TPCH_DB_NAME = "tpch";
     public static final String MOCKED_PARTITIONED_DB_NAME = "partitioned_db";
     public static final String MOCKED_PARTITIONED_DB_NAME2 = "partitioned_db2";
+    public static final String MOCKED_SUBFIELD_DB = "subfield_db";
 
     private static ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
@@ -86,6 +89,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         mockTPCHTable();
         mockPartitionTable();
         mockView();
+        mockSubfieldTable();
     }
 
     @Override
@@ -154,13 +158,13 @@ public class MockedHiveMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames() {
-        return Arrays.asList("tpch", "tpcds", "ssb");
+        return new ArrayList<>(MOCK_TABLE_MAP.keySet());
     }
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session, com.starrocks.catalog.Table table,
                                          Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate) {
+                                         ScalarOperator predicate, long limit) {
         HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
         String hiveDb = hmsTable.getDbName();
         String tblName = hmsTable.getTableName();
@@ -182,7 +186,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(com.starrocks.catalog.Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate, List<String> fieldNames) {
+                                                   long snapshotId, ScalarOperator predicate,
+                                                   List<String> fieldNames, long limit) {
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         int size = partitionKeys.size();
         readLock();
@@ -331,6 +336,31 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         mockTables.put(hmsView3.getTableName(), new HiveTableInfo(view3));
     }
 
+    private static void mockSubfieldTable() {
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_SUBFIELD_DB, new CaseInsensitiveMap<>());
+        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_SUBFIELD_DB);
+
+        // Mock table region
+        List<FieldSchema> cols = Lists.newArrayList();
+        cols.add(new FieldSchema("col_int", "int", null));
+        cols.add(new FieldSchema("col_struct", "struct<c0: int, c1: struct<c11: int>>", null));
+        StorageDescriptor sd =
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                        -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
+
+        CaseInsensitiveMap<String, ColumnStatistic> regionStats = new CaseInsensitiveMap<>();
+        regionStats.put("col_int", ColumnStatistic.unknown());
+        regionStats.put("col_struct", ColumnStatistic.unknown());
+
+        Table tbl =
+                new Table("subfield", MOCKED_SUBFIELD_DB, null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null, null,
+                        "EXTERNAL_TABLE");
+        mockTables.put(tbl.getTableName(),
+                new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(tbl, MOCKED_HIVE_CATALOG_NAME),
+                        ImmutableList.of(), 5, regionStats, MOCKED_FILES));
+
+    }
+
     public static void mockTPCHTable() {
         MOCK_TABLE_MAP.putIfAbsent(MOCKED_TPCH_DB_NAME, new CaseInsensitiveMap<>());
         Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_TPCH_DB_NAME);
@@ -342,8 +372,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("r_name", "string", null));
         cols.add(new FieldSchema("r_comment", "string", null));
         StorageDescriptor sd =
-                new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
-                                      Maps.newHashMap());
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                        -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
 
         CaseInsensitiveMap<String, ColumnStatistic> regionStats = new CaseInsensitiveMap<>();
         regionStats.put("r_regionkey", new ColumnStatistic(0, 4, 0, 4, 5));
@@ -363,8 +393,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("n_name", "string", null));
         cols.add(new FieldSchema("n_regionkey", "int", null));
         cols.add(new FieldSchema("n_comment", "string", null));
-        sd = new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
-                                   Maps.newHashMap());
+        sd = new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
 
         Map<String, ColumnStatistic> nationStats = new CaseInsensitiveMap<>();
         nationStats.put("n_nationkey", new ColumnStatistic(0, 24, 0, 4, 25));
@@ -387,8 +417,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("s_phone", "string", null));
         cols.add(new FieldSchema("s_acctbal", "decimal(15,2)", null));
         cols.add(new FieldSchema("s_comment", "string", null));
-        sd = new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
-                                   Maps.newHashMap());
+        sd = new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
 
         CaseInsensitiveMap<String, ColumnStatistic> supplierStats = new CaseInsensitiveMap<>();
         supplierStats.put("s_suppkey", new ColumnStatistic(1, 1000000.0, 0, 4, 1000000));
@@ -416,8 +446,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("p_container", "string", null));
         cols.add(new FieldSchema("p_retailprice", "decimal(15,2)", null));
         cols.add(new FieldSchema("p_comment", "string", null));
-        sd = new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
-                                   Maps.newHashMap());
+        sd = new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
 
         CaseInsensitiveMap<String, ColumnStatistic> partStats = new CaseInsensitiveMap<>();
         partStats.put("p_partkey", new ColumnStatistic(1, 20000000, 0, 8, 20000000));
@@ -443,8 +473,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("ps_availqty", "int", null));
         cols.add(new FieldSchema("ps_supplycost", "decimal(15,2)", null));
         cols.add(new FieldSchema("ps_comment", "string", null));
-        sd = new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
-                                   Maps.newHashMap());
+        sd = new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
 
         CaseInsensitiveMap<String, ColumnStatistic> partSuppStats = new CaseInsensitiveMap<>();
         partSuppStats.put("ps_partkey", new ColumnStatistic(1, 20000000, 0, 8, 20000000));
@@ -469,8 +499,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("c_acctbal", "decimal(15,2)", null));
         cols.add(new FieldSchema("c_mktsegment", "string", null));
         cols.add(new FieldSchema("c_comment", "string", null));
-        sd = new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
-                                   Maps.newHashMap());
+        sd = new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS,
+                "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
 
         Map<String, ColumnStatistic> customerStats = new CaseInsensitiveMap<>();
         customerStats.put("c_custkey", new ColumnStatistic(1, 15000000, 0, 8, 15000000));
@@ -499,7 +529,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("o_clerk", "string", null));
         cols.add(new FieldSchema("o_shippriority", "int", null));
         cols.add(new FieldSchema("o_comment", "string", null));
-        sd = new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
+        sd = new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS,
+                "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
                                    Maps.newHashMap());
 
         CaseInsensitiveMap<String, ColumnStatistic> ordersStats = new CaseInsensitiveMap<>();
@@ -540,7 +571,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("l_shipinstruct", "string", null));
         cols.add(new FieldSchema("l_shipmode", "string", null));
         cols.add(new FieldSchema("l_comment", "string", null));
-        sd = new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
+        sd = new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS,
+                "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
                                    Maps.newHashMap());
 
         Map<String, ColumnStatistic> lineitemStats = new CaseInsensitiveMap<>();
@@ -586,6 +618,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         mockT3();
         mockT1WithMultiPartitionColumns(); // t1_par
         mockT2WithMultiPartitionColumns(); // t2_par
+        mockT1WithNullPartitionColumns(); // t1_par_null
         mockTablesWithSinglePartitionColumn();
         mockOrders();
     }
@@ -605,7 +638,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("o_comment", "string", null));
 
         StorageDescriptor sd =
-                new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS,
+                        "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
                                       Maps.newHashMap());
         Table orders = new Table("orders", "partitioned_db", null, 0, 0, 0, sd,
                                  ImmutableList.of(new FieldSchema("o_orderdate", "Date", null)), Maps.newHashMap(),
@@ -673,7 +707,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("l_shipmode", "string", null));
         cols.add(new FieldSchema("l_comment", "string", null));
         StorageDescriptor sd =
-                new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS,
+                        "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
                                       Maps.newHashMap());
         Table lineItemPar = new Table("lineitem_par", "partitioned_db", null, 0, 0, 0, sd,
                                       ImmutableList.of(new FieldSchema("l_shipdate", "Date", null)), Maps.newHashMap(),
@@ -743,7 +778,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("l_shipmode", "string", null));
         cols.add(new FieldSchema("l_comment", "string", null));
         StorageDescriptor sd =
-                new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS,
+                        "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
                                       Maps.newHashMap());
         Table lineItemPar = new Table("lineitem_mul_par", "partitioned_db", null, 0, 0, 0, sd,
                                       ImmutableList.of(new FieldSchema("l_shipdate", "Date", null),
@@ -825,8 +861,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("l_shipmode", "string", null));
         cols.add(new FieldSchema("l_comment", "string", null));
         StorageDescriptor sd =
-                new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
-                                      Maps.newHashMap());
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false, -1,
+                        null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
         Table lineItemPar = new Table("lineitem_mul_par2", "partitioned_db", null, 0, 0, 0, sd,
                                       ImmutableList.of(new FieldSchema("l_shipdate", "Date", null),
                                                        new FieldSchema("l_returnflag", "string", null)),
@@ -904,7 +940,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("c2", "string", null));
         cols.add(new FieldSchema("c3", "string", null));
         StorageDescriptor sd =
-                new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS,
+                        "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
                                       Maps.newHashMap());
         Table mockTable = new Table(tableName, dbName, null, 0, 0, 0, sd,
                                     ImmutableList.of(new FieldSchema("par_col", "int", null)), Maps.newHashMap(), null,
@@ -964,8 +1001,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("c3", "string", null));
 
         StorageDescriptor sd =
-                new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
-                                      Maps.newHashMap());
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                        -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
         Table t1 = new Table("t1_par", "partitioned_db", null, 0, 0, 0, sd,
                              ImmutableList.of(new FieldSchema("par_col", "int", null),
                                               new FieldSchema("par_date", "date", null)), Maps.newHashMap(), null, null,
@@ -1018,6 +1055,75 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                                          partitionNames, (long) rowCount, columnStatisticMap, remoteFileInfos));
     }
 
+    public static void mockT1WithNullPartitionColumns() {
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_PARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
+        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_DB_NAME);
+
+        List<FieldSchema> cols = Lists.newArrayList();
+        cols.add(new FieldSchema("c1", "int", null));
+        cols.add(new FieldSchema("c2", "string", null));
+        cols.add(new FieldSchema("c3", "string", null));
+
+        StorageDescriptor sd =
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                        -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
+        Table t1 = new Table("t1_par_null", "partitioned_db", null, 0, 0, 0, sd,
+                ImmutableList.of(new FieldSchema("par_col", "int", null),
+                        new FieldSchema("par_date", "date", null)), Maps.newHashMap(), null, null,
+                "EXTERNAL_TABLE");
+        List<String> partitionNames = Lists.newArrayList("par_col=0/par_date=2020-01-01", "par_col=0/par_date=2020-01-02",
+                "par_col=0/par_date=2020-01-03", "par_col=1/par_date=__HIVE_DEFAULT_PARTITION__",
+                "par_col=__HIVE_DEFAULT_PARTITION__/par_date=2020-01-03", "par_col=3/par_date=2020-01-04");
+        Map<String, HivePartitionStats> hivePartitionStatsMap = Maps.newHashMap();
+        double avgNumPerPartition = (double) (100 / 3);
+        double rowCount = 100;
+
+        List<PartitionKey> partitionKeyList = Lists.newArrayList();
+        Column partitionColumn1 = new Column("par_col", Type.INT);
+        Column partitionColumn2 = new Column("par_date", Type.DATE);
+        List<Column> partitionColumns = ImmutableList.of(partitionColumn1, partitionColumn2);
+        try {
+            partitionKeyList.add(
+                    PartitionUtil.createPartitionKey(ImmutableList.of("0", "2020-01-02"), partitionColumns));
+            partitionKeyList.add(
+                    PartitionUtil.createPartitionKey(ImmutableList.of("0", "2020-01-02"), partitionColumns));
+            partitionKeyList.add(
+                    PartitionUtil.createPartitionKey(ImmutableList.of("0", "2020-01-03"), partitionColumns));
+            partitionKeyList.add(PartitionUtil.createPartitionKey(ImmutableList.of("1", "__HIVE_DEFAULT_PARTITION__"),
+                    partitionColumns));
+            partitionKeyList.add(
+                    PartitionUtil.createPartitionKey(ImmutableList.of("__HIVE_DEFAULT_PARTITION__", "2020-01-03"),
+                            partitionColumns));
+            partitionKeyList.add(
+                    PartitionUtil.createPartitionKey(ImmutableList.of("3", "2020-01-04"), partitionColumns));
+        } catch (AnalysisException e) {
+            throw new RuntimeException(e);
+        }
+
+        List<String> partitionColumnNames = ImmutableList.of("par_col", "par_date");
+        ColumnStatistic partitionColumnStats1 =
+                getPartitionColumnStatistic(partitionColumn1, partitionKeyList, partitionColumnNames,
+                        hivePartitionStatsMap, avgNumPerPartition, rowCount);
+        ColumnStatistic partitionColumnStats2 =
+                getPartitionColumnStatistic(partitionColumn2, partitionKeyList, partitionColumnNames,
+                        hivePartitionStatsMap, avgNumPerPartition, rowCount);
+
+        Map<String, ColumnStatistic> columnStatisticMap;
+        List<String> colNames = cols.stream().map(FieldSchema::getName).collect(Collectors.toList());
+        columnStatisticMap =
+                colNames.stream().collect(Collectors.toMap(Function.identity(), col -> ColumnStatistic.unknown()));
+        columnStatisticMap.put("par_col", partitionColumnStats1);
+        columnStatisticMap.put("par_date", partitionColumnStats2);
+
+        List<RemoteFileInfo> remoteFileInfos = Lists.newArrayList();
+        partitionNames.forEach(
+                k -> remoteFileInfos.add(new RemoteFileInfo(RemoteFileInputFormat.ORC, ImmutableList.of(), null)));
+
+        mockTables.put(t1.getTableName(),
+                new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(t1, MOCKED_HIVE_CATALOG_NAME),
+                        partitionNames, (long) rowCount, columnStatisticMap, remoteFileInfos));
+    }
+
     public static void mockT2WithMultiPartitionColumns() {
         MOCK_TABLE_MAP.putIfAbsent(MOCKED_PARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
         Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_DB_NAME);
@@ -1026,7 +1132,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("c1", "int", null));
         cols.add(new FieldSchema("c2", "string", null));
         cols.add(new FieldSchema("c3", "string", null));
-        StorageDescriptor sd = new StorageDescriptor(cols, "", "",  "", false, -1, null, Lists.newArrayList(),
+        StorageDescriptor sd = new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS,
+                "", false, -1, null, Lists.newArrayList(),
                 Lists.newArrayList(), Maps.newHashMap());
         Table t2 = new Table("t2_par", "partitioned_db", null, 0, 0, 0,  sd,
                 ImmutableList.of(new FieldSchema("par_col", "int", null),
@@ -1088,7 +1195,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
             cols.add(new FieldSchema("c1", "int", null));
             cols.add(new FieldSchema("c2", "string", null));
             cols.add(new FieldSchema("c3", "string", null));
-            StorageDescriptor sd = new StorageDescriptor(cols, "", "",  "", false, -1, null, Lists.newArrayList(),
+            StorageDescriptor sd = new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS,
+                    "", false, -1, null, Lists.newArrayList(),
                     Lists.newArrayList(), Maps.newHashMap());
             Table partTbl1 = new Table("part_tbl1", "partitioned_db", null, 0, 0, 0,  sd,
                     ImmutableList.of(new FieldSchema("par_date", "date", null)), Maps.newHashMap(),
@@ -1141,7 +1249,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
             cols.add(new FieldSchema("c1", "int", null));
             cols.add(new FieldSchema("c2", "string", null));
             cols.add(new FieldSchema("c3", "string", null));
-            StorageDescriptor sd = new StorageDescriptor(cols, "", "",  "", false,
+            StorageDescriptor sd = new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS,  "", false,
                     -1, null, Lists.newArrayList(),
                     Lists.newArrayList(), Maps.newHashMap());
             Table partTbl2 = new Table("part_tbl2", "partitioned_db", null, 0, 0, 0,  sd,
@@ -1204,11 +1312,10 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                 new HiveMetastoreOperations(cachingHiveMetastore, false, new Configuration(), MetastoreType.HMS,
                                             "hive_catalog");
         RemoteFileIO remoteFileIO = new HiveRemoteFileIO(new Configuration());
-        CachingRemoteFileIO cacheIO =
-                CachingRemoteFileIO.createCatalogLevelInstance(remoteFileIO, Executors.newSingleThreadExecutor(), 0, 0,
-                                                               0);
-        RemoteFileOperations fileOps =
-                new RemoteFileOperations(cacheIO, Executors.newSingleThreadExecutor(), false, false);
+        CachingRemoteFileIO cacheIO = CachingRemoteFileIO.createCatalogLevelInstance(remoteFileIO,
+                Executors.newSingleThreadExecutor(), 0, 0, 0);
+        RemoteFileOperations fileOps = new RemoteFileOperations(cacheIO, Executors.newSingleThreadExecutor(),
+                Executors.newSingleThreadExecutor(), false, false, new Configuration());
 
         HiveStatisticsProvider hiveStatisticsProvider = new HiveStatisticsProvider(hmsOps, fileOps);
         try {

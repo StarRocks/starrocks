@@ -23,6 +23,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
+#include "storage/tablet_meta_manager.h"
 #include "testutil/assert.h"
 
 namespace starrocks::lake {
@@ -56,12 +57,23 @@ protected:
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kTxnLogDirectoryName)));
     }
 
+    void check_local_persistent_index_meta(int64_t tablet_id, int64_t expected_version) {
+        PersistentIndexMetaPB index_meta;
+        DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store();
+        CHECK_OK(TabletMetaManager::get_persistent_index_meta(data_dir, tablet_id, &index_meta));
+        ASSERT_TRUE(index_meta.version().major_number() == expected_version);
+    }
+
     std::string _test_dir;
     std::unique_ptr<MemTracker> _parent_tracker;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<LocationProvider> _lp;
     std::unique_ptr<UpdateManager> _update_mgr;
     std::unique_ptr<TabletManager> _tablet_mgr;
+};
+
+struct PrimaryKeyParam {
+    bool enable_persistent_index = false;
 };
 
 } // namespace starrocks::lake

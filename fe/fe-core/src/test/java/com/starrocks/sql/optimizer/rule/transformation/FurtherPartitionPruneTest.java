@@ -17,17 +17,24 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.plan.PlanTestBase;
+import org.junit.Assert;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class FurtherPartitionPruneTest extends PlanTestBase {
 
     @BeforeAll
@@ -98,10 +105,40 @@ class FurtherPartitionPruneTest extends PlanTestBase {
                 "PARTITION `p202009` VALUES LESS THAN (\"2020-10-01\") ) " +
                 "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3 " +
                 "PROPERTIES ( \"replication_num\" = \"1\");");
+
+        starRocksAssert.withTable("CREATE TABLE `expr_range` " +
+                "( `k1` date, `k2` datetime, `k3` char(20), `k4` varchar(20), `k5` boolean) " +
+                "ENGINE=OLAP DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) " +
+                "PARTITION BY date_trunc('month', k1) " +
+                "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3 " +
+                "PROPERTIES ( \"replication_num\" = \"1\");");
+        starRocksAssert.withTable("CREATE TABLE `maxvalue_range` (\n" +
+                "  `v1` bigint(20) NULL COMMENT \"\",\n" +
+                "  `v2` bigint(20) NULL COMMENT \"\",\n" +
+                "  `v3` bigint(20) NULL COMMENT \"\",\n" +
+                "  `v4` varchar(20) NULL COMMENT \"\",\n" +
+                "  `pay_dt` date NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`, `v2`, `v3`)\n" +
+                "PARTITION BY RANGE (v1)\n" +
+                "(\n" +
+                "    PARTITION p202101 VALUES [('1'), ('100')),\n" +
+                "    PARTITION p202102 VALUES [('500'), ('800')),\n" +
+                "    PARTITION p202103 VALUES [('1000'), (MAXVALUE))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");");
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("emptyPartitionSqlList")
+    @Order(1)
     void testEmptyPartitionSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         assertTrue(plan, plan.contains("partitions=0/4"));
@@ -109,6 +146,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("onePartitionSqlList")
+    @Order(2)
     void testOnePartitionSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         assertTrue(plan, plan.contains("partitions=1/4"));
@@ -116,6 +154,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("twoPartitionsSqlList")
+    @Order(3)
     void testTwoPartitionsSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         assertTrue(plan, plan.contains("partitions=2/4"));
@@ -123,6 +162,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("threePartitionsSqlList")
+    @Order(3)
     void testThreePartitionsSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         assertTrue(plan, plan.contains("partitions=3/4"));
@@ -130,6 +170,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("fourPartitionsSqlList")
+    @Order(4)
     void testFourPartitionsSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         assertTrue(plan, plan.contains("partitions=4/4"));
@@ -137,6 +178,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("cannotPrunePredicateSqls")
+    @Order(5)
     void testCannotPrunePredicateSqls(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         assertTrue(plan, plan.contains("PREDICATES: "));
@@ -144,11 +186,45 @@ class FurtherPartitionPruneTest extends PlanTestBase {
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("canPrunePredicateSqls")
+    @Order(6)
     void testCanPrunePredicateSqls(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         assertFalse(plan, plan.contains("PREDICATES: "));
     }
 
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("exprPrunePartitionSqls")
+    @Order(7)
+    void testExprPrunePartition(String sql) throws Exception {
+        String plan = getFragmentPlan(sql);
+
+        Pattern pattern = Pattern.compile("partitions=.*");
+        Matcher matcher = pattern.matcher(plan);
+
+        while (matcher.find()) {
+            String matchedLine = matcher.group();
+            System.out.println(matchedLine);
+            String[] values = matchedLine.split("=")[1].split("/");
+            Assert.assertTrue(matchedLine, Integer.valueOf(values[0]) < Integer.valueOf(values[1]));
+        }
+    }
+
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("exprPrunePartitionSqls")
+    @Order(8)
+    void testDisableExprPrunePartition(String sql) throws Exception {
+        connectContext.getSessionVariable().setEnableExprPrunePartition(false);
+        String plan = getFragmentPlan(sql);
+        Pattern pattern = Pattern.compile("partitions=.*");
+        Matcher matcher = pattern.matcher(plan);
+
+        while (matcher.find()) {
+            String matchedLine = matcher.group();
+            System.out.println(matchedLine);
+            String[] values = matchedLine.split("=")[1].split("/");
+            Assert.assertTrue(matchedLine, Integer.valueOf(values[0]) == Integer.valueOf(values[1]));
+        }
+    }
 
     private static Stream<Arguments> emptyPartitionSqlList() {
         List<String> sqlList = Lists.newArrayList();
@@ -360,7 +436,6 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 
-
     private static Stream<Arguments> cannotPrunePredicateSqls() {
         List<String> sqlList = Lists.newArrayList();
         sqlList.add("select * from tbl_int where (k1 >= 0 and k1 < 200) or s1 = 'a'");
@@ -374,6 +449,10 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from less_than_tbl where k1 < str_to_date('20200801', '%Y%m%d')");
         sqlList.add("select * from less_than_tbl where k1 < '2020-08-01' and k1 is not null");
         sqlList.add("select * from less_than_tbl where k1 < '2020-08-01' and k1 is null");
+        sqlList.add("select * from ptest where date_trunc('year', d2) = '2020-01-01'");
+        sqlList.add("select * from less_than_tbl where date_trunc('year', k1) < '2020-08-01'");
+        sqlList.add("select * from less_than_tbl where datediff('2020-08-01', k1) = 1");
+
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 
@@ -387,6 +466,33 @@ class FurtherPartitionPruneTest extends PlanTestBase {
                 "and cast(d2 as date) < '2020-04-01'");
         sqlList.add("select * from ptest where d2 < cast('20200101' as date)");
         sqlList.add("select * from ptest where d2 < str_to_date('20200401', '%Y%m%d')");
+        return sqlList.stream().map(e -> Arguments.of(e));
+    }
+
+    private static Stream<Arguments> exprPrunePartitionSqls() {
+        List<String> sqlList = Lists.newArrayList();
+        sqlList.add("select * from less_than_tbl where date_trunc('year', k1) is null");
+        sqlList.add(
+                "select * from less_than_tbl where date_trunc('year', k1) is null or k1 in " +
+                        "('2020-09-01', '2020-09-02', '2020-09-03')");
+        sqlList.add("select * from less_than_tbl where date_trunc('year', k1) > '2050-08-01'");
+
+        sqlList.add("select * from less_than_tbl where date_trunc('month', date_trunc('day', k1)) < '2020-08-01'");
+        sqlList.add("select * from less_than_tbl where date_trunc('month', date_trunc('day', k1)) < '2020-08-01' " +
+                "or date_trunc('month', date_trunc('day', k1)) > '2020-09-01'");
+
+        sqlList.add(
+                "select * from less_than_tbl where date_trunc('month', date_trunc('day', k1)) < '2020-08-01 10:00:00'");
+        sqlList.add("select * from maxvalue_range where days_add('2020-01-01' ,v1) > '2050-01-01'");
+        sqlList.add("select * from maxvalue_range where hours_add(days_add('2020-01-01' ,v1), 100) > '2050-01-01'");
+        sqlList.add("select * from maxvalue_range where hours_add(days_add('2020-01-01' ,v1), 100) > '2050-01-01'");
+
+        sqlList.add("select * from less_than_tbl where k1 != '2020-09-01' and " +
+                "(date_trunc('year', k1) > '2030-01-01' or (k1 > '2020-09-01' and k1 <= '2020-10-01'))");
+
+        sqlList.add("select * from less_than_tbl where previous_day(k1, 'Monday') in ('2020-07-01', '2020-08-01', " +
+                "'2020-08-06') and k3 = 'a'");
+        sqlList.add("select * from less_than_tbl where datediff('2020-08-01', k1) < 0");
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 }

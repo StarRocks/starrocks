@@ -225,6 +225,9 @@ public class OperationType {
     public static final short OP_SAVE_AUTO_INCREMENT_ID = 105;
     public static final short OP_DELETE_AUTO_INCREMENT_ID = 106;
 
+    // light schema change for add and drop columns
+    public static final short OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS = 107;
+
     // routine load 110~120
     @Deprecated
     public static final short OP_ROUTINE_LOAD_JOB = 110;
@@ -319,6 +322,7 @@ public class OperationType {
 
     // drop catalog
     public static final short OP_DROP_CATALOG = 10061;
+
     // grant & revoke impersonate
     @Deprecated
     public static final short OP_GRANT_IMPERSONATE = 10062;
@@ -368,6 +372,8 @@ public class OperationType {
     public static final short OP_ADD_PARTITIONS_V2 = 10242;
     public static final short OP_MODIFY_PARTITION_V2 = 10243;
 
+    public static final short OP_ADD_SUB_PARTITIONS_V2 = 10244;
+
     // new privilege, all ends with V2
     public static final short OP_CREATE_USER_V2 = 10261;
     public static final short OP_UPDATE_USER_PRIVILEGE_V2 = 10262;
@@ -399,6 +405,17 @@ public class OperationType {
 
     // constraint properties
     public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;
+
+    // modify table property bucket size
+    public static final short OP_MODIFY_BUCKET_SIZE = 11140;
+
+    // external table analyze
+    public static final short OP_ADD_EXTERNAL_ANALYZE_STATUS = 11200;
+    public static final short OP_REMOVE_EXTERNAL_ANALYZE_STATUS = 11201;
+    public static final short OP_ADD_EXTERNAL_ANALYZER_JOB = 11202;
+    public static final short OP_REMOVE_EXTERNAL_ANALYZER_JOB = 11203;
+    public static final short OP_ADD_EXTERNAL_BASIC_STATS_META = 11204;
+    public static final short OP_REMOVE_EXTERNAL_BASIC_STATS_META = 11205;
 
     //Database json format log
     public static final short OP_CREATE_DB_V2 = 12001;
@@ -483,6 +500,12 @@ public class OperationType {
 
     // Pipe operations log
     public static final short OP_PIPE = 12200;
+
+    // Primary key
+    public static final short OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC = 13200;
+
+    // alter catalog
+    public static final short OP_ALTER_CATALOG = 13300;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds

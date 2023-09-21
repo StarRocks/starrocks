@@ -97,9 +97,9 @@ public:
         return true;
     }
 
-    virtual bool read_string(Column* column, Slice s, const Options& options) const = 0;
+    virtual bool read_string(Column* column, const Slice& s, const Options& options) const = 0;
 
-    virtual bool read_quoted_string(Column* column, Slice s, const Options& options) const = 0;
+    virtual bool read_quoted_string(Column* column, const Slice& s, const Options& options) const = 0;
 
 protected:
     template <char quote>

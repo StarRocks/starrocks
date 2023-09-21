@@ -41,7 +41,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
@@ -109,31 +109,27 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return;
             }
 
-            if (!RunMode.allowCreateLakeTable()) {
+            if (!RunMode.allowCreateLakeTable()) { // share_nothing mode
                 publishVersionForOlapTable(readyTransactionStates);
-                return;
-            }
-
-            if (!RunMode.allowCreateOlapTable()) {
+            } else if (!RunMode.allowCreateOlapTable()) { // share_data mode
                 publishVersionForLakeTable(readyTransactionStates);
-                return;
-            }
-
-            List<TransactionState> olapTransactions = new ArrayList<>();
-            List<TransactionState> lakeTransactions = new ArrayList<>();
-            for (TransactionState txnState : readyTransactionStates) {
-                if (isLakeTableTransaction(txnState)) {
-                    lakeTransactions.add(txnState);
-                } else {
-                    olapTransactions.add(txnState);
+            } else { // hybrid mode
+                List<TransactionState> olapTransactions = new ArrayList<>();
+                List<TransactionState> lakeTransactions = new ArrayList<>();
+                for (TransactionState txnState : readyTransactionStates) {
+                    if (isLakeTableTransaction(txnState)) {
+                        lakeTransactions.add(txnState);
+                    } else {
+                        olapTransactions.add(txnState);
+                    }
                 }
-            }
 
-            if (!olapTransactions.isEmpty()) {
-                publishVersionForOlapTable(olapTransactions);
-            }
-            if (!lakeTransactions.isEmpty()) {
-                publishVersionForLakeTable(lakeTransactions);
+                if (!olapTransactions.isEmpty()) {
+                    publishVersionForOlapTable(olapTransactions);
+                }
+                if (!lakeTransactions.isEmpty()) {
+                    publishVersionForLakeTable(lakeTransactions);
+                }
             }
         } catch (Throwable t) {
             LOG.error("errors while publish version to all backends", t);
@@ -396,7 +392,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return true;
             }
             long partitionId = partitionCommitInfo.getPartitionId();
-            Partition partition = table.getPartition(partitionId);
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
                 return true;

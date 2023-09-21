@@ -73,6 +73,7 @@ public class CreateTableAnalyzer {
 
     private static final String DEFAULT_CHARSET_NAME = "utf8";
 
+    private static final String UNIFIED = "unified";
     private static final String ELASTICSEARCH = "elasticsearch";
     private static final String ICEBERG = "iceberg";
     private static final String HIVE = "hive";
@@ -93,19 +94,26 @@ public class CreateTableAnalyzer {
                     throw new SemanticException("Unknown engine name: %s", engineName);
                 }
             }
-        } else {
-            String catalogType = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(catalogName);
-            if (Strings.isNullOrEmpty(engineName)) {
-                if (!catalogType.equalsIgnoreCase(ICEBERG) && !catalogType.equalsIgnoreCase(HIVE)) {
-                    throw new SemanticException("Currently doesn't support creating tables of type " + catalogType);
-                }
-                return catalogType;
-            } else if (!engineName.equalsIgnoreCase(catalogType)) {
-                throw new SemanticException("Can't create %s table in the %s catalog", engineName, catalogType);
-            } else {
-                return engineName;
-            }
         }
+
+        String catalogType = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(catalogName);
+        if (catalogType.equalsIgnoreCase(UNIFIED)) {
+            if (Strings.isNullOrEmpty(engineName)) {
+                throw new SemanticException("Create table in unified catalog requires engine clause " +
+                        "(ENGINE = ENGINE_NAME)");
+            }
+            return engineName;
+        }
+
+        if (Strings.isNullOrEmpty(engineName)) {
+            return catalogType; // use catalog type if engine is not specified
+        }
+
+        if (!engineName.equalsIgnoreCase(catalogType)) {
+            throw new SemanticException("Can't create %s table in the %s catalog", engineName, catalogType);
+        }
+
+        return engineName;
     }
 
     private static String analyzeCharsetName(String charsetName) {
@@ -433,7 +441,7 @@ public class CreateTableAnalyzer {
             }
 
             if (RunMode.allowCreateLakeTable()) {
-                throw new SemanticException("Table with Generated column can not be lake table");
+                throw new SemanticException("Does not support generated column in shared data cluster yet");
             }
 
             boolean found = false;

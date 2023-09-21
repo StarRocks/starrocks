@@ -1145,6 +1145,12 @@ void TabletManager::unregister_clone_tablet(int64_t tablet_id) {
     shard.tablets_under_clone.erase(tablet_id);
 }
 
+bool TabletManager::check_clone_tablet(int64_t tablet_id) {
+    TabletsShard& shard = _get_tablets_shard(tablet_id);
+    std::unique_lock wlock(shard.lock);
+    return shard.tablets_under_clone.count(tablet_id) > 0;
+}
+
 void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
                                                   const std::string& tablet_id_path) {
     // acquire the read lock, so that there is no creating tablet or load tablet from meta tasks
@@ -1267,7 +1273,7 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
             context.partition_id = tablet->partition_id();
             context.tablet_schema_hash = tablet->schema_hash();
             context.rowset_path_prefix = tablet->schema_hash_path();
-            context.tablet_schema = &tablet->tablet_schema();
+            context.tablet_schema = tablet->tablet_schema();
             context.rowset_state = VISIBLE;
             context.version = version;
             // there is no data in init rowset, so overlapping info is unknown.
@@ -1331,16 +1337,16 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
             //    to the new column
             size_t old_col_idx = 0;
             for (old_col_idx = 0; old_col_idx < old_num_columns; ++old_col_idx) {
-                auto old_name = base_tablet->tablet_schema().column(old_col_idx).name();
+                auto old_name = base_tablet->tablet_schema()->column(old_col_idx).name();
                 if (old_name == column.column_name) {
-                    uint32_t old_unique_id = base_tablet->tablet_schema().column(old_col_idx).unique_id();
+                    uint32_t old_unique_id = base_tablet->tablet_schema()->column(old_col_idx).unique_id();
                     col_idx_to_unique_id[new_col_idx] = old_unique_id;
                     // During linked schema change, the now() default value is stored in TabletMeta.
                     // When receiving a new schema change request, the last default value stored should be
                     // remained instead of changing.
-                    if (base_tablet->tablet_schema().column(old_col_idx).has_default_value()) {
+                    if (base_tablet->tablet_schema()->column(old_col_idx).has_default_value()) {
                         normal_request.tablet_schema.columns[new_col_idx].__set_default_value(
-                                base_tablet->tablet_schema().column(old_col_idx).default_value());
+                                base_tablet->tablet_schema()->column(old_col_idx).default_value());
                     }
                     break;
                 }
@@ -1396,7 +1402,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
             // meta from storage, and assuming that no thread will change the tablet state back
             // to 'RUNNING' from 'SHUTDOWN'.
             std::unique_lock l(dropped_tablet->get_header_lock());
-            dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+            CHECK(dropped_tablet->set_tablet_state(TABLET_SHUTDOWN).ok());
         }
 
         // Remove tablet meta from storage, crash the program if failed.
@@ -1411,7 +1417,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
         {
             // See comments above
             std::unique_lock l(dropped_tablet->get_header_lock());
-            dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+            CHECK(dropped_tablet->set_tablet_state(TABLET_SHUTDOWN).ok());
             dropped_tablet->save_meta();
         }
 

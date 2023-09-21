@@ -23,19 +23,16 @@ static void delete_cache_entry(const CacheKey& key, void* value) {
     delete cache_value;
 }
 
-Status CacheManager::populate(const std::string& key, const CacheValue& value) {
+void CacheManager::populate(const std::string& key, const CacheValue& value) {
     auto* cache_value = new CacheValue(value);
     auto* handle = _cache.insert(key, cache_value, cache_value->size(), &delete_cache_entry, CachePriority::NORMAL);
-    DeferOp defer([this, handle]() { _cache.release(handle); });
-    return handle != nullptr ? Status::OK() : Status::InternalError("Insert failure");
+    _cache.release(handle);
 }
-
-static const Status CACHE_MISS = Status::NotFound("CacheMiss");
 
 StatusOr<CacheValue> CacheManager::probe(const std::string& key) {
     auto* handle = _cache.lookup(key);
     if (handle == nullptr) {
-        return CACHE_MISS;
+        return Status::NotFound("CacheMiss");
     }
     DeferOp defer([this, handle]() { _cache.release(handle); });
     CacheValue cache_value(*reinterpret_cast<CacheValue*>(_cache.value(handle)));

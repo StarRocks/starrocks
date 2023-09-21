@@ -213,7 +213,8 @@ Thread::~Thread() {
 }
 
 void Thread::join() {
-    ThreadJoiner(this).join();
+    auto st = ThreadJoiner(this).join();
+    st.permit_unchecked_error();
 }
 
 int64_t Thread::tid() const {

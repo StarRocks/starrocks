@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
 
@@ -45,6 +46,9 @@ bool MemoryScratchSinkOperator::is_finished() const {
 
 Status MemoryScratchSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+    if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+    }
     return Status::OK();
 }
 
@@ -69,6 +73,9 @@ StatusOr<ChunkPtr> MemoryScratchSinkOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status MemoryScratchSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    // Same as ResultSinkOperator, The memory of the output result set should not be counted in the query memory,
+    // otherwise it will cause memory statistics errors.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return Status::OK();
     }
@@ -103,7 +110,7 @@ void MemoryScratchSinkOperator::try_to_put_sentinel() {
 MemoryScratchSinkOperatorFactory::MemoryScratchSinkOperatorFactory(int32_t id, const RowDescriptor& row_desc,
                                                                    std::vector<TExpr> t_output_expr,
                                                                    FragmentContext* const fragment_ctx)
-        : OperatorFactory(id, "memory_scratch_sink", Operator::s_pseudo_plan_node_id_for_memory_scratch_sink),
+        : OperatorFactory(id, "memory_scratch_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _row_desc(row_desc),
           _t_output_expr(std::move(t_output_expr)) {}
 

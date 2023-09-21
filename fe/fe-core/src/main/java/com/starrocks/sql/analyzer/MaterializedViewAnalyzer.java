@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -120,16 +121,13 @@ public class MaterializedViewAnalyzer {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
     }
 
-    public static List<BaseTableInfo> getBaseTableInfos(QueryStatement queryStatement, boolean withCheck) {
-        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+    public static Set<BaseTableInfo> getBaseTableInfos(QueryStatement queryStatement, boolean withCheck) {
+        Set<BaseTableInfo> baseTableInfos = Sets.newHashSet();
         processBaseTables(queryStatement, baseTableInfos, withCheck);
-        Set<BaseTableInfo> baseTableInfoSet = Sets.newHashSet(baseTableInfos);
-        baseTableInfos.clear();
-        baseTableInfos.addAll(baseTableInfoSet);
         return baseTableInfos;
     }
 
-    private static void processBaseTables(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos,
+    private static void processBaseTables(QueryStatement queryStatement, Set<BaseTableInfo> baseTableInfos,
                                           boolean withCheck) {
         Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
         for (Map.Entry<TableName, Table> entry : tableNameTableMap.entrySet()) {
@@ -184,7 +182,7 @@ public class MaterializedViewAnalyzer {
         }
     }
 
-    private static void processViews(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos,
+    private static void processViews(QueryStatement queryStatement, Set<BaseTableInfo> baseTableInfos,
                                      boolean withCheck) {
         List<ViewRelation> viewRelations = AnalyzerUtils.collectViewRelations(queryStatement);
         if (viewRelations.isEmpty()) {
@@ -238,13 +236,13 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb(),
                         statement.getTableName().getPos());
             }
-            List<BaseTableInfo> baseTableInfos = getBaseTableInfos(queryStatement, true);
+            Set<BaseTableInfo> baseTableInfos = getBaseTableInfos(queryStatement, true);
             // now do not support empty base tables
             // will be relaxed after test
             if (baseTableInfos.isEmpty()) {
                 throw new SemanticException("Can not find base table in query statement");
             }
-            statement.setBaseTableInfos(baseTableInfos);
+            statement.setBaseTableInfos(Lists.newArrayList(baseTableInfos));
 
             // set the columns into createMaterializedViewStatement
             List<Column> mvColumns = genMaterializedViewColumns(statement);
@@ -267,6 +265,7 @@ public class MaterializedViewAnalyzer {
                 checkPartitionExpPatterns(statement);
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, aliasTableMap);
+                checkWindowFunctions(statement, columnExprMap);
             }
             // check and analyze distribution
             checkDistribution(statement, aliasTableMap);
@@ -772,6 +771,28 @@ public class MaterializedViewAnalyzer {
 
         private void checkPartitionColumnWithBaseJDBCTable(SlotRef slotRef, JDBCTable table) {
             checkPartitionColumnWithBaseTable(slotRef, table.getPartitionColumns(), table.isUnPartitioned());
+        }
+
+        // if mv is partitioned, mv will be refreshed by partition.
+        // if mv has window functions, it should also be partitioned by and the partition by columns
+        // should contain the partition column of mv
+        private void checkWindowFunctions(
+                CreateMaterializedViewStatement statement,
+                Map<Column, Expr> columnExprMap) {
+            SlotRef partitionSlotRef = getSlotRef(statement.getPartitionRefTableExpr());
+            // should analyze the partition expr to get type info
+            PartitionExprAnalyzer.analyzePartitionExpr(statement.getPartitionRefTableExpr(), partitionSlotRef);
+            for (Expr columnExpr : columnExprMap.values()) {
+                if (columnExpr instanceof AnalyticExpr) {
+                    AnalyticExpr analyticExpr = columnExpr.cast();
+                    if (analyticExpr.getPartitionExprs() == null
+                            || !analyticExpr.getPartitionExprs().contains(statement.getPartitionRefTableExpr())) {
+                        throw new SemanticException("window function %s ’s partition expressions" +
+                                " should contain the partition column %s of materialized view",
+                                analyticExpr.getFnCall().getFnName().getFunction(), statement.getPartitionColumn().getName());
+                    }
+                }
+            }
         }
 
         private void checkPartitionColumnWithBaseIcebergTable(SlotRef slotRef, IcebergTable table) {

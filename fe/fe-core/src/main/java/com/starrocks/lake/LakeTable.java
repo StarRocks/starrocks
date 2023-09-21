@@ -42,6 +42,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.StorageVolumeMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
@@ -75,20 +76,6 @@ public class LakeTable extends OlapTable {
     public LakeTable(long id, String tableName, List<Column> baseSchema, KeysType keysType, PartitionInfo partitionInfo,
                      DistributionInfo defaultDistributionInfo) {
         this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, null);
-    }
-
-    private FilePathInfo getDefaultFilePathInfo() {
-        return tableProperty.getStorageInfo().getFilePathInfo();
-    }
-
-    @Override
-    public String getStoragePath() {
-        return getDefaultFilePathInfo().getFullPath();
-    }
-
-    @Override
-    public FilePathInfo getPartitionFilePathInfo() {
-        return getDefaultFilePathInfo();
     }
 
     @Override
@@ -161,6 +148,9 @@ public class LakeTable extends OlapTable {
                         String.valueOf(storageInfo.isEnableAsyncWriteBack()));
             }
         }
+        // storage volume
+        StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, svm.getStorageVolumeNameOfTable(id));
         return properties;
     }
 
@@ -168,7 +158,7 @@ public class LakeTable extends OlapTable {
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash,
                                           long partitionId, long shardGroupId) {
-        FilePathInfo fsInfo = getPartitionFilePathInfo();
+        FilePathInfo fsInfo = getPartitionFilePathInfo(partitionId);
         FileCacheInfo cacheInfo = getPartitionFileCacheInfo(partitionId);
         Map<String, String> properties = new HashMap<>();
         properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(partitionId));

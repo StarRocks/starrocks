@@ -152,7 +152,8 @@ struct RuntimeColumnPredicateBuilder {
             min_op = to_olap_filter_type(TExprOpcode::GT, false);
         }
         auto min_value = parser.min_value();
-        range.add_range(min_op, static_cast<value_type>(min_value));
+        auto st = range.add_range(min_op, static_cast<value_type>(min_value));
+        st.permit_unchecked_error();
 
         SQLFilterOp max_op;
         if (filter->right_close_interval()) {
@@ -162,7 +163,8 @@ struct RuntimeColumnPredicateBuilder {
         }
 
         auto max_value = parser.max_value();
-        range.add_range(max_op, static_cast<value_type>(max_value));
+        st = range.add_range(max_op, static_cast<value_type>(max_value));
+        st.permit_unchecked_error();
     }
 };
 } // namespace detail

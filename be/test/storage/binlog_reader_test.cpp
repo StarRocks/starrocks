@@ -128,7 +128,7 @@ void BinlogReaderTest::create_rowset(int32_t* start_key, RowsetInfo& rowset_info
     writer_context.partition_id = 10;
     writer_context.rowset_path_prefix = _tablet->schema_hash_path();
     writer_context.rowset_state = COMMITTED;
-    writer_context.tablet_schema = &_tablet->tablet_schema();
+    writer_context.tablet_schema = _tablet->tablet_schema();
     writer_context.version.first = 0;
     writer_context.version.second = 0;
     writer_context.segments_overlap = NONOVERLAPPING;
@@ -145,7 +145,7 @@ void BinlogReaderTest::create_rowset(int32_t* start_key, RowsetInfo& rowset_info
             auto& cols = chunk->columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(Datum(std::to_string(i)));
+            cols[2]->append_datum(Datum(Slice(std::to_string(i))));
         }
         ASSERT_OK(rowset_writer->flush_chunk(*chunk));
         *start_key += num_rows;

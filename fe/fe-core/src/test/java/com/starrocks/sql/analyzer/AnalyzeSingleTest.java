@@ -91,6 +91,11 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select v1 as location from t0");
 
         analyzeSuccess("select v1 as rank from t0");
+
+        analyzeSuccess("select v1 as running from t0");
+        analyzeSuccess("select v1 as queries from t0");
+        analyzeSuccess("show running queries");
+        analyzeSuccess("show running queries limit 10");
     }
 
     @Test
@@ -742,5 +747,22 @@ public class AnalyzeSingleTest {
                 "*/ col = \"con   tent\n" +
                 "contend and col = \"''```中\t文  \\\"\r\n" +
                 "\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\'';`", res);
+    }
+
+    @Test
+    public void testRemoveComments() {
+        analyzeFail("select /*+ SET */ v1 from t0",
+                "Unexpected input 'SET', the most similar input is {'SET_VAR'}");
+        analyzeFail("select /*+   abc*/ v1 from t0",
+                "Unexpected input 'abc', the most similar input is {'SET_VAR'}");
+
+        analyzeSuccess("select v1 /*+*/ from t0");
+        analyzeSuccess("select v1 /*+\n*/ from t0");
+        analyzeSuccess("select v1 /*+   \n\n*/ from t0");
+        analyzeSuccess("select v1 /**/ from t0");
+        analyzeSuccess("select v1 /*    */ from t0");
+        analyzeSuccess("select v1 /*    a*/ from t0");
+        analyzeSuccess("select v1 /*abc    '中文\n'*/ from t0");
+        analyzeSuccess("select /*+ SET_VAR ('abc' = 'abc')*/ v1  from t0");
     }
 }

@@ -1,4 +1,4 @@
--- query1
+-- query1,query18
 create materialized view lineitem_agg_mv1
 distributed by hash(l_orderkey,
                l_shipdate,
@@ -52,6 +52,7 @@ as select  /*+ SET_VAR(query_timeout = 7200) */
        l_suppkey, l_shipdate, l_partkey
 ;
 
+-- query6
 create materialized view lineitem_agg_mv3
 distributed by hash(l_shipdate, l_discount, l_quantity) buckets 24
 partition by l_shipdate

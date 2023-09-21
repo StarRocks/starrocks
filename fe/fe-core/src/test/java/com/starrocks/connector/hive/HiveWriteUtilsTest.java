@@ -29,7 +29,7 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 
-import static com.starrocks.connector.hive.MockedRemoteFileSystem.TEST_FILES;
+import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABLE;
 
 public class HiveWriteUtilsTest {
     @Test
@@ -51,13 +51,13 @@ public class HiveWriteUtilsTest {
     public void testPathExists() {
         Path path = new Path("hdfs://127.0.0.1:9000/user/hive/warehouse/db");
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Failed checking path",
+                "Failed to check path",
                 () -> HiveWriteUtils.pathExists(path, new Configuration()));
 
         new MockUp<FileSystem>() {
             @Mock
             public FileSystem get(URI uri, Configuration conf) {
-                return new MockedRemoteFileSystem(TEST_FILES);
+                return new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
             }
         };
         Assert.assertFalse(HiveWriteUtils.pathExists(path, new Configuration()));
@@ -73,7 +73,7 @@ public class HiveWriteUtilsTest {
         new MockUp<FileSystem>() {
             @Mock
             public FileSystem get(URI uri, Configuration conf) {
-                return new MockedRemoteFileSystem(TEST_FILES);
+                return new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
             }
         };
         Assert.assertFalse(HiveWriteUtils.isDirectory(path, new Configuration()));
@@ -89,7 +89,7 @@ public class HiveWriteUtilsTest {
         new MockUp<FileSystem>() {
             @Mock
             public FileSystem get(URI uri, Configuration conf) {
-                return new MockedRemoteFileSystem(TEST_FILES);
+                return new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
             }
         };
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,

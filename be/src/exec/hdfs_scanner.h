@@ -28,9 +28,6 @@
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks::parquet {
-class FileReader;
-}
 namespace starrocks {
 
 class RuntimeFilterProbeCollector;
@@ -72,6 +69,9 @@ struct HdfsScanStats {
     bool has_page_statistics = false;
     // page skip
     int64_t page_skip = 0;
+
+    // late materialize round-by-round
+    int64_t group_min_round_cost = 0;
 
     // ORC only!
     int64_t delete_build_ns = 0;

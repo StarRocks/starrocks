@@ -37,13 +37,14 @@
 
 namespace starrocks::lake {
 
-class PartialUpdateTest : public TestBase {
+class PartialUpdateTest : public TestBase, testing::WithParamInterface<PrimaryKeyParam> {
 public:
     PartialUpdateTest() : TestBase(kTestDirectory) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_next_rowset_id(1);
+        _tablet_metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
         //
         //  | column | type | KEY | NULL |
         //  +--------+------+-----+------+
@@ -74,7 +75,7 @@ public:
         _referenced_column_ids.push_back(0);
         _referenced_column_ids.push_back(1);
         _partial_tablet_schema = TabletSchema::create(*schema);
-        _partial_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_partial_tablet_schema));
+        _partial_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_partial_tablet_schema));
 
         auto c2 = schema->add_column();
         {
@@ -87,7 +88,7 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(*schema);
-        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
 
     void SetUp() override {
@@ -187,7 +188,7 @@ protected:
     std::vector<std::string> _trash_files;
 };
 
-TEST_F(PartialUpdateTest, test_write) {
+TEST_P(PartialUpdateTest, test_write) {
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 3);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -200,8 +201,8 @@ TEST_F(PartialUpdateTest, test_write) {
     // normal write
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -217,8 +218,8 @@ TEST_F(PartialUpdateTest, test_write) {
     // partial update
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         delta_writer->TEST_set_partial_update(_partial_tablet_schema, _referenced_column_ids);
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
@@ -232,9 +233,12 @@ TEST_F(PartialUpdateTest, test_write) {
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
+    if (GetParam().enable_persistent_index) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
 }
 
-TEST_F(PartialUpdateTest, test_write_multi_segment) {
+TEST_P(PartialUpdateTest, test_write_multi_segment) {
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 3);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -247,8 +251,8 @@ TEST_F(PartialUpdateTest, test_write_multi_segment) {
     // normal write
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -266,8 +270,8 @@ TEST_F(PartialUpdateTest, test_write_multi_segment) {
     config::write_buffer_size = 1;
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         delta_writer->TEST_set_partial_update(_partial_tablet_schema, _referenced_column_ids);
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
@@ -285,9 +289,12 @@ TEST_F(PartialUpdateTest, test_write_multi_segment) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
     // check segment size in last metadata
     EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
+    if (GetParam().enable_persistent_index) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
 }
 
-TEST_F(PartialUpdateTest, test_write_multi_segment_by_diff_val) {
+TEST_P(PartialUpdateTest, test_write_multi_segment_by_diff_val) {
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 5);
     auto chunk2 = generate_data(kChunkSize, 0, true, 6);
@@ -301,8 +308,8 @@ TEST_F(PartialUpdateTest, test_write_multi_segment_by_diff_val) {
     // normal write
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -320,8 +327,8 @@ TEST_F(PartialUpdateTest, test_write_multi_segment_by_diff_val) {
     config::write_buffer_size = 1;
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         delta_writer->TEST_set_partial_update(_partial_tablet_schema, _referenced_column_ids);
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
@@ -339,9 +346,12 @@ TEST_F(PartialUpdateTest, test_write_multi_segment_by_diff_val) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
     // check segment size in last metadata
     EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
+    if (GetParam().enable_persistent_index) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
 }
 
-TEST_F(PartialUpdateTest, test_resolve_conflict) {
+TEST_P(PartialUpdateTest, test_resolve_conflict) {
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 3);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -354,8 +364,8 @@ TEST_F(PartialUpdateTest, test_resolve_conflict) {
     // normal write
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -373,8 +383,8 @@ TEST_F(PartialUpdateTest, test_resolve_conflict) {
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
         txn_ids.push_back(txn_id);
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         delta_writer->TEST_set_partial_update(_partial_tablet_schema, _referenced_column_ids);
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
@@ -391,9 +401,12 @@ TEST_F(PartialUpdateTest, test_resolve_conflict) {
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
+    if (GetParam().enable_persistent_index) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
 }
 
-TEST_F(PartialUpdateTest, test_resolve_conflict_multi_segment) {
+TEST_P(PartialUpdateTest, test_resolve_conflict_multi_segment) {
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 5);
     auto chunk2 = generate_data(kChunkSize, 0, true, 6);
@@ -407,8 +420,8 @@ TEST_F(PartialUpdateTest, test_resolve_conflict_multi_segment) {
     // normal write
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -428,8 +441,8 @@ TEST_F(PartialUpdateTest, test_resolve_conflict_multi_segment) {
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
         txn_ids.push_back(txn_id);
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         delta_writer->TEST_set_partial_update(_partial_tablet_schema, _referenced_column_ids);
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
@@ -450,6 +463,12 @@ TEST_F(PartialUpdateTest, test_resolve_conflict_multi_segment) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
     // check segment size in last metadata
     EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
+    if (GetParam().enable_persistent_index) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
 }
+
+INSTANTIATE_TEST_SUITE_P(PartialUpdateTest, PartialUpdateTest,
+                         ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false}));
 
 } // namespace starrocks::lake

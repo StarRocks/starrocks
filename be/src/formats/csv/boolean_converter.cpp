@@ -37,7 +37,7 @@ Status BooleanConverter::write_quoted_string(OutputStream* os, const Column& col
     return write_string(os, column, row_num, options);
 }
 
-bool BooleanConverter::read_string(Column* column, Slice s, const Options& options) const {
+bool BooleanConverter::read_string(Column* column, const Slice& s, const Options& options) const {
     StringParser::ParseResult r;
     bool v = StringParser::string_to_bool(s.data, s.size, &r);
     if (r == StringParser::PARSE_SUCCESS) {
@@ -60,7 +60,7 @@ bool BooleanConverter::read_string(Column* column, Slice s, const Options& optio
     }
 }
 
-bool BooleanConverter::read_quoted_string(Column* column, Slice s, const Options& options) const {
+bool BooleanConverter::read_quoted_string(Column* column, const Slice& s, const Options& options) const {
     return read_string(column, s, options);
 }
 

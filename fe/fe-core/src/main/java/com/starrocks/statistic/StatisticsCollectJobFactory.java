@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -43,9 +44,9 @@ public class StatisticsCollectJobFactory {
     private StatisticsCollectJobFactory() {
     }
 
-    public static List<StatisticsCollectJob> buildStatisticsCollectJob(AnalyzeJob analyzeJob) {
+    public static List<StatisticsCollectJob> buildStatisticsCollectJob(NativeAnalyzeJob nativeAnalyzeJob) {
         List<StatisticsCollectJob> statsJobs = Lists.newArrayList();
-        if (StatsConstants.DEFAULT_ALL_ID == analyzeJob.getDbId()) {
+        if (StatsConstants.DEFAULT_ALL_ID == nativeAnalyzeJob.getDbId()) {
             // all database
             List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
 
@@ -56,27 +57,27 @@ public class StatisticsCollectJobFactory {
                 }
 
                 for (Table table : db.getTables()) {
-                    createJob(statsJobs, analyzeJob, db, table, null);
+                    createJob(statsJobs, nativeAnalyzeJob, db, table, null);
                 }
             }
-        } else if (StatsConstants.DEFAULT_ALL_ID == analyzeJob.getTableId()
-                && StatsConstants.DEFAULT_ALL_ID != analyzeJob.getDbId()) {
+        } else if (StatsConstants.DEFAULT_ALL_ID == nativeAnalyzeJob.getTableId()
+                && StatsConstants.DEFAULT_ALL_ID != nativeAnalyzeJob.getDbId()) {
             // all table
-            Database db = GlobalStateMgr.getCurrentState().getDb(analyzeJob.getDbId());
+            Database db = GlobalStateMgr.getCurrentState().getDb(nativeAnalyzeJob.getDbId());
             if (null == db) {
                 return Collections.emptyList();
             }
 
             for (Table table : db.getTables()) {
-                createJob(statsJobs, analyzeJob, db, table, null);
+                createJob(statsJobs, nativeAnalyzeJob, db, table, null);
             }
         } else {
             // database or table is null mean database/table has been dropped
-            Database db = GlobalStateMgr.getCurrentState().getDb(analyzeJob.getDbId());
+            Database db = GlobalStateMgr.getCurrentState().getDb(nativeAnalyzeJob.getDbId());
             if (db == null) {
                 return Collections.emptyList();
             }
-            createJob(statsJobs, analyzeJob, db, db.getTable(analyzeJob.getTableId()), analyzeJob.getColumns());
+            createJob(statsJobs, nativeAnalyzeJob, db, db.getTable(nativeAnalyzeJob.getTableId()), nativeAnalyzeJob.getColumns());
         }
 
         return statsJobs;
@@ -106,6 +107,68 @@ public class StatisticsCollectJobFactory {
         }
     }
 
+    public static List<StatisticsCollectJob> buildExternalStatisticsCollectJob(ExternalAnalyzeJob externalAnalyzeJob) {
+        List<StatisticsCollectJob> statsJobs = Lists.newArrayList();
+        if (externalAnalyzeJob.isAnalyzeAllDb()) {
+            List<String> dbNames = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    listDbNames(externalAnalyzeJob.getCatalogName());
+            for (String dbName : dbNames) {
+                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                        getDb(externalAnalyzeJob.getCatalogName(), dbName);
+                if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
+                    continue;
+                }
+
+                List<String> tableNames = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                        listTableNames(externalAnalyzeJob.getCatalogName(), dbName);
+                for (String tableName : tableNames) {
+                    Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                            getTable(externalAnalyzeJob.getCatalogName(), dbName, tableName);
+                    if (null == table) {
+                        continue;
+                    }
+
+                    createExternalAnalyzeJob(statsJobs, externalAnalyzeJob, db, table, null);
+                }
+            }
+        } else if (externalAnalyzeJob.isAnalyzeAllTable()) {
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    getDb(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName());
+            if (null == db) {
+                return Collections.emptyList();
+            }
+
+            List<String> tableNames = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    listTableNames(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName());
+            for (String tableName : tableNames) {
+                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                        getTable(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName(), tableName);
+                if (null == table) {
+                    continue;
+                }
+
+                createExternalAnalyzeJob(statsJobs, externalAnalyzeJob, db, table, null);
+            }
+        } else {
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    getDb(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName());
+            if (null == db) {
+                return Collections.emptyList();
+            }
+
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    getTable(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName(),
+                            externalAnalyzeJob.getTableName());
+            if (null == table) {
+                return Collections.emptyList();
+            }
+
+            createExternalAnalyzeJob(statsJobs, externalAnalyzeJob, db, table, externalAnalyzeJob.getColumns());
+        }
+
+        return statsJobs;
+    }
+
     public static StatisticsCollectJob buildExternalStatisticsCollectJob(String catalogName, Database db, Table table,
                                                                          List<String> columns,
                                                                          StatsConstants.AnalyzeType analyzeType,
@@ -114,11 +177,48 @@ public class StatisticsCollectJobFactory {
         if (columns == null || columns.isEmpty()) {
             columns = StatisticUtils.getCollectibleColumns(table);
         }
-        return new ExternalFullStatisticsCollectJob(catalogName, db, table, columns,
+
+        List<String> partitionNames;
+        if (!table.isUnPartitioned()) {
+            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    listPartitionNames(catalogName, db.getFullName(), table.getName());
+        } else {
+            partitionNames = ImmutableList.of(table.getName());
+        }
+
+        return new ExternalFullStatisticsCollectJob(catalogName, db, table, partitionNames, columns,
                 analyzeType, scheduleType, properties);
     }
 
-    private static void createJob(List<StatisticsCollectJob> allTableJobMap, AnalyzeJob job,
+    private static void createExternalAnalyzeJob(List<StatisticsCollectJob> allTableJobMap, ExternalAnalyzeJob job,
+                                                 Database db, Table table, List<String> columns)  {
+        if (table == null) {
+            return;
+        }
+
+        String regex = job.getProperties().getOrDefault(StatsConstants.STATISTIC_EXCLUDE_PATTERN, null);
+        if (StringUtils.isNotBlank(regex)) {
+            Pattern checkRegex = Pattern.compile(regex);
+            String name = db.getFullName() + "." + table.getName();
+            if (checkRegex.matcher(name).find()) {
+                LOG.debug("statistics job exclude pattern {}, hit table: {}", regex, name);
+                return;
+            }
+        }
+
+        if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)) {
+            createExternalFullStatsJob(allTableJobMap, job, db, table, columns);
+        }
+    }
+
+    private static void createExternalFullStatsJob(List<StatisticsCollectJob> allTableJobMap,
+                                                   ExternalAnalyzeJob job,
+                                                   Database db, Table table, List<String> columns) {
+        allTableJobMap.add(buildExternalStatisticsCollectJob(job.getCatalogName(), db, table,
+                columns, StatsConstants.AnalyzeType.FULL, job.getScheduleType(), Maps.newHashMap()));
+    }
+
+    private static void createJob(List<StatisticsCollectJob> allTableJobMap, NativeAnalyzeJob job,
                                   Database db, Table table, List<String> columns) {
         if (table == null || !(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
             return;
@@ -220,7 +320,7 @@ public class StatisticsCollectJobFactory {
         }
     }
 
-    private static void createSampleStatsJob(List<StatisticsCollectJob> allTableJobMap, AnalyzeJob job, Database db,
+    private static void createSampleStatsJob(List<StatisticsCollectJob> allTableJobMap, NativeAnalyzeJob job, Database db,
                                              Table table, List<String> columns) {
         StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, null, columns,
                 StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(), job.getProperties());
@@ -228,7 +328,7 @@ public class StatisticsCollectJobFactory {
     }
 
     private static void createFullStatsJob(List<StatisticsCollectJob> allTableJobMap,
-                                           AnalyzeJob job, LocalDateTime statsLastUpdateTime,
+                                           NativeAnalyzeJob job, LocalDateTime statsLastUpdateTime,
                                            Database db, Table table, List<String> columns) {
         StatsConstants.AnalyzeType analyzeType;
         List<Partition> partitionList = new ArrayList<>();

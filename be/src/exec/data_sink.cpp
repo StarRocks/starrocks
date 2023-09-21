@@ -46,6 +46,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/export_sink.h"
+#include "runtime/hive_table_sink.h"
 #include "runtime/iceberg_table_sink.h"
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
@@ -53,6 +54,7 @@
 #include "runtime/result_sink.h"
 #include "runtime/runtime_state.h"
 #include "runtime/schema_table_sink.h"
+#include "runtime/table_function_table_sink.h"
 
 namespace starrocks {
 
@@ -150,6 +152,20 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
             return Status::InternalError("Missing iceberg table sink");
         }
         *sink = std::make_unique<IcebergTableSink>(state->obj_pool(), output_exprs);
+        break;
+    }
+    case TDataSinkType::HIVE_TABLE_SINK: {
+        if (!thrift_sink.__isset.hive_table_sink) {
+            return Status::InternalError("Missing hive table sink");
+        }
+        *sink = std::make_unique<HiveTableSink>(state->obj_pool(), output_exprs);
+        break;
+    }
+    case TDataSinkType::TABLE_FUNCTION_TABLE_SINK: {
+        if (!thrift_sink.__isset.table_function_table_sink) {
+            return Status::InternalError("Missing table function table sink");
+        }
+        *sink = std::make_unique<TableFunctionTableSink>(state->obj_pool(), output_exprs);
         break;
     }
 

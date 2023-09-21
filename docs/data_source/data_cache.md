@@ -8,12 +8,12 @@ To optimize the query performance in these scenarios, StarRocks 2.5 provides the
 
 ## How it works
 
-StarRocks splits data in an external storage system into multiple blocks of the same size (1 MB by default), and caches the data on BEs. Block is the smallest unit of data cache.
+StarRocks splits data in an external storage system into multiple blocks of the same size (1 MB by default), and caches the data on BEs. Block is the smallest unit of data cache, which is configurable.
 
-For example, if you query a Parquet file of 128 MB from Amazon S3, StarRocks splits the file into 128 blocks (1 MB for each block, recommended setting). The blocks are [0, 1 MB), [1 MB, 2 MB), [2 MB, 3 MB) ... [127 MB, 128 MB). StarRocks assigns a globally unique ID to each block, called a cache key. A cache key consists of the following three parts.
+For example, if you set the block size to 1 MB and you want to query a Parquet file of 128 MB from Amazon S3, StarRocks splits the file into 128 blocks. The blocks are [0, 1 MB), [1 MB, 2 MB), [2 MB, 3 MB) ... [127 MB, 128 MB). StarRocks assigns a globally unique ID to each block, called a cache key. A cache key consists of the following three parts.
 
 ```Plain
-hash(filename) + filesize + blockId
+hash(filename) + fileModificationTime + blockId
 ```
 
 The following table provides descriptions of each part.
@@ -21,7 +21,7 @@ The following table provides descriptions of each part.
 | **Component item** | **Description**                                              |
 | ------------------ | ------------------------------------------------------------ |
 | filename           | The name of the data file.                                   |
-| filesize           | The size of the data file, 1 MB by default.                  |
+| fileModificationTime | The last modification time of the data file.                  |
 | blockId            | The ID that StarRocks assigns to a block when splitting the data file. The ID is unique under the same data file but is not unique within your StarRocks cluster. |
 
 If the query hits the [1 MB, 2 MB) block, StarRocks performs the following operations:
@@ -39,14 +39,16 @@ For more information about `enable_populate_block_cache`, see [System variables]
 
 ## Storage media of blocks
 
-By default, StarRocks uses the memory of BE machines to cache blocks. It also supports using both the memory and disks as hybrid storage media of blocks. If BE machines are equipped with disks, such as NVMe drives or SSDs, you can use both the memory and disks to cache blocks. If you use cloud storage, such as Amazon EBS, for BE machines, we recommend that you use only the memory to cache blocks.
+StarRocks uses the memory and disks of BE machines to cache blocks. It supports cache solely on memory or on both the memory and disks.
+
+If you use disks as the storage media, the cache speed is directly affected by the performance of disks. Therefore, we recommend that you use high-performance disks such as NVMe disks for data cache. If you do not have high-performance disks, you can add more disks to relieve disk I/O pressure.
 
 ## Cache replacement policies
 
 StarRocks uses the [least recently used](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_recently_used_(LRU)) (LRU) policy to cache and discard data.
 
-- StarRocks reads data from memory, and then from disks if the data is not found in memory. Data read from disks is loaded into memory.
-- Data deleted from memory is written into disks. Data removed from disks is discarded.
+- StarRocks first reads data from memory. If the data is not found in memory, StarRocks will read the data from disks and try to load the data read from disks into memory.
+- Data discarded from memory will be written to disks. Data discarded from disks will be deleted.
 
 ## Enable Data Cache
 
@@ -72,13 +74,13 @@ You can enable Data Cache for FEs by using one of the following methods:
 
 Add the following parameters to the **conf/be.conf** file of each BE. Then restart each BE to make the settings take effect.
 
-| **Parameter**          | **Description**                                              |
-| ---------------------- | ------------------------------------------------------------ |
-| block_cache_enable     | Whether Data Cache is enabled.<ul><li>`true`: Data Cache is enabled.</li><li>`false`: Data Cache is disabled. The value of this parameter defaults to `false`.</li></ul>To enable Data Cache, set the value of this parameter to `true`. |
-| block_cache_disk_path  | The paths of disks. We recommend that the number of paths you configured for this parameter is the same as the number of disks of your BE machine. Multiple paths need to be separated with semicolons (;). After you add this parameter, StarRocks automatically creates a file named **cachelib_data** to cache blocks. |
-| block_cache_meta_path  | The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the **$STARROCKS_HOME** path. |
-| block_cache_mem_size   | The maximum amount of data that can be cached in the memory. Unit: bytes. The default value is `2147483648`, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after Data Cache is enabled, consider increasing the value. |
-| block_cache_disk_size  | The maximum amount of data that can be cached in a single disk. For example, if you configure two disk paths for the `block_cache_disk_path` parameter and set the value of the `block_cache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached in these two disks. The default value is `0`, which indicates that only the memory is used to cache data. Unit: bytes. |
+| **Parameter**          | **Description**                                              | **Default value** |
+| ---------------------- | ------------------------------------------------------------ | -------------------|
+| block_cache_enable     | Whether to enable Data Cache.<ul><li>`true`: Data Cache is enabled.</li><li>`false`: Data Cache is disabled.</li></ul> | false |
+| block_cache_disk_path  | The paths of disks. You can configure more than one disk and separate the disk paths with semicolons (;). We recommend that the number of paths you configured be the same as the number of disks of your BE machine. When the BE starts, StarRocks automatically creates a disk cache directory (the creation fails if no parent directory exists). | `${STARROCKS_HOME}/block_cache` |
+| block_cache_meta_path  | The storage path of block metadata. Yon can leave this parameter unspecified. | `${STARROCKS_HOME}/block_cache` |
+| block_cache_mem_size   | The maximum amount of data that can be cached in the memory. Unit: bytes. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after Data Cache is enabled, consider increasing the value. | `2147483648`, which is 2 GB.  |
+| block_cache_disk_size  | The maximum amount of data that can be cached in a single disk. Unit: bytes. For example, if you configure two disk paths for the `block_cache_disk_path` parameter and set the value of the `block_cache_disk_size` parameter to `21474836480` (20 GB), a maximum of 40 GB data can be cached in these two disks.  | `0`, which indicates that only the memory is used to cache data.  |
 
 Examples of setting these parameters.
 
@@ -89,9 +91,6 @@ block_cache_enable = true
 
 # Configure the disk path. Assume the BE machine is equipped with two disks.
 block_cache_disk_path = /home/disk1/sr/dla_cache_data/;/home/disk2/sr/dla_cache_data/
-
-# Configure the metadata storage path.
-block_cache_meta_path = /home/disk1/sr/dla_cache_meta/ 
 
 # Set block_cache_mem_size to 2 GB.
 block_cache_mem_size = 2147483648

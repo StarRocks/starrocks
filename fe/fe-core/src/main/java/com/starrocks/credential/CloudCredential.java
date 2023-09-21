@@ -22,8 +22,8 @@ import java.util.Map;
 public interface CloudCredential {
 
     /**
-    * Set credentials into Hadoop configuration
-    */
+     * Set credentials into Hadoop configuration
+     */
     void applyToConfiguration(Configuration configuration);
 
     /**
@@ -39,7 +39,7 @@ public interface CloudCredential {
     void toThrift(Map<String, String> properties);
 
     // Generate unique credential string, used as cache key in FileSystem cache
-    String getCredentialString();
+    String toCredString();
 
     // Convert to the protobuf used by staros.
     FileStoreInfo toFileStoreInfo();

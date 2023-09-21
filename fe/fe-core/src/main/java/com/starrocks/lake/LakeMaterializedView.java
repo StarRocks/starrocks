@@ -59,20 +59,6 @@ public class LakeMaterializedView extends MaterializedView {
         this.type = TableType.CLOUD_NATIVE_MATERIALIZED_VIEW;
     }
 
-    private FilePathInfo getDefaultFilePathInfo() {
-        return tableProperty.getStorageInfo().getFilePathInfo();
-    }
-
-    @Override
-    public String getStoragePath() {
-        return getDefaultFilePathInfo().getFullPath();
-    }
-
-    @Override
-    public FilePathInfo getPartitionFilePathInfo() {
-        return getDefaultFilePathInfo();
-    }
-
     @Override
     public FileCacheInfo getPartitionFileCacheInfo(long partitionId) {
         FileCacheInfo cacheInfo = null;
@@ -159,12 +145,9 @@ public class LakeMaterializedView extends MaterializedView {
 
         // storage_volume
         StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-        String storageVolumeId = svm.getStorageVolumeIdOfTable(id);
-        if (storageVolumeId != null) {
-            String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeName(storageVolumeId);
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
-                    PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME).append("\" = \"").append(volume).append("\"");
-        }
+        String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfTable(id);
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
+                PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME).append("\" = \"").append(volume).append("\"");
     }
 
     @Override

@@ -25,6 +25,7 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "runtime/descriptors.h"
+#include "storage/tablet_schema.h"
 #include "util/random.h"
 
 namespace starrocks {
@@ -36,6 +37,7 @@ struct OlapTableIndexSchema {
     int64_t index_id;
     std::vector<SlotDescriptor*> slots;
     int32_t schema_hash;
+    std::vector<TabletColumn*> columns;
 
     void to_protobuf(POlapTableIndexSchema* pindex) const;
 };
@@ -220,6 +222,8 @@ public:
 
     Status add_partitions(const std::vector<TOlapTablePartition>& partitions);
 
+    Status remove_partitions(const std::vector<int64_t>& partition_ids);
+
     bool is_un_partitioned() const { return _partition_columns.empty(); }
 
 private:
@@ -248,7 +252,8 @@ private:
 
     ObjectPool _obj_pool;
     std::map<int64_t, OlapTablePartition*> _partitions;
-    std::map<ChunkRow*, OlapTablePartition*, PartionKeyComparator> _partitions_map;
+    // one partition have multi sub partition
+    std::map<ChunkRow*, std::vector<int64_t>, PartionKeyComparator> _partitions_map;
 
     Random _rand{(uint32_t)time(nullptr)};
 };

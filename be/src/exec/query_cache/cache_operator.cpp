@@ -126,7 +126,8 @@ struct PerLaneBuffer {
 
 CacheOperator::CacheOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, CacheManagerRawPtr cache_mgr,
                              const CacheParam& cache_param)
-        : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), driver_sequence),
+        : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), true,
+                             driver_sequence),
           _cache_mgr(cache_mgr),
           _cache_param(cache_param),
           _lane_arbiter(std::make_shared<LaneArbiter>(_cache_param.num_lanes)) {
@@ -521,9 +522,9 @@ Status CacheOperator::reset_lane(RuntimeState* state, LaneOwnerType lane_owner) 
         _lane_arbiter->enable_passthrough_mode();
         for (auto i = 0; i <= premature_finished_idx; ++i) {
             auto& multi_op = _multilane_operators[i];
-            multi_op->set_finished(state);
+            (void)multi_op->set_finished(state);
         }
-        _scan_operator->set_finished(state);
+        (void)_scan_operator->set_finished(state);
     }
     return Status::OK();
 }

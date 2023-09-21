@@ -46,6 +46,8 @@ public:
     virtual bool is_full();
     virtual bool is_close_done();
 
+    virtual bool get_immutable_partition_ids(std::set<int64_t>* partition_ids);
+
     // mutable
     IndexIdToTabletBEMap* index_id_to_tablet_be_map() { return &_index_id_to_tablet_be_map; }
 

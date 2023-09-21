@@ -204,7 +204,7 @@ OutPut Exchange Id: 06
 3:HdfsScanNode
 TABLE: customer
 NON-PARTITION PREDICATES: 14: c_acctbal > 0.00, substring(13: c_phone, 1, 2) IN ('21', '28', '24', '32', '35', '34', '37')
-MIN/MAX PREDICATES: 32: c_acctbal > 0.00
+MIN/MAX PREDICATES: 14: c_acctbal > 0.00
 partitions=1/1
 avgRowSize=23.0
 cardinality: 6818187

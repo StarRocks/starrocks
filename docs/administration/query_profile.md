@@ -7,14 +7,28 @@ This topic describes how to check the query profile. A query profile records the
 For StarRocks versions earlier than v2.5, you can enable query profile by setting the variable `is_report_success` to `true`:
 
 ```SQL
-set is_report_success = true;
+SET is_report_success = true;
 ```
 
 For StarRocks v2.5 or later versions, you can enable query profile by setting the variable `enable_profile` to `true`:
 
 ```SQL
-set enable_profile = true;
+SET enable_profile = true;
 ```
+
+### Runtime Profile
+
+From v3.1 onwards, StarRocks supports the runtime profile feature, empowering you to access query profiles even before the queries are completed.
+
+To use this feature, you need to set the session variable `runtime_profile_report_interval` in addition to setting `enable_profile` to `true`. `runtime_profile_report_interval` (Unit: second, Default: `10`), which governs the profile report interval, is set by default to 10 seconds, meaning that whenever a query takes longer than 10 seconds, the runtime profile feature is automatically enabled.
+
+```SQL
+SET runtime_profile_report_interval = 10;
+```
+
+A runtime profile shows the same information as any query profile does. You can analyze it just like a regular query profile to gain valuable insights into the performance of the running query.
+
+However, a runtime profile can be incomplete because some operators of the execution plan may depend on others. To easily distinguish the running operators from the finished ones, the running operators are marked with `Status: Running`.
 
 ## Access query profiles
 
@@ -22,7 +36,7 @@ set enable_profile = true;
 >
 > If you are using the Enterprise Edition of StarRocks, you can use StarRocks Manager to access and visualize your query profiles.
 
-If you are not, follow these steps to access your query profiles:
+If you are using the Community Edition of StarRocks, follow these steps to access your query profiles:
 
 1. Enter `http://<fe_ip>:<fe_http_port>` in your browser.
 2. On the page this is displayed, click **queries** on the top navigation pane.
@@ -90,6 +104,14 @@ A query profile encompasses a mass of metrics that show the details of the query
 | OperatorTotalTime | Total CPU time cost of the operator.                  |
 | PushRowNum        | Total row count of the data that the operator pushed. |
 | PullRowNum        | Total row count of the data that the operator pulled. |
+
+#### Unique metrics
+
+| Metric            | Description                             |
+| ----------------- | --------------------------------------- |
+| IOTaskExecTime    | Total execution time for all I/O tasks. |
+| IOTaskWaitTime    | Total wait time for all I/O tasks.      |
+| MorselsCount      | Total number of I/O tasks.              |
 
 #### Scan operator
 
@@ -176,6 +198,27 @@ A query profile encompasses a mass of metrics that show the details of the query
 | Type       | Local Exchange type. Valid values: `Passthrough`, `Partition`, and `Broadcast`. |
 | ShuffleNum | Number of shuffles. This metric is valid only when `Type` is `Partition`. |
 
+#### Hive Connector
+
+| Metric                      | Description                                            |
+| --------------------------- | ------------------------------------------------------ |
+| ScanRanges                  | Number of tablets that are scanned.                    |
+| ReaderInit                  | The initiation time of Reader.                         |
+| ColumnReadTime              | Time consumed by Reader to read and parse data.        |
+| ExprFilterTime              | Time used to filter expressions.                       |
+| RowsRead                    | Number of data rows that are read.                     |
+
+#### Input Stream
+
+| Metric                    | Description                                                               |
+| ------------------------- | ------------------------------------------------------------------------- |
+| AppIOBytesRead            | Size of the data read by I/O tasks from the application layer.            |
+| AppIOCounter              | Number of I/O tasks from the application layer.                           |
+| AppIOTime                 | Total time consumed by I/O tasks from the application layer to read data. |
+| FSBytesRead               | Size of the data read by the storage system.                              |
+| FSIOCounter               | Number of I/O tasks from the storage layer.                               |
+| FSIOTime                  | Total time consumed by the storage layer to read data.                    |
+
 ### Time consumed by operators
 
 - For the OlapScan and ConnectorScan operators, their time consumption is equivalent to `OperatorTotalTime + ScanTime`. Because the Scan operators perform I/O operations in the asynchronous I/O thread pool, ScanTime represents asynchronous I/O time.
@@ -221,6 +264,93 @@ Usually, a noticeable difference between MIN and MAX values indicates the data i
                - __MAX_OF_OperatorTotalTime: 10m30s
                - __MIN_OF_OperatorTotalTime: 279.170us
 ```
+
+## Perform text-based profile analysis
+
+From v3.1 onwards, StarRocks offers a more user-friendly text-based profile analysis feature. This feature allows you to efficiently identify bottlenecks and opportunities for query optimization.
+
+### Analyze an existing query
+
+You can analyze the profile of an existing query via its `QueryID`, regardless of whether the query is running or completed.
+
+#### List profiles
+
+Execute the following SQL statement to list the existing profiles:
+
+```sql
+SHOW PROFILELIST;
+```
+
+Example:
+
+```sql
+MySQL > show profilelist;
++--------------------------------------+---------------------+-------+----------+--------------------------------------------------------------------------------------------------------------------------------------+
+| QueryId                              | StartTime           | Time  | State    | Statement                                                                                                                            |
++--------------------------------------+---------------------+-------+----------+--------------------------------------------------------------------------------------------------------------------------------------+
+| b8289ffc-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:27 | 86ms  | Finished | SELECT o_orderpriority, COUNT(*) AS order_count\nFROM orders\nWHERE o_orderdate >= DATE '1993-07-01'\n    AND o_orderdate < DAT ...  |
+| b5be2fa8-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:23 | 67ms  | Finished | SELECT COUNT(*)\nFROM (\n    SELECT l_orderkey, SUM(l_extendedprice * (1 - l_discount)) AS revenue\n        , o_orderdate, o_sh ...  |
+| b36ac9c6-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:19 | 320ms | Finished | SELECT COUNT(*)\nFROM (\n    SELECT s_acctbal, s_name, n_name, p_partkey, p_mfgr\n        , s_address, s_phone, s_comment\n    F ... |
+| b037b245-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:14 | 175ms | Finished | SELECT l_returnflag, l_linestatus, SUM(l_quantity) AS sum_qty\n    , SUM(l_extendedprice) AS sum_base_price\n    , SUM(l_exten ...   |
+| a9543cf4-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:02 | 40ms  | Finished | select count(*) from lineitem                                                                                                        |
++--------------------------------------+---------------------+-------+----------+--------------------------------------------------------------------------------------------------------------------------------------+
+5 rows in set
+Time: 0.006s
+
+
+MySQL > show profilelist limit 1;
++--------------------------------------+---------------------+------+----------+-------------------------------------------------------------------------------------------------------------------------------------+
+| QueryId                              | StartTime           | Time | State    | Statement                                                                                                                           |
++--------------------------------------+---------------------+------+----------+-------------------------------------------------------------------------------------------------------------------------------------+
+| b8289ffc-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:27 | 86ms | Finished | SELECT o_orderpriority, COUNT(*) AS order_count\nFROM orders\nWHERE o_orderdate >= DATE '1993-07-01'\n    AND o_orderdate < DAT ... |
++--------------------------------------+---------------------+------+----------+-------------------------------------------------------------------------------------------------------------------------------------+
+1 row in set
+Time: 0.005s
+```
+
+This SQL statement allows you to easily obtain the `QueryId` associated with each query. The `QueryId` serves as a crucial identifier for further profile analysis and investigations.
+
+#### Analyze profile
+
+Once you have obtained the `QueryId`, you can perform a more detailed analysis on the specific query using the ANALYZE PROFILE statement. This SQL statement provides deeper insights and facilitates a comprehensive examination of the query's performance characteristics and optimizations.
+
+```sql
+ANALYZE PROFILE FROM '<QueryId>' [, <plan_node_id>, ...]
+```
+
+By default, the analysis output presents only the most crucial metrics for each operator. However, you can specify the ID of one or more plan nodes to view the corresponding metrics. This feature allows for a more comprehensive examination of the query's performance and facilitates targeted optimizations.
+
+Example 1: Analyze the profile without specifying plan node ID:
+
+![img](../assets/profile-16.png)
+
+Example 2: Analyze the profile and specify the ID of plan nodes:
+
+![img](../assets/profile-17.png)
+
+The ANALYZE PROFILE statement offers an enhanced approach to analyzing and comprehending the runtime profile. It distinguishes operators with different states, such as blocked, running, and finished. Moreover, this statement provides a comprehensive view of the entire progress as well as the progress of individual operators based on the processed row numbers, enabling a deeper understanding of query execution and performance. This feature further facilitates the profiling and optimization of queries in StarRocks.
+
+Example 3: Analyze the runtime profile of a running query:
+
+![img](../assets/profile-20.png)
+
+### Analyze a simulated query
+
+You can also simulate a given query and analyze its profile using the EXPLAIN ANALYZE statement.
+
+```sql
+EXPLAIN ANALYZE <sql>
+```
+
+Currently, EXPLAIN ANALYZE supports two types of SQL statements: the query (SELECT) statement and the INSERT INTO statement. You can only simulate the INSERT INTO statement and analyze its profiles on StarRocks' native OLAP tables. Please note that when you analyze the profiles of an INSERT INTO statement, no data will actually be inserted. By default, the transaction is aborted, ensuring that no unintended changes are made to the data in the process of profile analysis.
+
+Example 1: Analyze the profile of a given query:
+
+![img](../assets/profile-18.png)
+
+Example 1: Analyze the profile of an INSERT INTO operation:
+
+![img](../assets/profile-19.png)
 
 ## Visualize a query profile
 

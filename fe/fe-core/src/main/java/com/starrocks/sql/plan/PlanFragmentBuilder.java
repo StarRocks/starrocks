@@ -49,6 +49,7 @@ import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Tablet;
@@ -255,7 +256,7 @@ public class PlanFragmentBuilder {
         view.setMaintenancePlan(execPlan);
         List<Long> fakePartitionIds = Arrays.asList(1L, 2L, 3L);
 
-        DataSink tableSink = new OlapTableSink(view, tupleDesc, fakePartitionIds, true,
+        DataSink tableSink = new OlapTableSink(view, tupleDesc, fakePartitionIds,
                 view.writeQuorum(), view.enableReplicatedStorage(), false, false);
         execPlan.getTopFragment().setSink(tableSink);
 
@@ -430,7 +431,8 @@ public class PlanFragmentBuilder {
 
             // NOTE:
             // - only support push down single predicate(eg, a = xx) to scan node.
-            // - only keys in agg-key model (aggregation/unique_key model) and primary-key model can be included in the unused columns.
+            // - only keys in agg-key model (aggregation/unique_key model) and primary-key model can be included in the unused
+            // columns.
             // - complex pred(eg, a + b = xx) can not be pushed down to scan node yet.
             // so the columns in complex predicate are useful for the stage after scan.
             Set<Integer> singlePredColumnIds = new HashSet<Integer>();
@@ -658,7 +660,11 @@ public class PlanFragmentBuilder {
         }
 
         // get all column access path, and mark paths which one is predicate used
-        private List<ColumnAccessPath> computeAllColumnAccessPath(PhysicalScanOperator scan) {
+        private List<ColumnAccessPath> computeAllColumnAccessPath(PhysicalScanOperator scan, ExecPlan context) {
+            if (!context.getConnectContext().getSessionVariable().isCboPredicateSubfieldPath()) {
+                return scan.getColumnAccessPaths();
+            }
+
             if (scan.getPredicate() == null) {
                 return scan.getColumnAccessPaths();
             }
@@ -668,7 +674,7 @@ public class PlanFragmentBuilder {
 
             List<ColumnAccessPath> paths = Lists.newArrayList();
             SubfieldAccessPathNormalizer normalizer = new SubfieldAccessPathNormalizer();
-            collector.getComplexExpressions().forEach(normalizer::add);
+            normalizer.collect(collector.getComplexExpressions());
 
             for (ColumnRefOperator key : scan.getColRefToColumnMetaMap().keySet()) {
                 if (!key.getType().isComplexType()) {
@@ -699,9 +705,7 @@ public class PlanFragmentBuilder {
             OlapScanNode scanNode = new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "OlapScanNode");
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
-            scanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
-            scanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
-
+            scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             // set tablet
             try {
                 scanNode.updateScanInfo(node.getSelectedPartitionId(),
@@ -723,21 +727,25 @@ public class PlanFragmentBuilder {
                     return selectTabletIds != null && !selectTabletIds.isEmpty();
                 }).collect(Collectors.toList());
                 scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
+
                 for (Long partitionId : scanNode.getSelectedPartitionIds()) {
-                    List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(partitionId);
-                    Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                     final Partition partition = referenceTable.getPartition(partitionId);
-                    final MaterializedIndex selectedTable = partition.getIndex(selectedIndexId);
-                    List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
-                    Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
-                    for (int i = 0; i < allTabletIds.size(); i++) {
-                        tabletId2BucketSeq.put(allTabletIds.get(i), i);
+
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
+                        List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(physicalPartition.getId());
+                        Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
+                        final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
+                        List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
+                        totalTabletsNum += selectedTable.getTablets().size();
+                        for (int i = 0; i < allTabletIds.size(); i++) {
+                            tabletId2BucketSeq.put(allTabletIds.get(i), i);
+                        }
+                        scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
+                        List<Tablet> tablets =
+                                selectTabletIds.stream().map(selectedTable::getTablet).collect(Collectors.toList());
+                        scanNode.addScanRangeLocations(partition, physicalPartition, selectedTable, tablets, localBeId);
                     }
-                    totalTabletsNum += selectedTable.getTablets().size();
-                    scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
-                    List<Tablet> tablets =
-                            selectTabletIds.stream().map(selectedTable::getTablet).collect(Collectors.toList());
-                    scanNode.addScanRangeLocations(partition, selectedTable, tablets, localBeId);
                 }
                 scanNode.setTotalTabletsNum(totalTabletsNum);
             } catch (UserException e) {
@@ -761,7 +769,7 @@ public class PlanFragmentBuilder {
             }
 
             // set column access path
-            scanNode.setColumnAccessPaths(computeAllColumnAccessPath(node));
+            scanNode.setColumnAccessPaths(computeAllColumnAccessPath(node, context));
 
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
@@ -781,7 +789,6 @@ public class PlanFragmentBuilder {
 
             // set unused output columns 
             setUnUsedOutputColumns(node, scanNode, predicates, referenceTable);
-            scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
 
             // set isPreAggregation
             scanNode.setIsPreAggregation(node.isPreAggregation(), node.getTurnOffReason());
@@ -888,7 +895,7 @@ public class PlanFragmentBuilder {
                     slotDescriptor.setIsNullable(column.isAllowNull());
                     slotDescriptor.setIsMaterialized(true);
                     context.getColRefToExpr()
-                            .put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
+                            .putIfAbsent(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
                 }
             }
             minMaxTuple.computeMemLayout();
@@ -916,8 +923,7 @@ public class PlanFragmentBuilder {
             HudiScanNode hudiScanNode =
                     new HudiScanNode(context.getNextNodeId(), tupleDescriptor, "HudiScanNode");
             hudiScanNode.computeStatistics(optExpression.getStatistics());
-            hudiScanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
-            hudiScanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
+            hudiScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             try {
                 HDFSScanNodePredicates scanNodePredicates = hudiScanNode.getScanNodePredicates();
                 scanNodePredicates.setSelectedPartitionIds(predicates.getSelectedPartitionIds());
@@ -959,8 +965,7 @@ public class PlanFragmentBuilder {
 
             HdfsScanNode hdfsScanNode =
                     new HdfsScanNode(context.getNextNodeId(), tupleDescriptor, "HdfsScanNode");
-            hdfsScanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
-            hdfsScanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
+            hdfsScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             hdfsScanNode.computeStatistics(optExpression.getStatistics());
             try {
                 HDFSScanNodePredicates scanNodePredicates = hdfsScanNode.getScanNodePredicates();
@@ -1001,8 +1006,7 @@ public class PlanFragmentBuilder {
 
             FileTableScanNode fileTableScanNode =
                     new FileTableScanNode(context.getNextNodeId(), tupleDescriptor, "FileTableScanNode");
-            fileTableScanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
-            fileTableScanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
+            fileTableScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             fileTableScanNode.computeStatistics(optExpression.getStatistics());
             try {
                 HDFSScanNodePredicates scanNodePredicates = fileTableScanNode.getScanNodePredicates();
@@ -1049,8 +1053,7 @@ public class PlanFragmentBuilder {
             DeltaLakeScanNode deltaLakeScanNode =
                     new DeltaLakeScanNode(context.getNextNodeId(), tupleDescriptor, "DeltaLakeScanNode");
             deltaLakeScanNode.computeStatistics(optExpression.getStatistics());
-            deltaLakeScanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
-            deltaLakeScanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
+            deltaLakeScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1092,9 +1095,7 @@ public class PlanFragmentBuilder {
 
             PaimonScanNode paimonScanNode =
                     new PaimonScanNode(context.getNextNodeId(), tupleDescriptor, "PaimonScanNode");
-            paimonScanNode.computeStatistics(optExpression.getStatistics());
-            paimonScanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
-            paimonScanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
+            paimonScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1139,8 +1140,7 @@ public class PlanFragmentBuilder {
             IcebergScanNode icebergScanNode =
                     new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode");
             icebergScanNode.computeStatistics(optExpression.getStatistics());
-            icebergScanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
-            icebergScanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
+            icebergScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1202,8 +1202,7 @@ public class PlanFragmentBuilder {
             scanNode.setUser(context.getConnectContext().getQualifiedUser());
             scanNode.setUserIp(context.getConnectContext().getRemoteIP());
             scanNode.setLimit(node.getLimit());
-            scanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
-            scanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
+            scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
 
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
@@ -1361,8 +1360,7 @@ public class PlanFragmentBuilder {
             scanNode.setLimit(node.getLimit());
             scanNode.computeColumnsAndFilters();
             scanNode.computeStatistics(optExpression.getStatistics());
-            scanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
-            scanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
+            scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
 
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
@@ -1400,8 +1398,7 @@ public class PlanFragmentBuilder {
             }
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpression.getStatistics());
-            scanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
-            scanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
+            scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             try {
                 scanNode.assignBackends();
             } catch (UserException e) {
@@ -1448,8 +1445,7 @@ public class PlanFragmentBuilder {
             scanNode.setLimit(node.getLimit());
             scanNode.computeColumnsAndFilters();
             scanNode.computeStatistics(optExpression.getStatistics());
-            scanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
-            scanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
+            scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.UNPARTITIONED);
@@ -1838,6 +1834,7 @@ public class PlanFragmentBuilder {
             }
 
             aggregationNode.setUseSortAgg(node.isUseSortAgg());
+            aggregationNode.setUsePerBucketOptimize(node.isUsePerBucketOptmize());
             aggregationNode.setStreamingPreaggregationMode(node.getNeededPreaggregationMode());
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
@@ -1900,8 +1897,14 @@ public class PlanFragmentBuilder {
                             functionCallExpr.getFn(), functionCallExpr.getChild(0).getType());
                     replaceExpr.setFn(multiDistinctSum);
                     replaceExpr.getParams().setIsDistinct(false);
+                } else if (functionName.equals(FunctionSet.ARRAY_AGG)) {
+                    replaceExpr = new FunctionCallExpr(FunctionSet.ARRAY_AGG_DISTINCT, functionCallExpr.getParams());
+                    replaceExpr.setFn(Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT,
+                            new Type[] {functionCallExpr.getChild(0).getType()},
+                            IS_NONSTRICT_SUPERTYPE_OF));
+                    replaceExpr.getParams().setIsDistinct(false);
                 }
-                Preconditions.checkState(replaceExpr != null);
+                Preconditions.checkState(replaceExpr != null, functionName + " does not support distinct");
                 ExpressionAnalyzer.analyzeExpressionIgnoreSlot(replaceExpr, ConnectContext.get());
 
                 aggregateExprList.set(singleDistinctIndex, replaceExpr);

@@ -14,17 +14,26 @@
 
 package com.starrocks.sql.optimizer.validate;
 
-import com.google.api.client.util.Lists;
 import com.google.common.base.Joiner;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.metric.MaterializedViewMetricsEntity;
+import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.PlannerProfile;
+import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
+import com.starrocks.sql.optimizer.task.TaskContext;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import static com.starrocks.metric.MaterializedViewMetricsEntity.isUpdateMaterializedViewMetrics;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.collectMaterializedViews;
 
 public class MVRewriteValidator {
     private static final MVRewriteValidator INSTANCE = new MVRewriteValidator();
@@ -33,86 +42,110 @@ public class MVRewriteValidator {
         return INSTANCE;
     }
 
-    public void validateMV(OptExpression physicalPlan) {
-        ConnectContext connectContext = ConnectContext.get();
+    /**
+     * Record the MV usage into audit log
+     */
+    public void auditMv(ConnectContext connectContext, OptExpression physicalPlan, TaskContext taskContext) {
+        if (!isUpdateMaterializedViewMetrics(connectContext)) {
+            return;
+        }
+
+        OptimizerContext optimizerContext = taskContext.getOptimizerContext();
+        // Candidate MVs
+        if (CollectionUtils.isNotEmpty(optimizerContext.getCandidateMvs())) {
+            List<String> mvNames = optimizerContext.getCandidateMvs()
+                    .stream().map(x -> x.getMv().getName())
+                    .collect(Collectors.toList());
+            connectContext.getAuditEventBuilder().setCandidateMvs(mvNames);
+        }
+
+        // Rewritten MVs
+        List<MaterializedView> mvs = collectMaterializedViews(physicalPlan);
+        // To avoid queries that query the materialized view directly, only consider materialized views
+        // that are not used in rewriting before.
+        Set<Long> beforeTableIds = taskContext.getAllScanOperators().stream()
+                .map(op -> op.getTable().getId())
+                .collect(Collectors.toSet());
+        if (CollectionUtils.isNotEmpty(mvs)) {
+            List<String> rewrittenMVs = mvs.stream().filter(mv -> !beforeTableIds.contains(mv.getId()))
+                    .map(mv -> mv.getName())
+                    .collect(Collectors.toList());
+            connectContext.getAuditEventBuilder().setHitMvs(rewrittenMVs);
+        }
+    }
+
+    private void updateMaterializedViewMetricsIfNeeded(ConnectContext connectContext,
+                                                       OptimizerContext optimizerContext,
+                                                       List<MaterializedView> mvs,
+                                                       Set<Long> beforeTableIds) {
+        // ignore: explain queries
+        if (!isUpdateMaterializedViewMetrics(connectContext)) {
+            return;
+        }
+        // update considered metrics
+        if (CollectionUtils.isNotEmpty(optimizerContext.getCandidateMvs())) {
+            for (MaterializationContext mvContext : optimizerContext.getCandidateMvs()) {
+                MaterializedView mv = mvContext.getMv();
+                if (mv == null) {
+                    continue;
+                }
+                MaterializedViewMetricsEntity mvEntity =
+                        MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
+                mvEntity.increaseQueryConsideredCount(1L);
+            }
+        }
+        // update rewritten metrics
+        for (MaterializedView mv : mvs) {
+            // To avoid queries that query the materialized view directly, only consider materialized views
+            // that are not used in rewriting before.
+            MaterializedViewMetricsEntity mvEntity =
+                    MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
+            if (!beforeTableIds.contains(mv.getId())) {
+                mvEntity.increaseQueryHitCount(1L);
+            }
+            mvEntity.increaseQueryMaterializedViewCount(1L);
+        }
+    }
+
+    public void validateMV(ConnectContext connectContext, OptExpression physicalPlan, TaskContext taskContext) {
         if (connectContext == null) {
             return;
         }
 
-        PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer("Summary");
-        if (tracer == null) {
-            return;
-        }
-        List<String> mvNames = collectMaterializedViewNames(physicalPlan);
-        if (mvNames.isEmpty()) {
-            // Check whether plan has been rewritten success by rule.
-            Map<String, PlannerProfile.LogTracer> tracers = connectContext.getPlannerProfile().getTracers();
-            List<String> tracerNames = Lists.newArrayList();
-            for (Map.Entry<String, PlannerProfile.LogTracer> e : tracers.entrySet()) {
-                if (e.getValue().getLogs().stream().anyMatch(x -> x.contains(MaterializedViewRewriter.REWRITE_SUCCESS))) {
-                    tracerNames.add(e.getKey().replace("REWRITE ", ""));
-                }
-            }
+        List<MaterializedView> mvs = collectMaterializedViews(physicalPlan);
+        Set<Long> beforeTableIds = taskContext.getAllScanOperators().stream()
+                .map(op -> op.getTable().getId())
+                .collect(Collectors.toSet());
+
+        updateMaterializedViewMetricsIfNeeded(connectContext, taskContext.getOptimizerContext(), mvs, beforeTableIds);
+
+        List<MaterializedView> diffMVs = mvs.stream()
+                .filter(mv -> !beforeTableIds.contains(mv.getId()))
+                .collect(Collectors.toList());
+        if (diffMVs.isEmpty()) {
+            boolean hasRewriteSuccess = Tracers.getAllVars().stream()
+                    .anyMatch(var -> StringUtils.contains(var.getValue().toString(),
+                            MaterializedViewRewriter.REWRITE_SUCCESS));
 
             if (connectContext.getSessionVariable().isEnableMaterializedViewRewriteOrError()) {
-                if (tracerNames.isEmpty()) {
-                    throw new IllegalArgumentException("no executable plan with materialized view for this sql in " +
-                            connectContext.getSessionVariable().getMaterializedViewRewriteMode() + " mode.");
-                } else {
-                    throw new IllegalArgumentException("no executable plan with materialized view for this sql in " +
-                            connectContext.getSessionVariable().getMaterializedViewRewriteMode() + " mode because of" +
-                            "cost.");
-                }
-            }
-
-            if (tracerNames.isEmpty()) {
-                tracer.log("Query cannot be rewritten, please check the trace logs or " +
-                        "`set enable_mv_optimizer_trace_log=on` to find more infos.");
+                String errorMessage = hasRewriteSuccess ?
+                        "no executable plan with materialized view for this sql in " +
+                                connectContext.getSessionVariable().getMaterializedViewRewriteMode() + " mode " +
+                                "because of cost." :
+                        "no executable plan with materialized view for this sql in " +
+                                connectContext.getSessionVariable().getMaterializedViewRewriteMode() + " mode.";
+                throw new IllegalArgumentException(errorMessage);
             } else {
-                tracer.log("Query has already been successfully rewritten by: " + Joiner.on(",").join(tracerNames)
-                        + ", but are not chosen as the best plan by cost.");
+                String logMessage = hasRewriteSuccess ?
+                        "Query has already been successfully rewritten, but it is not chosen as the best plan by cost." :
+                        "Query cannot be rewritten, please check the trace logs to find more information.";
+                Tracers.log(Tracers.Module.MV, logMessage);
             }
         } else {
-            // If final result contains materialized views, ho
-            if (connectContext.getSessionVariable().isEnableMaterializedViewRewriteOrError()) {
-                Map<String, PlannerProfile.LogTracer> tracers = connectContext.getPlannerProfile().getTracers();
-                if (tracers.entrySet().stream().noneMatch(e -> e.getValue().getLogs().stream()
-                        .anyMatch(x -> x.contains(MaterializedViewRewriter.REWRITE_SUCCESS)))) {
-                    throw new IllegalArgumentException("no executable plan with materialized view for this sql in " +
-                            connectContext.getSessionVariable().getMaterializedViewRewriteMode() + " mode.");
-                }
-            }
-
-            tracer.log("Query has already been successfully rewritten by: " + Joiner.on(",").join(mvNames) + ".");
-        }
-    }
-
-    private static List<String> collectMaterializedViewNames(OptExpression optExpression) {
-        List<String> names = Lists.newArrayList();
-        collectMaterializedViewNames(optExpression, names);
-        return names;
-    }
-
-    private static void collectMaterializedViewNames(OptExpression optExpression, List<String> names) {
-        if (optExpression == null) {
-            return;
-        }
-        collectMaterializedViewNames(optExpression.getOp(), names);
-
-        for (OptExpression child : optExpression.getInputs()) {
-            collectMaterializedViewNames(child, names);
-        }
-    }
-
-    public static void collectMaterializedViewNames(Operator op, List<String> names) {
-        if (op == null) {
-            return;
-        }
-        if (op instanceof PhysicalScanOperator) {
-            PhysicalScanOperator scanOperator = (PhysicalScanOperator) op;
-            if (scanOperator.getTable().isMaterializedView()) {
-                names.add(scanOperator.getTable().getName());
-            }
+            List<String> mvNames = diffMVs.stream().map(MaterializedView::getName).collect(Collectors.toList());
+            String logMessage = "Query has already been successfully rewritten by: "
+                    + Joiner.on(",").join(mvNames) + ".";
+            Tracers.log(Tracers.Module.MV, logMessage);
         }
     }
 }

@@ -28,9 +28,6 @@ AS select * from view1;
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv_on_view_1 with sync mode ;
--- result:
-662f725b-2097-11ee-85b3-f236c9537340
--- !result
 SELECT * FROM mv_on_view_1 ORDER BY event_day;
 -- result:
 2020-01-14	5
@@ -40,9 +37,6 @@ insert into ss values('2020-01-15', 3);
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv_on_view_1 with sync mode;
--- result:
-665e238e-2097-11ee-85b3-f236c9537340
--- !result
 SELECT * FROM mv_on_view_1 ORDER BY event_day;
 -- result:
 2020-01-14	5
@@ -62,12 +56,9 @@ ALTER MATERIALIZED VIEW mv_on_view_1 ACTIVE;
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views 
     WHERE table_name = 'mv_on_view_1';
 -- result:
-true	
+true	base view view1 changed
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv_on_view_1 with sync mode;
--- result:
-66f75661-2097-11ee-85b3-f236c9537340
--- !result
 SELECT * FROM mv_on_view_1 ORDER BY event_day;
 -- result:
 -- !result
@@ -75,9 +66,6 @@ insert into jj values('2020-01-14', 2);
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv_on_view_1 with sync mode;
--- result:
-6788c101-2097-11ee-85b3-f236c9537340
--- !result
 SELECT * FROM mv_on_view_1 ORDER BY event_day;
 -- result:
 2020-01-14	2

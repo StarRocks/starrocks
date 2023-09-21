@@ -65,6 +65,8 @@ struct DeltaWriterOptions {
     ReplicaState replica_state;
     bool miss_auto_increment_column = false;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
+    POlapTableSchemaParam ptable_schema_param;
+    int64_t min_immutable_tablet_size = 0;
 };
 
 enum State {
@@ -148,12 +150,17 @@ public:
 
     const FlushStatistic& get_flush_stats() const { return _flush_token->get_stats(); }
 
+    bool is_immutable() const { return _is_immutable.load(std::memory_order_relaxed); }
+
 private:
     DeltaWriter(DeltaWriterOptions opt, MemTracker* parent, StorageEngine* storage_engine);
 
     Status _init();
     Status _flush_memtable_async(bool eos = false);
     Status _flush_memtable();
+    void _build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam& table_schema_param,
+                                      const TabletSchemaCSPtr& ori_tablet_schema);
+
     const char* _state_name(State state) const;
     const char* _replica_state_name(ReplicaState state) const;
     Status _fill_auto_increment_id(const Chunk& chunk);
@@ -181,7 +188,10 @@ private:
     Schema _vectorized_schema;
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<MemTableSink> _mem_table_sink;
-    const TabletSchema* _tablet_schema;
+    // tablet schema owned by delta writer, all write will use this tablet schema
+    // it's build from unsafe_tablet_schema_ref（stored when create tablet） and OlapTableSchema
+    // every request will have it's own tablet schema so simple schema change can work
+    TabletSchemaSPtr _tablet_schema;
 
     std::unique_ptr<FlushToken> _flush_token;
     std::unique_ptr<ReplicateToken> _replicate_token;
@@ -189,6 +199,7 @@ private:
     // initial value is max value
     size_t _memtable_buffer_row = -1;
     bool _partial_schema_with_sort_key = false;
+    std::atomic<bool> _is_immutable = false;
 };
 
 } // namespace starrocks

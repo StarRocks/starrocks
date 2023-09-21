@@ -37,7 +37,6 @@ package com.starrocks.alter;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -73,7 +72,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
-import com.starrocks.common.Pair;
 import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
@@ -81,7 +79,6 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
@@ -89,7 +86,6 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -363,6 +359,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     copiedShadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
                                     tbl.isInMemory(),
                                     tbl.enablePersistentIndex(),
+                                    tbl.primaryIndexCacheExpireSec(),
                                     tbl.getPartitionInfo().getTabletType(partitionId),
                                     tbl.getCompressionType(), copiedSortKeyIdxes);
                             createReplicaTask.setBaseTablet(
@@ -623,6 +620,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     }
                     int shadowSchemaHash = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash;
                     int originSchemaHash = tbl.getSchemaHashByIndexId(indexIdMap.get(shadowIdxId));
+                    List<Column> originSchemaColumns = tbl.getSchemaByIndexId(originIdxId);
 
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
@@ -631,7 +629,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             AlterReplicaTask rollupTask = AlterReplicaTask.alterLocalTablet(
                                     shadowReplica.getBackendId(), dbId, tableId, partitionId,
                                     shadowIdxId, shadowTabletId, originTabletId, shadowReplica.getId(),
-                                    shadowSchemaHash, originSchemaHash, visibleVersion, jobId, generatedColumnReq);
+                                    shadowSchemaHash, originSchemaHash, visibleVersion, jobId,
+                                    generatedColumnReq, originSchemaColumns);
                             schemaChangeBatchTask.addTask(rollupTask);
                         }
                     }
@@ -706,8 +705,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
 
-            // Before schema change, collect modified columns and drop columns.
-            Pair<Set<String>, Set<String>> dropModifiedColumns = collectDropAndModifiedColumns(tbl);
+            // Before schema change, collect modified columns for related mvs.
+            Set<String> modifiedColumns = collectModifiedColumnsForRelatedMVs(tbl);
 
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
@@ -751,13 +750,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             onFinished(tbl);
 
             // If schema changes include fields which defined in related mv, set those mv state to inactive.
-            Set<String> allModifiedColumns = Sets.newHashSet();
-            allModifiedColumns.addAll(dropModifiedColumns.first);
-            allModifiedColumns.addAll(dropModifiedColumns.second);
-            inactiveRelatedMv(allModifiedColumns, tbl);
-            inactiveViews(dropModifiedColumns.second, tbl);
+            inactiveRelatedMv(modifiedColumns, tbl);
 
             pruneMeta();
+            tbl.onReload();
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
 
@@ -767,28 +763,17 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             db.writeUnlock();
         }
 
-        editLog.waitInfinity(start, future);
+        EditLog.waitInfinity(start, future);
 
         LOG.info("schema change job finished: {}", jobId);
         this.span.end();
     }
 
-    private void inactiveViews(Set<String> modifiedColumns, OlapTable tbl) {
-        if (modifiedColumns.isEmpty()) {
-            return;
+    private Set<String> collectModifiedColumnsForRelatedMVs(OlapTable tbl) {
+        if (tbl.getRelatedMaterializedViews().isEmpty()) {
+            return Sets.newHashSet();
         }
-
-        String error = "column [" + String.join(", ", modifiedColumns) + "] on table [" + tbl.getName() + "] "
-                + "has been modified";
-        Database db = MetaUtils.getDatabase(dbId);
-        TableName tn = new TableName(db.getOriginName(), tbl.getName());
-        MetadataMgr.inactiveViews(ImmutableList.of(tn), error);
-    }
-
-    // drop columns && modified column
-    private Pair<Set<String>, Set<String>> collectDropAndModifiedColumns(OlapTable tbl) {
         Set<String> modifiedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        Set<String> dropColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
 
         for (Entry<Long, List<Column>> entry : indexSchemaMap.entrySet()) {
             Long shadowIdxId = entry.getKey();
@@ -808,12 +793,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         !shadowSchema.contains(element)).collect(Collectors.toList());
                 // can just drop one column one time, so just one element in differences
                 Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
-                dropColumns.add(originSchema.get(dropIdx).getName());
+                modifiedColumns.add(originSchema.get(dropIdx).getName());
             } else {
                 // add column should not affect old mv, just ignore.
             }
         }
-        return new Pair<>(dropColumns, modifiedColumns);
+        return modifiedColumns;
     }
 
     private void inactiveRelatedMv(Set<String> modifiedColumns, OlapTable table) {
@@ -931,6 +916,17 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         if (indexChange) {
             tbl.setIndexes(indexes);
         }
+
+        //update max column unique id
+        int maxColUniqueId = tbl.getMaxColUniqueId();
+        for (Column column : tbl.getFullSchema()) {
+            if (column.getUniqueId() > maxColUniqueId) {
+                maxColUniqueId = column.getUniqueId();
+            }
+        }
+        tbl.setMaxColUniqueId(maxColUniqueId);
+        LOG.debug("fullSchema:{}, maxColUniqueId:{}", tbl.getFullSchema(), maxColUniqueId);
+
 
         tbl.setState(OlapTableState.NORMAL);
         tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());
@@ -1092,6 +1088,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 OlapTable tbl = (OlapTable) db.getTable(tableId);
                 if (tbl != null) {
                     onFinished(tbl);
+                    tbl.onReload();
                 }
             } finally {
                 db.writeUnlock();

@@ -58,6 +58,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
@@ -67,6 +68,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -136,6 +138,10 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_REPLICATED_STORAGE = "replicated_storage";
 
+    public static final String PROPERTIES_BUCKET_SIZE = "bucket_size";
+
+    public static final String PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC = "primary_index_cache_expire_sec";
+
     public static final String PROPERTIES_TABLET_TYPE = "tablet_type";
 
     public static final String PROPERTIES_STRICT_RANGE = "strict_range";
@@ -153,6 +159,10 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
+
+    // 1. `force_external_table_query_rewrite` is used to control whether external table can be rewritten or not
+    // 2. external table can be rewritten by default if not specific.
+    // 3. you can use `query_rewrite_consistency` to control mv's rewrite consistency.
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
     public static final String PROPERTIES_QUERY_REWRITE_CONSISTENCY = "query_rewrite_consistency";
     public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
@@ -174,6 +184,14 @@ public class PropertyAnalyzer {
     // -1: disable randomize, use current time as start
     // positive value: use [0, mv_randomize_start) as random interval
     public static final String PROPERTY_MV_RANDOMIZE_START = "mv_randomize_start";
+
+    /**
+     * Materialized View sort keys
+     */
+    public static final String PROPERTY_MV_SORT_KEYS = "mv_sort_keys";
+
+    // light schema change
+    public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
@@ -317,6 +335,23 @@ public class PropertyAnalyzer {
             }
         }
         return partitionLiveNumber;
+    }
+
+    public static long analyzeBucketSize(Map<String, String> properties) throws AnalysisException {
+        long bucketSize = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_BUCKET_SIZE)) {
+            try {
+                bucketSize = Long.parseLong(properties.get(PROPERTIES_BUCKET_SIZE));
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Bucket size: " + e.getMessage());
+            }
+            if (bucketSize <= 0) {
+                throw new AnalysisException("Illegal Partition Bucket size: " + bucketSize);
+            }
+            return bucketSize;
+        } else {
+            throw new AnalysisException("Bucket size is not set");
+        }
     }
 
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv) {
@@ -536,6 +571,30 @@ public class PropertyAnalyzer {
         return schemaVersion;
     }
 
+    public static Boolean analyzeUseLightSchemaChange(Map<String, String> properties) throws AnalysisException {
+        if (properties == null || properties.isEmpty()) {
+            return false;
+        }
+        String value = properties.get(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+        // set light schema change false by default
+        if (Config.allow_default_light_schema_change) {
+            properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+            return true;
+        }
+        if (null == value) {
+            return false;
+        }
+        properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+        if (Boolean.TRUE.toString().equalsIgnoreCase(value)) {
+            return true;
+        } else if (Boolean.FALSE.toString().equalsIgnoreCase(value)) {
+            return false;
+        }
+        throw new AnalysisException(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE
+            + " must be `true` or `false`");
+    }
+
+
     public static Set<String> analyzeBloomFilterColumns(Map<String, String> properties, List<Column> columns,
                                                         boolean isPrimaryKey) throws AnalysisException {
         Set<String> bfColumns = null;
@@ -679,6 +738,19 @@ public class PropertyAnalyzer {
         return defaultVal;
     }
 
+    public static Pair<Boolean, Boolean> analyzeEnablePersistentIndex(Map<String, String> properties, boolean isPrimaryKey) {
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
+            String val = properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX);
+            properties.remove(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX);
+            return Pair.create(Boolean.parseBoolean(val), true);
+        } else {
+            if (isPrimaryKey) {
+                return Pair.create(Config.enable_persistent_index_by_default, false);
+            }
+            return Pair.create(false, false);
+        }
+    }
+
     // analyze property like : "type" = "xxx";
     public static String analyzeType(Map<String, String> properties) {
         String type = null;
@@ -708,6 +780,26 @@ public class PropertyAnalyzer {
                 throw new AnalysisException("Invalid " + propKey + " format: " + valStr);
             }
             properties.remove(propKey);
+        }
+        return val;
+    }
+
+    public static int analyzePrimaryIndexCacheExpireSecProp(Map<String, String> properties, String propKey, int defaultVal)
+            throws AnalysisException {
+        int val = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
+            String valStr = properties.get(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+            try {
+                val = Integer.parseInt(valStr);
+                if (val < 0) {
+                    throw new AnalysisException("Property " + PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC 
+                            + " must not be less than 0");
+                }
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Property " + PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC 
+                        + " must be integer: " + valStr);
+            }
+            properties.remove(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
         }
         return val;
     }
@@ -804,7 +896,7 @@ public class PropertyAnalyzer {
 
         BaseTableInfo tableInfo;
         if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
-            tableInfo = new BaseTableInfo(parentDb.getId(), dbName, table.getId());
+            tableInfo = new BaseTableInfo(parentDb.getId(), dbName, table.getName(), table.getId());
         } else {
             tableInfo = new BaseTableInfo(catalogName, dbName, table.getName(), table.getTableIdentifier());
         }
@@ -979,12 +1071,28 @@ public class PropertyAnalyzer {
         return TimeUtils.parseHumanReadablePeriodOrDuration(text);
     }
 
-    public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties) throws AnalysisException {
+    public static TPersistentIndexType analyzePersistentIndexType(Map<String, String> properties) throws AnalysisException {
+        if (properties != null && properties.containsKey(PROPERTIES_PERSISTENT_INDEX_TYPE)) {
+            String type = properties.get(PROPERTIES_PERSISTENT_INDEX_TYPE);
+            properties.remove(PROPERTIES_PERSISTENT_INDEX_TYPE);
+            if (type.equalsIgnoreCase("LOCAL")) {
+                return TPersistentIndexType.LOCAL;
+            } else {
+                throw new AnalysisException("Invalid persistent index type: " + type);
+            }
+        }
+        return TPersistentIndexType.LOCAL;
+    }
+
+    public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,
+                                                           boolean removeProperties) throws AnalysisException {
         String text = properties.get(PROPERTIES_STORAGE_COOLDOWN_TTL);
-        if (text == null) {
+        if (removeProperties) {
+            properties.remove(PROPERTIES_STORAGE_COOLDOWN_TTL);
+        }
+        if (Strings.isNullOrEmpty(text)) {
             return null;
         }
-        properties.remove(PROPERTIES_STORAGE_COOLDOWN_TTL);
         PeriodDuration periodDuration;
         try {
             periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(text);

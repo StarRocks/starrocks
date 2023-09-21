@@ -68,7 +68,8 @@ public:
         _partial_schema_with_sort_key = partial_schema_with_sort_key;
     }
 
-    static Schema convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs);
+    static Schema convert_schema(const TabletSchemaCSPtr& tablet_schema,
+                                 const std::vector<SlotDescriptor*>* slot_descs);
 
     ChunkPtr get_result_chunk() { return _result_chunk; }
 

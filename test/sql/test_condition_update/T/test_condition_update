@@ -1,0 +1,48 @@
+-- name: test_condition_update
+show backends;
+create database test_condition_update_2fdsiou12s;
+use test_condition_update_2fdsiou12s;
+
+CREATE table tab1 (
+      k1 INTEGER,
+      k2 VARCHAR(50),
+      v1 INTEGER,
+      v2 INTEGER,
+      v3 INTEGER,
+      v4 varchar(50),
+      v5 varchar(50)
+)
+ENGINE=OLAP
+PRIMARY KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into tab1 values (100, "k2_100", 100, 100, 100, "v4_100", "v5_100");
+insert into tab1 values (200, "k2_200", 200, 200, 200, "v4_200", "v5_200");
+insert into tab1 values (300, "k3_300", 300, 300, 300, "v4_300", "v5_300");
+select * from tab1;
+
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_condition_update_1.csv -XPUT -H label:stream_load_condition_update_123432 -H column_separator:, -H merge_condition:k1 ${url}/api/test_condition_update_2fdsiou12s/tab1/_stream_load
+sync;
+select * from tab1;
+
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_condition_update_1.csv -XPUT -H label:stream_load_condition_update_123433 -H column_separator:, -H merge_condition:v6 ${url}/api/test_condition_update_2fdsiou12s/tab1/_stream_load
+sync;
+select * from tab1;
+
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_condition_update_1.csv -XPUT -H label:stream_load_condition_update_123434 -H column_separator:, -H merge_condition:v1 ${url}/api/test_condition_update_2fdsiou12s/tab1/_stream_load
+sync;
+select * from tab1;
+
+
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_condition_update_2.csv -XPUT -H label:stream_load_condition_update_123435 -H column_separator:, -H merge_condition:v2 -H partial_update:true -H columns:k1,k2,v1 ${url}/api/test_condition_update_2fdsiou12s/tab1/_stream_load
+sync;
+select * from tab1;
+
+
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_condition_update_2.csv -XPUT -H label:stream_load_condition_update_123436 -H column_separator:, -H merge_condition:v1 -H partial_update:true -H columns:k1,k2,v1 ${url}/api/test_condition_update_2fdsiou12s/tab1/_stream_load
+sync;
+select * from tab1;
+

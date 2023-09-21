@@ -145,6 +145,7 @@ private:
     }
 
     Status _automatic_create_partition();
+    Status _update_immutable_partition(const std::set<int64_t>& partition_ids);
 
     Status _incremental_open_node_channel(const std::vector<TOlapTablePartition>& partitions);
 
@@ -239,6 +240,10 @@ private:
     bool _has_automatic_partition = false;
     std::atomic<bool> _is_automatic_partition_running = false;
     Status _automatic_partition_status;
+
+    // bucket size for automatic bucket
+    int64_t _automatic_bucket_size = 0;
+    std::set<int64_t> _immutable_partition_ids;
 };
 
 } // namespace starrocks::stream_load

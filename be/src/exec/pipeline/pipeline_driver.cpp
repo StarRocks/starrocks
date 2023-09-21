@@ -21,12 +21,14 @@
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
 #include "exec/query_cache/ticket_checker.h"
 #include "exec/workgroup/work_group.h"
+#include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -54,8 +56,6 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _overhead_timer = ADD_TIMER(_runtime_profile, "OverheadTime");
 
     _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
-    _global_schedule_counter = ADD_COUNTER(_runtime_profile, "GlobalScheduleCount", TUnit::UNIT);
-    _global_schedule_timer = ADD_TIMER(_runtime_profile, "GlobalScheduleTime");
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCount", TUnit::UNIT);
     _yield_by_time_limit_counter = ADD_COUNTER(_runtime_profile, "YieldByTimeLimit", TUnit::UNIT);
     _yield_by_preempt_counter = ADD_COUNTER(_runtime_profile, "YieldByPreempt", TUnit::UNIT);
@@ -78,19 +78,21 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     DCHECK(_state == DriverState::NOT_READY);
 
     auto* source_op = source_operator();
+    const auto use_cache = _fragment_ctx->enable_cache();
+
     // attach ticket_checker to both ScanOperator and SplitMorselQueue
-    auto should_attach_ticket_checker = (dynamic_cast<ScanOperator*>(source_op) != nullptr) &&
-                                        (dynamic_cast<SplitMorselQueue*>(_morsel_queue) != nullptr) &&
-                                        _fragment_ctx->enable_cache();
+    auto should_attach_ticket_checker =
+            (dynamic_cast<ScanOperator*>(source_op) != nullptr) && _morsel_queue != nullptr &&
+            _morsel_queue->could_attch_ticket_checker() &&
+            (use_cache || dynamic_cast<BucketSequenceMorselQueue*>(_morsel_queue) != nullptr);
+
     if (should_attach_ticket_checker) {
         auto* scan_op = dynamic_cast<ScanOperator*>(source_op);
-        auto* split_morsel_queue = dynamic_cast<SplitMorselQueue*>(_morsel_queue);
         auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
         scan_op->set_ticket_checker(ticket_checker);
-        split_morsel_queue->set_ticket_checker(ticket_checker);
+        _morsel_queue->set_ticket_checker(ticket_checker);
     }
 
-    const auto use_cache = _fragment_ctx->enable_cache();
     source_op->add_morsel_queue(_morsel_queue);
     // fill OperatorWithDependency instances into _dependencies from _operators.
     DCHECK(_dependencies.empty());
@@ -303,7 +305,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 if (return_status.ok()) {
                     if (maybe_chunk.value() &&
                         (maybe_chunk.value()->num_rows() > 0 ||
-                         (maybe_chunk.value()->owner_info().is_last_chunk() && is_multilane(next_op)))) {
+                         (maybe_chunk.value()->owner_info().is_last_chunk() && !next_op->ignore_empty_eos()))) {
                         size_t row_num = maybe_chunk.value()->num_rows();
                         if (UNLIKELY(row_num > runtime_state->chunk_size())) {
                             return Status::InternalError(
@@ -483,9 +485,6 @@ void PipelineDriver::mark_precondition_ready(RuntimeState* runtime_state) {
 }
 
 void PipelineDriver::start_schedule(int64_t start_count, int64_t start_time) {
-    _global_schedule_counter->set(start_count);
-    _global_schedule_timer->set(start_time);
-
     // start timers
     _total_timer_sw->start();
     _pending_timer_sw->start();
@@ -577,16 +576,6 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op
 
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count,
                               int64_t execution_time) {
-    if (schedule_count > 0) {
-        _global_schedule_counter->set(schedule_count - _global_schedule_counter->value());
-    } else {
-        _global_schedule_counter->set((int64_t)-1);
-    }
-    if (execution_time > 0) {
-        _global_schedule_timer->set(execution_time - _global_schedule_timer->value());
-    } else {
-        _global_schedule_timer->set((int64_t)-1);
-    }
     int64_t time_spent = 0;
     // The driver may be destructed after finalizing, so use a temporal driver to record
     // the information about the driver queue and workgroup.
@@ -791,6 +780,9 @@ void PipelineDriver::_update_statistics(RuntimeState* state, size_t total_chunks
     int64_t sink_operator_last_cpu_time_ns = sink_operator()->get_last_growth_cpu_time_ns();
     int64_t accounted_cpu_cost = runtime_ns + source_operator_last_cpu_time_ns + sink_operator_last_cpu_time_ns;
     query_ctx()->incr_cpu_cost(accounted_cpu_cost);
+    if (_workgroup != nullptr) {
+        _workgroup->incr_cpu_runtime_ns(accounted_cpu_cost);
+    }
 }
 
 void PipelineDriver::_update_scan_statistics(RuntimeState* state) {

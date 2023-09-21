@@ -134,6 +134,12 @@ static const AggregateFunction* get_function(const std::string& name, LogicalTyp
         }
     }
 
+    if (func_version > 6) {
+        if (name == "group_concat") {
+            func_name = "group_concat2";
+        }
+    }
+
     if (binary_type == TFunctionBinaryType::BUILTIN) {
         auto func = AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type,
                                                                           is_window_function, is_null);

@@ -108,7 +108,8 @@ public class SlotManager {
 
     public SlotManager(ResourceUsageMonitor resourceUsageMonitor) {
         resourceUsageMonitor.registerResourceAvailableListener(this::notifyResourceUsageAvailable);
-        this.slotRequestQueue = new SlotRequestQueue(resourceUsageMonitor::isResourceOverloaded);
+        this.slotRequestQueue = new SlotRequestQueue(resourceUsageMonitor::isGlobalResourceOverloaded,
+                resourceUsageMonitor::isGroupResourceOverloaded);
         this.allocatedSlots = new AllocatedSlots();
     }
 

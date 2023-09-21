@@ -14,9 +14,13 @@
 
 #pragma once
 
+#include <unordered_map>
+
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
+#include "exprs/expr_context.h"
+#include "formats/parquet/column_read_order_ctx.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
@@ -88,7 +92,8 @@ public:
     // we need load dict for dict_filter, so prepare should be after collec_io_range
     Status prepare();
     Status get_next(ChunkPtr* chunk, size_t* row_count) {
-        if (config::parquet_late_materialization_v2_enable) {
+        // TODO: new late materialization with read_range only deal with case enable late materialization
+        if (config::parquet_late_materialization_enable && config::parquet_late_materialization_v2_enable) {
             return _do_get_next_new(chunk, row_count);
         } else {
             return _do_get_next(chunk, row_count);
@@ -120,6 +125,8 @@ public:
     Status _do_get_next_new(ChunkPtr* chunk, size_t* row_count);
     Status _read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range, const Filter* filter,
                        ChunkPtr* chunk);
+
+    StatusOr<size_t> _read_range_round_by_round(const Range<uint64_t>& range, Filter* filter, ChunkPtr* chunk);
 
     Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
     Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
@@ -165,9 +172,13 @@ public:
     // columns(index) use as dict filter column
     std::vector<int> _dict_column_indices;
     std::unordered_map<int, std::vector<std::vector<std::string>>> _dict_column_sub_field_paths;
+    std::unordered_map<SlotId, std::vector<ExprContext*>> _left_no_dict_filter_conjuncts_by_slot;
 
     SparseRange<uint64_t> _range;
     SparseRangeIterator<uint64_t> _range_iter;
+
+    // round by round ctx
+    std::unique_ptr<ColumnReadOrderCtx> _column_read_order_ctx;
 };
 
 } // namespace starrocks::parquet

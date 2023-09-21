@@ -135,7 +135,7 @@ public class RemoteScanRangeLocations {
         result.add(scanRangeLocations);
     }
 
-    private boolean isTextFormat(THdfsFileFormat format) {
+    public static boolean isTextFormat(THdfsFileFormat format) {
         return format == THdfsFileFormat.TEXT || format == THdfsFileFormat.LZO_TEXT;
     }
 

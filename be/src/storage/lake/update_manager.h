@@ -37,6 +37,7 @@ class Tablet;
 class MetaFileBuilder;
 class UpdateManager;
 struct AutoIncrementPartialUpdateState;
+using IndexEntry = DynamicCache<uint64_t, LakePrimaryIndex>::Entry;
 
 class LakeDelvecLoader : public DelvecLoader {
 public:
@@ -60,7 +61,8 @@ public:
 
     // publish primary key tablet, update primary index and delvec, then update meta file
     Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadata& metadata,
-                                      Tablet* tablet, MetaFileBuilder* builder, int64_t base_version);
+                                      Tablet* tablet, IndexEntry* index_entry, MetaFileBuilder* builder,
+                                      int64_t base_version);
 
     // get rowids from primary index by each upserts
     Status get_rowids_from_pkindex(Tablet* tablet, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
@@ -70,8 +72,8 @@ public:
 
     // get column data by rssid and rowids
     Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
-                             const TabletSchema& tablet_schema, std::vector<uint32_t>& column_ids, bool with_default,
-                             std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
+                             const TabletSchemaCSPtr& tablet_schema, std::vector<uint32_t>& column_ids,
+                             bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns,
                              AutoIncrementPartialUpdateState* auto_increment_state = nullptr);
     // get delvec by version
@@ -88,7 +90,8 @@ public:
     size_t get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta);
 
     Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, const TabletMetadata& metadata,
-                                      Tablet* tablet, MetaFileBuilder* builder, int64_t base_version);
+                                      Tablet* tablet, IndexEntry* index_entry, MetaFileBuilder* builder,
+                                      int64_t base_version);
 
     // remove primary index entry from cache, called when publish version error happens.
     // Because update primary index isn't idempotent, so if primary index update success, but
@@ -118,6 +121,18 @@ public:
         return Status::OK();
     }
 
+    MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
+
+    // get or create primary index, and prepare primary index state
+    StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadata& metadata, Tablet* tablet,
+                                                MetaFileBuilder* builder, int64_t base_version, int64_t new_version);
+
+    // commit primary index, only take affect when it is local persistent index
+    Status commit_primary_index(IndexEntry* index_entry, Tablet* tablet);
+
+    // release index entry if it isn't nullptr
+    void release_primary_index(IndexEntry* index_entry);
+
 private:
     // print memory tracker state
     void _print_memory_stats();
@@ -125,7 +140,7 @@ private:
                       PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes);
 
     Status _do_update_with_condition(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
-                                     const TabletSchema& tablet_schema, uint32_t rowset_id, int32_t upsert_idx,
+                                     const TabletSchemaCSPtr& tablet_schema, uint32_t rowset_id, int32_t upsert_idx,
                                      int32_t condition_column, const std::vector<ColumnUniquePtr>& upserts,
                                      PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes);
 
@@ -150,6 +165,7 @@ private:
     MemTracker* _update_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _index_cache_mem_tracker;
     std::unique_ptr<MemTracker> _update_state_mem_tracker;
+    std::unique_ptr<MemTracker> _compaction_state_mem_tracker;
 };
 
 } // namespace lake

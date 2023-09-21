@@ -12,16 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.starrocks.connector.informationschema.InformationSchemaConnector;
-import com.starrocks.credential.CloudConfiguration;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
 
-public class CatalogConnector {
+public class CatalogConnector implements Connector {
     private final Connector normalConnector;
     private final Connector informationSchemaConnector;
 
@@ -42,9 +40,5 @@ public class CatalogConnector {
 
     public void shutdown() {
         normalConnector.shutdown();
-    }
-
-    public CloudConfiguration getCloudConfiguration() {
-        return normalConnector.getCloudConfiguration();
     }
 }

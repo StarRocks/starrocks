@@ -126,6 +126,7 @@ import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.util.Strings;
 import org.threeten.extra.PeriodDuration;
 
 import java.io.DataOutputStream;
@@ -158,7 +159,7 @@ public class AlterJobMgr {
         compactionHandler = new CompactionHandler();
     }
 
-    public void processCreateMaterializedView(CreateMaterializedViewStmt stmt)
+    public void processCreateSynchronousMaterializedView(CreateMaterializedViewStmt stmt)
             throws DdlException, AnalysisException {
         String tableName = stmt.getBaseIndexName();
         // check db
@@ -180,9 +181,15 @@ public class AlterJobMgr {
             if (table == null) {
                 throw new DdlException("create materialized failed. table:" + tableName + " not exist");
             }
+            if (table.isCloudNativeTable()) {
+                throw new DdlException("Creating synchronous materialized view(rollup) is not supported in " +
+                        "shared data clusters.\nPlease use asynchronous materialized view instead.\n" +
+                        "Refer to https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements" +
+                        "/data-definition/CREATE%20MATERIALIZED%20VIEW#asynchronous-materialized-view for details.");
+            }
             if (!table.isOlapTable()) {
-                throw new DdlException("Do not support create rollup on " + table.getType().name() +
-                        " table[" + tableName + "], please use new syntax to create materialized view");
+                throw new DdlException("Do not support create synchronous materialized view(rollup) on " +
+                        table.getType().name() + " table[" + tableName + "]");
             }
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
@@ -280,12 +287,13 @@ public class AlterJobMgr {
             }
 
             // Skip checks to maintain eventual consistency when replay
-            List<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(queryStatement, !isReplay);
+            List<BaseTableInfo> baseTableInfos =
+                    Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(queryStatement, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             GlobalStateMgr.getCurrentState().updateBaseTableRelatedMv(materializedView.getDbId(),
                     materializedView, baseTableInfos);
-            materializedView.setActive(true);
+            materializedView.setActive();
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason("user use alter materialized view set status to inactive");
         }
@@ -296,9 +304,15 @@ public class AlterJobMgr {
         long tableId = log.getTableId();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         db.writeLock();
+        MaterializedView mv = null;
         try {
-            MaterializedView mv = (MaterializedView) db.getTable(tableId);
+            mv = (MaterializedView) db.getTable(tableId);
             alterMaterializedViewStatus(mv, log.getStatus(), true);
+        } catch (Throwable e) {
+            if (mv != null) {
+                LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
+                mv.setInactiveAndReason("replay alter status failed: " + e.getMessage());
+            }
         } finally {
             db.writeUnlock();
         }
@@ -309,13 +323,25 @@ public class AlterJobMgr {
         long materializedViewId = log.getId();
         String newMaterializedViewName = log.getNewMaterializedViewName();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        MaterializedView oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
-        db.dropTable(oldMaterializedView.getName());
-        oldMaterializedView.setName(newMaterializedViewName);
-        db.registerTableUnlocked(oldMaterializedView);
-        updateTaskDefinition(oldMaterializedView);
-        LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
-                newMaterializedViewName, oldMaterializedView.getId());
+
+        db.writeLock();
+        MaterializedView oldMaterializedView = null;
+        try {
+            oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
+            db.dropTable(oldMaterializedView.getName());
+            oldMaterializedView.setName(newMaterializedViewName);
+            db.registerTableUnlocked(oldMaterializedView);
+            updateTaskDefinition(oldMaterializedView);
+            LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
+                    newMaterializedViewName, oldMaterializedView.getId());
+        } catch (Throwable e) {
+            if (oldMaterializedView != null) {
+                oldMaterializedView.setInactiveAndReason("replay rename failed: " + e.getMessage());
+                LOG.warn("replay rename materialized-view failed: {}", oldMaterializedView.getName(), e);
+            }
+        } finally {
+            db.writeUnlock();
+        }
     }
 
     private void updateTaskDefinition(MaterializedView materializedView) {
@@ -336,8 +362,8 @@ public class AlterJobMgr {
             return;
         }
         db.writeLock();
+        MaterializedView oldMaterializedView = null;
         try {
-            MaterializedView oldMaterializedView;
             final MaterializedView.MvRefreshScheme newMvRefreshScheme = new MaterializedView.MvRefreshScheme();
 
             oldMaterializedView = (MaterializedView) db.getTable(id);
@@ -364,6 +390,12 @@ public class AlterJobMgr {
                     oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
                     asyncRefreshContext.getStep(),
                     asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId());
+        } catch (Throwable e) {
+            if (oldMaterializedView != null) {
+                oldMaterializedView.setInactiveAndReason("replay failed: " + e.getMessage());
+                LOG.warn("replay change materialized-view refresh scheme failed: {}",
+                        oldMaterializedView.getName(), e);
+            }
         } finally {
             db.writeUnlock();
         }
@@ -376,8 +408,9 @@ public class AlterJobMgr {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         db.writeLock();
+        MaterializedView mv = null;
         try {
-            MaterializedView mv = (MaterializedView) db.getTable(tableId);
+            mv = (MaterializedView) db.getTable(tableId);
             TableProperty tableProperty = mv.getTableProperty();
             if (tableProperty == null) {
                 tableProperty = new TableProperty(properties);
@@ -385,6 +418,11 @@ public class AlterJobMgr {
             } else {
                 tableProperty.modifyTableProperties(properties);
                 tableProperty.buildProperty(opCode);
+            }
+        } catch (Throwable e) {
+            if (mv != null) {
+                mv.setInactiveAndReason("replay failed: " + e.getMessage());
+                LOG.warn("replay alter materialized-view properties failed: {}", mv.getName(), e);
             }
         } finally {
             db.writeUnlock();
@@ -545,12 +583,14 @@ public class AlterJobMgr {
                 Preconditions.checkState(properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT));
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
 
                 olapTable = (OlapTable) db.getTable(tableName);
                 if (olapTable.isCloudNativeTable()) {
@@ -569,6 +609,12 @@ public class AlterJobMgr {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
                     schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.REPLICATED_STORAGE);
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)) {
+                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
+                            TTabletMetaType.BUCKET_SIZE);
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
+                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
+                            TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
@@ -755,7 +801,9 @@ public class AlterJobMgr {
             if (!partitionInfo.isRangePartition()) {
                 throw new DdlException("Only support range partition table to modify storage_cooldown_ttl");
             }
-            periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
+            if (Strings.isNotBlank(storageCoolDownTTL)) {
+                periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
+            }
         }
         DataProperty newDataProperty =
                 PropertyAnalyzer.analyzeDataProperty(properties, null, false);
@@ -773,6 +821,10 @@ public class AlterJobMgr {
         for (String partitionName : partitionNames) {
             Partition partition = olapTable.getPartition(partitionName);
             // 1. date property
+
+            if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                continue;
+            }
 
             if (newDataProperty != null) {
                 // for storage_cooldown_ttl

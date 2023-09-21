@@ -32,6 +32,7 @@ public class RepoAccessor {
 
     private static final Logger LOG = LogManager.getLogger(RepoAccessor.class);
     private static final RepoAccessor INSTANCE = new RepoAccessor();
+    private static long DML_EXCEPTION_SLEEP_MS = 10000;
 
     public static RepoAccessor getInstance() {
         return INSTANCE;
@@ -48,10 +49,10 @@ public class RepoAccessor {
         }
     }
 
-    public List<PipeFileRecord> listFilesByState(long pipeId, FileListRepo.PipeFileState state) {
+    public List<PipeFileRecord> listFilesByState(long pipeId, FileListRepo.PipeFileState state, long limit) {
         List<PipeFileRecord> res = null;
         try {
-            String sql = buildListFileByState(pipeId, state);
+            String sql = buildListFileByState(pipeId, state, limit);
             List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
             res = PipeFileRecord.fromResultBatch(batch);
         } catch (Exception e) {
@@ -77,6 +78,7 @@ public class RepoAccessor {
             String sql = buildSqlAddFiles(records);
             RepoExecutor.getInstance().executeDML(sql);
             LOG.info("addFiles into repo: {}", records);
+            return;
         } catch (Exception e) {
             LOG.error("addFiles {} failed", records, e);
             throw e;
@@ -129,10 +131,12 @@ public class RepoAccessor {
         return FileListTableRepo.SELECTED_STAGED_FILES + where;
     }
 
-    protected String buildListFileByState(long pipeId, FileListRepo.PipeFileState state) {
-        String sql = String.format(FileListTableRepo.SELECT_FILES_BY_STATE,
-                pipeId, Strings.quote(state.toString()));
-        return sql;
+    protected String buildListFileByState(long pipeId, FileListRepo.PipeFileState state, long limit) {
+        return limit <= 0 ?
+                String.format(FileListTableRepo.SELECT_FILES_BY_STATE,
+                        pipeId, Strings.quote(state.toString())) :
+                String.format(FileListTableRepo.SELECT_FILES_BY_STATE_WITH_LIMIT,
+                        pipeId, Strings.quote(state.toString()), limit);
     }
 
     protected String buildDeleteByPipe(long pipeId) {

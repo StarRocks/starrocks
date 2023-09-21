@@ -25,6 +25,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -38,6 +39,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
@@ -79,6 +81,19 @@ public abstract class AstVisitor<R, C> {
     public R visitQueryStatement(QueryStatement statement, C context) {
         return visitStatement(statement, context);
     }
+
+    public R visitPrepareStatement(PrepareStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitExecuteStatement(ExecuteStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDeallocatePrepareStatement(DeallocateStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
 
     // ---------------------------------------- Warehouse Statement ----------------------------------------------------
 
@@ -295,6 +310,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitSetCatalogStatement(SetCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterCatalogStatement(AlterCatalogStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -553,6 +572,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowRunningQueriesStatement(ShowRunningQueriesStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowResourceGroupUsageStatement(ShowResourceGroupUsageStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -1182,6 +1205,10 @@ public abstract class AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
+    public R visitParameterExpr(Parameter node, C context) {
+        return visitExpression(node, context);
+    }
+
     // ------------------------------------------- AST ---------------------------------------==------------------------
 
     public R visitLimitElement(LimitElement node, C context) {
@@ -1194,5 +1221,9 @@ public abstract class AstVisitor<R, C> {
 
     public R visitGroupByClause(GroupByClause node, C context) {
         return null;
+    }
+
+    public R visitDictQueryExpr(DictQueryExpr node, C context) {
+        return visitExpression(node, context);
     }
 }

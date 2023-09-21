@@ -110,14 +110,14 @@ OutPut Exchange Id: 34
 32:Project
 |  output columns:
 |  61 <-> year[([37: o_orderdate, DATE, true]); args: DATE; result: SMALLINT; args nullable: true; result nullable: true]
-|  62 <-> [77: multiply, DECIMAL128(33,4), true]
-|  63 <-> if[([55: n_name, VARCHAR, true] = 'IRAN', [77: multiply, DECIMAL128(33,4), true], 0); args: BOOLEAN,DECIMAL128,DECIMAL128; result: DECIMAL128(33,4); args nullable: true; result nullable: true]
+|  62 <-> [71: multiply, DECIMAL128(33,4), true]
+|  63 <-> if[([55: n_name, VARCHAR, true] = 'IRAN', [71: multiply, DECIMAL128(33,4), true], 0); args: BOOLEAN,DECIMAL128,DECIMAL128; result: DECIMAL128(33,4); args nullable: true; result nullable: true]
 |  common expressions:
-|  73 <-> cast([22: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2))
-|  74 <-> [23: l_discount, DECIMAL64(15,2), true]
-|  75 <-> 1 - [74: cast, DECIMAL64(18,2), true]
-|  76 <-> cast([75: subtract, DECIMAL64(18,2), true] as DECIMAL128(18,2))
-|  77 <-> [73: cast, DECIMAL128(15,2), true] * [76: cast, DECIMAL128(18,2), true]
+|  67 <-> cast([22: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2))
+|  68 <-> [23: l_discount, DECIMAL64(15,2), true]
+|  69 <-> 1 - [68: cast, DECIMAL64(18,2), true]
+|  70 <-> cast([69: subtract, DECIMAL64(18,2), true] as DECIMAL128(18,2))
+|  71 <-> [67: cast, DECIMAL128(15,2), true] * [70: cast, DECIMAL128(18,2), true]
 |  cardinality: 242843
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
@@ -325,7 +325,7 @@ OutPut Exchange Id: 18
 16:HdfsScanNode
 TABLE: part
 NON-PARTITION PREDICATES: 5: p_type = 'ECONOMY ANODIZED STEEL'
-MIN/MAX PREDICATES: 71: p_type <= 'ECONOMY ANODIZED STEEL', 72: p_type >= 'ECONOMY ANODIZED STEEL'
+MIN/MAX PREDICATES: 5: p_type <= 'ECONOMY ANODIZED STEEL', 5: p_type >= 'ECONOMY ANODIZED STEEL'
 partitions=1/1
 avgRowSize=33.0
 cardinality: 133333
@@ -368,7 +368,7 @@ OutPut Exchange Id: 14
 0:HdfsScanNode
 TABLE: orders
 NON-PARTITION PREDICATES: 37: o_orderdate >= '1995-01-01', 37: o_orderdate <= '1996-12-31'
-MIN/MAX PREDICATES: 69: o_orderdate >= '1995-01-01', 70: o_orderdate <= '1996-12-31'
+MIN/MAX PREDICATES: 37: o_orderdate >= '1995-01-01', 37: o_orderdate <= '1996-12-31'
 partitions=1/1
 avgRowSize=20.0
 cardinality: 45530146
@@ -478,7 +478,7 @@ OutPut Exchange Id: 05
 3:HdfsScanNode
 TABLE: region
 NON-PARTITION PREDICATES: 59: r_name = 'MIDDLE EAST'
-MIN/MAX PREDICATES: 67: r_name <= 'MIDDLE EAST', 68: r_name >= 'MIDDLE EAST'
+MIN/MAX PREDICATES: 59: r_name <= 'MIDDLE EAST', 59: r_name >= 'MIDDLE EAST'
 partitions=1/1
 avgRowSize=10.8
 cardinality: 1

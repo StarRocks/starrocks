@@ -66,7 +66,7 @@ protected:
 };
 
 TEST_F(SegmentRewriterTest, rewrite_test) {
-    std::unique_ptr<TabletSchema> partial_tablet_schema = TabletSchemaHelper::create_tablet_schema(
+    std::shared_ptr<TabletSchema> partial_tablet_schema = TabletSchemaHelper::create_tablet_schema(
             {create_int_key_pb(1), create_int_key_pb(2), create_int_value_pb(4)});
 
     SegmentWriterOptions opts;
@@ -75,12 +75,12 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     std::string file_name = kSegmentDir + "/partial_rowset";
     ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
 
-    SegmentWriter writer(std::move(wfile), 0, partial_tablet_schema.get(), opts);
+    SegmentWriter writer(std::move(wfile), 0, partial_tablet_schema, opts);
     ASSERT_OK(writer.init());
 
     int32_t chunk_size = config::vector_chunk_size;
     size_t num_rows = 10000;
-    auto partial_schema = ChunkHelper::convert_schema(*partial_tablet_schema);
+    auto partial_schema = ChunkHelper::convert_schema(partial_tablet_schema);
     auto partial_chunk = ChunkHelper::new_chunk(partial_schema, chunk_size);
 
     for (auto i = 0; i < num_rows % chunk_size; ++i) {
@@ -103,10 +103,10 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     partial_rowset_footer.set_position(footer_position);
     partial_rowset_footer.set_size(file_size - footer_position);
 
-    auto partial_segment = *Segment::open(_fs, file_name, 0, partial_tablet_schema.get());
+    auto partial_segment = *Segment::open(_fs, file_name, 0, partial_tablet_schema);
     ASSERT_EQ(partial_segment->num_rows(), num_rows);
 
-    std::unique_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
+    std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
             {create_int_key_pb(1), create_int_key_pb(2), create_int_value_pb(3), create_int_value_pb(4),
              create_int_value_pb(5)});
     std::string dst_file_name = kSegmentDir + "/rewrite_rowset";
@@ -122,17 +122,17 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
         }
     }
 
-    ASSERT_OK(SegmentRewriter::rewrite(file_name, dst_file_name, *tablet_schema, read_column_ids, write_columns,
+    ASSERT_OK(SegmentRewriter::rewrite(file_name, dst_file_name, tablet_schema, read_column_ids, write_columns,
                                        partial_segment->id(), partial_rowset_footer));
 
-    auto segment = *Segment::open(_fs, dst_file_name, 0, tablet_schema.get());
+    auto segment = *Segment::open(_fs, dst_file_name, 0, tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
-    auto schema = ChunkHelper::convert_schema(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema(tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
     auto seg_iterator = res.value();
@@ -174,9 +174,9 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
             new_write_columns[i]->append_datum(Datum(static_cast<int32_t>(j + read_column_ids[i])));
         }
     }
-    ASSERT_OK(SegmentRewriter::rewrite(file_name, *tablet_schema, read_column_ids, new_write_columns,
+    ASSERT_OK(SegmentRewriter::rewrite(file_name, tablet_schema, read_column_ids, new_write_columns,
                                        partial_segment->id(), partial_rowset_footer));
-    auto rewrite_segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
+    auto rewrite_segment = *Segment::open(_fs, file_name, 0, tablet_schema);
 
     ASSERT_EQ(rewrite_segment->num_rows(), num_rows);
     res = rewrite_segment->new_iterator(schema, seg_options);

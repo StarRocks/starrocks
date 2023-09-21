@@ -73,15 +73,6 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
 }
 
 UpdateManager::~UpdateManager() {
-    if (_apply_thread_pool != nullptr) {
-        // DynamicCache may be still used by apply thread.
-        // Before deconstrut the DynamicCache, apply thread
-        // should be shutdown.
-        _apply_thread_pool->shutdown();
-    }
-    if (_get_pindex_thread_pool) {
-        _get_pindex_thread_pool->shutdown();
-    }
     clear_cache();
     if (_compaction_state_mem_tracker) {
         _compaction_state_mem_tracker.reset();
@@ -117,6 +108,23 @@ Status UpdateManager::init() {
     _persistent_index_compaction_mgr = std::make_unique<PersistentIndexCompactionManager>();
     RETURN_IF_ERROR(_persistent_index_compaction_mgr->init());
     return Status::OK();
+}
+
+void UpdateManager::stop() {
+    if (_get_pindex_thread_pool) {
+        _get_pindex_thread_pool->shutdown();
+    }
+    if (_apply_thread_pool) {
+        _apply_thread_pool->shutdown();
+    }
+}
+
+int64_t UpdateManager::get_index_cache_expire_ms(const Tablet& tablet) const {
+    const int32_t tablet_index_cache_expire_sec = tablet.tablet_meta()->get_primary_index_cache_expire_sec();
+    if (tablet_index_cache_expire_sec > 0) {
+        return tablet_index_cache_expire_sec * 1000;
+    }
+    return _cache_expire_ms;
 }
 
 Status UpdateManager::get_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
@@ -525,7 +533,7 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     if (st.ok()) {
         auto index_entry = _index_cache.get_or_create(tablet->tablet_id());
         st = index_entry->value().load(tablet);
-        index_entry->update_expire_time(MonotonicMillis() + _cache_expire_ms);
+        index_entry->update_expire_time(MonotonicMillis() + get_index_cache_expire_ms(*tablet));
         _index_cache.update_object_size(index_entry, index_entry->value().memory_usage());
         if (st.ok()) {
             _index_cache.release(index_entry);
@@ -555,6 +563,34 @@ void UpdateManager::on_rowset_cancel(Tablet* tablet, Rowset* rowset) {
             _update_state_cache.remove(state_entry);
         }
     }
+}
+
+bool UpdateManager::TEST_update_state_exist(Tablet* tablet, Rowset* rowset) {
+    string rowset_unique_id = rowset->rowset_id().to_string();
+    if (rowset->is_column_mode_partial_update()) {
+        auto column_state_entry =
+                _update_column_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
+        if (column_state_entry != nullptr) {
+            _update_column_state_cache.remove(column_state_entry);
+            return true;
+        }
+    } else {
+        auto state_entry = _update_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
+        if (state_entry != nullptr) {
+            _update_state_cache.remove(state_entry);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool UpdateManager::TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry == nullptr) {
+        return expected_cnt == 0;
+    }
+    _index_cache.release(index_entry);
+    return index_entry->get_ref() == expected_cnt;
 }
 
 } // namespace starrocks

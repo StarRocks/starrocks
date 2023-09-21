@@ -109,6 +109,7 @@ struct TCreateTabletReq {
     16: optional Types.TCompressionType compression_type = Types.TCompressionType.LZ4_FRAME
     17: optional TBinlogConfig binlog_config;
     18: optional TPersistentIndexType persistent_index_type;
+    19: optional i32 primary_index_cache_expire_sec;
 }
 
 struct TDropTabletReq {
@@ -145,6 +146,7 @@ struct TAlterTabletReqV2 {
     11: optional i64 job_id
     12: optional InternalService.TQueryGlobals query_globals
     13: optional InternalService.TQueryOptions query_options
+    14: optional list<Descriptors.TColumn> columns
 }
 
 struct TAlterMaterializedViewParam {
@@ -178,6 +180,7 @@ struct TPushReq {
     // 14 and 15 are used by spark load
     14: optional PlanNodes.TBrokerScanRange broker_scan_range
     15: optional Descriptors.TDescriptorTable desc_tbl
+    16: optional list<Descriptors.TColumn> columns_desc
 
     30: optional bool use_vectorized
     // 31 are used by spark load
@@ -340,7 +343,9 @@ enum TTabletMetaType {
     WRITE_QUORUM,
     REPLICATED_STORAGE,
     DISABLE_BINLOG,
-    BINLOG_CONFIG
+    BINLOG_CONFIG,
+    BUCKET_SIZE,
+    PRIMARY_INDEX_CACHE_EXPIRE_SEC
 }
 
 struct TTabletMetaInfo {
@@ -351,6 +356,7 @@ struct TTabletMetaInfo {
     5: optional bool is_in_memory // Deprecated
     6: optional bool enable_persistent_index
     7: optional TBinlogConfig binlog_config
+    8: optional i32 primary_index_cache_expire_sec
 }
 
 struct TUpdateTabletMetaInfoReq {

@@ -61,9 +61,11 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* has_page_statistics = nullptr;
     // page skip
     RuntimeProfile::Counter* page_skip = nullptr;
+    // round-by-round
+    RuntimeProfile::Counter* group_min_round_cost = nullptr;
 
     RuntimeProfile* root = profile->runtime_profile;
-    ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::UNIT);
+    ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::NONE);
     request_bytes_read = ADD_CHILD_COUNTER(root, "RequestBytesRead", TUnit::BYTES, kParquetProfileSectionPrefix);
     request_bytes_read_uncompressed =
             ADD_CHILD_COUNTER(root, "RequestBytesReadUncompressed", TUnit::BYTES, kParquetProfileSectionPrefix);
@@ -87,6 +89,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
 
     has_page_statistics = ADD_CHILD_COUNTER(root, "HasPageStatistics", TUnit::UNIT, kParquetProfileSectionPrefix);
     page_skip = ADD_CHILD_COUNTER(root, "PageSkipCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
+    group_min_round_cost = ADD_CHILD_COUNTER(root, "GroupMinRound", TUnit::UNIT, kParquetProfileSectionPrefix);
 
     COUNTER_UPDATE(request_bytes_read, _stats.request_bytes_read);
     COUNTER_UPDATE(request_bytes_read_uncompressed, _stats.request_bytes_read_uncompressed);
@@ -104,6 +107,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     int64_t page_stats = _stats.has_page_statistics ? 1 : 0;
     COUNTER_UPDATE(has_page_statistics, page_stats);
     COUNTER_UPDATE(page_skip, _stats.page_skip);
+    COUNTER_UPDATE(group_min_round_cost, _stats.group_min_round_cost);
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {

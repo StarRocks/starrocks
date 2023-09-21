@@ -17,10 +17,6 @@ package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
-import com.starrocks.connector.CachingRemoteFileIO;
-import com.starrocks.connector.RemoteFileBlockDesc;
-import com.starrocks.connector.RemoteFileDesc;
-import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.hive.HiveRemoteFileIO;
 import com.starrocks.connector.hive.MockedRemoteFileSystem;
 import org.apache.hadoop.conf.Configuration;
@@ -33,14 +29,14 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static com.starrocks.connector.hive.MockedRemoteFileSystem.TEST_FILES;
+import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABLE;
 
 public class CachingRemoteFileIOTest {
 
     @Test
     public void testGetHiveRemoteFiles() {
         HiveRemoteFileIO hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
-        FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
         hiveRemoteFileIO.setFileSystem(fs);
         FeConstants.runningUnitTest = true;
         ExecutorService executor = Executors.newFixedThreadPool(5);
@@ -73,5 +69,7 @@ public class CachingRemoteFileIOTest {
         Map<RemotePathKey, List<RemoteFileDesc>> presentRemoteFileInfos =
                 cachingFileIO.getPresentRemoteFiles(Lists.newArrayList(pathKey));
         Assert.assertEquals(1, presentRemoteFileInfos.size());
+
+        queryLevelCache.updateRemoteFiles(pathKey);
     }
 }

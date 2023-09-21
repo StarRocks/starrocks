@@ -1,0 +1,146 @@
+-- name: test_bucket_agg
+CREATE TABLE `t0` (
+  `c0` bigint DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` bigint DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 SELECT generate_series, 4096 - generate_series, generate_series FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+insert into t0 select * from t0;
+-- result:
+-- !result
+set tablet_internal_parallel_mode="force_split";
+-- result:
+-- !result
+select distinct c0 from t0 order by 1 limit 5;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+select distinct c0, c1 from t0 order by 1, 2 limit 5;
+-- result:
+1	4095
+2	4094
+3	4093
+4	4092
+5	4091
+-- !result
+select distinct c0, c1, c2 from t0 order by 1, 2, 3 limit 5;
+-- result:
+1	4095	1
+2	4094	2
+3	4093	3
+4	4092	4
+5	4091	5
+-- !result
+select sum(c1) from t0 group by c0, c2 order by 1 limit 5;
+-- result:
+0
+2
+4
+6
+8
+-- !result
+select sum(c2) from t0 group by c0, c1 order by 1 limit 5;
+-- result:
+2
+4
+6
+8
+10
+-- !result
+select sum(c1), max(c2) from t0 group by c0 order by 1, 2 limit 5;
+-- result:
+0	4096
+2	4095
+4	4094
+6	4093
+8	4092
+-- !result
+select count(*) from (select distinct c0 from t0) tb;
+-- result:
+4096
+-- !result
+select count(*) from (select c0, c1, sum(c2) from t0 group by c0, c1) tb;
+-- result:
+4096
+-- !result
+select count(*) from (select distinct c0 from t0 limit 100) tb;
+-- result:
+100
+-- !result
+set tablet_internal_parallel_mode="auto";
+-- result:
+-- !result
+select distinct c0 from t0 order by 1 limit 5;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+select distinct c0, c1 from t0 order by 1, 2 limit 5;
+-- result:
+1	4095
+2	4094
+3	4093
+4	4092
+5	4091
+-- !result
+select distinct c0, c1, c2 from t0 order by 1, 2, 3 limit 5;
+-- result:
+1	4095	1
+2	4094	2
+3	4093	3
+4	4092	4
+5	4091	5
+-- !result
+select sum(c1) from t0 group by c0, c2 order by 1 limit 5;
+-- result:
+0
+2
+4
+6
+8
+-- !result
+select sum(c2) from t0 group by c0, c1 order by 1 limit 5;
+-- result:
+2
+4
+6
+8
+10
+-- !result
+select sum(c1), max(c2) from t0 group by c0 order by 1, 2 limit 5;
+-- result:
+0	4096
+2	4095
+4	4094
+6	4093
+8	4092
+-- !result
+select count(*) from (select distinct c0 from t0) tb;
+-- result:
+4096
+-- !result
+select count(*) from (select c0, c1, sum(c2) from t0 group by c0, c1) tb;
+-- result:
+4096
+-- !result
+select count(*) from (select distinct c0 from t0 limit 100) tb;
+-- result:
+100
+-- !result

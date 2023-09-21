@@ -97,9 +97,11 @@ public class FragmentInstanceExecState {
      */
     public static FragmentInstanceExecState createFakeExecution(TUniqueId fragmentInstanceId,
                                                                 TNetworkAddress address) {
-        String name = "Instance " + DebugUtil.printId(fragmentInstanceId);
+        String instanceId = DebugUtil.printId(fragmentInstanceId);
+        String name = "Instance " + instanceId + " (host=" + address + ")";
         RuntimeProfile profile = new RuntimeProfile(name);
         profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
+        profile.addInfoString("InstanceId", instanceId);
 
         return new FragmentInstanceExecState(null, null, 0, fragmentInstanceId, 0, null, profile, null, null, -1);
     }
@@ -110,9 +112,11 @@ public class FragmentInstanceExecState {
                                                             TExecPlanFragmentParams request,
                                                             ComputeNode worker) {
         TNetworkAddress address = worker.getAddress();
-        String name = "Instance " + DebugUtil.printId(request.params.fragment_instance_id) + " (host=" + address + ")";
+        String instanceId = DebugUtil.printId(request.params.fragment_instance_id);
+        String name = "Instance " + instanceId + " (host=" + address + ")";
         RuntimeProfile profile = new RuntimeProfile(name);
         profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
+        profile.addInfoString("InstanceId", instanceId);
 
         return new FragmentInstanceExecState(jobSpec,
                 fragmentId, fragmentIndex,
@@ -157,7 +161,8 @@ public class FragmentInstanceExecState {
 
         TNetworkAddress brpcAddress = worker.getBrpcAddress();
         try {
-            deployFuture = BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, requestToDeploy);
+            deployFuture = BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, requestToDeploy,
+                    jobSpec.getPlanProtocol());
         } catch (RpcException | TException e) {
             // DO NOT throw exception here, return a complete future with error code,
             // so that the following logic will cancel the fragment.

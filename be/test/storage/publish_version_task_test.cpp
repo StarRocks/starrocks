@@ -70,11 +70,11 @@ public:
         TabletManager* tablet_manager = starrocks::StorageEngine::instance()->tablet_manager();
         TabletSharedPtr tablet = tablet_manager->get_tablet(12345);
         ASSERT_TRUE(tablet != nullptr);
-        const TabletSchema& tablet_schema = tablet->tablet_schema();
+        const TabletSchemaCSPtr& tablet_schema = tablet->tablet_schema();
 
         // create rowset
         RowsetWriterContext rowset_writer_context;
-        create_rowset_writer_context(&rowset_writer_context, tablet->schema_hash_path(), &tablet_schema);
+        create_rowset_writer_context(&rowset_writer_context, tablet->schema_hash_path(), tablet_schema);
         std::unique_ptr<RowsetWriter> rowset_writer;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
 
@@ -125,7 +125,8 @@ public:
     }
 
     static void create_rowset_writer_context(RowsetWriterContext* rowset_writer_context,
-                                             const std::string& schema_hash_path, const TabletSchema* tablet_schema) {
+                                             const std::string& schema_hash_path,
+                                             const TabletSchemaCSPtr& tablet_schema) {
         RowsetId rowset_id;
         rowset_id.init(10000);
         rowset_writer_context->rowset_id = rowset_id;
@@ -139,7 +140,7 @@ public:
         rowset_writer_context->version.second = 2;
     }
 
-    static void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer, const TabletSchema& tablet_schema) {
+    static void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer, const TabletSchemaCSPtr& tablet_schema) {
         std::vector<std::string> test_data;
         auto schema = ChunkHelper::convert_schema(tablet_schema);
         auto chunk = ChunkHelper::new_chunk(schema, 1024);
@@ -178,7 +179,8 @@ public:
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
         std::vector<bool> nullable_tuples = std::vector<bool>{false};
         DescriptorTbl* tbl = nullptr;
-        DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+        CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
+                      .ok());
 
         auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
         auto* tuple_desc = row_desc->tuple_descriptors()[0];

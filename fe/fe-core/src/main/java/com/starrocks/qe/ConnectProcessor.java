@@ -35,6 +35,9 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -43,6 +46,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
@@ -62,7 +67,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.KillStmt;
+import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
@@ -73,18 +80,22 @@ import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.channels.AsynchronousCloseException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.IntStream;
 
 /**
  * Process one mysql connection, receive one pakcet, process, send one packet.
@@ -302,7 +313,7 @@ public class ConnectProcessor {
                 ctx.getQualifiedUser(),
                 Optional.ofNullable(ctx.getResourceGroup()).map(TWorkGroup::getName).orElse(""));
         ctx.setQueryDetail(queryDetail);
-        //copy queryDetail, cause some properties can be changed in future
+        // copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
     }
 
@@ -326,7 +337,7 @@ public class ConnectProcessor {
                         ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
                 .setDb(ctx.getDatabase())
                 .setCatalog(ctx.getCurrentCatalog());
-        ctx.getPlannerProfile().reset();
+        Tracers.register(ctx);
 
         // execute this query.
         StatementBase parsedStmt = null;
@@ -346,8 +357,12 @@ public class ConnectProcessor {
                     ctx.setQueryId(UUIDUtil.genUUID());
                 }
                 parsedStmt = stmts.get(i);
+                //JDBC has no prepared prefix, only
+                if (ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE && (parsedStmt instanceof PrepareStmt)) {
+                    ((PrepareStmt) parsedStmt).setName(String.valueOf(ctx.getStmtId()));
+                }
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
-
+                Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
                 // Only add the last running stmt for multi statement,
                 // because the audit log will only show the last stmt.
                 if (i == stmts.size() - 1) {
@@ -393,6 +408,8 @@ public class ConnectProcessor {
                 // ignore kill stmt execute err(not monitor it)
                 ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             }
+        } finally {
+            Tracers.close();
         }
 
         // audit after exec
@@ -451,6 +468,81 @@ public class ConnectProcessor {
         ctx.getState().setEof();
     }
 
+    // prepared statement cmd COM_EXECUT
+    // protocol
+    // Type             Name Description
+    // int<1>           status [0x17] COM_STMT_EXECUTE
+    // int<4>           statement_id ID of the prepared statement to execute
+    // int<1>           flags  Flags. See enum_cursor_type
+    // int<4>           iteration_count Number of times to execute the statement. Currently always 1.
+    // binary<var>      null_bitmap   NULL bitmap, length= (paramater_count + 7) / 8
+    // int<1>           new_params_bind_flag  Flag if parameters must be re-bound
+    // int<2>           parameter_type  Type of the parameter value. See enum_field_type
+    // string<lenenc>   parameter_name Name of the parameter or empty if not present
+    // binary<var>      parameter_values  value of each parameter
+    // detail https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_execute.html
+    private void handleExecute() {
+        packetBuf = packetBuf.order(ByteOrder.LITTLE_ENDIAN);
+        // stmt_id
+        int stmtId = packetBuf.getInt();
+        // flag
+        packetBuf.get();
+        packetBuf.getInt();
+        // cache statement
+        PrepareStmtContext prepareCtx = ctx.getPreparedStmt(String.valueOf(stmtId));
+        if (null == prepareCtx) {
+            ctx.getState().setError("msg: Not Found prepared statement, stmtName: " + stmtId);
+            return;
+        }
+        int numParams = prepareCtx.getStmt().getParameters().size();
+        // null bitmap
+        byte[] nullBitmap = new byte[(numParams + 7) / 8];
+        packetBuf.get(nullBitmap);
+        try {
+            ctx.setQueryId(UUIDUtil.genUUID());
+            Integer[] mysqlTypeCodes = new Integer[numParams];
+
+            // new_params_bind_flag
+            if (packetBuf.hasRemaining() && (int) packetBuf.get() != 0) {
+                // parse params types
+                IntStream.range(0, numParams).forEach(i -> mysqlTypeCodes[i] = (int) packetBuf.getChar());
+            }
+            // gene exprs
+            List<Expr> exprs = new ArrayList<>();
+            for (int i = 0; i < numParams; ++i) {
+                if (isNull(nullBitmap, i)) {
+                    exprs.add(new NullLiteral());
+                    continue;
+                }
+                LiteralExpr l = LiteralExpr.parseLiteral(mysqlTypeCodes[i]);
+                l.parseMysqlParam(packetBuf);
+                exprs.add(l);
+            }
+            ExecuteStmt executeStmt = new ExecuteStmt(String.valueOf(stmtId), exprs);
+            // audit will affect performance
+            boolean enableAudit = ctx.getSessionVariable().isAuditExecuteStmt();
+            String originStmt = enableAudit ? executeStmt.toSql() : "/* omit */";
+            executeStmt.setOrigStmt(new OriginStatement(originStmt, 0));
+
+            executor = new StmtExecutor(ctx, executeStmt);
+            ctx.setExecutor(executor);
+            executor.execute();
+
+            if (enableAudit) {
+                auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+            }
+        } catch (Throwable e)  {
+            // Catch all throwable.
+            // If reach here, maybe palo bug.
+            LOG.warn("Process one query failed because unknown reason: ", e);
+            ctx.getState().setError(e.getClass().getSimpleName() + ", msg: " + e.getMessage());
+        }
+    }
+
+    private static boolean isNull(byte[] bitmap, int position) {
+        return (bitmap[position / 8] & (0xff & (1 << (position & 7)))) != 0;
+    }
+
     private void dispatch() throws IOException {
         int code = packetBuf.get();
         MysqlCommand command = MysqlCommand.fromCode(code);
@@ -473,6 +565,7 @@ public class ConnectProcessor {
                 handleQuit();
                 break;
             case COM_QUERY:
+            case COM_STMT_PREPARE:
                 handleQuery();
                 ctx.setStartTime();
                 break;
@@ -487,6 +580,9 @@ public class ConnectProcessor {
                 break;
             case COM_PING:
                 handlePing();
+                break;
+            case COM_STMT_EXECUTE:
+                handleExecute();
                 break;
             default:
                 ctx.getState().setError("Unsupported command(" + command + ")");
@@ -712,6 +808,16 @@ public class ConnectProcessor {
                 result.setResultSet(executor.getProxyResultSet().tothrift());
             } else if (executor.getProxyResultBuffer() != null) {  // query statement
                 result.setChannelBufferList(executor.getProxyResultBuffer());
+            }
+
+            String resourceGroupName = ctx.getAuditEventBuilder().build().resourceGroup;
+            if (StringUtils.isNotEmpty(resourceGroupName)) {
+                result.setResource_group_name(resourceGroupName);
+            }
+
+            PQueryStatistics audit = executor.getQueryStatisticsForAuditLog();
+            if (audit != null) {
+                result.setAudit_statistics(AuditStatisticsUtil.toThrift(audit));
             }
         }
         return result;

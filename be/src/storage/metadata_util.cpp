@@ -27,7 +27,7 @@ namespace starrocks {
 
 // Old version StarRocks use `TColumnType` to save type info, convert it into `TTypeDesc`.
 // NOTE: This is only used for some legacy UT
-static void convert_to_new_version(TColumn* tcolumn) {
+void convert_to_new_version(TColumn* tcolumn) {
     if (!tcolumn->__isset.type_desc) {
         tcolumn->__set_index_len(tcolumn->column_type.index_len);
 
@@ -43,7 +43,6 @@ static void convert_to_new_version(TColumn* tcolumn) {
         tcolumn->__isset.type_desc = true;
     }
 }
-
 static StorageAggregateType t_aggregation_type_to_field_aggregation_method(TAggregationType::type agg_type) {
     switch (agg_type) {
     case TAggregationType::NONE:
@@ -152,7 +151,7 @@ static Status type_desc_to_pb(const std::vector<TTypeNode>& types, int* index, C
     return Status::InternalError("Unreachable path");
 }
 
-static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnPB* column_pb) {
+Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnPB* column_pb) {
     DCHECK(t_column.__isset.type_desc);
     const std::vector<TTypeNode>& types = t_column.type_desc.types;
     int index = 0;
@@ -165,7 +164,8 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
     column_pb->set_name(t_column.column_name);
     column_pb->set_is_key(t_column.is_key);
     column_pb->set_is_nullable(t_column.is_allow_null);
-
+    column_pb->set_has_bitmap_index(t_column.has_bitmap_index);
+    column_pb->set_is_auto_increment(t_column.is_auto_increment);
     if (t_column.is_key) {
         auto agg_method = STORAGE_AGGREGATE_NONE;
         column_pb->set_aggregation(get_string_by_aggregation_type(agg_method));
@@ -184,10 +184,6 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
     }
     if (t_column.__isset.is_bloom_filter_column) {
         column_pb->set_is_bf_column(t_column.is_bloom_filter_column);
-    }
-
-    if (t_column.__isset.is_auto_increment) {
-        column_pb->set_is_auto_increment(t_column.is_auto_increment);
     }
 
     return Status::OK();
@@ -242,7 +238,13 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     bool has_bf_columns = false;
     for (TColumn tcolumn : tablet_schema.columns) {
         convert_to_new_version(&tcolumn);
-        uint32_t col_unique_id = col_ordinal_to_unique_id.at(col_ordinal++);
+        uint32_t col_unique_id;
+        if (tcolumn.col_unique_id >= 0) {
+            col_unique_id = tcolumn.col_unique_id;
+        } else {
+            col_unique_id = col_ordinal_to_unique_id.at(col_ordinal);
+        }
+        col_ordinal++;
         ColumnPB* column = schema->add_column();
 
         RETURN_IF_ERROR(t_column_to_pb_column(col_unique_id, tcolumn, column));

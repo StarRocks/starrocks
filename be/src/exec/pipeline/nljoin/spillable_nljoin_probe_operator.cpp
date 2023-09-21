@@ -116,7 +116,7 @@ SpillableNLJoinProbeOperator::SpillableNLJoinProbeOperator(
         const std::string& sql_join_conjuncts, const std::vector<ExprContext*>& join_conjuncts,
         const std::vector<ExprContext*>& conjunct_ctxs, const std::vector<SlotDescriptor*>& col_types,
         size_t probe_column_count, const std::shared_ptr<NLJoinContext>& cross_join_context)
-        : OperatorWithDependency(factory, id, "spillable_nestloop_join_probe", plan_node_id, driver_sequence),
+        : OperatorWithDependency(factory, id, "spillable_nestloop_join_probe", plan_node_id, false, driver_sequence),
           _prober(join_op, join_conjuncts, conjunct_ctxs, col_types, probe_column_count),
           _cross_join_context(cross_join_context) {}
 
