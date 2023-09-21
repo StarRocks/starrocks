@@ -48,6 +48,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
+import com.starrocks.thrift.TTaskType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -387,7 +388,7 @@ public class ReportHandlerTest {
 
         // finish 30 tablets migration
         for (int i = 0; i < 30; i++) {
-            gentTaskQueue.removeTask(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, allTablets.get(i));
+            AgentTaskQueue.removeTask(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, allTablets.get(i));
         }
         // limit the batch size to 30
         Config.tablet_sched_max_migration_task_sent_once = 30;
