@@ -220,7 +220,7 @@ jobs:
           ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} --with-coverage
 
       - run: |
-          echo "FE: ${{steps.deploy_sr.outputs.fe}}, BE: ${{steps.deploy_sr.outputs.be}}"
+          echo "FE: ${{ steps.deploy_sr.outputs.fe }}, BE: ${{ steps.deploy_sr.outputs.be }}"
 
       - name: Clean ENV
         if: always()
@@ -304,7 +304,7 @@ jobs:
   admit:
     runs-on: [self-hosted, normal]
     name: ADMIT TEST
-    needs: [ deploy, SQL-Tester ]
+    needs: [ build, deploy, SQL-Tester ]
     if: always() && needs.deploy.result == 'success'
     timeout-minutes: 40
     env:
@@ -335,7 +335,7 @@ jobs:
           rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull
 
           cd ${{ github.workspace }}/ci-tool
-          ./bin/run-admit.sh --pr ${PR_NUMBER} --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
+          ./bin/run-admit.sh --pr ${PR_NUMBER} --branch ${{ github.base_ref }} --build Release --repository ${{ github.repository }}
 
       - name: Prepare Tools
         if: success() || failure()
