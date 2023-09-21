@@ -792,9 +792,9 @@ mysql> EXPLAIN SELECT
 
 ## Disable query rewrite
 
-StarRocks enables query rewrite for asynchronous materialized views created based on the default catalog by default. You can disable this feature by setting the session variable `enable_materialized_view_rewrite` to `false`.
+By default, StarRocks enables query rewrite for asynchronous materialized views created based on the default catalog. You can disable this feature by setting the session variable `enable_materialized_view_rewrite` to `false`.
 
-For asynchronous materialized views created based on an external catalog, you can disable this feature by setting the materialized view property `force_external_table_query_rewrite` to `false` using[ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER%20MATERIALIZED%20VIEW.md).
+For asynchronous materialized views created based on an external catalog, you can disable this feature by setting the materialized view property `force_external_table_query_rewrite` to `false` using [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER%20MATERIALIZED%20VIEW.md).
 
 ## Limitations
 
