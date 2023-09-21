@@ -86,29 +86,13 @@ void BinaryColumnBase<T>::append_selective_fixed_size(const Column& src, const u
         _offsets.resize(cur_row_count + size + 1);
         _bytes.resize(cur_byte_size + item_size * size);
 
-        bool have_zero = check_zero(indexes, from, size);
-        if (!have_zero) {
-            auto* dest_bytes = _bytes.data();
-            uint32_t cur_offset = _offsets[cur_row_count];
-            for (size_t i = 0; i < size; i++) {
-                uint32_t idx = indexes[from + i];
-                _offsets[cur_row_count + i + 1] = cur_offset + (i + 1) * item_size;
-                strings::memcpy_inlined(dest_bytes + i * item_size, src_bytes.data() + (idx - 1) * item_size,
-                                        item_size);
-            }
-        } else {
-            auto* dest_bytes = _bytes.data();
-            for (size_t i = 0; i < size; i++) {
-                uint32_t idx = indexes[from + i];
-                if (idx != 0) {
-                    _offsets[cur_row_count + i + 1] = _offsets[cur_row_count + i] + item_size;
-                    strings::memcpy_inlined(dest_bytes + i * item_size, src_bytes.data() + (idx - 1) * item_size,
-                                            item_size);
-                } else {
-                    _offsets[cur_row_count + i + 1] = _offsets[cur_row_count + i];
-                }
-            }
-            _bytes.resize(_offsets.back());
+        auto* dest_bytes = _bytes.data();
+        uint32_t cur_offset = _offsets[cur_row_count];
+
+        for (uint32_t i = 0; i < size; i++) {
+            _offsets[cur_row_count + i + 1] = cur_offset + (i + 1) * item_size;
+            uint32_t idx = indexes[from + i];
+            strings::memcpy_inlined(dest_bytes + i * item_size, src_bytes.data() + (idx - 1) * item_size, item_size);
         }
     }
     _slices_cache = false;

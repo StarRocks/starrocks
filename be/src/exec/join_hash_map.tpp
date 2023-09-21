@@ -437,7 +437,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
         }
         {
             SCOPED_TIMER(_probe_state->output_build_column_timer);
-            _build_output(chunk, true);
+            _build_output(chunk);
         }
         {
             SCOPED_TIMER(_probe_state->output_tuple_column_timer);
@@ -461,7 +461,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
             if (!_table_items->with_other_conjunct) {
                 _build_default_output(chunk, _probe_state->count);
             } else {
-                _build_output(chunk, true);
+                _build_output(chunk);
             }
         }
         {
@@ -477,7 +477,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
         }
         {
             SCOPED_TIMER(_probe_state->output_build_column_timer);
-            _build_output(chunk, false);
+            _build_output(chunk);
         }
         {
             SCOPED_TIMER(_probe_state->output_tuple_column_timer);
@@ -501,7 +501,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe_remain(RuntimeState* state, Ch
     if (_table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN || _table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN) {
         // right anti/semi join without other conjunct output default value of probe-columns as placeholder.
         _probe_null_output(chunk, _probe_state->count);
-        _build_output(chunk, true);
+        _build_output(chunk);
 
         if (_table_items->need_create_tuple_columns) {
             _build_tuple_output(chunk);
@@ -509,7 +509,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe_remain(RuntimeState* state, Ch
     } else {
         // RIGHT_OUTER_JOIN || FULL_OUTER_JOIN
         _probe_null_output(chunk, _probe_state->count);
-        _build_output(chunk, true);
+        _build_output(chunk);
 
         if (_table_items->need_create_tuple_columns) {
             for (int tuple_id : _table_items->output_probe_tuple_ids) {
@@ -718,9 +718,11 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::lazy_build_output(ChunkPtr* src_chun
             (*dest_chunk)->append_column((*src_chunk)->get_column_by_slot_id(slot->id()), slot->id());
         } else if (hash_table_slot.need_output) {
             if (!column->is_nullable()) {
-                _lazy_copy_build_column(column, dest_chunk, slot, to_nullable, hash_table_slot.is_fixed);
+                _lazy_copy_build_column(column, dest_chunk, slot, to_nullable,
+                                        hash_table_slot.is_fixed && !_probe_state->has_null_build_tuple);
             } else {
-                _lazy_copy_build_nullable_column(column, dest_chunk, slot, hash_table_slot.is_fixed);
+                _lazy_copy_build_nullable_column(column, dest_chunk, slot,
+                                                 hash_table_slot.is_fixed && !_probe_state->has_null_build_tuple);
             }
         } else {
             ColumnPtr default_column = ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
@@ -731,18 +733,20 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::lazy_build_output(ChunkPtr* src_chun
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
-void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk, bool copy) {
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
     bool to_nullable = _table_items->right_to_nullable;
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
         SlotDescriptor* slot = hash_table_slot.slot;
         ColumnPtr& column = _table_items->build_chunk->columns()[i];
         if (hash_table_slot.need_materialize) {
-            if (hash_table_slot.ref_slot == -1 || _probe_state->has_null_build_tuple || copy) {
+            if (hash_table_slot.ref_slot == -1) {
                 if (!column->is_nullable()) {
-                    _copy_build_column(column, chunk, slot, to_nullable, hash_table_slot.is_fixed);
+                    _copy_build_column(column, chunk, slot, to_nullable,
+                                       hash_table_slot.is_fixed && !_probe_state->has_null_build_tuple);
                 } else {
-                    _copy_build_nullable_column(column, chunk, slot, hash_table_slot.is_fixed);
+                    _copy_build_nullable_column(column, chunk, slot,
+                                                hash_table_slot.is_fixed && !_probe_state->has_null_build_tuple);
                 }
             } else {
                 auto tmp_column = (*chunk)->get_column_by_slot_id(hash_table_slot.ref_slot);
