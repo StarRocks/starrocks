@@ -27,7 +27,9 @@ import org.apache.logging.log4j.Logger;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CLOUD_CONFIGURATION_STRING;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES_LOADED;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_RUNTIME_JARS;
 
 public class CloudConfiguration {
@@ -41,6 +43,7 @@ public class CloudConfiguration {
         Map<String, String> properties = new HashMap<>();
         properties.put(HDFS_CONFIG_RESOURCES, configResources);
         properties.put(HDFS_RUNTIME_JARS, runtimeJars);
+        properties.put(HDFS_CLOUD_CONFIGURATION_STRING, toConfString());
         tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
@@ -54,10 +57,12 @@ public class CloudConfiguration {
             LOG.debug(String.format("Add path '%s' to configuration", path.toString()));
             conf.addResource(path);
         }
+        conf.setBoolean(HDFS_CONFIG_RESOURCES_LOADED, true);
     }
 
     public void applyToConfiguration(Configuration configuration) {
         addConfigResourcesToConfiguration(configResources, configuration);
+        configuration.set(HDFS_CLOUD_CONFIGURATION_STRING, toConfString());
     }
 
     // Hadoop FileSystem has a cache itself, it used request uri as a cache key by default,
