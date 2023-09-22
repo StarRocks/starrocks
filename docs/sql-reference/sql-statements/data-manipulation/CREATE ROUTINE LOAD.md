@@ -604,7 +604,7 @@ For example, the following JSON-formatted data exists in the Kafka topic `topic-
 
 **Target database and table**
 
-Create a table named `tbl_expr_test`  in the database `example_db` in the StarRocks cluster. The target table `tbl_expr_test` contains two columns, where the values of the `col1` columns need to be computed by using case expression on JSON data.
+Create a table named `tbl_expr_test` in the database `example_db` in the StarRocks cluster. The target table `tbl_expr_test` contains two columns, where the values of the `col2` column need to be computed by using case expression on JSON data.
 
 ```SQL
 CREATE TABLE tbl_expr_test (
@@ -614,7 +614,7 @@ DISTRIBUTED BY HASH (col1);
 
 **Routine Load job**
 
-Because the values in the `col2` column in the target table are generated using a CASE expression, you need to specify the corresponding expression in the `COLUMNS` parameter for the load job.
+Because the values in the `col2` column in the target table are generated using a CASE expression, you need to specify the corresponding expression in the `COLUMNS` parameter for the Routine load job.
 
 ```SQL
 CREATE ROUTINE LOAD rl_expr_test ON tbl_expr_test
