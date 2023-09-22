@@ -155,7 +155,11 @@ public class DynamicPluginLoader extends PluginLoader {
     public void uninstall() throws IOException, UserException {
         if (plugin != null) {
             pluginUninstallValid();
-            plugin.close();
+            try {
+                plugin.close();
+            } catch (Throwable t) {
+                LOG.warn("close plugin failed", t);
+            }
         }
 
         if (null != installPath && Files.exists(installPath)
