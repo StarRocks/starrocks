@@ -100,6 +100,31 @@ models:
 ```
 For materialized view only support partition_by、buckets、distributed_by、properties、refresh_method configuration.
 
+## Read From Catalog
+First you need to add this catalog to starrocks. The following is an example of hive.
+```mysql
+CREATE EXTERNAL CATALOG `hive_catalog`
+PROPERTIES (
+    "hive.metastore.uris"  =  "thrift://127.0.0.1:8087",
+    "type"="hive"
+);
+```
+How to add other types of catalogs can be found in the documentation.
+https://docs.starrocks.io/en-us/latest/data_source/catalog/catalog_overview
+Then write the sources.yaml file.
+```yaml
+sources:
+  - name: external_example
+    schema: hive_catalog.hive_db
+    tables:
+      - name: hive_table_name
+```
+Finally, you might use below marco quote 
+```
+{{ source('external_example', 'hive_table_name') }}
+```
+
+
 ## Test Adapter
 consult [the project](https://github.com/dbt-labs/dbt-adapter-tests)
 
