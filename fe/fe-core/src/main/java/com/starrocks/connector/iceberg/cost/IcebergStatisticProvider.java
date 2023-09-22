@@ -83,12 +83,8 @@ public class IcebergStatisticProvider {
             }
 
             statisticsBuilder.setOutputRowCount(icebergFileStats.getRecordCount());
-            if (!columnNdvs.isEmpty()) {
-                statisticsBuilder.addColumnStatistics(buildColumnStatistics(
-                        nativeTable, colRefToColumnMetaMap, icebergFileStats, columnNdvs));
-            } else {
-                statisticsBuilder.addColumnStatistics(buildUnknownColumnStatistics(colRefToColumnMetaMap.keySet()));
-            }
+            statisticsBuilder.addColumnStatistics(buildColumnStatistics(
+                    nativeTable, colRefToColumnMetaMap, icebergFileStats, columnNdvs));
         } else {
             statisticsBuilder.setOutputRowCount(1);
             statisticsBuilder.addColumnStatistics(buildUnknownColumnStatistics(colRefToColumnMetaMap.keySet()));
@@ -212,27 +208,18 @@ public class IcebergStatisticProvider {
     private ColumnStatistic generateColumnStatistic(Integer fieldId, Column column, IcebergFileStats icebergStats,
                                                     Map<Integer, Long> columnNdvs) {
         ColumnStatistic.Builder builder = ColumnStatistic.builder();
-        Long ndv = columnNdvs.get(fieldId);
-        if (ndv != null) {
-            builder.setDistinctValuesCount(Math.min(ndv, icebergStats.getRecordCount()));
-        }
-
-        if (icebergStats.getMinValue(fieldId).isPresent()) {
-            if (column.getType().isStringType()) {
+        if (column.getType().isStringType()) {
+            if (icebergStats.getMinValues() != null && icebergStats.getMinValues().get(fieldId) != null) {
                 String minString = icebergStats.getMinValues().get(fieldId).toString();
                 builder.setMinString(minString);
-            } else {
-                builder.setMinValue(icebergStats.getMinValue(fieldId).get());
             }
-        }
-
-        if (icebergStats.getMaxValue(fieldId).isPresent()) {
-            if (column.getType().isStringType()) {
+            if (icebergStats.getMaxValues() != null && icebergStats.getMaxValues().get(fieldId) != null) {
                 String maxString = icebergStats.getMaxValues().get(fieldId).toString();
                 builder.setMaxString(maxString);
-            } else {
-                builder.setMaxValue(icebergStats.getMaxValue(fieldId).get());
             }
+        } else {
+            builder.setMinValue(icebergStats.getMinValue(fieldId).get());
+            builder.setMaxValue(icebergStats.getMaxValue(fieldId).get());
         }
 
         Long nullCount = icebergStats.getNullCounts() == null ? null : icebergStats.getNullCounts().get(fieldId);
@@ -247,6 +234,14 @@ public class IcebergStatisticProvider {
             if (columnSize != null) {
                 builder.setAverageRowSize(Math.max(columnSize * 1.0 / Math.max(icebergStats.getRecordCount(), 1), 1));
             }
+        }
+
+        Long ndv = columnNdvs.get(fieldId);
+        if (ndv != null) {
+            builder.setDistinctValuesCount(Math.min(ndv, icebergStats.getRecordCount()));
+            builder.setType(ColumnStatistic.StatisticType.ESTIMATE);
+        } else {
+            builder.setType(ColumnStatistic.StatisticType.UNKNOWN);
         }
         return builder.build();
     }
