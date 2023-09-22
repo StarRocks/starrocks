@@ -155,7 +155,7 @@ public class InsertAnalyzer {
             lockTimes++;
         }
         try {
-           new TableMetaSyncer().syncTable(copiedTable);
+            new TableMetaSyncer().syncTable(copiedTable);
         }  catch (MetaNotFoundException e) {
             throw new SemanticException(e.getMessage());
         } finally {
