@@ -3,6 +3,7 @@
 package com.starrocks.leader;
 
 import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -19,8 +20,8 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
-import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TResourceUsage;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTaskType;
@@ -57,8 +58,7 @@ public class ReportHandlerTest {
                 .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
                         "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
                 .withTable("CREATE TABLE test.binlog_report_handler_test(k1 int, v1 int) " +
-                        "duplicate key(k1) distributed by hash(k1) buckets 50 properties('replication_num' = '1', " +
-                        "'binlog_enable' = 'true', 'binlog_max_size' = '100');");
+                        "duplicate key(k1) distributed by hash(k1) buckets 50 properties('replication_num' = '1');");
     }
 
     @Test
