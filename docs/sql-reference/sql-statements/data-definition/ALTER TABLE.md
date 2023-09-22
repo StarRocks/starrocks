@@ -112,22 +112,25 @@ DROP TEMPORARY PARTITION <partition_name>
 
 #### Modify partition properties
 
-Syntax:
+**Syntax**
 
 ```sql
 ALTER TABLE [database.]table
-MODIFY PARTITION p1|(p1[, p2, ...]) SET ("key" = "value", ...)
+    MODIFY PARTITION { <partition_name> | partition_name_list | (*) }
+        SET ("key" = "value", ...);
 ```
 
-Note:
+**Usages**
 
-1. The following properties of a partition can be modified:
+- The following properties of a partition can be modified:
 
-   - storage_medium
-   - storage_cooldown_time
-   - replication_num
+  - storage_medium
+  - storage_cooldown_ttl or storage_cooldown_time
+  - replication_num
 
-2. For single-partition tables, partition name is the same as the table name.
+- For the table that has only one partition, the partition name is the same as the table name. If the table is divided into multiple partitions, you can use `(*)`to modify the properties of all partitions, which is more convenient.
+
+- Execute `SHOW PARTITIONS FROM <table_name>` to view the partition properties after modification.
 
 ### Modify rollup index
 
@@ -325,7 +328,7 @@ You can add a generated column and specify its expression. [The generated column
 
 #### Modify table properties
 
-Currently, StarRocks supports modifying bloomfilter columns, colocate_with property, dynamic_partition property, enable_persistent_index property, replication_num property and default.replication_num property.
+Currently, StarRocks supports modifying `bloom_filter_columns` property,`colocate_with` property, dynamic partitioning related properties, `enable_persistent_index` property, `replication_num` property and `default.replication_num` property, `storage_cooldown_ttl` property and `storage_cooldown_time` property.
 
 Syntax:
 
