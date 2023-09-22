@@ -1542,10 +1542,19 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select * from t0 left outer join t1 on t0.v1 = t1.v4 and t1.v5 > t0.v2 and t0.v2 > t1.v6" +
                 " and t0.v2 > t1.v4";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "     TABLE: t1\n" +
-                "     PREAGGREasfGATION: ON\n" +
+        assertContains(plan, "TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 5: v5 >= CAST('test_min_v2' AS BIGINT), 6: v6 <= CAST('test_max_v2' AS BIGINT), " +
                 "4: v4 <= CAST('test_max_v2' AS BIGINT)");
 
+        sql = "select * from t0 left outer join t2 on t0.v1 = t2.v7 left outer join t1 on t0.v1 = t1.v4 and " +
+                "t1.v5 > t0.v2 and t0.v2 > t1.v6" +
+                " and t0.v2 > t1.v4";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 8: v5 >= CAST('test_min_v2' AS BIGINT), 9: v6 <= CAST('test_max_v2' AS BIGINT), " +
+                "7: v4 <= CAST('test_max_v2' AS BIGINT)\n" +
+                "     partitions=1/1");
     }
 }
