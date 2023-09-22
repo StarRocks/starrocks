@@ -154,6 +154,8 @@ public class CoordinatorPreprocessor {
     // fragment_id -> < be_id -> bucket_count >
     private final Map<PlanFragmentId, Map<Long, Integer>> fragmentIdToBackendIdBucketCountMap = Maps.newHashMap();
     private final Map<PlanFragmentId, List<Integer>> fragmentIdToSeqToInstanceMap = Maps.newHashMap();
+    private final Map<PlanFragmentId, List<Integer>> fragmentIdToSeqToDriverSeqMap = Maps.newHashMap();
+    private final Map<PlanFragmentId, List<Integer>> fragmentIdToSeqToPartitionMap = Maps.newHashMap();
 
     // used only by channel stream load, records the mapping from channel id to target BE's address
     private final Map<Integer, TNetworkAddress> channelIdToBEHTTP = Maps.newHashMap();
@@ -840,19 +842,45 @@ public class CoordinatorPreprocessor {
 
     public void computeBucketSeq2InstanceOrdinal(FragmentExecParams params, int numBuckets) {
         Integer[] bucketSeq2InstanceOrdinal = new Integer[numBuckets];
+        Integer[] bucketSeq2DriverSeq = new Integer[numBuckets];
+        Integer[] bucketSeq2Partition = new Integer[numBuckets];
         // some buckets are pruned, so set the corresponding instance ordinal to BUCKET_ABSENT to indicate
         // absence of buckets.
         for (int bucketSeq = 0; bucketSeq < numBuckets; ++bucketSeq) {
             bucketSeq2InstanceOrdinal[bucketSeq] = BUCKET_ABSENT;
+            bucketSeq2DriverSeq[bucketSeq] = BUCKET_ABSENT;
+            bucketSeq2Partition[bucketSeq] = BUCKET_ABSENT;
         }
+
+        boolean assignBucketsAmongDrivers =
+                params.instanceExecParams.stream().flatMap(instance -> instance.bucketSeqToDriverSeq.values().stream())
+                        .noneMatch(driverSeq -> driverSeq.equals(ABSENT_DRIVER_SEQUENCE));
+
+        int nextSubpartition = 0;
         for (int i = 0; i < params.instanceExecParams.size(); ++i) {
             FInstanceExecParam instance = params.instanceExecParams.get(i);
-            for (Integer bucketSeq : instance.bucketSeqToDriverSeq.keySet()) {
-                Preconditions.checkArgument(bucketSeq < numBuckets, "bucketSeq exceeds bucketNum in colocate Fragment");
-                bucketSeq2InstanceOrdinal[bucketSeq] = i;
+            if (assignBucketsAmongDrivers) {
+                List<Map.Entry<Integer, Integer>> sortedBucketSeqToDriverSeq =
+                        instance.bucketSeqToDriverSeq.entrySet().stream()
+                                .sorted(Comparator.comparingInt(Map.Entry::getValue)).collect(Collectors.toList());
+                for (Map.Entry<Integer, Integer> entry : sortedBucketSeqToDriverSeq) {
+                    Integer bucketSeq = entry.getKey();
+                    Integer driverSeq = entry.getValue();
+                    bucketSeq2InstanceOrdinal[bucketSeq] = i;
+                    bucketSeq2DriverSeq[bucketSeq] = driverSeq;
+                    bucketSeq2Partition[bucketSeq] = nextSubpartition++;
+                }
+            } else {
+                for (Integer bucketSeq : instance.bucketSeqToDriverSeq.keySet()) {
+                    bucketSeq2InstanceOrdinal[bucketSeq] = i;
+                }
             }
         }
         fragmentIdToSeqToInstanceMap.put(params.fragment.getFragmentId(), Arrays.asList(bucketSeq2InstanceOrdinal));
+        if (assignBucketsAmongDrivers) {
+            fragmentIdToSeqToDriverSeqMap.put(params.fragment.getFragmentId(), Arrays.asList(bucketSeq2DriverSeq));
+            fragmentIdToSeqToPartitionMap.put(params.fragment.getFragmentId(), Arrays.asList(bucketSeq2Partition));
+        }
     }
 
     private boolean isColocateFragment(PlanNode node) {
@@ -1224,7 +1252,7 @@ public class CoordinatorPreprocessor {
                             dest.fragment_instance_id = instanceExecParams.instanceId;
                             dest.server = toRpcHost(instanceExecParams.host);
                             dest.setBrpc_server(SystemInfoService.toBrpcIp(instanceExecParams.host));
-                            if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
+                            if (driverSeq != ABSENT_DRIVER_SEQUENCE) {
                                 dest.setPipeline_driver_sequence(driverSeq);
                             }
                             break;
@@ -1297,7 +1325,7 @@ public class CoordinatorPreprocessor {
                                 dest.fragment_instance_id = instanceExecParams.instanceId;
                                 dest.server = toRpcHost(instanceExecParams.host);
                                 dest.setBrpc_server(SystemInfoService.toBrpcIp(instanceExecParams.host));
-                                if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
+                                if (driverSeq != ABSENT_DRIVER_SEQUENCE) {
                                     dest.setPipeline_driver_sequence(driverSeq);
                                 }
                                 break;
@@ -1507,14 +1535,13 @@ public class CoordinatorPreprocessor {
         }
         return candidates;
     }
+    static final int ABSENT_PIPELINE_DOP = -1;
+    static final int ABSENT_DRIVER_SEQUENCE = -1;
 
     // fragment instance exec param, it is used to assemble
     // the per-instance TPlanFragmentExecParas, as a member of
     // FragmentExecParams
     public static class FInstanceExecParam {
-        static final int ABSENT_PIPELINE_DOP = -1;
-        static final int ABSENT_DRIVER_SEQUENCE = -1;
-
         TUniqueId instanceId;
         TNetworkAddress host;
         Map<Integer, List<TScanRangeParams>> perNodeScanRanges = Maps.newHashMap();
@@ -1608,20 +1635,20 @@ public class CoordinatorPreprocessor {
             this.fragment = fragment;
         }
 
-        void setBucketSeqToInstanceForRuntimeFilters() {
+        void setLayoutInfoForRuntimeFilters() {
             if (bucketSeqToInstanceForFilterIsSet) {
                 return;
             }
             bucketSeqToInstanceForFilterIsSet = true;
             List<Integer> seqToInstance = fragmentIdToSeqToInstanceMap.get(fragment.getFragmentId());
-            if (seqToInstance == null || seqToInstance.isEmpty()) {
-                return;
-            }
+            List<Integer> seqToDriverSeq = fragmentIdToSeqToDriverSeqMap.get(fragment.getFragmentId());
+            List<Integer> seqToSubpartition = fragmentIdToSeqToPartitionMap.get(fragment.getFragmentId());
             for (RuntimeFilterDescription rf : fragment.getBuildRuntimeFilters().values()) {
-                if (!rf.isColocateOrBucketShuffle()) {
-                    continue;
-                }
                 rf.setBucketSeqToInstance(seqToInstance);
+                rf.setBucketSeqToDriverSeq(seqToDriverSeq);
+                rf.setBucketSeqToPartition(seqToSubpartition);
+                rf.setNumInstances(instanceExecParams.size());
+                rf.setNumDriversPerInstance(fragment.getPipelineDop());
             }
         }
 
@@ -1821,7 +1848,7 @@ public class CoordinatorPreprocessor {
                                                       int tableSinkTotalDop,
                                                       boolean isEnableStreamPipeline) throws Exception {
             boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
-            setBucketSeqToInstanceForRuntimeFilters();
+            setLayoutInfoForRuntimeFilters();
 
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
             for (int i = 0; i < instanceExecParams.size(); ++i) {
@@ -1866,7 +1893,7 @@ public class CoordinatorPreprocessor {
 
             boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
 
-            setBucketSeqToInstanceForRuntimeFilters();
+            setLayoutInfoForRuntimeFilters();
 
             TExecPlanFragmentParams commonParams = new TExecPlanFragmentParams();
             toThriftForCommonParams(commonParams, destHost, descTable, enablePipelineEngine, tableSinkTotalDop, false);

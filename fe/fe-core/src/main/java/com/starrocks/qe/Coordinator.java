@@ -673,6 +673,14 @@ public class Coordinator {
 
         } else {
             // This is a load process.
+
+            // TODO (by satanson): Other DataSink except ResultSink can not support global
+            //  runtime filter merging at present, we should support it in future.
+            // pipeline-level runtime filter needs to derive RuntimeFilterLayout, so we collect
+            // RuntimeFilterDescription
+            for (PlanFragment fragment : fragments) {
+                fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
+            }
             this.queryOptions.setEnable_profile(true);
             deltaUrls = Lists.newArrayList();
             loadCounters = Maps.newHashMap();

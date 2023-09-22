@@ -104,7 +104,7 @@ public class CoordinatorTest extends PlanTestBase {
         fragment.getBuildRuntimeFilters().put(1, rf);
         Assert.assertTrue(rf.getBucketSeqToInstance() == null || rf.getBucketSeqToInstance().isEmpty());
         coordinatorPreprocessor.computeBucketSeq2InstanceOrdinal(params, 6);
-        params.setBucketSeqToInstanceForRuntimeFilters();
+        params.setLayoutInfoForRuntimeFilters();
         Assert.assertEquals(rf.getBucketSeqToInstance(), Arrays.<Integer>asList(0, 1, 0, 2, 1, 2));
     }
 

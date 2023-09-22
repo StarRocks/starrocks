@@ -575,7 +575,20 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
         int expr_order = rf_desc->build_expr_order();
         ColumnPtr column = ht.get_key_columns()[expr_order];
         bool eq_null = _is_null_safes[expr_order];
-        _runtime_bloom_filter_build_params.emplace_back(pipeline::RuntimeBloomFilterBuildParam(eq_null, column));
+        MutableJoinRuntimeFilterPtr filter = nullptr;
+        auto multi_partitioned = rf_desc->layout().pipeline_level_multi_partitioned();
+        if (multi_partitioned) {
+            LogicalType build_type = rf_desc->build_expr_type();
+            filter = std::shared_ptr<JoinRuntimeFilter>(
+                    RuntimeFilterHelper::create_runtime_bloom_filter(nullptr, build_type));
+            if (filter == nullptr) continue;
+            filter->set_join_mode(rf_desc->join_mode());
+            filter->init(ht.get_row_count());
+            RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_bloom_filter(column, build_type, filter.get(),
+                                                                           kHashJoinKeyColumnOffset, eq_null));
+        }
+        _runtime_bloom_filter_build_params.emplace_back(pipeline::RuntimeBloomFilterBuildParam(
+                multi_partitioned, eq_null, std::move(column), std::move(filter)));
     }
     return Status::OK();
 }
