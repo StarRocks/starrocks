@@ -69,7 +69,8 @@ public class AnalyticAnalyzer {
                     !analyticFunction.getFn().functionName().equals(FunctionSet.BITMAP_UNION_COUNT) &&
                     !analyticFunction.getFn().functionName().equals(FunctionSet.LEAD) &&
                     !analyticFunction.getFn().functionName().equals(FunctionSet.LAG)) {
-                throw new SemanticException("bitmap type could only used for bitmap_union_count/lead/lag window function");
+                throw new SemanticException(
+                        "bitmap type could only used for bitmap_union_count/lead/lag window function");
             } else if (e.getType().isHllType() &&
                     !analyticFunction.getFn().functionName().equals(AnalyticExpr.HLL_UNION_AGG) &&
                     !analyticFunction.getFn().functionName().equals(FunctionSet.LEAD) &&
@@ -109,7 +110,8 @@ public class AnalyticAnalyzer {
                 // but the actually derived column in BE is not nullableColumn)
                 // which make the input colum in chunk not match the _agg_input_column in BE. so add this check in FE.
                 if (!analyticFunction.getChild(2).isLiteral() && analyticFunction.getChild(2).isNullable()) {
-                    throw new SemanticException("The type of the third parameter of LEAD/LAG not match the type " + firstType);
+                    throw new SemanticException(
+                            "The type of the third parameter of LEAD/LAG not match the type " + firstType);
                 }
             } else {
                 throw new SemanticException("The number of parameter in LEAD/LAG is uncorrected");
@@ -125,13 +127,9 @@ public class AnalyticAnalyzer {
             }
         }
 
-        if (isStatisticFn(analyticFunction.getFn()) && (!analyticExpr.getOrderByElements().isEmpty())) {
-            throw new SemanticException("order by not allowed with '" + analyticFunction.toSql() + "'");
-        }
-
         if (analyticExpr.getWindow() != null) {
             if ((isRankingFn(analyticFunction.getFn()) || isOffsetFn(analyticFunction.getFn()) ||
-                    isHllAggFn(analyticFunction.getFn()) || isStatisticFn(analyticFunction.getFn()))) {
+                    isHllAggFn(analyticFunction.getFn()))) {
                 throw new SemanticException("Windowing clause not allowed with '" + analyticFunction.toSql() + "'");
             }
 
