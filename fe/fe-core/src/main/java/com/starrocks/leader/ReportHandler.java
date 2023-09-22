@@ -977,7 +977,7 @@ public class ReportHandler extends Daemon {
         return true;
     }
 
-    private static void handleMigration(ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap,
+    protected static void handleMigration(ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap,
                                         long backendId) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         AgentBatchTask batchTask = new AgentBatchTask();
@@ -1003,7 +1003,7 @@ public class ReportHandler extends Daemon {
                 // 2. If the task already running on BE, do not send again
                 if (AgentTaskQueue.getTask(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, tabletId) != null) {
                     LOG.debug("migrate of tablet:{} is already running on BE", tabletId);
-                    break;
+                    continue;
                 }
 
                 // 3. primary key table is not supported
