@@ -12,7 +12,7 @@ Release date: September 20, 2023
 
 ## Improvements
 
-The command execution logic is optimized to ensure that the returned results of SQL commands that contain invalid comments conform to MySQL. [#30210](https://github.com/StarRocks/starrocks/pull/30210)
+Executing SQL commands with invalid comments now returns results consistent with MySQL. [#30210](https://github.com/StarRocks/starrocks/pull/30210)
 
 ## Bug Fixes
 
