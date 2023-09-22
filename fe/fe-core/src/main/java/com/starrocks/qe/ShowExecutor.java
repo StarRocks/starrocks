@@ -223,6 +223,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -2630,6 +2631,19 @@ public class ShowExecutor {
                 // pass
             }
         }
+        List<ExternalBasicStatsMeta> externalMetas =
+                new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeMgr().getExternalBasicStatsMetaMap().values());
+        for (ExternalBasicStatsMeta meta : externalMetas) {
+            try {
+                List<String> result = ShowBasicStatsMetaStmt.showExternalBasicStatsMeta(connectContext, meta);
+                if (result != null) {
+                    rows.add(result);
+                }
+            } catch (MetaNotFoundException e) {
+                // pass
+            }
+        }
+
         rows = doPredicate(stmt, stmt.getMetaData(), rows);
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
