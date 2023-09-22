@@ -94,7 +94,7 @@ public class LocalMetaStoreTest {
         Assert.assertEquals(olapTable.getName(), copiedTable.getName());
         Set<Long> tabletIdSet = Sets.newHashSet();
         List<Partition> newPartitions = localMetastore.getNewPartitionsFromPartitions(db,
-                olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds);
+                olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds, false);
         Assert.assertEquals(sourcePartitionIds.size(), newPartitions.size());
         Assert.assertEquals(1, newPartitions.size());
         Partition newPartition = newPartitions.get(0);

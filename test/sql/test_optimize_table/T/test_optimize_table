@@ -1,0 +1,9 @@
+-- name: test_optimize_table
+create table t(k int) distributed by hash(k) buckets 10;
+show partitions from t;
+insert into t values(1),(2),(3);
+select * from t;
+alter table t distributed by hash(k);
+function: wait_optimize_table_finish()
+select * from t;
+show partitions from t;

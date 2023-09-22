@@ -64,6 +64,7 @@ import com.google.gson.stream.JsonWriter;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.LakeTableAlterMetaJob;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
+import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.authentication.LDAPSecurityIntegration;
@@ -248,8 +249,13 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory.of(AlterJobV2.class, "clazz")
                     .registerSubtype(RollupJobV2.class, "RollupJobV2")
                     .registerSubtype(SchemaChangeJobV2.class, "SchemaChangeJobV2")
+<<<<<<< HEAD
                     .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
                     .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob");
+=======
+                    .registerSubtype(OptimizeJobV2.class, "OptimizeJobV2")
+                    .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob");
+>>>>>>> 7492b9c373 ([Feature] Support alter table optimize distribution (#30707))
 
     // runtime adapter for class "LoadJobStateUpdateInfo"
     private static final RuntimeTypeAdapterFactory<LoadJobStateUpdateInfo>

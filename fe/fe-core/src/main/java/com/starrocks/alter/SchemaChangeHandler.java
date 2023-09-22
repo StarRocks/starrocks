@@ -107,6 +107,7 @@ import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -146,6 +147,25 @@ public class SchemaChangeHandler extends AlterHandler {
 
     public SchemaChangeHandler() {
         super("schema change");
+    }
+
+    private AlterJobV2 createOptimizeTableJob(
+            OptimizeClause optimizeClause, Database db, OlapTable olapTable, Map<String, String> propertyMap) 
+        throws UserException {
+        if (olapTable.getState() != OlapTableState.NORMAL) {
+            throw new DdlException("Table[" + olapTable.getName() + "]'s is not in NORMAL state");
+        }
+
+        long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
+
+        // create job
+        OptimizeJobV2Builder jobBuilder = olapTable.optimizeTable();
+        jobBuilder.withOptimizeClause(optimizeClause)
+                .withJobId(GlobalStateMgr.getCurrentState().getNextId())
+                .withDbId(db.getId())
+                .withTimeoutSeconds(timeoutSecond);
+
+        return jobBuilder.build();
     }
 
     /**
@@ -1350,10 +1370,20 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
+    public List<List<Comparable>> getOptimizeJobInfosByDb(Database db) {
+        List<List<Comparable>> optimizeJobInfos = new LinkedList<>();
+        getAlterJobV2Infos(db, AlterJobV2.JobType.OPTIMIZE, optimizeJobInfos);
+
+        // sort by "JobId", "PartitionName", "CreateTime", "FinishTime", "IndexName", "IndexState"
+        ListComparator<List<Comparable>> comparator = new ListComparator<List<Comparable>>(0, 1, 2, 3, 4, 5);
+        optimizeJobInfos.sort(comparator);
+        return optimizeJobInfos;
+    }
+
     @Override
     public List<List<Comparable>> getAlterJobInfosByDb(Database db) {
         List<List<Comparable>> schemaChangeJobInfos = new LinkedList<>();
-        getAlterJobV2Infos(db, schemaChangeJobInfos);
+        getAlterJobV2Infos(db, AlterJobV2.JobType.SCHEMA_CHANGE, schemaChangeJobInfos);
 
         // sort by "JobId", "PartitionName", "CreateTime", "FinishTime", "IndexName", "IndexState"
         ListComparator<List<Comparable>> comparator = new ListComparator<List<Comparable>>(0, 1, 2, 3, 4, 5);
@@ -1361,19 +1391,27 @@ public class SchemaChangeHandler extends AlterHandler {
         return schemaChangeJobInfos;
     }
 
+<<<<<<< HEAD
     private void getAlterJobV2Infos(Database db, List<AlterJobV2> alterJobsV2,
                                     List<List<Comparable>> schemaChangeJobInfos) {
+=======
+    private void getAlterJobV2Infos(Database db, AlterJobV2.JobType type, List<AlterJobV2> alterJobsV2,
+            List<List<Comparable>> schemaChangeJobInfos) {
+>>>>>>> 7492b9c373 ([Feature] Support alter table optimize distribution (#30707))
         ConnectContext ctx = ConnectContext.get();
         for (AlterJobV2 alterJob : alterJobsV2) {
             if (alterJob.getDbId() != db.getId()) {
+                continue;
+            }
+            if (alterJob.getType() != type) {
                 continue;
             }
             alterJob.getInfo(schemaChangeJobInfos);
         }
     }
 
-    private void getAlterJobV2Infos(Database db, List<List<Comparable>> schemaChangeJobInfos) {
-        getAlterJobV2Infos(db, ImmutableList.copyOf(alterJobsV2.values()), schemaChangeJobInfos);
+    private void getAlterJobV2Infos(Database db, AlterJobV2.JobType type, List<List<Comparable>> schemaChangeJobInfos) {
+        getAlterJobV2Infos(db, type, ImmutableList.copyOf(alterJobsV2.values()), schemaChangeJobInfos);
     }
 
     public Optional<Long> getActiveTxnIdOfTable(long tableId) {
@@ -1529,6 +1567,8 @@ public class SchemaChangeHandler extends AlterHandler {
             } else if (alterClause instanceof DropIndexClause) {
                 lightSchemaChange = false;
                 processDropIndex((DropIndexClause) alterClause, olapTable, newIndexes);
+            } else if (alterClause instanceof OptimizeClause) {
+                return createOptimizeTableJob((OptimizeClause) alterClause, db, olapTable, propertyMap);
             } else {
                 Preconditions.checkState(false);
             }

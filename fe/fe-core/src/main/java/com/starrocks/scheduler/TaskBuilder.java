@@ -15,6 +15,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
+import com.starrocks.alter.OptimizeTask;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
@@ -90,6 +91,16 @@ public class TaskBuilder {
             stmt = "";
         }
         return stmt;
+    }
+
+    public static OptimizeTask buildOptimizeTask(String name, Map<String, String> properties, String sql, String dbName) {
+        OptimizeTask task = new OptimizeTask(name);
+        task.setSource(Constants.TaskSource.INSERT);
+        task.setDbName(dbName);
+        task.setProperties(properties);
+        task.setDefinition(sql);
+        task.setExpireTime(0L);
+        return task;
     }
 
     public static Task buildMvTask(MaterializedView materializedView, String dbName) {
