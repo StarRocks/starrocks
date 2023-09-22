@@ -732,6 +732,14 @@ TEST_F(JsonFunctionsTest, extract_from_object_test) {
     EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": {}})", "$.data.key", &output));
 
     EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": 1})", "$.data.key", &output));
+
+    EXPECT_OK(test_extract_from_object(R"({"key1": [1,2]})", "$.key1[1]", &output));
+    EXPECT_STREQ(output.data(), "2");
+
+    EXPECT_OK(test_extract_from_object(R"({"key1": [{"key2":3},{"key4": 5}]})", "$.key1[1].key4", &output));
+    EXPECT_STREQ(output.data(), "5");
+
+    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"key1": null})", "$.key1[1].key4", &output));
 }
 
 class JsonLengthTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, int>> {};
