@@ -87,4 +87,5 @@ public class PartitionRange implements Comparable<PartitionRange> {
     public int hashCode() {
         return Objects.hash(partitionName, partitionKeyRange);
     }
+
 }

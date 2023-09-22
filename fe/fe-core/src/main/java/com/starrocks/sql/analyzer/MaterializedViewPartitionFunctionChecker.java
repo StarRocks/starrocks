@@ -38,6 +38,7 @@ public class MaterializedViewPartitionFunctionChecker {
         FN_NAME_TO_PATTERN = Maps.newHashMap();
         // can add some other functions
         FN_NAME_TO_PATTERN.put("date_trunc", MaterializedViewPartitionFunctionChecker::checkDateTrunc);
+        FN_NAME_TO_PATTERN.put("str2date", MaterializedViewPartitionFunctionChecker::checkStr2date);
     }
 
     public static boolean checkDateTrunc(Expr expr) {
@@ -99,6 +100,28 @@ public class MaterializedViewPartitionFunctionChecker {
                 }
             }
         }
+        return false;
+    }
+
+    public static boolean checkStr2date(Expr expr) {
+        if (!(expr instanceof FunctionCallExpr)) {
+            return false;
+        }
+
+        FunctionCallExpr fnExpr = (FunctionCallExpr) expr;
+        String fnNameString = fnExpr.getFnName().getFunction();
+        if (!fnNameString.equalsIgnoreCase(FunctionSet.STR2DATE)) {
+            return false;
+        }
+
+        Expr child0 = fnExpr.getChild(0);
+        if (child0 instanceof SlotRef) {
+            SlotRef slotRef = (SlotRef) child0;
+            PrimitiveType primitiveType = slotRef.getType().getPrimitiveType();
+            // must check slotRef type, because function analyze don't check it.
+            return primitiveType == PrimitiveType.CHAR || primitiveType == PrimitiveType.VARCHAR;
+        }
+
         return false;
     }
 }
