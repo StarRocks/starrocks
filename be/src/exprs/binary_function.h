@@ -44,124 +44,67 @@ class BaseBinaryFunction {
 public:
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr vector_vector(const ColumnPtr& v1, const ColumnPtr& v2) {
-        if constexpr (LType == TYPE_VARCHAR && RType == TYPE_VARCHAR) {
-            auto result = RunTimeColumnType<ResultType>::create();
-            result->resize_uninitialized(v1->size());
-            auto& r3 = result->get_data();
-            auto* data3 = r3.data();
+        auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
+        auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
 
-            auto& r1= ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
-            auto& r2= ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
+        auto result = RunTimeColumnType<ResultType>::create();
+        result->resize_uninitialized(v1->size());
+        auto& r3 = result->get_data();
 
-            const int s = std::min(v1->size(), v2->size());
-            for (int i = 0; i < s; ++i) {
-                data3[i] = OP::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
-                        r1[i], r2[i]);
-            }
-            return result;
-        } else {
-            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
-            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
-
-            auto result = RunTimeColumnType<ResultType>::create();
-            result->resize_uninitialized(v1->size());
-            auto& r3 = result->get_data();
-
-            auto* data1 = r1.data();
-            auto* data2 = r2.data();
-            auto* data3 = r3.data();
-            const int s = std::min(v1->size(), v2->size());
-            for (int i = 0; i < s; ++i) {
-                data3[i] = OP::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
-                        data1[i], data2[i]);
-            }
-
-            return result;
+        auto* data1 = r1.data();
+        auto* data2 = r2.data();
+        auto* data3 = r3.data();
+        const int s = std::min(v1->size(), v2->size());
+        for (int i = 0; i < s; ++i) {
+            data3[i] = OP::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
+                    data1[i], data2[i]);
         }
+
+        return result;
     }
 
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr const_vector(const ColumnPtr& v1, const ColumnPtr& v2) {
-        if constexpr (LType == TYPE_VARCHAR && RType == TYPE_VARCHAR) {
-            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
-            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
+        auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
+        auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
 
-            auto result = RunTimeColumnType<ResultType>::create();
-            result->resize_uninitialized(v2->size());
-            auto& r3 = result->get_data();
+        auto result = RunTimeColumnType<ResultType>::create();
+        result->resize_uninitialized(v2->size());
+        auto& r3 = result->get_data();
 
-            auto data1 = r1[0];
-            auto* data3 = r3.data();
+        auto data1 = r1[0];
+        auto* data2 = r2.data();
+        auto* data3 = r3.data();
 
-            int size = v2->size();
-            for (int i = 0; i < size; ++i) {
-                data3[i] = OP::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
-                        data1, r2[i]);
-            }
-
-            return result;
-        } else {
-            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
-            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
-
-            auto result = RunTimeColumnType<ResultType>::create();
-            result->resize_uninitialized(v2->size());
-            auto& r3 = result->get_data();
-
-            auto data1 = r1[0];
-            auto* data2 = r2.data();
-            auto* data3 = r3.data();
-
-            int size = v2->size();
-            for (int i = 0; i < size; ++i) {
-                data3[i] = OP::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
-                        data1, data2[i]);
-            }
-
-            return result;
+        int size = v2->size();
+        for (int i = 0; i < size; ++i) {
+            data3[i] = OP::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
+                    data1, data2[i]);
         }
+
+        return result;
     }
 
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr vector_const(const ColumnPtr& v1, const ColumnPtr& v2) {
-        if constexpr (LType == TYPE_VARCHAR && RType == TYPE_VARCHAR) {
-            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
-            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
+        auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
+        auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
 
-            auto result = RunTimeColumnType<ResultType>::create();
-            result->resize_uninitialized(v1->size());
-            auto& r3 = result->get_data();
+        auto result = RunTimeColumnType<ResultType>::create();
+        result->resize_uninitialized(v1->size());
+        auto& r3 = result->get_data();
 
-            auto data2 = r2[0];
-            auto* data3 = r3.data();
+        auto* data1 = r1.data();
+        auto data2 = r2[0];
+        auto* data3 = r3.data();
 
-            int size = v1->size();
-            for (int i = 0; i < size; ++i) {
-                data3[i] = OP::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
-                        r1[i], data2);
-            }
-
-            return result;
-        } else {
-            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
-            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
-
-            auto result = RunTimeColumnType<ResultType>::create();
-            result->resize_uninitialized(v1->size());
-            auto& r3 = result->get_data();
-
-            auto* data1 = r1.data();
-            auto data2 = r2[0];
-            auto* data3 = r3.data();
-
-            int size = v1->size();
-            for (int i = 0; i < size; ++i) {
-                data3[i] = OP::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
-                        data1[i], data2);
-            }
-
-            return result;
+        int size = v1->size();
+        for (int i = 0; i < size; ++i) {
+            data3[i] = OP::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
+                    data1[i], data2);
         }
+
+        return result;
     }
 
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
