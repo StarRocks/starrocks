@@ -54,6 +54,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
+import static com.google.common.base.Verify.verifyNotNull;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.collect.Iterables.getOnlyElement;
@@ -389,8 +390,14 @@ public class IcebergStatisticProvider {
             protected Long computeNext(Long previous) {
                 requireNonNull(previous, "previous is null");
                 @Nullable
-                Long parentId = icebergTable.snapshot(previous).parentId();
-                return parentId;
+                Snapshot snapshot = icebergTable.snapshot(previous);
+                if (snapshot == null) {
+                    return null;
+                }
+                if (snapshot.parentId() == null) {
+                    return null;
+                }
+                return verifyNotNull(snapshot.parentId(), "snapshot.parentId()");
             }
         };
     }
