@@ -1978,7 +1978,12 @@ public class GlobalStateMgr {
     }
 
     public void createTxnTimeoutChecker() {
+<<<<<<< HEAD
         txnTimeoutChecker = new LeaderDaemon("txnTimeoutChecker", Config.transaction_clean_interval_second) {
+=======
+        txnTimeoutChecker = new FrontendDaemon("txnTimeoutChecker",
+                Config.transaction_clean_interval_second * 1000L) {
+>>>>>>> 9a7b935966 ([BugFix] Fix load external OLAP table job cancelled job (#31634))
             @Override
             protected void runAfterCatalogReady() {
                 globalTransactionMgr.abortTimeoutTxns();
