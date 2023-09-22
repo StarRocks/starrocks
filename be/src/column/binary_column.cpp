@@ -88,11 +88,20 @@ void BinaryColumnBase<T>::append_selective_fixed_size(const Column& src, const u
 
         auto* dest_bytes = _bytes.data();
         uint32_t cur_offset = _offsets[cur_row_count];
+        auto* src_bytes_data = src_bytes.data();
+
+        size_t prefetch_index = 16;
 
         for (uint32_t i = 0; i < size; i++) {
+            if (prefetch_index < size) {
+                uint32_t idx = indexes[from + prefetch_index];
+                __builtin_prefetch(static_cast<const void*>(src_bytes_data + (idx - 1) * item_size));
+            }
+            prefetch_index++;
+
             _offsets[cur_row_count + i + 1] = cur_offset + (i + 1) * item_size;
             uint32_t idx = indexes[from + i];
-            strings::memcpy_inlined(dest_bytes + i * item_size, src_bytes.data() + (idx - 1) * item_size, item_size);
+            strings::memcpy_inlined(dest_bytes + i * item_size, src_bytes_data + (idx - 1) * item_size, item_size);
         }
     }
     _slices_cache = false;
