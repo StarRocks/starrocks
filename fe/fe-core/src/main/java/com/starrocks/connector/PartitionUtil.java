@@ -493,9 +493,11 @@ public class PartitionUtil {
             if (entry.getValue().getKeys().get(0) instanceof StringLiteral) {
                 if (index == 0) {
                     lastPartitionKey = entry.getValue();
-                    PartitionKey infinityPartitionKey =
-                            PartitionKey.createInfinityPartitionKey(ImmutableList.of(partitionColumn), false);
-                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(infinityPartitionKey, entry.getValue()));
+                    PartitionKey startPartitionKey = new PartitionKey();
+                    startPartitionKey.pushColumn(StringLiteral.create(FeConstants.PARTITION_USE_STR2DATE_MINVALUE,
+                            partitionColumn.getType()),
+                            partitionColumn.getPrimitiveType());
+                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(startPartitionKey, entry.getValue()));
                     ++index;
                     continue;
                 }
