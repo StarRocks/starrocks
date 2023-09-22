@@ -159,6 +159,7 @@ jobs:
       !failure() &&
       github.base_ref != 'main' &&
       startsWith(github.head_ref, 'mergify/') &&
+      !contains(github.event.pull_request.labels.*.name, 'conflict') &&
       (contains(github.event.pull_request.title, 'cherry-pick') || 
       contains(github.event.pull_request.title, 'backport'))
     steps:

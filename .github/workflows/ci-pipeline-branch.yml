@@ -30,6 +30,7 @@ jobs:
         if: >
           !contains(github.event.pull_request.title, '(sync #') &&
           !contains(github.event.pull_request.labels.*.name, 'sync') &&
+          !contains(github.base_ref, '-sync-') &&
           (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
         run: |
           echo "pass=true" >> $GITHUB_OUTPUT

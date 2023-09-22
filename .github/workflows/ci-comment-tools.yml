@@ -20,18 +20,40 @@ permissions:
 
 jobs:
 
+  info:
+    name: INFO
+    runs-on: [self-hosted, sync-normal]
+    if: ${{ github.event.issue.pull_request }}
+    env:
+      PR_NUMBER: ${{ github.event.issue.number }}
+      SYNC_PAT: ${{ secrets.SYNC_PAT }}
+    outputs:
+      assignees: ${{ steps.pr-info.outputs.assignees }}
+      branch: ${{ steps.pr-info.outputs.branch }}
+      state: ${{ steps.pr-info.outputs.state }}
+      merge_commit: ${{ steps.pr-info.outputs.merge_commit }}
+      title: ${{ steps.pr-info.outputs.title }}
+    steps:
+      - name: PR INFO
+        id: pr-info
+        run: |
+          cd /var/lib/elastic-service && git pull
+          ./lib/get_pr_info.sh
+
   rebase:
     name: Rebase
     runs-on: ubuntu-latest
-    if: >-
-      github.event.issue.pull_request != '' && 
-      (
-        contains(github.event.comment.body, '/rebase') || 
-        contains(github.event.comment.body, '/autosquash')
-      )
+    needs: info
+    if: >
+      contains(github.event.comment.body, '/rebase') || contains(github.event.comment.body, '/autosquash')
+    env:
+      PR_NUMBER: ${{ github.event.issue.number }}
+      BRANCH: ${{ needs.info.outputs.branch }}
+      ASSIGNEES: ${{ needs.info.outputs.assignees }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout the latest code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT }}
           fetch-depth: 0
@@ -42,3 +64,35 @@ jobs:
           autosquash: ${{ contains(github.event.comment.body, '/autosquash') || contains(github.event.comment.body, '/rebase-autosquash') }}
         env:
           GITHUB_TOKEN: ${{ secrets.PAT }}
+
+  backport:
+    name: Backport
+    runs-on: ubuntu-latest
+    needs: info
+    if: >
+      contains(github.event.comment.body, '@mergify backport' ||  contains(github.event.comment.body, '@mergifyio backport')
+    env:
+      PR_NUMBER: ${{ github.event.issue.number }}
+      BRANCH: ${{ needs.info.outputs.branch }}
+      ASSIGNEES: ${{ needs.info.outputs.assignees }}
+      MERGE_COMMIT: ${{ needs.info.outputs.merge_commit }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Check Status
+        run: |
+          if [[ "${{ needs.info.outputs.state }}" != "MERGED" ]]; then
+              gh pr comment ${PR_NUMBER} -R ${{ github.repository }} -b "❌ PR has not been merged yet!"
+              exit 1
+          fi
+
+      - name: Checkout the latest code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT }}
+          fetch-depth: 0
+
+      - name: BACKPORT
+        run: |
+          cd /var/lib/elastic-service && git pull
+          ./bin/backport.sh "${{ needs.info.outputs.title }}" "${{ github.event.comment.body }}"
