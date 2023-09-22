@@ -533,7 +533,7 @@ FROM KAFKA
 > - If the outermost layer of the JSON-formatted data is an array structure, you need to set `"strip_outer_array"="true"` in `PROPERTIES` to strip the outermost array structure. Additionally, when you need to specify `jsonpaths`, the root element of the entire JSON-formatted data is the flattened JSON object because the outermost array structure of the JSON-formatted data is stripped.
 > - You can use `json_root` to specify the root element of the JSON-formatted data.
 
-#### StarRocks table contains derived columns generated using expressions on JSON data
+#### StarRocks table contains derived columns generated using expressions
 
 **Prepare a dataset**
 
@@ -589,7 +589,7 @@ FROM KAFKA
 > - If the outermost layer of the JSON data is an array structure, you need to set `"strip_outer_array"="true"` in the `PROPERTIES` to strip the outermost array structure. Additionally, when you need to specify `jsonpaths`, the root element of the entire JSON data is the flattened JSON object because the outermost array structure of the JSON data is stripped.
 > - You can use `json_root` to specify the root element of the JSON-formatted data.
 
-#### StarRocks table contains derived column generated using CASE expression on JSON data
+#### StarRocks table contains derived column generated using CASE expression
 
 You need to use the matched mode for the Routine Load job. That is, you need to specify `jsonpaths` and `COLUMNS` parameters when creating the Routine Load job. The `jsonpaths` parameter specifies the keys of the JSON data to be loaded, and the `COLUMNS` parameter specifies the expressions.
 
