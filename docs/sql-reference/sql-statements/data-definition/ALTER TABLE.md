@@ -128,7 +128,7 @@ ALTER TABLE [database.]table
   - storage_cooldown_ttl or storage_cooldown_time
   - replication_num
 
-- For the table has only one partition, partition name is the same as the table name. If the table is divided into multiple partitions, you can use `(*)`to modify the properties of all partitions. which is more convenient.
+- For the table that has only one partition, the partition name is the same as the table name. If the table is divided into multiple partitions, you can use `(*)`to modify the properties of all partitions, which is more convenient.
 
 - Execute `SHOW PARTITIONS FROM <table_name>` to view the partition properties after modification.
 
@@ -328,7 +328,7 @@ You can add a generated column and specify its expression. [The generated column
 
 #### Modify table properties
 
-Currently, StarRocks supports modifying bloomfilter columns, colocate_with property, dynamic_partition property, enable_persistent_index property, replication_num property and default.replication_num property, storage_cooldown_ttl property and storage_cooldown_time property.
+Currently, StarRocks supports modifying `bloom_filter_columns` property,`colocate_with` property, dynamic partitioning related properties, `enable_persistent_index` property, `replication_num` property and `default.replication_num` property, `storage_cooldown_ttl` property and `storage_cooldown_time` property.
 
 Syntax:
 

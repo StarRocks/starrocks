@@ -396,12 +396,12 @@ PROPERTIES (
 
     If the FE configuration item `enable_strict_storage_medium_check` is set to `true`, the system strictly checks BE disk type when you create a table. If the storage medium you specified in CREATE TABLE is inconsistent with BE disk type, an error "Failed to find enough host in all backends with storage medium is SSD|HDD." is returned and table creation fails. If `enable_strict_storage_medium_check` is set to `false`, the system ignores this error and forcibly creates the table. However, cluster disk space may be unevenly distributed after data is loaded.<br>
 
-    From 2.3.6, 2.4.2, 2.5.1, and 3.0 onwards, the system automatically infers storage medium based on BE disk type if `storage_medium` is not explicitly specified.<br>
+    From v2.3.6, v2.4.2, v2.5.1, and v3.0 onwards, the system automatically infers storage medium based on BE disk type if `storage_medium` is not explicitly specified.<br>
 
   - The system automatically sets this parameter to SSD in the following scenarios:
 
     - The disk types reported by BEs (`storage_root_path`) contain only SSD.
-    - The disk types reported by BEs (`storage_root_path`) contain both SSD and HDD. Note that from 2.3.10, 2.4.5, 2.5.4, and 3.0 onwards, the system sets `storage_medium` to SSD when `storage_root_path` reported by BEs contain both SSD and HDD and the property `storage_cooldown_time` is specified.
+    - The disk types reported by BEs (`storage_root_path`) contain both SSD and HDD. Note that from v2.3.10, v2.4.5, v2.5.4, and v3.0 onwards, the system sets `storage_medium` to SSD when `storage_root_path` reported by BEs contain both SSD and HDD and the property `storage_cooldown_time` is specified.
 
   - The system automatically sets this parameter to HDD in the following scenarios:
 
@@ -437,7 +437,7 @@ PROPERTIES (
 - Expression and List partitioning are not supported.
 - The partition column need to be of date type.
 - Multiple partition columns are not supported.
-- Primary key tables are not supported.
+- Primary Key tables are not supported.
 
 **Set the number of replicas for each tablet in partitions**
 
