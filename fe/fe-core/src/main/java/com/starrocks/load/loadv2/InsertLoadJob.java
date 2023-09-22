@@ -25,6 +25,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
@@ -195,7 +196,7 @@ public class InsertLoadJob extends LoadJob {
             return true;
         }
 
-        if (table instanceof SchemaTable || table instanceof IcebergTable) {
+        if (table instanceof SchemaTable || table instanceof IcebergTable || table instanceof ExternalOlapTable) {
             return false;
         } else {
             return true;
