@@ -378,7 +378,7 @@ Since version 3.0, the primary key and sort key are decoupled in the Primary Key
 
 #### Specify initial storage medium, automatic storage cooldown time, replica number
 
-If the engine type is `OLAP`, you can specify initial storage medium (`storage_medium`), automatic storage cooldown time or time interval (`storage_cooldown_time` or `storage_cooldown_ttl`), and replica number (`replication_num`) when you create a table.
+If the engine type is `OLAP`, you can specify initial storage medium (`storage_medium`), automatic storage cooldown time (`storage_cooldown_time`) or time interval (`storage_cooldown_ttl`), and replica number (`replication_num`) when you create a table.
 
 The scope where the properties take effect: If the table has only one partition, the properties belong to the table. If the table is divided into multiple partitions, the properties belong to each partition. And when you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](../data-definition/ALTER%20TABLE.md) after table creation.
 
