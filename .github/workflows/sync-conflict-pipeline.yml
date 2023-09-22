@@ -131,7 +131,7 @@ jobs:
         timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }}
+          ./bin/elastic-build.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }}
 
       - name: build result
         run: |
