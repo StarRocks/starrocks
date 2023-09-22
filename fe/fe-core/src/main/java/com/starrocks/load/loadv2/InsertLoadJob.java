@@ -25,6 +25,11 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.HiveTable;
+>>>>>>> 9a7b935966 ([BugFix] Fix load external OLAP table job cancelled job (#31634))
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
@@ -195,7 +200,14 @@ public class InsertLoadJob extends LoadJob {
             return true;
         }
 
+<<<<<<< HEAD
         if (table instanceof SchemaTable || table instanceof IcebergTable) {
+=======
+        if (table instanceof SystemTable
+                || table instanceof IcebergTable
+                || table instanceof HiveTable
+                || table instanceof ExternalOlapTable) {
+>>>>>>> 9a7b935966 ([BugFix] Fix load external OLAP table job cancelled job (#31634))
             return false;
         } else {
             return true;
