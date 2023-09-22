@@ -27,7 +27,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -52,17 +52,12 @@ public class DeriveRangeJoinPredicateRule extends TransformationRule {
 
     public DeriveRangeJoinPredicateRule() {
         super(RuleType.TF_DERIVE_RANGE_JOIN_PREDICATE,
-                Pattern.create(OperatorType.LOGICAL_JOIN, OperatorType.PATTERN_SCAN, OperatorType.PATTERN_SCAN));
+                Pattern.create(OperatorType.LOGICAL_JOIN, OperatorType.PATTERN_LEAF, OperatorType.PATTERN_LEAF));
     }
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        if (context.getSessionVariable().enableCboDeriveRangeJoinPredicate()) {
-            return input.inputAt(0).getOp().getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN &&
-                    input.inputAt(1).getOp().getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN;
-        }
-
-        return false;
+        return context.getSessionVariable().enableCboDeriveRangeJoinPredicate();
     }
 
     @Override
@@ -119,10 +114,13 @@ public class DeriveRangeJoinPredicateRule extends TransformationRule {
         }
 
         // generate range predicate
-        LogicalScanOperator leftScan = input.inputAt(0).getOp().cast();
-        LogicalScanOperator rightScan = input.inputAt(1).getOp().cast();
+        LogicalOperator leftOp = input.inputAt(0).getOp().cast();
+        LogicalOperator rightOp = input.inputAt(1).getOp().cast();
         Statistics leftStatics = getStatistics(input.inputAt(0), context);
         Statistics rightStatics = getStatistics(input.inputAt(1), context);
+        if (leftStatics == null || rightStatics == null) {
+            return Lists.newArrayList();
+        }
 
         List<ScalarOperator> leftPredicates = Lists.newArrayList();
         List<ScalarOperator> rightPredicates = Lists.newArrayList();
@@ -133,11 +131,15 @@ public class DeriveRangeJoinPredicateRule extends TransformationRule {
                 continue;
             }
 
+            ColumnStatistic columnStatistic;
             ColumnRefOperator anchor = optional.get();
-            ColumnStatistic columnStatistic =
-                    leftScan.getColRefToColumnMetaMap().containsKey(anchor) ? leftStatics.getColumnStatistic(anchor) :
-                            rightStatics.getColumnStatistic(anchor);
-
+            if (leftStatics.getColumnStatistic(anchor) != null) {
+                columnStatistic = leftStatics.getColumnStatistic(anchor);
+            } else if (rightStatics.getColumnStatistic(anchor) != null) {
+                columnStatistic = rightStatics.getColumnStatistic(anchor);
+            } else {
+                continue;
+            }
             if (StringUtils.isEmpty(columnStatistic.getMinString()) ||
                     StringUtils.isEmpty(columnStatistic.getMaxString())) {
                 LOG.debug("column minString value: {}, maxString value: {}");
@@ -183,38 +185,57 @@ public class DeriveRangeJoinPredicateRule extends TransformationRule {
             return Lists.newArrayList(input);
         }
 
-        leftPredicates.add(leftScan.getPredicate());
-        rightPredicates.add(rightScan.getPredicate());
+        leftPredicates.add(leftOp.getPredicate());
+        rightPredicates.add(rightOp.getPredicate());
 
         if (join.getJoinType().isInnerJoin()) {
-            Operator ls = OperatorBuilderFactory.build(leftScan).withOperator(leftScan)
+            Operator ls = OperatorBuilderFactory.build(leftOp).withOperator(leftOp)
                     .setPredicate(Utils.compoundAnd(leftPredicates)).build();
-            Operator rs = OperatorBuilderFactory.build(rightScan).withOperator(rightScan)
+            Operator rs = OperatorBuilderFactory.build(rightOp).withOperator(rightOp)
                     .setPredicate(Utils.compoundAnd(rightPredicates)).build();
-            return Lists.newArrayList(OptExpression.create(join, OptExpression.create(ls), OptExpression.create(rs)));
+
+            return Lists.newArrayList(OptExpression.create(join,
+                    OptExpression.create(ls, input.inputAt(0).getInputs()),
+                    OptExpression.create(rs, input.inputAt(1).getInputs())));
+
         } else if (join.getJoinType().isLeftOuterJoin()) {
-            Operator rs = OperatorBuilderFactory.build(rightScan).withOperator(rightScan)
+            Operator rs = OperatorBuilderFactory.build(rightOp).withOperator(rightOp)
                     .setPredicate(Utils.compoundAnd(rightPredicates)).build();
-            return Lists.newArrayList(
-                    OptExpression.create(join, OptExpression.create(leftScan), OptExpression.create(rs)));
+
+            return Lists.newArrayList(OptExpression.create(join,
+                    input.inputAt(0),
+                    OptExpression.create(rs, input.inputAt(1).getInputs())));
+
         } else if (join.getJoinType().isRightOuterJoin()) {
-            Operator ls = OperatorBuilderFactory.build(leftScan).withOperator(leftScan)
+            Operator ls = OperatorBuilderFactory.build(leftOp).withOperator(leftOp)
                     .setPredicate(Utils.compoundAnd(leftPredicates)).build();
-            return Lists.newArrayList(
-                    OptExpression.create(join, OptExpression.create(ls), OptExpression.create(rightScan)));
+
+            return Lists.newArrayList(OptExpression.create(join,
+                    OptExpression.create(ls, input.inputAt(0).getInputs()),
+                    input.inputAt(1)));
         }
 
         return null;
     }
 
-    private static Statistics getStatistics(OptExpression input, OptimizerContext context) {
-        if (input.getStatistics() != null) {
-            return input.getStatistics();
+    private Statistics getStatistics(OptExpression input, OptimizerContext context) {
+        deriveStatistics(input, context);
+        return input.getStatistics();
+    }
+
+
+    private void deriveStatistics(OptExpression optExpression, OptimizerContext context) {
+        if (optExpression.getStatistics() != null) {
+            return;
         }
-        ExpressionContext ec = new ExpressionContext(input);
+
+        for (OptExpression child : optExpression.getInputs()) {
+            deriveStatistics(child, context);
+        }
+        ExpressionContext ec = new ExpressionContext(optExpression);
         StatisticsCalculator sc = new StatisticsCalculator(ec, context.getColumnRefFactory(),
                 context.getTaskContext().getOptimizerContext());
         sc.estimatorStats();
-        return ec.getStatistics();
+        optExpression.setStatistics(ec.getStatistics());
     }
 }

@@ -150,8 +150,8 @@ public class ColumnStatistic {
     }
 
     public static Builder buildFrom(ColumnStatistic other) {
-        return new Builder(other.minValue, other.maxValue, other.nullsFraction, other.averageRowSize,
-                other.distinctValuesCount, other.histogram, other.type);
+        return new Builder(other.minString, other.maxString, other.minValue, other.maxValue,
+                other.nullsFraction, other.averageRowSize, other.distinctValuesCount, other.histogram, other.type);
     }
 
     public static Builder buildFrom(String columnStatistic) {
@@ -208,6 +208,16 @@ public class ColumnStatistic {
         private Builder(double minValue, double maxValue, double nullsFraction, double averageRowSize,
                         double distinctValuesCount, Histogram histogram,
                         StatisticType type) {
+            this(null, null, minValue, maxValue, nullsFraction,
+                    averageRowSize, distinctValuesCount, histogram, type);
+        }
+
+        private Builder(String maxString, String minString, double minValue, double maxValue,
+                        double nullsFraction, double averageRowSize,
+                        double distinctValuesCount, Histogram histogram,
+                        StatisticType type) {
+            this.maxString = maxString;
+            this.minString = minString;
             this.minValue = minValue;
             this.maxValue = maxValue;
             this.nullsFraction = nullsFraction;
