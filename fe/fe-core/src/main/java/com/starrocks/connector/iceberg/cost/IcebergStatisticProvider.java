@@ -16,6 +16,7 @@
 package com.starrocks.connector.iceberg.cost;
 
 import com.google.common.collect.AbstractIterator;
+import com.google.common.collect.AbstractSequentialIterator;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
@@ -51,11 +52,14 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 
+import static com.google.common.base.Verify.verifyNotNull;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.collect.Iterables.getOnlyElement;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
+import static java.util.Objects.requireNonNull;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
 
@@ -320,7 +324,7 @@ public class IcebergStatisticProvider {
         ImmutableMap.Builder<Integer, Long> colIdToNdv = ImmutableMap.builder();
         Set<Integer> remainingColumnIds = new HashSet<>(columnIds);
 
-        Iterator<StatisticsFile> statisticsFiles = getStatisticsFiles(
+        Iterator<StatisticsFile> statisticsFiles = walkStatisticsFiles(
                 icebergTable.getNativeTable(), icebergTable.getSnapshot().get().snapshotId());
         while (!remainingColumnIds.isEmpty() && statisticsFiles.hasNext()) {
             StatisticsFile statisticsFile = statisticsFiles.next();
@@ -329,7 +333,6 @@ public class IcebergStatisticProvider {
                     .filter(blobMetadata -> blobMetadata.type().equals(StandardBlobTypes.APACHE_DATASKETCHES_THETA_V1))
                     .filter(blobMetadata -> blobMetadata.fields().size() == 1)
                     .filter(blobMetadata -> remainingColumnIds.contains(getOnlyElement(blobMetadata.fields())))
-                    // Fail loud upon duplicates (there must be none)
                     .collect(toImmutableMap(blobMetadata -> getOnlyElement(blobMetadata.fields()), identity()));
 
             for (Map.Entry<Integer, BlobMetadata> entry : thetaBlobsByFieldId.entrySet()) {
@@ -349,30 +352,52 @@ public class IcebergStatisticProvider {
         return colIdToNdv.build();
     }
 
-    public static Iterator<StatisticsFile> getStatisticsFiles(Table icebergTable, long snapshotId) {
+    public static Iterator<StatisticsFile> walkStatisticsFiles(Table icebergTable, long startingSnapshotId) {
         return new AbstractIterator<StatisticsFile>() {
             private final Map<Long, StatisticsFile> statsFileBySnapshot = icebergTable.statisticsFiles().stream()
                     .collect(toMap(
                             StatisticsFile::snapshotId,
                             identity(),
                             (a, b) -> {
-                                throw new IllegalStateException(String.format(
-                                        "Unexpected duplicate statistics files %s, %s", a, b));
+                                throw new IllegalStateException(
+                                        String.format("Unexpected duplicate statistics files %s, %s", a, b));
                             },
                             HashMap::new));
+
+            private final Iterator<Long> snapshots = walkSnapshots(icebergTable, startingSnapshotId);
 
             @Override
             protected StatisticsFile computeNext() {
                 if (statsFileBySnapshot.isEmpty()) {
-                    // Already found all statistics files
                     return endOfData();
                 }
 
-                StatisticsFile statisticsFile = statsFileBySnapshot.remove(snapshotId);
-                if (statisticsFile != null) {
-                    return statisticsFile;
+                while (snapshots.hasNext()) {
+                    long snapshotId = snapshots.next();
+                    StatisticsFile statisticsFile = statsFileBySnapshot.remove(snapshotId);
+                    if (statisticsFile != null) {
+                        return statisticsFile;
+                    }
                 }
                 return endOfData();
+            }
+        };
+    }
+
+    private static Iterator<Long> walkSnapshots(Table icebergTable, long startingSnapshotId) {
+        return new AbstractSequentialIterator<Long>(startingSnapshotId) {
+            @Override
+            protected Long computeNext(Long previous) {
+                requireNonNull(previous, "previous is null");
+                @Nullable
+                Snapshot snapshot = icebergTable.snapshot(previous);
+                if (snapshot == null) {
+                    return null;
+                }
+                if (snapshot.parentId() == null) {
+                    return null;
+                }
+                return verifyNotNull(snapshot.parentId(), "snapshot.parentId()");
             }
         };
     }
