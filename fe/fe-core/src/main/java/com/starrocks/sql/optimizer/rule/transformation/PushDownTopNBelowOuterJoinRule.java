@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
@@ -73,6 +74,7 @@ public class PushDownTopNBelowOuterJoinRule extends TransformationRule {
         } else if (joinType.isRightJoin()) {
             joinChild = childExpr.inputAt(1);
         }
+        Preconditions.checkState(joinChild != null);
 
         if (topn.hasLimit() && joinChild.getOp().hasLimit() && topn.getLimit() >= joinChild.getOp().getLimit()) {
             return false;

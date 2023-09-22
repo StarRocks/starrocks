@@ -48,13 +48,13 @@ INSERT INTO duplicate_table VALUES
     ('2020-10-23','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
     ('2020-10-24','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
 
-select * from (select * from duplicate_table_with_null union all select * from duplicate_table_with_null) t order by k2 limit 1, 2;
+select * from (select * from duplicate_table_with_null union all select * from duplicate_table_with_null) t order by k2 limit 2, 1;
 select * from (select * from duplicate_table_with_null union all select * from duplicate_table_with_null) t order by k1,k2,k3,k4 limit 3;
-select * from ( select * from (select * from duplicate_table_with_null limit 3) t1 union all select * from (select * from duplicate_table_with_null)t2 ) t order by k2 limit 3;
-select * from ( select * from (select * from duplicate_table_with_null limit 3) t1 union all select * from (select * from duplicate_table_with_null)t2 ) t order by k2 limit 1;
-select * from ( select * from (select * from duplicate_table_with_null limit 3) t1 union all select * from (select * from duplicate_table_with_null limit 1)t2 ) t order by k1 limit 1;
-select * from ( select * from (select * from duplicate_table_with_null limit 3) t1 union all select * from (select * from duplicate_table_with_null limit 2)t2 ) t order by k1 limit 3;
-select * from ( select * from (select * from duplicate_table_with_null limit 3) t1 union all select * from (select * from duplicate_table_with_null limit 3)t2 ) t order by k1 limit 2;
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2)t2 ) t order by k2 limit 3;
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2)t2 ) t order by k2 limit 1;
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 1)t2 ) t order by k1 limit 1;
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 2)t2 ) t order by k1 limit 3;
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 3)t2 ) t order by k1 limit 2;
 select a, b, c from ( 
     select k1 as a, k2 as b, k3 as c from duplicate_table_with_null
     union all 
@@ -68,13 +68,13 @@ select a, b, c from (
 
 
 -- multi tables
-select * from (select * from duplicate_table union all select * from duplicate_table_with_null) t order by k1 limit 1, 2;
+select * from (select * from duplicate_table union all select * from duplicate_table_with_null) t order by k1 limit 4, 1;
 select * from (select * from duplicate_table_with_null union all select * from duplicate_table_with_null) t order by k1,k2,k3,k4 limit 3;
-select * from ( select * from (select * from duplicate_table limit 3) t1 union all select * from (select * from duplicate_table_with_null)t2 ) t order by k2 limit 3;
-select * from ( select * from (select * from duplicate_table limit 3) t1 union all select * from (select * from duplicate_table_with_null)t2 ) t order by k2 limit 1;
-select * from ( select * from (select * from duplicate_table limit 3) t1 union all select * from (select * from duplicate_table_with_null limit 1)t2 ) t order by k1 limit 1;
-select * from ( select * from (select * from duplicate_table limit 3) t1 union all select * from (select * from duplicate_table_with_null limit 2)t2 ) t order by k2 limit 3;
-select * from ( select * from (select * from duplicate_table limit 3) t1 union all select * from (select * from duplicate_table_with_null limit 3)t2 ) t order by k1 limit 2;
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 )t2 ) t order by k2 limit 3;
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2)t2 ) t order by k2 limit 1;
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 1)t2 ) t order by k1 limit 1;
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 2)t2 ) t order by k2 limit 3;
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 3)t2 ) t order by k1 limit 2;
 select a, b, c from ( 
     select k1 as a, k2 as b, k3 as c from duplicate_table
     union all 
@@ -89,13 +89,14 @@ select a, b, c from (
 
 -- close topn pushdown below union all
 set cbo_push_down_topn_limit=0;
-select * from (select * from duplicate_table_with_null union all select * from duplicate_table_with_null) t order by k2 limit 1, 2;
+
+select * from (select * from duplicate_table_with_null union all select * from duplicate_table_with_null) t order by k2 limit 2, 1;
 select * from (select * from duplicate_table_with_null union all select * from duplicate_table_with_null) t order by k1,k2,k3,k4 limit 3;
-select * from ( select * from (select * from duplicate_table_with_null limit 3) t1 union all select * from (select * from duplicate_table_with_null)t2 ) t order by k2 limit 3;
-select * from ( select * from (select * from duplicate_table_with_null limit 3) t1 union all select * from (select * from duplicate_table_with_null)t2 ) t order by k2 limit 1;
-select * from ( select * from (select * from duplicate_table_with_null limit 3) t1 union all select * from (select * from duplicate_table_with_null limit 1)t2 ) t order by k1 limit 1;
-select * from ( select * from (select * from duplicate_table_with_null limit 3) t1 union all select * from (select * from duplicate_table_with_null limit 2)t2 ) t order by k1 limit 3;
-select * from ( select * from (select * from duplicate_table_with_null limit 3) t1 union all select * from (select * from duplicate_table_with_null limit 3)t2 ) t order by k1 limit 2;
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2)t2 ) t order by k2 limit 3;
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2)t2 ) t order by k2 limit 1;
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 1)t2 ) t order by k1 limit 1;
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 2)t2 ) t order by k1 limit 3;
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 3)t2 ) t order by k1 limit 2;
 select a, b, c from ( 
     select k1 as a, k2 as b, k3 as c from duplicate_table_with_null
     union all 
@@ -106,15 +107,16 @@ select a, b, c from (
     union all 
     select k1 as a, k2 as b, k3 as c from duplicate_table_with_null
 ) t order by a, b, c limit 2;
+
 
 -- multi tables
-select * from (select * from duplicate_table union all select * from duplicate_table_with_null) t order by k1 limit 1, 2;
+select * from (select * from duplicate_table union all select * from duplicate_table_with_null) t order by k1 limit 4, 1;
 select * from (select * from duplicate_table_with_null union all select * from duplicate_table_with_null) t order by k1,k2,k3,k4 limit 3;
-select * from ( select * from (select * from duplicate_table limit 3) t1 union all select * from (select * from duplicate_table_with_null)t2 ) t order by k2 limit 3;
-select * from ( select * from (select * from duplicate_table limit 3) t1 union all select * from (select * from duplicate_table_with_null)t2 ) t order by k2 limit 1;
-select * from ( select * from (select * from duplicate_table limit 3) t1 union all select * from (select * from duplicate_table_with_null limit 1)t2 ) t order by k1 limit 1;
-select * from ( select * from (select * from duplicate_table limit 3) t1 union all select * from (select * from duplicate_table_with_null limit 2)t2 ) t order by k2 limit 3;
-select * from ( select * from (select * from duplicate_table limit 3) t1 union all select * from (select * from duplicate_table_with_null limit 3)t2 ) t order by k1 limit 2;
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 )t2 ) t order by k2 limit 3;
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2)t2 ) t order by k2 limit 1;
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 1)t2 ) t order by k1 limit 1;
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 2)t2 ) t order by k2 limit 3;
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 3)t2 ) t order by k1 limit 2;
 select a, b, c from ( 
     select k1 as a, k2 as b, k3 as c from duplicate_table
     union all 
@@ -125,7 +127,6 @@ select a, b, c from (
     union all 
     select k1 as a, k2 as b, k3 as c from duplicate_table_with_null
 ) t order by a, b, c limit 2;
-
 
 drop table duplicate_table_with_null;
 drop table duplicate_table;
