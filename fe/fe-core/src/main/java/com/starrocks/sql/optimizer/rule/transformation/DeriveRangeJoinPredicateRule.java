@@ -39,12 +39,17 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 public class DeriveRangeJoinPredicateRule extends TransformationRule {
+
+    private static final Logger LOG = LogManager.getLogger(DeriveRangeJoinPredicateRule.class);
+
     public DeriveRangeJoinPredicateRule() {
         super(RuleType.TF_DERIVE_RANGE_JOIN_PREDICATE,
                 Pattern.create(OperatorType.LOGICAL_JOIN, OperatorType.PATTERN_SCAN, OperatorType.PATTERN_SCAN));
@@ -135,13 +140,17 @@ public class DeriveRangeJoinPredicateRule extends TransformationRule {
 
             if (StringUtils.isEmpty(columnStatistic.getMinString()) ||
                     StringUtils.isEmpty(columnStatistic.getMaxString())) {
+                LOG.debug("column minString value: {}, maxString value: {}");
                 continue;
             }
 
-            ScalarOperator lower = new CastOperator(anchor.getType(),
-                    new ConstantOperator(columnStatistic.getMinString(), Type.STRING));
-            ScalarOperator upper = new CastOperator(anchor.getType(),
-                    new ConstantOperator(columnStatistic.getMaxString(), Type.STRING));
+            ScalarOperator lower = new ConstantOperator(columnStatistic.getMinString(), Type.STRING);
+            ScalarOperator upper = new ConstantOperator(columnStatistic.getMaxString(), Type.STRING);
+
+            if (!anchor.getType().isStringType()) {
+                lower = new CastOperator(anchor.getType(), lower);
+                upper = new CastOperator(anchor.getType(), upper);
+            }
 
             List<BinaryPredicateOperator> predicates = columnToRange.get(refs);
             // must be range predicate
