@@ -851,7 +851,8 @@ public class MaterializedViewAnalyzer {
 
         private void checkPartitionColumnType(Column partitionColumn) {
             PrimitiveType type = partitionColumn.getPrimitiveType();
-            if (!type.isFixedPointType() && !type.isDateType()) {
+            if (!type.isFixedPointType() && !type.isDateType() && type != PrimitiveType.CHAR
+                    && type != PrimitiveType.VARCHAR) {
                 throw new SemanticException("Materialized view partition exp column:"
                         + partitionColumn.getName() + " with type " + type + " not supported");
             }
