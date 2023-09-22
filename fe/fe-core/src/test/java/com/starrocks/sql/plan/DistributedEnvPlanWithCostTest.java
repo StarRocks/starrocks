@@ -22,9 +22,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
@@ -1504,13 +1501,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testRnagePredicateJoin() throws Exception {
-        new MockUp<DeriveRangeJoinPredicateRule>() {
-            @Mock
-            public boolean check(OptExpression input, OptimizerContext context) {
-                return true;
-            }
-        };
-
         new MockUp<MockTpchStatisticStorage>() {
             @Mock
             ColumnStatistic getColumnStatistic(Table table, String column) {
@@ -1528,20 +1518,26 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         };
 
         String sql = "select * from t0 left outer join t1 on t0.v1 = t1.v4 and t1.v5 < t0.v2 and t0.v2 < t1.v6";
+        connectContext.getSessionVariable().setCboDeriveRangeJoinPredicate(true);
         String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboDeriveRangeJoinPredicate(false);
         assertContains(plan, "     TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 5: v5 <= CAST('test_max_v2' AS BIGINT), 6: v6 >= CAST('test_min_v2' AS BIGINT)");
 
         sql = "select * from t0 left outer join t1 on t0.v1 = t1.v4 and t1.v5 > t0.v2 and t0.v2 > t1.v6";
+        connectContext.getSessionVariable().setCboDeriveRangeJoinPredicate(true);
         plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboDeriveRangeJoinPredicate(false);
         assertContains(plan, "     TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 5: v5 >= CAST('test_min_v2' AS BIGINT), 6: v6 <= CAST('test_max_v2' AS BIGINT)");
 
         sql = "select * from t0 left outer join t1 on t0.v1 = t1.v4 and t1.v5 > t0.v2 and t0.v2 > t1.v6" +
                 " and t0.v2 > t1.v4";
+        connectContext.getSessionVariable().setCboDeriveRangeJoinPredicate(true);
         plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboDeriveRangeJoinPredicate(false);
         assertContains(plan, "TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 5: v5 >= CAST('test_min_v2' AS BIGINT), 6: v6 <= CAST('test_max_v2' AS BIGINT), " +
@@ -1550,7 +1546,9 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select * from t0 left outer join t2 on t0.v1 = t2.v7 left outer join t1 on t0.v1 = t1.v4 and " +
                 "t1.v5 > t0.v2 and t0.v2 > t1.v6" +
                 " and t0.v2 > t1.v4";
+        connectContext.getSessionVariable().setCboDeriveRangeJoinPredicate(true);
         plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboDeriveRangeJoinPredicate(false);
         assertContains(plan, "TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 8: v5 >= CAST('test_min_v2' AS BIGINT), 9: v6 <= CAST('test_max_v2' AS BIGINT), " +

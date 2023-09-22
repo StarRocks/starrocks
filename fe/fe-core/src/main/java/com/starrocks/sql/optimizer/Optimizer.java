@@ -403,6 +403,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new RewriteSimpleAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new LabelMinMaxCountOnScanRule());
+        deriveRangeJoinPredicate(tree, rootTaskContext);
 
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
@@ -422,8 +423,14 @@ public class Optimizer {
         // if this rule has applied before MV.
         ruleRewriteOnlyOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
 
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
         return tree.getInputs().get(0);
+    }
+
+    private void deriveRangeJoinPredicate(OptExpression tree, TaskContext rootTaskContext) {
+        if (context.getSessionVariable().enableCboDeriveRangeJoinPredicate()) {
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+        }
     }
 
     private boolean isEnableSingleTableMVRewrite(TaskContext rootTaskContext,
