@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -96,24 +97,19 @@ public class PushDownTopNBelowUnionRule extends TransformationRule {
                 .map(x -> unionAllOutputColumnRefIdToIndexMap.get(x.getColumnRef().getId()))
                 .collect(Collectors.toList());
         List<List<ColumnRefOperator>> unionChildrenOutputColumns = unionOperator.getChildOutputColumns();
+        List<Ordering> oldOrderings = topn.getOrderByElements();
+        Preconditions.checkState(oldOrderings.size() == orderByIndexes.size());
         for (int i = 0; i < childExpr.getInputs().size(); i++) {
             OptExpression unionChild = childExpr.inputAt(i);
             if (canPushDownTopNBelowUnionChild(topn, unionChild)) {
-                List<Ordering> oldOrderings = topn.getOrderByElements();
-                Preconditions.checkState(oldOrderings.size() == orderByIndexes.size());
-                List<Ordering> newOrderings = Lists.newArrayList();
-                for (int j = 0; j < orderByIndexes.size(); j++) {
-                    ColumnRefOperator orderColumnRef = unionChildrenOutputColumns.get(i).get(j);
-                    Ordering oldOrdering = oldOrderings.get(j);
-                    Ordering newOrdering = new Ordering(orderColumnRef, oldOrdering.isAscending(), oldOrdering.isNullsFirst());
-                    newOrderings.add(newOrdering);
-                }
+                List<ColumnRefOperator> unionChildOutputColRefs = unionChildrenOutputColumns.get(i);
+                List<Ordering> newOrderings =
+                        buildUnionChildOrderings(oldOrderings, orderByIndexes, unionChildOutputColRefs);
                 OptExpression newTopNOperator = OptExpression.create(new LogicalTopNOperator.Builder()
                         .setOrderByElements(newOrderings)
                         .setLimit(topn.getLimit())
                         .setTopNType(topn.getTopNType())
-                        .setSortPhase(topn.getSortPhase())
-                        .setIsSplit(false)
+                        .setSortPhase(SortPhase.PARTIAL)
                         .build(), unionChild);
                 newUnionChildren.add(newTopNOperator);
             } else {
@@ -123,5 +119,26 @@ public class PushDownTopNBelowUnionRule extends TransformationRule {
         }
         OptExpression newUnionOperator = OptExpression.create(unionOperator, newUnionChildren);
         return Collections.singletonList(OptExpression.create(topn, newUnionOperator));
+    }
+
+    /**
+     * @param oldOrderings              : old orderings before pushed down
+     * @param orderByIndexes            : ordering keys' indexes in the output columns
+     * @param unionChildOutputColRefs   : the output column refs of the ith union child
+     * @return  : construct new orderings for the ith union child.
+     */
+    private List<Ordering> buildUnionChildOrderings(List<Ordering> oldOrderings,
+                                                    List<Integer> orderByIndexes,
+                                                    List<ColumnRefOperator> unionChildOutputColRefs) {
+        List<Ordering> newOrderings = Lists.newArrayList();
+        for (int j = 0; j < orderByIndexes.size(); j++) {
+            int orderColIdx = orderByIndexes.get(j);
+            Preconditions.checkState(orderColIdx < unionChildOutputColRefs.size());
+            ColumnRefOperator orderColumnRef = unionChildOutputColRefs.get(orderColIdx);
+            Ordering oldOrdering = oldOrderings.get(j);
+            Ordering newOrdering = new Ordering(orderColumnRef, oldOrdering.isAscending(), oldOrdering.isNullsFirst());
+            newOrderings.add(newOrdering);
+        }
+        return newOrderings;
     }
 }

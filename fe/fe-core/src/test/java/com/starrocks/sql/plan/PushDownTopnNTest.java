@@ -27,15 +27,15 @@ public class PushDownTopnNTest extends PlanTestBase {
                 "ORDER BY t.b desc limit 20";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        assertContains(plan, "6:TOP-N\n" +
-                "  |  order by: <slot 4> 4: v4 DESC\n" +
+        assertContains(plan, "5:TOP-N\n" +
+                "  |  order by: <slot 5> 5: v5 DESC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 20\n" +
                 "  |  \n" +
-                "  5:OlapScanNode\n" +
-                "     TABLE: t1");
+                "  4:OlapScanNode\n" +
+                "     TABLE: t");
         assertContains(plan, "2:TOP-N\n" +
-                "  |  order by: <slot 1> 1: v1 DESC\n" +
+                "  |  order by: <slot 2> 2: v2 DESC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 20\n" +
                 "  |  \n" +
@@ -60,7 +60,7 @@ public class PushDownTopnNTest extends PlanTestBase {
                 "  1:OlapScanNode\n" +
                 "     TABLE: t0");
         assertContains(plan, "5:TOP-N\n" +
-                "  |  order by: <slot 4> 4: v4 DESC\n" +
+                "  |  order by: <slot 5> 5: v5 DESC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 20\n" +
                 "  |  \n" +
@@ -99,15 +99,15 @@ public class PushDownTopnNTest extends PlanTestBase {
                 "ORDER BY t.b desc limit 20";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        assertContains(plan, "6:TOP-N\n" +
-                "  |  order by: <slot 4> 4: v4 DESC\n" +
+        assertContains(plan, "5:TOP-N\n" +
+                "  |  order by: <slot 5> 5: v5 DESC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 20\n" +
                 "  |  \n" +
-                "  5:OlapScanNode\n" +
+                "  4:OlapScanNode\n" +
                 "     TABLE: t1");
         assertContains(plan, "2:TOP-N\n" +
-                "  |  order by: <slot 1> 1: v1 DESC\n" +
+                "  |  order by: <slot 2> 2: v2 DESC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 20\n" +
                 "  |  \n" +

@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -102,8 +103,7 @@ public class PushDownTopNBelowOuterJoinRule extends TransformationRule {
                 .setOrderByElements(topn.getOrderByElements())
                 .setLimit(topn.getLimit())
                 .setTopNType(topn.getTopNType())
-                .setSortPhase(topn.getSortPhase())
-                .setIsSplit(false)
+                .setSortPhase(SortPhase.PARTIAL)
                 .build(), joinChildWithSort);
 
         OptExpression newJoinOperator;
