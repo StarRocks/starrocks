@@ -33,6 +33,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakePartitionKey;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.HiveTable;
@@ -52,6 +53,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
@@ -225,7 +227,7 @@ public class PartitionUtil {
                 // 2007-01-01 10:35:00.123000 => 2007-01-01 10:35:00.123
                 return String.format("%04d-%02d-%02d %02d:%02d:%02d.%6d", dateLiteral.getYear(), dateLiteral.getMonth(),
                         dateLiteral.getDay(), dateLiteral.getHour(), dateLiteral.getMinute(), dateLiteral.getSecond(),
-                        dateLiteral.getMicrosecond()).replaceFirst("0+$", "");
+                        dateLiteral.getMicrosecond()).replaceFirst("0{1,6}$", "");
             }
         }
     }
@@ -488,20 +490,44 @@ public class PartitionUtil {
 
         Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
         for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
-            if (index == 0) {
+            if (entry.getValue().getKeys().get(0) instanceof StringLiteral) {
+                if (index == 0) {
+                    lastPartitionKey = entry.getValue();
+                    PartitionKey startPartitionKey = new PartitionKey();
+                    startPartitionKey.pushColumn(StringLiteral.create(FeConstants.PARTITION_USE_STR2DATE_MINVALUE,
+                            partitionColumn.getType()),
+                            partitionColumn.getPrimitiveType());
+                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(startPartitionKey, entry.getValue()));
+                    ++index;
+                    continue;
+                }
+                Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
+                if (entry.getValue().getKeys().get(0).getStringValue().equals(FeConstants.MYSQL_PARTITION_MAXVALUE)) {
+                    PartitionKey endKey = new PartitionKey();
+                    endKey.pushColumn(StringLiteral.create(FeConstants.PARTITION_USE_STR2DATE_MAXVALUE,
+                            partitionColumn.getType()),
+                            partitionColumn.getPrimitiveType());
+                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(lastPartitionKey, endKey));
+                } else {
+                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(lastPartitionKey, entry.getValue()));
+                }
+                lastPartitionKey = entry.getValue();
+            } else {
+                if (index == 0) {
+                    lastPartitionName = entry.getKey();
+                    lastPartitionKey = entry.getValue();
+                    if (lastPartitionKey.getKeys().get(0).isNullable()) {
+                        // If partition key is NULL literal, rewrite it to min value.
+                        lastPartitionKey = PartitionKey.createInfinityPartitionKey(ImmutableList.of(partitionColumn), false);
+                    }
+                    ++index;
+                    continue;
+                }
+                Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
+                mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, entry.getValue()));
                 lastPartitionName = entry.getKey();
                 lastPartitionKey = entry.getValue();
-                if (lastPartitionKey.getKeys().get(0).isNullable()) {
-                    // If partition key is NULL literal, rewrite it to min value.
-                    lastPartitionKey = PartitionKey.createInfinityPartitionKey(ImmutableList.of(partitionColumn), false);
-                }
-                ++index;
-                continue;
             }
-            Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
-            mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, entry.getValue()));
-            lastPartitionName = entry.getKey();
-            lastPartitionKey = entry.getValue();
         }
         if (lastPartitionName != null) {
             PartitionKey endKey = new PartitionKey();
@@ -581,7 +607,6 @@ public class PartitionUtil {
         return partition.get(position, (Class<T>) javaClass);
     }
 
-
     public static LiteralExpr addOffsetForLiteral(LiteralExpr expr, int offset) throws AnalysisException {
         if (expr instanceof DateLiteral) {
             DateLiteral lowerDate = (DateLiteral) expr;
@@ -625,9 +650,15 @@ public class PartitionUtil {
             return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(basePartitionMap, mvPartitionMap);
         } else if (partitionExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-            String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
-            return SyncPartitionUtils.getRangePartitionDiffOfExpr(basePartitionMap, mvPartitionMap,
-                    granularity, partitionColumn.getPrimitiveType(), null);
+            if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC) ||
+                    functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+                return SyncPartitionUtils.getRangePartitionDiffOfExpr(basePartitionMap,
+                        mvPartitionMap, functionCallExpr, partitionColumn.getPrimitiveType(), null);
+            } else {
+                throw new SemanticException("Materialized view partition function " +
+                        functionCallExpr.getFnName().getFunction() +
+                        " is not supported yet.", functionCallExpr.getPos());
+            }
         } else {
             throw UnsupportedException.unsupportedException("unsupported partition expr:" + partitionExpr);
         }
