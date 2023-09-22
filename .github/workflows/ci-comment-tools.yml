@@ -67,7 +67,7 @@ jobs:
 
   backport:
     name: Backport
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, sync-normal]
     needs: info
     if: >
       contains(github.event.comment.body, '@mergify backport') ||
