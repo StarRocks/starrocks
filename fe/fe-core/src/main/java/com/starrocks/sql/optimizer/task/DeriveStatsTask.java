@@ -85,10 +85,6 @@ public class DeriveStatsTask extends OptimizerTask {
             return true;
         }
 
-        if (isMaterializedView()) {
-            return false;
-        }
-
         return newStatistics.getComputeSize() < currentStatistics.getComputeSize();
     }
 }
