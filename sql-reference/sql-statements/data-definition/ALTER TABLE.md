@@ -112,21 +112,23 @@ DROP TEMPORARY PARTITION partition_name;
 
 #### 修改分区属性 (MODIFY PARTITION)
 
-语法：
+**语法：**
 
 ```sql
 ALTER TABLE [database.]table
-MODIFY PARTITION p1|(p1[, p2, ...]) SET ("key" = "value", ...);
+    MODIFY PARTITION { <partition_name> | partition_name_list | (*) }
+        SET ("key" = "value", ...);
 ```
 
-说明：
+**使用说明：**
 
-1. 当前支持修改分区的下列属性：
-    * storage_medium
-    * storage_cooldown_time
-    * replication_num
+* 当前支持修改分区的下列属性：
+  * storage_medium
+  * storage_cooldown_ttl 或 storage_cooldown_time
+  * replication_num
 
-2. 对于单分区表，partition_name 同表名。
+* 对于单分区表，分区名同表名。对于多分区表，如果需要修改所有分区的属性，则使用 `(*)` 更加方便。
+* 执行 `SHOW PARTITIONS FROM <table_name>` 查看修改后分区属性。
 
 ### 操作 rollup 相关语法
 
@@ -329,7 +331,7 @@ ADD col_name data_type [NULL] AS generation_expr [COMMENT 'string']
 
 #### 修改表的属性
 
-目前支持修改 `bloom_filter_columns`，`colocate_with`， `dynamic_partition` 属性，`enable_persistent_index` 属性，`replication_num` 和 `default.replication_num` 属性。
+支持修改 `bloom_filter_columns`，`colocate_with`， `dynamic_partition` 属性，`enable_persistent_index` 属性，`replication_num` 和 `default.replication_num` 属性，`storage_cooldown_ttl` 和 `storage_cooldown_time` 属性。
 
 语法：
 
