@@ -88,6 +88,8 @@ public:
         _query_deadline =
                 duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _query_expire_seconds).count();
     }
+    void set_enable_pipeline_level_shuffle(bool flag) { _enable_pipeline_level_shuffle = flag; }
+    bool enable_pipeline_level_shuffle() { return _enable_pipeline_level_shuffle; }
     void set_enable_profile() { _enable_profile = true; }
     bool enable_profile() { return _enable_profile; }
     void set_runtime_profile_report_interval(int64_t runtime_profile_report_interval_s) {
@@ -200,6 +202,7 @@ private:
     seconds _query_expire_seconds = seconds(DEFAULT_EXPIRE_SECONDS);
     bool _is_runtime_filter_coordinator = false;
     std::once_flag _init_mem_tracker_once;
+    bool _enable_pipeline_level_shuffle = false;
     std::shared_ptr<RuntimeProfile> _profile;
     bool _enable_profile = false;
     int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();

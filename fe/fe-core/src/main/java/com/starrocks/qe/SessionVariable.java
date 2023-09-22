@@ -397,6 +397,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
     public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
+    public static final String ENABLE_PIPELINE_LEVEL_SHUFFLE = "enable_pipeline_level_shuffle";
 
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
@@ -1315,6 +1316,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
     private boolean enableIcebergIdentityColumnOptimize = true;
+
+    @VarAttr(name = ENABLE_PIPELINE_LEVEL_SHUFFLE)
+    private boolean enablePipelineLevelShuffle = true;
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -2626,6 +2630,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setUse_range_join(enableRangeJoin);
+        tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
         return tResult;
     }
 
