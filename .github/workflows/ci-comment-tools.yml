@@ -70,7 +70,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: info
     if: >
-      contains(github.event.comment.body, '@mergify backport' ||  contains(github.event.comment.body, '@mergifyio backport')
+      contains(github.event.comment.body, '@mergify backport') ||
+      contains(github.event.comment.body, '@mergifyio backport') ||
+      contains(github.event.comment.body, '@Mergify backport') ||
+      contains(github.event.comment.body, '@Mergifyio backport') ||
+      contains(github.event.comment.body, 'backport')
     env:
       PR_NUMBER: ${{ github.event.issue.number }}
       BRANCH: ${{ needs.info.outputs.branch }}
