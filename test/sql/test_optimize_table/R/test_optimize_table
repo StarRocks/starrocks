@@ -1,0 +1,34 @@
+-- name: test_optimize_table
+create table t(k int) distributed by hash(k) buckets 10;
+-- result:
+-- !result
+show partitions from t;
+-- result:
+[REGEX].*0	NORMAL			k	10	3	HDD	9999-12-31 23:59:59	None	0B	false	0
+-- !result
+insert into t values(1),(2),(3);
+-- result:
+-- !result
+select * from t;
+-- result:
+2
+3
+1
+-- !result
+alter table t distributed by hash(k);
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+select * from t;
+-- result:
+1
+2
+3
+-- !result
+show partitions from t;
+-- result:
+[REGEX].*0	NORMAL			k	1	3	HDD	9999-12-31 23:59:59	None.*
+-- !result

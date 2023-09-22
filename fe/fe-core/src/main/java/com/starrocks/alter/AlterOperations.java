@@ -82,7 +82,8 @@ public class AlterOperations {
 
     // MODIFY_TABLE_PROPERTY is also processed by SchemaChangeHandler
     public boolean hasSchemaChangeOp() {
-        return currentOps.contains(AlterOpType.SCHEMA_CHANGE) || currentOps.contains(AlterOpType.MODIFY_TABLE_PROPERTY);
+        return currentOps.contains(AlterOpType.SCHEMA_CHANGE) || currentOps.contains(AlterOpType.MODIFY_TABLE_PROPERTY)
+                || currentOps.contains(AlterOpType.OPTIMIZE);
     }
 
     public boolean hasRollupOp() {
