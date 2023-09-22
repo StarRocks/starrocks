@@ -58,7 +58,7 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.sql.common.PartitionDiff;
+import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
@@ -1300,7 +1300,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return getVisiblePartitionNames();
         }
         Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap = getRangePartitionMap();
-        PartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, partitionInfo.second,
+        RangePartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, partitionInfo.second,
                 basePartitionNameToRangeMap, mvPartitionNameToRangeMap);
         needRefreshMvPartitionNames.addAll(rangePartitionDiff.getDeletes().keySet());
         for (String deleted : rangePartitionDiff.getDeletes().keySet()) {

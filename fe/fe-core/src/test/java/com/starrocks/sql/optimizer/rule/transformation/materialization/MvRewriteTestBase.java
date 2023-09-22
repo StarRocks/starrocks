@@ -87,7 +87,7 @@ public class MvRewriteTestBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
 
-        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+        ConnectorPlanTestBase.mockCatalog(connectContext);
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test");
 

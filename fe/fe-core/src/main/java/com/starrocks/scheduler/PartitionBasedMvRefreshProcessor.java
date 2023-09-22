@@ -27,19 +27,18 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCTable;
-import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -73,6 +72,7 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropPartitionClause;
@@ -91,7 +91,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
-import com.starrocks.sql.common.PartitionDiff;
+import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -627,7 +627,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Column refBaseTablePartitionColumn = partitionTableAndColumn.second;
         Preconditions.checkNotNull(refBaseTablePartitionColumn);
 
-        PartitionDiff rangePartitionDiff = new PartitionDiff();
+        RangePartitionDiff rangePartitionDiff = new RangePartitionDiff();
 
         int partitionTTLNumber = materializedView.getTableProperty().getPartitionTTLNumber();
         mvContext.setPartitionTTLNumber(partitionTTLNumber);
@@ -652,9 +652,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 rangePartitionDiff = SyncPartitionUtils.getRangePartitionDiffOfSlotRef(refBaseTablePartitionMap, mvPartitionMap);
             } else if (partitionExpr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-                String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
-                rangePartitionDiff = SyncPartitionUtils.getRangePartitionDiffOfExpr(refBaseTablePartitionMap, mvPartitionMap,
-                        granularity, refBaseTablePartitionColumn.getPrimitiveType());
+                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC) ||
+                        functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+                    rangePartitionDiff = SyncPartitionUtils.getRangePartitionDiffOfExpr(refBaseTablePartitionMap,
+                            mvRangePartitionMap, functionCallExpr, refBaseTablePartitionColumn.getPrimitiveType());
+                } else {
+                    throw new SemanticException("Materialized view partition function " +
+                            functionCallExpr.getFnName().getFunction() +
+                            " is not supported yet.", functionCallExpr.getPos());
+                }
             }
         } catch (UserException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
@@ -1002,6 +1008,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (columnOutputNames.get(i).equalsIgnoreCase(partitionSlot.getColumnName())) {
                 outputPartitionSlot = outputExpressions.get(i);
                 break;
+            } else if (outputExpressions.get(i) instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) outputExpressions.get(i);
+                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+                    outputPartitionSlot = outputExpressions.get(i).getChild(0);
+                    break;
+                }
             } else {
                 // alias name.
                 SlotRef slotRef = outputExpressions.get(i).unwrapSlotRef();
@@ -1141,6 +1153,34 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         if (changed) {
                             return true;
                         }
+                    }
+                } else if (snapshotTable.isJDBCTable()) {
+                    JDBCTable snapShotJDBCTable = (JDBCTable) snapshotTable;
+                    if (snapShotJDBCTable.isUnPartitioned()) {
+                        if (!table.isUnPartitioned()) {
+                            return true;
+                        }
+                    } else {
+                        PartitionInfo mvPartitionInfo = materializedView.getPartitionInfo();
+                        // TODO: Support list partition later.
+                        // do not need to check base partition table changed when mv is not partitioned
+                        if  (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
+                            return false;
+                        }
+
+                        Pair<Table, Column> partitionTableAndColumn = getRefBaseTableAndPartitionColumn(snapshotBaseTables);
+                        Column partitionColumn = partitionTableAndColumn.second;
+                        // For Non-partition based base table, it's not necessary to check the partition changed.
+                        if (!snapshotTable.equals(partitionTableAndColumn.first)
+                                || !snapShotJDBCTable.containColumn(partitionColumn.getName())) {
+                            continue;
+                        }
+
+                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.
+                                getPartitionKeyRange(snapshotTable, partitionColumn);
+                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.
+                                getPartitionKeyRange(table, partitionColumn);
+                        return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
                     }
                 }
             } catch (UserException e) {
