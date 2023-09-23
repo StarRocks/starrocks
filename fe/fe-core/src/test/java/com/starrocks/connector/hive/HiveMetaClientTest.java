@@ -196,21 +196,6 @@ public class HiveMetaClientTest {
     }
 
     @Test
-    public void testDropTable(@Mocked HiveMetaStoreClient metaStoreClient) throws TException {
-        new Expectations() {
-            {
-                metaStoreClient.dropTable("hive_db", "hive_table", anyBoolean, anyBoolean);
-                result = any;
-            }
-        };
-
-        HiveConf hiveConf = new HiveConf();
-        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
-        HiveMetaClient client = new HiveMetaClient(hiveConf);
-        client.dropTable("hive_db", "hive_table");
-    }
-
-    @Test
     public void testForCoverage(@Mocked HiveMetaStoreClient metaStoreClient) throws TException {
         Partition partition = new Partition();
         String dbName = "hive_db";
@@ -218,12 +203,6 @@ public class HiveMetaClientTest {
 
         new Expectations() {
             {
-                metaStoreClient.alter_table(dbName, tblName, null);
-                result = any;
-
-                metaStoreClient.alter_partition(dbName, tblName, partition);
-                result = any;
-
                 metaStoreClient.listPartitionNames(dbName, tblName, (short) -1);
                 result = any;
 
@@ -249,8 +228,6 @@ public class HiveMetaClientTest {
         HiveConf hiveConf = new HiveConf();
         hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
         HiveMetaClient client = new HiveMetaClient(hiveConf);
-        client.alterTable(dbName, tblName, null);
-        client.alterPartition("hive_db", "hive_table", partition);
         client.getPartitionKeys(dbName, tblName);
         client.getPartitionKeysByValue(dbName, tblName, new ArrayList<String>());
 
@@ -262,7 +239,6 @@ public class HiveMetaClientTest {
         client.getTableColumnStats(dbName, tblName, new ArrayList<>());
         client.getPartitionColumnStats(dbName, tblName, new ArrayList<>(), new ArrayList<>());
         client.getNextNotification(0, 0, null);
-
     }
 }
 
