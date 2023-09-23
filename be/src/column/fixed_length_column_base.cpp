@@ -47,7 +47,7 @@ void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_
                                                 uint32_t size) {
     const T* src_data = reinterpret_cast<const T*>(src.raw_data());
     size_t orig_size = _data.size();
-    _data.resize(orig_size + size);
+    raw::stl_vector_resize_uninitialized(&_data, orig_size + size);
     for (size_t i = 0; i < size; ++i) {
         _data[orig_size + i] = src_data[indexes[from + i]];
     }

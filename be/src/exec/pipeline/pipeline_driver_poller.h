@@ -61,6 +61,8 @@ public:
         return _local_blocked_drivers.size();
     }
 
+    size_t peak_hang_time() const { return poller_hang_time; }
+
     void iterate_immutable_driver(const IterateImmutableDriverFunc& call) const;
 
 private:
@@ -85,5 +87,7 @@ private:
     // The parked driver needs to be actived when it needs to be triggered again.
     mutable std::mutex _global_parked_mutex;
     DriverList _parked_drivers;
+
+    size_t poller_hang_time = 0;
 };
 } // namespace starrocks::pipeline

@@ -15,6 +15,8 @@
 #include "pipeline_driver_poller.h"
 
 #include <chrono>
+
+#include "util/defer_op.h"
 namespace starrocks::pipeline {
 
 void PipelineDriverPoller::start() {
@@ -71,6 +73,11 @@ void PipelineDriverPoller::run_internal() {
             auto driver_it = _local_blocked_drivers.begin();
             while (driver_it != _local_blocked_drivers.end()) {
                 auto* driver = *driver_it;
+                auto st = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+                auto defer = DeferOp([&]() {
+                    auto ed = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+                    poller_hang_time = std::max<size_t>(poller_hang_time, ed - st);
+                });
 
                 if (!driver->is_query_never_expired() && driver->query_ctx()->is_query_expired()) {
                     // there are not any drivers belonging to a query context can make progress for an expiration period
