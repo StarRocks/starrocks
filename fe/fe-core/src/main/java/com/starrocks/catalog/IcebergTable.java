@@ -38,8 +38,11 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortField;
+import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -142,6 +145,12 @@ public class IcebergTable extends Table {
         }
 
         return partitionColumns;
+    }
+
+    public boolean hasBucketProperties() {
+        org.apache.iceberg.Table nativeTable = getNativeTable();
+
+        return nativeTable.spec().isPartitioned() && Partitioning.hasBucketField(nativeTable.spec());
     }
 
     public List<Integer> partitionColumnIndexes() {
