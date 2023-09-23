@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.iceberg.cost;
 
-import com.google.common.collect.AbstractIterator;
+import com.google.common.collect.AbstractSequentialIterator;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
@@ -47,15 +46,20 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 
+import static com.google.common.base.Verify.verifyNotNull;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.collect.Iterables.getOnlyElement;
+import static com.google.common.collect.Streams.stream;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
+import static java.util.Objects.requireNonNull;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
 
@@ -208,18 +212,24 @@ public class IcebergStatisticProvider {
     private ColumnStatistic generateColumnStatistic(Integer fieldId, Column column, IcebergFileStats icebergStats,
                                                     Map<Integer, Long> columnNdvs) {
         ColumnStatistic.Builder builder = ColumnStatistic.builder();
-        if (column.getType().isStringType()) {
-            if (icebergStats.getMinValues() != null && icebergStats.getMinValues().get(fieldId) != null) {
+        if (icebergStats.canUseStats(fieldId, icebergStats.getMinValues())) {
+            if (column.getType().isStringType()) {
                 String minString = icebergStats.getMinValues().get(fieldId).toString();
                 builder.setMinString(minString);
+            } else {
+                Optional<Double> res = icebergStats.getMinValue(fieldId);
+                res.ifPresent(builder::setMinValue);
             }
-            if (icebergStats.getMaxValues() != null && icebergStats.getMaxValues().get(fieldId) != null) {
+        }
+
+        if (icebergStats.canUseStats(fieldId, icebergStats.getMaxValues())) {
+            if (column.getType().isStringType()) {
                 String maxString = icebergStats.getMaxValues().get(fieldId).toString();
                 builder.setMaxString(maxString);
+            } else {
+                Optional<Double> res = icebergStats.getMaxValue(fieldId);
+                res.ifPresent(builder::setMaxValue);
             }
-        } else {
-            builder.setMinValue(icebergStats.getMinValue(fieldId).get());
-            builder.setMaxValue(icebergStats.getMaxValue(fieldId).get());
         }
 
         Long nullCount = icebergStats.getNullCounts() == null ? null : icebergStats.getNullCounts().get(fieldId);
@@ -319,17 +329,18 @@ public class IcebergStatisticProvider {
     public static Map<Integer, Long> readNdvs(IcebergTable icebergTable, Set<Integer> columnIds) {
         ImmutableMap.Builder<Integer, Long> colIdToNdv = ImmutableMap.builder();
         Set<Integer> remainingColumnIds = new HashSet<>(columnIds);
+        Long snapshotId;
+        if (icebergTable.getSnapshot().isPresent()) {
+            snapshotId = icebergTable.getSnapshot().get().snapshotId();
+        } else {
+            return new HashMap<>();
+        }
 
-        Iterator<StatisticsFile> statisticsFiles = getStatisticsFiles(
-                icebergTable.getNativeTable(), icebergTable.getSnapshot().get().snapshotId());
-        while (!remainingColumnIds.isEmpty() && statisticsFiles.hasNext()) {
-            StatisticsFile statisticsFile = statisticsFiles.next();
-
+        getLatestStatisticsFile(icebergTable.getNativeTable(), snapshotId).ifPresent(statisticsFile -> {
             Map<Integer, BlobMetadata> thetaBlobsByFieldId = statisticsFile.blobMetadata().stream()
                     .filter(blobMetadata -> blobMetadata.type().equals(StandardBlobTypes.APACHE_DATASKETCHES_THETA_V1))
                     .filter(blobMetadata -> blobMetadata.fields().size() == 1)
                     .filter(blobMetadata -> remainingColumnIds.contains(getOnlyElement(blobMetadata.fields())))
-                    // Fail loud upon duplicates (there must be none)
                     .collect(toImmutableMap(blobMetadata -> getOnlyElement(blobMetadata.fields()), identity()));
 
             for (Map.Entry<Integer, BlobMetadata> entry : thetaBlobsByFieldId.entrySet()) {
@@ -344,35 +355,45 @@ public class IcebergStatisticProvider {
                     colIdToNdv.put(fieldId, Long.parseLong(ndv));
                 }
             }
-        }
+        });
 
         return colIdToNdv.build();
     }
 
-    public static Iterator<StatisticsFile> getStatisticsFiles(Table icebergTable, long snapshotId) {
-        return new AbstractIterator<StatisticsFile>() {
-            private final Map<Long, StatisticsFile> statsFileBySnapshot = icebergTable.statisticsFiles().stream()
-                    .collect(toMap(
-                            StatisticsFile::snapshotId,
-                            identity(),
-                            (a, b) -> {
-                                throw new IllegalStateException(String.format(
-                                        "Unexpected duplicate statistics files %s, %s", a, b));
-                            },
-                            HashMap::new));
+    public static Optional<StatisticsFile> getLatestStatisticsFile(Table icebergTable, long snapshotId) {
+        if (icebergTable.statisticsFiles().isEmpty()) {
+            return Optional.empty();
+        }
 
+        Map<Long, StatisticsFile> statsFileBySnapshot = icebergTable.statisticsFiles().stream()
+                .collect(toMap(
+                        StatisticsFile::snapshotId,
+                        identity(),
+                        (a, b) -> {
+                            throw new IllegalStateException(
+                                    String.format("Unexpected duplicate statistics files %s, %s", a, b));
+                        }));
+
+        return stream(walkSnapshots(icebergTable, snapshotId))
+                .map(statsFileBySnapshot::get)
+                .filter(Objects::nonNull)
+                .findFirst();
+    }
+
+    private static Iterator<Long> walkSnapshots(Table icebergTable, long startingSnapshotId) {
+        return new AbstractSequentialIterator<Long>(startingSnapshotId) {
             @Override
-            protected StatisticsFile computeNext() {
-                if (statsFileBySnapshot.isEmpty()) {
-                    // Already found all statistics files
-                    return endOfData();
+            protected Long computeNext(Long previous) {
+                requireNonNull(previous, "previous is null");
+                @Nullable
+                Snapshot snapshot = icebergTable.snapshot(previous);
+                if (snapshot == null) {
+                    return null;
                 }
-
-                StatisticsFile statisticsFile = statsFileBySnapshot.remove(snapshotId);
-                if (statisticsFile != null) {
-                    return statisticsFile;
+                if (snapshot.parentId() == null) {
+                    return null;
                 }
-                return endOfData();
+                return verifyNotNull(snapshot.parentId(), "snapshot.parentId()");
             }
         };
     }
