@@ -34,7 +34,6 @@ import com.starrocks.thrift.TIcebergSchemaField;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionData;
-import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
@@ -293,8 +292,8 @@ public class IcebergApiConverter {
         return tableProperties.build();
     }
 
-    public static <T> T get(int i, PartitionData partitionData, Class<?> clazz) {
-        return partitionData.get(i, clazz);
+    public static <T> T get(int pos, PartitionData partitionData, Class<?> clazz) {
+        return (T) partitionData.get(pos, clazz);
     }
 
     public static List<Pair<Integer, Integer>> getBucketFields(PartitionSpec spec) {
