@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -26,12 +26,16 @@ import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.MetaException;
+import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.thrift.TException;
+import org.apache.thrift.transport.TTransportException;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -189,6 +193,52 @@ public class HiveMetaClientTest {
         Assert.assertEquals("\004", customDesc.getLineDelim());
         Assert.assertEquals("\006", customDesc.getCollectionDelim());
         Assert.assertEquals(":", customDesc.getMapkeyDelim());
+    }
+
+    @Test
+    public void testForCoverage(@Mocked HiveMetaStoreClient metaStoreClient) throws TException {
+        Partition partition = new Partition();
+        String dbName = "hive_db";
+        String tblName = "hive_table";
+
+        new Expectations() {
+            {
+                metaStoreClient.listPartitionNames(dbName, tblName, (short) -1);
+                result = any;
+
+                metaStoreClient.listPartitionNames(dbName, tblName, new ArrayList<String>(), (short) -1);
+                result = any;
+
+                metaStoreClient.getPartitionsByNames(dbName, tblName, new ArrayList<>());
+                result = new TException("something wrong");
+
+                metaStoreClient.getPartitionsByNames(dbName, tblName, Arrays.asList("retry"));
+                result = new TTransportException("something wrong");
+
+                metaStoreClient.getTableColumnStatistics(dbName, tblName, new ArrayList<>());
+                result = any;
+
+                metaStoreClient.getPartitionColumnStatistics(dbName, tblName, new ArrayList<>(), new ArrayList<>());
+                result = any;
+
+                metaStoreClient.getNextNotification(0, 0, null);
+                result = any;
+            }
+        };
+        HiveConf hiveConf = new HiveConf();
+        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
+        HiveMetaClient client = new HiveMetaClient(hiveConf);
+        client.getPartitionKeys(dbName, tblName);
+        client.getPartitionKeysByValue(dbName, tblName, new ArrayList<String>());
+
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> client.getPartitionsByNames(dbName, tblName, new ArrayList<>()));
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> client.getPartitionsByNames(dbName, tblName, Arrays.asList("retry")));
+
+        client.getTableColumnStats(dbName, tblName, new ArrayList<>());
+        client.getPartitionColumnStats(dbName, tblName, new ArrayList<>(), new ArrayList<>());
+        client.getNextNotification(0, 0, null);
     }
 }
 
