@@ -156,12 +156,8 @@ public class HiveConnectorInternalMgr {
     public boolean isEnableBackgroundRefreshHiveMetadata() {
         return enableBackgroundRefreshHiveMetadata;
     }
-<<<<<<< HEAD
-}
-=======
 
     public MetastoreType getMetastoreType() {
         return metastoreType;
     }
 }
->>>>>>> e4479f8adf ([Refactor] refactor cloud cred and support cred-isolated cache key (#30023))

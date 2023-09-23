@@ -194,8 +194,6 @@ public class HiveMetaClientTest {
         Assert.assertEquals("\006", customDesc.getCollectionDelim());
         Assert.assertEquals(":", customDesc.getMapkeyDelim());
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testDropTable(@Mocked HiveMetaStoreClient metaStoreClient) throws TException {
@@ -266,6 +264,5 @@ public class HiveMetaClientTest {
         client.getNextNotification(0, 0, null);
 
     }
->>>>>>> e4479f8adf ([Refactor] refactor cloud cred and support cred-isolated cache key (#30023))
 }
 

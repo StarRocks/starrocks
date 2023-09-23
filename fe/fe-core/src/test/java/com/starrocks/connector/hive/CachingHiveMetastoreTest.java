@@ -31,6 +31,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -252,8 +253,6 @@ public class CachingHiveMetastoreTest {
         List<String> value = PartitionUtil.fromPartitionKey(hivePartitionKey);
         Assert.assertEquals(HiveMetaClient.PARTITION_NULL_VALUE, value.get(0));
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testPartitionExist() {
@@ -356,5 +355,4 @@ public class CachingHiveMetastoreTest {
                 HivePartitionName.of("db1", "table1", "col1=2"));
         cachingHiveMetastore.refreshPartition(partitionNames);
     }
->>>>>>> e4479f8adf ([Refactor] refactor cloud cred and support cred-isolated cache key (#30023))
 }
