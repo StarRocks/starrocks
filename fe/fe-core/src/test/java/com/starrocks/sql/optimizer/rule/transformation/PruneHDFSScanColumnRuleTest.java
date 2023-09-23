@@ -85,7 +85,8 @@ public class PruneHDFSScanColumnRuleTest {
                                                  @Mocked TaskContext taskContext) {
         OptExpression scan = new OptExpression(
                 new LogicalIcebergScanOperator(table,
-                        scanColumnMap, Maps.newHashMap(), -1, null));
+                        scanColumnMap, Maps.newHashMap(),
+                        -1, null));
 
         List<TaskContext> taskContextList = new ArrayList<>();
         taskContextList.add(taskContext);

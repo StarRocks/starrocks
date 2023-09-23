@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -59,6 +60,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
     protected boolean canUseAnyColumn;
     protected boolean canUseMinMaxCountOpt;
+    protected DistributionSpec distributionSpec;
 
     public LogicalScanOperator(
             OperatorType type,
@@ -126,6 +128,14 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
     public boolean getCanUseMinMaxCountOpt() {
         return canUseMinMaxCountOpt;
+    }
+
+    public void setDistributionSpec(DistributionSpec distributionSpec) {
+        this.distributionSpec = distributionSpec;
+    }
+
+    public DistributionSpec getDistributionSpec() {
+        return distributionSpec;
     }
 
     @Override

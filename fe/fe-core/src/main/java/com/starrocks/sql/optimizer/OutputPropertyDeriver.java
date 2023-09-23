@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.AnyDistributionSpec;
@@ -39,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
@@ -111,6 +113,13 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     @Override
     public PhysicalPropertySet visitOperator(Operator node, ExpressionContext context) {
         return mergeCTEProperty(PhysicalPropertySet.EMPTY);
+    }
+
+    private PhysicalPropertySet computeColocatJoinOutPutPropertyForIcebergTable(
+            JoinOperator joinType,
+            HashDistributionSpec leftScanDistributionSpec,
+            HashDistributionSpec rightScanDistributionSpec) {
+        return createPropertySetByDistribution(leftScanDistributionSpec);
     }
 
     private PhysicalPropertySet computeColocateJoinOutputProperty(JoinOperator joinType,
@@ -258,7 +267,11 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                         leftDistributionDesc.getDistributionCols(), rightDistributionDesc.getDistributionCols());
                 return computeHashJoinDistributionPropertyInfo(node, outputProperty,
                         leftOnPredicateColumns, rightOnPredicateColumns);
-
+            } else if (leftDistributionDesc.isIcebergLocal() && rightDistributionDesc.isIcebergLocal()) {
+                return computeHashJoinDistributionPropertyInfo(node,
+                        computeColocatJoinOutPutPropertyForIcebergTable(node.getJoinType(), leftDistributionSpec,
+                                rightDistributionSpec),
+                        leftOnPredicateColumns, rightOnPredicateColumns);
             } else {
                 LOG.error("Children output property distribution error.left child property: {}, " +
                                 "right child property: {}, join node: {}",
@@ -376,6 +389,16 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                             HashDistributionDesc.SourceType.LOCAL), physicalPropertyInfo));
         } else {
             return createPropertySetByDistribution(olapDistributionSpec);
+        }
+    }
+
+    @Override
+    public PhysicalPropertySet visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, ExpressionContext context) {
+        IcebergTable icebergTable = (IcebergTable) node.getTable();
+        if (icebergTable.hasBucketProperties()) {
+            return createPropertySetByDistribution(node.getDistributionSpec());
+        } else {
+            return visitOperator(node, context);
         }
     }
 

@@ -296,7 +296,7 @@ public class IcebergApiConverter {
         return (T) partitionData.get(pos, clazz);
     }
 
-    public static List<Pair<Integer, Integer>> getBucketFields(PartitionSpec spec) {
+    public static List<Pair<Integer, Integer>> getBucketSourceIdWithBucketNum(PartitionSpec spec) {
         return PartitionSpecVisitor.visit(spec, new BucketPartitionSpecVisitor()).stream()
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
@@ -312,7 +312,7 @@ public class IcebergApiConverter {
         @Override
         public Pair<Integer, Integer> bucket(
                 int fieldId, String sourceName, int sourceId, int numBuckets) {
-            return new Pair<>(fieldId, numBuckets);
+            return new Pair<>(sourceId, numBuckets);
         }
 
         @Override

@@ -132,6 +132,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
 
                 newScanOperator.setScanOperatorPredicates(scanOperator.getScanOperatorPredicates());
                 newScanOperator.setCanUseAnyColumn(canUseAnyColumn);
+                newScanOperator.setDistributionSpec(scanOperator.getDistributionSpec());
                 return Lists.newArrayList(new OptExpression(newScanOperator));
             } catch (Exception e) {
                 throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
