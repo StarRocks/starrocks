@@ -235,22 +235,18 @@ public class IcebergStatisticProvider {
         Long nullCount = icebergStats.getNullCounts() == null ? null : icebergStats.getNullCounts().get(fieldId);
         if (nullCount != null) {
             builder.setNullsFraction(nullCount * 1.0 / Math.max(icebergStats.getRecordCount(), 1));
+        } else {
+            builder.setNullsFraction(0);
         }
 
-        if (!column.getType().isStringType()) {
-            builder.setAverageRowSize(column.getType().getTypeSize());
-        } else {
-            Long columnSize = icebergStats.getColumnSizes() == null ? null : icebergStats.getColumnSizes().get(fieldId);
-            if (columnSize != null) {
-                builder.setAverageRowSize(Math.max(columnSize * 1.0 / Math.max(icebergStats.getRecordCount(), 1), 1));
-            }
-        }
+        builder.setAverageRowSize(1);
 
         Long ndv = columnNdvs.get(fieldId);
         if (ndv != null) {
-            builder.setDistinctValuesCount(Math.min(ndv, icebergStats.getRecordCount()));
+            builder.setDistinctValuesCount(Math.max(Math.min(ndv, icebergStats.getRecordCount()), 1));
             builder.setType(ColumnStatistic.StatisticType.ESTIMATE);
         } else {
+            builder.setDistinctValuesCount(1);
             builder.setType(ColumnStatistic.StatisticType.UNKNOWN);
         }
         return builder.build();
@@ -397,4 +393,5 @@ public class IcebergStatisticProvider {
             }
         };
     }
+
 }
