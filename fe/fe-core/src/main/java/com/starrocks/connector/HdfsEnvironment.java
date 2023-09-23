@@ -18,7 +18,6 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.HashMap;
 import java.util.Map;
 
 public class HdfsEnvironment {
@@ -28,12 +27,7 @@ public class HdfsEnvironment {
      * Create default Hdfs environment
      */
     public HdfsEnvironment() {
-<<<<<<< HEAD
         this.hdfsConfiguration = new HdfsConfiguration();
-=======
-        hdfsConfiguration = new Configuration();
-        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
->>>>>>> 0bd03b40a1 ([Refactor] put `hadoop.config.resources` fields as common attributes of CloudConfiguration (#30462))
     }
 
     public HdfsEnvironment(Map<String, String> properties) {
