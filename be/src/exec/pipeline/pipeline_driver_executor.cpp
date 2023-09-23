@@ -38,6 +38,8 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
     REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_schedule_count, [this]() { return _schedule_count.load(); });
     REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_execution_time, [this]() { return _driver_execution_ns.load(); });
     REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_queue_len, [this]() { return _driver_queue->size(); });
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_poller_peak_hang_time,
+                                    [this]() { return _blocked_driver_poller->peak_hang_time(); });
     REGISTER_GAUGE_STARROCKS_METRIC(pipe_poller_block_queue_len,
                                     [this]() { return _blocked_driver_poller->blocked_driver_queue_len(); });
 }

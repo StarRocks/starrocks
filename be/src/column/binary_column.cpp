@@ -69,7 +69,8 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
     size_t cur_row_count = _offsets.size() - 1;
     size_t cur_byte_size = _bytes.size();
 
-    _offsets.resize(cur_row_count + size + 1);
+    raw::stl_vector_resize_uninitialized(&_offsets, cur_row_count + size + 1);
+    // _offsets.resize(cur_row_count + size + 1);
     for (size_t i = 0; i < size; i++) {
         uint32_t row_idx = indexes[from + i];
         T str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
