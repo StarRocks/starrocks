@@ -286,7 +286,7 @@ public class SchemaChangeHandler extends AlterHandler {
             if (isKey) {
                 throw new DdlException("Can not drop key column in primary data model table");
             }
-            lightSchemaChange = !isKey;
+            lightSchemaChange &= !isKey;
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
             if (indexMeta.getSortKeyIdxes() != null) {
                 for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
