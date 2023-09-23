@@ -156,8 +156,4 @@ public class HiveConnectorInternalMgr {
     public boolean isEnableBackgroundRefreshHiveMetadata() {
         return enableBackgroundRefreshHiveMetadata;
     }
-
-    public MetastoreType getMetastoreType() {
-        return metastoreType;
-    }
 }
