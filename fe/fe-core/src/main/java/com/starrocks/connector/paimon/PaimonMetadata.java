@@ -256,7 +256,6 @@ public class PaimonMetadata implements ConnectorMetadata {
         return predicates;
     }
 
-<<<<<<< HEAD
     public long getTableCreateTime(String dbName, String tblName) throws Exception {
         Identifier sysIdentifier = new Identifier(dbName, String.format("%s%s", tblName, "$schemas"));
         RecordReaderIterator<InternalRow> iterator = null;
@@ -288,10 +287,9 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
         }
         return 0;
-=======
-    @Override
+    }
+
     public CloudConfiguration getCloudConfiguration() {
         return hdfsEnvironment.getCloudConfiguration();
->>>>>>> c60edea929 ([Refactor] Move `getCloudConfiguration` to `ConnectorMetadata` from `Connector` (#30476))
     }
 }

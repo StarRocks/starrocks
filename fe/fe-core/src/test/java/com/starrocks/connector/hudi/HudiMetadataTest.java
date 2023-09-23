@@ -18,11 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.CachingRemoteFileIO;
-<<<<<<< HEAD
-=======
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.MetastoreType;
->>>>>>> c60edea929 ([Refactor] Move `getCloudConfiguration` to `ConnectorMetadata` from `Connector` (#30476))
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.hive.CachingHiveMetastore;
 import com.starrocks.connector.hive.HiveMetaClient;

@@ -33,11 +33,8 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
-<<<<<<< HEAD
-import com.starrocks.sql.PlannerProfile;
-=======
 import com.starrocks.credential.CloudConfiguration;
->>>>>>> c60edea929 ([Refactor] Move `getCloudConfiguration` to `ConnectorMetadata` from `Connector` (#30476))
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;

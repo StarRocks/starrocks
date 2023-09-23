@@ -77,19 +77,12 @@ public class HudiScanNode extends ScanNode {
         if (catalog == null) {
             return;
         }
-<<<<<<< HEAD
         Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
-        if (connector != null) {
-            cloudConfiguration = connector.getCloudConfiguration();
-        }
-=======
-        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalog));
         cloudConfiguration = connector.getMetadata().getCloudConfiguration();
         Preconditions.checkState(cloudConfiguration != null,
                 String.format("cloudConfiguration of catalog %s should not be null", catalog));
->>>>>>> c60edea929 ([Refactor] Move `getCloudConfiguration` to `ConnectorMetadata` from `Connector` (#30476))
     }
 
     @Override

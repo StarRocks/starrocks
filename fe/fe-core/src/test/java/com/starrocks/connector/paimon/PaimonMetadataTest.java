@@ -193,8 +193,6 @@ public class PaimonMetadataTest {
         Assert.assertTrue(paimonTable.getUUID().startsWith("paimon_catalog.db1.tbl1"));
     }
 
-    @Test
-<<<<<<< HEAD
     public void testGetCreateTime(@Mocked SchemasTable schemasTable,
                                   @Mocked ReadBuilder readBuilder,
                                   @Mocked RecordReader<InternalRow> recordReader) throws Exception {
@@ -224,10 +222,10 @@ public class PaimonMetadataTest {
 
         long creteTime = metadata.getTableCreateTime("db1", "tbl1");
         Assert.assertEquals(0, creteTime);
-=======
+    }
+
     public void testGetCloudConfiguration() {
         CloudConfiguration cc = metadata.getCloudConfiguration();
         Assert.assertEquals(cc.getCloudType(), CloudType.DEFAULT);
->>>>>>> c60edea929 ([Refactor] Move `getCloudConfiguration` to `ConnectorMetadata` from `Connector` (#30476))
     }
 }

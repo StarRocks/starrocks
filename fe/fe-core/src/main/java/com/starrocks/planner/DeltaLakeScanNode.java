@@ -25,8 +25,8 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.PartitionUtil;
-import com.starrocks.connector.delta.DeltaLakeConnector;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.delta.ExpressionConverter;
 import com.starrocks.credential.CloudConfiguration;
@@ -92,20 +92,12 @@ public class DeltaLakeScanNode extends ScanNode {
         if (catalog == null) {
             return;
         }
-<<<<<<< HEAD
-        DeltaLakeConnector connector = (DeltaLakeConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
-                getConnector(catalog);
-        if (connector != null) {
-            cloudConfiguration = connector.getCloudConfiguration();
-        }
-=======
-        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+        Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalog));
         cloudConfiguration = connector.getMetadata().getCloudConfiguration();
         Preconditions.checkState(cloudConfiguration != null,
                 String.format("cloudConfiguration of catalog %s should not be null", catalog));
->>>>>>> c60edea929 ([Refactor] Move `getCloudConfiguration` to `ConnectorMetadata` from `Connector` (#30476))
     }
 
     @Override
