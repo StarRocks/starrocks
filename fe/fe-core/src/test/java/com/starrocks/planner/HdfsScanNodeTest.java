@@ -17,7 +17,7 @@ package com.starrocks.planner;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.Connector;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
@@ -30,7 +30,7 @@ import java.util.HashMap;
 public class HdfsScanNodeTest {
     @Test
     public void testInit(@Mocked GlobalStateMgr globalStateMgr,
-                         @Mocked CatalogConnector connector,
+                         @Mocked Connector connector,
                          @Mocked HiveTable table) {
         String catalog = "XXX";
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
