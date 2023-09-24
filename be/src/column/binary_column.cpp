@@ -78,17 +78,13 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
     const auto& src_offsets = src_column.get_offset();
     const auto& src_bytes = src_column.get_bytes();
 
-    // enable prefetch if
-    // 1) the input size is large enough
-    bool need_prefetch = (size > SEQUENTIAL_DISTINCT * 2);
-
     size_t cur_row_count = _offsets.size() - 1;
     size_t cur_byte_size = _bytes.size();
 
     _offsets.resize(cur_row_count + size + 1);
     std::vector<T> random_offsets(size);
     for (size_t i = 0; i < size; i++) {
-        if (need_prefetch && (SEQUENTIAL_DISTINCT + i < size)) {
+        if (SEQUENTIAL_DISTINCT + i < size) {
             SEQUENTIAL_PREFETCH(src_offsets.data() + indexes[from + i + SEQUENTIAL_DISTINCT])
         }
         uint32_t row_idx = indexes[from + i];
@@ -101,7 +97,7 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
 
     auto* dest_bytes = _bytes.data();
     for (size_t i = 0; i < size; i++) {
-        if (need_prefetch && (SEQUENTIAL_DISTINCT + i < size)) {
+        if (SEQUENTIAL_DISTINCT + i < size) {
             SEQUENTIAL_PREFETCH(src_bytes.data() + random_offsets[i + SEQUENTIAL_DISTINCT])
         }
         strings::memcpy_inlined(dest_bytes + _offsets[cur_row_count + i], src_bytes.data() + random_offsets[i],
