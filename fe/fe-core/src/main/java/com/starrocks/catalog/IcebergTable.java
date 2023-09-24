@@ -41,8 +41,6 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortField;
-import org.apache.iceberg.expressions.Expressions;
-import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
