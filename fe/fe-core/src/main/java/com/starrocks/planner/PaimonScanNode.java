@@ -22,11 +22,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Type;
-<<<<<<< HEAD
 import com.starrocks.connector.Connector;
-=======
-import com.starrocks.connector.CatalogConnector;
->>>>>>> e697706eef ([Refactor] refactor hdfs scan node to thrift and scan optimization options (#31367))
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.paimon.PaimonConnector;

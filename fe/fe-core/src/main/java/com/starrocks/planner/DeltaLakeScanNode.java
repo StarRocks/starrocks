@@ -25,11 +25,7 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-<<<<<<< HEAD
 import com.starrocks.connector.Connector;
-=======
-import com.starrocks.connector.CatalogConnector;
->>>>>>> e697706eef ([Refactor] refactor hdfs scan node to thrift and scan optimization options (#31367))
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.delta.ExpressionConverter;

@@ -30,11 +30,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
-<<<<<<< HEAD
 import com.starrocks.connector.Connector;
-=======
-import com.starrocks.connector.CatalogConnector;
->>>>>>> e697706eef ([Refactor] refactor hdfs scan node to thrift and scan optimization options (#31367))
 import com.starrocks.connector.PredicateUtils;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;

@@ -743,13 +743,7 @@ public class PlanFragmentBuilder {
             OlapScanNode scanNode = new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "OlapScanNode");
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
-<<<<<<< HEAD
-            scanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
-            scanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
-
-=======
             scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
->>>>>>> e697706eef ([Refactor] refactor hdfs scan node to thrift and scan optimization options (#31367))
             // set tablet
             try {
                 scanNode.updateScanInfo(node.getSelectedPartitionId(),
