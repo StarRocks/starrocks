@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "agent/agent_task.h"
 #include "fs/fs_util.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
@@ -49,6 +50,22 @@ protected:
 
     std::unique_ptr<TabletMetadata> _tablet_metadata;
 };
+
+TEST_F(AlterTabletMetaTest, test_missing_txn_id) {
+    lake::SchemaChangeHandler handler(_tablet_mgr.get());
+    TUpdateTabletMetaInfoReq update_tablet_meta_req;
+
+    TTabletMetaInfo tablet_meta_info;
+    auto tablet_id = _tablet_metadata->id();
+    tablet_meta_info.__set_tablet_id(tablet_id);
+    tablet_meta_info.__set_meta_type(TTabletMetaType::ENABLE_PERSISTENT_INDEX);
+    tablet_meta_info.__set_enable_persistent_index(true);
+
+    update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
+    auto status = handler.process_update_tablet_meta(update_tablet_meta_req);
+    ASSERT_ERROR(status);
+    ASSERT_EQ("txn_id not set in request", status.get_error_msg());
+}
 
 TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index) {
     lake::SchemaChangeHandler handler(_tablet_mgr.get());

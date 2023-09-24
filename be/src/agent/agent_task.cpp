@@ -729,7 +729,6 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
         update_tablet_meta_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
         lake::SchemaChangeHandler handler(ExecEnv::GetInstance()->lake_tablet_manager());
         auto res = handler.process_update_tablet_meta(update_tablet_meta_req);
-        Status s;
         if (!res.ok()) {
             // TODO explict the error message and errorCode
             error_msgs.emplace_back(res.get_error_msg());

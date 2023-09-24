@@ -310,6 +310,11 @@ public:
 
     ThreadPool* vacuum_thread_pool();
 
+    // only used for test
+    void set_lake_tablet_manager(lake::TabletManager* lake_tablet_manager) {
+        _lake_tablet_manager = lake_tablet_manager;
+    }
+
 private:
     void _wait_for_fragments_finish();
 
