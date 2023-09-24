@@ -22,6 +22,9 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
@@ -39,16 +42,14 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
-<<<<<<< HEAD
 import com.starrocks.system.ComputeNode;
-import com.starrocks.thrift.TCloudConfiguration;
-=======
->>>>>>> e697706eef ([Refactor] refactor hdfs scan node to thrift and scan optimization options (#31367))
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
