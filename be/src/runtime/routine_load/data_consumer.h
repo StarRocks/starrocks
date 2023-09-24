@@ -89,6 +89,11 @@ protected:
 
 class KafkaEventCb : public RdKafka::EventCb {
 public:
+    KafkaEventCb(std::atomic<bool>* all_brokers_down) : _all_brokers_down(all_brokers_down) {}
+    ~KafkaEventCb() = default;
+
+    KafkaEventCb() = delete;
+
     void event_cb(RdKafka::Event& event) override {
         switch (event.type()) {
         case RdKafka::Event::EVENT_ERROR:
@@ -112,13 +117,23 @@ public:
                       << ", event: " << event.str();
             break;
         }
+
+        if (event.err() == RdKafka::ERR__ALL_BROKERS_DOWN && _all_brokers_down != nullptr) {
+            _all_brokers_down->store(true);
+        }
     }
+
+private:
+    std::atomic<bool>* _all_brokers_down;
 };
 
 class KafkaDataConsumer : public DataConsumer {
 public:
     explicit KafkaDataConsumer(StreamLoadContext* ctx)
-            : DataConsumer(), _brokers(ctx->kafka_info->brokers), _topic(ctx->kafka_info->topic) {}
+            : DataConsumer(),
+              _brokers(ctx->kafka_info->brokers),
+              _topic(ctx->kafka_info->topic),
+              _k_event_cb(&_all_brokers_down) {}
 
     ~KafkaDataConsumer() override {
         VLOG(3) << "deconstruct consumer";
@@ -153,6 +168,8 @@ public:
                                 std::vector<int64_t>* latest_offsets, int timeout);
 
 private:
+    bool _is_all_brokers_down() { return _all_brokers_down.load(); }
+
     std::string _brokers;
     std::string _topic;
     std::unordered_map<std::string, std::string> _custom_properties;
@@ -160,6 +177,7 @@ private:
     size_t _non_eof_partition_count = 0;
     KafkaEventCb _k_event_cb;
     RdKafka::KafkaConsumer* _k_consumer = nullptr;
+    std::atomic<bool> _all_brokers_down = false;
 };
 
 class PulsarDataConsumer : public DataConsumer {
