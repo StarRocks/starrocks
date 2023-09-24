@@ -761,7 +761,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         //only new table generate ColUniqueId, exist table do not.
-        boolean lightSchemaChange = olapTable.getMaxColUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE;
+        boolean lightSchemaChange = olapTable.getUseLightSchemaChange();
 
         String newColName = newColumn.getName();
         //make sure olapTable has locked
