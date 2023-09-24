@@ -318,6 +318,37 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
                                                      sc_params.materialized_params_map, has_delete_predicates,
                                                      &sc_params.sc_sorting, &sc_params.sc_directly, nullptr));
 
+    if (base_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+        const auto& base_sort_key_idxes = base_schema->sort_key_idxes();
+        const auto& new_sort_key_idxes = new_schema->sort_key_idxes();
+        std::vector<int32_t> base_sort_key_unique_ids;
+        std::vector<int32_t> new_sort_key_unique_ids;
+        for (auto idx : base_sort_key_idxes) {
+            base_sort_key_unique_ids.emplace_back(base_schema->column(idx).unique_id());
+        }
+        for (auto idx : new_sort_key_idxes) {
+            new_sort_key_unique_ids.emplace_back(new_schema->column(idx).unique_id());
+        }
+
+        if (new_sort_key_unique_ids.size() > base_sort_key_unique_ids.size()) {
+            // new sort keys' size is greater than base sort keys, must be sc_sorting
+            sc_params.sc_sorting = true;
+            sc_params.sc_directly = false;
+        } else {
+            auto base_iter = base_sort_key_unique_ids.cbegin();
+            auto new_iter = new_sort_key_unique_ids.cbegin();
+            // check wheather new sort keys are just subset of base sort keys
+            while (new_iter != new_sort_key_unique_ids.cend() && *base_iter == *new_iter) {
+                ++base_iter;
+                ++new_iter;
+            }
+            if (new_iter != new_sort_key_unique_ids.cend()) {
+                sc_params.sc_sorting = true;
+                sc_params.sc_directly = false;
+            }
+        }
+    }
+
     // create txn log
     auto txn_log = std::make_shared<TxnLog>();
     txn_log->set_tablet_id(new_tablet.id());
