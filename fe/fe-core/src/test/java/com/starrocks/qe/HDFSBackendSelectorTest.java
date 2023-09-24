@@ -52,7 +52,7 @@ public class HDFSBackendSelectorTest {
     final int computeNodePort = 9030;
     final String hostFormat = "Host%02d";
 
-    private List<TScanRangeLocations> createScanRanges(int number, int size) {
+    private List<TScanRangeLocations> createScanRanges(long number, long size) {
         List<TScanRangeLocations> ans = new ArrayList<>();
 
         for (int i = 0; i < number; i++) {
