@@ -296,6 +296,11 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
     RdKafka::Metadata* metadata = nullptr;
     RdKafka::ErrorCode err = _k_consumer->metadata(true /* for this topic */, topic, &metadata, timeout);
     if (err != RdKafka::ERR_NO_ERROR) {
+        if (_is_all_brokers_down()) {
+            return Status::ServiceUnavailable(
+                    "all kafka brokers are down, please check the status of kafka broker, and the correctness of "
+                    "broker list");
+        }
         std::stringstream ss;
         ss << "failed to get partition meta: " << RdKafka::err2str(err);
         LOG(WARNING) << ss.str();
