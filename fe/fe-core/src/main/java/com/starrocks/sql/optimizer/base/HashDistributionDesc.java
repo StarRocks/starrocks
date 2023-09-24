@@ -31,6 +31,7 @@ public class HashDistributionDesc {
         // e.g. required SHUFFLE_AGG(a, b, c), child SHUFFLE_AGG(b, a), satisfy
         // e.g. required SHUFFLE_AGG(a, b, c), child SHUFFLE_AGG(c, b), satisfy
         // e.g. required SHUFFLE_AGG(a, b, c), child SHUFFLE_AGG(b, c, a), satisfy
+        ICEBERG_LOCAL, // hash property from iceberg scan node
         SHUFFLE_AGG, // hash property from shuffle agg
         // SHUFFLE JOIN required must equals and order same, it's much stricter than SHUFFLE_AGG
         // e.g. required SHUFFLE_JOIN(a, b, c), child SHUFFLE_JOIN(a), not satisfy
@@ -133,6 +134,10 @@ public class HashDistributionDesc {
 
     public boolean isLocal() {
         return this.sourceType == SourceType.LOCAL;
+    }
+
+    public boolean isIcebergLocal() {
+        return this.sourceType == SourceType.ICEBERG_LOCAL;
     }
 
     public boolean isShuffle() {

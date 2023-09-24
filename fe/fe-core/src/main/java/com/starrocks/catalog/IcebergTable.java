@@ -26,6 +26,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
@@ -41,8 +42,6 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortField;
-import org.apache.iceberg.expressions.Expressions;
-import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -62,6 +61,24 @@ import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 
 public class IcebergTable extends Table {
+    public static class BucketProperty {
+        private int bucketNum;
+        private Column column;
+
+        public BucketProperty(int bucketNum, Column column) {
+            this.bucketNum = bucketNum;
+            this.column = column;
+        }
+
+        public int getBucketNum() {
+            return bucketNum;
+        }
+
+        public Column getColumn() {
+            return column;
+        }
+    }
+
     private static final Logger LOG = LogManager.getLogger(IcebergTable.class);
 
     private static final String JSON_KEY_ICEBERG_DB = "database";
@@ -151,6 +168,21 @@ public class IcebergTable extends Table {
         org.apache.iceberg.Table nativeTable = getNativeTable();
 
         return nativeTable.spec().isPartitioned() && Partitioning.hasBucketField(nativeTable.spec());
+    }
+
+    public List<BucketProperty> getBucketProperties() {
+        if (!hasBucketProperties()) {
+            return null;
+        }
+        List<BucketProperty> bucketProperties = new ArrayList<>();
+        List<Pair<Integer, Integer>> bucketSourceIdWithBucketNums = IcebergApiConverter.
+                getBucketSourceIdWithBucketNum(nativeTable.spec());
+        for (Pair<Integer, Integer> bucket : bucketSourceIdWithBucketNums) {
+            Column column = getColumn(nativeTable.schema().findColumnName(bucket.first));
+            bucketProperties.add(new BucketProperty(bucket.second, column));
+        }
+
+        return bucketProperties;
     }
 
     public List<Integer> partitionColumnIndexes() {

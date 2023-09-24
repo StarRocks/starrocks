@@ -2384,7 +2384,8 @@ public class PlanFragmentBuilder {
                         HashDistributionDesc.SourceType hashSourceType =
                                 ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
                                         .getHashDistributionDesc().getSourceType();
-                        return hashSourceType.equals(HashDistributionDesc.SourceType.LOCAL);
+                        return hashSourceType.equals(HashDistributionDesc.SourceType.LOCAL) || hashSourceType
+                                .equals(HashDistributionDesc.SourceType.ICEBERG_LOCAL);
                     });
         }
 

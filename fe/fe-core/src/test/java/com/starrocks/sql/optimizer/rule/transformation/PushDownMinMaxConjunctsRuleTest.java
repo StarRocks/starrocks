@@ -44,7 +44,7 @@ public class PushDownMinMaxConjunctsRuleTest {
 
         OptExpression scan =
                 new OptExpression(new LogicalIcebergScanOperator(table,
-                                Maps.newHashMap(), Maps.newHashMap(), -1, binaryPredicateOperator));
+                        Maps.newHashMap(), Maps.newHashMap(), -1, binaryPredicateOperator));
         scan.getInputs().add(scan);
 
         assertEquals(0, ((LogicalIcebergScanOperator) scan.getOp()).getScanOperatorPredicates().getMinMaxConjuncts().size());
