@@ -79,6 +79,10 @@ size_t HashJoinBuildOperator::output_amplification_factor() const {
 Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     DeferOp op([this]() { _is_finished = true; });
 
+    if (state->is_cancelled()) {
+        return Status::OK();
+    }
+
     RETURN_IF_ERROR(_join_builder->build_ht(state));
 
     size_t merger_index = _driver_sequence;

@@ -76,7 +76,12 @@ void PipelineDriverPoller::run_internal() {
                 auto st = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
                 auto defer = DeferOp([&]() {
                     auto ed = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-                    poller_hang_time = std::max<size_t>(poller_hang_time, ed - st);
+                    size_t current_hang_time = ed - st;
+                    poller_hang_time = std::max<size_t>(poller_hang_time, current_hang_time);
+                    if (current_hang_time > 50) {
+                        LOG(INFO) << "slow poller detected, cost:" << current_hang_time
+                                  << " driver:" << driver->to_readable_string();
+                    }
                 });
 
                 if (!driver->is_query_never_expired() && driver->query_ctx()->is_query_expired()) {
