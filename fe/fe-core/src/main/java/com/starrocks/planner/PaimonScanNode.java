@@ -15,11 +15,9 @@
 
 package com.starrocks.planner;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.PaimonTable;
@@ -33,7 +31,6 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
-import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -239,28 +236,13 @@ public class PaimonScanNode extends ScanNode {
         String sqlPredicates = getExplainString(conjuncts);
         msg.hdfs_scan_node.setSql_predicates(sqlPredicates);
 
-        List<Expr> minMaxConjuncts = scanNodePredicates.getMinMaxConjuncts();
-        if (!minMaxConjuncts.isEmpty()) {
-            String minMaxSqlPredicate = getExplainString(minMaxConjuncts);
-            for (Expr expr : minMaxConjuncts) {
-                msg.hdfs_scan_node.addToMin_max_conjuncts(expr.treeToThrift());
-            }
-            msg.hdfs_scan_node.setMin_max_tuple_id(scanNodePredicates.getMinMaxTuple().getId().asInt());
-            msg.hdfs_scan_node.setMin_max_sql_predicates(minMaxSqlPredicate);
-        }
-
         if (paimonTable != null) {
             msg.hdfs_scan_node.setTable_name(paimonTable.getName());
         }
 
-        if (cloudConfiguration != null) {
-            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
-            cloudConfiguration.toThrift(tCloudConfiguration);
-            msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
-        }
-
-        msg.hdfs_scan_node.setCan_use_any_column(canUseAnyColumn);
-        msg.hdfs_scan_node.setCan_use_min_max_count_opt(canUseMinMaxCountOpt);
+        HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
+        HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
+        HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
     }
 
     @Override
