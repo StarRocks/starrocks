@@ -32,6 +32,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.PredicateUtils;
@@ -65,12 +66,14 @@ import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -96,6 +99,9 @@ public class IcebergScanNode extends ScanNode {
     private Set<String> equalityDeleteColumns = new HashSet<>();
 
     private final HashMultimap<String, Long> hostToBeId = HashMultimap.create();
+
+    private Map<String, Integer> fileToBucketId = new HashMap<>();
+
     private long totalBytes = 0;
 
     private boolean isFinalized = false;
@@ -107,6 +113,10 @@ public class IcebergScanNode extends ScanNode {
         super(id, desc, planNodeName);
         srIcebergTable = (IcebergTable) desc.getTable();
         setupCloudCredential();
+    }
+
+    public Map<String, Integer> getFileToBucketId() {
+        return fileToBucketId;
     }
 
     private void setupCloudCredential() {
@@ -256,6 +266,7 @@ public class IcebergScanNode extends ScanNode {
             }
 
             StructLike partition = task.file().partition();
+
             partitionKeyToId.putIfAbsent(partition, nextPartitionId());
 
             TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
@@ -294,6 +305,13 @@ public class IcebergScanNode extends ScanNode {
 
             TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
             scanRangeLocations.addToLocations(scanRangeLocation);
+
+            if (srIcebergTable.hasBucketProperties()) {
+                int bucketId = IcebergApiConverter.get(0, (PartitionData) partition,
+                        srIcebergTable.getNativeTable().spec().javaClasses()[0]);
+                fileToBucketId.put(file.path().toString(), bucketId);
+                setColocate(true);
+            }
 
             result.add(scanRangeLocations);
         }

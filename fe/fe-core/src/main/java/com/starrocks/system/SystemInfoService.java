@@ -92,6 +92,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -106,6 +107,8 @@ public class SystemInfoService implements GsonPostProcessable {
     @SerializedName(value = "ce")
     private volatile ConcurrentHashMap<Long, ComputeNode> idToComputeNodeRef;
 
+    private AtomicInteger offset = new AtomicInteger(0);
+
     private long lastBackendIdForCreation = -1;
     private long lastBackendIdForOther = -1;
 
@@ -118,6 +121,12 @@ public class SystemInfoService implements GsonPostProcessable {
 
         idToReportVersionRef = ImmutableMap.of();
         pathHashToDishInfoRef = ImmutableMap.of();
+    }
+
+    public int getOffsetAndUpdate(int delta) {
+        return offset.getAndUpdate(currentOffset ->
+                (currentOffset + delta) % (idToBackendRef.isEmpty() ? idToComputeNodeRef.size() : idToBackendRef.size())
+        );
     }
 
     public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs)

@@ -158,6 +158,8 @@ public class CoordinatorPreprocessor {
     // used only by channel stream load, records the mapping from be port to be's webserver port
     private final Map<TNetworkAddress, TNetworkAddress> bePortToBeWebServerPort = Maps.newHashMap();
 
+    private final Map<Integer, Long> icebergBucketIdToBeId = Maps.newHashMap();
+
     // backends which this query will use
     private ImmutableMap<Long, ComputeNode> idToBackend;
     // compute node which this query will use
@@ -1064,11 +1066,38 @@ public class CoordinatorPreprocessor {
         return fragmentExecParamsMap.get(fragmentId).scanRangeAssignment;
     }
 
+    void buildIcebergBucketToNodeMapping() {
+        Set<Integer> bucketIds = new HashSet<>();
+        scanNodes.stream()
+                .map(x -> (IcebergScanNode) x)
+                .forEach(x -> bucketIds.addAll(x.getFileToBucketId().values()));
+        int maxSelectedBucketSize = bucketIds.size();
+        int offset = GlobalStateMgr.getCurrentSystemInfo().getOffsetAndUpdate(maxSelectedBucketSize);
+        List<Long> backendIds = Lists.newArrayList(idToBackend.keySet());
+
+        for (int bucketId : bucketIds) {
+            icebergBucketIdToBeId.put(bucketId, backendIds.get((offset++) % idToBackend.size()));
+        }
+    }
+
     // Populates scan_range_assignment_.
     // <fragment, <server, nodeId>>
     @VisibleForTesting
     void computeScanRangeAssignment() throws Exception {
         SessionVariable sv = connectContext.getSessionVariable();
+
+        boolean useIcebergBucket = scanNodes.stream()
+                .allMatch(node -> {
+                    if (node instanceof IcebergScanNode) {
+                        IcebergScanNode icebergNode = (IcebergScanNode) node;
+                        return isColocateFragment(icebergNode.getFragment().getPlanRoot());
+                    }
+                    return false;
+                });
+
+        if (useIcebergBucket) {
+            buildIcebergBucketToNodeMapping();
+        }
 
         // set scan ranges/locations for scan nodes
         for (ScanNode scanNode : scanNodes) {
@@ -1083,7 +1112,8 @@ public class CoordinatorPreprocessor {
             if (scanNode instanceof SchemaScanNode) {
                 BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment);
                 selector.computeScanRangeAssignment();
-            } else if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
+            } else if ((scanNode instanceof HdfsScanNode) ||
+                    (scanNode instanceof IcebergScanNode && !useIcebergBucket) ||
                     scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
                     scanNode instanceof FileTableScanNode || scanNode instanceof PaimonScanNode) {
 
@@ -1093,6 +1123,11 @@ public class CoordinatorPreprocessor {
                                 hasComputeNode,
                                 sv.getForceScheduleLocal(),
                                 sv.getHDFSBackendSelectorScanRangeShuffle());
+                selector.computeScanRangeAssignment();
+            } else if (scanNode instanceof IcebergScanNode) {
+                IcebergBucketBackendSelector selector =
+                        new IcebergBucketBackendSelector(scanNode, locations, assignment,
+                                idToBackend, icebergBucketIdToBeId, hasComputeNode);
                 selector.computeScanRangeAssignment();
             } else {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());
