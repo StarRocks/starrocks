@@ -310,7 +310,6 @@ public class IcebergScanNode extends ScanNode {
                 int bucketId = IcebergApiConverter.get(0, (PartitionData) partition,
                         srIcebergTable.getNativeTable().spec().javaClasses()[0]);
                 fileToBucketId.put(file.path().toString(), bucketId);
-                setColocate(true);
             }
 
             result.add(scanRangeLocations);

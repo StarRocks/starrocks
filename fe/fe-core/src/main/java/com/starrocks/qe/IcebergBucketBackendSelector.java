@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class IcebergBucketBackendSelector implements BackendSelector {
     public static final Logger LOG = LogManager.getLogger(IcebergBucketBackendSelector.class);
@@ -51,6 +52,8 @@ public class IcebergBucketBackendSelector implements BackendSelector {
 
     private final boolean chooseComputeNode;
     private final Map<String, Integer> filePathToBucketId;
+    private final Set<Long> usedBackendIDs;
+    private final Map<TNetworkAddress, Long> addressToBackendId;
 
 
     public IcebergBucketBackendSelector(ScanNode scanNode,
@@ -58,6 +61,8 @@ public class IcebergBucketBackendSelector implements BackendSelector {
                                         FragmentScanRangeAssignment assignment,
                                         ImmutableMap<Long, ComputeNode> idToBackend,
                                         Map<Integer, Long> bucketIdToBeId,
+                                        Map<TNetworkAddress, Long> addressToBackendId,
+                                        Set<Long> usedBackendIDs,
                                         boolean chooseComputeNode) {
         this.scanNode = scanNode;
         this.locations = locations;
@@ -66,6 +71,8 @@ public class IcebergBucketBackendSelector implements BackendSelector {
         this.chooseComputeNode = chooseComputeNode;
         this.icebergBucketIdToBeId = bucketIdToBeId;
         this.filePathToBucketId = ((IcebergScanNode) scanNode).getFileToBucketId();
+        this.usedBackendIDs = usedBackendIDs;
+        this.addressToBackendId = addressToBackendId;
     }
 
     @Override
@@ -117,6 +124,8 @@ public class IcebergBucketBackendSelector implements BackendSelector {
     private void recordScanRangeAssignment(ComputeNode node, TScanRangeLocations scanRangeLocations, int bucketId) {
         TNetworkAddress address = new TNetworkAddress(node.getHost(), node.getBePort());
 
+        usedBackendIDs.add(node.getId());
+        addressToBackendId.put(address, node.getId());
         // update statistic
         long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
         assignedScansPerComputeNode.put(node, assignedScansPerComputeNode.get(node) + addedScans);
