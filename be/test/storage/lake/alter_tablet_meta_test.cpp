@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "agent/agent_task.h"
 #include "fs/fs_util.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
@@ -99,6 +100,29 @@ TEST_F(AlterTabletMetaTest, test_alter_not_persistent_index) {
 
     update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
     ASSERT_ERROR(handler.process_update_tablet_meta(update_tablet_meta_req));
+}
+
+TEST_F(AlterTabletMetaTest, test_run_alter_meta_task) {
+    TUpdateTabletMetaInfoReq update_tablet_meta_req;
+    int64_t txn_id = 1;
+    update_tablet_meta_req.__set_txn_id(txn_id);
+    update_tablet_meta_req.__set_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+
+    TTabletMetaInfo tablet_meta_info;
+    auto tablet_id = _tablet_metadata->id();
+    tablet_meta_info.__set_tablet_id(tablet_id);
+    tablet_meta_info.__set_meta_type(TTabletMetaType::ENABLE_PERSISTENT_INDEX);
+    tablet_meta_info.__set_enable_persistent_index(true);
+    update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
+
+    TAgentTaskRequest task;
+    time_t ts;
+
+    auto request = std::make_shared<UpdateTabletMetaInfoAgentTaskRequest>(task, update_tablet_meta_req, ts);
+    auto temp_tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+    ExecEnv::GetInstance()->set_lake_tablet_manager(_tablet_mgr.get());
+    run_update_meta_info_task(request, ExecEnv::GetInstance());
+    ExecEnv::GetInstance()->set_lake_tablet_manager(temp_tablet_manager);
 }
 
 } // namespace starrocks::lake

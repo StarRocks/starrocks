@@ -341,7 +341,7 @@ Status SchemaChangeHandler::process_update_tablet_meta(const TUpdateTabletMetaIn
     return Status::OK();
 }
 
-Status SchemaChangeHandler ::do_process_update_tablet_meta(const TTabletMetaInfo& tablet_meta_info, int64_t txn_id) {
+Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo& tablet_meta_info, int64_t txn_id) {
     if (tablet_meta_info.meta_type != TTabletMetaType::ENABLE_PERSISTENT_INDEX) {
         // Only support ENABLE_PERSISTENT_INDEX for now
         return Status::InternalError("not supported update meta type:" + tablet_meta_info.meta_type);

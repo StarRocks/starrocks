@@ -191,6 +191,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
         if (db == null) {
             // database has been dropped
             LOG.warn("database does not exist, dbId:" + dbId);
+            throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
         db.writeLock();
 
@@ -199,6 +200,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             if (table == null) {
                 // table has been dropped
                 LOG.warn("table does not exist, tableId:" + tableId);
+                throw new AlterCancelException("table does not exist, tableId:" + tableId);
             } else {
                 // modify table meta
                 if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
