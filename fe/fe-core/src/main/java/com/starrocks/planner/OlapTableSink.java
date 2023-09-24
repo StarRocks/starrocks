@@ -291,10 +291,6 @@ public class OlapTableSink extends DataSink {
                 columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
             }
 
-            LOG.info("generate TOlapTableSchema");
-            for (int uid : columnSortKeyUids) {
-                LOG.info("sort key column uid: {}", uid);
-            }
             if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
                 columns.add(Load.LOAD_OP_COLUMN);
             }

@@ -220,6 +220,7 @@ public:
     const RowsetMetaPB& get_meta_pb() const { return *_rowset_meta_pb; }
 
     void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema_ptr) {
+        _rowset_meta_pb->clear_tablet_schema();
         TabletSchemaPB* ts_pb = _rowset_meta_pb->mutable_tablet_schema();
         tablet_schema_ptr->to_schema_pb(ts_pb);
         if (ts_pb->has_id() && ts_pb->id() != TabletSchema::invalid_id()) {

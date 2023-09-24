@@ -760,7 +760,6 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("unsupported default expr:" + newColumn.getDefaultExpr().getExpr());
         }
 
-        //only new table generate ColUniqueId, exist table do not.
         boolean lightSchemaChange = olapTable.getUseLightSchemaChange();
 
         String newColName = newColumn.getName();
@@ -2232,7 +2231,7 @@ public class SchemaChangeHandler extends AlterHandler {
         try {
             LOG.debug("indexSchemaMap:{}, indexes:{}", indexSchemaMap, indexes);
             if (olapTable.getState() == OlapTableState.ROLLUP) {
-                throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
+                throw new DdlException("Table[" + olapTable.getName() + "] is doing ROLLUP job");
             }
 
             // for now table's state can only be NORMAL

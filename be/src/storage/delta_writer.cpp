@@ -244,8 +244,9 @@ Status DeltaWriter::_init() {
             partial_update_schema->set_sort_key_idxes(sort_key_idxes);
         }
 
-        writer_context.partial_update_tablet_schema = partial_update_schema;
-        writer_context.tablet_schema = writer_context.partial_update_tablet_schema;
+        writer_context.tablet_schema = partial_update_schema;
+        writer_context.full_tablet_schema = _tablet_schema;
+        writer_context.is_partial_update = true;
         writer_context.partial_update_mode = _opt.partial_update_mode;
         _tablet_schema = partial_update_schema;
     } else {

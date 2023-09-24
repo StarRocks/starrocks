@@ -127,7 +127,7 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema) {
                 index->slots.emplace_back(it->second);
             }
         }
-        
+
         if (t_index.__isset.column_param) {
             auto col_param = _obj_pool.add(new OlapTableColumnParam());
             for (auto& tcolumn_desc : t_index.column_param.columns) {
