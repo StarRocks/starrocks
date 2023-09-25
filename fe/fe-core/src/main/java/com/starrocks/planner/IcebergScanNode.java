@@ -140,6 +140,10 @@ public class IcebergScanNode extends ScanNode {
         }
     }
 
+    public int getBucketNum() {
+        return srIcebergTable.getBucketProperties().get(0).getBucketNum();
+    }
+
     @Override
     public void init(Analyzer analyzer) throws UserException {
         super.init(analyzer);

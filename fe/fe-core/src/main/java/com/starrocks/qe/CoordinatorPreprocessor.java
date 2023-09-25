@@ -1126,8 +1126,9 @@ public class CoordinatorPreprocessor {
                 selector.computeScanRangeAssignment();
             } else if (scanNode instanceof IcebergScanNode) {
                 IcebergBucketBackendSelector selector =
-                        new IcebergBucketBackendSelector(scanNode, locations, assignment,
-                                idToBackend, icebergBucketIdToBeId, addressToBackendID, usedBackendIDs, hasComputeNode);
+                        new IcebergBucketBackendSelector(scanNode, locations, assignment, idToBackend,
+                                icebergBucketIdToBeId, addressToBackendID, usedBackendIDs, hasComputeNode,
+                                fragmentIdBucketSeqToScanRangeMap, fragmentIdToSeqToAddressMap, fragmentIdToBucketNumMap);
                 selector.computeScanRangeAssignment();
             } else {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());

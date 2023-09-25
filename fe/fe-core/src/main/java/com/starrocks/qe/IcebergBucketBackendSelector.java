@@ -16,12 +16,14 @@ package com.starrocks.qe;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.system.ComputeNode;
@@ -55,6 +57,10 @@ public class IcebergBucketBackendSelector implements BackendSelector {
     private final Set<Long> usedBackendIDs;
     private final Map<TNetworkAddress, Long> addressToBackendId;
 
+    private final Map<PlanFragmentId, CoordinatorPreprocessor.BucketSeqToScanRange> fragmentIdBucketSeqToScanRangeMap;
+    private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap;
+    private final Map<PlanFragmentId, Integer> fragmentIdToBucketNumMap;
+
 
     public IcebergBucketBackendSelector(ScanNode scanNode,
                                         List<TScanRangeLocations> locations,
@@ -63,7 +69,10 @@ public class IcebergBucketBackendSelector implements BackendSelector {
                                         Map<Integer, Long> bucketIdToBeId,
                                         Map<TNetworkAddress, Long> addressToBackendId,
                                         Set<Long> usedBackendIDs,
-                                        boolean chooseComputeNode) {
+                                        boolean chooseComputeNode,
+                                        Map<PlanFragmentId, CoordinatorPreprocessor.BucketSeqToScanRange> fragmentIdBucketS,
+                                        Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap,
+                                        Map<PlanFragmentId, Integer> fragmentIdToBucketNumMap) {
         this.scanNode = scanNode;
         this.locations = locations;
         this.assignment = assignment;
@@ -73,6 +82,9 @@ public class IcebergBucketBackendSelector implements BackendSelector {
         this.filePathToBucketId = ((IcebergScanNode) scanNode).getFileToBucketId();
         this.usedBackendIDs = usedBackendIDs;
         this.addressToBackendId = addressToBackendId;
+        this.fragmentIdBucketSeqToScanRangeMap = fragmentIdBucketS;
+        this.fragmentIdToSeqToAddressMap = fragmentIdToSeqToAddressMap;
+        this.fragmentIdToBucketNumMap = fragmentIdToBucketNumMap;
     }
 
     @Override
@@ -80,6 +92,17 @@ public class IcebergBucketBackendSelector implements BackendSelector {
         if (locations.size() == 0) {
             return;
         }
+        PlanFragmentId fragmentId = scanNode.getFragmentId();
+
+        if (!fragmentIdToSeqToAddressMap.containsKey(fragmentId)) {
+            fragmentIdToSeqToAddressMap.put(fragmentId, Maps.newHashMap());
+            fragmentIdBucketSeqToScanRangeMap.put(fragmentId, new CoordinatorPreprocessor.BucketSeqToScanRange());
+            fragmentIdToBucketNumMap.put(fragmentId, ((IcebergScanNode) scanNode).getBucketNum());
+        }
+
+        Map<Integer, TNetworkAddress> bucketSeqToAddress = fragmentIdToSeqToAddressMap.get(fragmentId);
+        CoordinatorPreprocessor.BucketSeqToScanRange bucketSeqToScanRange =
+                fragmentIdBucketSeqToScanRangeMap.get(scanNode.getFragmentId());
 
         for (ComputeNode computeNode : idToBackend.values()) {
             if (!computeNode.isAlive() || SimpleScheduler.isInBlacklist(computeNode.getId())) {
@@ -116,12 +139,14 @@ public class IcebergBucketBackendSelector implements BackendSelector {
                 throw new RuntimeException("Failed to find backend to execute");
             }
 
-            recordScanRangeAssignment(node, scanRangeLocations, bucketId);
+            recordScanRangeAssignment(node, scanRangeLocations, bucketId, bucketSeqToScanRange, bucketSeqToAddress);
             recordScanRangeStatistic();
         }
     }
 
-    private void recordScanRangeAssignment(ComputeNode node, TScanRangeLocations scanRangeLocations, int bucketId) {
+    private void recordScanRangeAssignment(ComputeNode node, TScanRangeLocations scanRangeLocations, int bucketId,
+                                           CoordinatorPreprocessor.BucketSeqToScanRange bucketSeqToScanRange,
+                                           Map<Integer, TNetworkAddress> bucketSeqToAddress) {
         TNetworkAddress address = new TNetworkAddress(node.getHost(), node.getBePort());
 
         usedBackendIDs.add(node.getId());
@@ -133,12 +158,19 @@ public class IcebergBucketBackendSelector implements BackendSelector {
         // add in assignment
         Map<Integer, List<TScanRangeParams>> scanRanges =
                 BackendSelector.findOrInsert(assignment, address, new HashMap<>());
+
         List<TScanRangeParams> scanRangeParamsList =
-                BackendSelector.findOrInsert(scanRanges, scanNode.getId().asInt(), new ArrayList<TScanRangeParams>());
+                BackendSelector.findOrInsert(scanRanges, scanNode.getId().asInt(), new ArrayList<>());
         // add scan range params
         TScanRangeParams scanRangeParams = new TScanRangeParams();
         scanRangeParams.scan_range = scanRangeLocations.scan_range;
         scanRangeParamsList.add(scanRangeParams);
+
+        scanRanges = bucketSeqToScanRange.computeIfAbsent(bucketId, k -> Maps.newHashMap());
+        scanRangeParamsList = scanRanges.computeIfAbsent(scanNode.getId().asInt(), k -> Lists.newArrayList());
+        scanRangeParamsList.add(scanRangeParams);
+
+        bucketSeqToAddress.put(bucketId, address);
     }
 
     private void recordScanRangeStatistic() {
