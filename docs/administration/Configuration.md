@@ -2242,7 +2242,6 @@ BE static parameters are as follows.
 | tablet_writer_open_rpc_timeout_sec | 60 | N/A | |
 | tc_max_total_thread_cache_bytes | 1073741824 | N/A | |
 | thrift_connect_timeout_seconds | 3 | N/A | |
-| thrift_port | 9060 | N/A | |
 | txn_map_shard_size | 128 | N/A | |
 | txn_shard_size | 1024 | N/A | |
 | udf_thread_pool_size | 1 | N/A | |
