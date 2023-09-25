@@ -179,13 +179,20 @@ public class IcebergBucketBackendSelector implements BackendSelector {
         for (Map.Entry<ComputeNode, Long> entry : assignedScansPerComputeNode.entrySet()) {
             sb.append(entry.getKey().getAddress().hostname).append(":").append(entry.getValue()).append(",");
         }
-        PlannerProfile.addCustomProperties(scanNode.getTableName() + " scan_range_bytes", sb.toString());
+        PlannerProfile.addCustomProperties(scanNode.getTableName() + " node_scan_range_bytes", sb.toString());
 
         sb = new StringBuilder();
         for (Map.Entry<Integer, Long> entry : assignedScansPerBucket.entrySet()) {
             sb.append(entry.getKey()).append(":").append(entry.getValue()).append(",");
         }
 
-        PlannerProfile.addCustomProperties(scanNode.getTableName() + " scan_range_bytes", sb.toString());
+        PlannerProfile.addCustomProperties(scanNode.getTableName() + " bucket_scan_range_bytes", sb.toString());
+
+        sb = new StringBuilder();
+        for (Map.Entry<Integer, Long> entry : icebergBucketIdToBeId.entrySet()) {
+            sb.append(entry.getKey()).append(":").append(idToBackend.get(entry.getValue()).getAddress().hostname).append(",");
+        }
+
+        PlannerProfile.addCustomProperties(scanNode.getTableName() + " bucket_id_to_be_addr", sb.toString());
     }
 }
