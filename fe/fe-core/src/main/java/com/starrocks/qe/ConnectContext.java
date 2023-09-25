@@ -48,7 +48,7 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.ssl.SSLChannel;
-import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
+import com.starrocks.mysql.ssl.SSLChannelImp;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
@@ -795,24 +795,12 @@ public class ConnectContext {
     }
 
     public boolean enableSSL() throws IOException {
-        Class<? extends SSLChannel> clazz = SSLChannelImpClassLoader.loadSSLChannelImpClazz();
-        if (clazz == null) {
-            LOG.warn("load SSLChannelImp class failed");
-            throw new IOException("load SSLChannelImp class failed");
-        }
-
-        try {
-            SSLChannel sslChannel = (SSLChannel) clazz.getConstructors()[0]
-                    .newInstance(sslContext.createSSLEngine(), mysqlChannel);
-            if (!sslChannel.init()) {
-                return false;
-            } else {
-                mysqlChannel.setSSLChannel(sslChannel);
-                return true;
-            }
-        } catch (Exception e) {
-            LOG.warn("construct SSLChannelImp class failed");
-            throw new IOException("construct SSLChannelImp class failed");
+        SSLChannel sslChannel = new SSLChannelImp(sslContext.createSSLEngine(), mysqlChannel);
+        if (!sslChannel.init()) {
+            return false;
+        } else {
+            mysqlChannel.setSSLChannel(sslChannel);
+            return true;
         }
     }
 
