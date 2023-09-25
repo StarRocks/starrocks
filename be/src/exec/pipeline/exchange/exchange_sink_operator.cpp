@@ -437,7 +437,14 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
+<<<<<<< HEAD
     _uncompressed_bytes_counter = ADD_COUNTER(_unique_metrics, "UncompressedBytes", TUnit::BYTES);
+=======
+    _sender_input_bytes_counter = ADD_COUNTER(_unique_metrics, "SenderInputBytes", TUnit::BYTES);
+    _serialized_bytes_counter = ADD_COUNTER(_unique_metrics, "SerializedBytes", TUnit::BYTES);
+    _compressed_bytes_counter = ADD_COUNTER(_unique_metrics, "CompressedBytes", TUnit::BYTES);
+
+>>>>>>> b9263bb7f1 ([Refactor] add RawSendBytes, SerializedBytes and CompressedBytes for exchange sink (#31721))
     _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
@@ -659,6 +666,8 @@ void ExchangeSinkOperator::close(RuntimeState* state) {
 
 Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, bool* is_first_chunk, int num_receivers) {
     VLOG_ROW << "[ExchangeSinkOperator] serializing " << src->num_rows() << " rows";
+    auto send_input_bytes = serde::ProtobufChunkSerde::max_serialized_size(*src, nullptr);
+    COUNTER_UPDATE(_sender_input_bytes_counter, send_input_bytes * num_receivers);
     {
         SCOPED_TIMER(_serialize_chunk_timer);
         // We only serialize chunk meta for first chunk
@@ -681,24 +690,25 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
     }
     DCHECK(dst->has_uncompressed_size());
     DCHECK_EQ(dst->uncompressed_size(), dst->data().size());
-    const size_t uncompressed_size = dst->uncompressed_size();
+    const size_t serialized_size = dst->uncompressed_size();
+    COUNTER_UPDATE(_serialized_bytes_counter, serialized_size * num_receivers);
 
-    if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(uncompressed_size)) {
+    if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(serialized_size)) {
         return Status::InternalError(strings::Substitute("The input size for compression should be less than $0",
                                                          _compress_codec->max_input_size()));
     }
 
     // try compress the ChunkPB data
-    if (_compress_codec != nullptr && uncompressed_size > 0) {
+    if (_compress_codec != nullptr && serialized_size > 0) {
         SCOPED_TIMER(_compress_timer);
 
         if (use_compression_pool(_compress_codec->type())) {
             Slice compressed_slice;
             Slice input(dst->data());
-            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
+            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, serialized_size, nullptr,
                                                       &_compression_scratch));
         } else {
-            int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
+            int max_compressed_size = _compress_codec->max_compressed_len(serialized_size);
 
             if (_compression_scratch.size() < max_compressed_size) {
                 _compression_scratch.resize(max_compressed_size);
@@ -711,18 +721,14 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
             _compression_scratch.resize(compressed_slice.size);
         }
 
-        double compress_ratio = (static_cast<double>(uncompressed_size)) / _compression_scratch.size();
+        double compress_ratio = (static_cast<double>(serialized_size)) / _compression_scratch.size();
         if (LIKELY(compress_ratio > config::rpc_compress_ratio_threshold)) {
             dst->mutable_data()->swap(reinterpret_cast<std::string&>(_compression_scratch));
             dst->set_compress_type(_compress_type);
         }
-
-        VLOG_ROW << "uncompressed size: " << uncompressed_size << ", compressed size: " << _compression_scratch.size();
+        COUNTER_UPDATE(_compressed_bytes_counter, _compression_scratch.size() * num_receivers);
+        VLOG_ROW << "uncompressed size: " << serialized_size << ", compressed size: " << _compression_scratch.size();
     }
-    size_t chunk_size = dst->data().size();
-    VLOG_ROW << "chunk data size " << chunk_size;
-
-    COUNTER_UPDATE(_uncompressed_bytes_counter, uncompressed_size * num_receivers);
     return Status::OK();
 }
 
