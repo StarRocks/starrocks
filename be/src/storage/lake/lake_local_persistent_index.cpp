@@ -297,7 +297,6 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
                                                _l2_versions.size() > 0 ? _l2_versions[0] : EditVersion()));
     _dump_snapshot = false;
     _flushed = false;
-    _primary_index->update_data_version(base_version);
 
     LOG(INFO) << "build persistent index finish tablet: " << tablet->id() << " version:" << base_version
               << " #rowset:" << rowsets->size() << " #segment:" << total_segments << " data_size:" << total_data_size
