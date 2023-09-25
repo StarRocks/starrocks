@@ -29,6 +29,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.CatalogProperties;
+import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
@@ -75,8 +76,8 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
             throw new IllegalArgumentException("Iceberg hadoop catalog must set warehouse location(" +
                     ICEBERG_CUSTOM_PROPERTIES_PREFIX + WAREHOUSE_LOCATION + ").");
         }
-        delegate = new HadoopCatalog(conf, copiedProperties.get(WAREHOUSE_LOCATION));
-        delegate.initialize(name, copiedProperties);
+
+        delegate = (HadoopCatalog) CatalogUtil.loadCatalog(HadoopCatalog.class.getName(), name, copiedProperties, conf);
     }
 
     @Override
