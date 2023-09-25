@@ -99,7 +99,8 @@ public class TransactionState implements Writable {
         DELETE(6),                     // synchronization delete job use this type
         LAKE_COMPACTION(7),            // compaction of LakeTable
         FRONTEND_STREAMING(8),          // FE streaming load use this type
-        MV_REFRESH(9);                  // Refresh MV
+        MV_REFRESH(9),                  // Refresh MV
+        REPLICATION(10);                     // Replication
 
         private final int flag;
 
@@ -131,6 +132,8 @@ public class TransactionState implements Writable {
                     return FRONTEND_STREAMING;
                 case 9:
                     return MV_REFRESH;
+                case 10:
+                    return REPLICATION;
                 default:
                     return null;
             }

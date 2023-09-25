@@ -109,5 +109,6 @@ using ReleaseSnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TReleaseSnap
 using MoveDirAgentTaskRequest = AgentTaskRequestWithReqBody<TMoveDirReq>;
 using UpdateTabletMetaInfoAgentTaskRequest = AgentTaskRequestWithReqBody<TUpdateTabletMetaInfoReq>;
 using DropAutoIncrementMapAgentTaskRequest = AgentTaskRequestWithReqBody<TDropAutoIncrementMapReq>;
+using ReplicationAgentTaskRequest = AgentTaskRequestWithReqBody<TReplicationRequest>;
 
 } // namespace starrocks

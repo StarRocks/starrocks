@@ -42,6 +42,7 @@ import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.loadv2.MiniLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
+import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.thrift.TTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 
@@ -100,6 +101,8 @@ public abstract class TxnCommitAttachment implements Writable {
             attachment = new InsertTxnCommitAttachment();
         } else if (type == LoadJobSourceType.FRONTEND_STREAMING) {
             attachment = StreamLoadTxnCommitAttachment.loadStreamLoadTxnCommitAttachment(in);
+        } else if (type == LoadJobSourceType.REPLICATION) {
+            attachment = new ReplicationTxnCommitAttachment();
         } else {
             throw new IOException("Unknown load job source type: " + type.name());
         }

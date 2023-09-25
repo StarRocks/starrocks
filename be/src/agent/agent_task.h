@@ -41,4 +41,5 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                                ExecEnv* exec_env);
 void run_drop_auto_increment_map_task(const std::shared_ptr<DropAutoIncrementMapAgentTaskRequest>& agent_task_req,
                                       ExecEnv* exec_env);
+void run_replication_task(const std::shared_ptr<ReplicationAgentTaskRequest>& agent_task_req, ExecEnv* exec_env);
 } // namespace starrocks

@@ -809,7 +809,9 @@ public class DatabaseTransactionMgr {
                         continue;
                     }
 
-                    if (partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
+                    // The version of a failover replication transaction may not continuously
+                    if (txn.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
+                            partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                         return false;
                     }
 
@@ -927,7 +929,9 @@ public class DatabaseTransactionMgr {
                                 transactionState);
                         continue;
                     }
-                    if (partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
+                    // The version of a failover replication transaction may not continuously
+                    if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
+                            partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                         // prevent excessive logging
                         if (transactionState.getLastErrTimeMs() + 3000 < System.nanoTime() / 1000000) {
                             LOG.debug("transactionId {} partition commitInfo version {} is not equal with " +

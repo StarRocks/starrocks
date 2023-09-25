@@ -2612,4 +2612,10 @@ public class Config extends ConfigBase {
     // This limit limits the maximum size of json file to load.
     @ConfField(mutable = true)
     public static long json_file_size_limit = 4294967296L;
+    
+    /*
+     * replication transaction timeout in seconds
+     */
+    @ConfField(mutable = true)
+    public static int replication_transaction_timeout_sec = 2 * 60 * 60;
 }

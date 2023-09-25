@@ -149,6 +149,10 @@ CONF_Int32(sleep_five_seconds, "5");
 CONF_Int32(compact_threads, "4");
 CONF_Int32(compact_thread_pool_queue_size, "100");
 
+// The count of thread to replication
+CONF_Int32(replication_threads, "64");
+CONF_Int32(replication_thread_pool_queue_size, "2048");
+
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
 // The user function dir.

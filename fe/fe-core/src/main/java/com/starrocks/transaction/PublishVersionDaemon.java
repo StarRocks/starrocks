@@ -110,7 +110,13 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
             List<TransactionState> readyTransactionStates =
                     globalTransactionMgr.getReadyToPublishTransactions(Config.enable_new_publish_mechanism);
-            if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
+            if (readyTransactionStates == null) {
+                return;
+            }
+            // for REPLICATION, publish version in ReplicationJob
+            readyTransactionStates.removeIf(
+                    txnState -> txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION);
+            if (readyTransactionStates.isEmpty()) {
                 return;
             }
 

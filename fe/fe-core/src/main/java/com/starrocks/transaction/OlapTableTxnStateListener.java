@@ -26,6 +26,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
@@ -270,6 +271,16 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
             isFirstPartition = false;
         }
+
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+            ReplicationTxnCommitAttachment attachment = (ReplicationTxnCommitAttachment) txnState
+                    .getTxnCommitAttachment();
+            Map<Long, Long> partitionVersions = attachment.getPartitionVersions();
+            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+                partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
+            }
+        }
+
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
     }
 
@@ -311,6 +322,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             } finally {
                 db.readUnlock();
             }
+        }
+
+        // for REPLICATION, clear transaction in ReplicationJob
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+            return;
         }
 
         // Optimization for multi-table transaction: avoid sending duplicated requests to BE nodes.

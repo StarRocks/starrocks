@@ -117,6 +117,7 @@ add_library(Storage STATIC
     task/engine_manual_compaction_task.cpp
     task/engine_storage_migration_task.cpp
     task/engine_alter_tablet_task.cpp
+    task/engine_replication_task.cpp
     aggregate_iterator.cpp
     async_delta_writer.cpp
     chunk_helper.cpp

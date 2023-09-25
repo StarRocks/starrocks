@@ -57,6 +57,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPublishVersionRequest;
 import com.starrocks.thrift.TPushReq;
 import com.starrocks.thrift.TReleaseSnapshotRequest;
+import com.starrocks.thrift.TReplicationRequest;
 import com.starrocks.thrift.TSnapshotRequest;
 import com.starrocks.thrift.TStorageMediumMigrateReq;
 import com.starrocks.thrift.TTaskType;
@@ -384,6 +385,12 @@ public class AgentBatchTask implements Runnable {
                 CompactionTask compactionTask = (CompactionTask) task;
                 TCompactionReq req = compactionTask.toThrift();
                 tAgentTaskRequest.setCompaction_req(req);
+                return tAgentTaskRequest;
+            }
+            case REPLICATION: {
+                ReplicationTask replicationTask = (ReplicationTask) task;
+                TReplicationRequest req = replicationTask.toThrift();
+                tAgentTaskRequest.setReplication_req(req);
                 return tAgentTaskRequest;
             }
             default:

@@ -30,6 +30,7 @@
 #include "storage/task/engine_checksum_task.h"
 #include "storage/task/engine_clone_task.h"
 #include "storage/task/engine_manual_compaction_task.h"
+#include "storage/task/engine_replication_task.h"
 #include "storage/task/engine_storage_migration_task.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
@@ -836,6 +837,49 @@ void run_drop_auto_increment_map_task(const std::shared_ptr<DropAutoIncrementMap
     drop_auto_increment_map(drop_auto_increment_map_req.table_id);
     LOG(INFO) << "drop auto increment map task success, tableid=" << drop_auto_increment_map_req.table_id;
     unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature);
+}
+
+void run_replication_task(const std::shared_ptr<ReplicationAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    const TReplicationRequest& replication_req = agent_task_req->task_req;
+    AgentStatus status = STARROCKS_SUCCESS;
+
+    // Return result to fe
+    TStatus task_status;
+    TFinishTaskRequest finish_task_request;
+    finish_task_request.__set_backend(BackendOptions::get_localBackend());
+    finish_task_request.__set_task_type(agent_task_req->task_type);
+    finish_task_request.__set_signature(agent_task_req->signature);
+
+    TStatusCode::type status_code = TStatusCode::OK;
+    std::vector<std::string> error_msgs;
+    std::vector<TTabletInfo> tablet_infos;
+
+    EngineReplicationTask engine_task(GlobalEnv::GetInstance()->replication_mem_tracker(), replication_req,
+                                      agent_task_req->signature, &error_msgs, &tablet_infos, &status);
+    Status res = StorageEngine::instance()->execute_task(&engine_task);
+    if (!res.ok()) {
+        status_code = TStatusCode::RUNTIME_ERROR;
+        LOG(WARNING) << "replication failed. status:" << res << ", signature:" << agent_task_req->signature;
+        error_msgs.emplace_back("replication failed.");
+    } else {
+        if (status != STARROCKS_SUCCESS && status != STARROCKS_CREATE_TABLE_EXIST) {
+            StarRocksMetrics::instance()->clone_requests_failed.increment(1);
+            status_code = TStatusCode::RUNTIME_ERROR;
+            LOG(WARNING) << "replication failed. signature: " << agent_task_req->signature;
+            error_msgs.emplace_back("replication failed.");
+        } else {
+            LOG(INFO) << "replication success, set tablet infos. status:" << status
+                      << ", signature:" << agent_task_req->signature;
+            finish_task_request.__set_finish_tablet_infos(tablet_infos);
+        }
+    }
+
+    task_status.__set_status_code(status_code);
+    task_status.__set_error_msgs(error_msgs);
+    finish_task_request.__set_task_status(task_status);
+
+    finish_task(finish_task_request);
+    remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 }
 
 } // namespace starrocks

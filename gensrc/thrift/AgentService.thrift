@@ -353,6 +353,18 @@ struct TRecoverTabletReq {
     4: optional Types.TVersionHash version_hash // Deprecated
 }
 
+struct TReplicationRequest {
+    1: optional Types.TTableId table_id
+    2: optional Types.TPartitionId partition_id
+    3: optional Types.TTabletId tablet_id
+    4: optional Types.TSchemaHash schema_hash
+    5: optional string src_token
+    6: optional Types.TTabletId src_tablet_id
+    7: optional list<Types.TBackend> src_backends
+    8: optional Types.TVersion snapshot_version
+    9: optional i32 timeout_s
+}
+
 enum TTabletMetaType {
     PARTITIONID,
     INMEMORY,
@@ -421,6 +433,7 @@ struct TAgentTaskRequest {
     26: optional TUpdateTabletMetaInfoReq update_tablet_meta_info_req
     27: optional TDropAutoIncrementMapReq drop_auto_increment_map_req
     28: optional TCompactionReq compaction_req
+    29: optional TReplicationRequest replication_req
 }
 
 struct TAgentResult {
