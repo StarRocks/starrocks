@@ -563,6 +563,8 @@ The types of engines supported by StarRocks:
 * hudi: Hudi external tables, supported from v2.2.
 * jdbc: external table for JDBC-compatible databases, supported from v2.3.
 
+From v3.0, we recommend that you use [catalogs](../data_source/catalog/catalog_overview.md) to query data from external data sources.
+
 ### streaming_preaggregation_mode
 
 Used to specify the preaggregation mode for the first phase of GROUP BY. If the preaggregation effect in the first phase is not satisfactory, you can use the streaming mode, which performs simple data serialization before streaming data to the destination. Valid values:
