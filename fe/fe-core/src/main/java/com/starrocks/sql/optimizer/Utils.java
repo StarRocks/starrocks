@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -169,6 +170,12 @@ public class Utils {
     public static List<PhysicalOlapScanOperator> extractPhysicalOlapScanOperator(OptExpression root) {
         List<PhysicalOlapScanOperator> list = Lists.newArrayList();
         extractOperator(root, list, op -> OperatorType.PHYSICAL_OLAP_SCAN.equals(op.getOpType()));
+        return list;
+    }
+
+    public static List<PhysicalIcebergScanOperator> extractIcebergScanOperator(OptExpression root) {
+        List<PhysicalIcebergScanOperator> list = Lists.newArrayList();
+        extractOperator(root, list, op -> OperatorType.PHYSICAL_ICEBERG_SCAN.equals(op.getOpType()));
         return list;
     }
 

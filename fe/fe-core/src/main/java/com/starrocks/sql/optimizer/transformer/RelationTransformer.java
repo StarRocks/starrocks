@@ -518,8 +518,12 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 GlobalStateMgr.getCurrentState().getMetadataMgr().refreshTable(
                         catalogName, dbName, node.getTable(), Lists.newArrayList(), true);
             }
-            scanOperator = new LogicalIcebergScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
-                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate);
+            if (node.isMetaQuery()) {
+                scanOperator = new LogicalMetaScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build());
+            } else {
+                scanOperator = new LogicalIcebergScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                        columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate);
+            }
         } else if (Table.TableType.HUDI.equals(node.getTable().getType())) {
             scanOperator = new LogicalHudiScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate);

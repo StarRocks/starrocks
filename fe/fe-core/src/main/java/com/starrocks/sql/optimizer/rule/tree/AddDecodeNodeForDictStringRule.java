@@ -27,6 +27,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -47,6 +48,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
@@ -886,6 +888,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         }
 
         List<PhysicalOlapScanOperator> scanOperators = Utils.extractPhysicalOlapScanOperator(root);
+        List<PhysicalIcebergScanOperator> externalScanOperators = Utils.extractIcebergScanOperator(root);
 
         for (PhysicalOlapScanOperator scanOperator : scanOperators) {
             OlapTable table = (OlapTable) scanOperator.getTable();
@@ -934,6 +937,49 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     LOG.debug("{} doesn't have global dict", column.getName());
                 }
             }
+        }
+
+        for (PhysicalIcebergScanOperator externalScanOperator : externalScanOperators) {
+            Table table = externalScanOperator.getTable();
+
+            // TODO: implements versionTime
+            for (ColumnRefOperator column : externalScanOperator.getColRefToColumnMetaMap().keySet()) {
+                // Condition 1:
+                if (!column.getType().isVarchar()) {
+                    continue;
+                }
+
+                ColumnStatistic columnStatistic =
+                        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(table, column.getName());
+                // Condition 2: the varchar column is low cardinality string column
+                if (!FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
+                        columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
+                    LOG.debug("{} isn't low cardinality string column", column.getName());
+                    continue;
+                }
+
+                // Condition 3: the varchar column has collected global dict
+                if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getName(), 1)) {
+                    Optional<ColumnDict> dict =
+                            IDictManager.getInstance().getGlobalDict(table.getId(), column.getName());
+                    // cache reaches capacity limit, randomly eliminate some keys
+                    // then we will get an empty dictionary.
+                    if (!dict.isPresent()) {
+                        continue;
+                    }
+                    globalDictCache.put(new Pair<>(table.getId(), column.getName()), dict.get());
+                    if (!tableIdToStringColumnIds.containsKey(table.getId())) {
+                        Set<Integer> integers = Sets.newHashSet();
+                        integers.add(column.getId());
+                        tableIdToStringColumnIds.put(table.getId(), integers);
+                    } else {
+                        tableIdToStringColumnIds.get(table.getId()).add(column.getId());
+                    }
+                } else {
+                    LOG.debug("{} doesn't have global dict", column.getName());
+                }
+            }
+
         }
 
         if (tableIdToStringColumnIds.isEmpty()) {
