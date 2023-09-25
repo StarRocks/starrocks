@@ -155,14 +155,25 @@ jobs:
   automerge-check:
     runs-on: ubuntu-latest
     needs: backport-check
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      REPO: ${{ github.repository }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     if: >
       !failure() &&
       github.base_ref != 'main' &&
       startsWith(github.head_ref, 'mergify/') &&
-      !contains(github.event.pull_request.labels.*.name, 'conflict') &&
       (contains(github.event.pull_request.title, 'cherry-pick') || 
       contains(github.event.pull_request.title, 'backport'))
     steps:
+      - name: check
+        run: |
+          labels=`gh pr view ${PR_NUMBER} -R ${REPO} --json labels | jq -r '.labels[].name'`
+          if [[ "${labels}" =~ "conflict"  ]]; then
+              echo "PR with conflict label, skip auto-merge!"
+              exit 1
+          fi
+          
       - name: add automerge label
         uses: actions-ecosystem/action-add-labels@v1
         with:
