@@ -34,6 +34,7 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TDataStreamSink;
