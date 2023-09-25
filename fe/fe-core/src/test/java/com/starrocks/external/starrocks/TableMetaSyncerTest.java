@@ -126,7 +126,8 @@ public class TableMetaSyncerTest {
         MasterImpl leader = new MasterImpl();
         TGetTableMetaResponse response = leader.getTableMeta(request);
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("test_db").getTable("test_ext_table");
+        Table table = GlobalStateMgr.getCurrentState()
+                .getDb("default_cluster:test_db").getTable("test_ext_table");
         ExternalOlapTable extTable = (ExternalOlapTable) table;
         // remove the thread local meta context
         MetaContext.remove();
