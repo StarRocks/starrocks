@@ -52,6 +52,10 @@ public class LakeMaterializedView extends MaterializedView {
 
     private static final Logger LOG = LogManager.getLogger(LakeMaterializedView.class);
 
+    public LakeMaterializedView() {
+        this.type = TableType.CLOUD_NATIVE_MATERIALIZED_VIEW;
+    }
+
     public LakeMaterializedView(long id, long dbId, String mvName, List<Column> baseSchema, KeysType keysType,
                                 PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
                                 MvRefreshScheme refreshScheme) {
