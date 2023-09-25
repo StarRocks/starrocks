@@ -1653,7 +1653,6 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testSortedStreamingAggregate() throws Exception {
         connectContext.getSessionVariable().setEnableSortAggregate(true);
-        connectContext.getSessionVariable().setEnableQueryCache(false);
         String sql;
         String plan;
         {

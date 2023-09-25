@@ -104,8 +104,6 @@ public class FragmentNormalizer {
 
     private Set<Integer> cachedPlanNodeIds = Sets.newHashSet();
     private boolean assignScanRangesAcrossDrivers = false;
-    private int numTablets = 0;
-    private long rowCountPerTablet = 0;
     public FragmentNormalizer(ExecPlan execPlan, PlanFragment fragment) {
         this.execPlan = execPlan;
         this.fragment = fragment;
@@ -154,22 +152,6 @@ public class FragmentNormalizer {
 
     void endNotRemappingSlotId() {
         this.notRemappingSlotId = false;
-    }
-
-    public void setNumTablets(int numTablets) {
-        this.numTablets = numTablets;
-    }
-
-    public int getNumTablets() {
-        return this.numTablets;
-    }
-
-    public void setRowCountPerTablet(long rowCountPerTablet) {
-        this.rowCountPerTablet = rowCountPerTablet;
-    }
-
-    public long getRowCountPerTablet(){
-        return rowCountPerTablet;
     }
 
     public boolean isNotRemappingSlotId() {
