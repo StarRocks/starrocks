@@ -707,11 +707,7 @@ Suppose the Avro schema is relatively simple, and you need to load all fields of
 
 **Prepare a dataset**
 
-<<<<<<< HEAD
-**Avro schema**
-=======
 - **Avro schema**
->>>>>>> 9c7428d191 ([Enhancement][Doc]add-a-col-expression-example-in-create-routine-load (#31554))
 
     1. Create the following Avro schema file `avro_schema1.avsc`:
 
@@ -731,11 +727,7 @@ Suppose the Avro schema is relatively simple, and you need to load all fields of
 
     2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html).
 
-<<<<<<< HEAD
-**Avro data**
-=======
 - **Avro data**
->>>>>>> 9c7428d191 ([Enhancement][Doc]add-a-col-expression-example-in-create-routine-load (#31554))
 
 Prepare the Avro data and send it to the Kafka topic `topic_1`.
 
@@ -782,11 +774,7 @@ Suppose the Avro schema contains a nested record-type field, and you need to loa
 
 **Prepare a dataset**
 
-<<<<<<< HEAD
-**Avro schema**
-=======
 - **Avro schema**
->>>>>>> 9c7428d191 ([Enhancement][Doc]add-a-col-expression-example-in-create-routine-load (#31554))
 
     1. Create the following Avro schema file `avro_schema2.avsc`. The outer Avro record includes five fields which are `id`, `name`, `checked`, `sensor_type`, and `data` in sequence. And the field `data` has a nested record `data_record`.
 
@@ -815,11 +803,7 @@ Suppose the Avro schema contains a nested record-type field, and you need to loa
 
     2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html).
 
-<<<<<<< HEAD
-**Avro data**
-=======
 - **Avro data**
->>>>>>> 9c7428d191 ([Enhancement][Doc]add-a-col-expression-example-in-create-routine-load (#31554))
 
 Prepare the Avro data and send it to the Kafka topic `topic_2`.
 
@@ -869,11 +853,7 @@ FROM KAFKA
 
 Suppose the Avro schema contains a Union field, and you need to load the Union field into StarRocks.
 
-<<<<<<< HEAD
-**Avro schema**
-=======
 - **Avro schema**
->>>>>>> 9c7428d191 ([Enhancement][Doc]add-a-col-expression-example-in-create-routine-load (#31554))
 
     1. Create the following Avro schema file `avro_schema3.avsc`. The outer Avro record includes five fields which are `id`, `name`, `checked`, `sensor_type`, and `data` in sequence. And the field `data` is of Union type and includes two elements, `null` and a nested record `data_record`.
 
@@ -903,11 +883,7 @@ Suppose the Avro schema contains a Union field, and you need to load the Union f
 
     2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html).
 
-<<<<<<< HEAD
-**Avro data**
-=======
 - **Avro data**
->>>>>>> 9c7428d191 ([Enhancement][Doc]add-a-col-expression-example-in-create-routine-load (#31554))
 
 Prepare the Avro data and send it to the Kafka topic `topic_3`.
 
