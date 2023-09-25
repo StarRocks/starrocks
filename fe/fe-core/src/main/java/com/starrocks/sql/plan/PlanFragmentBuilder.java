@@ -1785,7 +1785,7 @@ public class PlanFragmentBuilder {
 
                 // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
                 if (!withLocalShuffle && node.isMergedLocalAgg() &&
-                        hasColocateOlapScanChildInFragment(aggregationNode)) {
+                        hasColocateScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }
             } else if (node.getType().isGlobal() || (node.getType().isLocal() && !node.isSplit())) {
@@ -1835,7 +1835,7 @@ public class PlanFragmentBuilder {
                 aggregationNode.setLimit(node.getLimit());
 
                 // Check colocate for one-phase local agg.
-                if (!withLocalShuffle && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                if (!withLocalShuffle && hasColocateScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }
             } else if (node.getType().isDistinctGlobal()) {
@@ -1850,7 +1850,7 @@ public class PlanFragmentBuilder {
                 aggregationNode.unsetNeedsFinalize();
                 aggregationNode.setIntermediateTuple();
 
-                if (!withLocalShuffle && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                if (!withLocalShuffle && hasColocateScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }
             } else if (node.getType().isDistinctLocal()) {
@@ -1889,11 +1889,17 @@ public class PlanFragmentBuilder {
         }
 
         // Check whether colocate Table exists in the same Fragment
-        public boolean hasColocateOlapScanChildInFragment(PlanNode node) {
+        public boolean hasColocateScanChildInFragment(PlanNode node) {
             if (node instanceof OlapScanNode) {
                 ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
                 OlapScanNode scanNode = (OlapScanNode) node;
                 if (colocateIndex.isColocateTable(scanNode.getOlapTable().getId())) {
+                    return true;
+                }
+            }
+            if (node instanceof IcebergScanNode) {
+                IcebergScanNode scanNode = (IcebergScanNode) node;
+                if (scanNode.getSrIcebergTable().hasBucketProperties()) {
                     return true;
                 }
             }
@@ -1902,7 +1908,7 @@ public class PlanFragmentBuilder {
             }
             boolean hasOlapScanChild = false;
             for (PlanNode child : node.getChildren()) {
-                hasOlapScanChild |= hasColocateOlapScanChildInFragment(child);
+                hasOlapScanChild |= hasColocateScanChildInFragment(child);
             }
             return hasOlapScanChild;
         }
@@ -2513,7 +2519,7 @@ public class PlanFragmentBuilder {
             analyticEvalNode.setLimit(node.getLimit());
             analyticEvalNode.setHasNullableGenerateChild();
             analyticEvalNode.computeStatistics(optExpr.getStatistics());
-            if (hasColocateOlapScanChildInFragment(analyticEvalNode)) {
+            if (hasColocateScanChildInFragment(analyticEvalNode)) {
                 analyticEvalNode.setColocate(true);
             }
 
