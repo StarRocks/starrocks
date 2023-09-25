@@ -148,7 +148,7 @@ class ClientConnection {
 public:
     ClientConnection(ClientCache<T>* client_cache, TNetworkAddress address, Status* status)
             : _client_cache(client_cache), _client(nullptr) {
-        *status = _client_cache->get_client(address, &_client, 0);
+        *status = _client_cache->get_client(address, &_client, config::thrift_rpc_timeout_ms);
 
         if (status->ok()) {
             DCHECK(_client != nullptr);
