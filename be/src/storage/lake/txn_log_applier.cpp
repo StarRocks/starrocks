@@ -88,6 +88,9 @@ public:
         if (log.has_op_alter_metadata()) {
             RETURN_IF_ERROR(apply_alter_meta_log(log.op_alter_metadata()));
         }
+        if (log.has_op_replication()) {
+            RETURN_IF_ERROR(apply_replication_log(log.op_replication(), log.txn_id()));
+        }
         return Status::OK();
     }
 
@@ -222,6 +225,55 @@ private:
                 }
             }
         }
+        return Status::OK();
+    }
+
+    Status apply_replication_log(const TxnLogPB_OpReplication& op_replication, int64_t txn_id) {
+        if (op_replication.txn_meta().txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
+            LOG(WARNING) << "Fail to apply replication log, invalid txn meta state: "
+                         << ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state());
+            return Status::Corruption("Invalid txn meta state: " +
+                                      ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state()));
+        }
+        if (op_replication.txn_meta().snapshot_version() != _new_version) {
+            LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
+                         << ", snapshot version: " << op_replication.txn_meta().snapshot_version()
+                         << ", new version: " << _new_version;
+            return Status::Corruption("mismatched snapshot version and new version");
+        }
+
+        if (op_replication.txn_meta().incremental_snapshot()) {
+            CHECK(_new_version - _base_version == op_replication.op_writes_size())
+                    << ", base_version: " << _base_version << ", new_version: " << _new_version
+                    << ", op_write_size: " << op_replication.op_writes_size();
+            for (const auto& op_write : op_replication.op_writes()) {
+                RETURN_IF_ERROR(apply_write_log(op_write, txn_id));
+            }
+        } else {
+            auto old_next_rowset_id = _metadata->next_rowset_id();
+            auto old_rowsets = std::move(*_metadata->mutable_rowsets());
+            _metadata->clear_rowsets();
+
+            for (const auto& op_write : op_replication.op_writes()) {
+                if (op_write.dels_size() > 0 || op_write.rowset().num_rows() > 0 ||
+                    op_write.rowset().has_delete_predicate()) {
+                    auto rowset = _metadata->add_rowsets();
+                    rowset->CopyFrom(op_write.rowset());
+                    rowset->set_id(_metadata->next_rowset_id());
+                    _metadata->set_next_rowset_id(_metadata->next_rowset_id() + std::max(1, rowset->segments_size()));
+                }
+            }
+
+            for (const auto& pair : op_replication.delvecs()) {
+                auto delvec = std::make_shared<DelVector>();
+                RETURN_IF_ERROR(delvec->load(_new_version, pair.second.data().data(), pair.second.data().size()));
+                _builder.append_delvec(delvec, pair.first + old_next_rowset_id);
+            }
+
+            _metadata->set_cumulative_point(0);
+            old_rowsets.Swap(_metadata->mutable_compaction_inputs());
+        }
+
         return Status::OK();
     }
 
@@ -395,12 +447,22 @@ private:
             return Status::Corruption("mismatched snapshot version and new version");
         }
 
-        if (!op_replication.txn_meta().incremental_snapshot()) {
+        if (op_replication.txn_meta().incremental_snapshot()) {
+            for (const auto& op_write : op_replication.op_writes()) {
+                RETURN_IF_ERROR(apply_write_log(op_write));
+            }
+        } else {
+            auto old_rowsets = std::move(*_metadata->mutable_rowsets());
             _metadata->clear_rowsets();
+
+            for (const auto& op_write : op_replication.op_writes()) {
+                RETURN_IF_ERROR(apply_write_log(op_write));
+            }
+
+            _metadata->set_cumulative_point(0);
+            old_rowsets.Swap(_metadata->mutable_compaction_inputs());
         }
-        for (const auto& op_write : op_replication.op_writes()) {
-            RETURN_IF_ERROR(apply_write_log(op_write));
-        }
+
         return Status::OK();
     }
 

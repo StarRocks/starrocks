@@ -491,6 +491,12 @@ public class ReplicationJob implements GsonPostProcessable {
                     throw new MetaNotFoundException("Partition " + tPartitionInfo.partition_id + " in table "
                             + table.getName() + " in database " + db.getFullName() + " not found");
                 }
+                Preconditions.checkState(partition.getCommittedVersion() <= tPartitionInfo.src_version,
+                        "target committed version: " + partition.getCommittedVersion()
+                                + " is larger than source visible version: " + tPartitionInfo.src_version);
+                if (partition.getCommittedVersion() == tPartitionInfo.src_version) {
+                    continue;
+                }
                 PartitionInfo partitionInfo = initPartitionInfo(olapTable, tPartitionInfo, partition);
                 partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
             }
@@ -557,7 +563,10 @@ public class ReplicationJob implements GsonPostProcessable {
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
         for (Partition partition : table.getPartitions()) {
             Partition srcPartition = srcTable.getPartition(partition.getName());
-            if (partition.getCommittedVersion() >= srcPartition.getVisibleVersion()) {
+            Preconditions.checkState(partition.getCommittedVersion() <= srcPartition.getVisibleVersion(),
+                    "target committed version: " + partition.getCommittedVersion()
+                            + " is larger than source visible version: " + srcPartition.getVisibleVersion());
+            if (partition.getCommittedVersion() == srcPartition.getVisibleVersion()) {
                 continue;
             }
             PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, partition, srcPartition,

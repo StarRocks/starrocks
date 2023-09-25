@@ -44,11 +44,14 @@ private:
                                 const std::vector<int64_t>* missing_version_ranges, TBackend* src_backend,
                                 std::string* src_snapshot_path);
 
-    StatusOr<TxnLogPtr> replicate_remote_snapshot(const TReplicateSnapshotRequest& request,
-                                                  const TRemoteSnapshotInfo& src_snapshot_info);
+    StatusOr<TxnLogPtr> replicate_remote_snapshot_for_none_primary(const TReplicateSnapshotRequest& request,
+                                                                   const TRemoteSnapshotInfo& src_snapshot_info);
+
+    StatusOr<TxnLogPtr> replicate_remote_snapshot_for_primary(const TReplicateSnapshotRequest& request,
+                                                              const TRemoteSnapshotInfo& src_snapshot_info);
 
     Status convert_rowset_meta(const RowsetMeta& rowset_meta, TTransactionId transaction_id,
-                               RowsetMetadata* rowset_metadata,
+                               TxnLogPB::OpWrite* op_write,
                                std::unordered_map<std::string, std::string>* segment_filename_map);
 
 private:

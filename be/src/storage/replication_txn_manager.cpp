@@ -121,7 +121,7 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
 
     LOG(INFO) << "Remote snapshot tablet. "
               << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
-              << ", type: " << KeysType_Name(tablet->keys_type()) << ", src_tablet_id: " << request.src_tablet_id
+              << ", keys_type: " << KeysType_Name(tablet->keys_type()) << ", src_tablet_id: " << request.src_tablet_id
               << ", visible version: " << request.visible_version
               << ", snapshot version: " << request.src_visible_version
               << ", missed_versions=" << version_list_to_string(missed_versions);
@@ -200,19 +200,13 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
             continue;
         }
 
-        status = convert_tablet_meta_file(tablet_snapshot_dir_path, request);
-        if (!status.ok()) {
-            LOG(WARNING) << "Fail to convert tablet meta file: " << status << ", txn_id: " << request.transaction_id
-                         << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
-                         << ", visible_version: " << request.visible_version
-                         << ", snapshot_version: " << request.src_visible_version;
-            continue;
+        if (tablet->updates() == nullptr) {
+            status = convert_snapshot_for_none_primary(tablet_snapshot_dir_path, request);
+        } else {
+            status = convert_snapshot_for_primary(tablet_snapshot_dir_path, request);
         }
-
-        status = SnapshotManager::instance()->convert_rowset_ids(tablet_snapshot_dir_path, request.tablet_id,
-                                                                 request.schema_hash);
         if (!status.ok()) {
-            LOG(WARNING) << "Fail to convert rowset ids: " << status << ", txn_id: " << request.transaction_id
+            LOG(WARNING) << "Fail to convert snapshot: " << status << ", txn_id: " << request.transaction_id
                          << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
                          << ", visible_version: " << request.visible_version
                          << ", snapshot_version: " << request.src_visible_version;
@@ -231,8 +225,8 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
 
         LOG(INFO) << "Replicated snapshot from " << src_be.host << ":" << src_be.http_port << ":" << src_snapshot_path
                   << " to " << tablet_snapshot_dir_path << ", txn_id: " << request.transaction_id
-                  << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
-                  << ", visible_version: " << request.visible_version
+                  << ", keys_type: " << KeysType_Name(tablet->keys_type()) << ", tablet_id: " << request.tablet_id
+                  << ", src_tablet_id: " << request.src_tablet_id << ", visible_version: " << request.visible_version
                   << ", snapshot_version: " << request.src_visible_version;
         break;
     }
@@ -335,11 +329,6 @@ Status ReplicationTxnManager::make_remote_snapshot(const TRemoteSnapshotRequest&
                                                         request.src_schema_hash, request.src_visible_version, timeout_s,
                                                         missed_versions, missing_version_ranges, src_snapshot_path);
         if (!status.ok()) {
-            LOG(WARNING) << "Fail to make snapshot from " << src_be.host << ", " << status
-                         << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
-                         << ", src_tablet_id: " << request.src_tablet_id
-                         << ", visible_version: " << request.visible_version
-                         << ", snapshot_version: " << request.src_visible_version;
             continue;
         }
 
@@ -354,60 +343,77 @@ Status ReplicationTxnManager::make_remote_snapshot(const TRemoteSnapshotRequest&
     return status;
 }
 
-Status ReplicationTxnManager::convert_tablet_meta_file(const std::string& tablet_snapshot_path,
-                                                       const TReplicateSnapshotRequest& request) {
+Status ReplicationTxnManager::convert_snapshot_for_none_primary(const std::string& tablet_snapshot_path,
+                                                                const TReplicateSnapshotRequest& request) {
     std::string src_header_file_path = tablet_snapshot_path + std::to_string(request.src_tablet_id) + ".hdr";
-    if (fs::path_exist(src_header_file_path)) {
-        TabletMeta tablet_meta;
-        Status status = tablet_meta.create_from_file(src_header_file_path);
-        if (!status.ok()) {
-            LOG(WARNING) << "Fail to load tablet meta from " << src_header_file_path << ", " << status
-                         << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
-                         << ", src_tablet_id: " << request.src_tablet_id
-                         << ", visible_version: " << request.visible_version
-                         << ", snapshot_version: " << request.src_visible_version;
-            return status;
-        }
+    TabletMeta tablet_meta;
+    RETURN_IF_ERROR(tablet_meta.create_from_file(src_header_file_path));
 
-        TabletMetaPB tablet_meta_pb;
-        tablet_meta.to_meta_pb(&tablet_meta_pb);
-        tablet_meta_pb.set_table_id(request.table_id);
-        tablet_meta_pb.set_partition_id(request.partition_id);
-        tablet_meta_pb.set_tablet_id(request.tablet_id);
-
-        std::string header_file_path = tablet_snapshot_path + std::to_string(request.tablet_id) + ".hdr";
-        status = TabletMeta::save(header_file_path, tablet_meta_pb);
-        if (!status.ok()) {
-            LOG(WARNING) << "Fail to save tablet meta pb to " << header_file_path << ", " << status
-                         << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
-                         << ", src_tablet_id: " << request.src_tablet_id
-                         << ", visible_version: " << request.visible_version
-                         << ", snapshot_version: " << request.src_visible_version;
-            return status;
-        }
-
-        if (request.tablet_id != request.src_tablet_id) {
-            status = fs::remove(src_header_file_path);
-            if (!status.ok()) {
-                LOG(WARNING) << "Fail to remove tablet meta " << src_header_file_path << ", " << status
-                             << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
-                             << ", src_tablet_id: " << request.src_tablet_id
-                             << ", visible_version: " << request.visible_version
-                             << ", snapshot_version: " << request.src_visible_version;
-            }
-        }
-
-        return status;
+    TabletMetaPB tablet_meta_pb;
+    tablet_meta.to_meta_pb(&tablet_meta_pb);
+    tablet_meta_pb.set_table_id(request.table_id);
+    tablet_meta_pb.set_partition_id(request.partition_id);
+    tablet_meta_pb.set_tablet_id(request.tablet_id);
+    tablet_meta_pb.set_schema_hash(request.schema_hash);
+    for (auto& rowset_meta : *tablet_meta_pb.mutable_rs_metas()) {
+        rowset_meta.set_partition_id(request.partition_id);
+        rowset_meta.set_tablet_id(request.tablet_id);
+    }
+    for (auto& rowset_meta : *tablet_meta_pb.mutable_inc_rs_metas()) {
+        rowset_meta.set_partition_id(request.partition_id);
+        rowset_meta.set_tablet_id(request.tablet_id);
     }
 
-    // TODO: convert meta file and dcgs_snapshot file
+    std::string header_file_path = tablet_snapshot_path + std::to_string(request.tablet_id) + ".hdr";
+    RETURN_IF_ERROR(TabletMeta::save(header_file_path, tablet_meta_pb));
+
+    if (request.tablet_id != request.src_tablet_id) {
+        auto status = fs::delete_file(src_header_file_path);
+        if (!status.ok()) {
+            LOG(WARNING) << "Fail to delete file: " << src_header_file_path << ", " << status;
+        }
+    }
+
+    RETURN_IF_ERROR(SnapshotManager::instance()->convert_rowset_ids(tablet_snapshot_path, request.tablet_id,
+                                                                    request.schema_hash));
+    return Status::OK();
+}
+
+Status ReplicationTxnManager::convert_snapshot_for_primary(const std::string& tablet_snapshot_path,
+                                                           const TReplicateSnapshotRequest& request) {
+    std::string snapshot_meta_file_path = tablet_snapshot_path + "meta";
+    ASSIGN_OR_RETURN(auto snapshot_meta, SnapshotManager::instance()->parse_snapshot_meta(snapshot_meta_file_path));
+
+    TabletMetaPB& tablet_meta_pb = snapshot_meta.tablet_meta();
+    tablet_meta_pb.set_table_id(request.table_id);
+    tablet_meta_pb.set_partition_id(request.partition_id);
+    tablet_meta_pb.set_tablet_id(request.tablet_id);
+    tablet_meta_pb.set_schema_hash(request.schema_hash);
+    for (auto& rowset_meta : *tablet_meta_pb.mutable_rs_metas()) {
+        rowset_meta.set_partition_id(request.partition_id);
+        rowset_meta.set_tablet_id(request.tablet_id);
+    }
+    for (auto& rowset_meta : *tablet_meta_pb.mutable_inc_rs_metas()) {
+        rowset_meta.set_partition_id(request.partition_id);
+        rowset_meta.set_tablet_id(request.tablet_id);
+    }
+
+    for (auto& rowset_meta : snapshot_meta.rowset_metas()) {
+        rowset_meta.set_partition_id(request.partition_id);
+        rowset_meta.set_tablet_id(request.tablet_id);
+    }
+
+    RETURN_IF_ERROR(snapshot_meta.serialize_to_file(snapshot_meta_file_path));
+
+    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, tablet_snapshot_path));
+
     return Status::OK();
 }
 
 Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& snapshot_dir, int64_t snapshot_version,
                                                bool incremental_snapshot) {
     if (tablet->updates() != nullptr) {
-        return Status::NotSupported("Pk table not supported");
+        return publish_snapshot_for_primary(tablet, snapshot_dir);
     }
 
     Status res;
@@ -544,6 +550,62 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
     }
 
     return res;
+}
+
+Status ReplicationTxnManager::publish_snapshot_for_primary(Tablet* tablet, const std::string& snapshot_dir) {
+    auto meta_file = strings::Substitute("$0/meta", snapshot_dir);
+    ASSIGN_OR_RETURN(auto snapshot_meta, SnapshotManager::instance()->parse_snapshot_meta(meta_file));
+
+    // check all files in /clone and /tablet
+    std::set<std::string> clone_files;
+    RETURN_IF_ERROR(fs::list_dirs_files(snapshot_dir, nullptr, &clone_files));
+    clone_files.erase("meta");
+
+    std::set<std::string> local_files;
+    const std::string& tablet_dir = tablet->schema_hash_path();
+    RETURN_IF_ERROR(fs::list_dirs_files(tablet_dir, nullptr, &local_files));
+
+    // Files that are found in both |clone_files| and |local_files|.
+    std::vector<std::string> duplicate_files;
+    std::set_intersection(clone_files.begin(), clone_files.end(), local_files.begin(), local_files.end(),
+                          std::back_inserter(duplicate_files));
+    for (const auto& fname : duplicate_files) {
+        ASSIGN_OR_RETURN(auto md5sum1, fs::md5sum(snapshot_dir + "/" + fname));
+        ASSIGN_OR_RETURN(auto md5sum2, fs::md5sum(tablet_dir + "/" + fname));
+        if (md5sum1 != md5sum2) {
+            LOG(WARNING) << "duplicated file `" << fname << "` with different md5sum";
+            return Status::InternalError("duplicate file with different md5");
+        }
+        clone_files.erase(fname);
+        local_files.erase(fname);
+    }
+
+    auto fs = FileSystem::Default();
+    std::set<std::string> tablet_files;
+    for (const std::string& filename : clone_files) {
+        std::string from = snapshot_dir + "/" + filename;
+        std::string to = tablet_dir + "/" + filename;
+        tablet_files.insert(to);
+        RETURN_IF_ERROR(fs->link_file(from, to));
+    }
+    LOG(INFO) << "Linked " << clone_files.size() << " files from " << snapshot_dir << " to " << tablet_dir;
+    // Note that |snapshot_meta| may be modified by `load_snapshot`.
+    Status status = tablet->updates()->load_snapshot(snapshot_meta);
+    if (!status.ok()) {
+        Status clear_st;
+        for (const std::string& filename : tablet_files) {
+            clear_st = fs::delete_file(filename);
+            if (!clear_st.ok()) {
+                LOG(WARNING) << "remove tablet file: " << filename << " failed, status: " << clear_st;
+            }
+        }
+    }
+
+    int64_t expired_stale_sweep_endtime = UnixSeconds() - config::tablet_rowset_stale_sweep_time_sec;
+    tablet->updates()->remove_expired_versions(expired_stale_sweep_endtime);
+    LOG(INFO) << "Loaded snapshot of tablet " << tablet->tablet_id() << " from " << snapshot_dir;
+
+    return status;
 }
 
 Status ReplicationTxnManager::publish_incremental_meta(Tablet* tablet, const TabletMeta& cloned_tablet_meta,

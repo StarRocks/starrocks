@@ -24,6 +24,7 @@
 #include "agent/master_info.h"
 #include "agent/task_signatures_manager.h"
 #include "fs/fs.h"
+#include "fs/fs_memory.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_constants.h"
 #include "gutil/strings/split.h"
@@ -145,9 +146,13 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
         }
     }
 
+    ASSIGN_OR_RETURN(auto tablet_metadata, tablet.get_metadata(request.visible_version));
+
     Status status;
     for (const auto& src_snapshot_info : request.src_snapshot_infos) {
-        auto status_or = replicate_remote_snapshot(request, src_snapshot_info);
+        auto status_or = tablet_metadata->schema().keys_type() == KeysType::PRIMARY_KEYS
+                                 ? replicate_remote_snapshot_for_primary(request, src_snapshot_info)
+                                 : replicate_remote_snapshot_for_none_primary(request, src_snapshot_info);
 
         if (!status_or.ok()) {
             status = status_or.status();
@@ -163,6 +168,7 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
         LOG(INFO) << "Replicated snapshot from " << src_snapshot_info.backend.host << ":"
                   << src_snapshot_info.backend.http_port << ":" << src_snapshot_info.snapshot_path << " to "
                   << _tablet_manager->location_provider()->segment_root_location(request.tablet_id)
+                  << ", keys_type: " << KeysType_Name(tablet_metadata->schema().keys_type())
                   << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
                   << ", src_tablet_id: " << request.src_tablet_id << ", visible_version: " << request.visible_version
                   << ", snapshot_version: " << request.src_visible_version;
@@ -195,11 +201,6 @@ Status ReplicationTxnManager::make_remote_snapshot(const TRemoteSnapshotRequest&
                                                         request.src_schema_hash, request.src_visible_version, timeout_s,
                                                         missed_versions, missing_version_ranges, src_snapshot_path);
         if (!status.ok()) {
-            LOG(WARNING) << "Fail to make snapshot from " << src_be.host << ":" << src_be.be_port << ", " << status
-                         << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
-                         << ", src_tablet_id: " << request.src_tablet_id
-                         << ", visible_version: " << request.visible_version
-                         << ", snapshot_version: " << request.src_visible_version;
             continue;
         }
 
@@ -210,8 +211,8 @@ Status ReplicationTxnManager::make_remote_snapshot(const TRemoteSnapshotRequest&
     return status;
 }
 
-StatusOr<TxnLogPtr> ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshotRequest& request,
-                                                                     const TRemoteSnapshotInfo& src_snapshot_info) {
+StatusOr<TxnLogPtr> ReplicationTxnManager::replicate_remote_snapshot_for_none_primary(
+        const TReplicateSnapshotRequest& request, const TRemoteSnapshotInfo& src_snapshot_info) {
     std::string remote_header_file_name = std::to_string(request.src_tablet_id) + ".hdr";
     ASSIGN_OR_RETURN(auto header_file_content,
                      ReplicationUtils::download_remote_snapshot_file(
@@ -219,25 +220,29 @@ StatusOr<TxnLogPtr> ReplicationTxnManager::replicate_remote_snapshot(const TRepl
                              src_snapshot_info.snapshot_path, request.src_tablet_id, request.src_schema_hash,
                              remote_header_file_name, config::download_low_speed_time));
     TabletMeta tablet_meta;
-    RETURN_IF_ERROR(tablet_meta.create_from_memory(header_file_content));
+    auto status = tablet_meta.create_from_memory(header_file_content);
+    if (!status.ok()) {
+        LOG(WARNING) << "Fail to parse remote snapshot header file: " << remote_header_file_name
+                     << ", content: " << header_file_content << ", " << status;
+        return status;
+    }
 
     auto txn_log = std::make_shared<TxnLog>();
-    std::unordered_map<std::string, std::string> segment_filename_map;
+    std::unordered_map<std::string, std::string> filename_map;
     const auto& rowset_metas =
             tablet_meta.all_rs_metas().empty() ? tablet_meta.all_inc_rs_metas() : tablet_meta.all_rs_metas();
     for (const auto& rowset_meta : rowset_metas) {
-        auto* rowset_metadata = txn_log->mutable_op_replication()->add_op_writes()->mutable_rowset();
-        RETURN_IF_ERROR(
-                convert_rowset_meta(*rowset_meta, request.transaction_id, rowset_metadata, &segment_filename_map));
+        auto* op_write = txn_log->mutable_op_replication()->add_op_writes();
+        RETURN_IF_ERROR(convert_rowset_meta(*rowset_meta, request.transaction_id, op_write, &filename_map));
     }
 
     RETURN_IF_ERROR(ReplicationUtils::download_remote_snapshot(
             src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
             src_snapshot_info.snapshot_path, request.src_tablet_id, request.src_schema_hash, nullptr,
             _tablet_manager->location_provider()->segment_root_location(request.tablet_id) + '/',
-            [segment_filename_map = std::move(segment_filename_map)](const std::string& filename) {
-                auto iter = segment_filename_map.find(filename);
-                if (iter == segment_filename_map.end()) {
+            [filename_map = std::move(filename_map)](const std::string& filename) {
+                auto iter = filename_map.find(filename);
+                if (iter == filename_map.end()) {
                     return std::string();
                 }
                 return iter->second;
@@ -260,9 +265,80 @@ StatusOr<TxnLogPtr> ReplicationTxnManager::replicate_remote_snapshot(const TRepl
     return txn_log;
 }
 
+StatusOr<TxnLogPtr> ReplicationTxnManager::replicate_remote_snapshot_for_primary(
+        const TReplicateSnapshotRequest& request, const TRemoteSnapshotInfo& src_snapshot_info) {
+    std::string snapshot_meta_file_name = "meta";
+    ASSIGN_OR_RETURN(auto snapshot_meta_content,
+                     ReplicationUtils::download_remote_snapshot_file(
+                             src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
+                             src_snapshot_info.snapshot_path, request.src_tablet_id, request.src_schema_hash,
+                             snapshot_meta_file_name, config::download_low_speed_time));
+
+    auto memory_file = new_random_access_file_from_memory(snapshot_meta_file_name, snapshot_meta_content);
+    SnapshotMeta snapshot_meta;
+    auto status = snapshot_meta.parse_from_file(memory_file.get());
+    if (!status.ok()) {
+        LOG(WARNING) << "Fail to parse remote snapshot meta file: " << snapshot_meta_file_name
+                     << ", content: " << snapshot_meta_content << ", " << status;
+        return status;
+    }
+
+    CHECK(((src_snapshot_info.incremental_snapshot &&
+            snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_INCREMENTAL) ||
+           (!src_snapshot_info.incremental_snapshot &&
+            snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_FULL)))
+            << ", incremental_snapshot: " << src_snapshot_info.incremental_snapshot
+            << ", snapshot_type: " << SnapshotTypePB_Name(snapshot_meta.snapshot_type());
+
+    auto txn_log = std::make_shared<TxnLog>();
+    std::unordered_map<std::string, std::string> filename_map;
+    for (const auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
+        RowsetMeta rowset_meta(rowset_meta_pb);
+        auto* op_write = txn_log->mutable_op_replication()->add_op_writes();
+        RETURN_IF_ERROR(convert_rowset_meta(rowset_meta, request.transaction_id, op_write, &filename_map));
+    }
+
+    RETURN_IF_ERROR(ReplicationUtils::download_remote_snapshot(
+            src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
+            src_snapshot_info.snapshot_path, request.src_tablet_id, request.src_schema_hash, nullptr,
+            _tablet_manager->location_provider()->segment_root_location(request.tablet_id) + '/',
+            [filename_map = std::move(filename_map)](const std::string& filename) {
+                auto iter = filename_map.find(filename);
+                if (iter == filename_map.end()) {
+                    return std::string();
+                }
+                return iter->second;
+            }));
+
+    for (const auto& pair : snapshot_meta.delete_vectors()) {
+        auto* delvecs = txn_log->mutable_op_replication()->mutable_delvecs();
+        auto& delvec_data = (*delvecs)[pair.first];
+        delvec_data.set_version(pair.second.version());
+        pair.second.save_to(delvec_data.mutable_data());
+    }
+
+    txn_log->set_tablet_id(request.tablet_id);
+    txn_log->set_txn_id(request.transaction_id);
+
+    auto* txn_meta = txn_log->mutable_op_replication()->mutable_txn_meta();
+    txn_meta->set_txn_id(request.transaction_id);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_tablet_id(request.tablet_id);
+    txn_meta->set_visible_version(request.visible_version);
+    txn_meta->set_src_backend_host(src_snapshot_info.backend.host);
+    txn_meta->set_src_backend_port(src_snapshot_info.backend.be_port);
+    txn_meta->set_src_snapshot_path(src_snapshot_info.snapshot_path);
+    txn_meta->set_snapshot_version(request.src_visible_version);
+    txn_meta->set_incremental_snapshot(src_snapshot_info.incremental_snapshot);
+
+    return txn_log;
+}
+
 Status ReplicationTxnManager::convert_rowset_meta(const RowsetMeta& rowset_meta, TTransactionId transaction_id,
-                                                  RowsetMetadata* rowset_metadata,
-                                                  std::unordered_map<std::string, std::string>* segment_filename_map) {
+                                                  TxnLogPB::OpWrite* op_write,
+                                                  std::unordered_map<std::string, std::string>* filename_map) {
+    // Convert rowset metadata
+    auto* rowset_metadata = op_write->mutable_rowset();
     rowset_metadata->set_overlapped(rowset_meta.is_segments_overlapping());
     rowset_metadata->set_num_rows(rowset_meta.num_rows());
     rowset_metadata->set_data_size(rowset_meta.data_disk_size());
@@ -276,9 +352,25 @@ Status ReplicationTxnManager::convert_rowset_meta(const RowsetMeta& rowset_meta,
         std::string new_segment_filename = gen_segment_filename(transaction_id);
 
         rowset_metadata->add_segments(new_segment_filename);
-        auto pair = segment_filename_map->emplace(std::move(old_segment_filename), std::move(new_segment_filename));
+        auto pair = filename_map->emplace(std::move(old_segment_filename), std::move(new_segment_filename));
         if (!pair.second) {
             return Status::Corruption("Duplicated segment file: " + pair.first->first);
+        }
+    }
+
+    // Convert rowset txn meta
+    auto* rowset_txn_meta = op_write->mutable_txn_meta();
+    rowset_txn_meta->CopyFrom(rowset_meta.txn_meta());
+
+    // Convert dels
+    for (int64_t del_id = 0; del_id < rowset_meta.get_num_delete_files(); ++del_id) {
+        std::string old_del_filename = rowset_id + '_' + std::to_string(del_id) + ".del";
+        std::string new_del_filename = gen_del_filename(transaction_id);
+
+        op_write->add_dels(new_del_filename);
+        auto pair = filename_map->emplace(std::move(old_del_filename), std::move(new_del_filename));
+        if (!pair.second) {
+            return Status::Corruption("Duplicated del file: " + pair.first->first);
         }
     }
 

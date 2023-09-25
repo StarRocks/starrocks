@@ -39,6 +39,8 @@ public:
     explicit MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
     // append delvec to builder's buffer
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
+    // clear all delvecs
+    void clear_delvecs();
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<std::string>& orphan_files);
