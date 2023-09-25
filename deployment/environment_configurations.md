@@ -50,7 +50,7 @@ netstat -tunlp | grep 8060
 
 在用于 CN 部署的实例上，您需要检查以下端口：
 
-- `9060`：CN Thrift Server 端口（`thrift_port`）
+- `9060`：CN Thrift Server 端口（`be_port`）（注意：自 v3.1 起，该配置项由 `thrift_port` 更名为 `be_port`。）
 - `8040`：CN HTTP Server 端口（`be_http_port`）
 - `9050`：CN 心跳服务端口（`heartbeat_service_port`）
 - `8060`：CN BRPC 端口（`brpc_port`）
