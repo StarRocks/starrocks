@@ -107,6 +107,7 @@ struct HashJoinerParam {
     const std::vector<ExprContext*> _probe_expr_ctxs;
     const std::vector<ExprContext*> _other_join_conjunct_ctxs;
     const std::vector<ExprContext*> _conjunct_ctxs;
+    std::vector<ExprContext*> _range_conjunct_ctxs;
     const RowDescriptor _build_row_descriptor;
     const RowDescriptor _probe_row_descriptor;
     const RowDescriptor _row_descriptor;
@@ -392,6 +393,7 @@ private:
     const std::vector<bool>& _is_null_safes;
     // Equal conjuncts in Join On.
     const std::vector<ExprContext*>& _build_expr_ctxs;
+    const std::vector<ExprContext*>& _range_keys;
     // Equal conjuncts in Join On.
     const std::vector<ExprContext*>& _probe_expr_ctxs;
     // Conjuncts in Join On except equal conjuncts.

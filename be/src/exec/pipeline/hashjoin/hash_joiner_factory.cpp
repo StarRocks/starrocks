@@ -14,6 +14,15 @@
 
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 
+#include <unordered_map>
+#include <utility>
+
+#include "common/global_types.h"
+#include "exprs/column_ref.h"
+#include "exprs/expr_context.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/Opcodes_types.h"
+
 namespace starrocks::pipeline {
 
 Status HashJoinerFactory::prepare(RuntimeState* state) {
@@ -25,12 +34,66 @@ Status HashJoinerFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_param._probe_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_param._other_join_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_param._conjunct_ctxs, state));
+
+    //TODO: if enable range join optimize
+    // check could range optimize
+    //
+
+    // now we only support equal join key column is slot ref
+    for (auto expr_ctx : _param._build_expr_ctxs) {
+        if (!expr_ctx->root()->is_slotref()) {
+            return Status::OK();
+        }
+    }
+    //
+    if (!state->enable_range_join()) {
+        return Status::OK();
+    }
+
+    //
+    std::unordered_map<SlotId, std::pair<ExprContext*, ExprContext*>> range_exprs;
+    for (ExprContext* expr_ctx : _param._other_join_conjunct_ctxs) {
+        auto root = expr_ctx->root();
+        const auto& children = root->children();
+
+        if (root->node_type() != TExprNodeType::BINARY_PRED) {
+            continue;
+        }
+        if (children.size() != 2) {
+            continue;
+        }
+        if (!root->get_child(0)->is_slotref() && !root->get_child(1)->is_slotref()) {
+            continue;
+        }
+        ColumnRef* ref = root->get_child(0)->get_column_ref();
+        auto slot_id = ref->slot_id();
+        if (root->op() == TExprOpcode::GE) {
+            range_exprs[slot_id].first = expr_ctx;
+            continue;
+        }
+        if (root->op() == TExprOpcode::LE) {
+            range_exprs[slot_id].second = expr_ctx;
+            continue;
+        }
+    }
+    //
+    if (!range_exprs.empty()) {
+        for (auto& [slot_id, range_expr] : range_exprs) {
+            if (range_expr.first != nullptr && range_expr.second != nullptr) {
+                _param._range_conjunct_ctxs.push_back(range_expr.first);
+                _param._range_conjunct_ctxs.push_back(range_expr.second);
+                break;
+            }
+        }
+    }
+
     return Status::OK();
 }
 
 void HashJoinerFactory::close(RuntimeState* state) {
     Expr::close(_param._conjunct_ctxs, state);
     Expr::close(_param._other_join_conjunct_ctxs, state);
+    Expr::close(_param._range_conjunct_ctxs, state);
     Expr::close(_param._probe_expr_ctxs, state);
     Expr::close(_param._build_expr_ctxs, state);
 }

@@ -229,6 +229,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String TABLET_INTERNAL_PARALLEL_MODE = "tablet_internal_parallel_mode";
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
+    public static final String ENABLE_RANGE_JOIN = "enable_range_join";
     public static final String PIPELINE_DOP = "pipeline_dop";
     public static final String MAX_PIPELINE_DOP = "max_pipeline_dop";
 
@@ -1046,6 +1047,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SORT_AGGREGATE)
     private boolean enableSortAggregate = false;
+
+    @VarAttr(name = ENABLE_RANGE_JOIN)
+    private boolean enableRangeJoin = false;
 
     @VarAttr(name = ENABLE_PARALLEL_MERGE)
     private boolean enableParallelMerge = true;
@@ -2617,6 +2621,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setConnector_scan_use_query_mem_ratio(connectorScanUseQueryMemRatio);
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
+        tResult.setUse_range_join(enableRangeJoin);
         return tResult;
     }
 

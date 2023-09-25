@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "common/global_types.h"
+#include "exprs/expr_context.h"
 #define JOIN_HASH_MAP_H
 
 #include <gen_cpp/PlanNodes_types.h>
@@ -55,6 +57,7 @@ class ColumnRef;
     M(slice)                       \
     M(fixed32)                     \
     M(fixed64)                     \
+    M(range_key_string)            \
     M(fixed128)
 
 enum class JoinHashMapType {
@@ -75,9 +78,10 @@ enum class JoinHashMapType {
     keydecimal64,
     keydecimal128,
     slice,
-    fixed32, // 4 bytes
-    fixed64, // 8 bytes
-    fixed128 // 16 bytes
+    fixed32,  // 4 bytes
+    fixed64,  // 8 bytes
+    fixed128, // 16 bytes
+    range_key_string,
 };
 
 enum class JoinMatchFlag { NORMAL, ALL_NOT_MATCH, ALL_MATCH_ONE, MOST_MATCH_ONE };
@@ -127,6 +131,13 @@ struct JoinHashTableItems {
 
     std::unique_ptr<MemPool> build_pool = nullptr;
     std::vector<JoinKeyDesc> join_keys;
+
+    std::vector<ExprContext*> join_expr;
+    std::vector<ExprContext*> range_keys;
+    SlotId probe_range_key_id = -1;
+    Buffer<std::pair<uint32_t, uint32_t>> range;
+    Buffer<uint8_t> cmps;
+    Buffer<Slice> range_end_mx_data;
 };
 
 struct HashTableProbeState {
@@ -137,8 +148,10 @@ struct HashTableProbeState {
     Buffer<uint32_t> probe_index;
     Buffer<uint32_t> next;
     Buffer<Slice> probe_slice;
+    std::pair<uint32_t, uint32_t> build_range;
     Buffer<uint8_t>* null_array = nullptr;
     ColumnPtr probe_key_column;
+    ColumnPtr probe_range_key_column;
     const Columns* key_columns = nullptr;
 
     // when exec right join
@@ -150,6 +163,8 @@ struct HashTableProbeState {
     uint32_t count = 0; // current return values count
     // the rows of src probe chunk
     size_t probe_row_count = 0;
+
+    Buffer<std::pair<uint32_t, uint32_t>> probe_ranges;
 
     // 0: normal
     // 1: all match one
@@ -217,6 +232,8 @@ struct HashTableParam {
     std::set<SlotId> output_slots;
     std::set<SlotId> predicate_slots;
     std::vector<JoinKeyDesc> join_keys;
+    std::vector<ExprContext*> join_expr;
+    std::vector<ExprContext*> range_keys;
 
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
@@ -668,6 +685,94 @@ private:
 #define JoinHashMapForFixedSizeKey(LT) JoinHashMap<LT, FixedSizeJoinBuildFunc<LT>, FixedSizeJoinProbeFunc<LT>>
 #define JoinHashMapForSerializedKey(LT) JoinHashMap<LT, SerializedJoinBuildFunc, SerializedJoinProbeFunc>
 
+class SortedSerializeJoinBuildFunc {
+public:
+    void prepare(RuntimeState* state, JoinHashTableItems* table_items);
+    const Buffer<Slice>& get_key_data(const JoinHashTableItems& table_items) { return table_items.build_slice; }
+    void construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items, HashTableProbeState* probe_state);
+
+private:
+    static void _build_columns(JoinHashTableItems* table_items, HashTableProbeState* probe_state,
+                               const Columns& data_columns, uint32_t start, uint32_t count, uint8_t** ptr);
+
+    static void _build_nullable_columns(JoinHashTableItems* table_items, HashTableProbeState* probe_state,
+                                        const Columns& data_columns, const NullColumns& null_columns, uint32_t start,
+                                        uint32_t count, uint8_t** ptr);
+};
+
+class SortedSerializeJoinProbeFunc {
+public:
+    const Buffer<Slice>& get_key_data(const HashTableProbeState& probe_state) { return probe_state.probe_slice; }
+
+    void prepare(RuntimeState* state, HashTableProbeState* probe_state) {
+        probe_state->probe_pool = std::make_unique<MemPool>();
+        probe_state->probe_slice.resize(state->chunk_size());
+        probe_state->is_nulls.resize(state->chunk_size());
+    }
+
+    void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
+
+    ALWAYS_INLINE std::pair<uint32_t, uint32_t> seek(const JoinHashTableItems& table_items, Slice* range_st,
+                                                     Slice* range_ed, uint32_t build_index, Slice data);
+
+    bool equal(const Slice& x, const Slice& y) { return x == y; }
+
+private:
+    void _probe_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
+                       const Columns& data_columns, uint8_t* ptr);
+    void _probe_nullable_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
+                                const Columns& data_columns, const NullColumns& null_columns, uint8_t* ptr);
+};
+
+class SortedJoinHashMap {
+public:
+    using CppType = Slice;
+
+    explicit SortedJoinHashMap(JoinHashTableItems* table_items, HashTableProbeState* probe_state)
+            : _table_items(table_items), _probe_state(probe_state) {}
+    ~SortedJoinHashMap() = default;
+
+    void build_prepare(RuntimeState* state);
+    void probe_prepare(RuntimeState* state);
+
+    void build(RuntimeState* state);
+    void probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
+               bool* has_remain);
+    void probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* has_remain);
+
+private:
+    SortedSerializeJoinBuildFunc _build_func;
+    SortedSerializeJoinProbeFunc _probe_func;
+
+    // search hash table
+    void _search_ht(RuntimeState* state, ChunkPtr* probe_chunk);
+    template <bool first_probe>
+    void _search_ht_impl(RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& data);
+
+    template <bool first_probe>
+    void _probe_from_ht_for_left_outer_join_with_other_conjunct(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                const Buffer<CppType>& probe_data);
+
+    void _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
+    void _probe_tuple_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
+    void _probe_null_output(ChunkPtr* chunk, size_t count);
+
+    void _build_output(ChunkPtr* chunk);
+    void _build_tuple_output(ChunkPtr* chunk);
+    void _build_default_output(ChunkPtr* chunk, size_t count);
+
+    void _copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
+
+    void _copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
+
+    void _copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
+
+    void _copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
+
+    JoinHashTableItems* _table_items = nullptr;
+    HashTableProbeState* _probe_state = nullptr;
+};
+
 class JoinHashTable {
 public:
     JoinHashTable() = default;
@@ -745,9 +850,11 @@ private:
     std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_INT)> _fixed32 = nullptr;
     std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_BIGINT)> _fixed64 = nullptr;
     std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_LARGEINT)> _fixed128 = nullptr;
+    std::unique_ptr<SortedJoinHashMap> _range_key_string;
 
     JoinHashMapType _hash_map_type = JoinHashMapType::empty;
     bool _need_create_tuple_columns = true;
+    bool _range_join = false;
 
     std::shared_ptr<JoinHashTableItems> _table_items;
     std::unique_ptr<HashTableProbeState> _probe_state = std::make_unique<HashTableProbeState>();
