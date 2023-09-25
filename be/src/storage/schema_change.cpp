@@ -774,15 +774,25 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
             }
         }
 
+        // pk table can handle the case that convert version > request version, duplicate versions will be skipped
+        int64_t request_version = request.alter_version;
+        int64_t base_max_version = base_tablet->max_version().first;
+        if (base_max_version > request_version) {
+            LOG(INFO) << _alter_msg_header << " base_tablet's max_version:" << base_max_version
+                      << " > request_version:" << request_version
+                      << " using max_version instead, base_tablet:" << base_tablet->tablet_id()
+                      << " new_tablet:" << new_tablet->tablet_id();
+            request_version = base_max_version;
+        }
         if (sc_params.sc_directly) {
-            status = new_tablet->updates()->convert_from(base_tablet, request.alter_version,
-                                                         sc_params.chunk_changer.get(), _alter_msg_header);
+            status = new_tablet->updates()->convert_from(base_tablet, request_version, sc_params.chunk_changer.get(),
+                                                         _alter_msg_header);
         } else if (sc_params.sc_sorting) {
-            status = new_tablet->updates()->reorder_from(base_tablet, request.alter_version,
-                                                         sc_params.chunk_changer.get(), _alter_msg_header);
+            status = new_tablet->updates()->reorder_from(base_tablet, request_version, sc_params.chunk_changer.get(),
+                                                         _alter_msg_header);
         } else {
-            status = new_tablet->updates()->link_from(base_tablet.get(), request.alter_version,
-                                                      sc_params.chunk_changer.get(), _alter_msg_header);
+            status = new_tablet->updates()->link_from(base_tablet.get(), request_version, sc_params.chunk_changer.get(),
+                                                      _alter_msg_header);
         }
         if (!status.ok()) {
             LOG(WARNING) << _alter_msg_header << "schema change new tablet load snapshot error: " << status.to_string();
