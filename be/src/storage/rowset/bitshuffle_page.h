@@ -302,12 +302,11 @@ public:
 
     [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override {
         DCHECK(_parsed) << "Must call init()";
-        if (PREDICT_FALSE(_num_elements == 0)) {
-            DCHECK_EQ(0, pos);
-            return Status::InvalidArgument("invalid pos");
-        }
-
         DCHECK_LE(pos, _num_elements);
+        if (pos > _num_elements) {
+            std::string msg = strings::Substitute("invalid pos:$0, num_elements:$1", pos, _num_elements);
+            return Status::InternalError(msg);
+        }
         _cur_index = pos;
         return Status::OK();
     }
