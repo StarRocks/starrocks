@@ -23,6 +23,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
+import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -66,6 +67,11 @@ public class AlterTableStatementAnalyzer {
         if (alterClause.getProperties().containsKey(PROPERTIES_BF_COLUMNS)) {
             return true;
         }
+
+        if (alterClause instanceof DropIndexClause) {
+            return true;
+        }
+
         return false;
     }
 }
