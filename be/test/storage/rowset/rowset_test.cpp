@@ -78,6 +78,7 @@ protected:
 
     void SetUp() override {
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
+        _update_mem_tracker = std::make_unique<starrocks::MemTracker>();
         config::tablet_map_shard_size = 1;
         config::txn_map_shard_size = 1;
         config::txn_shard_size = 1;
@@ -94,6 +95,7 @@ protected:
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
+        options.update_mem_tracker = _update_mem_tracker.get();
         Status s = starrocks::StorageEngine::open(options, &k_engine);
         ASSERT_TRUE(s.ok()) << s.to_string();
 
@@ -241,6 +243,7 @@ protected:
 
 private:
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _update_mem_tracker = nullptr;
     std::string _default_storage_root_path;
 };
 
@@ -263,6 +266,7 @@ static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& sch
 
 void RowsetTest::test_final_merge(bool has_merge_condition = false) {
     auto tablet = create_tablet(12421, 53242);
+    tablet->set_enable_persistent_index(true);
 
     RowsetSharedPtr rowset;
     const uint32_t rows_per_segment = 1024;
