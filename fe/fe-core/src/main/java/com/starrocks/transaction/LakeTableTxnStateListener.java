@@ -29,6 +29,8 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.AbortTxnRequest;
+import com.starrocks.proto.TxnTypePB;
+import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
@@ -36,6 +38,7 @@ import com.starrocks.system.Backend;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -174,6 +177,17 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
             isFirstPartition = false;
         }
+
+        // The new versions in a replication transaction depend on the versions in ReplicationTxnCommitAttachment
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+            ReplicationTxnCommitAttachment attachment = (ReplicationTxnCommitAttachment) txnState
+                    .getTxnCommitAttachment();
+            Map<Long, Long> partitionVersions = attachment.getPartitionVersions();
+            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+                partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
+            }
+        }
+
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
     }
 
@@ -184,6 +198,11 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void postAbort(TransactionState txnState, List<TabletFailInfo> failedTablets) {
+        List<Long> txnIds = Collections.singletonList(txnState.getTransactionId());
+        List<TxnTypePB> txnTypes = Collections.singletonList(
+                txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                        ? TxnTypePB.TXN_REPLICATION
+                        : TxnTypePB.TXN_NORMAL);
         Map<Long, List<Long>> tabletGroup = null;
         Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
         if (db == null) {
@@ -211,8 +230,8 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
                 continue;
             }
             AbortTxnRequest request = new AbortTxnRequest();
-            request.txnIds = Lists.newArrayList();
-            request.txnIds.add(txnState.getTransactionId());
+            request.txnIds = txnIds;
+            request.txnTypes = txnTypes;
             request.tabletIds = entry.getValue();
 
             try {

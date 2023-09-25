@@ -156,6 +156,7 @@ import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.privilege.ViewPEntryObject;
 import com.starrocks.privilege.WarehouseFCPEntryObject;
+import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.SharedDataStorageVolumeMgr;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.server.StorageVolumeMgr;
@@ -335,7 +336,8 @@ public class GsonUtils {
                     .registerSubtype(ManualLoadTxnCommitAttachment.class, "ManualLoadTxnCommitAttachment")
                     .registerSubtype(MiniLoadTxnCommitAttachment.class, "MiniLoadTxnCommitAttachment")
                     .registerSubtype(RLTaskTxnCommitAttachment.class, "RLTaskTxnCommitAttachment")
-                    .registerSubtype(StreamLoadTxnCommitAttachment.class, "StreamLoadTxnCommitAttachment");
+                    .registerSubtype(StreamLoadTxnCommitAttachment.class, "StreamLoadTxnCommitAttachment")
+                    .registerSubtype(ReplicationTxnCommitAttachment.class, "ReplicationTxnCommitAttachment");
 
     public static final RuntimeTypeAdapterFactory<RoutineLoadProgress> ROUTINE_LOAD_PROGRESS_TYPE_RUNTIME_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(RoutineLoadProgress.class, "clazz")

@@ -39,8 +39,18 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     public void applyCommitLog(TransactionState txnState, TableCommitInfo commitInfo) {
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             long partitionId = partitionCommitInfo.getPartitionId();
-            Partition partition = table.getPartition(partitionId);
-            partition.setNextVersion(partition.getNextVersion() + 1);
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+            if (partition == null) {
+                LOG.warn("ignored dropped partition {} when applying commit log", partitionId);
+                continue;
+            }
+
+            // The version of a replication transaction may not continuously
+            if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+                partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+            } else {
+                partition.setNextVersion(partition.getNextVersion() + 1);
+            }
         }
     }
 
@@ -56,7 +66,10 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             long version = partitionCommitInfo.getVersion();
             long versionTime = partitionCommitInfo.getVersionTime();
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
-            Preconditions.checkState(version == partition.getVisibleVersion() + 1);
+            // The version of a replication transaction may not continuously
+            Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                    || version == partition.getVisibleVersion() + 1);
+
             partition.updateVisibleVersion(version, versionTime);
 
             PartitionIdentifier partitionIdentifier =
