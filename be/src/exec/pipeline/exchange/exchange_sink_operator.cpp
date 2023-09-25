@@ -200,7 +200,11 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(Chunk* chunk, int32_t d
         _chunks[driver_sequence]->set_num_rows(0);
     }
 
-    _chunks[driver_sequence]->append_selective(*chunk, indexes, from, size);
+    if (_parent->_devirtualize) {
+        _chunks[driver_sequence]->append_selective2(*chunk, indexes, from, size);
+    } else {
+        _chunks[driver_sequence]->append_selective(*chunk, indexes, from, size);
+    }
     return Status::OK();
 }
 
@@ -393,7 +397,8 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
 
     _buffer->incr_sinker(state);
-
+    _devirtualize = state->query_options().__isset.enable_append_selective_devirtualize &&
+                    state->query_options().enable_append_selective_devirtualize;
     _be_number = state->be_number();
     if (state->query_options().__isset.transmission_encode_level) {
         _encode_level = state->query_options().transmission_encode_level;
