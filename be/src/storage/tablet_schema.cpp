@@ -279,7 +279,15 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaPB& schema_
     return std::make_shared<TabletSchema>(schema_pb, schema_map);
 }
 
+<<<<<<< HEAD
 std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_tablet_schema,
+=======
+// Be careful
+// When you use this function to create a new partial tablet schema, please make sure `referenced_column_ids` include
+// all sort key column index of `src_tablet_schema`. Otherwise you need to recalculate the short key columns of the
+// partial tablet schema
+std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_tablet_schema,
+>>>>>>> 20dcccd284 ([BugFix] Fix some daily test bug (#31644))
                                                    const std::vector<int32_t>& referenced_column_ids) {
     TabletSchemaPB partial_tablet_schema_pb;
     partial_tablet_schema_pb.set_id(src_tablet_schema.id());

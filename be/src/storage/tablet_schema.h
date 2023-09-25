@@ -262,9 +262,37 @@ public:
     double bf_fpp() const { return _bf_fpp; }
     CompressionTypePB compression_type() const { return _compression_type; }
 
+<<<<<<< HEAD
     // The in-memory property is no longer supported, but leave this API for compatibility.
     // Newly-added code should not rely on this method, it may be removed at any time.
     static bool is_in_memory() { return false; }
+=======
+    int32_t schema_version() const { return _schema_version; }
+    void clear_columns();
+    void copy_from(const std::shared_ptr<const TabletSchema>& tablet_schema);
+
+    // Please call the following function with caution. Most of the time,
+    // the following two functions should not be called explicitly.
+    // When we do column partial update for primary key table which seperate primary keys
+    // and sort keys, we will create a partial tablet schema for rowset writer. However,
+    // the sort key columns maybe not exist in the partial tablet schema and the partial tablet
+    // schema will keep a wrong sort key idxes and short key column num. So BE will crash in ASAN
+    // mode. However, the sort_key_idxes and short_key_column_num in partial tablet schema is not
+    // important actually, because the update segment file does not depend on it and the update
+    // segment file will be rewrite to col file after apply. So these function are used to modify
+    // the sort_key_idxes and short_key_column_num in partial tablet schema to avoid BE crash so far.
+    void set_sort_key_idxes(std::vector<ColumnId> sort_key_idxes) {
+        for (auto idx : _sort_key_idxes) {
+            _cols[idx].set_is_sort_key(false);
+        }
+        _sort_key_idxes.clear();
+        _sort_key_idxes.assign(sort_key_idxes.begin(), sort_key_idxes.end());
+        for (auto idx : _sort_key_idxes) {
+            _cols[idx].set_is_sort_key(true);
+        }
+    }
+    void set_num_short_key_columns(uint16_t num_short_key_columns) { _num_short_key_columns = num_short_key_columns; }
+>>>>>>> 20dcccd284 ([BugFix] Fix some daily test bug (#31644))
 
     std::string debug_string() const;
 
