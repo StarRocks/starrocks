@@ -18,6 +18,7 @@ package com.starrocks.external.starrocks;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.leader.LeaderImpl;
+import com.starrocks.meta.MetaContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -25,6 +26,7 @@ import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -108,13 +110,6 @@ public class TableMetaSyncerTest {
                     "is_robot," +
                     "is_unpatrolled" +
                 ")" +
-                "PARTITION BY RANGE(event_time)" +
-                "(" +
-                    "PARTITION p06 VALUES LESS THAN ('2015-09-12 06:00:00')," +
-                    "PARTITION p12 VALUES LESS THAN ('2015-09-12 12:00:00')," +
-                    "PARTITION p18 VALUES LESS THAN ('2015-09-12 18:00:00')," +
-                    "PARTITION p24 VALUES LESS THAN ('2015-09-13 00:00:00')" +
-                ")" +
                 "DISTRIBUTED BY HASH(user)" +
                 "properties (" +
                     "\"host\" = \"127.0.0.2\"," +
@@ -134,6 +129,10 @@ public class TableMetaSyncerTest {
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test_db").getTable("test_ext_table");
         ExternalOlapTable extTable = (ExternalOlapTable) table;
+        // remove the thread local meta context
+        MetaContext.remove();
         extTable.updateMeta(request.getDb_name(), response.getTable_meta(), response.getBackends());
+        Assert.assertNull(MetaContext.get());
+        Assert.assertEquals(4, extTable.getPartitions().size());
     }
 }

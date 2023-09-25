@@ -115,7 +115,8 @@ public class OlapTableTest {
         OlapTable olapTable = new OlapTable();
         olapTable.setHasDelete();
 
-        OlapTable copied = olapTable.copyOnlyForQuery();
+        OlapTable copied = new OlapTable();
+        olapTable.copyOnlyForQuery(copied);
 
         Assert.assertEquals(olapTable.hasDelete(), copied.hasDelete());
         Assert.assertEquals(olapTable.hasForbitGlobalDict(), copied.hasForbitGlobalDict());
