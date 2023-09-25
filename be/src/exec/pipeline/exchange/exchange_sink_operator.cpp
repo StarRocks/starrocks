@@ -439,7 +439,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
-    _send_bytes_counter = ADD_COUNTER(_unique_metrics, "RawSendBytes", TUnit::BYTES);
+    _sender_input_bytes_counter = ADD_COUNTER(_unique_metrics, "SenderInputBytes", TUnit::BYTES);
     _serialized_bytes_counter = ADD_COUNTER(_unique_metrics, "SerializedBytes", TUnit::BYTES);
     _compressed_bytes_counter = ADD_COUNTER(_unique_metrics, "CompressedBytes", TUnit::BYTES);
 
@@ -667,8 +667,8 @@ void ExchangeSinkOperator::close(RuntimeState* state) {
 
 Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, bool* is_first_chunk, int num_receivers) {
     VLOG_ROW << "[ExchangeSinkOperator] serializing " << src->num_rows() << " rows";
-    auto raw_send_bytes = serde::ProtobufChunkSerde::max_serialized_size(*src, nullptr);
-    COUNTER_UPDATE(_send_bytes_counter, raw_send_bytes * num_receivers);
+    auto send_input_bytes = serde::ProtobufChunkSerde::max_serialized_size(*src, nullptr);
+    COUNTER_UPDATE(_sender_input_bytes_counter, send_input_bytes * num_receivers);
     {
         SCOPED_TIMER(_serialize_chunk_timer);
         // We only serialize chunk meta for first chunk
