@@ -54,6 +54,12 @@ void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment
     }
 }
 
+void MetaFileBuilder::clear_delvecs() {
+    _buf.clear();
+    _delvecs.clear();
+    _segmentid_to_delvec.clear();
+}
+
 void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
                                     const std::map<int, std::string>& replace_segments,
                                     const std::vector<std::string>& orphan_files) {

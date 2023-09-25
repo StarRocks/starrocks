@@ -113,8 +113,6 @@ public:
     // a file to local_path
     StatusOr<uint64_t> download(const std::string& local_path);
 
-    StatusOr<std::string> download();
-
     Status execute_post_request(const std::string& payload, std::string* response);
 
     Status execute_delete_request(const std::string& payload, std::string* response);
