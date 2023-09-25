@@ -20,6 +20,7 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.AnyDistributionSpec;
 import com.starrocks.sql.optimizer.base.CTEProperty;
@@ -395,7 +396,8 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     @Override
     public PhysicalPropertySet visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, ExpressionContext context) {
         IcebergTable icebergTable = (IcebergTable) node.getTable();
-        if (icebergTable.hasBucketProperties()) {
+        if (ConnectContext.get().getSessionVariable().isEnableIcebergBucketOptimize() &&
+                icebergTable.hasBucketProperties()) {
             return createPropertySetByDistribution(node.getDistributionSpec());
         } else {
             return visitOperator(node, context);

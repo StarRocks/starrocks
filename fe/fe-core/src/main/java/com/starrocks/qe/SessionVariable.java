@@ -510,6 +510,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_ICEBERG_NDV = "enable_iceberg_ndv";
 
+    public static final String ENABLE_ICEBERG_BUCKET_OPTIMIZE = "enable_iceberg_bucket_optimize";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -706,6 +708,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_ICEBERG_NDV)
     private boolean enableIcebergNdv = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_ICEBERG_BUCKET_OPTIMIZE)
+    private boolean enableIcebergBucketOptimize = true;
 
     @VariableMgr.VarAttr(name = INNODB_READ_ONLY)
     private boolean innodbReadOnly = true;
@@ -1102,6 +1107,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableIcebergNdv(boolean enableIcebergNdv) {
         this.enableIcebergNdv = enableIcebergNdv;
+    }
+
+    public boolean isEnableIcebergBucketOptimize() {
+        return enableIcebergBucketOptimize;
     }
 
     @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
