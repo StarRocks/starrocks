@@ -250,6 +250,7 @@ set(EXEC_FILES
         ./storage/table_reader_test.cpp
         ./storage/table_schema_test.cpp
         ./storage/tablet_updates_test.cpp
+        ./storage/tablet_updates_schema_change_test.cpp
         ./storage/update_manager_test.cpp
         ./storage/compaction_utils_test.cpp
         ./storage/compaction_manager_test.cpp
