@@ -222,6 +222,7 @@
 - FE 配置项 `tablet_create_timeout_second` 默认值由 `1` 改为 `10`。
 - FE 配置项 `max_routine_load_task_num_per_be` 默认值由 `5` 改为 `16`，并且当创建的 Routine Load 任务数量较多时，如果发生报错会给出提示。
 - FE 配置项 `quorom_publish_wait_time_ms` 更名为 `quorum_publish_wait_time_ms`，`async_load_task_pool_size` 更名为 `max_broker_load_job_concurrency`。
+- CN 配置项 `thrift_port` 更名为 `be_port`。
 - 废弃 BE 配置项 `routine_load_thread_pool_size`，单 BE 节点上 Routine Load 线程池大小完全由 FE 配置项 `max_routine_load_task_num_per_be` 控制。
 - 废弃 BE 配置项 `txn_commit_rpc_timeout_ms` 和系统变量 `tx_visible_wait_timeout`，通过 `time_out` 设置事务超时时间。
 - 废弃 FE 配置项 `max_broker_concurrency`、`load_parallel_instance_num`。
