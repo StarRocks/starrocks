@@ -1931,6 +1931,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.pipelineDop = pipelineDop;
     }
 
+    public int getChunkSize() {
+        return this.chunkSize;
+    }
+
     public int getPipelineDop() {
         return this.pipelineDop;
     }
