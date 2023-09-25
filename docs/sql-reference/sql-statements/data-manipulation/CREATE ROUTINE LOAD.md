@@ -246,7 +246,7 @@ For examples, see [matched mode](#starrocks-table-column-names-different-from-js
 
 This section uses  CSV-formatted data as an example to describe how you can employ various parameter settings and combinations to meet your diverse loading requirements.
 
-#### Prepare a dataset
+**Prepare a dataset**
 
 Suppose you want to load CSV-formatted data from a Kafka topic named `ordertest1`.Every message in the dataset includes six columns: order ID, payment date, customer name, nationality, gender, and price.
 
@@ -259,7 +259,7 @@ Suppose you want to load CSV-formatted data from a Kafka topic named `ordertest1
 2020051101,2020-05-11,Edogawa Conan,japan,male,8924
 ```
 
-#### Create a table
+**Create a table**
 
 According to the columns of CSV-formatted data, create a table named `example_tbl1` in the database `example_db`.
 
@@ -275,7 +275,7 @@ DUPLICATE KEY (order_id,pay_dt)
 DISTRIBUTED BY HASH(`order_id`); 
 ```
 
-#### **Consume data starting from** **specified offsets for** **specified** **partitions**
+#### Consume data starting from specified offsets for specified partitions
 
 If the Routine Load job needs to consume data starting from specified partitions and offsets, you need to configure the parameters `kafka_partitions` and `kafka_offsets`.
 
@@ -292,7 +292,7 @@ FROM KAFKA
 );
 ```
 
-#### **Improve loading performance by increasing task** **parallelism**
+#### Improve loading performance by increasing task parallelism
 
 To improve loading performance and avoid accumulative consumption, you can increase task parallelism by increasing the `desired_concurrent_number` value when you create the Routine Load job. Task parallelism allows splitting one Routine Load job into as many parallel tasks as possible.
 
@@ -333,7 +333,7 @@ FROM KAFKA
 
 If the sequence of columns in the CSV-formatted data is inconsistent with the columns in the target table, assuming that the fifth column in the CSV-formatted data does not need to be imported to the target table, you need to specify the column mapping between the CSV-formatted data and the target table through the `COLUMNS` parameter.
 
-#### Target database and table
+**Target database and table**
 
 Create the target table `example_tbl2` in the target database `example_db` according to the columns in the CSV-formatted data. In this scenario, you need to create five columns corresponding to the five columns in the CSV-formatted data, except for the fifth column that stores gender.
 
@@ -349,7 +349,7 @@ DUPLICATE KEY (order_id,pay_dt)
 DISTRIBUTED BY HASH(order_id); 
 ```
 
-#### Routine Load job
+**Routine Load job**
 
 In this example, since the fifth column in the CSV-formatted data does not need to be loaded to the target table, the fifth column is temporarily named `temp_gender` in `COLUMNS`, and the other columns are directly mapped to the table `example_tbl2`.
 
@@ -484,7 +484,7 @@ FROM KAFKA
 
 #### StarRocks table column names consistent with JSON key names
 
-##### Prepare a dataset
+**Prepare a dataset**
 
 For example, the following JSON-formatted data exists in the Kafka topic `ordertest2`.
 
@@ -496,7 +496,7 @@ For example, the following JSON-formatted data exists in the Kafka topic `ordert
 
 > **Note** Each JSON object must be in one Kafka message. Otherwise, an error that indicates a failure in parsing JSON-formatted data occurs.
 
-##### Target database and table
+**Target database and table**
 
 Create table `example_tbl3` in the target database `example_db` in the StarRocks cluster. The column names are consistent with the keys names in the JSON-formatted data.
 
@@ -511,7 +511,7 @@ AGGREGATE KEY(commodity_id,customer_name,country,pay_time)
 DISTRIBUTED BY HASH(commodity_id); 
 ```
 
-##### Routine Load job
+**Routine Load job**
 
 You can use the simple mode for the Routine Load job. That is, you do not need to specify `jsonpaths` and `COLUMNS` parameters when creating the Routine Load job. StarRocks extracts the keys of JSON-formatted data in the topic `ordertest2` of the Kafka cluster according to the column names of the target table `example_tbl3` and loads the JSON-formatted data into the target table.
 
@@ -533,9 +533,9 @@ FROM KAFKA
 > - If the outermost layer of the JSON-formatted data is an array structure, you need to set `"strip_outer_array"="true"` in `PROPERTIES` to strip the outermost array structure. Additionally, when you need to specify `jsonpaths`, the root element of the entire JSON-formatted data is the flattened JSON object because the outermost array structure of the JSON-formatted data is stripped.
 > - You can use `json_root` to specify the root element of the JSON-formatted data.
 
-#### StarRocks table column names different from JSON key names
+#### StarRocks table contains derived columns generated using expressions
 
-##### Prepare a dataset
+**Prepare a dataset**
 
 For example, the following JSON-formatted data exists in the topic `ordertest2` of the Kafka cluster.
 
@@ -545,7 +545,7 @@ For example, the following JSON-formatted data exists in the topic `ordertest2` 
 {"commodity_id": "3", "customer_name": "Antoine de Saint-Exupéry","country": "France","pay_time": 1589191487,"price": 895}
 ```
 
-##### Target database and table
+**Target database and table**
 
 Create a table named `example_tbl4` in the database `example_db` in the StarRocks cluster. The column `pay_dt` is a derived column whose values are generated by computing values of the key `pay_time` in the JSON-formatted data.
 
@@ -561,7 +561,7 @@ AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`,`pay_dt`)
 DISTRIBUTED BY HASH(`commodity_id`); 
 ```
 
-##### Routine Load job
+**Routine Load job**
 
 You can use the matched mode for the Routine Load job. That is, you need to specify `jsonpaths` and `COLUMNS` parameters when creating the Routine Load job.
 
@@ -589,11 +589,72 @@ FROM KAFKA
 > - If the outermost layer of the JSON data is an array structure, you need to set `"strip_outer_array"="true"` in the `PROPERTIES` to strip the outermost array structure. Additionally, when you need to specify `jsonpaths`, the root element of the entire JSON data is the flattened JSON object because the outermost array structure of the JSON data is stripped.
 > - You can use `json_root` to specify the root element of the JSON-formatted data.
 
+#### StarRocks table contains derived column generated using CASE expression
+
+**Prepare a dataset**
+
+For example, the following JSON-formatted data exists in the Kafka topic `topic-expr-test`.
+
+```JSON
+{"key1":1, "key2": 21}
+{"key1":12, "key2": 22}
+{"key1":13, "key2": 23}
+{"key1":14, "key2": 24}
+```
+
+**Target database and table**
+
+Create a table named `tbl_expr_test` in the database `example_db` in the StarRocks cluster. The target table `tbl_expr_test` contains two columns, where the values of the `col2` column need to be computed by using case expression on JSON data.
+
+```SQL
+CREATE TABLE tbl_expr_test (
+    col1 string, col2 string)
+DISTRIBUTED BY HASH (col1);
+```
+
+**Routine Load job**
+
+Because the values in the `col2` column in the target table are generated using a CASE expression, you need to specify the corresponding expression in the `COLUMNS` parameter for the Routine load job.
+
+```SQL
+CREATE ROUTINE LOAD rl_expr_test ON tbl_expr_test
+COLUMNS (
+      key1,
+      key2,
+      col1 = key1,
+      col2 = CASE WHEN key1 = "1" THEN "key1=1" 
+                  WHEN key1 = "12" THEN "key1=12"
+                  ELSE "nothing" END) 
+PROPERTIES ("format" = "json")
+FROM KAFKA
+(
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_topic" = "topic-expr-test"
+);
+```
+
+**Query StarRocks table**
+
+Query the StarRocks table. The result shows that the values in the `col2` column are the output of the CASE expression.
+
+```SQL
+MySQL [example_db]> SELECT * FROM tbl_expr_test;
++------+---------+
+| col1 | col2    |
++------+---------+
+| 1    | key1=1  |
+| 12   | key1=12 |
+| 13   | nothing |
+| 14   | nothing |
++------+---------+
+4 rows in set (0.015 sec)
+```
+
 #### Specify the root element of the JSON-formatted data to be loaded
 
 You need to use `json_root` to specify the root element of the JSON-formatted data to be loaded and the value must be a valid JsonPath expression.
 
-##### Prepare a dataset
+**Prepare a dataset**
 
 For example, the following JSON-formatted data exists in the topic `ordertest3` of the Kafka cluster. And the root element of the JSON-formatted data to be loaded is `$.RECORDS`.
 
@@ -601,7 +662,7 @@ For example, the following JSON-formatted data exists in the topic `ordertest3` 
 {"RECORDS":[{"commodity_id": "1", "customer_name": "Mark Twain", "country": "US","pay_time": 1589191487,"price": 875},{"commodity_id": "2", "customer_name": "Oscar Wilde", "country": "UK","pay_time": 1589191487,"price": 895},{"commodity_id": "3", "customer_name": "Antoine de Saint-Exupéry","country": "France","pay_time": 1589191487,"price": 895}]}
 ```
 
-##### Target database and table
+**Target database and table**
 
 Create a table named `example_tbl3` in the database `example_db` in the StarRocks cluster.
 
@@ -617,7 +678,7 @@ ENGINE=OLAP
 DISTRIBUTED BY HASH(commodity_id); 
 ```
 
-##### Routine Load job
+**Routine Load job**
 
 You can set `"json_root" = "$.RECORDS"` in `PROPERTIES` to specify the root element of the JSON-formatted data to be loaded. Also, since the JSON-formatted data to be loaded is in an array structure, you must also set `"strip_outer_array" = "true"` to strip the outermost array structure.
 
@@ -644,33 +705,33 @@ Since v3.0.1, StarRocks supports loading Avro data by using Routine Load.
 
 Suppose the Avro schema is relatively simple, and you need to load all fields of the Avro data.
 
-##### Prepare a dataset
+**Prepare a dataset**
 
-###### Avro schema
+- **Avro schema**
 
-1. Create the following Avro schema file `avro_schema1.avsc`:
+    1. Create the following Avro schema file `avro_schema1.avsc`:
 
-      ```json
-      {
-          "type": "record",
-          "name": "sensor_log",
-          "fields" : [
-              {"name": "id", "type": "long"},
-              {"name": "name", "type": "string"},
-              {"name": "checked", "type" : "boolean"},
-              {"name": "data", "type": "double"},
-              {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}}  
-          ]
-      }
-      ```
+        ```json
+        {
+            "type": "record",
+            "name": "sensor_log",
+            "fields" : [
+                {"name": "id", "type": "long"},
+                {"name": "name", "type": "string"},
+                {"name": "checked", "type" : "boolean"},
+                {"name": "data", "type": "double"},
+                {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}}  
+            ]
+        }
+        ```
 
-2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html).
+    2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html).
 
-###### Avro data
+- **Avro data**
 
 Prepare the Avro data and send it to the Kafka topic `topic_1`.
 
-##### Target database and table
+**Target database and table**
 
 According to the fields of Avro data, create a table `sensor_log1` in the target database `sensor` in the StarRocks cluster. The column names of the table must match the field names in the Avro data. For the data types mapping when Avro data is loaded into StarRocks, see [Data types mapping](#Data types mapping).
 
@@ -687,7 +748,7 @@ DUPLICATE KEY (id)
 DISTRIBUTED BY HASH(`id`); 
 ```
 
-##### Routine Load job
+**Routine Load job**
 
 You can use the simple mode for the Routine Load job. That is, you do not need to specify the parameter `jsonpaths` when creating the Routine Load job. Execute the following statement to submit a Routine Load job named `sensor_log_load_job1` to consume the Avro messages in the Kafka topic `topic_1` and load the data into the table `sensor_log1` in the database `sensor`.
 
@@ -711,42 +772,42 @@ FROM KAFKA
 
 Suppose the Avro schema contains a nested record-type field, and you need to load the subfield in a nested record-type field into StarRocks.
 
-##### Prepare a dataset
+**Prepare a dataset**
 
-###### Avro schema
+- **Avro schema**
 
-1. Create the following Avro schema file `avro_schema2.avsc`. The outer Avro record includes five fields which are `id`, `name`, `checked`, `sensor_type`, and `data` in sequence. And the field `data` has a nested record `data_record`.
+    1. Create the following Avro schema file `avro_schema2.avsc`. The outer Avro record includes five fields which are `id`, `name`, `checked`, `sensor_type`, and `data` in sequence. And the field `data` has a nested record `data_record`.
 
-      ```JSON
-      {
-          "type": "record",
-          "name": "sensor_log",
-          "fields" : [
-              {"name": "id", "type": "long"},
-              {"name": "name", "type": "string"},
-              {"name": "checked", "type" : "boolean"},
-              {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}},
-              {"name": "data", "type": 
-                  {
-                      "type": "record",
-                      "name": "data_record",
-                      "fields" : [
-                          {"name": "data_x", "type" : "boolean"},
-                          {"name": "data_y", "type": "long"}
-                      ]
-                  }
-              }
-          ]
-      }
-      ```
+        ```JSON
+        {
+            "type": "record",
+            "name": "sensor_log",
+            "fields" : [
+                {"name": "id", "type": "long"},
+                {"name": "name", "type": "string"},
+                {"name": "checked", "type" : "boolean"},
+                {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}},
+                {"name": "data", "type": 
+                    {
+                        "type": "record",
+                        "name": "data_record",
+                        "fields" : [
+                            {"name": "data_x", "type" : "boolean"},
+                            {"name": "data_y", "type": "long"}
+                        ]
+                    }
+                }
+            ]
+        }
+        ```
 
-2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html).
+    2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html).
 
-###### Avro data
+- **Avro data**
 
 Prepare the Avro data and send it to the Kafka topic `topic_2`.
 
-##### Target database and table
+**Target database and table**
 
 According to the fields of Avro data, create a table `sensor_log2` in the target database `sensor` in the StarRocks cluster.
 
@@ -765,7 +826,7 @@ DUPLICATE KEY (id)
 DISTRIBUTED BY HASH(`id`); 
 ```
 
-##### Routine Load job
+**Routine Load job**
 
 Submit the load job, use `jsonpaths` to specify the fields of the Avro data that need to be loaded. Note that for the subfield `data_y` in the nested Record, you need to specify its `jsonpath` as `"$.data.data_y"`.
 
@@ -788,45 +849,45 @@ FROM KAFKA
 
 #### Avro schema contains a Union field
 
-##### Prepare a dataset
+**Prepare a dataset**
 
 Suppose the Avro schema contains a Union field, and you need to load the Union field into StarRocks.
 
-###### Avro schema
+- **Avro schema**
 
-1. Create the following Avro schema file `avro_schema3.avsc`. The outer Avro record includes five fields which are `id`, `name`, `checked`, `sensor_type`, and `data` in sequence. And the field `data` is of Union type and includes two elements, `null` and a nested record `data_record`.
+    1. Create the following Avro schema file `avro_schema3.avsc`. The outer Avro record includes five fields which are `id`, `name`, `checked`, `sensor_type`, and `data` in sequence. And the field `data` is of Union type and includes two elements, `null` and a nested record `data_record`.
 
-      ```JSON
-      {
-          "type": "record",
-          "name": "sensor_log",
-          "fields" : [
-              {"name": "id", "type": "long"},
-              {"name": "name", "type": "string"},
-              {"name": "checked", "type" : "boolean"},
-              {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}},
-              {"name": "data", "type": [null,
-                    {
-                        "type": "record",
-                        "name": "data_record",
-                        "fields" : [
-                            {"name": "data_x", "type" : "boolean"},
-                            {"name": "data_y", "type": "long"}
-                        ]
-                    }
-                  ]
-              }
-          ]
-      }
-      ```
+        ```JSON
+        {
+            "type": "record",
+            "name": "sensor_log",
+            "fields" : [
+                {"name": "id", "type": "long"},
+                {"name": "name", "type": "string"},
+                {"name": "checked", "type" : "boolean"},
+                {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}},
+                {"name": "data", "type": [null,
+                        {
+                            "type": "record",
+                            "name": "data_record",
+                            "fields" : [
+                                {"name": "data_x", "type" : "boolean"},
+                                {"name": "data_y", "type": "long"}
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+        ```
 
-2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html).
+    2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html).
 
-###### Avro data
+- **Avro data**
 
 Prepare the Avro data and send it to the Kafka topic `topic_3`.
 
-##### Target database and table
+**Target database and table**
 
 According to the fields of Avro data, create a table `sensor_log3` in the target database `sensor` in the StarRocks cluster.
 
@@ -845,7 +906,7 @@ DUPLICATE KEY (id)
 DISTRIBUTED BY HASH(`id`); 
 ```
 
-##### Routine Load job
+**Routine Load job**
 
 Submit the load job, use `jsonpaths` to specify the fields that need to be loaded in the Avro data. Note that for the field `data_y`, you need to specify its `jsonpath` as `"$.data.data_y"`.
 
