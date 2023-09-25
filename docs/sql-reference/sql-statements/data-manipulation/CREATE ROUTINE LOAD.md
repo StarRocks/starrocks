@@ -275,7 +275,7 @@ DUPLICATE KEY (order_id,pay_dt)
 DISTRIBUTED BY HASH(`order_id`); 
 ```
 
-#### **Consume data starting from** **specified offsets for** **specified** **partitions**
+#### Consume data starting from specified offsets for specified partitions
 
 If the Routine Load job needs to consume data starting from specified partitions and offsets, you need to configure the parameters `kafka_partitions` and `kafka_offsets`.
 
@@ -292,7 +292,7 @@ FROM KAFKA
 );
 ```
 
-#### **Improve loading performance by increasing task** **parallelism**
+#### Improve loading performance by increasing task parallelism
 
 To improve loading performance and avoid accumulative consumption, you can increase task parallelism by increasing the `desired_concurrent_number` value when you create the Routine Load job. Task parallelism allows splitting one Routine Load job into as many parallel tasks as possible.
 
@@ -533,7 +533,7 @@ FROM KAFKA
 > - If the outermost layer of the JSON-formatted data is an array structure, you need to set `"strip_outer_array"="true"` in `PROPERTIES` to strip the outermost array structure. Additionally, when you need to specify `jsonpaths`, the root element of the entire JSON-formatted data is the flattened JSON object because the outermost array structure of the JSON-formatted data is stripped.
 > - You can use `json_root` to specify the root element of the JSON-formatted data.
 
-#### StarRocks table column names different from JSON key names
+#### StarRocks table contains derived columns generated using expressions
 
 **Prepare a dataset**
 
@@ -588,6 +588,67 @@ FROM KAFKA
 >
 > - If the outermost layer of the JSON data is an array structure, you need to set `"strip_outer_array"="true"` in the `PROPERTIES` to strip the outermost array structure. Additionally, when you need to specify `jsonpaths`, the root element of the entire JSON data is the flattened JSON object because the outermost array structure of the JSON data is stripped.
 > - You can use `json_root` to specify the root element of the JSON-formatted data.
+
+#### StarRocks table contains derived column generated using CASE expression
+
+**Prepare a dataset**
+
+For example, the following JSON-formatted data exists in the Kafka topic `topic-expr-test`.
+
+```JSON
+{"key1":1, "key2": 21}
+{"key1":12, "key2": 22}
+{"key1":13, "key2": 23}
+{"key1":14, "key2": 24}
+```
+
+**Target database and table**
+
+Create a table named `tbl_expr_test` in the database `example_db` in the StarRocks cluster. The target table `tbl_expr_test` contains two columns, where the values of the `col2` column need to be computed by using case expression on JSON data.
+
+```SQL
+CREATE TABLE tbl_expr_test (
+    col1 string, col2 string)
+DISTRIBUTED BY HASH (col1);
+```
+
+**Routine Load job**
+
+Because the values in the `col2` column in the target table are generated using a CASE expression, you need to specify the corresponding expression in the `COLUMNS` parameter for the Routine load job.
+
+```SQL
+CREATE ROUTINE LOAD rl_expr_test ON tbl_expr_test
+COLUMNS (
+      key1,
+      key2,
+      col1 = key1,
+      col2 = CASE WHEN key1 = "1" THEN "key1=1" 
+                  WHEN key1 = "12" THEN "key1=12"
+                  ELSE "nothing" END) 
+PROPERTIES ("format" = "json")
+FROM KAFKA
+(
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_topic" = "topic-expr-test"
+);
+```
+
+**Query StarRocks table**
+
+Query the StarRocks table. The result shows that the values in the `col2` column are the output of the CASE expression.
+
+```SQL
+MySQL [example_db]> SELECT * FROM tbl_expr_test;
++------+---------+
+| col1 | col2    |
++------+---------+
+| 1    | key1=1  |
+| 12   | key1=12 |
+| 13   | nothing |
+| 14   | nothing |
++------+---------+
+4 rows in set (0.015 sec)
+```
 
 #### Specify the root element of the JSON-formatted data to be loaded
 
@@ -646,27 +707,35 @@ Suppose the Avro schema is relatively simple, and you need to load all fields of
 
 **Prepare a dataset**
 
+<<<<<<< HEAD
 **Avro schema**
+=======
+- **Avro schema**
+>>>>>>> 9c7428d191 ([Enhancement][Doc]add-a-col-expression-example-in-create-routine-load (#31554))
 
-1. Create the following Avro schema file `avro_schema1.avsc`:
+    1. Create the following Avro schema file `avro_schema1.avsc`:
 
-      ```json
-      {
-          "type": "record",
-          "name": "sensor_log",
-          "fields" : [
-              {"name": "id", "type": "long"},
-              {"name": "name", "type": "string"},
-              {"name": "checked", "type" : "boolean"},
-              {"name": "data", "type": "double"},
-              {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}}  
-          ]
-      }
-      ```
+        ```json
+        {
+            "type": "record",
+            "name": "sensor_log",
+            "fields" : [
+                {"name": "id", "type": "long"},
+                {"name": "name", "type": "string"},
+                {"name": "checked", "type" : "boolean"},
+                {"name": "data", "type": "double"},
+                {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}}  
+            ]
+        }
+        ```
 
-2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html).
+    2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html).
 
+<<<<<<< HEAD
 **Avro data**
+=======
+- **Avro data**
+>>>>>>> 9c7428d191 ([Enhancement][Doc]add-a-col-expression-example-in-create-routine-load (#31554))
 
 Prepare the Avro data and send it to the Kafka topic `topic_1`.
 
@@ -713,36 +782,44 @@ Suppose the Avro schema contains a nested record-type field, and you need to loa
 
 **Prepare a dataset**
 
+<<<<<<< HEAD
 **Avro schema**
+=======
+- **Avro schema**
+>>>>>>> 9c7428d191 ([Enhancement][Doc]add-a-col-expression-example-in-create-routine-load (#31554))
 
-1. Create the following Avro schema file `avro_schema2.avsc`. The outer Avro record includes five fields which are `id`, `name`, `checked`, `sensor_type`, and `data` in sequence. And the field `data` has a nested record `data_record`.
+    1. Create the following Avro schema file `avro_schema2.avsc`. The outer Avro record includes five fields which are `id`, `name`, `checked`, `sensor_type`, and `data` in sequence. And the field `data` has a nested record `data_record`.
 
-      ```JSON
-      {
-          "type": "record",
-          "name": "sensor_log",
-          "fields" : [
-              {"name": "id", "type": "long"},
-              {"name": "name", "type": "string"},
-              {"name": "checked", "type" : "boolean"},
-              {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}},
-              {"name": "data", "type": 
-                  {
-                      "type": "record",
-                      "name": "data_record",
-                      "fields" : [
-                          {"name": "data_x", "type" : "boolean"},
-                          {"name": "data_y", "type": "long"}
-                      ]
-                  }
-              }
-          ]
-      }
-      ```
+        ```JSON
+        {
+            "type": "record",
+            "name": "sensor_log",
+            "fields" : [
+                {"name": "id", "type": "long"},
+                {"name": "name", "type": "string"},
+                {"name": "checked", "type" : "boolean"},
+                {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}},
+                {"name": "data", "type": 
+                    {
+                        "type": "record",
+                        "name": "data_record",
+                        "fields" : [
+                            {"name": "data_x", "type" : "boolean"},
+                            {"name": "data_y", "type": "long"}
+                        ]
+                    }
+                }
+            ]
+        }
+        ```
 
-2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html).
+    2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html).
 
+<<<<<<< HEAD
 **Avro data**
+=======
+- **Avro data**
+>>>>>>> 9c7428d191 ([Enhancement][Doc]add-a-col-expression-example-in-create-routine-load (#31554))
 
 Prepare the Avro data and send it to the Kafka topic `topic_2`.
 
@@ -792,37 +869,45 @@ FROM KAFKA
 
 Suppose the Avro schema contains a Union field, and you need to load the Union field into StarRocks.
 
+<<<<<<< HEAD
 **Avro schema**
+=======
+- **Avro schema**
+>>>>>>> 9c7428d191 ([Enhancement][Doc]add-a-col-expression-example-in-create-routine-load (#31554))
 
-1. Create the following Avro schema file `avro_schema3.avsc`. The outer Avro record includes five fields which are `id`, `name`, `checked`, `sensor_type`, and `data` in sequence. And the field `data` is of Union type and includes two elements, `null` and a nested record `data_record`.
+    1. Create the following Avro schema file `avro_schema3.avsc`. The outer Avro record includes five fields which are `id`, `name`, `checked`, `sensor_type`, and `data` in sequence. And the field `data` is of Union type and includes two elements, `null` and a nested record `data_record`.
 
-      ```JSON
-      {
-          "type": "record",
-          "name": "sensor_log",
-          "fields" : [
-              {"name": "id", "type": "long"},
-              {"name": "name", "type": "string"},
-              {"name": "checked", "type" : "boolean"},
-              {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}},
-              {"name": "data", "type": [null,
-                    {
-                        "type": "record",
-                        "name": "data_record",
-                        "fields" : [
-                            {"name": "data_x", "type" : "boolean"},
-                            {"name": "data_y", "type": "long"}
-                        ]
-                    }
-                  ]
-              }
-          ]
-      }
-      ```
+        ```JSON
+        {
+            "type": "record",
+            "name": "sensor_log",
+            "fields" : [
+                {"name": "id", "type": "long"},
+                {"name": "name", "type": "string"},
+                {"name": "checked", "type" : "boolean"},
+                {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}},
+                {"name": "data", "type": [null,
+                        {
+                            "type": "record",
+                            "name": "data_record",
+                            "fields" : [
+                                {"name": "data_x", "type" : "boolean"},
+                                {"name": "data_y", "type": "long"}
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+        ```
 
-2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html).
+    2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html).
 
+<<<<<<< HEAD
 **Avro data**
+=======
+- **Avro data**
+>>>>>>> 9c7428d191 ([Enhancement][Doc]add-a-col-expression-example-in-create-routine-load (#31554))
 
 Prepare the Avro data and send it to the Kafka topic `topic_3`.
 
