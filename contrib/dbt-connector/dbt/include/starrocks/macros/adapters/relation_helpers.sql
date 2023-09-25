@@ -27,6 +27,7 @@
   {%- set properties = config.get('properties') -%}
   {%- set materialized = config.get('materialized', none) -%}
   {%- set unique_key = config.get('unique_key', none) -%}
+  {%- set catalog = adapter.config.credentials.catalog -%}
 
   {%- if materialized == 'incremental' and unique_key is not none -%}
     {%- set table_type = 'PRIMARY' -%}
@@ -40,7 +41,7 @@
   {%- endif -%}
 
   {# 1. SET ENGINE #}
-  {%- if is_create_table %} ENGINE = OLAP {% endif -%}
+  {%- if is_create_table and catalog == 'default_catalog' %} ENGINE = OLAP {% endif -%}
 
   {# 2. SET KEYS #}
   {%- if keys is not none -%}
@@ -97,7 +98,7 @@
   {% endif -%}
 
   {# 4. SET PROPERTIES #}
-  {%- if properties is not none %}
+  {%- if properties is not none and catalog == 'default_catalog' %}
     PROPERTIES (
       {% for key, value in properties.items() -%}
         "{{ key }}" = "{{ value }}"

@@ -94,6 +94,7 @@ class StarRocksAdapter(SQLAdapter):
                 )
             _database, name, schema, type_info = row
             relation = self.Relation.create(
+                catalog=self.config.credentials.catalog,
                 database=None,
                 schema=schema,
                 identifier=name,
