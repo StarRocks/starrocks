@@ -252,6 +252,11 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
     auto publish_latency = MonotonicMillis() - start_ts;
     g_publish_latency << publish_latency;
     if (st.ok()) {
+        if (is_replication_txn) {
+            (void)ExecEnv::GetInstance()->delete_file_thread_pool()->submit_func([transaction_id]() {
+                StorageEngine::instance()->replication_txn_manager()->clear_txn(transaction_id);
+            });
+        }
         LOG(INFO) << "publish_version success. txn_id: " << transaction_id << " #partition:" << num_partition
                   << " #tablet:" << tablet_tasks.size() << " time:" << publish_latency << "ms"
                   << " #already_finished:" << total_tablet_cnt - num_active_tablet;
