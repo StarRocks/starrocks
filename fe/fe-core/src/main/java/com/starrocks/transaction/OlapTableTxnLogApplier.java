@@ -62,7 +62,12 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                     }
                 }
             }
-            partition.setNextVersion(partition.getNextVersion() + 1);
+            // The version of a replication transaction may not continuously
+            if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+                partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+            } else {
+                partition.setNextVersion(partition.getNextVersion() + 1);
+            }
         }
     }
 

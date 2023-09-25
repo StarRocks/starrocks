@@ -14,6 +14,7 @@
 
 package com.starrocks.lake;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.staros.client.StarClientException;
@@ -123,6 +124,13 @@ public class LakeTablet extends Tablet {
             LOG.warn("Failed to get backends by shard. tablet id: {}", getId(), e);
             return Sets.newHashSet();
         }
+    }
+
+    @Override
+    public List<Replica> getAllReplicas() {
+        List<Replica> replicas = Lists.newArrayList();
+        getQueryableReplicas(replicas, null, 0, -1, 0);
+        return replicas;
     }
 
     // visibleVersion and schemaHash is not used

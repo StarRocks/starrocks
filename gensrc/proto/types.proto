@@ -103,6 +103,30 @@ enum WriteQuorumTypePB {
     ALL = 2;
 }
 
+enum TxnTypePB {
+     TXN_NORMAL = 0;
+     TXN_REPLICATION = 1;
+ }
+
+ enum ReplicationTxnStatePB {
+     TXN_INVALID = 0;
+     TXN_SNAPSHOTED = 1;
+     TXN_REPLICATED = 2;
+     TXN_PUBLISHED = 3;
+ }
+
+ message ReplicationTxnMetaPB {
+     optional int64 txn_id = 1;
+     optional ReplicationTxnStatePB txn_state = 2;
+     optional int64 tablet_id = 3;
+     optional int64 visible_version = 4;
+     optional string src_backend_host = 5;
+     optional int32 src_backend_port = 6;
+     optional string src_snapshot_path = 7;
+     optional int64 snapshot_version = 8;
+     optional bool incremental_snapshot = 9;
+ } 
+
 // Used to store additional information about a txn when it is finished/visible
 // It will be serialized with TransactionState
 message TxnFinishStatePB {
