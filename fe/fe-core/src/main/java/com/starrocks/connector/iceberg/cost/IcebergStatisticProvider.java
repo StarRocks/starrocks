@@ -15,7 +15,7 @@
 package com.starrocks.connector.iceberg.cost;
 
 import com.google.common.collect.AbstractSequentialIterator;
-import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.HashMultimap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.RemoteFileDesc;
@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.iceberg.BlobMetadata;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StatisticsFile;
@@ -49,6 +50,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -65,6 +67,8 @@ import static java.util.stream.Collectors.toMap;
 
 public class IcebergStatisticProvider {
     private static final Logger LOG = LogManager.getLogger(IcebergStatisticProvider.class);
+    private final HashMultimap<Integer, Object> partitionFieldIdToValue = HashMultimap.create();
+    private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     public IcebergStatisticProvider() {
     }
@@ -84,6 +88,17 @@ public class IcebergStatisticProvider {
             Map<Integer, Long> columnNdvs = new HashMap<>();
             if (session != null && session.getSessionVariable().isEnableIcebergNdv()) {
                 columnNdvs = readNdvs(icebergTable, primitiveColumnsFiledIds);
+                if (!partitionFieldIdToValue.isEmpty()) {
+                    Map<Integer, Long> partitionSourceIdToNdv = new HashMap<>();
+                    for (PartitionField partitionField : nativeTable.spec().fields()) {
+                        int sourceId = partitionField.sourceId();
+                        int fieldId = partitionField.fieldId();
+                        if (partitionFieldIdToValue.containsKey(fieldId)) {
+                            partitionSourceIdToNdv.put(sourceId, (long) partitionFieldIdToValue.get(fieldId).size());
+                        }
+                    }
+                    columnNdvs.putAll(partitionSourceIdToNdv);
+                }
             }
 
             statisticsBuilder.setOutputRowCount(icebergFileStats.getRecordCount());
@@ -152,6 +167,30 @@ public class IcebergStatisticProvider {
                     continue;
                 }
                 files.add(dataFile.path().toString());
+                PartitionData partitionData = (PartitionData) fileScanTask.file().partition();
+                for (int i = 0; i < partitionData.size(); i++) {
+                    Types.NestedField nestedField;
+                    try {
+                        nestedField = partitionData.getPartitionType().fields().get(i);
+                    } catch (Exception e) {
+                        LOG.error("Can not find partition field");
+                        continue;
+                    }
+                    if (nestedField == null) {
+                        LOG.error("Can not find partition field");
+                        continue;
+                    }
+
+                    int fieldId = nestedField.fieldId();
+                    Object partitionValue = partitionData.get(i);
+                    if (partitionValue == null) {
+                        LOG.error("Can not find partition value");
+                        continue;
+                    }
+
+                    partitionFieldIdToValue.put(fieldId, partitionValue);
+                }
+
                 if (icebergFileStats == null) {
                     icebergFileStats = new IcebergFileStats(
                             idToTypeMapping,
@@ -183,6 +222,10 @@ public class IcebergStatisticProvider {
         }
 
         return icebergFileStats;
+    }
+
+    private long nextPartitionId() {
+        return partitionIdGen.getAndIncrement();
     }
 
     private Map<ColumnRefOperator, ColumnStatistic> buildColumnStatistics(
@@ -323,9 +366,9 @@ public class IcebergStatisticProvider {
     }
 
     public static Map<Integer, Long> readNdvs(IcebergTable icebergTable, Set<Integer> columnIds) {
-        ImmutableMap.Builder<Integer, Long> colIdToNdv = ImmutableMap.builder();
+        Map<Integer, Long> colIdToNdv = new HashMap<>();
         Set<Integer> remainingColumnIds = new HashSet<>(columnIds);
-        Long snapshotId;
+        long snapshotId;
         if (icebergTable.getSnapshot().isPresent()) {
             snapshotId = icebergTable.getSnapshot().get().snapshotId();
         } else {
@@ -353,7 +396,7 @@ public class IcebergStatisticProvider {
             }
         });
 
-        return colIdToNdv.build();
+        return colIdToNdv;
     }
 
     public static Optional<StatisticsFile> getLatestStatisticsFile(Table icebergTable, long snapshotId) {
