@@ -119,6 +119,10 @@ public class IcebergScanNode extends ScanNode {
         return fileToBucketId;
     }
 
+    public IcebergTable getSrIcebergTable() {
+        return srIcebergTable;
+    }
+
     private void setupCloudCredential() {
         String catalogName = srIcebergTable.getCatalogName();
         if (catalogName == null) {
