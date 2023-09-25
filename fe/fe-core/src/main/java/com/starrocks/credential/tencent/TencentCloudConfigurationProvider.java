@@ -32,7 +32,7 @@ public class TencentCloudConfigurationProvider implements CloudConfigurationProv
         TencentCloudCredential tencentCloudCredential = new TencentCloudCredential(
                 properties.getOrDefault(TENCENT_COS_ACCESS_KEY, ""),
                 properties.getOrDefault(TENCENT_COS_SECRET_KEY, ""),
-                properties.getOrDefault(TENCENT_COS_ENDPOINT, ""),
+                properties.getOrDefault(TENCENT_COS_ENDPOINT, "")
         );
         if (!tencentCloudCredential.validate()) {
             return null;
