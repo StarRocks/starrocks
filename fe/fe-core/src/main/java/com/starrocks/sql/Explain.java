@@ -190,6 +190,9 @@ public class Explain {
                                     .collect(Collectors.joining(", ")) + "]"))
                     .append("\n");
 
+            if (scan.getTable().isMaterializedView()) {
+                buildOperatorProperty(sb, "MaterializedView: true", context.step);
+            }
             buildCostEstimate(sb, optExpression, context.step);
 
             int totalTabletsNum = 0;
