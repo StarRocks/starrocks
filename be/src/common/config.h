@@ -41,7 +41,7 @@ namespace starrocks::config {
 CONF_Int32(cluster_id, "-1");
 // The port on which ImpalaInternalService is exported.
 CONF_Int32(be_port, "9060");
-CONF_Int32(thrift_port, "9060");
+CONF_Int32(thrift_port, "0");
 
 // The port for brpc.
 CONF_Int32(brpc_port, "8060");

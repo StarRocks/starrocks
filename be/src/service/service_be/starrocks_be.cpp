@@ -153,6 +153,14 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start thrift server
     auto thrift_server = BackendService::create<BackendService>(exec_env, config::be_port);
+    if (as_cn) {
+        int thrift_port = config::thrift_port;
+        if (thrift_port != 0) {
+            thrift_server = BackendService::create<BackendService>(exec_env, thrift_port);
+            LOG(WARNING) << "thrif_port has been deprecated, please use be_port next time!";
+        }
+    }
+    
     if (auto status = thrift_server->start(); !status.ok()) {
         LOG(ERROR) << "Fail to start BackendService thrift server on port " << config::be_port << ": " << status;
         shutdown_logging();
