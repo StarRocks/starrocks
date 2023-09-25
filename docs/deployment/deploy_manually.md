@@ -166,7 +166,7 @@ A Compute Node (CN) is a stateless computing service that does not maintain data
    a. If any of the CN ports mentioned in the [Environment Configuration Checklist](../deployment/environment_configurations.md) are occupied, you must assign valid alternatives in the CN configuration file.
 
       ```YAML
-      be_port = vvvv                   # Default: 9060
+      be_port = vvvv                   # Default: 9060    (From v3.1 onwards, this configuration item is renamed from `thrift_port` to `be_port`.)
       be_http_port = xxxx              # Default: 8040
       heartbeat_service_port = yyyy    # Default: 9050
       brpc_port = zzzz                 # Default: 8060
