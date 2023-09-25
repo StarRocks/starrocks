@@ -175,7 +175,7 @@ public:
 
     Status reopen(int timeout_ms) { return _client_cache->reopen_client(&_client, timeout_ms); }
 
-    Status reopen() { return _client_cache->reopen_client(&_client, 0); }
+    Status reopen() { return _client_cache->reopen_client(&_client, config::thrift_rpc_timeout_ms); }
 
     T* operator->() const { return _client; }
 
