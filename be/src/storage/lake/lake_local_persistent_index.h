@@ -28,10 +28,7 @@ class LakePrimaryIndex;
 
 class LakeLocalPersistentIndex : public PersistentIndex {
 public:
-    explicit LakeLocalPersistentIndex(std::string path, LakePrimaryIndex* primary_index)
-            : PersistentIndex(path), _primary_index(primary_index) {
-        _path = path;
-    }
+    explicit LakeLocalPersistentIndex(std::string path) : PersistentIndex(path) { _path = path; }
 
     ~LakeLocalPersistentIndex() override {}
 
@@ -40,7 +37,6 @@ public:
 
 private:
     std::string _path;
-    LakePrimaryIndex* _primary_index;
 };
 
 } // namespace starrocks::lake
