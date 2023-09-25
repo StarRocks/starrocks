@@ -77,7 +77,7 @@ sh bin/start_be.sh --daemon
 
 |配置项|描述|默认值|
 |---|---|---|
-|thrift_port|CN 上 Thrift Server 的端口，用于接收来自 FE 的请求。|9060|
+|be_port|CN 上 Thrift Server 的端口，用于接收来自 FE 的请求。|9060|
 |be_http_port|CN 上的 HTTP Server 的端口。|8040|
 |heartbeat_service_port|CN 上 Thrift server 端口，用于接收来自 FE 的心跳。|9050|
 |brpc_port|CN 与 BE 节点间的通讯端口。|8060|

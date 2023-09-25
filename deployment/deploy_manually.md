@@ -170,7 +170,7 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
    a. 如果任何在 [环境配置清单](../deployment/environment_configurations.md) 中提到的 CN 端口被占用，您必须在 CN 配置文件中为其分配其他可用端口。.
 
       ```YAML
-      thrift_port = vvvv               # 默认值：9060
+      be_port = vvvv                   # 默认值：9060
       be_http_port = xxxx              # 默认值：8040
       heartbeat_service_port = yyyy    # 默认值：9050
       brpc_port = zzzz                 # 默认值：8060
