@@ -80,7 +80,7 @@ jobs:
       BRANCH: ${{ needs.info.outputs.branch }}
       ASSIGNEES: ${{ needs.info.outputs.assignees }}
       MERGE_COMMIT: ${{ needs.info.outputs.merge_commit }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
 
     steps:
       - name: Check Status
