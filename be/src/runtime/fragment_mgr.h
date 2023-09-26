@@ -51,13 +51,6 @@ class JoinRuntimeFilter;
 }
 std::string to_load_error_http_path(const std::string& file_name);
 
-// Describe the type of fragments, such as what it's used for.
-enum class FragmentType {
-    UNKNOWN = 0,
-    // The fragment is used for streaming load.
-    STREAMING_LOAD = 1
-};
-
 // This class used to manage all the fragment execute in this instance
 class FragmentMgr : public RestMonitorIface {
 public:
@@ -74,7 +67,7 @@ public:
 
     // TODO(zc): report this is over
     Status exec_plan_fragment(const TExecPlanFragmentParams& params, const StartSuccCallback& start_cb,
-                              const FinishCallback& cb, FragmentType fragment_type = FragmentType::UNKNOWN);
+                              const FinishCallback& cb);
 
     Status cancel(const TUniqueId& fragment_id) {
         return cancel(fragment_id, PPlanFragmentCancelReason::INTERNAL_ERROR);

@@ -327,9 +327,6 @@ public:
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
-    void set_is_streaming_load(bool is_streaming_load) { _is_streaming_load = is_streaming_load; }
-    bool is_streaming_load() { return _is_streaming_load; }
-
     bool enable_query_statistic() const;
     std::shared_ptr<QueryStatistics> intermediate_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
@@ -464,9 +461,6 @@ private:
     pipeline::FragmentContext* _fragment_ctx = nullptr;
 
     bool _enable_pipeline_engine = false;
-
-    // Whether this is for streaming load
-    bool _is_streaming_load = false;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \

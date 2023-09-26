@@ -328,8 +328,9 @@ static int compute_priority(int32_t num_submitted_tasks) {
 }
 
 bool ConnectorScanNode::_submit_scanner(ConnectorScanner* scanner, bool blockable) {
-    // submit the scanner to the dedicated thread pool if needed
-    if (_runtime_state->is_streaming_load() && config::enable_streaming_load_thread_pool) {
+    // submit the streaming load scanner to the dedicated thread pool if needed
+    if (_runtime_state->query_options().load_job_type == TLoadJobType::STREAM_LOAD &&
+        config::enable_streaming_load_thread_pool) {
         VLOG(1) << "Submit streaming load scanner, fragment: " << print_id(runtime_state()->fragment_instance_id());
         return _submit_streaming_load_scanner(scanner, blockable);
     }

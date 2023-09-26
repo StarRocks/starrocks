@@ -53,8 +53,6 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
     ctx->start_write_data_nanos = MonotonicNanos();
     LOG(INFO) << "begin to execute job. label=" << ctx->label << ", txn_id: " << ctx->txn_id
               << ", query_id=" << print_id(ctx->put_result.params.params.query_id);
-    FragmentType fragment_type =
-            (ctx->load_type == TLoadType::MANUAL_LOAD) ? FragmentType::STREAMING_LOAD : FragmentType::UNKNOWN;
     auto st = _exec_env->fragment_mgr()->exec_plan_fragment(
             ctx->put_result.params,
             [ctx](PlanFragmentExecutor* executor) {
@@ -116,8 +114,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                 if (ctx->unref()) {
                     delete ctx;
                 }
-            },
-            fragment_type);
+            });
     if (!st.ok()) {
         if (ctx->unref()) {
             delete ctx;
