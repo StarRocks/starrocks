@@ -60,7 +60,7 @@ jobs:
     env:
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
       REPO: ${{ github.repository }}
-      GITHUB_TOKEN: ${{ secrets.PAT }}
+      GH_TOKEN: ${{ secrets.PAT }}
 
     steps:
       - name: META-REVIEW
