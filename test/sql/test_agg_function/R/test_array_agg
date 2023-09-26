@@ -1066,14 +1066,14 @@ select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 de
 ["张三此地无银三百两","张三掩耳盗铃"]	["张三此地无银三百两","张三掩耳盗铃"]
 ["李四大闹天空"]	["李四大闹天空"]
 -- !result
-select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss group by id order by id;
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 asc nulls last) from ss group by id order by id;
 -- result:
 [null,"Ti"]	["Ti",null]
 ["Tom","Tom"]	["Tom","Tom"]
-["王武程咬金","Tom","Tom"]	["王武程咬金","Tom","Tom"]
-["欧阳诸葛方程","Ti","May"]	["欧阳诸葛方程","Ti","May"]
+["王武程咬金","Tom","Tom"]	["Tom","Tom","王武程咬金"]
+["欧阳诸葛方程","Ti","May"]	["May","Ti","欧阳诸葛方程"]
 [null]	[null]
-["张三此地无银三百两","张三掩耳盗铃"]	["张三此地无银三百两","张三掩耳盗铃"]
+["张三此地无银三百两","张三掩耳盗铃"]	["张三掩耳盗铃","张三此地无银三百两"]
 ["李四大闹天空"]	["李四大闹天空"]
 -- !result
 select array_agg(name order by 1 nulls first), array_agg(name order by 1 nulls last) from ss group by id order by id;

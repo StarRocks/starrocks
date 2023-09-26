@@ -193,7 +193,7 @@ select array_agg(distinct name order by 1 asc), array_agg(name order by 1 desc) 
 select array_agg(distinct name order by 1 asc), array_agg(distinct name order by 1 desc) from ss group by id order by 1;
 select array_agg(name order by 1 asc), array_agg(name order by 1 desc) from ss group by id order by id;
 select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss group by id order by id;
-select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss group by id order by id;
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 asc nulls last) from ss group by id order by id;
 select array_agg(name order by 1 nulls first), array_agg(name order by 1 nulls last) from ss group by id order by id;
 
 select array_agg(distinct name order by 1 asc), array_agg(name order by 1 desc) from ss order by 1;
