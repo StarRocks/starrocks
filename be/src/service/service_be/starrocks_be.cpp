@@ -35,11 +35,16 @@ void start_be() {
 
     // Begin to start services
     // 1. Start thrift server with 'be_port'.
-    auto thrift_server = BackendService::create<BackendService>(exec_env, starrocks::config::be_port);
+    int thrift_port = config::be_port;
+    if (as_cn && config::thrift_port != 0) {
+        thrift_port = config::thrift_port;
+        LOG(WARNING) << "'thrift_port' is deprecated, please update be.conf to use 'be_port' instead!";
+    }
+    auto thrift_server = BackendService::create<BackendService>(exec_env, thrift_port);
+    
     if (auto status = thrift_server->start(); !status.ok()) {
-        LOG(ERROR) << "Fail to start BackendService thrift server on port " << starrocks::config::be_port << ": "
-                   << status;
-        starrocks::shutdown_logging();
+        LOG(ERROR) << "Fail to start BackendService thrift server on port " << thrift_port << ": " << status;
+        shutdown_logging();
         exit(1);
     }
 
