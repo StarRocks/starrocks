@@ -60,6 +60,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.ColumnReuseUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
@@ -481,6 +482,8 @@ public class PlanFragmentBuilder {
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
 
             Preconditions.checkState(!node.getColumnRefMap().isEmpty());
+            ColumnReuseUtil.hackReusedColumnRefOperator(node.getColumnRefMap());
+            ColumnReuseUtil.hackReusedColumnRefOperator(node.getCommonSubOperatorMap());
 
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
 
@@ -542,6 +545,9 @@ public class PlanFragmentBuilder {
             if (node == null) {
                 return inputFragment;
             }
+
+            ColumnReuseUtil.hackReusedColumnRefOperator(node.getColumnRefMap());
+            ColumnReuseUtil.hackReusedColumnRefOperator(node.getCommonSubOperatorMap());
 
             Preconditions.checkState(!node.getColumnRefMap().isEmpty());
 
