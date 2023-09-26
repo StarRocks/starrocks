@@ -67,7 +67,7 @@ import static java.util.stream.Collectors.toMap;
 
 public class IcebergStatisticProvider {
     private static final Logger LOG = LogManager.getLogger(IcebergStatisticProvider.class);
-    private final HashMultimap<Integer, Object> partitionFieldIdToValue = HashMultimap.create();
+    private final Map<String, HashMultimap<Integer, Object>> partitionFieldIdToValues = new HashMap<>();
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     public IcebergStatisticProvider() {
@@ -88,7 +88,9 @@ public class IcebergStatisticProvider {
             Map<Integer, Long> columnNdvs = new HashMap<>();
             if (session != null && session.getSessionVariable().isEnableIcebergNdv()) {
                 columnNdvs = readNdvs(icebergTable, primitiveColumnsFiledIds);
-                if (!partitionFieldIdToValue.isEmpty()) {
+                String uuid = icebergTable.getUUID();
+                if (partitionFieldIdToValues.containsKey(uuid) && !partitionFieldIdToValues.get(uuid).isEmpty()) {
+                    HashMultimap<Integer, Object> partitionFieldIdToValue = partitionFieldIdToValues.get(uuid);
                     Map<Integer, Long> partitionSourceIdToNdv = new HashMap<>();
                     for (PartitionField partitionField : nativeTable.spec().fields()) {
                         int sourceId = partitionField.sourceId();
@@ -168,6 +170,8 @@ public class IcebergStatisticProvider {
                 }
                 files.add(dataFile.path().toString());
                 PartitionData partitionData = (PartitionData) fileScanTask.file().partition();
+
+                String uuid = icebergTable.getUUID();
                 for (int i = 0; i < partitionData.size(); i++) {
                     Types.NestedField nestedField;
                     try {
@@ -188,7 +192,9 @@ public class IcebergStatisticProvider {
                         continue;
                     }
 
-                    partitionFieldIdToValue.put(fieldId, partitionValue);
+                    HashMultimap<Integer, Object> idToValues = partitionFieldIdToValues.computeIfAbsent(
+                            uuid, (ignored) -> HashMultimap.create());
+                    idToValues.put(fieldId, partitionValue);
                 }
 
                 if (icebergFileStats == null) {
