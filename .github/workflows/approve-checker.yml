@@ -1,8 +1,7 @@
 name: APPROVE CHECKER
 
 on:
-#  pull_request_target
-  pull_request:
+  pull_request_target:
     types:
       - review_requested
 
@@ -99,7 +98,7 @@ jobs:
         if: always() && (needs.meta-review.result == 'success' || needs.meta-review.result == 'skipped')
         uses: LouisBrunner/checks-action@v1.6.1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT }}
           sha: ${{ github.event.pull_request.base.head.sha }}
           name: META APPROVE
           conclusion: 'success'
@@ -111,7 +110,7 @@ jobs:
         if: always() && needs.meta-review.result != 'success' && needs.meta-review.result != 'skipped'
         uses: LouisBrunner/checks-action@v1.6.1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT }}
           sha: ${{ github.event.pull_request.base.head.sha }}
           name: META APPROVE
           conclusion: 'failure'
