@@ -29,7 +29,7 @@ jobs:
       REPO: ${{ github.repository }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     outputs:
-      LABELS: ${{ steps.labels.outputs.LABELS }}
+      LABELS: ${{ steps.labels.outputs.labels }}
     steps:
       - name: LABELS
         id: labels
@@ -52,7 +52,6 @@ jobs:
 
     steps:
       - name: META-REVIEW
-        if: contains(steps.labels.outputs.LABELS, 'META-REVIEW')
         env:
           META_TEAM: test-team
         run: |
@@ -70,5 +69,15 @@ jobs:
           done
           
           echo "Lack of META-TEAM members' approval!"
-          
+
+  no-meta-review:
+    needs: info
+    runs-on: ubuntu-latest
+    if: contains(needs.info.outputs.LABELS, 'A')
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      REPO: ${{ github.repository }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - run: echo test
       
