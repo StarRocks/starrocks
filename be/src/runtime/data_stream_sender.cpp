@@ -408,12 +408,15 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
 }
 
 Status DataStreamSender::init(const TDataSink& tsink, RuntimeState* state) {
+    VLOG(2) << "DataStreamSender init:\n" << apache::thrift::ThriftDebugString(tsink);
+
     RETURN_IF_ERROR(DataSink::init(tsink, state));
     const TDataStreamSink& t_stream_sink = tsink.stream_sink;
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         RETURN_IF_ERROR(Expr::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs,
                                                 &_partition_expr_ctxs, state));
+        _table_partition_column_ids = t_stream_sink.output_partition.table_partition_column_ids;
     } else if (_part_type == TPartitionType::RANGE_PARTITIONED) {
         // NOTE: should never go here
         return Status::NotSupported("Range partition is not supported anymore.");
@@ -554,9 +557,28 @@ Status DataStreamSender::send_chunk(RuntimeState* state, Chunk* chunk) {
             }
 
             if (_part_type == TPartitionType::HASH_PARTITIONED) {
-                _hash_values.assign(num_rows, HashUtil::FNV_SEED);
-                for (const ColumnPtr& column : _partitions_columns) {
-                    column->fnv_hash(&_hash_values[0], 0, num_rows);
+                // TODO: support multi partition columns
+                if (_table_partition_column_ids.size() > 0) {
+                    _hash_values.assign(num_rows, HashUtil::FNV_SEED);
+                    _phash_values.assign(num_rows, HashUtil::FNV_SEED);
+                    int32_t opt_column_id = _table_partition_column_ids[0];
+                    DCHECK_LT(opt_column_id, _partitions_columns.size());
+                    VLOG(2) << "enable partition shuffle optimization, opt partition column id:" << opt_column_id;
+                    _partitions_columns[opt_column_id]->fnv_hash(&_phash_values[0], 0, num_rows);
+                    for (size_t i = 0; i < _partitions_columns.size(); ++i) {
+                        if (i != opt_column_id) {
+                            _partitions_columns[i]->fnv_hash(&_hash_values[0], 0, num_rows);
+                        }
+                    }
+
+                    for (size_t i = 0; i < num_rows; ++i) {
+                        _hash_values[i] = (_hash_values[i] << 16) | (_phash_values[i] >> 16);
+                    }
+                } else {
+                    _hash_values.assign(num_rows, HashUtil::FNV_SEED);
+                    for (const ColumnPtr& column : _partitions_columns) {
+                        column->fnv_hash(&_hash_values[0], 0, num_rows);
+                    }
                 }
             } else {
                 // The data distribution was calculated using CRC32_HASH,

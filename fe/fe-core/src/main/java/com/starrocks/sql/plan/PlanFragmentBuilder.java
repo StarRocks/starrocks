@@ -1780,7 +1780,7 @@ public class PlanFragmentBuilder {
                 aggregationNode.setIsPreagg(node.canUseStreamingPreAgg());
                 aggregationNode.setIntermediateTuple();
                 if (!partitionExpressions.isEmpty()) {
-                    inputFragment.setOutputPartition(DataPartition.hashPartitioned(partitionExpressions));
+                    inputFragment.setOutputPartition(DataPartition.hashPartitioned(partitionExpressions, null));
                 }
 
                 // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
@@ -1980,13 +1980,14 @@ public class PlanFragmentBuilder {
                 dataPartition = DataPartition.UNPARTITIONED;
             } else if (DistributionSpec.DistributionType.SHUFFLE.equals(distribution.getDistributionSpec().getType())) {
                 exchangeNode.setNumInstances(inputFragment.getPlanRoot().getNumInstances());
-                List<ColumnRefOperator> partitionColumns =
-                        getShuffleColumns((HashDistributionSpec) distribution.getDistributionSpec());
+                HashDistributionSpec hashDistributionDesc = (HashDistributionSpec) distribution.getDistributionSpec();
+                List<ColumnRefOperator> partitionColumns = getShuffleColumns(hashDistributionDesc);
                 List<Expr> distributeExpressions =
                         partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
-                dataPartition = DataPartition.hashPartitioned(distributeExpressions);
+                dataPartition = DataPartition.hashPartitioned(distributeExpressions,
+                        hashDistributionDesc.getHashDistributionDesc().getTablePartitionColumnIds());
             } else {
                 throw new StarRocksPlannerException("Unsupport exchange type : "
                         + distribution.getDistributionSpec().getType(), INTERNAL_ERROR);
@@ -2432,7 +2433,8 @@ public class PlanFragmentBuilder {
                                                                  JoinNode hashJoinNode) {
             hashJoinNode.setPartitionExprs(removeFragment.getDataPartition().getPartitionExprs());
             DataPartition dataPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
-                    removeFragment.getDataPartition().getPartitionExprs());
+                    removeFragment.getDataPartition().getPartitionExprs(),
+                    removeFragment.getDataPartition().getTablePartitionColumnIds());
             removeFragment.getChild(0).setOutputPartition(dataPartition);
 
             // Currently, we always generate new fragment for PhysicalDistribution.
@@ -2603,7 +2605,7 @@ public class PlanFragmentBuilder {
                 if (isUnion) {
                     fragment.setOutputPartition(DataPartition.RANDOM);
                 } else {
-                    fragment.setOutputPartition(DataPartition.hashPartitioned(materializedExpressions));
+                    fragment.setOutputPartition(DataPartition.hashPartitioned(materializedExpressions, null));
                 }
 
                 // nothing distribute can satisfy set-operator, must shuffle data
@@ -2956,6 +2958,21 @@ public class PlanFragmentBuilder {
             return buildJoinFragment(context, leftFragment, rightFragment, distributionMode, joinNode);
         }
 
+        private void setTablePartitionColumnIds(PlanFragment leftFragment, PlanFragment rightFragment) {
+            List<Integer> lTablePartitionColumnIds = leftFragment.getDataPartition().getTablePartitionColumnIds();
+            List<Integer> rTablePartitionColumnIds = rightFragment.getDataPartition().getTablePartitionColumnIds();
+            if (lTablePartitionColumnIds != null && !lTablePartitionColumnIds.isEmpty()) {
+                leftFragment.getChild(0).getOutputPartition()
+                        .setTablePartitionColumnIds(lTablePartitionColumnIds);
+                rightFragment.getChild(0).getOutputPartition()
+                        .setTablePartitionColumnIds(lTablePartitionColumnIds);
+            } else if (rTablePartitionColumnIds != null && !rTablePartitionColumnIds.isEmpty()) {
+                leftFragment.getChild(0).getOutputPartition()
+                        .setTablePartitionColumnIds(rTablePartitionColumnIds);
+                rightFragment.getChild(0).getOutputPartition()
+                        .setTablePartitionColumnIds(rTablePartitionColumnIds);
+            }
+        }
         @NotNull
         private PlanFragment buildJoinFragment(ExecPlan context, PlanFragment leftFragment, PlanFragment rightFragment,
                                                JoinNode.DistributionMode distributionMode, JoinNode joinNode) {
@@ -2984,6 +3001,8 @@ public class PlanFragmentBuilder {
 
                 leftFragment.getChild(0).setOutputPartition(lhsJoinPartition);
                 rightFragment.getChild(0).setOutputPartition(rhsJoinPartition);
+
+                setTablePartitionColumnIds(leftFragment, rightFragment);
 
                 // Currently, we always generate new fragment for PhysicalDistribution.
                 // So we need to remove exchange node only fragment for Join.

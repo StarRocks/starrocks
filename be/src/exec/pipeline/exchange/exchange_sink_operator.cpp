@@ -246,6 +246,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
             TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk)));
             _current_request_bytes += pchunk->data().size();
         }
+        COUNTER_UPDATE(_parent->_send_chunks_counter, 1);
     }
 
     // Try to accumulate enough bytes before sending a RPC. When eos is true we should send
@@ -330,7 +331,8 @@ ExchangeSinkOperator::ExchangeSinkOperator(
         const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,
         const int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
         const std::vector<ExprContext*>& partition_expr_ctxs, bool enable_exchange_pass_through,
-        bool enable_exchange_perf, FragmentContext* const fragment_ctx, const std::vector<int32_t>& output_columns)
+        bool enable_exchange_perf, FragmentContext* const fragment_ctx, const std::vector<int32_t>& output_columns,
+        const std::vector<int32_t>& table_partition_column_ids)
         : Operator(factory, id, "exchange_sink", plan_node_id, false, driver_sequence),
           _buffer(buffer),
           _part_type(part_type),
@@ -340,7 +342,8 @@ ExchangeSinkOperator::ExchangeSinkOperator(
           _dest_node_id(dest_node_id),
           _partition_expr_ctxs(partition_expr_ctxs),
           _fragment_ctx(fragment_ctx),
-          _output_columns(output_columns) {
+          _output_columns(output_columns),
+          _table_partition_column_ids(table_partition_column_ids) {
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
     RuntimeState* state = fragment_ctx->runtime_state();
     PassThroughChunkBuffer* pass_through_chunk_buffer =
@@ -438,6 +441,8 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
 
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
     _uncompressed_bytes_counter = ADD_COUNTER(_unique_metrics, "UncompressedBytes", TUnit::BYTES);
+    _append_rows_selective_counter = ADD_COUNTER(_unique_metrics, "AppendRowsSelectiveNum", TUnit::UNIT);
+    _send_chunks_counter = ADD_COUNTER(_unique_metrics, "SendChunksNum", TUnit::UNIT);
     _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
@@ -563,8 +568,41 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
             // Compute hash for each partition column
             if (_part_type == TPartitionType::HASH_PARTITIONED) {
                 _hash_values.assign(num_rows, HashUtil::FNV_SEED);
-                for (const ColumnPtr& column : _partitions_columns) {
-                    column->fnv_hash(&_hash_values[0], 0, num_rows);
+                if (_table_partition_column_ids.size() > 0) {
+                    _phash_values.assign(num_rows, HashUtil::FNV_SEED);
+                    int32_t opt_column_id = _table_partition_column_ids[0];
+                    DCHECK_LT(opt_column_id, _partitions_columns.size());
+
+                    VLOG(2) << "enable partition shuffle optimization, opt partition column id:" << opt_column_id;
+                    int32_t shuffle_optimization_column_bit_size =
+                            _runtime_state->shuffle_optimization_column_bit_size();
+                    int32_t non_shuffle_optimization_column_bit_size = 32 - shuffle_optimization_column_bit_size;
+                    if (shuffle_optimization_column_bit_size == 32) {
+                        _partitions_columns[opt_column_id]->fnv_hash(&_hash_values[0], 0, num_rows);
+                    } else if (non_shuffle_optimization_column_bit_size == 32) {
+                        for (size_t i = 0; i < _partitions_columns.size(); ++i) {
+                            if (i == opt_column_id) {
+                                continue;
+                            }
+                            _partitions_columns[i]->fnv_hash(&_hash_values[0], 0, num_rows);
+                        }
+                    } else {
+                        _partitions_columns[opt_column_id]->fnv_hash(&_phash_values[0], 0, num_rows);
+                        for (size_t i = 0; i < _partitions_columns.size(); ++i) {
+                            if (i == opt_column_id) {
+                                continue;
+                            }
+                            _partitions_columns[i]->fnv_hash(&_hash_values[0], 0, num_rows);
+                        }
+                        for (size_t i = 0; i < num_rows; ++i) {
+                            _hash_values[i] = (_hash_values[i] << shuffle_optimization_column_bit_size) |
+                                              (_phash_values[i] >> non_shuffle_optimization_column_bit_size);
+                        }
+                    }
+                } else {
+                    for (const ColumnPtr& column : _partitions_columns) {
+                        column->fnv_hash(&_hash_values[0], 0, num_rows);
+                    }
                 }
             } else {
                 // The data distribution was calculated using CRC32_HASH,
@@ -594,6 +632,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
             }
         }
 
+        int64_t append_rows_selective_counter = 0;
         for (int32_t channel_id : _channel_indices) {
             if (_channels[channel_id]->get_fragment_instance_id().lo == -1) {
                 // dest bucket is no used, continue
@@ -613,8 +652,10 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
 
                 RETURN_IF_ERROR(_channels[channel_id]->add_rows_selective(send_chunk, driver_sequence,
                                                                           _row_indexes.data(), from, size, state));
+                append_rows_selective_counter++;
             }
         }
+        COUNTER_UPDATE(_append_rows_selective_counter, append_rows_selective_counter);
     }
     return Status::OK();
 }
@@ -752,7 +793,8 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
         const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,
         int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
         std::vector<ExprContext*> partition_expr_ctxs, bool enable_exchange_pass_through, bool enable_exchange_perf,
-        FragmentContext* const fragment_ctx, std::vector<int32_t> output_columns)
+        FragmentContext* const fragment_ctx, std::vector<int32_t> output_columns,
+        std::vector<int32_t> table_partition_column_ids)
         : OperatorFactory(id, "exchange_sink", plan_node_id),
           _buffer(std::move(buffer)),
           _part_type(part_type),
@@ -765,13 +807,14 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
           _enable_exchange_pass_through(enable_exchange_pass_through),
           _enable_exchange_perf(enable_exchange_perf),
           _fragment_ctx(fragment_ctx),
-          _output_columns(std::move(output_columns)) {}
+          _output_columns(std::move(output_columns)),
+          _table_partition_column_ids(std::move(table_partition_column_ids)) {}
 
 OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     return std::make_shared<ExchangeSinkOperator>(
             this, _id, _plan_node_id, driver_sequence, _buffer, _part_type, _destinations, _is_pipeline_level_shuffle,
             _num_shuffles_per_channel, _sender_id, _dest_node_id, _partition_expr_ctxs, _enable_exchange_pass_through,
-            _enable_exchange_perf, _fragment_ctx, _output_columns);
+            _enable_exchange_perf, _fragment_ctx, _output_columns, _table_partition_column_ids);
 }
 
 Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {

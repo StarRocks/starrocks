@@ -124,6 +124,7 @@ public:
     const bool get_enable_exchange_perf() const { return _enable_exchange_perf; };
 
     const std::vector<int32_t>& output_columns() const { return _output_columns; }
+    const std::vector<int32_t>& table_partition_column_ids() const { return _table_partition_column_ids; }
 
 private:
     class Channel;
@@ -145,6 +146,7 @@ private:
     size_t _request_bytes_threshold = 0;
 
     std::vector<uint32_t> _hash_values;
+    std::vector<uint32_t> _phash_values;
     Columns _partitions_columns;
     bool _is_first_chunk = true;
     // String to write compressed chunk data in serialize().
@@ -211,6 +213,7 @@ private:
 
     // Specify the columns which need to send
     std::vector<int32_t> _output_columns;
+    std::vector<int32_t> _table_partition_column_ids;
 };
 
 } // namespace starrocks

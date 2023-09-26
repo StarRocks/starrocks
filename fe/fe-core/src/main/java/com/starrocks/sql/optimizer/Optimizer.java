@@ -66,6 +66,7 @@ import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
+import com.starrocks.sql.optimizer.rule.tree.PrunePartitionShuffleColumnRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
@@ -600,6 +601,7 @@ public class Optimizer {
 
     private OptExpression physicalRuleRewrite(TaskContext rootTaskContext, OptExpression result) {
         Preconditions.checkState(result.getOp().isPhysical());
+        SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
 
         int planCount = result.getPlanCount();
 
@@ -612,8 +614,14 @@ public class Optimizer {
         result = new ExchangeSortToMergeRule().rewrite(result, rootTaskContext);
         result = new PruneAggregateNodeRule().rewrite(result, rootTaskContext);
         result = new PruneShuffleColumnRule().rewrite(result, rootTaskContext);
+
         result = new UseSortAggregateRule().rewrite(result, rootTaskContext);
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
+
+        if (sessionVariable.isCboPruneShuffleColumn()) {
+            result = new PrunePartitionShuffleColumnRule().rewrite(result, rootTaskContext);
+        }
+
         // This rule should be last
         result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
         // Reorder predicates
@@ -622,7 +630,6 @@ public class Optimizer {
         result = new ExtractAggregateColumn().rewrite(result, rootTaskContext);
         result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
 
-        SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
         if (sessionVariable.isEnableCboTablePrune() || sessionVariable.isEnableRboTablePrune()) {
             result = new CloneDuplicateColRefRule().rewrite(result, rootTaskContext);
         }

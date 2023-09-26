@@ -51,7 +51,8 @@ public:
                          const int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
                          const std::vector<ExprContext*>& partition_expr_ctxs, bool enable_exchange_pass_through,
                          bool enable_exchange_perf, FragmentContext* const fragment_ctx,
-                         const std::vector<int32_t>& output_columns);
+                         const std::vector<int32_t>& output_columns,
+                         const std::vector<int32_t>& table_partition_column_ids);
 
     ~ExchangeSinkOperator() override = default;
 
@@ -177,6 +178,8 @@ private:
     RuntimeProfile::Counter* _compress_timer = nullptr;
     RuntimeProfile::Counter* _bytes_pass_through_counter = nullptr;
     RuntimeProfile::Counter* _uncompressed_bytes_counter = nullptr;
+    RuntimeProfile::Counter* _append_rows_selective_counter = nullptr;
+    RuntimeProfile::Counter* _send_chunks_counter = nullptr;
 
     std::atomic<bool> _is_finished = false;
     std::atomic<bool> _is_cancelled = false;
@@ -184,6 +187,7 @@ private:
     // The following fields are for shuffle exchange:
     const std::vector<ExprContext*>& _partition_expr_ctxs; // compute per-row partition values
     Columns _partitions_columns;
+    std::vector<uint32_t> _phash_values;
     std::vector<uint32_t> _hash_values;
     std::vector<uint32_t> _shuffle_channel_ids;
     std::vector<int> _driver_sequence_per_shuffle;
@@ -201,6 +205,7 @@ private:
     FragmentContext* const _fragment_ctx;
 
     const std::vector<int32_t>& _output_columns;
+    const std::vector<int32_t>& _table_partition_column_ids;
 
     std::unique_ptr<Shuffler> _shuffler;
 
@@ -215,7 +220,8 @@ public:
                                 bool is_pipeline_level_shuffle, int32_t num_shuffles_per_channel, int32_t sender_id,
                                 PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs,
                                 bool enable_exchange_pass_through, bool enable_exchange_perf,
-                                FragmentContext* const fragment_ctx, std::vector<int32_t> output_columns);
+                                FragmentContext* const fragment_ctx, std::vector<int32_t> output_columns,
+                                std::vector<int32_t> table_partition_column_ids);
 
     ~ExchangeSinkOperatorFactory() override = default;
 
@@ -244,6 +250,7 @@ private:
     FragmentContext* const _fragment_ctx;
 
     const std::vector<int32_t> _output_columns;
+    const std::vector<int32_t> _table_partition_column_ids;
 };
 
 } // namespace pipeline

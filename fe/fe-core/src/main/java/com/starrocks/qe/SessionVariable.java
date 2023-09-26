@@ -305,6 +305,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
 
+    public static final String ENABLE_PARTITION_COLUMN_SHUFFLE_OPTIMIZATION
+            = "enable_partition_column_shuffle_optimization";
+    public static final String SHUFFLE_OPTIMIZATION_COLUMN_HINTS
+            = "shuffle_optimization_column_hints";
+    public static final String SHUFFLE_OPTIMIZATION_COLUMN_BIT_SIZE
+            = "shuffle_optimization_column_bit_size";
+
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -1305,6 +1312,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
     private boolean cboDeriveRangeJoinPredicate = false;
 
+    @VarAttr(name = "cbo_prune_shuffle_column")
+    private boolean cboPruneShuffleColumn = true;
+
+    @VarAttr(name = "shuffle_optimization_column_hints")
+    private String shuffleOptimizationColumnHints = "";
+
+    @VarAttr(name = SHUFFLE_OPTIMIZATION_COLUMN_BIT_SIZE)
+    private int shufflePartitionColumnBitSize = 27;
+
+    public boolean isCboPruneShuffleColumn() {
+        return cboPruneShuffleColumn;
+    }
+
+    public String getShuffleOptimizationColumnHints() {
+        return shuffleOptimizationColumnHints;
+    }
+
     public boolean enableCboDeriveRangeJoinPredicate() {
         return cboDeriveRangeJoinPredicate;
     }
@@ -1315,6 +1339,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
     private boolean enableIcebergIdentityColumnOptimize = true;
+
+    public int getShufflePartitionColumnBitSize() {
+        return shufflePartitionColumnBitSize;
+    }
+
+    public void setShufflePartitionColumnBitSize(int shufflePartitionColumnBitSize) {
+        this.shufflePartitionColumnBitSize = shufflePartitionColumnBitSize;
+    }
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -2626,6 +2658,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setUse_range_join(enableRangeJoin);
+        tResult.setShuffle_optimization_column_bit_size(shufflePartitionColumnBitSize);
         return tResult;
     }
 

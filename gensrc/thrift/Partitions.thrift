@@ -97,6 +97,8 @@ struct TDataPartition {
   1: required TPartitionType type
   2: optional list<Exprs.TExpr> partition_exprs
   3: optional list<TRangePartition> partition_infos
+  // Specify table partition column ids to optimize shuffle distribution.
+  4: optional list<i32> table_partition_column_ids;
 }
 
 

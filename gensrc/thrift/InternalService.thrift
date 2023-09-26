@@ -222,6 +222,7 @@ struct TQueryOptions {
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
   105: optional bool use_column_pool = true;
+  106: optional i32 shuffle_optimization_column_bit_size = 27;
 
   205: optional bool use_range_join;
 }

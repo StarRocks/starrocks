@@ -47,6 +47,8 @@ public class HashDistributionDesc {
     // Which operator produce this hash DistributionDesc
     private final SourceType sourceType;
 
+    private List<Integer> tablePartitionColumnIds;
+
     // only used to build scan initial distribution info
     public HashDistributionDesc(List<Integer> columns, SourceType sourceType) {
         this.distributionCols = columns.stream().map(e -> new DistributionCol(e, true))
@@ -129,7 +131,13 @@ public class HashDistributionDesc {
         return true;
     }
 
+    public List<Integer> getTablePartitionColumnIds() {
+        return tablePartitionColumnIds;
+    }
 
+    public void setTablePartitionColumnIds(List<Integer> tablePartitionColumnIds) {
+        this.tablePartitionColumnIds = tablePartitionColumnIds;
+    }
 
     public boolean isLocal() {
         return this.sourceType == SourceType.LOCAL;

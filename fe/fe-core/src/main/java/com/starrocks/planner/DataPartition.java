@@ -66,7 +66,13 @@ public class DataPartition {
     // for hash partition: exprs used to compute hash value
     private ImmutableList<Expr> partitionExprs;
 
+    private List<Integer> tablePartitionColumnIds = Lists.newArrayList();
+
     public DataPartition(TPartitionType type, List<Expr> exprs) {
+        this(type, exprs, null);
+    }
+
+    public DataPartition(TPartitionType type, List<Expr> exprs, List<Integer> tablePartitionColumnIds) {
         if (type != TPartitionType.UNPARTITIONED && type != TPartitionType.RANDOM) {
             Preconditions.checkNotNull(exprs);
             Preconditions.checkState(!exprs.isEmpty());
@@ -79,6 +85,7 @@ public class DataPartition {
             this.type = type;
             this.partitionExprs = ImmutableList.of();
         }
+        this.tablePartitionColumnIds = tablePartitionColumnIds;
     }
 
     public void substitute(ExprSubstitutionMap smap, Analyzer analyzer) throws AnalysisException {
@@ -91,10 +98,19 @@ public class DataPartition {
                 type == TPartitionType.UNPARTITIONED || type == TPartitionType.RANDOM);
         this.type = type;
         this.partitionExprs = ImmutableList.of();
+        this.tablePartitionColumnIds = Lists.newArrayList();
     }
 
-    public static DataPartition hashPartitioned(List<Expr> exprs) {
-        return new DataPartition(TPartitionType.HASH_PARTITIONED, exprs);
+    public static DataPartition hashPartitioned(List<Expr> exprs, List<Integer> tablePartitionColumnIds) {
+        return new DataPartition(TPartitionType.HASH_PARTITIONED, exprs, tablePartitionColumnIds);
+    }
+
+    public List<Integer> getTablePartitionColumnIds() {
+        return tablePartitionColumnIds;
+    }
+
+    public void setTablePartitionColumnIds(List<Integer> tablePartitionColumnIds) {
+        this.tablePartitionColumnIds = tablePartitionColumnIds;
     }
 
     public boolean isPartitioned() {
@@ -118,6 +134,9 @@ public class DataPartition {
         if (partitionExprs != null) {
             result.setPartition_exprs(Expr.treesToThrift(partitionExprs));
         }
+        if (tablePartitionColumnIds != null) {
+            result.setTable_partition_column_ids(tablePartitionColumnIds);
+        }
         return result;
     }
 
@@ -130,6 +149,11 @@ public class DataPartition {
                 strings.add(expr.toSql());
             }
             str.append(": ").append(Joiner.on(", ").join(strings));
+        }
+        if (tablePartitionColumnIds != null && !tablePartitionColumnIds.isEmpty()) {
+            str.append("(optHints:")
+                    .append(Joiner.on(",").join(tablePartitionColumnIds))
+                    .append(")");
         }
         str.append("\n");
         return str.toString();
