@@ -7,7 +7,7 @@ The shared-data StarRocks cluster is specifically engineered for the cloud on th
 Compared to the classic StarRocks architecture, separation of storage and compute offers a wide range of benefits. By decoupling these components, StarRocks provides:
 
 - Inexpensive and seamlessly scalable storage.
-- Elastic scalable compute. Because data is not stored in CN nodes, scaling can be done without data migration or shuffling across nodes.
+- Elastic scalable compute. Because data is no longer stored in BE nodes, scaling can be done without data migration or shuffling across nodes.
 - Local disk cache for hot data to boost query performance.
 - Adjustable time-to-live (TTL) for cached hot data. StarRocks automatically removes the expired cached data to save the local disk space.
 - Asynchronous data ingestion into object storage, allowing a significant improvement in loading performance.
@@ -20,7 +20,7 @@ This feature is supported from v3.0.
 
 ## Deploy a shared-data StarRocks cluster
 
-The deployment of a shared-data StarRocks cluster is similar to that of a shared-nothing StarRocks cluster. The only difference is that you need to deploy CNs instead of BEs in a shared-data cluster. This section only lists the extra FE and CN configuration items you need to add in the configuration files of FE and CN **fe.conf** and **cn.conf** when you deploy a shared-data StarRocks cluster. For detailed instructions on deploying a StarRocks cluster, see [Deploy StarRocks](../deployment/deploy_manually.md).
+The deployment of a shared-data StarRocks cluster is similar to that of a shared-nothing StarRocks cluster. The only difference is the parameters in the configuration files of FE and BE **fe.conf** and **be.conf**. This section only lists the FE and BE configuration items you need to add to the configuration files when you deploy a shared-data StarRocks cluster. For detailed instructions on deploying a shared-nothing StarRocks cluster, see [Deploy StarRocks](../deployment/deploy_manually.md).
 
 ### Configure FE nodes for shared-data StarRocks
 
@@ -182,9 +182,9 @@ Before starting FEs, add the following configuration items in the FE configurati
   aws_s3_secret_key = <secret_key>
   ```
 
-### Configure CN nodes for shared-data StarRocks
+### Configure BE nodes for shared-data StarRocks
 
-**Before starting CNs**, add the following configuration items in the CN configuration file **cn.conf**:
+**Before starting BEs**, add the following configuration items in the BE configuration file **be.conf**:
 
 ```Plain
 starlet_port = <starlet_port>
@@ -193,7 +193,7 @@ storage_root_path = <storage_root_path>
 
 | **Configuration item** | **Description**                |
 | ---------------------- | ------------------------------ |
-| starlet_port           | The CN heartbeat service port for the StarRocks shared-data cluster. Default value: `9070`.|
+| starlet_port           | The BE heartbeat service port. Default value: `9070`.|
 | storage_root_path      | The storage volume directory that the local cached data depends on and the medium type of the storage. Multiple volumes are separated by semicolon (;). If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`. Default value: `${STARROCKS_HOME}/storage`. |
 
 > **NOTE**
@@ -249,7 +249,7 @@ In addition to the regular table PROPERTIES, you need to specify the following P
 
 | **Property**            | **Description**                                              |
 | ----------------------- | ------------------------------------------------------------ |
-| enable_storage_cache    | Whether to enable the local disk cache. Default: `true`.<ul><li>When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).</li><li>When this property is set to `false`, the data is loaded only into the object storage.</li></ul>**NOTE**<br />To enable the local disk cache, you must specify the directory of the disk in the CN configuration item `storage_root_path`. |
+| enable_storage_cache    | Whether to enable the local disk cache. Default: `true`.<ul><li>When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).</li><li>When this property is set to `false`, the data is loaded only into the object storage.</li></ul>**NOTE**<br />To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. |
 | storage_cache_ttl       | The duration for which StarRocks caches the loaded data in the local disk if the local disk cache is enabled. The expired data is deleted from the local disk. If the value is set to `-1`, the cached data does not expire. Default: `2592000` (30 days).<br />**CAUTION**<br />If you disabled the local disk cache, you do not need to set this configuration item. Setting this item to a value other than `0` when the local disk cache is disabled will cause unexpected behaviors of StarRocks. |
 | enable_async_write_back | Whether to allow data to be written into object storage asynchronously. Default: `false`.<ul><li>When this property is set to `true`, the load task returns success as soon as the data is written into the local disk cache, and the data is written into the object storage asynchronously. This allows better loading performance, but it also risks data reliability under potential system failures.</li><li>When this property is set to `false`, the load task returns success only after the data is written into both object storage and the local disk cache. This guarantees higher availability but leads to lower loading performance.</li></ul> |
 
