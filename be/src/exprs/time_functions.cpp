@@ -696,9 +696,9 @@ StatusOr<ColumnPtr> TimeFunctions::to_tera_date(FunctionContext* context, const 
             if (!state->formatter->parse(str, &date_time_value)) {
                 result.append_null();
             } else {
-                TimestampValue ts = TimestampValue::create(
-                        date_time_value.year(), date_time_value.month(), date_time_value.day(), date_time_value.hour(),
-                        date_time_value.minute(), date_time_value.second(), date_time_value.microsecond());
+                TimestampValue ts = TimestampValue::create(date_time_value.year(), date_time_value.month(),
+                                                           date_time_value.day(), date_time_value.hour(),
+                                                           date_time_value.minute(), date_time_value.second());
                 result.append((DateValue)ts);
             }
         }
@@ -759,9 +759,9 @@ StatusOr<ColumnPtr> TimeFunctions::to_tera_timestamp(FunctionContext* context, c
             if (!state->formatter->parse(str, &date_time_value)) {
                 result.append_null();
             } else {
-                TimestampValue ts = TimestampValue::create(
-                        date_time_value.year(), date_time_value.month(), date_time_value.day(), date_time_value.hour(),
-                        date_time_value.minute(), date_time_value.second(), date_time_value.microsecond());
+                TimestampValue ts = TimestampValue::create(date_time_value.year(), date_time_value.month(),
+                                                           date_time_value.day(), date_time_value.hour(),
+                                                           date_time_value.minute(), date_time_value.second());
                 result.append(ts);
             }
         }
