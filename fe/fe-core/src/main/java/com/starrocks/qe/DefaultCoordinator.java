@@ -374,8 +374,8 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
-    public void setExecPlanSupplier(Supplier<ExecPlan> execPlanSupplier) {
-        queryProfile.setExecPlanSupplier(execPlanSupplier);
+    public void setExecPlan(ExecPlan execPlan) {
+        queryProfile.setExecPlan(execPlan);
     }
 
     @Override

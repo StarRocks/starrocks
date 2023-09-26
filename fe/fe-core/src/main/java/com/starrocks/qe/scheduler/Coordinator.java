@@ -157,7 +157,7 @@ public abstract class Coordinator {
 
     public abstract void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier);
 
-    public abstract void setExecPlanSupplier(Supplier<ExecPlan> execPlanSupplier);
+    public abstract void setExecPlan(ExecPlan execPlan);
 
     public abstract RuntimeProfile buildMergedQueryProfile();
 

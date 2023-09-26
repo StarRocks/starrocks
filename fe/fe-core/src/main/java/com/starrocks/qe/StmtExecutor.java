@@ -961,7 +961,7 @@ public class StmtExecutor {
 
         coord.exec();
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
-        coord.setExecPlanSupplier(() -> execPlan);
+        coord.setExecPlan(execPlan);
 
         RowBatch batch;
         boolean isOutfileQuery = false;
@@ -1799,6 +1799,15 @@ public class StmtExecutor {
                     context.getSessionVariable().getQueryTimeoutS(),
                     workerGroupId);
 
+            // The metadata may be changed between plan() and beginTransaction().
+            // When to beginTransaction(), the plan is not ready and the tablet is dropped by balance.
+            // So we need to get txn first, to make the dropping tablet procedure to wait.
+            // This is the re-plan of the insert to fix the issue
+
+            if (Config.replan_on_insert) {
+                execPlan = StatementPlanner.plan(stmt, context);
+            }
+
             // add table indexes to transaction state
             txnState = transactionMgr.getTransactionState(database.getId(), transactionId);
             if (txnState == null) {
@@ -1885,7 +1894,7 @@ public class StmtExecutor {
 
             coord.exec();
             coord.setTopProfileSupplier(this::buildTopLevelProfile);
-            coord.setExecPlanSupplier(() -> execPlan);
+            coord.setExecPlan(execPlan);
 
             long jobDeadLineMs = System.currentTimeMillis() + context.getSessionVariable().getQueryTimeoutS() * 1000;
             coord.join(context.getSessionVariable().getQueryTimeoutS());
