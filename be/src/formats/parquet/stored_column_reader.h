@@ -72,6 +72,11 @@ public:
         return _reader->get_dict_values(dict_codes, nulls, column);
     }
 
+    virtual Status get_global_code(std::vector<int32_t>& dict_codes, const NullableColumn& nulls, Column* column,
+                                   GlobalDictMap* map) {
+        return _reader->to_global_dict_code(dict_codes, nulls, column, map);
+    }
+
 protected:
     virtual bool page_selected(size_t num_values);
 

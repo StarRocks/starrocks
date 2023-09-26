@@ -21,6 +21,7 @@
 #include "gen_cpp/parquet_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
 #include "util/runtime_profile.h"
@@ -79,7 +80,7 @@ public:
                 int64_t row_group_first_row);
     ~GroupReader() = default;
 
-    Status init();
+    Status init(RuntimeState* runtime_state);
     Status get_next(ChunkPtr* chunk, size_t* row_count);
     void close();
     void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
@@ -90,6 +91,11 @@ private:
     public:
         void init(size_t column_number);
         void use_as_dict_filter_column(int col_idx, SlotId slot_id, const std::vector<ExprContext*>& conjunct_ctxs);
+        void use_as_global_dict(int col_idx, const GlobalDictMap* global_dict) {
+            _is_global_dict_column[col_idx] = true;
+            _global_dicts[col_idx] = global_dict;
+            _global_dict_column_indices.push_back(col_idx);
+        }
         Status rewrite_conjunct_ctxs_to_predicates(
                 const GroupReaderParam& param,
                 std::unordered_map<SlotId, std::unique_ptr<ColumnReader>>& column_readers, ObjectPool* obj_pool,
@@ -108,6 +114,11 @@ private:
         }
 
     private:
+        // if this column could use global dict
+        std::vector<bool> _is_global_dict_column;
+        std::vector<const GlobalDictMap*> _global_dicts;
+        std::vector<int> _global_dict_column_indices;
+
         // if this column use as dict filter?
         std::vector<bool> _is_dict_filter_column;
         // columns(index) use as dict filter column
@@ -124,9 +135,12 @@ private:
     Status _create_column_reader(const GroupReaderParam::Column& column);
     ChunkPtr _create_read_chunk(const std::vector<int>& column_indices);
     // Extract dict filter columns and conjuncts
-    void _process_columns_and_conjunct_ctxs();
+    void _process_columns_and_conjunct_ctxs(RuntimeState* runtime_state);
     bool _can_use_as_dict_filter_column(const SlotDescriptor* slot, const SlotIdExprContextsMap& slot_conjunct_ctxs,
                                         const tparquet::ColumnMetaData& column_metadata);
+    bool _could_use_global_dict_optimize(const SlotDescriptor* slot, const SlotIdExprContextsMap& slot_conjunct_ctxs,
+                                         const tparquet::ColumnMetaData& column_metadata);
+
     // Returns true if all of the data pages in the column chunk are dict encoded
     static bool _column_all_pages_dict_encoded(const tparquet::ColumnMetaData& column_metadata);
     void _init_read_chunk();
