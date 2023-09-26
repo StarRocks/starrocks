@@ -49,6 +49,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -394,7 +395,8 @@ public class CompactionScheduler extends Daemon {
         VisibleStateWaiter waiter;
         db.writeLock();
         try {
-            waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList, Lists.newArrayList());
+            waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
+                    Collections.emptyList(), null);
         } finally {
             db.writeUnlock();
         }

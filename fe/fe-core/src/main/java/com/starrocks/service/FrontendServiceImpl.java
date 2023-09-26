@@ -289,6 +289,7 @@ import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.thrift.TVerboseVariableRecord;
 import com.starrocks.thrift.TWarehouseInfo;
+import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
@@ -1405,6 +1406,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setStatus(status);
         try {
             loadTxnCommitImpl(request, status);
+        } catch (CommitRateExceededException e) {
+            long allowCommitTime = e.getAllowCommitTime();
+            LOG.warn("commit rate exceeded. txn_id: {}: allow commit time: {}", request.getTxnId(), allowCommitTime);
+            status.setStatus_code(TStatusCode.SR_EAGAIN);
+            status.addToError_msgs(e.getMessage());
+            result.setRetry_interval_ms(Math.max(allowCommitTime - System.currentTimeMillis(), 0));
         } catch (UserException e) {
             LOG.warn("failed to commit txn_id: {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
@@ -1419,7 +1426,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     // return true if commit success and publish success, return false if publish timeout
-    private void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws UserException {
+    void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws UserException {
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {

@@ -24,6 +24,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.UserException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -46,6 +47,8 @@ import com.starrocks.thrift.TImmutablePartitionRequest;
 import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListTableStatusResult;
+import com.starrocks.thrift.TLoadTxnCommitRequest;
+import com.starrocks.thrift.TLoadTxnCommitResult;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -58,6 +61,7 @@ import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
@@ -72,10 +76,15 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.spy;
 
 public class FrontendServiceImplTest {
 
@@ -878,10 +887,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testStreamLoadPutColumnMapException() throws TException {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        Table table = db.getTable("site_access_hour");
-
+    public void testStreamLoadPutColumnMapException() {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
         request.setDb("test");
@@ -905,5 +911,35 @@ public class FrontendServiceImplTest {
                 "Getting analyzing error from line 1, column 24 to line 1, column 40. Detail message: " +
                         "No matching function with signature: str_to_date(varchar).",
                 errMsg.get(0));
+    }
+
+    @Test
+    public void testLoadTxnCommitRateLimitExceeded() throws UserException, TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        request.commitInfos = new ArrayList<>();
+        long now = System.currentTimeMillis();
+        doThrow(new CommitRateExceededException(1001, now + 100)).when(impl).loadTxnCommitImpl(any(), any());
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        Assert.assertEquals(TStatusCode.SR_EAGAIN, result.status.status_code);
+        Assert.assertTrue(result.retry_interval_ms >= (now + 100 - System.currentTimeMillis()));
+    }
+
+    @Test
+    public void testLoadTxnCommitFailed() throws UserException, TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        request.commitInfos = new ArrayList<>();
+        doThrow(new UserException("injected error")).when(impl).loadTxnCommitImpl(any(), any());
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        Assert.assertEquals(TStatusCode.ANALYSIS_ERROR, result.status.status_code);
     }
 }
