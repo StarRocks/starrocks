@@ -17,8 +17,7 @@ jobs:
     steps:
       - name: debug
         run: |
-          echo "${{ toJson(github.event.pull_request) }}"
-          echo "${{ toJson(github.event.review) }}"
+          cat $GITHUB_EVENT_PATH
 
   info:
     if: >
