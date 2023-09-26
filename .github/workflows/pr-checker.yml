@@ -31,7 +31,6 @@ jobs:
   sync-checker:
     runs-on: ubuntu-latest
     if: >
-      github.event.pull_request.action != 'synchronize' &&
       !contains(github.event.pull_request.title, '(sync #') &&
       !contains(github.event.pull_request.labels.*.name, 'sync') &&
       (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
@@ -53,7 +52,6 @@ jobs:
     needs: title-check
     runs-on: ubuntu-latest
     if: >
-      github.event.pull_request.action != 'synchronize' &&
       (startsWith(github.event.pull_request.title, '[BugFix]') ||
        startsWith(github.event.pull_request.title, '[Enhancement]')) &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
@@ -121,7 +119,7 @@ jobs:
   behavior-check:
     runs-on: ubuntu-latest
     if: >
-      !startsWith(github.event.pull_request.title, '[Doc]') && github.base_ref == 'main' && github.event.pull_request.action != 'synchronize'
+      !startsWith(github.event.pull_request.title, '[Doc]') && github.base_ref == 'main'
     steps:
       - name: Format Check
         id: check
