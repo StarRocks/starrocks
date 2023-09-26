@@ -51,6 +51,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static com.starrocks.common.io.IOUtils.readOptionStringOrNull;
 import static com.starrocks.common.io.IOUtils.writeOptionString;
@@ -151,6 +152,7 @@ public class AggregateFunction extends Function {
         return createBuiltin(name, argTypes, retType, intermediateType, false, ignoresDistinct, isAnalyticFn,
                 returnsNonNullOnEmpty);
     }
+
 
     public static AggregateFunction createBuiltin(String name,
                                                   List<Type> argTypes, Type retType, Type intermediateType,
@@ -328,6 +330,21 @@ public class AggregateFunction extends Function {
             sb.append(" INTERMEDIATE " + getIntermediateType() + "\n");
         }
         return sb.toString();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof AggregateFunction)) {
+            return false;
+        }
+        AggregateFunction agg = (AggregateFunction) obj;
+        if (!intermediateType.equals(agg.intermediateType) || ignoresDistinct != agg.ignoresDistinct ||
+                isAnalyticFn != agg.isAggregateFn || returnsNonNullOnEmpty != agg.returnsNonNullOnEmpty ||
+                !symbolName.equals(agg.symbolName) || isDistinct != agg.isDistinct ||
+                !Objects.equals(nullsFirst, agg.getNullsFirst()) || !Objects.equals(isAscOrder, agg.getIsAscOrder())) {
+            return false;
+        }
+        return super.equals(obj);
     }
 
     @Override
