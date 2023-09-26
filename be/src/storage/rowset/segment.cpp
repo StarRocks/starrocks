@@ -47,6 +47,7 @@
 #include "segment_chunk_iterator_adapter.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/page_io.h"
@@ -75,9 +76,9 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs,
                                                  uint32_t segment_id, std::shared_ptr<const TabletSchema> tablet_schema,
                                                  size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer,
-                                                 bool skip_fill_local_cache) {
-    auto segment =
-            std::make_shared<Segment>(private_type(0), std::move(fs), path, segment_id, std::move(tablet_schema));
+                                                 bool skip_fill_local_cache, lake::TabletManager* tablet_manager) {
+    auto segment = std::make_shared<Segment>(private_type(0), std::move(fs), path, segment_id, std::move(tablet_schema),
+                                             tablet_manager);
 
     RETURN_IF_ERROR(segment->_open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache));
     return std::move(segment);
@@ -174,11 +175,12 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
 }
 
 Segment::Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
-                 TabletSchemaCSPtr tablet_schema)
+                 TabletSchemaCSPtr tablet_schema, lake::TabletManager* tablet_manager)
         : _fs(std::move(fs)),
           _fname(std::move(path)),
           _tablet_schema(std::move(tablet_schema)),
-          _segment_id(segment_id) {
+          _segment_id(segment_id),
+          _tablet_manager(tablet_manager) {
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
 }
 
@@ -278,6 +280,7 @@ Status Segment::load_index(bool skip_fill_local_cache) {
         if (st.ok()) {
             MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->short_key_index_mem_tracker(),
                                      _short_key_index_mem_usage());
+            update_cache_size();
         } else {
             _reset();
         }
@@ -411,6 +414,21 @@ Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
         sk_index_values->emplace_back(_sk_index_decoder->key(i).to_string());
     }
     return Status::OK();
+}
+
+size_t Segment::_column_index_mem_usage() {
+    size_t size = 0;
+    for (auto& r : _column_readers) {
+        auto& reader = r.second;
+        size += reader->mem_usage();
+    }
+    return size;
+}
+
+void Segment::update_cache_size() {
+    if (_tablet_manager != nullptr) {
+        _tablet_manager->update_segment_cache_size(file_name());
+    }
 }
 
 } // namespace starrocks
