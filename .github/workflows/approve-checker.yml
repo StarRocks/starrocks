@@ -35,7 +35,11 @@ jobs:
         id: labels
         run: |
           labels=$(gh pr view ${PR_NUMBER} -R ${REPO} --json labels -q '.labels[].name')
-          echo "LABELS=${labels}" >> $GITHUB_OUTPUT
+          echo "LABELS<<EOF" >> $GITHUB_OUTPUT
+          echo "$labels" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          cat $GITHUB_OUTPUT
 
   meta-review:
     needs: info
@@ -47,9 +51,6 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - name: Get Reviews Info
-        run: echo "This PR was approved"
-
       - name: META-REVIEW
         if: contains(steps.labels.outputs.LABELS, 'META-REVIEW')
         env:
