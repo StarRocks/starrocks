@@ -9,3 +9,7 @@ select cosine_similarity(array<float>[0.1, 0.2, 0.3], data) as dist, id from t1 
 select cosine_similarity(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2, 0.3]) as dist;
 
 select cosine_similarity_norm(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2, 0.3]) as dist;
+
+select l2_distance(array<float>[0.1, 0.2, 0.3], data) as dist, id from t1 order by dist desc;
+
+select l2_distance(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2, 0.3]) as dist;

@@ -1,4 +1,4 @@
--- name: test_math_cosine_similarity
+-- name: test_math: cosine_similarity, l2_distance
 create table t1 (id int, data array<float>) engine = olap distributed by hash(id) properties ("replication_num" = "1");
 -- result:
 -- !result
@@ -18,4 +18,14 @@ select cosine_similarity(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2, 0.3
 select cosine_similarity_norm(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2, 0.3]) as dist;
 -- result:
 0.14000002
+-- !result
+select l2_distance(array<float>[0.1, 0.2, 0.3], data) as dist, id from t1 order by dist desc;
+-- result:
+0.08000001       3
+0.020000001      2
+0                1
+-- !result
+select l2_distance(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2, 0.3]) as dist;
+-- result:
+0
 -- !result
