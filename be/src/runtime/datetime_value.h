@@ -242,7 +242,6 @@ public:
 
     static uint8_t calc_weekday(uint64_t daynr, bool);
 
-    TimeType type() const { return (TimeType)_type; }
     int year() const { return _year; }
     int month() const { return _month; }
     int day() const { return _day; }
