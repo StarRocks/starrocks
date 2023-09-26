@@ -1038,6 +1038,9 @@ CONF_Int32(default_mv_resource_group_cpu_limit, "1");
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");
 
+// used for control the max memory cost when batch get pk index in each tablet
+CONF_mInt64(primary_key_batch_get_index_memory_limit, "104857600"); // 100MB
+
 // If your sort key cardinality is very high,
 // You could enable this config to speed up the point lookup query,
 // otherwise, StarRocks will use zone map for one column filter
