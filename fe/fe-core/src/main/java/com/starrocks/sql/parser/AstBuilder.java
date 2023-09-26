@@ -318,7 +318,6 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCharsetStmt;
-import com.starrocks.sql.ast.ShowClustersStmt;
 import com.starrocks.sql.ast.ShowCollationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
@@ -1668,12 +1667,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new ShowWarehousesStmt(pattern, where, createPos(context));
-    }
-
-    @Override
-    public ParseNode visitShowClustersStatement(StarRocksParser.ShowClustersStatementContext context) {
-        String whName = ((Identifier) visit(context.identifier())).getValue();
-        return new ShowClustersStmt(whName, createPos(context));
     }
 
     // ------------------------------------------- DML Statement -------------------------------------------------------
@@ -6727,11 +6720,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 if (scale != null) {
                     return ScalarType.createUnifiedDecimalType(precision, scale);
                 }
-                try {
-                    return ScalarType.createUnifiedDecimalType(precision);
-                } catch (AnalysisException e) {
-                    throw new SemanticException(e.getMessage());
-                }
+                return ScalarType.createUnifiedDecimalType(precision);
             }
             return ScalarType.createUnifiedDecimalType(10, 0);
         } else if (context.DECIMAL32() != null || context.DECIMAL64() != null || context.DECIMAL128() != null) {

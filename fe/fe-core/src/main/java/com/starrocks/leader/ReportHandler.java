@@ -1032,6 +1032,7 @@ public class ReportHandler extends Daemon {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         AgentBatchTask batchTask = new AgentBatchTask();
 
+        OUTER:
         for (TStorageMedium storageMedium : tabletMetaMigrationMap.keySet()) {
             List<Long> tabletIds = tabletMetaMigrationMap.get(storageMedium);
             List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
@@ -1039,14 +1040,34 @@ public class ReportHandler extends Daemon {
                 long tabletId = tabletIds.get(i);
                 TabletMeta tabletMeta = tabletMetaList.get(i);
 
+                // 1. If size of tabletMigrationMap exceeds (Config.tablet_sched_max_migration_task_sent_once - running_tasks_on_be),
+                // dot not send more tasks. The number of tasks running on BE cannot exceed Config.tablet_sched_max_migration_task_sent_once
+                if (batchTask.getTaskNum() >=
+                        Config.tablet_sched_max_migration_task_sent_once
+                                - AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false)) {
+                    LOG.debug("size of tabletMigrationMap + size of running tasks on BE is bigger than {}",
+                            Config.tablet_sched_max_migration_task_sent_once);
+                    break OUTER;
+                }
+
+                // 2. If the task already running on BE, do not send again
+                if (AgentTaskQueue.getTask(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, tabletId) != null) {
+                    LOG.debug("migrate of tablet:{} is already running on BE", tabletId);
+                    continue;
+                }
+
+                // 3. There are some limitations for primary table, details in migratableTablet()
                 Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
                 if (db == null) {
                     continue;
                 }
-                OlapTable table = null;
+                OlapTable table;
                 db.readLock();
                 try {
                     table = (OlapTable) db.getTable(tabletMeta.getTableId());
+                    if (table == null) {
+                        continue;
+                    }
                 } finally {
                     db.readUnlock();
                 }
