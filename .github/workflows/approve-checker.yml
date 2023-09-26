@@ -1,0 +1,86 @@
+name: APPROVE CHECKER
+
+on:
+#  pull_request_target:
+#    types:
+#      - review_requested
+
+  pull_request_review:
+    types:
+      - submitted
+
+jobs:
+
+#  review-request:
+#    if: github.event.pull_request && github.event.number
+#    runs-on: ubuntu-latest
+#    env:
+#      PR_NUMBER: ${{ github.event.number }}
+#      REPO: ${{ github.repository }}
+#      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#    outputs:
+#      LABELS: ${{ steps.labels.outputs.LABELS }}
+#    steps:
+#      - name: info
+#        run: |
+#          echo "${{ toJson(github.event) }}"
+#
+#      - name: LABELS
+#        id: labels
+#        run: |
+#          labels=$(gh pr view ${PR_NUMBER} -R ${REPO} --json labels -q '.labels[].name')
+#          echo "LABELS=${labels}" >> $GITHUB_OUTPUT
+
+  info:
+    if: github.event.review && github.event.review.state == 'approved'
+    runs-on: ubuntu-latest
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      REPO: ${{ github.repository }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      LABELS: ${{ steps.labels.outputs.LABELS }}
+    steps:
+      - name: info
+        run: |
+          echo "${{ toJson(github.event) }}"
+
+      - name: LABELS
+        id: labels
+        run: |
+          labels=$(gh pr view ${PR_NUMBER} -R ${REPO} --json labels -q '.labels[].name')
+          echo "LABELS=${labels}" >> $GITHUB_OUTPUT
+
+  meta-review:
+    if: github.event.review && github.event.review.state == 'approved' &&
+    runs-on: ubuntu-latest
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      REPO: ${{ github.repository }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Get Reviews Info
+        run: echo "This PR was approved"
+
+      - name: META-REVIEW
+        if: contains(steps.labels.outputs.LABELS, 'META-REVIEW')
+        env:
+          META_TEAM: test-team
+        run: |
+          members=($(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /orgs/${REPO%%/*}/teams/${META_TEAM}/members -q '.[].login')
+          reviewers=($(gh pr view ${PR_NUMBER} -R ${REPO} --json reviews -q '.reviews.[] | select(.state == "APPROVED") | .author.login'))
+          for each_reviewer in ${reviewers[@]}; do
+            for each_member in ${members[@]}; do
+              if [[ "${each_reviewer}" =~ "${each_member}" ]]; then
+                exit 0
+              fi
+            done
+          done
+          
+          echo "Lack of META-TEAM members' approval!"
+          
+      
