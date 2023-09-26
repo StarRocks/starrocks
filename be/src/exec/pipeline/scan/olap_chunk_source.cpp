@@ -304,7 +304,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     _tablet_schema = TabletSchema::copy(tablet_schema_ptr);
 
     // if column_desc come from fe, reset tablet schema
-    if (!_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
+    if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
+        !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
         _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
         _tablet_schema->clear_columns();
         for (const auto& column_desc : _scan_node->thrift_olap_scan_node().columns_desc) {
