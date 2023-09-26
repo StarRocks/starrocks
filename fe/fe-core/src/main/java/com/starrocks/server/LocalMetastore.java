@@ -4833,7 +4833,7 @@ public class LocalMetastore implements ConnectorMetadata {
                                                           List<Long> sourcePartitionIds,
                                                           Map<Long, String> origPartitions, OlapTable copiedTbl,
                                                           String namePostfix, Set<Long> tabletIdSet,
-                                                          List<Long> tmpPartitionIds, boolean isOptimize)
+                                                          List<Long> tmpPartitionIds, DistributionDesc distributionDesc)
             throws DdlException {
         List<Partition> newPartitions = Lists.newArrayListWithCapacity(sourcePartitionIds.size());
         for (int i = 0; i < sourcePartitionIds.size(); ++i) {
@@ -4857,10 +4857,12 @@ public class LocalMetastore implements ConnectorMetadata {
             }
 
             Partition newPartition = null;
-            if (isOptimize) {
-                Partition sourcePartition = olapTable.getPartition(sourcePartitionId);
-                DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo().copy();
-                olapTable.optimizeDistribution(distributionInfo, sourcePartition);
+            if (distributionDesc != null) {
+                DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(olapTable.getColumns());
+                if (distributionInfo.getBucketNum() == 0) {
+                    Partition sourcePartition = olapTable.getPartition(sourcePartitionId);
+                    olapTable.optimizeDistribution(distributionInfo, sourcePartition);
+                }
                 newPartition = createPartition(
                         db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet, distributionInfo);
             } else {
@@ -4876,11 +4878,11 @@ public class LocalMetastore implements ConnectorMetadata {
     // new partitions have the same indexes as source partitions.
     public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
                                                               String namePostfix, List<Long> sourcePartitionIds,
-                                                              List<Long> tmpPartitionIds, boolean isOptimize) {
+                                                              List<Long> tmpPartitionIds, DistributionDesc distributionDesc) {
         Preconditions.checkState(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         Map<Long, String> origPartitions = Maps.newHashMap();
-        OlapTable copiedTbl = getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions, isOptimize);
+        OlapTable copiedTbl = getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions, distributionDesc != null);
         copiedTbl.setDefaultDistributionInfo(olapTable.getDefaultDistributionInfo());
 
         // 2. use the copied table to create partitions
@@ -4889,7 +4891,7 @@ public class LocalMetastore implements ConnectorMetadata {
         Set<Long> tabletIdSet = Sets.newHashSet();
         try {
             newPartitions = getNewPartitionsFromPartitions(db, olapTable, sourcePartitionIds, origPartitions,
-                    copiedTbl, namePostfix, tabletIdSet, tmpPartitionIds, isOptimize);
+                    copiedTbl, namePostfix, tabletIdSet, tmpPartitionIds, distributionDesc);
             buildPartitions(db, copiedTbl, newPartitions.stream().map(Partition::getSubPartitions)
                     .flatMap(p -> p.stream()).collect(Collectors.toList()));
         } catch (Exception e) {

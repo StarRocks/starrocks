@@ -176,7 +176,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
         try {
             PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
-                    optimizeClause.getSourcePartitionIds(), getTmpPartitionIds(), true);
+                    optimizeClause.getSourcePartitionIds(), getTmpPartitionIds(), optimizeClause.getDistributionDesc());
         } catch (Exception e) {
             LOG.warn("create temp partitions failed", e);
             throw new AlterCancelException("create temp partitions failed " + e);

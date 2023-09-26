@@ -38,7 +38,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DynamicPartitionUtil;
@@ -358,16 +357,6 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                     && !(targetKeysType == KeysType.AGG_KEYS && !hasReplace)) {
                 throw new SemanticException(targetKeysType.toSql() + (hasReplace ? " with replace " : "")
                         + " must use hash distribution", distributionDesc.getPos());
-            }
-            try {
-                if (olapTable.getDefaultDistributionInfo().getType()
-                        != distributionDesc.toDistributionInfo(olapTable.getColumns()).getType()) {
-                    throw new SemanticException("not support change default distribution type from " +
-                            olapTable.getDefaultDistributionInfo().getType() + " to " +
-                            distributionDesc.toDistributionInfo(olapTable.getColumns()).getType());
-                }
-            } catch (DdlException e) {
-                throw new SemanticException(e.getMessage());
             }
             distributionDesc.analyze(columnSet);
             clause.setDistributionDesc(distributionDesc);
