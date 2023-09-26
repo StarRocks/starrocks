@@ -255,7 +255,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
 - `colocate_with`: The colocation group of the asynchronous materialized view. See [Colocate Join](../../../using_starrocks/Colocate_join.md) for further information. This property is supported from v3.0.
 - `unique_constraints` and `foreign_key_constraints`: The Unique Key constraints and Foreign Key constraints when you create an asynchronous materialized view for query rewrite in the View Delta Join scenario. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/Materialized_view.md#rewrite-queries-in-view-delta-join-scenario) for further information. This property is supported from v3.0.
 - `resource_group`: The resource group to which the refresh tasks of the materialized view belong. For more about resource groups see [Resource group](../../../administration/resource_group.md).
-- `query_rewrite_consistency`: The data consistency between the materialized view and the base table for query rewrite. This property is supported from v3.2. Valid values:
+- `query_rewrite_consistency`: The query rewrite rule the materialized view. This property is supported from v3.2. Valid values:
   - `disable`: Disable the automatic query rewrite using the asynchronous materialized view.
   - `checked` (Default value): Enable the automatic query rewrite only when the materialized view meets the timeliness requirement, which means:
     - if `mv_rewrite_staleness_second` is not specified, the materialized view can be used for query rewrite only when its data is consistent with the data in all base tables
