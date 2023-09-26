@@ -21,7 +21,7 @@ jobs:
 
   info:
     if: >
-      (github.event.pull_request && github.event.number && github.event.requested_teams) ||
+      (github.event.pull_request && github.event.number && github.event.requested_team) ||
       (github.event.pull_request.requested_teams && github.event.review && github.event.review.state == 'approved')
     runs-on: ubuntu-latest
     env:
