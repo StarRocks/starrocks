@@ -226,6 +226,7 @@ struct TQueryOptions {
   205: optional bool use_range_join;
   206: optional bool enable_pipeline_level_shuffle;
 
+  300: optional bool enable_append_selective_devirtualize;
   400: optional bool enable_intra_instance_broadcast_join;
 }
 
