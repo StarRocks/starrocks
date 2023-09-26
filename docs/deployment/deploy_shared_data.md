@@ -193,11 +193,7 @@ storage_root_path = <storage_root_path>
 
 | **Configuration item** | **Description**                |
 | ---------------------- | ------------------------------ |
-<<<<<<< HEAD
-| starlet_port           | The BE heartbeat service port. Default value: `9070`.|
-=======
 | starlet_port           | The CN heartbeat service port for the StarRocks shared-data cluster. Default value: `9070`.|
->>>>>>> 884b67c0d7 ([Doc] Replace BE with CN in shared-data (#31748))
 | storage_root_path      | The storage volume directory that the local cached data depends on and the medium type of the storage. Multiple volumes are separated by semicolon (;). If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`. Default value: `${STARROCKS_HOME}/storage`. |
 
 > **NOTE**
@@ -253,13 +249,8 @@ In addition to the regular table PROPERTIES, you need to specify the following P
 
 | **Property**            | **Description**                                              |
 | ----------------------- | ------------------------------------------------------------ |
-<<<<<<< HEAD
-| enable_storage_cache    | Whether to enable the local disk cache. Default: `true`.<ul><li>When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).</li><li>When this property is set to `false`, the data is loaded only into the object storage.</li></ul>**NOTE**<br />To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. |
+| enable_storage_cache    | Whether to enable the local disk cache. Default: `true`.<ul><li>When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).</li><li>When this property is set to `false`, the data is loaded only into the object storage.</li></ul>**NOTE**<br />To enable the local disk cache, you must specify the directory of the disk in the CN configuration item `storage_root_path`. |
 | storage_cache_ttl       | The duration for which StarRocks caches the loaded data in the local disk if the local disk cache is enabled. The expired data is deleted from the local disk. If the value is set to `-1`, the cached data does not expire. Default: `2592000` (30 days).<br />**CAUTION**<br />If you disabled the local disk cache, you do not need to set this configuration item. Setting this item to a value other than `0` when the local disk cache is disabled will cause unexpected behaviors of StarRocks. |
-=======
-| datacache.enable        | Whether to enable the local disk cache. Default: `true`.<ul><li>When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).</li><li>When this property is set to `false`, the data is loaded only into the object storage.</li></ul>**NOTE**<br />To enable the local disk cache, you must specify the directory of the disk in the CN configuration item `storage_root_path`. |
-| datacache.partition_duration | The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.<br />**NOTE**<br />This property is available only when `datacache.enable` is set to `true`. |
->>>>>>> 884b67c0d7 ([Doc] Replace BE with CN in shared-data (#31748))
 | enable_async_write_back | Whether to allow data to be written into object storage asynchronously. Default: `false`.<ul><li>When this property is set to `true`, the load task returns success as soon as the data is written into the local disk cache, and the data is written into the object storage asynchronously. This allows better loading performance, but it also risks data reliability under potential system failures.</li><li>When this property is set to `false`, the load task returns success only after the data is written into both object storage and the local disk cache. This guarantees higher availability but leads to lower loading performance.</li></ul> |
 
 ### View table information
