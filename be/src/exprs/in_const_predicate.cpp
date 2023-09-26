@@ -75,7 +75,7 @@ Status VectorizedInConstPredicateBuilder::create() {
     return _st;
 }
 
-Status VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, size_t column_offset) {
+void VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, size_t column_offset) {
     LogicalType type = _expr->type().type;
     Expr* expr = _in_pred_ctx->root();
     DCHECK(column != nullptr);
@@ -137,7 +137,6 @@ Status VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, si
         default:;
         }
     }
-    return Status::OK();
 }
 
 } // namespace starrocks

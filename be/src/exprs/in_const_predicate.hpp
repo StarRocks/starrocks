@@ -83,7 +83,7 @@ public:
                Type == TYPE_BIGINT;
     }
 
-    Status prepare([[maybe_unused]] RuntimeState* state) {
+    [[nodiscard]] Status prepare([[maybe_unused]] RuntimeState* state) {
         if (_is_prepare) {
             return Status::OK();
         }
@@ -93,7 +93,7 @@ public:
         return Status::OK();
     }
 
-    Status merge(Predicate* predicate) override {
+    [[nodiscard]] Status merge(Predicate* predicate) override {
         if (auto* that = dynamic_cast<typeof(this)>(predicate)) {
             const auto& hash_set = that->hash_set();
             _hash_set.insert(hash_set.begin(), hash_set.end());
@@ -105,7 +105,7 @@ public:
         }
     }
 
-    Status prepare(RuntimeState* state, ExprContext* context) override {
+    [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override {
         RETURN_IF_ERROR(Expr::prepare(state, context));
 
         if (_is_prepare) {
@@ -126,7 +126,8 @@ public:
         return Status::OK();
     }
 
-    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
+    [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
+                              FunctionContext::FunctionStateScope scope) override {
         RETURN_IF_ERROR(Expr::open(state, context, scope));
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             if (Type != _children[0]->type().type) {
@@ -412,7 +413,8 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedInConstPredicateGeneric(*this)); }
 
-    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
+    [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
+                              FunctionContext::FunctionStateScope scope) override {
         RETURN_IF_ERROR(Expr::open(state, context, scope));
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             _const_input.resize(_children.size());
@@ -523,8 +525,8 @@ public:
     VectorizedInConstPredicateBuilder(RuntimeState* state, ObjectPool* pool, Expr* expr)
             : _state(state), _pool(pool), _expr(expr) {}
 
-    Status create();
-    Status add_values(const ColumnPtr& column, size_t column_offset);
+    [[nodiscard]] Status create();
+    void add_values(const ColumnPtr& column, size_t column_offset);
     void use_array_set(size_t array_size) { _array_size = array_size; }
     void use_as_join_runtime_filter() { _is_join_runtime_filter = true; }
     void set_eq_null(bool v) { _eq_null = v; }
