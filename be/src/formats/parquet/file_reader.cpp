@@ -82,11 +82,12 @@ Status FileReader::_parse_footer() {
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
         RETURN_IF_ERROR(_file->read_at_fully(_file_size - footer_read_size, footer_buffer.data(), footer_read_size));
-        _scanner_ctx->stats->request_bytes_read += footer_read_size;
-        _scanner_ctx->stats->request_bytes_read_uncompressed += footer_read_size;
     }
 
     ASSIGN_OR_RETURN(uint32_t metadata_length, _parse_metadata_length(footer_buffer));
+
+    _scanner_ctx->stats->request_bytes_read += metadata_length + PARQUET_FOOTER_SIZE;
+    _scanner_ctx->stats->request_bytes_read_uncompressed += metadata_length + PARQUET_FOOTER_SIZE;
 
     if (footer_read_size < (metadata_length + PARQUET_FOOTER_SIZE)) {
         // footer_buffer's size is not enough to read the whole metadata, we need to re-read for larger size
@@ -95,8 +96,6 @@ Status FileReader::_parse_footer() {
         {
             SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
             RETURN_IF_ERROR(_file->read_at_fully(_file_size - re_read_size, footer_buffer.data(), re_read_size));
-            _scanner_ctx->stats->request_bytes_read += re_read_size;
-            _scanner_ctx->stats->request_bytes_read_uncompressed += re_read_size;
         }
     }
 
