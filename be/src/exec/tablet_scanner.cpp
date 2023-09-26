@@ -52,7 +52,8 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     _tablet_schema = TabletSchema::copy(tablet_schema_ptr);
 
     // if column_desc come from fe, reset tablet schema
-    if (!_parent->_olap_scan_node.columns_desc.empty() && _parent->_olap_scan_node.columns_desc[0].col_unique_id >= 0) {
+    if (_parent->_olap_scan_node.__isset.columns_desc && !_parent->_olap_scan_node.columns_desc.empty() &&
+        _parent->_olap_scan_node.columns_desc[0].col_unique_id >= 0) {
         _tablet_schema->clear_columns();
         for (const auto& column_desc : _parent->_olap_scan_node.columns_desc) {
             _tablet_schema->append_column(TabletColumn(column_desc));
