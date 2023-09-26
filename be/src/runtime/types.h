@@ -125,6 +125,15 @@ struct TypeDescriptor {
         return res;
     }
 
+    static TypeDescriptor create_struct_type(const std::vector<std::string> field_names,
+                                             const std::vector<TypeDescriptor>& filed_types) {
+        TypeDescriptor res;
+        res.type = TYPE_STRUCT;
+        res.field_names = field_names;
+        res.children = filed_types;
+        return res;
+    }
+
     static TypeDescriptor create_hll_type() {
         TypeDescriptor ret;
         ret.type = TYPE_HLL;
