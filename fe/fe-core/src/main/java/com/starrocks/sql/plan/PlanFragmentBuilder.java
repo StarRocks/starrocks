@@ -1211,6 +1211,7 @@ public class PlanFragmentBuilder {
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), icebergScanNode, DataPartition.RANDOM);
+            fragment.setQueryGlobalDicts(node.getGlobalDicts());
             context.getFragments().add(fragment);
             return fragment;
         }
