@@ -49,6 +49,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AddFollowerClause;
@@ -272,11 +273,13 @@ public class SystemHandler extends AlterHandler {
                                 maxReplicationNum = replicationNum;
                                 if (infoService.getAvailableBackendIds().size() - decommissionBackends.size() <
                                         maxReplicationNum) {
-                                    decommissionBackends.clear();
-                                    throw new DdlException(
-                                            "It will cause insufficient BE number if these BEs are decommissioned " +
-                                            "because the table " + db.getFullName() + "." + olapTable.getName() + " requires " +
-                                            maxReplicationNum + " replicas.");
+                                    if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+                                        decommissionBackends.clear();
+                                        throw new DdlException(
+                                                "It will cause insufficient BE number if these BEs are decommissioned " +
+                                                        "because the table " + db.getFullName() + "." + olapTable.getName() +
+                                                        " requires " + maxReplicationNum + " replicas.");
+                                    }
                                 }
                             }
                         }
