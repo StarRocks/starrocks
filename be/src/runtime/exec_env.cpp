@@ -157,7 +157,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     std::unique_ptr<ThreadPool> streaming_load_pool;
     RETURN_IF_ERROR(
-            ThreadPoolBuilder("streaming_load_scan")
+            ThreadPoolBuilder("stream_load_scan")
                     .set_min_threads(config::streaming_load_thread_pool_num_min)
                     .set_max_threads(config::streaming_load_thread_pool_num_max)
                     .set_max_queue_size(config::streaming_load_thread_pool_queue_size)
