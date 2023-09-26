@@ -215,7 +215,7 @@ struct TBrokerScanRangeParams {
     // hdfs_read_buffer_size_kb for reading through lib hdfs directly
     15: optional i32 hdfs_read_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
-    16: THdfsProperties hdfs_properties
+    16: optional THdfsProperties hdfs_properties
 }
 
 // Broker scan range
