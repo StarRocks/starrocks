@@ -318,7 +318,6 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCharsetStmt;
-import com.starrocks.sql.ast.ShowClustersStmt;
 import com.starrocks.sql.ast.ShowCollationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
@@ -1668,12 +1667,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new ShowWarehousesStmt(pattern, where, createPos(context));
-    }
-
-    @Override
-    public ParseNode visitShowClustersStatement(StarRocksParser.ShowClustersStatementContext context) {
-        String whName = ((Identifier) visit(context.identifier())).getValue();
-        return new ShowClustersStmt(whName, createPos(context));
     }
 
     // ------------------------------------------- DML Statement -------------------------------------------------------
