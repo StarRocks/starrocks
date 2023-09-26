@@ -242,6 +242,7 @@ Status DeltaWriter::_init() {
             std::iota(sort_key_idxes.begin(), sort_key_idxes.end(), 0);
             partial_update_schema->set_num_short_key_columns(1);
             partial_update_schema->set_sort_key_idxes(sort_key_idxes);
+            _partial_schema_with_sort_key = false;
         }
 
         writer_context.partial_update_tablet_schema = partial_update_schema;
@@ -323,16 +324,20 @@ void DeltaWriter::_set_state(State state, const Status& st) {
 }
 
 Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
-    if (_tablet->updates() != nullptr && _partial_schema_with_sort_key && _opt.slots != nullptr &&
-        _opt.slots->back()->col_name() == "__op") {
-        size_t op_column_id = chunk.num_columns() - 1;
-        const auto& op_column = chunk.get_column_by_index(op_column_id);
-        auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
-        for (size_t i = 0; i < chunk.num_rows(); i++) {
-            if (ops[i] == TOpType::UPSERT) {
-                LOG(WARNING) << "table with sort key do not support partial update";
-                return Status::NotSupported("table with sort key do not support partial update");
+    if (_tablet->updates() != nullptr && _partial_schema_with_sort_key) {
+        if (_opt.slots != nullptr && _opt.slots->back()->col_name() == "__op") {
+            size_t op_column_id = chunk.num_columns() - 1;
+            const auto& op_column = chunk.get_column_by_index(op_column_id);
+            auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+            for (size_t i = 0; i < chunk.num_rows(); i++) {
+                if (ops[i] == TOpType::UPSERT) {
+                    LOG(WARNING) << "table with sort key do not support partial update";
+                    return Status::NotSupported("table with sort key do not support partial update");
+                }
             }
+        } else {
+            LOG(WARNING) << "table with sort key do not support partial update";
+            return Status::NotSupported("table with sort key do not support partial update");
         }
     }
     return Status::OK();
