@@ -17,28 +17,14 @@ jobs:
     steps:
       - name: debug
         run: |
-          echo "${{ toJson(github.event) }}"
+          echo "${{ toJson(github.event.pull_request) }}"
+          echo "${{ toJson(github.event.review) }}"
 
-  review-request:
-    if: github.event.pull_request && github.event.number
-    runs-on: ubuntu-latest
-    env:
-      PR_NUMBER: ${{ github.event.number }}
-      REPO: ${{ github.repository }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    outputs:
-      HIT: ${{ steps.hit.outputs.HIT }}
-    steps:
-      - name: HIT-CHECK
-        id: hit
-        run: |
-          # judge if request team is META, if yes, run next info check
-          echo "HIT=true" >> $GITHUB_OUTPUT
-  
   info:
-    if: always() && (github.event.review && github.event.review.state == 'approved') || needs.review-request.outputs.HIT == true
+    if: >
+      (github.event.pull_request && github.event.number && github.event.requested_teams) ||
+      (github.event.pull_request.requested_teams && github.event.review && github.event.review.state == 'approved')
     runs-on: ubuntu-latest
-    needs: review-request
     env:
       PR_NUMBER: ${{ github.event.number }}
       REPO: ${{ github.repository }}
@@ -46,10 +32,6 @@ jobs:
     outputs:
       LABELS: ${{ steps.labels.outputs.LABELS }}
     steps:
-      - name: info
-        run: |
-          echo "${{ toJson(github.event) }}"
-
       - name: LABELS
         id: labels
         run: |
