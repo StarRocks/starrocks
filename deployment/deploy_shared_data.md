@@ -7,7 +7,7 @@ StarRocks 存算分离集群采用了存储计算分离架构，特别为云存�
 相对存算一体架构，StarRocks 的存储计算分离架构提供以下优势：
 
 - 廉价且可无缝扩展的存储。
-- 弹性可扩展的计算能力。由于数据不再存储在 BE 节点中，因此集群无需进行跨节点数据迁移或 Shuffle 即可完成扩缩容。
+- 弹性可扩展的计算能力。由于数据不存储在 CN 节点中，因此集群无需进行跨节点数据迁移或 Shuffle 即可完成扩缩容。
 - 热数据的本地磁盘缓存，用以提高查询性能。
 - 可选异步导入数据至对象存储，提高导入效率。
 
@@ -17,7 +17,7 @@ StarRocks 存算分离集群架构如下：
 
 ## 部署 StarRocks 存算分离集群
 
-StarRocks 存算分离集群的部署方式与存算一体集群的部署方式类似。唯一不同的是 FE 和 BE 的配置文件 **fe.conf** 和 **be.conf** 中的配置项。本小节仅列出部署 StarRocks 存算分离集群时需要添加到配置文件中的 FE 和 BE 配置项。有关部署 StarRocks 存算一体集群的详细说明，请参阅 [部署 StarRocks](/deployment/deploy_manually.md)。
+StarRocks 存算分离集群的部署方式与存算一体集群的部署方式类似，但存算分离集群需要部署 CN 节点而非 BE 节点。本小节仅列出部署 StarRocks 存算分离集群时需要添加到 FE 和 CN 配置文件 **fe.conf** 和 **cn.conf** 中的额外配置项。有关部署 StarRocks 集群的详细说明，请参阅 [部署 StarRocks](/deployment/deploy_manually.md)。
 
 ### 配置存算分离集群 FE 节点
 
@@ -357,9 +357,9 @@ enable_load_volume_from_conf = false
   aws_s3_secret_key = <secret_key>
   ```
 
-### 配置存算分离集群 BE 节点
+### 配置存算分离集群 CN 节点
 
-**在启动 BE 之前**，在 BE 配置文件 **be.conf** 中添加以下配置项：
+**在启动 CN 之前**，在 CN 配置文件 **cn.conf** 中添加以下配置项：
 
 ```Properties
 starlet_port = <starlet_port>
@@ -368,7 +368,7 @@ storage_root_path = <storage_root_path>
 
 | **配置项**              | **描述**                 |
 | ---------------------- | ------------------------ |
-| starlet_port | 存算分离模式下，用于 BE 心跳服务的端口。默认值：`9070`。 |
+| starlet_port | 存算分离模式下，用于 CN 心跳服务的端口。默认值：`9070`。 |
 | storage_root_path      | 本地缓存数据依赖的存储目录以及该存储介质的类型，多块盘配置使用分号（;）隔开。如果为 SSD 磁盘，需在路径后添加 `,medium:ssd`，如果为 HDD 磁盘，需在路径后添加 `,medium:hdd`。例如：`/data1,medium:hdd;/data2,medium:ssd`。默认值：`${STARROCKS_HOME}/storage`。 |
 
 > **说明**
@@ -455,7 +455,7 @@ PROPERTIES (
 
 | **属性**                | **描述**                                                     |
 | ----------------------- | ------------------------------------------------------------ |
-| datacache.enable        | 是否启用本地磁盘缓存。默认值：`true`。<ul><li>当该属性设置为 `true` 时，数据会同时导入对象存储（或 HDFS）和本地磁盘（作为查询加速的缓存）。</li><li>当该属性设置为 `false` 时，数据仅导入到对象存储中。</li></ul>**说明**<br />如需启用本地磁盘缓存，必须在 BE 配置项 `storage_root_path` 中指定磁盘目录。 |
+| datacache.enable        | 是否启用本地磁盘缓存。默认值：`true`。<ul><li>当该属性设置为 `true` 时，数据会同时导入对象存储（或 HDFS）和本地磁盘（作为查询加速的缓存）。</li><li>当该属性设置为 `false` 时，数据仅导入到对象存储中。</li></ul>**说明**<br />如需启用本地磁盘缓存，必须在 CN 配置项 `storage_root_path` 中指定磁盘目录。 |
 | datacache.partition_duration | 热数据的有效期。当启用本地磁盘缓存时，所有数据都会导入至本地磁盘缓存中。当缓存满时，StarRocks 会从缓存中删除最近较少使用（Less recently used）的数据。当有查询需要扫描已删除的数据时，StarRocks 会检查该数据是否在有效期内。如果数据在有效期内，StarRocks 会再次将数据导入至缓存中。如果数据不在有效期内，StarRocks 不会将其导入至缓存中。该属性为字符串，您可以使用以下单位指定：`YEAR`、`MONTH`、`DAY` 和 `HOUR`，例如，`7 DAY` 和 `12 HOUR`。如果不指定，StarRocks 将所有数据都作为热数据进行缓存。<br />**说明**<br />仅当 `datacache.enable` 设置为 `true` 时，此属性可用。 |
 | enable_async_write_back | 是否允许数据异步写入对象存储。默认值：`false`。<ul><li>当该属性设置为 `true` 时，导入任务在数据写入本地磁盘缓存后立即返回成功，数据将异步写入对象存储。允许数据异步写入可以提升导入性能，但如果系统发生故障，可能会存在一定的数据可靠性风险。</li><li>当该属性设置为 `false` 时，只有在数据同时写入对象存储和本地磁盘缓存后，导入任务才会返回成功。禁用数据异步写入保证了更高的可用性，但会导致较低的导入性能。</li></ul> |
 
