@@ -43,6 +43,8 @@ jobs:
 
       - name: LABELS
         id: label_info
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.PR_NUMBER }}
         run: |
           labels=$(gh pr view ${PR_NUMBER} -R ${REPO} --json labels -q '.labels[].name')
           echo "labels<<EOF" >> $GITHUB_OUTPUT
