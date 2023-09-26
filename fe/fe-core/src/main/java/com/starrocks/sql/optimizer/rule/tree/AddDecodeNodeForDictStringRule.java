@@ -45,12 +45,14 @@ import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -362,6 +364,82 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             return visitProjectionAfter(optExpression, context);
         }
 
+        private void adjustScanOperator(PhysicalScanOperator scanOperator,
+                                        DecodeContext context, List<ScalarOperator> predicates,
+                                        Map<ColumnRefOperator, Column> newColRefToColumnMetaMap,
+                                        List<ColumnRefOperator> newOutputColumns) {
+            long tableId = scanOperator.getTable().getId();
+            // check column could apply dict optimize and replace string column to dict column
+            for (Integer columnId : context.tableIdToStringColumnIds.get(tableId)) {
+                ColumnRefOperator stringColumn = context.columnRefFactory.getColumnRef(columnId);
+                if (!scanOperator.getColRefToColumnMetaMap().containsKey(stringColumn)) {
+                    continue;
+                }
+
+                BooleanSupplier checkColumnCouldApply = () -> {
+                    if (context.disableDictOptimizeColumns.contains(columnId)) {
+                        return false;
+                    }
+
+                    if (scanOperator.getPredicate() != null &&
+                            scanOperator.getPredicate().getUsedColumns().contains(columnId)) {
+                        // If there is an unsupported expression in any of the low cardinality columns,
+                        // we disable low cardinality optimization.
+                        return predicates.stream().allMatch(
+                                predicate -> !predicate.getUsedColumns().contains(columnId) ||
+                                        couldApplyDictOptimize(predicate, context.allStringColumnIds));
+                    }
+                    return true;
+                };
+
+                if (!checkColumnCouldApply.getAsBoolean()) {
+                    continue;
+                }
+
+                ColumnRefOperator newDictColumn = createNewDictColumn(context, stringColumn);
+
+                if (newOutputColumns.contains(stringColumn)) {
+                    newOutputColumns.remove(stringColumn);
+                    newOutputColumns.add(newDictColumn);
+                }
+
+                Column oldColumn = scanOperator.getColRefToColumnMetaMap().get(stringColumn);
+                Column newColumn = new Column(oldColumn);
+                newColumn.setType(ID_TYPE);
+
+                newColRefToColumnMetaMap.remove(stringColumn);
+                newColRefToColumnMetaMap.put(newDictColumn, newColumn);
+
+                // get dict from cache
+                ColumnDict columnDict = context.globalDictCache.get(new Pair<>(tableId, stringColumn.getName()));
+                Preconditions.checkState(columnDict != null);
+                context.globalDicts.add(new Pair<>(newDictColumn.getId(), columnDict));
+
+                context.stringColumnIdToDictColumnIds.put(columnId, newDictColumn.getId());
+                context.hasEncoded = true;
+            }
+
+            // rewrite predicate
+            // get all string columns for this table
+            Set<Integer> stringColumns = context.tableIdToStringColumnIds.get(tableId);
+            // get all could apply this optimization string columns
+            ColumnRefSet applyOptCols = new ColumnRefSet();
+            stringColumns.stream().filter(cid -> context.stringColumnIdToDictColumnIds.containsKey(cid))
+                    .forEach(applyOptCols::union);
+
+            // if predicate used any apply to optimize column, it should be rewritten
+            if (scanOperator.getPredicate() != null) {
+                for (int i = 0; i < predicates.size(); i++) {
+                    ScalarOperator predicate = predicates.get(i);
+                    if (predicate.getUsedColumns().isIntersect(applyOptCols)) {
+                        final DictMappingRewriter rewriter = new DictMappingRewriter(context);
+                        final ScalarOperator newCallOperator = rewriter.rewrite(predicate.clone());
+                        predicates.set(i, newCallOperator);
+                    }
+                }
+            }
+        }
+
         @Override
         public OptExpression visitPhysicalOlapScan(OptExpression optExpression, DecodeContext context) {
             visitProjectionBefore(optExpression, context);
@@ -371,87 +449,15 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             }
 
             PhysicalOlapScanOperator scanOperator = (PhysicalOlapScanOperator) optExpression.getOp();
-            long tableId = scanOperator.getTable().getId();
             if (context.tableIdToStringColumnIds.containsKey(scanOperator.getTable().getId())) {
                 Map<ColumnRefOperator, Column> newColRefToColumnMetaMap =
                         Maps.newHashMap(scanOperator.getColRefToColumnMetaMap());
                 List<ColumnRefOperator> newOutputColumns = Lists.newArrayList(scanOperator.getOutputColumns());
-
-                List<Pair<Integer, ColumnDict>> globalDicts = context.globalDicts;
-                ScalarOperator newPredicate;
                 List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
 
-                // check column could apply dict optimize and replace string column to dict column
-                for (Integer columnId : context.tableIdToStringColumnIds.get(tableId)) {
-                    ColumnRefOperator stringColumn = context.columnRefFactory.getColumnRef(columnId);
-                    if (!scanOperator.getColRefToColumnMetaMap().containsKey(stringColumn)) {
-                        continue;
-                    }
+                adjustScanOperator(scanOperator, context, predicates, newColRefToColumnMetaMap, newOutputColumns);
 
-                    BooleanSupplier checkColumnCouldApply = () -> {
-                        if (context.disableDictOptimizeColumns.contains(columnId)) {
-                            return false;
-                        }
-
-                        if (scanOperator.getPredicate() != null &&
-                                scanOperator.getPredicate().getUsedColumns().contains(columnId)) {
-                            // If there is an unsupported expression in any of the low cardinality columns,
-                            // we disable low cardinality optimization.
-                            return predicates.stream().allMatch(
-                                    predicate -> !predicate.getUsedColumns().contains(columnId) ||
-                                            couldApplyDictOptimize(predicate, context.allStringColumnIds));
-                        }
-                        return true;
-                    };
-
-                    if (!checkColumnCouldApply.getAsBoolean()) {
-                        continue;
-                    }
-
-                    ColumnRefOperator newDictColumn = createNewDictColumn(context, stringColumn);
-
-                    if (newOutputColumns.contains(stringColumn)) {
-                        newOutputColumns.remove(stringColumn);
-                        newOutputColumns.add(newDictColumn);
-                    }
-
-                    Column oldColumn = scanOperator.getColRefToColumnMetaMap().get(stringColumn);
-                    Column newColumn = new Column(oldColumn);
-                    newColumn.setType(ID_TYPE);
-
-                    newColRefToColumnMetaMap.remove(stringColumn);
-                    newColRefToColumnMetaMap.put(newDictColumn, newColumn);
-
-                    // get dict from cache
-                    ColumnDict columnDict = context.globalDictCache.get(new Pair<>(tableId, stringColumn.getName()));
-                    Preconditions.checkState(columnDict != null);
-                    globalDicts.add(new Pair<>(newDictColumn.getId(), columnDict));
-
-                    context.stringColumnIdToDictColumnIds.put(columnId, newDictColumn.getId());
-                    context.hasEncoded = true;
-                }
-
-                // rewrite predicate
-                // get all string columns for this table
-                Set<Integer> stringColumns = context.tableIdToStringColumnIds.get(tableId);
-                // get all could apply this optimization string columns
-                ColumnRefSet applyOptCols = new ColumnRefSet();
-                stringColumns.stream().filter(cid -> context.stringColumnIdToDictColumnIds.containsKey(cid))
-                        .forEach(applyOptCols::union);
-
-                // if predicate used any apply to optimize column, it should be rewritten
-                if (scanOperator.getPredicate() != null) {
-                    for (int i = 0; i < predicates.size(); i++) {
-                        ScalarOperator predicate = predicates.get(i);
-                        if (predicate.getUsedColumns().isIntersect(applyOptCols)) {
-                            final DictMappingRewriter rewriter = new DictMappingRewriter(context);
-                            final ScalarOperator newCallOperator = rewriter.rewrite(predicate.clone());
-                            predicates.set(i, newCallOperator);
-                        }
-                    }
-                }
-
-                newPredicate = Utils.compoundAnd(predicates);
+                ScalarOperator newPredicate = Utils.compoundAnd(predicates);
                 if (context.hasEncoded) {
                     // TODO: maybe have to implement a clone method to create a physical node.
                     PhysicalOlapScanOperator newOlapScan =
@@ -463,12 +469,62 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     newOlapScan.setCanUseAnyColumn(scanOperator.getCanUseAnyColumn());
                     newOlapScan.setCanUseMinMaxCountOpt(scanOperator.getCanUseMinMaxCountOpt());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
-                    newOlapScan.setGlobalDicts(globalDicts);
+                    newOlapScan.setGlobalDicts(context.globalDicts);
                     // set output columns because of the projection is not encoded but the colRefToColumnMetaMap has encoded.
                     // There need to set right output columns
                     newOlapScan.setOutputColumns(newOutputColumns);
                     newOlapScan.setNeedSortedByKeyPerTablet(scanOperator.needSortedByKeyPerTablet());
 
+                    OptExpression result = new OptExpression(newOlapScan);
+                    result.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
+                            context.stringColumnIdToDictColumnIds));
+                    result.setStatistics(optExpression.getStatistics());
+                    return visitProjectionAfter(result, context);
+                }
+            }
+            return visitProjectionAfter(optExpression, context);
+        }
+
+        @Override
+        public OptExpression visitPhysicalIcebergScan(OptExpression optExpression, DecodeContext context) {
+            visitProjectionBefore(optExpression, context);
+
+            if (!context.needEncode) {
+                return optExpression;
+            }
+
+            PhysicalIcebergScanOperator scanOperator = (PhysicalIcebergScanOperator) optExpression.getOp();
+            if (context.tableIdToStringColumnIds.containsKey(scanOperator.getTable().getId())) {
+                Map<ColumnRefOperator, Column> newColRefToColumnMetaMap =
+                        Maps.newHashMap(scanOperator.getColRefToColumnMetaMap());
+                List<ColumnRefOperator> newOutputColumns = Lists.newArrayList(scanOperator.getOutputColumns());
+
+                List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
+                adjustScanOperator(scanOperator, context, predicates, newColRefToColumnMetaMap, newOutputColumns);
+                ScalarOperator newPredicate = Utils.compoundAnd(predicates);
+
+                ScanOperatorPredicates newScanOperatorPredicates = scanOperator.getScanOperatorPredicates().clone();
+                {
+                    adjustScanOperator(scanOperator, context, newScanOperatorPredicates.getMinMaxConjuncts(),
+                            newScanOperatorPredicates.getMinMaxColumnRefMap(), newOutputColumns);
+                    adjustScanOperator(scanOperator, context, newScanOperatorPredicates.getNoEvalPartitionConjuncts(),
+                            newColRefToColumnMetaMap, newOutputColumns);
+                    adjustScanOperator(scanOperator, context, newScanOperatorPredicates.getPartitionConjuncts(),
+                            newColRefToColumnMetaMap, newOutputColumns);
+                    adjustScanOperator(scanOperator, context, newScanOperatorPredicates.getNonPartitionConjuncts(),
+                            newColRefToColumnMetaMap, newOutputColumns);
+                }
+
+                if (context.hasEncoded) {
+                    // TODO: maybe have to implement a clone method to create a physical node.
+                    PhysicalIcebergScanOperator newOlapScan =
+                            new PhysicalIcebergScanOperator(scanOperator.getTable(), newColRefToColumnMetaMap,
+                                    scanOperator.getLimit(), newPredicate,
+                                    scanOperator.getProjection(), newScanOperatorPredicates);
+                    newOlapScan.setCanUseAnyColumn(scanOperator.getCanUseAnyColumn());
+                    newOlapScan.setCanUseMinMaxCountOpt(scanOperator.getCanUseMinMaxCountOpt());
+                    newOlapScan.setGlobalDicts(context.globalDicts);
+                    newOlapScan.setOutputColumns(newOutputColumns);
                     OptExpression result = new OptExpression(newOlapScan);
                     result.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
                             context.stringColumnIdToDictColumnIds));
@@ -951,10 +1007,10 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
                 //                ColumnStatistic columnStatistic =
                 //                        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(table, column.getName());
-                // Condition 2: the varchar column is low cardinality string column
+                //                // Condition 2: the varchar column is low cardinality string column
                 //                if (!FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
                 //                        columnStatistic.getDistinctValuesCount() > CacheDictManager
-                //                        .LOW_CARDINALITY_THRESHOLD)) {
+                //                                .LOW_CARDINALITY_THRESHOLD)) {
                 //                    LOG.debug("{} isn't low cardinality string column", column.getName());
                 //                    continue;
                 //                }
