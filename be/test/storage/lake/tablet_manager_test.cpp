@@ -22,17 +22,16 @@
 
 #include "common/config.h"
 #include "fs/fs.h"
-#include "gen_cpp/AgentService_types.h"
+#include "fs/fs_util.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
-#include "storage/lake/tablet.h"
 #include "storage/lake/update_manager.h"
 #include "storage/options.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "util/filesystem_util.h"
-#include "util/lru_cache.h"
 
 // NOTE: intend to put the following header to the end of the include section
 // so that our `gutil/dynamic_annotations.h` takes precedence of the absl's.
@@ -500,6 +499,63 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
     }
 }
 
+namespace {
+class PartitionedLocationProvider : public lake::LocationProvider {
+public:
+    PartitionedLocationProvider(std::string root_dir, int num_partition)
+            : _root_dir(std::move(root_dir)), _num_partition(num_partition) {
+        for (int i = 0; i < _num_partition; i++) {
+            auto dir = lake::join_path(_root_dir, std::to_string(i));
+            CHECK_OK(fs::create_directories(lake::join_path(dir, lake::kMetadataDirectoryName)));
+        }
+    }
+
+    std::string root_location(int64_t tablet_id) const override {
+        return lake::join_path(_root_dir, std::to_string(tablet_id % _num_partition));
+    }
+
+private:
+    std::string _root_dir;
+    const int _num_partition;
+};
+
+TCreateTabletReq build_create_tablet_request(int64_t tablet_id, int64_t index_id) {
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.tablet_schema.__set_id(index_id);
+    req.tablet_schema.__set_schema_hash(0);
+    req.tablet_schema.__set_short_key_column_count(1);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+
+    auto& c0 = req.tablet_schema.columns.emplace_back();
+    c0.column_name = "c0";
+    c0.is_key = true;
+    c0.column_type.type = TPrimitiveType::BIGINT;
+    c0.is_allow_null = false;
+
+    return req;
+}
+
+} // namespace
+
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, test_multi_partition_schema_file) {
+    const static int kNumPartition = 4;
+    const static int64_t kIndexId = 123454321;
+    auto lp = std::make_unique<PartitionedLocationProvider>(_test_dir, kNumPartition);
+    _tablet_manager->TEST_set_location_provider(lp.get());
+    for (int i = 0; i < 10; i++) {
+        auto req = build_create_tablet_request(next_id(), kIndexId);
+        ASSERT_OK(_tablet_manager->create_tablet(req));
+    }
+    for (int i = 0; i < kNumPartition; i++) {
+        auto partition_dir = lake::join_path(_test_dir, std::to_string(i));
+        auto schema_file_path = lake::join_path(partition_dir, lake::schema_filename(kIndexId));
+        EXPECT_TRUE(fs::path_exist(schema_file_path)) << schema_file_path;
+    }
+}
+
 #ifdef USE_STAROS
 class MockStarOSWorker : public StarOSWorker {
 public:
@@ -539,7 +595,7 @@ TEST_F(LakeTabletManagerTest, tablet_schema_load_from_remote) {
     // prepare fake shard_info returned by mocked `_fetch_shard_info_from_remote()`
     staros::starlet::ShardInfo shard_info;
     shard_info.id = tablet_id;
-    shard_info.properties.emplace(std::make_pair("indexId", std::to_string(schema_id)));
+    shard_info.properties.emplace("indexId", std::to_string(schema_id));
 
     // preserve original g_worker value, and reset it to our MockedWorker
     std::shared_ptr<StarOSWorker> origin_worker = g_worker;

@@ -924,23 +924,16 @@ Status TabletManager::delete_tablet_metadata_lock(int64_t tablet_id, int64_t ver
     return st.is_not_found() ? Status::OK() : st;
 }
 
+// Store a copy of the tablet schema in a separate schema file named SCHEMA_{indexId}.
+// If this is a multi-partition table, then each partition directory will contain a schema file.
+// This method may be concurrently and repeatedly called multiple times. That means concurrent
+// creation and writes to the same schema file could happen. We assume the FileSystem interface
+// guarantees last-write-wins semantics here.
 Status TabletManager::create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb) {
-    auto cache_key = global_schema_cache_key(schema_pb.id());
-    auto handle = _metacache->lookup(CacheKey(cache_key));
-    if (handle != nullptr) {
-        // If there is a cache entry, it means that the current process has successfully
-        // created the file already, and there is no need to create it again.
-        _metacache->release(handle);
-        VLOG(3) << "Skipped creating schema file of id " << schema_pb.id() << " for tablet " << tablet_id;
-    } else {
+    auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(schema_pb.id()));
+    if (!fs::path_exist(schema_file_path)) {
         VLOG(3) << "Creating schema file of id " << schema_pb.id() << " for tablet " << tablet_id;
-        // The absence of a cache entry does not necessarily mean that the schema file does
-        // not exist. It may also be that the cache has been evicted. In addition, other
-        // processes may have already created or are creating the schema file. It is allowed
-        // for this to happen, because the schema files created by all processes are the
-        // same, as long as the final file exists, it is fine.
         auto options = WritableFileOptions{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-        auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(schema_pb.id()));
         ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(options, schema_file_path));
         RETURN_IF_ERROR(wf->append(schema_pb.SerializeAsString()));
         RETURN_IF_ERROR(wf->close());
@@ -950,6 +943,7 @@ Status TabletManager::create_schema_file(int64_t tablet_id, const TabletSchemaPB
         if (UNLIKELY(schema == nullptr)) {
             return Status::InternalError("failed to emplace the schema hash map");
         }
+        auto cache_key = global_schema_cache_key(schema_pb.id());
         auto cache_value = std::make_unique<CacheValue>(schema);
         auto cache_size = inserted ? (int)schema->mem_usage() : 0;
         fill_metacache(cache_key, cache_value.release(), cache_size);
