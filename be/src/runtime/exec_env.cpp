@@ -155,12 +155,19 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new PriorityThreadPool("table_scan_io", // olap/external table scan thread pool
                                    config::scanner_thread_pool_thread_num, config::scanner_thread_pool_queue_size);
 
+    // Thread pool used for streaming load to scan StreamLoadPipe. The maximum number of
+    // threads and queue size are set INT32_MAX which indicate there is no limit for the
+    // thread pool, and this can avoid deadlock for concurrent streaming loads. The thread
+    // pool will not be full easily because fragment execution pool and http workers also
+    // limit the streaming load concurrency which is controlled by fragment_pool_thread_num_max
+    // and webserver_num_workers respectively. This pool will be used when
+    // enable_streaming_load_thread_pool is true.
     std::unique_ptr<ThreadPool> streaming_load_pool;
     RETURN_IF_ERROR(
             ThreadPoolBuilder("stream_load_scan")
                     .set_min_threads(config::streaming_load_thread_pool_num_min)
-                    .set_max_threads(config::streaming_load_thread_pool_num_max)
-                    .set_max_queue_size(config::streaming_load_thread_pool_queue_size)
+                    .set_max_threads(INT32_MAX)
+                    .set_max_queue_size(INT32_MAX)
                     .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
                     .build(&streaming_load_pool));
     _streaming_load_thread_pool = streaming_load_pool.release();
