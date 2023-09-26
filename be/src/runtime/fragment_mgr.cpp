@@ -140,7 +140,6 @@ private:
     int _backend_num;
     ExecEnv* _exec_env;
     TNetworkAddress _coord_addr;
-    FragmentType _fragment_type;
 
     PlanFragmentExecutor _executor;
     DateTimeValue _start_time;
