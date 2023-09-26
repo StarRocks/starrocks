@@ -80,7 +80,6 @@ public:
                                        bool fill_metadata_cache);
 
 private:
-    // _tablet is owned by TabletReader
     Tablet _tablet;
     RowsetMetadataPtr _rowset_metadata;
     int _index{kInvalidRowsetIndex};

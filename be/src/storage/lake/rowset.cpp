@@ -28,10 +28,10 @@
 namespace starrocks::lake {
 
 Rowset::Rowset(Tablet tablet, RowsetMetadataPtr rowset_metadata, int index)
-        : _tablet(tablet), _rowset_metadata(std::move(rowset_metadata)), _index(index) {}
+        : _tablet(std::move(tablet)), _rowset_metadata(std::move(rowset_metadata)), _index(index) {}
 
 Rowset::Rowset(Tablet tablet, RowsetMetadataPtr rowset_metadata)
-        : _tablet(tablet), _rowset_metadata(std::move(rowset_metadata)) {}
+        : _tablet(std::move(tablet)), _rowset_metadata(std::move(rowset_metadata)) {}
 
 Rowset::~Rowset() = default;
 
@@ -95,13 +95,6 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
-
-        //        if (options.rowid_range_option != nullptr) {
-        //            seg_options.rowid_range_option = options.rowid_range_option->get_segment_rowid_range(this, seg_ptr.get());
-        //            if (seg_options.rowid_range_option == nullptr) {
-        //                continue;
-        //            }
-        //        }
 
         auto res = seg_ptr->new_iterator(*segment_schema, seg_options);
         if (res.status().is_end_of_file()) {
