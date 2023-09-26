@@ -208,7 +208,8 @@ void SinkBuffer::_update_network_time(const TUniqueId& instance_id, const int64_
                                       const int64_t receiver_post_process_time) {
     const int64_t get_response_timestamp = MonotonicNanos();
     _last_receive_time = get_response_timestamp;
-    int32_t concurrency = _num_in_flight_rpcs[instance_id.lo];
+    // int32_t concurrency = _num_in_flight_rpcs[instance_id.lo];
+    int32_t concurrency = config::pipeline_sink_brpc_dop;
     int64_t time_usage = get_response_timestamp - send_timestamp - receiver_post_process_time;
     _network_times[instance_id.lo].update(time_usage, concurrency);
     _rpc_cumulative_time += time_usage;
