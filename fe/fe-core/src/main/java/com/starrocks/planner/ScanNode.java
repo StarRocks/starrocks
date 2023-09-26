@@ -41,6 +41,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.UserException;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.optimizer.ScanOptimzeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
 
@@ -60,6 +61,7 @@ public abstract class ScanNode extends PlanNode {
     protected boolean canUseAnyColumn;
     protected boolean canUseMinMaxCountOpt;
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    protected ScanOptimzeOption scanOptimzeOption;
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -81,17 +83,13 @@ public abstract class ScanNode extends PlanNode {
     public void setCanUseAnyColumn(boolean canUseAnyColumn) {
         this.canUseAnyColumn = canUseAnyColumn;
     }
-
-    public void setCanUseMinMaxCountOpt(boolean canUseMinMaxCountOpt) {
-        this.canUseMinMaxCountOpt = canUseMinMaxCountOpt;
+    
+    public void setScanOptimzeOption(ScanOptimzeOption opt) {
+        this.scanOptimzeOption = opt.copy();
     }
 
-    public boolean getCanUseAnyColumn() {
-        return canUseAnyColumn;
-    }
-
-    public boolean getCanUseMinMaxCountOpt() {
-        return canUseMinMaxCountOpt;
+    public ScanOptimzeOption getScanOptimzeOption() {
+        return scanOptimzeOption;
     }
 
     public String getTableName() {
