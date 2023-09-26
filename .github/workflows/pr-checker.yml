@@ -198,7 +198,7 @@ jobs:
       !contains(github.event.pull_request.title, 'backport')
     env:
       PR_NUMBER: ${{ github.event.number }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.PAT }}
     steps:
       - name: CHECK CHANGELIST
         run: |
