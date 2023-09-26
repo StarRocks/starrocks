@@ -111,13 +111,7 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
                                     boolean metaValue,
                                     MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> latch,
                                     TTabletMetaType metaType, TTabletType tabletType, long txnId) {
-        this(backendId, tableIdWithSchemaHash, metaType);
-        if (metaType == TTabletMetaType.INMEMORY) {
-            this.isInMemory = metaValue;
-        } else if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
-            this.enablePersistentIndex = metaValue;
-        }
-        this.latch = latch;
+        this(backendId, tableIdWithSchemaHash, metaValue, latch, metaType);
         this.tabletType = tabletType;
         this.txnId = txnId;
     }

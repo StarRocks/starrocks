@@ -120,7 +120,6 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         }
 
-        LOG.info("watershedTxnId:" + watershedTxnId);
         try {
             for (Partition partition : partitions) {
                 updatePartitionTabletMeta(db, olapTable.getName(), partition.getName(), metaValue, metaType);

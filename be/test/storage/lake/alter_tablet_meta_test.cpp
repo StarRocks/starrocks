@@ -103,6 +103,43 @@ TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index) {
     ASSERT_EQ(false, new_tablet_meta2.value()->enable_persistent_index());
 }
 
+TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index_not_change) {
+    lake::SchemaChangeHandler handler(_tablet_mgr.get());
+    TUpdateTabletMetaInfoReq update_tablet_meta_req;
+    int64_t txn_id = 1;
+    update_tablet_meta_req.__set_txn_id(txn_id);
+
+    TTabletMetaInfo tablet_meta_info;
+    auto tablet_id = _tablet_metadata->id();
+    tablet_meta_info.__set_tablet_id(tablet_id);
+    tablet_meta_info.__set_meta_type(TTabletMetaType::ENABLE_PERSISTENT_INDEX);
+    tablet_meta_info.__set_enable_persistent_index(true);
+
+    update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
+    ASSERT_OK(handler.process_update_tablet_meta(update_tablet_meta_req));
+
+    auto new_tablet_meta = _tablet_mgr->publish_version(tablet_id, 1, 2, &txn_id, 1);
+    ASSERT_OK(new_tablet_meta.status());
+    ASSERT_EQ(true, new_tablet_meta.value()->enable_persistent_index());
+
+    int64_t txn_id2 = txn_id + 1;
+    TUpdateTabletMetaInfoReq update_tablet_meta_req2;
+    update_tablet_meta_req2.__set_txn_id(txn_id2);
+
+    // `enable_persistent_index` is still set to true
+    TTabletMetaInfo tablet_meta_info2;
+    tablet_meta_info2.__set_tablet_id(tablet_id);
+    tablet_meta_info2.__set_meta_type(TTabletMetaType::ENABLE_PERSISTENT_INDEX);
+    tablet_meta_info2.__set_enable_persistent_index(true);
+
+    update_tablet_meta_req2.tabletMetaInfos.push_back(tablet_meta_info2);
+    ASSERT_OK(handler.process_update_tablet_meta(update_tablet_meta_req2));
+
+    auto new_tablet_meta2 = _tablet_mgr->publish_version(tablet_id, 2, 3, &txn_id2, 1);
+    ASSERT_OK(new_tablet_meta2.status());
+    ASSERT_EQ(true, new_tablet_meta2.value()->enable_persistent_index());
+}
+
 TEST_F(AlterTabletMetaTest, test_alter_not_persistent_index) {
     lake::SchemaChangeHandler handler(_tablet_mgr.get());
     TUpdateTabletMetaInfoReq update_tablet_meta_req;

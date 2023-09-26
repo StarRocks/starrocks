@@ -166,7 +166,13 @@ private:
                     // because the primary index is available in cache
                     // But it will be remove from index cache after apply is finished
                     (void)_tablet.update_mgr()->index_cache().try_remove_by_key(_tablet.id());
+                } else {
+                    LOG(WARNING) << strings::Substitute(
+                            "alter_meta_log not need to apply, for enable_persistent_index is the same, which is $0, "
+                            "base_version: $1, new_version: $2",
+                            _metadata->enable_persistent_index(), _base_version, _new_version);
                 }
+
             }
         }
         return Status::OK();
