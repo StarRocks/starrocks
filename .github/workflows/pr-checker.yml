@@ -182,8 +182,7 @@ jobs:
   changelist-check:
     runs-on: [self-hosted, normal]
     if: >
-      (github.event.pull_request.action == 'opened' ||
-      github.event.pull_request.action == 'synchronize') &&
+      (github.event.pull_request.action == 'opened' || github.event.pull_request.action == 'synchronize') &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     env:
