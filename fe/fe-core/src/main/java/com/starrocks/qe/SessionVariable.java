@@ -205,6 +205,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
     public static final String ENABLE_PIPELINE_QUERY_STATISTIC = "enable_pipeline_query_statistic";
 
+    public static final String ENABLE_INTRA_INSTANCE_BROADCAST_JOIN = "enable_intra_instance_broadcast_join";
+
     public static final String ENABLE_MV_PLANNER = "enable_mv_planner";
     public static final String ENABLE_INCREMENTAL_REFRESH_MV = "enable_incremental_mv";
 
@@ -556,6 +558,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PIPELINE_QUERY_STATISTIC)
     private boolean enablePipelineQueryStatistic = true;
+
+    @VarAttr(name = ENABLE_INTRA_INSTANCE_BROADCAST_JOIN)
+    private boolean enableIntraInstanceBroadcastJoin = false;
 
     @VariableMgr.VarAttr(name = ENABLE_LOCAL_SHUFFLE_AGG)
     private boolean enableLocalShuffleAgg = true;
@@ -2631,6 +2636,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setUse_range_join(enableRangeJoin);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
+        tResult.setEnable_intra_instance_broadcast_join(enableIntraInstanceBroadcastJoin && !enablePipelineLevelShuffle);
+
         return tResult;
     }
 

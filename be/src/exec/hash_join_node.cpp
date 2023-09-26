@@ -433,8 +433,16 @@ template <class HashJoinerFactory, class HashJoinBuilderFactory, class HashJoinP
 pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
+    const bool enable_intra_instance_broadcast_join =
+            runtime_state()->query_options().__isset.enable_intra_instance_broadcast_join &&
+            runtime_state()->query_options().enable_intra_instance_broadcast_join;
+    const bool use_intra_instance_broadcast_join =
+            enable_intra_instance_broadcast_join && _join_type != TJoinOp::RIGHT_OUTER_JOIN &&
+            _join_type != TJoinOp::FULL_OUTER_JOIN && _join_type != TJoinOp::RIGHT_SEMI_JOIN &&
+            _join_type != TJoinOp::RIGHT_ANTI_JOIN;
+
     auto rhs_operators = child(1)->decompose_to_pipeline(context);
-    if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
+    if (_distribution_mode == TJoinDistributionMode::BROADCAST || use_intra_instance_broadcast_join) {
         // Broadcast join need only create one hash table, because all the HashJoinProbeOperators
         // use the same hash table with their own different probe states.
         rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), rhs_operators);
@@ -508,7 +516,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     } else {
         if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
             lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators);
-        } else {
+        } else if (!use_intra_instance_broadcast_join) {
             auto* rhs_source_op = context->source_operator(rhs_operators);
             auto* lhs_source_op = context->source_operator(lhs_operators);
             DCHECK_EQ(rhs_source_op->partition_type(), lhs_source_op->partition_type());
