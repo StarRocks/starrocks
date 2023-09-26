@@ -739,7 +739,7 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
         return;
     }
 
-    // SHARED_NOTHING, tablet_type == TTabletType::TABLET_TYPE_DISK
+    // SHARED_NOTHING, tablet_type = TTabletType::TABLET_TYPE_DISK
     for (const auto& tablet_meta_info : update_tablet_meta_req.tabletMetaInfos) {
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_meta_info.tablet_id);
         if (tablet == nullptr) {

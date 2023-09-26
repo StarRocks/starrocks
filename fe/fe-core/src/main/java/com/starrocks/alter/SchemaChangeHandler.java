@@ -1582,8 +1582,9 @@ public class SchemaChangeHandler extends AlterHandler {
                             olapTable.getName(), enablePersistentIndex));
                     return null;
                 }
+            } else {
+                throw new DdlException("only support alter enable_persistent_index in shared_data mode");
             }
-
 
             long timeoutSecond = PropertyAnalyzer.analyzeTimeout(properties, Config.alter_table_timeout_second);
             alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
@@ -1592,7 +1593,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     TTabletMetaType.ENABLE_PERSISTENT_INDEX, enablePersistentIndex);
         } else {
             // shouldn't happen
-            throw new DdlException("Cloud Native Table only supports alter table properties enable_persistent_index");
+            throw new DdlException("only support alter enable_persistent_index in shared_data mode");
         }
         return alterMetaJob;
     }

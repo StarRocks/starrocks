@@ -86,7 +86,7 @@ message TabletMetadataPB {
     optional PersistentIndexTypePB persistent_index_type = 12;
 }
 
-message TabletMetaModifyPB {
+message MetadataUpdateInfoPB {
     optional bool enable_persistent_index = 1;
 }
 
@@ -121,7 +121,7 @@ message TxnLogPB {
     }
 
     message OpAlterMetadata {
-        repeated TabletMetaModifyPB modify_tablet_metas = 1;
+        repeated MetadataUpdateInfoPB metadata_update_infos = 1;
     }
 
     optional int64 tablet_id = 1;

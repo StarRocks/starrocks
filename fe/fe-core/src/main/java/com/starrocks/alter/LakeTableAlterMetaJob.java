@@ -110,10 +110,6 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             db.readUnlock();
         }
 
-        // If the function of updatePartitionTabletMeta has been called,
-        // then FE restart or change leader,
-        // updatePartitionTabletMeta will have the same txnId so that
-        // BE can judge whether the task has been processed。
         if (this.watershedTxnId == -1) {
             this.watershedTxnId =
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
@@ -363,7 +359,8 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             Preconditions.checkState(partition.getNextVersion() == commitVersion,
                     "partitionNextVersion=" + partition.getNextVersion() + " commitVersion=" + commitVersion);
             partition.setNextVersion(commitVersion + 1);
-            LOG.info("partitionNextVersion=" + partition.getNextVersion() + " commitVersion=" + commitVersion);
+            LOG.info("LakeTableAlterMetaJob id: {} update next version of partition: {}, commitVersion: {}",
+                    jobId, partition.getName(), commitVersion);
         }
     }
 
@@ -375,6 +372,8 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
                     "partitionVisitionVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             partition.updateVisibleVersion(commitVersion);
             LOG.info("partitionVisibleVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
+            LOG.info("LakeTableAlterMetaJob id: {} update visible version of partition: {}, visible Version: {}",
+                    jobId, partition.getName(), commitVersion);
         }
     }
 
@@ -421,7 +420,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
 
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
-
+        // LakeTableAlterMetaJob is not supported by show for now
     }
 
     @Override
@@ -467,6 +466,10 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
                 table.setState(OlapTable.OlapTableState.NORMAL);
             } else if (jobState == JobState.CANCELLED) {
                 table.setState(OlapTable.OlapTableState.NORMAL);
+            } else if (jobState == JobState.PENDING || jobState == JobState.WAITING_TXN) {
+                // do nothing
+            } else {
+                throw new RuntimeException("unknown job state '{}'" + jobState.name());
             }
         } finally {
             db.writeUnlock();

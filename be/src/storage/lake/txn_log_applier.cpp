@@ -153,7 +153,7 @@ private:
 
     Status apply_alter_meta_log(const TxnLogPB_OpAlterMetadata& op_alter_metas) {
         DCHECK_EQ(_base_version + 1, _new_version);
-        for (const auto& alter_meta : op_alter_metas.modify_tablet_metas()) {
+        for (const auto& alter_meta : op_alter_metas.metadata_update_infos()) {
             if (alter_meta.has_enable_persistent_index()) {
                 // this should always be true,
                 // for FE will check whether the value of `enable_persisent_index` is changed or not
@@ -172,7 +172,6 @@ private:
                             "base_version: $1, new_version: $2",
                             _metadata->enable_persistent_index(), _base_version, _new_version);
                 }
-
             }
         }
         return Status::OK();

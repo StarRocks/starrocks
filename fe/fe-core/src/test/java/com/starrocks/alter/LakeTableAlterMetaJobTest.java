@@ -37,6 +37,8 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
@@ -50,9 +52,12 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
+import com.starrocks.thrift.TTabletType;
+import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.After;
@@ -63,8 +68,10 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import javax.validation.constraints.NotNull;
 
@@ -358,6 +365,22 @@ public class LakeTableAlterMetaJobTest {
             long commitVersion = commitVersionMap.get(partitionId);
             Assert.assertEquals(partition.getVisibleVersion(), commitVersion);
         }
+    }
+
+    @Test
+    public void testUpdateTabletMetaInfoTaskToThrift() throws AlterCancelException {
+        long backend = 1L;
+        long txnId = 1L;
+        Set<Pair<Long, Integer>> tableIdWithSchemaHash = new HashSet<>();
+        Pair<Long, Integer> item = new Pair<>(1L, 1);
+        tableIdWithSchemaHash.add(item);
+        MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> latch = new MarkedCountDownLatch<>(1);
+
+        UpdateTabletMetaInfoTask updateTabletMetaInfoTask = new UpdateTabletMetaInfoTask(backend, tableIdWithSchemaHash,
+                true, latch, TTabletMetaType.ENABLE_PERSISTENT_INDEX, TTabletType.TABLET_TYPE_LAKE, txnId);
+        TUpdateTabletMetaInfoReq result = updateTabletMetaInfoTask.toThrift();
+        Assert.assertEquals(result.txn_id, txnId);
+        Assert.assertEquals(result.tablet_type, TTabletType.TABLET_TYPE_LAKE);
     }
 
 }
