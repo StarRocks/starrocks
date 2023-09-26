@@ -1,8 +1,7 @@
 name: APPROVE CHECKER
 
 on:
-#  pull_request_target:
-  pull_request:
+  pull_request_target:
     types:
       - review_requested
 
@@ -10,14 +9,21 @@ on:
     types:
       - submitted
 
-jobs:
+permissions:
+  checks: write
+  actions: write
+  contents: write
+  deployments: write
+  discussions: write
+  issues: write
+  packages: write
+  pages: write
+  pull-requests: write
+  repository-projects: write
+  security-events: write
+  statuses: write
 
-  DEBUG:
-    runs-on: ubuntu-latest
-    steps:
-      - name: debug
-        run: |
-          cat $GITHUB_EVENT_PATH
+jobs:
 
   info:
     if: >
@@ -60,14 +66,13 @@ jobs:
     env:
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
       REPO: ${{ github.repository }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.PAT }}
 
     steps:
       - name: META-REVIEW
         env:
-          META_TEAM: test-team
+          META_TEAM: meta-committer
         run: |
-          set -x
           members=($(gh api \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -82,5 +87,3 @@ jobs:
           done
           
           echo "Lack of META-TEAM members' approval!"
-
-      
