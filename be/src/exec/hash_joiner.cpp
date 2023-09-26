@@ -547,7 +547,7 @@ Status HashJoiner::_create_runtime_in_filters(RuntimeState* state) {
             if (probe_expr->type().is_string_type()) {
                 _string_key_columns.emplace_back(column);
             }
-            RETURN_IF_ERROR(builder.add_values(column, kHashJoinKeyColumnOffset));
+            builder.add_values(column, kHashJoinKeyColumnOffset);
             _runtime_in_filters.push_back(builder.get_in_const_predicate());
         }
     }
