@@ -540,6 +540,10 @@ public class FileScanNode extends LoadScanNode {
                 return TFileFormatType.FORMAT_PARQUET;
             } else if (fileFormat.toLowerCase().equals("orc")) {
                 return TFileFormatType.FORMAT_ORC;
+            } else if (fileFormat.toLowerCase().equals("csv")) {
+                return TFileFormatType.FORMAT_CSV_PLAIN;
+            } else if (fileFormat.toLowerCase().equals("json")) {
+                return TFileFormatType.FORMAT_JSON;
             }
         }
 

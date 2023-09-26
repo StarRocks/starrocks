@@ -22,7 +22,7 @@ namespace starrocks {
 
 const size_t MAX_RAW_JSON_LEN = 64;
 
-Status JsonDocumentStreamParser::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
+Status JsonDocumentStreamParser::parse(char* data, size_t len, size_t allocated) noexcept {
     try {
         _data = data;
         _len = len;
@@ -93,7 +93,7 @@ std::string JsonDocumentStreamParser::left_bytes_string(size_t sz) noexcept {
     return std::string(reinterpret_cast<char*>(_data) + off, _len - off);
 }
 
-Status JsonArrayParser::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
+Status JsonArrayParser::parse(char* data, size_t len, size_t allocated) noexcept {
     try {
         _doc = _parser->iterate(data, len, allocated);
 
@@ -251,7 +251,7 @@ Status JsonArrayParserWithRoot::advance() noexcept {
     return this->JsonArrayParser::advance();
 }
 
-Status ExpandedJsonDocumentStreamParserWithRoot::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
+Status ExpandedJsonDocumentStreamParserWithRoot::parse(char* data, size_t len, size_t allocated) noexcept {
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::parse(data, len, allocated));
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::get_current(&_curr_row));
 
@@ -349,7 +349,7 @@ Status ExpandedJsonDocumentStreamParserWithRoot::advance() noexcept {
     return Status::OK();
 }
 
-Status ExpandedJsonArrayParserWithRoot::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
+Status ExpandedJsonArrayParserWithRoot::parse(char* data, size_t len, size_t allocated) noexcept {
     RETURN_IF_ERROR(this->JsonArrayParser::parse(data, len, allocated));
     RETURN_IF_ERROR(this->JsonArrayParser::get_current(&_curr_row));
 
