@@ -2,8 +2,9 @@ name: APPROVE CHECKER
 
 on:
 #  pull_request_target:
-#    types:
-#      - review_requested
+  pull_request:
+    types:
+      - review_requested
 
   pull_request_review:
     types:
@@ -11,29 +12,33 @@ on:
 
 jobs:
 
-#  review-request:
-#    if: github.event.pull_request && github.event.number
-#    runs-on: ubuntu-latest
-#    env:
-#      PR_NUMBER: ${{ github.event.number }}
-#      REPO: ${{ github.repository }}
-#      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#    outputs:
-#      LABELS: ${{ steps.labels.outputs.LABELS }}
-#    steps:
-#      - name: info
-#        run: |
-#          echo "${{ toJson(github.event) }}"
-#
-#      - name: LABELS
-#        id: labels
-#        run: |
-#          labels=$(gh pr view ${PR_NUMBER} -R ${REPO} --json labels -q '.labels[].name')
-#          echo "LABELS=${labels}" >> $GITHUB_OUTPUT
-
-  info:
-    if: github.event.review && github.event.review.state == 'approved'
+  DEBUG:
     runs-on: ubuntu-latest
+    steps:
+      - name: debug
+        run: |
+          echo "${{ toJson(github.event) }}"
+
+  review-request:
+    if: github.event.pull_request && github.event.number
+    runs-on: ubuntu-latest
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      REPO: ${{ github.repository }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      HIT: ${{ steps.hit.outputs.HIT }}
+    steps:
+      - name: HIT-CHECK
+        id: hit
+        run: |
+          # judge if request team is META, if yes, run next info check
+          echo "HIT=true" >> $GITHUB_OUTPUT
+  
+  info:
+    if: always() && (github.event.review && github.event.review.state == 'approved') || needs.review-request.outputs.HIT == true
+    runs-on: ubuntu-latest
+    needs: review-request
     env:
       PR_NUMBER: ${{ github.event.number }}
       REPO: ${{ github.repository }}
@@ -52,8 +57,9 @@ jobs:
           echo "LABELS=${labels}" >> $GITHUB_OUTPUT
 
   meta-review:
-    if: github.event.review && github.event.review.state == 'approved' &&
+    needs: info
     runs-on: ubuntu-latest
+    if: github.event.review && github.event.review.state == 'approved' && contains(needs.info.outputs.LABELS, 'META-REVIEW')
     env:
       PR_NUMBER: ${{ github.event.number }}
       REPO: ${{ github.repository }}
