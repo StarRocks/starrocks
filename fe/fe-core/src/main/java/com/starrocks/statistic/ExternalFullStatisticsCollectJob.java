@@ -35,7 +35,6 @@ import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InsertStmt;
@@ -78,6 +77,11 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         super(db, table, columns, type, scheduleType, properties);
         this.catalogName = catalogName;
         this.partitionNames = partitionNames;
+    }
+
+    @Override
+    public String getCatalogName() {
+        return catalogName;
     }
 
     @Override
@@ -186,10 +190,10 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
         LOG.debug("statistics collect sql : " + sql);
         StatisticExecutor executor = new StatisticExecutor();
-        SessionVariable sessionVariable = context.getSessionVariable();
-        // Full table scan is performed for full statistics collecting. In this case,
-        // we do not need to use pagecache.
-        sessionVariable.setUsePageCache(false);
+
+        // set default session variables for stats context
+        setDefaultSessionVariable(context);
+
         List<TStatisticData> dataList = executor.executeStatisticDQL(context, sql);
 
         for (TStatisticData data : dataList) {

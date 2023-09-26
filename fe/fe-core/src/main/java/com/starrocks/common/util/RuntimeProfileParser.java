@@ -30,6 +30,8 @@ import java.util.regex.Pattern;
  * This class is used for reconstruct RuntimeProfile from plain text
  */
 public class RuntimeProfileParser {
+    private static final Pattern NONE_COUNTER_PATTERN =
+            Pattern.compile("^- (.*?): $");
     private static final Pattern BYTE_COUNTER_PATTERN =
             Pattern.compile("^- (.*?): (-?\\d+\\.\\d+) (KB|MB|GB|TB|B)$");
     private static final Pattern BYTE_PER_SEC_COUNTER_PATTERN =
@@ -146,7 +148,11 @@ public class RuntimeProfileParser {
         if (counterTuple != null) {
             return counterTuple;
         }
-        return tryParseTimer(item);
+        counterTuple = tryParseTimer(item);
+        if (counterTuple != null) {
+            return counterTuple;
+        }
+        return tryParseNone(item);
     }
 
     private static InfoStringTuple tryParseInfoString(String item) {
@@ -299,6 +305,15 @@ public class RuntimeProfileParser {
         }
 
         return new CounterTuple(name, TUnit.TIME_NS, total.longValue());
+    }
+
+    private static CounterTuple tryParseNone(String item) {
+        Matcher matcher = NONE_COUNTER_PATTERN.matcher(item);
+        if (!matcher.matches()) {
+            return null;
+        }
+        String name = matcher.group(1);
+        return new CounterTuple(name, TUnit.NONE, 0);
     }
 
     private static final class ProfileTuple {

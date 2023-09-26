@@ -51,12 +51,12 @@ if [ -z $STARROCKS_VERSION ]; then
     elif [ ! -z $branch_name ]; then
         export STARROCKS_VERSION=$branch_name
     else
-        export STARROCKS_VERSION=$(git rev-parse --short HEAD)
+        export STARROCKS_VERSION=$(git rev-parse --short=7 HEAD)
     fi
 fi
 
-if [ -z $STARROCKS_COMMIT_HASH]; then
-    export STARROCKS_COMMIT_HASH=$(git rev-parse --short HEAD)
+if [ -z $STARROCKS_COMMIT_HASH ] ; then
+    export STARROCKS_COMMIT_HASH=$(git rev-parse --short=7 HEAD)
 fi
 
 set -eo pipefail
@@ -327,6 +327,18 @@ if [ ${BUILD_BE} -eq 1 ] ; then
       fi
       export STARLET_INSTALL_DIR
     fi
+
+    # Temporarily keep the default behavior same as before to avoid frequent thirdparty update.
+    # Once the starcache version is stable, we will turn on it by default.
+    if [[ -z ${WITH_STARCACHE} ]]; then
+      WITH_STARCACHE=${USE_STAROS}
+    fi
+
+    if [[ "${WITH_STARCACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/starcache/lib/libstarcache.a ]]; then
+        echo "Missing depdency libraries(starcache), you can download and extract it to thirdparty installed directory."
+        exit 1
+    fi
+
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
                   -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
                   -DSTARROCKS_HOME=${STARROCKS_HOME}                    \
@@ -340,8 +352,8 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DWITH_CACHELIB=${WITH_CACHELIB}                      \
+                  -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DUSE_STAROS=${USE_STAROS}                            \
-                  -DWITH_STARCACHE=${USE_STAROS}                        \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
 
@@ -387,6 +399,8 @@ if [ ${FE_MODULES}x != ""x ]; then
         ${MVN_CMD} clean
     fi
     ${MVN_CMD} package -am -pl ${FE_MODULES} -DskipTests
+    cd ${STARROCKS_HOME}/java-extensions
+    ${MVN_CMD} package -am -pl hadoop-ext -DskipTests
     cd ${STARROCKS_HOME}
 fi
 
@@ -411,6 +425,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         rm -rf ${STARROCKS_OUTPUT}/fe/lib/*
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/fe/lib/
@@ -471,6 +486,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/paimon-reader-lib ${STARROCKS_OUTPUT}/be/lib/
     cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib
+    cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/hadoop-azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs

@@ -39,6 +39,7 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
@@ -242,7 +243,6 @@ public final class SqlToScalarOperatorTranslator {
                 if (num > 0) {
                     return num;
                 }
-
                 if (child instanceof Subquery) {
                     num++;
                 } else {
@@ -288,6 +288,13 @@ public final class SqlToScalarOperatorTranslator {
 
             return super.visit(node, context);
 
+        }
+        @Override
+        public ScalarOperator visitParameterExpr(Parameter node, Context context) {
+            if (node.getExpr() == null) {
+                throw new SemanticException("Unknown parameter");
+            }
+            return visit(node.getExpr());
         }
 
         @Override
@@ -794,9 +801,9 @@ public final class SqlToScalarOperatorTranslator {
             ColumnRefSet outerUsedColumns = new ColumnRefSet();
             if (subqueryPlan.getCorrelation().isEmpty()) {
                 for (Expr outer : context.outerExprs) {
-                    outerUsedColumns.union(SqlToScalarOperatorTranslator
-                            .translate(outer, builder.getExpressionMapping(), columnRefFactory)
-                            .getUsedColumns());
+                    outerUsedColumns.union(
+                            SqlToScalarOperatorTranslator.translate(outer, expressionMapping, columnRefFactory)
+                                    .getUsedColumns());
                 }
             }
 

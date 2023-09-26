@@ -221,7 +221,7 @@ build_thrift() {
 
 # llvm
 build_llvm() {
-    export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -D_POSIX_C_SOURCE=199309L"
+    export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -D_POSIX_C_SOURCE=200112L"
     export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess"
 
     LLVM_TARGET="X86"
@@ -978,8 +978,6 @@ build_broker_thirdparty_jars() {
 }
 
 build_aws_cpp_sdk() {
-    export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -D_POSIX_C_SOURCE=200112L"
-
     check_if_source_exist $AWS_SDK_CPP_SOURCE
     cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
     # only build s3, s3-crt, transfer manager, identity-management and sts, you can add more components if you want.
@@ -987,7 +985,6 @@ build_aws_cpp_sdk() {
                -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DENABLE_TESTING=OFF \
                -DENABLE_CURL_LOGGING=OFF \
                -G "${CMAKE_GENERATOR}" \
-               -D_POSIX_C_SOURCE=200112L \
                -DCURL_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libcurl.a   \
                -DZLIB_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libz.a      \
                -DOPENSSL_ROOT_DIR=${TP_INSTALL_DIR}                     \
@@ -1082,6 +1079,11 @@ build_fast_float() {
 build_cachelib() {
     check_if_source_exist $CACHELIB_SOURCE
     rm -rf $TP_INSTALL_DIR/$CACHELIB_SOURCE && mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $TP_INSTALL_DIR/
+}
+
+build_starcache() {
+    check_if_source_exist $STARCACHE_SOURCE
+    rm -rf $TP_INSTALL_DIR/$STARCACHE_SOURCE && mv $TP_SOURCE_DIR/$STARCACHE_SOURCE $TP_INSTALL_DIR/
 }
 
 # streamvbyte
@@ -1217,7 +1219,7 @@ strip_binary() {
 # set GLOBAL_C*FLAGS for easy restore in each sub build process
 export GLOBAL_CPPFLAGS="-I ${TP_INCLUDE_DIR}"
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
-export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=199309L"
+export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=200112L"
 export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g"
 
 # set those GLOBAL_*FLAGS to the CFLAGS/CXXFLAGS/CPPFLAGS
@@ -1274,6 +1276,7 @@ build_opentelemetry
 build_benchmark
 build_fast_float
 build_cachelib
+build_starcache
 build_streamvbyte
 build_jansson
 build_avro_c

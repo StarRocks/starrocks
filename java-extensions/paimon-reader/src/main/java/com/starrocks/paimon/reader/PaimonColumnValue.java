@@ -129,9 +129,9 @@ public class PaimonColumnValue implements ColumnValue {
             PaimonColumnValue cv = null;
             if (idx != null) {
                 DataField dataField = fields.get(idx);
-                Object o = InternalRowUtils.get(array, i, dataField.type());
+                Object o = InternalRowUtils.get(array, idx, dataField.type());
                 if (o != null) {
-                    cv = new PaimonColumnValue(0, dataField.type());
+                    cv = new PaimonColumnValue(o, dataField.type());
                 }
             }
             values.add(cv);

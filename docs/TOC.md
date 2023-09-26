@@ -53,9 +53,12 @@
   + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from HDFS](./loading/hdfs_load.md)
   + [Load data from cloud storage](./loading/cloud_storage_load.md)
+  + Load data from Apache Kafka®
+    + [Load data using Kafka connector](/loading/Kafka-connector-starrocks.md)
+    + [Load data using Routine Load](/loading/RoutineLoad.md)
   + [Continuously load data from Apache Kafka®](./loading/RoutineLoad.md)
-  + Load data using Apache Spark™
-    + [Load data using Spark Connector](./loading/Spark-connector-starrocks.md)
+  + Load data from Apache Spark™
+    + [Load data using Spark Connector (recommended)](./loading/Spark-connector-starrocks.md)
     + [Load data in bulk using Spark Load](./loading/SparkLoad.md)
   + [Load data using INSERT](./loading/InsertInto.md)
   + [Load data using Stream Load transaction interface](./loading/Stream_Load_transaction_interface.md)
@@ -85,8 +88,20 @@
   + [Data lake-related FAQ](./data_source/datalake_faq.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
-  + [Synchronous materialized view](./using_starrocks/Materialized_view-single_table.md)
-  + [Asynchronous materialized view](./using_starrocks/Materialized_view.md)
+  + [Synchronous materialized views](./using_starrocks/Materialized_view-single_table.md)
+  + Asynchronous materialized views
+    + [Overview](./using_starrocks/Materialized_view.md)
+    + Use cases
+      + [Data modeling](./using_starrocks/data_modeling_with_materialized_views.md)
+      + [Query rewrite](./using_starrocks/query_rewrite_with_materialized_views.md)
+      + [Data lake query acceleration](./using_starrocks/data_lake_query_acceleration_with_materialized_views.md)
+    + Usage
+      + [CREATE MATERIALIZED VIEW](./sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md)
+      + [ALTER MATERIALIZED VIEW](./sql-reference/sql-statements/data-definition/ALTER%20MATERIALIZED%20VIEW.md)
+      + [DROP MATERIALIZED VIEW](./sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md)
+      + [SHOW MATERIALIZED VIEWS](./sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md)
+      + [information_schema.materialized_views](./administration/information_schema.md#materialized_views)
+      + [Troubleshooting](./using_starrocks/troubleshooting_asynchronous_materialized_views.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + [Query Cache](./using_starrocks/query_cache.md)
@@ -709,6 +724,7 @@
   + [User-defined variables](./reference/user_defined_variables.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
+  + [AWS IAM policies](./reference/aws_iam_policies.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
@@ -743,6 +759,10 @@
     + [Build Handbook](./developers/build-starrocks/handbook.md)
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
++ Ecosystem Release Notes
+  + [Kafka connector](./ecosystem_release/kafka_connector.md)
+  + [Spark connector](./ecosystem_release/spark_connector.md)
+  + [Flink connector](./ecosystem_release/flink_connector.md)
 + Release Notes
   + [v3.1](./release_notes/release-3.1.md)
   + [v3.0](./release_notes/release-3.0.md)

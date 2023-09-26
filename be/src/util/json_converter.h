@@ -23,7 +23,7 @@ using SimdJsonValue = simdjson::ondemand::value;
 using SimdJsonObject = simdjson::ondemand::object;
 
 // Convert SIMD-JSON object/value to a JsonValue
-StatusOr<JsonValue> convert_from_simdjson(SimdJsonValue value);
-StatusOr<JsonValue> convert_from_simdjson(SimdJsonObject value);
+[[nodiscard]] StatusOr<JsonValue> convert_from_simdjson(SimdJsonValue value);
+[[nodiscard]] StatusOr<JsonValue> convert_from_simdjson(SimdJsonObject value);
 
 } // namespace starrocks

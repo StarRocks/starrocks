@@ -61,6 +61,11 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
         this.predicates = predicates;
     }
 
+    @Override
+    protected boolean noPartitionSelected() {
+        return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
+    }
+
     public boolean hasUnknownColumn() {
         return hasUnknownColumn;
     }

@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterLoadStmt;
@@ -83,11 +84,13 @@ import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
+import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
@@ -409,36 +412,6 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     }
 
     @Override
-    public Void visitCreateCatalogStatement(CreateCatalogStmt statement, ConnectContext context) {
-        CatalogAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitDropCatalogStatement(DropCatalogStmt statement, ConnectContext context) {
-        CatalogAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
-        CatalogAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
-        CatalogAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
-        CatalogAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
     public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
         DropStmtAnalyzer.analyze(statement, context);
         return null;
@@ -534,6 +507,44 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, ConnectContext session) {
         PauseRoutineLoadAnalyzer.analyze(statement, session);
+        return null;
+    }
+
+    // ---------------------------------------- Catalog Statement -------------------------------------------
+
+    @Override
+    public Void visitCreateCatalogStatement(CreateCatalogStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDropCatalogStatement(DropCatalogStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterCatalogStatement(AlterCatalogStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
         return null;
     }
 
@@ -867,6 +878,19 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitCancelCompactionStatement(CancelCompactionStmt statement, ConnectContext context) {
         CancelCompactionStmtAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    // ---------------------------------------- Prepare Statement -------------------------------------------
+    @Override
+    public Void visitPrepareStatement(PrepareStmt statement, ConnectContext context) {
+        new PrepareAnalyzer(context).analyze(statement);
+        return null;
+    }
+
+    @Override
+    public Void visitExecuteStatement(ExecuteStmt statement, ConnectContext context) {
+        new PrepareAnalyzer(context).analyze(statement);
         return null;
     }
 }

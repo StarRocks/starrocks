@@ -51,7 +51,7 @@ public class RangerStarRocksAccessRequest extends RangerAccessRequestImpl {
         request.setClusterName("starrocks");
         request.setAccessTime(new Date());
 
-        LOG.debug("RangerStarRocksAccessRequest | " + request.toString());
+        LOG.debug("RangerStarRocksAccessRequest | " + request);
 
         return request;
     }

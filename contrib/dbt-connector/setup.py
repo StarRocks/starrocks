@@ -41,7 +41,7 @@ with open(os.path.join(this_directory, "README.md")) as f:
 
 package_name = "dbt-starrocks"
 # make sure this always matches dbt/adapters/starrocks/__version__.py
-package_version = "1.3.1"
+package_version = "1.4.0"
 description = """The Starrocks adapter plugin for dbt"""
 
 
@@ -57,7 +57,7 @@ setup(
     packages=find_namespace_packages(include=['dbt', 'dbt.*']),
     include_package_data=True,
     install_requires=[
-        "dbt-core==1.6.0",
+        "dbt-core==1.6.2",
         "mysql-connector-python>=8.1",
     ],
     zip_safe=False,

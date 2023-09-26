@@ -36,6 +36,7 @@ package com.starrocks.qe;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.cluster.ClusterNamespace;
@@ -206,6 +207,8 @@ public class ConnectContext {
 
     private boolean relationAliasCaseInsensitive = false;
 
+    private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
+
     public StmtExecutor getExecutor() {
         return executor;
     }
@@ -252,6 +255,18 @@ public class ConnectContext {
         if (shouldDumpQuery()) {
             this.dumpInfo = new QueryDumpInfo(this);
         }
+    }
+
+    public void putPreparedStmt(String stmtName, PrepareStmtContext ctx) {
+        this.preparedStmtCtxs.put(stmtName, ctx);
+    }
+
+    public PrepareStmtContext getPreparedStmt(String stmtName) {
+        return this.preparedStmtCtxs.get(stmtName);
+    }
+
+    public void removePreparedStmt(String stmtName) {
+        this.preparedStmtCtxs.remove(stmtName);
     }
 
     public long getStmtId() {
@@ -342,7 +357,7 @@ public class ConnectContext {
 
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
         VariableMgr.setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
-        if (!setVar.getType().equals(SetType.GLOBAL) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
+        if (!SetType.GLOBAL.equals(setVar.getType()) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
     }
@@ -827,7 +842,6 @@ public class ConnectContext {
             }
             row.add(stmt);
             row.add(Boolean.toString(isPending));
-            row.add(currentWarehouse);
             return row;
         }
     }

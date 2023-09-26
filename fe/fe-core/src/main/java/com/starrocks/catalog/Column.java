@@ -43,9 +43,9 @@ import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
@@ -208,6 +208,32 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         Preconditions.checkArgument(this.type.isComplexType() ||
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
         this.uniqueId = column.getUniqueId();
+    }
+
+    public ColumnDef toColumnDef() {
+        ColumnDef.DefaultValueDef defaultDef = null;
+        if (defaultValue == null) {
+            if (defaultExpr != null) {
+                defaultDef = new ColumnDef.DefaultValueDef(true, defaultExpr.obtainExpr());
+            } else {
+                defaultDef = new ColumnDef.DefaultValueDef(false, null);
+            }
+        } else {
+            defaultDef = new ColumnDef.DefaultValueDef(true, new StringLiteral(defaultValue));
+        }
+        ColumnDef.DefaultValueDef defaultValueDef = null;
+        if (defaultValue != null) {
+            defaultValueDef = new ColumnDef.DefaultValueDef(true, new StringLiteral(defaultValue));
+        } else {
+            if (defaultExpr != null) {
+                defaultValueDef = new ColumnDef.DefaultValueDef(true, defaultExpr.obtainExpr());
+            } else {
+                defaultValueDef = new ColumnDef.DefaultValueDef(false, null);
+            }
+        }
+        ColumnDef col = new ColumnDef(name, new TypeDef(type), null, isKey, aggregationType, isAllowNull,
+                defaultValueDef, isAutoIncrement, generatedColumnExpr, comment);
+        return col;
     }
 
     public void setName(String newName) {
@@ -608,7 +634,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 return defaultExpr.getExpr();
             }
         }
-        return FeConstants.NULL_STRING;
+        return null;
     }
 
     public String toSqlWithoutAggregateTypeName() {

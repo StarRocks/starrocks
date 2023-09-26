@@ -194,7 +194,7 @@ public class PruneHDFSScanColumnRuleTest {
         };
         List<OptExpression> list = hudiRule.transform(scan, context);
         LogicalHudiScanOperator scanOperator = (LogicalHudiScanOperator) list.get(0).getOp();
-        Assert.assertEquals(scanOperator.getCanUseAnyColumn(), (requiredOutputColumns.size() == 0));
+        Assert.assertEquals(scanOperator.getScanOptimzeOption().getCanUseAnyColumn(), (requiredOutputColumns.size() == 0));
         Map<ColumnRefOperator, Column> transferMap = scanOperator.getColRefToColumnMetaMap();
         Assert.assertEquals(transferMap.size(), 1);
         Assert.assertEquals(transferMap.get(intColumnOperator).getName(), "id");

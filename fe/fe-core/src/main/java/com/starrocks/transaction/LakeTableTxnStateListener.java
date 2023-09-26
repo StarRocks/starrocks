@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.transaction;
 
 import com.google.common.base.Preconditions;
@@ -26,8 +25,11 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.Config;
 import com.starrocks.common.NoAliveBackendException;
+import com.starrocks.lake.CommitRateLimiter;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -38,9 +40,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.validation.constraints.NotNull;
 
 public class LakeTableTxnStateListener implements TransactionStateListener {
     private static final Logger LOG = LogManager.getLogger(LakeTableTxnStateListener.class);
@@ -51,10 +55,14 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     private Set<Long> dirtyPartitionSet;
     private Set<String> invalidDictCacheColumns;
     private Map<String, Long> validDictCacheColumns;
+    private final CompactionMgr compactionMgr;
 
-    public LakeTableTxnStateListener(DatabaseTransactionMgr dbTxnMgr, OlapTable table) {
-        this.dbTxnMgr = dbTxnMgr;
-        this.table = table;
+    public LakeTableTxnStateListener(@NotNull DatabaseTransactionMgr dbTxnMgr, @NotNull OlapTable table) {
+        this.dbTxnMgr = Objects.requireNonNull(dbTxnMgr, "dbTxnMgr is null");
+        this.table = Objects.requireNonNull(table, "table is null");
+        this.compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
+        Preconditions.checkState(this.table.isCloudNativeTableOrMaterializedView(),
+                "expect LakeTable or LakeMaterializedView but real type is " + this.table.getClass().getName());
     }
 
     @Override
@@ -64,7 +72,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
-            List<TabletFailInfo> failedTablets) throws TransactionException {
+                          List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
         if (table.getState() == OlapTable.OlapTableState.RESTORE) {
             throw new TransactionCommitFailedException("Cannot write RESTORE state table \"" + table.getName() + "\"");
@@ -119,13 +127,19 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             finishedTabletsOfThisTable.add(finishedTablets.get(i).getTabletId());
         }
 
+        if (enableIngestSlowdown()) {
+            long currentTimeMs = System.currentTimeMillis();
+            new CommitRateLimiter(compactionMgr, txnState, table.getId()).check(dirtyPartitionSet, currentTimeMs);
+        }
+
         List<Long> unfinishedTablets = null;
         for (Long partitionId : dirtyPartitionSet) {
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             List<MaterializedIndex> allIndices = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
             for (MaterializedIndex index : allIndices) {
                 Optional<Tablet> unfinishedTablet =
-                        index.getTablets().stream().filter(t -> !finishedTabletsOfThisTable.contains(t.getId())).findAny();
+                        index.getTablets().stream().filter(t -> !finishedTabletsOfThisTable.contains(t.getId()))
+                                .findAny();
                 if (!unfinishedTablet.isPresent()) {
                     continue;
                 }
@@ -222,5 +236,9 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
                 LOG.error(e);
             }
         }
+    }
+
+    static boolean enableIngestSlowdown() {
+        return Config.lake_enable_ingest_slowdown;
     }
 }

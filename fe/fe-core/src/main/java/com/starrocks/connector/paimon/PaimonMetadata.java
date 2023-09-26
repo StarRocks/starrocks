@@ -235,7 +235,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         return builder.build();
     }
 
-    long getRowCount(List<? extends Split> splits) {
+    public static long getRowCount(List<? extends Split> splits) {
         long rowCount = 0;
         for (Split split : splits) {
             DataSplit dataSplit = (DataSplit) split;

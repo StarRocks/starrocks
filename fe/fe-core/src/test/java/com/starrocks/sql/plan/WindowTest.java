@@ -290,12 +290,14 @@ public class WindowTest extends PlanTestBase {
     @Test
     public void testStatisticWindowFunction() throws Exception {
         String sql = "select CORR(t1e,t1f) over (partition by t1a order by t1b) from test_all_type";
-        starRocksAssert.query(sql)
-                .analysisError("order by not allowed with");
-        sql = "select CORR(t1e,t1f) over (partition by t1a " +
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        sql = "select CORR(t1e,t1f) over (partition by t1a order by t1b " +
                 "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) from test_all_type";
-        starRocksAssert.query(sql)
-                .analysisError("Windowing clause not allowed with");
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
     }
 
     @Test

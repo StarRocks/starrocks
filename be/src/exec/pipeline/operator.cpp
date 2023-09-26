@@ -54,6 +54,9 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
     if (is_subordinate) {
         _common_metrics->add_info_string("IsSubordinate");
     }
+    if (is_combinatorial_operator()) {
+        _common_metrics->add_info_string("IsCombinatorial");
+    }
 }
 
 Status Operator::prepare(RuntimeState* state) {
@@ -75,6 +78,10 @@ Status Operator::prepare(RuntimeState* state) {
     if (state->query_ctx() && state->query_ctx()->spill_manager()) {
         _mem_resource_manager.prepare(this, state->query_ctx()->spill_manager());
     }
+    for_each_child_operator([&](Operator* child) {
+        child->_common_metrics->add_info_string("IsSubordinate");
+        child->_common_metrics->add_info_string("IsChild");
+    });
     return Status::OK();
 }
 
@@ -280,8 +287,8 @@ void OperatorFactory::_prepare_runtime_in_filters(RuntimeState* state) {
 
         auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
         for (auto* filter : in_filters) {
-            filter->prepare(state);
-            filter->open(state);
+            WARN_IF_ERROR(filter->prepare(state), "prepare filter expression failed");
+            WARN_IF_ERROR(filter->open(state), "open filter expression failed");
             _runtime_in_filters.push_back(filter);
         }
     }

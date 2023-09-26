@@ -67,6 +67,7 @@ import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AddSubPartitionsInfoV2;
+import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
@@ -139,7 +140,9 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
@@ -910,6 +913,16 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB: {
+                data = ExternalAnalyzeJob.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB: {
+                data = ExternalAnalyzeJob.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_ADD_BASIC_STATS_META: {
                 data = BasicStatsMeta.read(in);
                 isRead = true;
@@ -927,6 +940,16 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
                 data = HistogramStatsMeta.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META: {
+                data = ExternalBasicStatsMeta.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META: {
+                data = ExternalBasicStatsMeta.read(in);
                 isRead = true;
                 break;
             }
@@ -952,6 +975,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DROP_CATALOG: {
                 data = DropCatalogLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ALTER_CATALOG: {
+                data = AlterCatalogLog.read(in);
                 isRead = true;
                 break;
             }

@@ -669,6 +669,9 @@ CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 // The number of execution threads for pipeline engine.
 CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // The number of threads for preparing fragment instances in pipeline engine, vCPUs by default.
+// *  "n": positive integer, fixed number of threads to n.
+// *  "0": default value, means the same as number of cpu cores.
+// * "-n": negative integer, means n times of number of cpu cores.
 CONF_Int64(pipeline_prepare_thread_pool_thread_num, "0");
 CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
 // The number of threads for executing sink io task in pipeline engine, vCPUs by default.
@@ -1037,6 +1040,9 @@ CONF_Int32(default_mv_resource_group_cpu_limit, "1");
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");
 
+// used for control the max memory cost when batch get pk index in each tablet
+CONF_mInt64(primary_key_batch_get_index_memory_limit, "104857600"); // 100MB
+
 // If your sort key cardinality is very high,
 // You could enable this config to speed up the point lookup query,
 // otherwise, StarRocks will use zone map for one column filter
@@ -1048,5 +1054,7 @@ CONF_mInt32(finish_publish_version_internal, "100");
 CONF_mInt32(get_txn_status_internal_sec, "30");
 
 CONF_mBool(dump_metrics_with_bvar, "true");
+
+CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 
 } // namespace starrocks::config
