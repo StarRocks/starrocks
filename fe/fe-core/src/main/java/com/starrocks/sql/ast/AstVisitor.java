@@ -101,10 +101,6 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    public R visitShowClusterStatement(ShowClustersStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
     public R visitUseDbStatement(UseDbStmt statement, C context) {

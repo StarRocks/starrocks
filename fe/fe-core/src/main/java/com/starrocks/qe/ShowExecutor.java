@@ -165,7 +165,6 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCharsetStmt;
-import com.starrocks.sql.ast.ShowClustersStmt;
 import com.starrocks.sql.ast.ShowCollationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
@@ -229,7 +228,6 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -286,8 +284,6 @@ public class ShowExecutor {
             handleHelp();
         } else if (stmt instanceof ShowWarehousesStmt) {
             handleShowWarehouses();
-        } else if (stmt instanceof ShowClustersStmt) {
-            handleShowClusters();
         } else if (stmt instanceof ShowDbStmt) {
             handleShowDb();
         } else if (stmt instanceof ShowTableStmt) {
@@ -2652,16 +2648,6 @@ public class ShowExecutor {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
         List<List<String>> rowSet = warehouseMgr.getWarehousesInfo().stream()
-                .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
-        resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
-    }
-
-    // show cluster statement
-    private void handleShowClusters() {
-        ShowClustersStmt showStmt = (ShowClustersStmt) stmt;
-        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentWarehouseMgr();
-        Warehouse warehouse = warehouseMgr.getWarehouse(showStmt.getWarehouseName());
-        List<List<String>> rowSet = warehouse.getClusterInfo().stream()
                 .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
     }
