@@ -203,6 +203,9 @@ public class MetadataMgr {
     public void dropDb(String catalogName, String dbName, boolean isForce) throws DdlException, MetaNotFoundException {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         if (connectorMetadata.isPresent()) {
+            if (getDb(catalogName, dbName) == null) {
+                throw new MetaNotFoundException(String.format("Database %s.%s doesn't exists", catalogName, dbName));
+            }
             connectorMetadata.get().dropDb(dbName, isForce);
         }
     }
