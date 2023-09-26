@@ -21,7 +21,7 @@ jobs:
 
   info:
     if: >
-      (github.event.pull_request && github.event.number && github.event.requested_team) ||
+      (github.event.pull_request && github.event.requested_team) ||
       (github.event.pull_request.requested_teams && github.event.review && github.event.review.state == 'approved')
     runs-on: ubuntu-latest
     env:
@@ -40,7 +40,7 @@ jobs:
   meta-review:
     needs: info
     runs-on: ubuntu-latest
-    if: github.event.review && github.event.review.state == 'approved' && contains(needs.info.outputs.LABELS, 'META-REVIEW')
+    if: contains(needs.info.outputs.LABELS, 'META-REVIEW'))
     env:
       PR_NUMBER: ${{ github.event.number }}
       REPO: ${{ github.repository }}
