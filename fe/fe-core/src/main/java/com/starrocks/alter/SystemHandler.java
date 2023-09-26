@@ -249,13 +249,14 @@ public class SystemHandler extends AlterHandler {
             return decommissionBackends;
         }
 
+        // when decommission backends in shared_data mode, unnecessary to check clusterCapacity or table replica
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            return decommissionBackends;
+        }
+
         if (infoService.getClusterAvailableCapacityB() - releaseCapacity < needCapacity) {
             decommissionBackends.clear();
             throw new DdlException("It will cause insufficient disk space if these BEs are decommissioned.");
-        }
-
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            return decommissionBackends;
         }
 
         short maxReplicationNum = 0;
