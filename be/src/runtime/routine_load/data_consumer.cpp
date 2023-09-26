@@ -48,6 +48,20 @@
 
 namespace starrocks {
 
+#define RETURN_IF_KAFKA_ERROR(err, msg)                                              \
+    do {                                                                             \
+        const RdKafka::ErrorCode& _err = err;                                        \
+        const std::string& _msg = msg;                                               \
+        if (UNLIKELY(_err != RdKafka::ERR_NO_ERROR)) {                               \
+            auto err_msg = fmt::format("{}, err: {}", _msg, RdKafka::err2str(_err)); \
+            LOG(WARNING) << err_msg);                                                \
+            if (_err == RdKafka::ERR__ALL_BROKERS_DOWN) {                            \
+                return Status::ServiceUnavailable(err_msg);                          \
+            }                                                                        \
+            return Status::InternalError(err_msg);                                   \
+        }                                                                            \
+    } while (false)
+
 // init kafka consumer will only set common configs such as
 // brokers, groupid
 Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
@@ -301,11 +315,7 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
         }
         RdKafka::ErrorCode err =
                 _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset, left_ms);
-        if (err != RdKafka::ERR_NO_ERROR) {
-            LOG(WARNING) << "failed to query watermark offset of topic: " << _topic << " partition: " << p_id
-                         << ", err: " << RdKafka::err2str(err);
-            return Status::InternalError("failed to query watermark offset, err: " + RdKafka::err2str(err));
-        }
+        RETURN_IF_KAFKA_ERROR(err, "failed to query watermark offset of topic: " + _topic + ", partition: " + std::to_string(p_id);
         beginning_offsets->push_back(beginning_offset);
         latest_offsets->push_back(latest_offset);
     }
@@ -335,12 +345,8 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
     // get topic metadata
     RdKafka::Metadata* metadata = nullptr;
     RdKafka::ErrorCode err = _k_consumer->metadata(true /* for this topic */, topic, &metadata, timeout);
-    if (err != RdKafka::ERR_NO_ERROR) {
-        std::stringstream ss;
-        ss << "failed to get partition meta: " << RdKafka::err2str(err);
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
-    }
+    RETURN_IF_KAFKA_ERROR(err, fmt::format("failed to get partition metadata, topic: {}", _topic));
+
     auto meta_deleter = [metadata]() { delete metadata; };
     DeferOp delete_meta([meta_deleter] { return meta_deleter(); });
 
@@ -351,15 +357,7 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
             continue;
         }
 
-        if ((*it)->err() != RdKafka::ERR_NO_ERROR) {
-            std::stringstream ss;
-            ss << "error: " << err2str((*it)->err());
-            if ((*it)->err() == RdKafka::ERR_LEADER_NOT_AVAILABLE) {
-                ss << ", try again";
-            }
-            LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
-        }
+        RETURN_IF_KAFKA_ERROR((*it)->err(), fmt::format("failed to get partition metadata, topic: {}", _topic));
 
         RdKafka::TopicMetadata::PartitionMetadataIterator ip;
         for (ip = (*it)->partitions()->begin(); ip != (*it)->partitions()->end(); ++ip) {
@@ -395,11 +393,7 @@ Status KafkaDataConsumer::reset() {
 
 Status KafkaDataConsumer::commit(std::vector<RdKafka::TopicPartition*>& offset) {
     RdKafka::ErrorCode err = _k_consumer->commitSync(offset);
-    if (err != RdKafka::ERR_NO_ERROR) {
-        std::stringstream ss;
-        ss << "failed to commit kafka offset : " << RdKafka::err2str(err);
-        return Status::InternalError(ss.str());
-    }
+    RETURN_IF_KAFKA_ERROR(err, "failed to commit kafka offset");
     return Status::OK();
 }
 
