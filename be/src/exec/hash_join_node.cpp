@@ -889,7 +889,7 @@ Status HashJoinNode::_push_down_in_filter(RuntimeState* state) {
             builder.use_as_join_runtime_filter();
             Status st = builder.create();
             if (!st.ok()) continue;
-            RETURN_IF_ERROR(builder.add_values(column, kHashJoinKeyColumnOffset));
+            builder.add_values(column, kHashJoinKeyColumnOffset);
             _runtime_in_filters.push_back(builder.get_in_const_predicate());
         }
     }
