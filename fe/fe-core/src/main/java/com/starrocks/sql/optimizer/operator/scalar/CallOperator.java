@@ -178,7 +178,7 @@ public class CallOperator extends ScalarOperator {
                 Objects.equals(fnName, other.fnName) &&
                 Objects.equals(type, other.type) &&
                 Objects.equals(arguments, other.arguments) &&
-                fn.equals(other.fn);
+                Objects.equals(fn, other.fn);
     }
 
     @Override

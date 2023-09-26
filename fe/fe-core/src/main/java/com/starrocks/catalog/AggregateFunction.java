@@ -338,9 +338,9 @@ public class AggregateFunction extends Function {
             return false;
         }
         AggregateFunction agg = (AggregateFunction) obj;
-        if (!intermediateType.equals(agg.intermediateType) || ignoresDistinct != agg.ignoresDistinct ||
+        if (!Objects.equals(intermediateType, agg.intermediateType) || ignoresDistinct != agg.ignoresDistinct ||
                 isAnalyticFn != agg.isAggregateFn || returnsNonNullOnEmpty != agg.returnsNonNullOnEmpty ||
-                !symbolName.equals(agg.symbolName) || isDistinct != agg.isDistinct ||
+                !Objects.equals(symbolName, agg.symbolName) || isDistinct != agg.isDistinct ||
                 !Objects.equals(nullsFirst, agg.getNullsFirst()) || !Objects.equals(isAscOrder, agg.getIsAscOrder())) {
             return false;
         }
