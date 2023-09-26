@@ -76,6 +76,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -367,12 +368,12 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         private void adjustScanOperator(PhysicalScanOperator scanOperator,
                                         DecodeContext context, List<ScalarOperator> predicates,
                                         Map<ColumnRefOperator, Column> newColRefToColumnMetaMap,
-                                        List<ColumnRefOperator> newOutputColumns) {
+                                        Map<ColumnRefOperator, ColumnRefOperator> mapping) {
             long tableId = scanOperator.getTable().getId();
             // check column could apply dict optimize and replace string column to dict column
             for (Integer columnId : context.tableIdToStringColumnIds.get(tableId)) {
                 ColumnRefOperator stringColumn = context.columnRefFactory.getColumnRef(columnId);
-                if (!scanOperator.getColRefToColumnMetaMap().containsKey(stringColumn)) {
+                if (!newColRefToColumnMetaMap.containsKey(stringColumn)) {
                     continue;
                 }
 
@@ -396,17 +397,14 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     continue;
                 }
 
-                ColumnRefOperator newDictColumn = createNewDictColumn(context, stringColumn);
-
-                if (newOutputColumns.contains(stringColumn)) {
-                    newOutputColumns.remove(stringColumn);
-                    newOutputColumns.add(newDictColumn);
+                if (!mapping.containsKey(stringColumn)) {
+                    ColumnRefOperator newDictColumn = createNewDictColumn(context, stringColumn);
+                    mapping.put(stringColumn, newDictColumn);
                 }
-
-                Column oldColumn = scanOperator.getColRefToColumnMetaMap().get(stringColumn);
+                ColumnRefOperator newDictColumn = mapping.get(stringColumn);
+                Column oldColumn = newColRefToColumnMetaMap.get(stringColumn);
                 Column newColumn = new Column(oldColumn);
                 newColumn.setType(ID_TYPE);
-
                 newColRefToColumnMetaMap.remove(stringColumn);
                 newColRefToColumnMetaMap.put(newDictColumn, newColumn);
 
@@ -440,6 +438,16 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             }
         }
 
+        private void adjustOutputColumns(Map<ColumnRefOperator, ColumnRefOperator> mapping,
+                                         List<ColumnRefOperator> outputColumns) {
+            for (int i = 0; i < outputColumns.size(); i++) {
+                ColumnRefOperator replaced = mapping.get(outputColumns.get(i));
+                if (replaced != null) {
+                    outputColumns.set(i, replaced);
+                }
+            }
+        }
+
         @Override
         public OptExpression visitPhysicalOlapScan(OptExpression optExpression, DecodeContext context) {
             visitProjectionBefore(optExpression, context);
@@ -454,8 +462,9 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                         Maps.newHashMap(scanOperator.getColRefToColumnMetaMap());
                 List<ColumnRefOperator> newOutputColumns = Lists.newArrayList(scanOperator.getOutputColumns());
                 List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
-
-                adjustScanOperator(scanOperator, context, predicates, newColRefToColumnMetaMap, newOutputColumns);
+                Map<ColumnRefOperator, ColumnRefOperator> replaced = new HashMap<>();
+                adjustScanOperator(scanOperator, context, predicates, newColRefToColumnMetaMap, replaced);
+                adjustOutputColumns(replaced, newOutputColumns);
 
                 ScalarOperator newPredicate = Utils.compoundAnd(predicates);
                 if (context.hasEncoded) {
@@ -498,22 +507,24 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 Map<ColumnRefOperator, Column> newColRefToColumnMetaMap =
                         Maps.newHashMap(scanOperator.getColRefToColumnMetaMap());
                 List<ColumnRefOperator> newOutputColumns = Lists.newArrayList(scanOperator.getOutputColumns());
+                Map<ColumnRefOperator, ColumnRefOperator> replaced = new HashMap<>();
 
                 List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
-                adjustScanOperator(scanOperator, context, predicates, newColRefToColumnMetaMap, newOutputColumns);
+                adjustScanOperator(scanOperator, context, predicates, newColRefToColumnMetaMap, replaced);
                 ScalarOperator newPredicate = Utils.compoundAnd(predicates);
 
                 ScanOperatorPredicates newScanOperatorPredicates = scanOperator.getScanOperatorPredicates().clone();
                 {
                     adjustScanOperator(scanOperator, context, newScanOperatorPredicates.getMinMaxConjuncts(),
-                            newScanOperatorPredicates.getMinMaxColumnRefMap(), newOutputColumns);
+                            newScanOperatorPredicates.getMinMaxColumnRefMap(), replaced);
                     adjustScanOperator(scanOperator, context, newScanOperatorPredicates.getNoEvalPartitionConjuncts(),
-                            newColRefToColumnMetaMap, newOutputColumns);
+                            newColRefToColumnMetaMap, replaced);
                     adjustScanOperator(scanOperator, context, newScanOperatorPredicates.getPartitionConjuncts(),
-                            newColRefToColumnMetaMap, newOutputColumns);
+                            newColRefToColumnMetaMap, replaced);
                     adjustScanOperator(scanOperator, context, newScanOperatorPredicates.getNonPartitionConjuncts(),
-                            newColRefToColumnMetaMap, newOutputColumns);
+                            newColRefToColumnMetaMap, replaced);
                 }
+                adjustOutputColumns(replaced, newOutputColumns);
 
                 if (context.hasEncoded) {
                     // TODO: maybe have to implement a clone method to create a physical node.
