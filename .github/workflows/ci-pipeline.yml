@@ -706,7 +706,7 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
 
           cd ${{ github.workspace }}
-          rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull
+          rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull >/dev/null
 
           cd ${{ github.workspace }}/ci-tool
           ./bin/run-admit.sh --pr ${PR_NUMBER} --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}

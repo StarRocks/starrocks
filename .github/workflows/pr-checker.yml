@@ -10,6 +10,21 @@ on:
       - opened
       - reopened
       - edited
+      - synchronize
+
+permissions:
+  checks: write
+  actions: write
+  contents: write
+  deployments: write
+  discussions: write
+  issues: write
+  packages: write
+  pages: write
+  pull-requests: write
+  repository-projects: write
+  security-events: write
+  statuses: write
 
 jobs:
 
@@ -38,7 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       (startsWith(github.event.pull_request.title, '[BugFix]') ||
-       startsWith(github.event.pull_request.title, '[Enhancement]'))&&
+       startsWith(github.event.pull_request.title, '[Enhancement]')) &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     steps:
@@ -174,3 +189,18 @@ jobs:
           token: ${{ secrets.PAT }}
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: rebase
+
+  changelist-check:
+    runs-on: [self-hosted, normal]
+    if: >
+      (github.event.pull_request.action == 'opened' || github.event.pull_request.action == 'synchronize') &&
+      !contains(github.event.pull_request.title, 'cherry-pick') &&
+      !contains(github.event.pull_request.title, 'backport')
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+    steps:
+      - name: CHECK CHANGELIST
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/check-pr-changelist.sh
