@@ -3,8 +3,7 @@ name: PR CHECKER
 on:
   pull_request_target:
     branches:
-      - main
-      - 'branch-[0-9].[0-9]'
+      - ci-meta-approval-test
 
     types:
       - opened
@@ -37,6 +36,7 @@ jobs:
     name: SYNC CHECKER
     steps:
       - run: echo "Normal PR."
+      - run: cat $GITHUB_EVENT_PATH
 
   title-check:
     runs-on: ubuntu-latest

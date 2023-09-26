@@ -71,7 +71,7 @@ jobs:
     steps:
       - name: META-REVIEW
         env:
-          META_TEAM: meta-committer
+          META_TEAM: test-team
         run: |
           members=($(gh api \
             -H "Accept: application/vnd.github+json" \

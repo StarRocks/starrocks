@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
-      META_TEAM: meta-committer
+      META_TEAM: test-team
 
     steps:
       - name: ADD REVIEWER
