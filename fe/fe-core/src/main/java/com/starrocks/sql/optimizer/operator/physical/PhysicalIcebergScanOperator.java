@@ -14,20 +14,42 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
+
+import java.util.List;
+import java.util.Map;
 
 public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
+    private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
 
     public PhysicalIcebergScanOperator(LogicalIcebergScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_ICEBERG_SCAN, scanOperator);
         this.predicates = scanOperator.getScanOperatorPredicates();
+    }
+
+    public PhysicalIcebergScanOperator(Table table,
+                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                       long limit,
+                                       ScalarOperator predicate,
+                                       Projection projection,
+                                       ScanOperatorPredicates predicates) {
+        super(OperatorType.PHYSICAL_ICEBERG_SCAN, table, colRefToColumnMetaMap, limit, predicate, projection);
+        this.predicates = predicates;
     }
 
     @Override
@@ -59,4 +81,18 @@ public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
         predicates.getMinMaxColumnRefMap().keySet().forEach(refs::union);
         return refs;
     }
+
+    public void setOutputColumns(List<ColumnRefOperator> outputColumns) {
+        this.outputColumns = outputColumns;
+    }
+
+    public List<Pair<Integer, ColumnDict>> getGlobalDicts() {
+        return globalDicts;
+    }
+
+    public void setGlobalDicts(
+            List<Pair<Integer, ColumnDict>> globalDicts) {
+        this.globalDicts = globalDicts;
+    }
+
 }
