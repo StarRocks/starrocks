@@ -193,12 +193,12 @@ jobs:
   changelist-check:
     runs-on: [self-hosted, normal]
     if: >
-      (github.event.pull_request.action == 'opened' || github.event.pull_request.action == 'synchronize') &&
+      (github.event.action == 'opened' || github.event.action == 'synchronize') &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     env:
       PR_NUMBER: ${{ github.event.number }}
-      GH_TOKEN: ${{ secrets.PAT }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: CHECK CHANGELIST
         run: |
