@@ -199,13 +199,15 @@ public class QueryAnalyzer {
             sourceScope.setParent(scope);
 
             Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
-            new AstTraverser<Void, Void>() {
-                @Override
-                public Void visitTable(TableRelation tableRelation, Void context) {
-                    generatedExprToColumnRef.putAll(tableRelation.getGeneratedExprToColumnRef());
-                    return null;
-                }
-            }.visit(resolvedRelation);
+            if (!(resolvedRelation instanceof ViewRelation)) {
+                new AstTraverser<Void, Void>() {
+                    @Override
+                    public Void visitTable(TableRelation tableRelation, Void context) {
+                        generatedExprToColumnRef.putAll(tableRelation.getGeneratedExprToColumnRef());
+                        return null;
+                    }
+                }.visit(resolvedRelation);
+            }
             analyzeState.setGeneratedExprToColumnRef(generatedExprToColumnRef);
 
             SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
