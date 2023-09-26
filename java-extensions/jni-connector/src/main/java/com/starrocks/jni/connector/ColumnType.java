@@ -47,6 +47,7 @@ public class ColumnType {
         ARRAY,
         MAP,
         STRUCT,
+        TINYINT,
     }
 
     TypeValue typeValue;
@@ -73,6 +74,7 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-micros", TypeValue.DATETIME_MICROS);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-millis", TypeValue.DATETIME_MILLIS);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal", TypeValue.DECIMAL);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("tinyint", TypeValue.TINYINT);
 
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BYTE, 1);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BOOLEAN, 1);
@@ -81,6 +83,7 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.FLOAT, 4);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.LONG, 8);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DOUBLE, 8);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.TINYINT, 1);
     }
 
     @Override
@@ -160,7 +163,6 @@ public class ColumnType {
         int p = scanner.indexOf('<', ',', '>');
         String t = scanner.substr(p);
         scanner.moveTo(p);
-
         // assume there is no blank char in `type`.
         typeValue = null;
         switch (t) {

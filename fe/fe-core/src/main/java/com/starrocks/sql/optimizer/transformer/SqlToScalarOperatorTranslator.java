@@ -27,6 +27,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -38,6 +39,7 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
@@ -82,6 +84,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictQueryOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -240,7 +243,6 @@ public final class SqlToScalarOperatorTranslator {
                 if (num > 0) {
                     return num;
                 }
-
                 if (child instanceof Subquery) {
                     num++;
                 } else {
@@ -286,6 +288,13 @@ public final class SqlToScalarOperatorTranslator {
 
             return super.visit(node, context);
 
+        }
+        @Override
+        public ScalarOperator visitParameterExpr(Parameter node, Context context) {
+            if (node.getExpr() == null) {
+                throw new SemanticException("Unknown parameter");
+            }
+            return visit(node.getExpr());
         }
 
         @Override
@@ -718,6 +727,11 @@ public final class SqlToScalarOperatorTranslator {
                         ConstantOperator.createBigint(node.getIntValue())));
             }
 
+            if (node.getFuncType().equalsIgnoreCase("DATABASE") ||
+                    node.getFuncType().equalsIgnoreCase("SCHEMA")) {
+                return ConstantOperator.createVarchar(node.getStrValue());
+            }
+
             return new CallOperator(node.getFuncType(), node.getType(), Lists.newArrayList(
                     ConstantOperator.createVarchar(node.getStrValue()),
                     ConstantOperator.createBigint(node.getIntValue())));
@@ -787,9 +801,9 @@ public final class SqlToScalarOperatorTranslator {
             ColumnRefSet outerUsedColumns = new ColumnRefSet();
             if (subqueryPlan.getCorrelation().isEmpty()) {
                 for (Expr outer : context.outerExprs) {
-                    outerUsedColumns.union(SqlToScalarOperatorTranslator
-                            .translate(outer, builder.getExpressionMapping(), columnRefFactory)
-                            .getUsedColumns());
+                    outerUsedColumns.union(
+                            SqlToScalarOperatorTranslator.translate(outer, expressionMapping, columnRefFactory)
+                                    .getUsedColumns());
                 }
             }
 
@@ -815,6 +829,15 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visitCloneExpr(CloneExpr node, Context context) {
             return new CloneOperator(visit(node.getChild(0), context.clone(node)));
+        }
+
+        @Override
+        public ScalarOperator visitDictQueryExpr(DictQueryExpr node, Context context) {
+            List<ScalarOperator> arguments = node.getChildren()
+                    .stream()
+                    .map(child -> visit(child, context.clone(node)))
+                    .collect(Collectors.toList());
+            return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn());
         }
     }
 

@@ -22,6 +22,7 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/any_value.h"
+#include "exprs/agg/approx_top_k.h"
 #include "exprs/agg/array_agg.h"
 #include "exprs/agg/avg.h"
 #include "exprs/agg/bitmap_agg.h"
@@ -114,6 +115,10 @@ public:
         return std::make_shared<ArrayAggAggregateFunctionV2>();
     }
 
+    static AggregateFunctionPtr MakeGroupConcatAggregateFunctionV2() {
+        return std::make_shared<GroupConcatAggregateFunctionV2>();
+    }
+
     template <LogicalType LT>
     static auto MakeMaxAggregateFunction();
 
@@ -128,6 +133,10 @@ public:
 
     template <LogicalType LT>
     static AggregateFunctionPtr MakeAnyValueAggregateFunction();
+
+    static AggregateFunctionPtr MakeAnyValueSemiAggregateFunction() {
+        return std::make_shared<AnyValueSemiAggregateFunction>();
+    }
 
     template <typename NestedState, bool IsWindowFunc, bool IgnoreNull = true,
               typename NestedFunctionPtr = AggregateFunctionPtr>
@@ -216,6 +225,11 @@ public:
     template <LogicalType LT>
     static AggregateFunctionPtr MakeSessionNumberWindowFunction() {
         return std::make_shared<SessionNumberWindowFunction<LT>>();
+    }
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeApproxTopKAggregateFunction() {
+        return std::make_shared<ApproxTopKAggregateFunction<LT>>();
     }
 
     template <LogicalType LT>

@@ -59,6 +59,7 @@ message ImmutableIndexMetaPB {
     uint64 size = 3;
     repeated ImmutableIndexShardMetaPB shards = 4;
     repeated ShardInfoPB shard_info = 5;
+    repeated uint64 shard_bf_off = 6;
 }
 
 message PersistentIndexMetaPB {

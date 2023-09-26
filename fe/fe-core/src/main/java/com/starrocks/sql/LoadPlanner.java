@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TRoutineLoadTask;
@@ -128,6 +129,7 @@ public class LoadPlanner {
     private String label;
     // Routine load related structs
     TRoutineLoadTask routineLoadTask;
+    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
 
     private Boolean missAutoIncrementColumn = Boolean.FALSE;
 
@@ -217,9 +219,11 @@ public class LoadPlanner {
         this.label = label;
         this.timeoutS = timeoutS;
         this.etlJobType = EtlJobType.STREAM_LOAD;
-        if (Config.enable_pipeline_load) {
-            this.context.getSessionVariable().setEnablePipelineEngine(true);
-        }
+        this.context.getSessionVariable().setEnablePipelineEngine(true);
+    }
+
+    public void setPartialUpdateMode(TPartialUpdateMode mode) {
+        this.partialUpdateMode = mode;
     }
 
     public void plan() throws UserException {
@@ -304,23 +308,18 @@ public class LoadPlanner {
         if (!needShufflePlan) {
             sinkFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
         }
-        prepareSinkFragment(sinkFragment, partitionIds, true, true, forceReplicatedStorage);
+        prepareSinkFragment(sinkFragment, partitionIds, true, forceReplicatedStorage);
         if (this.context != null) {
-            if (this.context.getSessionVariable().isEnablePipelineEngine() && Config.enable_pipeline_load) {
-                if (needShufflePlan) {
-                    sinkFragment.setPipelineDop(1);
-                    sinkFragment.setParallelExecNum(parallelInstanceNum);
-                    sinkFragment.setForceSetTableSinkDop();
-                } else {
-                    sinkFragment.setPipelineDop(parallelInstanceNum);
-                    sinkFragment.setParallelExecNum(1);
-                }
-                sinkFragment.setHasOlapTableSink();
-                sinkFragment.setForceAssignScanRangesPerDriverSeq();
-            } else {
+            if (needShufflePlan) {
                 sinkFragment.setPipelineDop(1);
                 sinkFragment.setParallelExecNum(parallelInstanceNum);
+                sinkFragment.setForceSetTableSinkDop();
+            } else {
+                sinkFragment.setPipelineDop(parallelInstanceNum);
+                sinkFragment.setParallelExecNum(1);
             }
+            sinkFragment.setHasOlapTableSink();
+            sinkFragment.setForceAssignScanRangesPerDriverSeq();
         } else {
             sinkFragment.setPipelineDop(1);
             sinkFragment.setParallelExecNum(parallelInstanceNum);
@@ -410,7 +409,7 @@ public class LoadPlanner {
         return nullExprInAutoIncrement;
     }
 
-    private void prepareSinkFragment(PlanFragment sinkFragment, List<Long> partitionIds, boolean canUsePipeLine,
+    private void prepareSinkFragment(PlanFragment sinkFragment, List<Long> partitionIds,
                                      boolean completeTabletSink, boolean forceReplicatedStorage) throws UserException {
         DataSink dataSink = null;
         if (destTable instanceof OlapTable) {
@@ -423,14 +422,18 @@ public class LoadPlanner {
                 enableAutomaticPartition = olapTable.supportedAutomaticPartition();
             }
             Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
-            dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds, canUsePipeLine,
+            dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds,
                     olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
                     checkNullExprInAutoIncrement(), enableAutomaticPartition);
             if (this.missAutoIncrementColumn == Boolean.TRUE) {
                 ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
             }
+            if (olapTable.getAutomaticBucketSize() > 0) {
+                ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
+            }
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
+                ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);
                 ((OlapTableSink) dataSink).complete();
             }
             // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
@@ -450,6 +453,7 @@ public class LoadPlanner {
         if (destTable instanceof OlapTable) {
             OlapTableSink dataSink = (OlapTableSink) fragments.get(0).getSink();
             dataSink.init(loadId, txnId, dbId, timeoutS);
+            dataSink.setPartialUpdateMode(partialUpdateMode);
             dataSink.complete();
         }
         this.txnId = txnId;

@@ -47,6 +47,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.privilege.ranger.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -198,13 +199,15 @@ public class QueryAnalyzer {
             sourceScope.setParent(scope);
 
             Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
-            new AstTraverser<Void, Void>() {
-                @Override
-                public Void visitTable(TableRelation tableRelation, Void context) {
-                    generatedExprToColumnRef.putAll(tableRelation.getGeneratedExprToColumnRef());
-                    return null;
-                }
-            }.visit(resolvedRelation);
+            if (!(resolvedRelation instanceof ViewRelation)) {
+                new AstTraverser<Void, Void>() {
+                    @Override
+                    public Void visitTable(TableRelation tableRelation, Void context) {
+                        generatedExprToColumnRef.putAll(tableRelation.getGeneratedExprToColumnRef());
+                        return null;
+                    }
+                }.visit(resolvedRelation);
+            }
             analyzeState.setGeneratedExprToColumnRef(generatedExprToColumnRef);
 
             SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
@@ -284,12 +287,14 @@ public class QueryAnalyzer {
                 }
 
                 Table table = resolveTable(tableRelation);
+                Relation r;
                 if (table instanceof View) {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
-                    return viewRelation;
+
+                    r = viewRelation;
                 } else if (table instanceof HiveView) {
                     HiveView hiveView = (HiveView) table;
                     QueryStatement queryStatement = hiveView.getQueryStatement();
@@ -297,7 +302,8 @@ public class QueryAnalyzer {
                     view.setInlineViewDefWithSqlMode(hiveView.getInlineViewDef(), 0);
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
-                    return viewRelation;
+
+                    r = viewRelation;
                 } else {
                     if (tableRelation.getTemporalClause() != null) {
                         if (table.getType() != Table.TableType.MYSQL) {
@@ -309,10 +315,24 @@ public class QueryAnalyzer {
 
                     if (table.isSupported()) {
                         tableRelation.setTable(table);
-                        return tableRelation;
+                        r = tableRelation;
                     } else {
                         throw unsupportedException("Unsupported scan table type: " + table.getType());
                     }
+                }
+
+                if (r.isPolicyRewritten()) {
+                    return r;
+                }
+                assert tableName != null;
+                QueryStatement policyRewriteQuery = SecurityPolicyRewriteRule.buildView(session, r, tableName);
+                if (policyRewriteQuery == null) {
+                    return r;
+                } else {
+                    r.setPolicyRewritten(true);
+                    SubqueryRelation subqueryRelation = new SubqueryRelation(policyRewriteQuery);
+                    subqueryRelation.setAlias(tableName);
+                    return subqueryRelation;
                 }
             } else {
                 if (relation.getResolveTableName() != null) {
@@ -347,17 +367,14 @@ public class QueryAnalyzer {
             } else {
                 List<Column> fullSchema = node.isBinlogQuery()
                         ? appendBinlogMetaColumns(table.getFullSchema()) : table.getFullSchema();
-                List<Column> baseSchema = node.isBinlogQuery()
-                        ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema();
+                Set<Column> baseSchema = new HashSet<>(node.isBinlogQuery()
+                        ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema());
                 for (Column column : fullSchema) {
-                    Field field;
-                    if (baseSchema.contains(column)) {
-                        field = new Field(column.getName(), column.getType(), tableName,
-                                new SlotRef(tableName, column.getName(), column.getName()), true, column.isAllowNull());
-                    } else {
-                        field = new Field(column.getName(), column.getType(), tableName,
-                                new SlotRef(tableName, column.getName(), column.getName()), false, column.isAllowNull());
-                    }
+                    // TODO: avoid analyze visible or not each time, cache it in schema
+                    boolean visible = baseSchema.contains(column);
+                    SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                    Field field = new Field(column.getName(), column.getType(), tableName, slot, visible,
+                            column.isAllowNull());
                     columns.put(field, column);
                     fields.add(field);
                 }
@@ -389,8 +406,8 @@ public class QueryAnalyzer {
 
             Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
             for (Column column : table.getBaseSchema()) {
-                if (column.materializedColumnExpr() != null) {
-                    Expr materializedExpression = column.materializedColumnExpr();
+                if (column.generatedColumnExpr() != null) {
+                    Expr materializedExpression = column.generatedColumnExpr();
                     ExpressionAnalyzer.analyzeExpression(materializedExpression, new AnalyzeState(), scope, session);
                     SlotRef slotRef = new SlotRef(null, column.getName());
                     ExpressionAnalyzer.analyzeExpression(slotRef, new AnalyzeState(), scope, session);

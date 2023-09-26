@@ -110,8 +110,12 @@ public class PriorityLeaderTaskExecutor {
         return executor.getCorePoolSize();
     }
 
-    public void setCorePoolSize(int corePoolSize) {
-        executor.setCorePoolSize(corePoolSize);
+    public void setPoolSize(int poolSize) {
+        // corePoolSize and maximumPoolSize are same.
+        // Must set corePoolSize first, because setMaximumPoolSize() will throw IllegalArgumentException
+        // if maximumPoolSize < corePoolSize.
+        executor.setCorePoolSize(poolSize);
+        executor.setMaximumPoolSize(poolSize);
     }
 
     private class TaskChecker implements Runnable {

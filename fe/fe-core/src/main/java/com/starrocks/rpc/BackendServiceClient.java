@@ -41,7 +41,6 @@ import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
-import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
@@ -56,8 +55,6 @@ import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
 import com.starrocks.proto.PUpdateFailPointStatusResponse;
-import com.starrocks.rpc.PGetFileSchemaRequest;
-import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TNetworkAddress;
@@ -80,10 +77,11 @@ public class BackendServiceClient {
     }
 
     public Future<PExecPlanFragmentResult> execPlanFragmentAsync(
-            TNetworkAddress address, TExecPlanFragmentParams tRequest)
+            TNetworkAddress address, TExecPlanFragmentParams tRequest, String protocol)
             throws TException, RpcException {
         final PExecPlanFragmentRequest pRequest = new PExecPlanFragmentRequest();
-        pRequest.setRequest(tRequest);
+        pRequest.setAttachmentProtocol(protocol);
+        pRequest.setRequest(tRequest, protocol);
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
             return service.execPlanFragmentAsync(pRequest);
@@ -107,40 +105,6 @@ public class BackendServiceClient {
                     address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
         }
-    }
-
-    public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
-            TNetworkAddress address, TExecBatchPlanFragmentsParams tRequest)
-            throws TException, RpcException {
-        final PExecBatchPlanFragmentsRequest pRequest = new PExecBatchPlanFragmentsRequest();
-        pRequest.setRequest(tRequest);
-
-        Future<PExecBatchPlanFragmentsResult> resultFuture = null;
-        for (int i = 1; i <= Config.max_query_retry_time && resultFuture == null; ++i) {
-            try {
-                final PBackendService service = BrpcProxy.getBackendService(address);
-                resultFuture = service.execBatchPlanFragmentsAsync(pRequest);
-            } catch (NoSuchElementException e) {
-                // Retry `RETRY_TIMES`, when NoSuchElementException occurs.
-                if (i >= Config.max_query_retry_time) {
-                    LOG.warn("Execute batch plan fragments retry failed, address={}:{}",
-                            address.getHostname(), address.getPort(), e);
-                    throw new RpcException(address.hostname, e.getMessage());
-                }
-                try {
-                    Thread.sleep(10);
-                } catch (InterruptedException interruptedException) {
-                    Thread.currentThread().interrupt();
-                }
-            } catch (Throwable e) {
-                LOG.warn("Execute batch plan fragments catch a exception, address={}:{}",
-                        address.getHostname(), address.getPort(), e);
-                throw new RpcException(address.hostname, e.getMessage());
-            }
-        }
-
-        Preconditions.checkState(resultFuture != null);
-        return resultFuture;
     }
 
     public Future<PCancelPlanFragmentResult> cancelPlanFragmentAsync(

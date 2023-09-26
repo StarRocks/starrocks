@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-namespace cpp starrocks
+namespace cpp starrocks 
 namespace java com.starrocks.thrift
 
 include "StatusCode.thrift"
@@ -41,3 +41,11 @@ struct TStatus {
   2: optional list<string> error_msgs
 }
 
+enum TTransactionStatus {
+    UNKNOWN = 0,
+    PREPARE = 1,
+    COMMITTED = 2,
+    VISIBLE = 3,
+    ABORTED = 4,
+    PREPARED = 5
+} 

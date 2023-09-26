@@ -1,0 +1,18 @@
+-- name: test_explain_analyze
+function: prepare_data("tpcds", "${db[0]}")
+-- result:
+None
+-- !result
+shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" bash ${root_path}/sql/test_profile/T/test_profile_analysis.sh
+-- result:
+0
+Analyze profile succeeded
+Analyze profile succeeded
+Analyze profile succeeded
+-- !result
+shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" bash ${root_path}/sql/test_profile/T/test_profile_non_default_variables.sh
+-- result:
+0
+NonDefaultSessionVariables contains 'pipeline_dop'
+NonDefaultSessionVariables contains 'pipeline_dop'
+-- !result

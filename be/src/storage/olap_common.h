@@ -249,6 +249,7 @@ struct OlapReaderStatistics {
 
     int64_t segment_stats_filtered = 0;
     int64_t rows_key_range_filtered = 0;
+    int64_t rows_key_range_num = 0;
     int64_t rows_stats_filtered = 0;
     int64_t rows_bf_filtered = 0;
     int64_t rows_del_filtered = 0;
@@ -285,6 +286,10 @@ struct OlapReaderStatistics {
 
     int64_t io_ns_local_disk = 0;
     int64_t io_ns_remote = 0;
+
+    int64_t prefetch_hit_count = 0;
+    int64_t prefetch_wait_finish_ns = 0;
+    int64_t prefetch_pending_ns = 0;
     // ------ for lake tablet ------
 };
 
@@ -294,6 +299,9 @@ const char* const kIOCountLocalDisk = "io_count_local_disk";
 const char* const kIOCountRemote = "io_count_remote";
 const char* const kIONsLocalDisk = "io_ns_local_disk";
 const char* const kIONsRemote = "io_ns_remote";
+const char* const kPrefetchHitCount = "prefetch_hit_count";
+const char* const kPrefetchWaitFinishNs = "prefetch_wait_finish_ns";
+const char* const kPrefetchPendingNs = "prefetch_pending_ns";
 
 typedef uint32_t ColumnId;
 typedef int32_t ColumnUID;

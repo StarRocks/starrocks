@@ -22,7 +22,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 
 import java.util.Collections;
 import java.util.List;
-import javax.annotation.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -61,20 +60,6 @@ public abstract class ScalarOperator implements Cloneable {
         }
 
         return true;
-    }
-
-    public static boolean isTrue(@Nullable ScalarOperator op) {
-        if (op == null) {
-            return false;
-        }
-        return op.isTrue();
-    }
-
-    public static boolean isFalse(@Nullable ScalarOperator op) {
-        if (op == null) {
-            return false;
-        }
-        return op.isFalse();
     }
 
     public boolean isTrue() {
@@ -258,6 +243,15 @@ public abstract class ScalarOperator implements Cloneable {
             BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) predicate;
             return binaryPredicate.getBinaryType().isEquivalence()
                     && binaryPredicate.getChild(0).isColumnRef() && binaryPredicate.getChild(1).isColumnRef();
+        }
+        return false;
+    }
+
+    public static boolean isColumnEqualConstant(ScalarOperator predicate) {
+        if (predicate instanceof BinaryPredicateOperator) {
+            BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) predicate;
+            return binaryPredicate.getBinaryType().isEquivalence()
+                    && binaryPredicate.getChild(0).isColumnRef() && binaryPredicate.getChild(1).isConstantRef();
         }
         return false;
     }

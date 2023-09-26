@@ -75,7 +75,7 @@ std::string SegmentReadOptions::debug_string() const {
         ss << "]}";
     }
     ss << "],delete_predicates={";
-    ss << "},tablet_schema={";
+    ss << "},unsafe_tablet_schema_ref={";
     ss << "},use_page_cache=" << use_page_cache;
     return ss.str();
 }

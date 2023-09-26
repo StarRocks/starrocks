@@ -31,6 +31,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DictMappingExpr;
+import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -50,6 +51,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
@@ -70,6 +72,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictQueryOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -530,6 +533,7 @@ public class ScalarOperatorToExpr {
             for (ColumnRefOperator ref : operator.getRefColumns()) {
                 SlotRef slot = new SlotRef(new SlotDescriptor(
                         new SlotId(ref.getId()), ref.getName(), ref.getType(), ref.isNullable()));
+                slot.setTblName(new TableName(TableName.LAMBDA_FUNC_TABLE, TableName.LAMBDA_FUNC_TABLE));
                 hackTypeNull(slot);
                 context.colRefToExpr.put(ref, slot);
                 arguments.add(slot);
@@ -596,6 +600,14 @@ public class ScalarOperatorToExpr {
             Subquery subquery = new Subquery(operator.getQueryStatement());
             subquery.setUseSemiAnti(operator.getApplyOperator().isUseSemiAnti());
             return subquery;
+        }
+
+        @Override
+        public Expr visitDictQueryOperator(DictQueryOperator operator, FormatterContext context) {
+            List<Expr> arg = operator.getChildren().stream()
+                    .map(expr -> buildExpr.build(expr, context))
+                    .collect(Collectors.toList());
+            return new DictQueryExpr(arg, operator.getDictQueryExpr(), operator.getFn());
         }
     }
 

@@ -60,36 +60,12 @@ class RoutineLoadTaskExecutor {
 public:
     typedef std::function<void(StreamLoadContext*)> ExecFinishCallback;
 
-    RoutineLoadTaskExecutor(ExecEnv* exec_env) : _exec_env(exec_env), _data_consumer_pool(10) {
-        REGISTER_GAUGE_STARROCKS_METRIC(routine_load_task_count, [this]() {
-            std::lock_guard<std::mutex> l(_lock);
-            return _task_map.size();
-        });
-        auto st = ThreadPoolBuilder("routine_load")
-                          .set_min_threads(0)
-                          .set_max_threads(INT_MAX)
-                          .set_max_queue_size(INT_MAX)
-                          .build(&_thread_pool);
-        DCHECK(st.ok());
-        _data_consumer_pool.start_bg_worker();
-    }
+    RoutineLoadTaskExecutor(ExecEnv* exec_env) : _exec_env(exec_env), _data_consumer_pool(10) {}
 
-    ~RoutineLoadTaskExecutor() noexcept {
-        // _thread_pool.shutdown();
-        // _thread_pool.join();
+    ~RoutineLoadTaskExecutor() noexcept = default;
 
-        if (_thread_pool) {
-            _thread_pool->shutdown();
-        }
-
-        for (auto& it : _task_map) {
-            auto ctx = it.second;
-            if (ctx->unref()) {
-                delete ctx;
-            }
-        }
-        _task_map.clear();
-    }
+    Status init();
+    void stop();
 
     // submit a routine load task
     Status submit_task(const TRoutineLoadTask& task);
@@ -110,10 +86,6 @@ private:
 
     void err_handler(StreamLoadContext* ctx, const Status& st, const std::string& err_msg);
 
-    // for test only
-    Status _execute_plan_for_test(StreamLoadContext* ctx);
-
-private:
     ExecEnv* _exec_env;
     std::unique_ptr<ThreadPool> _thread_pool;
     DataConsumerPool _data_consumer_pool;

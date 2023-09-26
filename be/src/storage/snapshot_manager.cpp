@@ -198,7 +198,7 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     // equal to tablet id in meta
     new_tablet_meta_pb.set_tablet_id(tablet_id);
     new_tablet_meta_pb.set_schema_hash(schema_hash);
-    TabletSchema tablet_schema(new_tablet_meta_pb.schema());
+    auto tablet_schema = std::make_shared<const TabletSchema>(new_tablet_meta_pb.schema());
 
     std::unordered_map<string, string> old_to_new_rowsetid;
 
@@ -255,12 +255,12 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
 }
 
 Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const string& new_path,
-                                          TabletSchema& tablet_schema, const RowsetId& rowset_id,
+                                          TabletSchemaCSPtr& tablet_schema, const RowsetId& rowset_id,
                                           RowsetMetaPB* new_rs_meta_pb) {
     // TODO use factory to obtain RowsetMeta when SnapshotManager::convert_rowset_ids supports rowset
     auto rowset_meta = std::make_shared<RowsetMeta>(rs_meta_pb);
     RowsetSharedPtr org_rowset;
-    if (!RowsetFactory::create_rowset(&tablet_schema, new_path, rowset_meta, &org_rowset).ok()) {
+    if (!RowsetFactory::create_rowset(tablet_schema, new_path, rowset_meta, &org_rowset).ok()) {
         return Status::RuntimeError("fail to create rowset");
     }
     // do not use cache to load index
@@ -274,7 +274,7 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     context.partition_id = org_rowset_meta->partition_id();
     context.tablet_schema_hash = org_rowset_meta->tablet_schema_hash();
     context.rowset_path_prefix = new_path;
-    context.tablet_schema = &tablet_schema;
+    context.tablet_schema = org_rowset_meta->tablet_schema() ? org_rowset_meta->tablet_schema() : tablet_schema;
     context.rowset_state = org_rowset_meta->rowset_state();
     context.version = org_rowset_meta->version();
     // keep segments_overlap same as origin rowset
@@ -687,8 +687,8 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
         auto version = meta_pb.mutable_updates()->add_versions();
 
         uint32_t next_segment_id = 0;
-        version->mutable_version()->set_major(snapshot_version);
-        version->mutable_version()->set_minor(0);
+        version->mutable_version()->set_major_number(snapshot_version);
+        version->mutable_version()->set_minor_number(0);
         version->set_creation_time(time(nullptr));
         for (const auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
             auto rsid = rowset_meta_pb.rowset_seg_id();
@@ -697,8 +697,8 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
         }
         meta_pb.mutable_updates()->set_next_rowset_id(next_segment_id);
         meta_pb.mutable_updates()->set_next_log_id(0);
-        meta_pb.mutable_updates()->mutable_apply_version()->set_major(snapshot_version);
-        meta_pb.mutable_updates()->mutable_apply_version()->set_minor(0);
+        meta_pb.mutable_updates()->mutable_apply_version()->set_major_number(snapshot_version);
+        meta_pb.mutable_updates()->mutable_apply_version()->set_minor_number(0);
     }
 
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
@@ -740,6 +740,9 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
             RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
         }
         rowset_meta_pb.set_rowset_id(new_rowset_id.to_string());
+        // reset rowsetid means that it is different from the rowset in snapshot meta.
+        // It is reasonable that reset the creation time here.
+        rowset_meta_pb.set_creation_time(UnixSeconds());
     }
     return Status::OK();
 }

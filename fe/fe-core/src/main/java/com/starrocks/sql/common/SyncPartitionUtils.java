@@ -30,6 +30,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -115,8 +116,8 @@ public class SyncPartitionUtils {
     }
 
 
-    public static boolean hasPartitionChange(Map<String, Range<PartitionKey>> baseRangeMap,
-                                             Map<String, Range<PartitionKey>> mvRangeMap) {
+    public static boolean hasRangePartitionChanged(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                   Map<String, Range<PartitionKey>> mvRangeMap) {
         Map<String, Range<PartitionKey>> adds = diffRange(baseRangeMap, mvRangeMap);
         if (adds != null && !adds.isEmpty()) {
             return true;
@@ -125,11 +126,41 @@ public class SyncPartitionUtils {
         return deletes != null && !deletes.isEmpty();
     }
 
+    public static boolean hasListPartitionChanged(Map<String, List<List<String>>> baseRangeMap,
+                                                 Map<String, List<List<String>>> mvRangeMap) {
+        Map<String, List<List<String>>> adds = diffList(baseRangeMap, mvRangeMap);
+        if (adds != null && !adds.isEmpty()) {
+            return true;
+        }
+        Map<String, List<List<String>>> deletes = diffList(mvRangeMap, baseRangeMap);
+        return deletes != null && !deletes.isEmpty();
+    }
+
+    public static RangePartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                                 Map<String, Range<PartitionKey>> mvRangeMap,
+                                                                 FunctionCallExpr functionCallExpr, PrimitiveType partitionType) {
+
+        Map<String, Range<PartitionKey>> rollupRange = Maps.newHashMap();
+        if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+            String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
+            rollupRange = mappingRangeList(baseRangeMap, granularity, partitionType);
+        } else if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+            rollupRange = mappingRangeList(baseRangeMap);
+        }
+        return getRangePartitionDiff(baseRangeMap, mvRangeMap, rollupRange);
+    }
+
     public static RangePartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                  Map<String, Range<PartitionKey>> mvRangeMap,
                                                                  String granularity, PrimitiveType partitionType) {
         Map<String, Range<PartitionKey>> rollupRange = mappingRangeList(baseRangeMap, granularity, partitionType);
+        return getRangePartitionDiff(baseRangeMap, mvRangeMap, rollupRange);
+    }
 
+    @NotNull
+    private static RangePartitionDiff getRangePartitionDiff(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                            Map<String, Range<PartitionKey>> mvRangeMap,
+                                                            Map<String, Range<PartitionKey>> rollupRange) {
         // TODO: Callers may use `List<PartitionRange>` directly.
         List<PartitionRange> rollupRanges = rollupRange.keySet().stream().map(name -> new PartitionRange(name,
                 rollupRange.get(name))).collect(Collectors.toList());
@@ -144,7 +175,31 @@ public class SyncPartitionUtils {
         RangePartitionDiff diff = new RangePartitionDiff(adds, deletes);
         diff.setRollupToBasePartitionMap(partitionRefMap);
         return diff;
+    }
 
+    private static Map<String, Range<PartitionKey>> mappingRangeList(Map<String, Range<PartitionKey>> baseRangeMap) {
+        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
+        try {
+            for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
+                LiteralExpr lowerExpr = rangeEntry.getValue().lowerEndpoint().getKeys().get(0);
+                LiteralExpr upperExpr = rangeEntry.getValue().upperEndpoint().getKeys().get(0);
+
+                Preconditions.checkArgument(lowerExpr instanceof StringLiteral
+                        && upperExpr instanceof StringLiteral);
+
+                PartitionKey lowerPartitionKey = new PartitionKey();
+                PartitionKey upperPartitionKey = new PartitionKey();
+                LocalDateTime lowerDate = DateUtils.parseStrictDateTime(lowerExpr.getStringValue());
+                LocalDateTime upperDate = DateUtils.parseStrictDateTime(upperExpr.getStringValue());
+                lowerPartitionKey.pushColumn(new DateLiteral(lowerDate, Type.DATE), PrimitiveType.DATE);
+                upperPartitionKey.pushColumn(new DateLiteral(upperDate, Type.DATE), PrimitiveType.DATE);
+
+                result.put(rangeEntry.getKey(), Range.closedOpen(lowerPartitionKey, upperPartitionKey));
+            }
+        } catch (AnalysisException e) {
+            throw new SemanticException("Convert to PartitionMapping failed:", e);
+        }
+        return result;
     }
 
     public static Map<String, Range<PartitionKey>> mappingRangeList(Map<String, Range<PartitionKey>> baseRangeMap,
@@ -432,7 +487,7 @@ public class SyncPartitionUtils {
     }
 
     public static Map<String, List<List<String>>> diffList(Map<String, List<List<String>>> srcListMap,
-                                                             Map<String, List<List<String>>> dstListMap) {
+                                                           Map<String, List<List<String>>> dstListMap) {
 
         Map<String, List<List<String>>> result = Maps.newHashMap();
         for (Map.Entry<String, List<List<String>>> srcEntry : srcListMap.entrySet()) {

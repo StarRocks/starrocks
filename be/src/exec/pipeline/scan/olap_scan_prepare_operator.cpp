@@ -22,7 +22,7 @@ namespace starrocks::pipeline {
 /// OlapScanPrepareOperator
 OlapScanPrepareOperator::OlapScanPrepareOperator(OperatorFactory* factory, int32_t id, const string& name,
                                                  int32_t plan_node_id, int32_t driver_sequence, OlapScanContextPtr ctx)
-        : SourceOperator(factory, id, name, plan_node_id, driver_sequence), _ctx(std::move(ctx)) {
+        : SourceOperator(factory, id, name, plan_node_id, true, driver_sequence), _ctx(std::move(ctx)) {
     _ctx->ref();
 }
 
@@ -39,7 +39,12 @@ Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     RETURN_IF_ERROR(_ctx->prepare(state));
-    RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->olap_scan_ranges()));
+
+    auto* capture_tablet_rowsets_timer = ADD_TIMER(_unique_metrics, "CaptureTabletRowsetsTime");
+    {
+        SCOPED_TIMER(capture_tablet_rowsets_timer);
+        RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->olap_scan_ranges()));
+    }
 
     return Status::OK();
 }

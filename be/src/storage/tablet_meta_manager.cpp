@@ -56,6 +56,7 @@
 #include "storage/kv_store.h"
 #include "storage/olap_define.h"
 #include "storage/rocksdb_status_adapter.h"
+#include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
 #include "util/coding.h"
@@ -803,7 +804,7 @@ Status TabletMetaManager::rowset_commit(DataDir* store, TTabletId tablet_id, int
         }
     }
     // pending rowset may exists or not, but delete it anyway
-    RETURN_IF_ERROR(delete_pending_rowset(store, &batch, tablet_id, edit->version().major()));
+    RETURN_IF_ERROR(delete_pending_rowset(store, &batch, tablet_id, edit->version().major_number()));
     return store->get_meta()->write_batch(&batch);
 }
 
@@ -871,8 +872,8 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
     auto ops = log.add_ops();
     ops->set_type(TabletMetaOpType::OP_APPLY);
     auto version_pb = ops->mutable_apply();
-    version_pb->set_major(version.major());
-    version_pb->set_minor(version.minor());
+    version_pb->set_major_number(version.major_number());
+    version_pb->set_minor_number(version.minor_number());
     auto logval = log.SerializeAsString();
     rocksdb::Status st = batch.Put(handle, logkey, logval);
     if (!st.ok()) {
@@ -885,7 +886,7 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
     int64_t total_bytes = 0;
     for (auto& rssid_delvec : delvecs) {
         tsid.segment_id = rssid_delvec.first;
-        auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major());
+        auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major_number());
         auto dv_value = rssid_delvec.second->save();
         total_bytes += dv_value.size();
         st = batch.Put(handle, dv_key, dv_value);
@@ -936,8 +937,8 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
     auto ops = log.add_ops();
     ops->set_type(TabletMetaOpType::OP_APPLY);
     auto version_pb = ops->mutable_apply();
-    version_pb->set_major(version.major());
-    version_pb->set_minor(version.minor());
+    version_pb->set_major_number(version.major_number());
+    version_pb->set_minor_number(version.minor_number());
     auto logval = log.SerializeAsString();
     rocksdb::Status st = batch.Put(handle, logkey, logval);
     if (!st.ok()) {
@@ -951,7 +952,7 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
     int64_t total_bytes = 0;
     for (const auto& delta_column : delta_column_groups) {
         tsid.segment_id = delta_column.first;
-        auto dcg_key = encode_delta_column_group_key(tsid.tablet_id, tsid.segment_id, version.major());
+        auto dcg_key = encode_delta_column_group_key(tsid.tablet_id, tsid.segment_id, version.major_number());
         auto dcg_value = delta_column.second->save();
         total_bytes += dcg_value.size();
         st = batch.Put(handle, dcg_key, dcg_value);
@@ -966,7 +967,7 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
     span->AddEvent("delvec_start");
     for (auto& rssid_delvec : delvecs) {
         tsid.segment_id = rssid_delvec.first;
-        auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major());
+        auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major_number());
         auto dv_value = rssid_delvec.second->save();
         st = batch.Put(handle, dv_key, dv_value);
         if (!st.ok()) {
@@ -1261,6 +1262,30 @@ Status TabletMetaManager::scan_delta_column_group(KVStore* meta, TTabletId table
                 dcgs->push_back(std::move(dcg_ptr));
                 return true;
             });
+
+    if (!st.ok()) {
+        LOG(WARNING) << "fail to iterate rocksdb delvecs. tablet_id=" << tablet_id;
+        return st;
+    }
+    return Status::OK();
+}
+
+Status TabletMetaManager::scan_tablet_delta_column_group(KVStore* meta, TTabletId tablet_id,
+                                                         DeltaColumnGroupList* dcgs) {
+    std::string lower = encode_delta_column_group_key(tablet_id, 0, INT64_MAX);
+    std::string upper = encode_delta_column_group_key(tablet_id, UINT32_MAX, INT64_MAX);
+    auto st = meta->iterate_range(META_COLUMN_FAMILY_INDEX, lower, upper,
+                                  [&](std::string_view key, std::string_view value) -> bool {
+                                      TTabletId dummy;
+                                      uint32_t dummy_segment_id;
+                                      int64_t decode_version;
+                                      decode_delta_column_group_key(key, &dummy, &dummy_segment_id, &decode_version);
+                                      DeltaColumnGroupPtr dcg_ptr = std::make_shared<DeltaColumnGroup>();
+                                      CHECK(dcg_ptr->load(decode_version, value.data(), value.size()).ok());
+                                      CHECK(dcgs != nullptr);
+                                      dcgs->push_back(std::move(dcg_ptr));
+                                      return true;
+                                  });
     if (!st.ok()) {
         LOG(WARNING) << "fail to iterate rocksdb delvecs. tablet_id=" << tablet_id;
         return st;
@@ -1434,15 +1459,42 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
     };
     RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_tabletmeta_func));
     stats->total_count += stats->tablet_count;
-    stats->total_count += stats->update_tablet_count;
     stats->total_meta_bytes += stats->tablet_meta_bytes;
+    stats->total_count += stats->update_tablet_count;
+    stats->total_meta_bytes += stats->update_tablet_meta_bytes;
 
-    auto traverse_rst_func = [&](std::string_view key, std::string_view value) -> bool {
-        stats->rowset_count++;
-        stats->rowset_meta_bytes += value.size();
-        return true;
-    };
-    RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, "rst_", traverse_rst_func));
+    RowsetMetaManager::traverse_rowset_metas(
+            meta, [&](const TabletUid& tablet_uid, const RowsetId& rowset_id, std::string_view value) -> bool {
+                stats->rowset_count++;
+                stats->rowset_meta_bytes += value.size();
+                if (detail) {
+                    bool parsed = false;
+                    auto rowset_meta = std::make_shared<RowsetMeta>(value, &parsed);
+                    if (!parsed) {
+                        LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
+                        return true;
+                    }
+                    if (rowset_meta->tablet_uid() != tablet_uid) {
+                        LOG(WARNING) << "tablet uid is not equal, skip the rowset"
+                                     << ", rowset_id=" << rowset_meta->rowset_id()
+                                     << ", in_put_tablet_uid=" << tablet_uid
+                                     << ", tablet_uid in rowset meta=" << rowset_meta->tablet_uid();
+                        return true;
+                    }
+                    auto itr = stats->tablets.find(rowset_meta->tablet_id());
+                    if (itr == stats->tablets.end()) {
+                        // reduce print warning log here, cause there may be many orphan rowsets
+                        stats->error_count++;
+                        LOG_EVERY_SECOND(WARNING)
+                                << "rst_ rowset without tablet tablet_id:" << rowset_meta->tablet_id()
+                                << " rowset_id:" << rowset_meta->rowset_id() << " version:" << rowset_meta->version();
+                    } else {
+                        itr->second.rowset_count++;
+                        itr->second.rowset_meta_bytes += value.size();
+                    }
+                }
+                return true;
+            });
     stats->total_count += stats->rowset_count;
     stats->total_meta_bytes += stats->rowset_meta_bytes;
 
@@ -1460,6 +1512,7 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
             auto itr = stats->tablets.find(tid);
             if (itr == stats->tablets.end()) {
                 LOG(WARNING) << "tablet_meta_log without tablet tablet_id:" << tid << " logid:" << logid;
+                stats->error_count++;
             } else {
                 itr->second.log_count++;
                 itr->second.log_meta_bytes += value.size();
@@ -1481,7 +1534,8 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
         if (detail) {
             auto itr = stats->tablets.find(tid);
             if (itr == stats->tablets.end()) {
-                LOG(WARNING) << "tablet_delvec without tablet tablet_id:" << tid;
+                LOG(WARNING) << "tablet_delvec without tablet tablet_id:" << tid << " rssid:" << rssid
+                             << " version:" << version;
                 stats->error_count++;
             } else {
                 itr->second.delvec_count++;
@@ -1532,7 +1586,7 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
         if (detail) {
             auto itr = stats->tablets.find(tid);
             if (itr == stats->tablets.end()) {
-                LOG(WARNING) << "tablet_rowset without tablet tablet_id:" << tid;
+                LOG(WARNING) << "pending_rowset without tablet tablet_id:" << tid << " version:" << version;
                 stats->error_count++;
             } else {
                 itr->second.pending_rowset_count++;

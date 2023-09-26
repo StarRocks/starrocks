@@ -14,8 +14,8 @@
 
 package com.starrocks.catalog;
 
-import com.google.api.client.util.Lists;
 import com.google.common.base.Joiner;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CastExpr;
@@ -49,6 +49,7 @@ import static java.util.stream.Collectors.toList;
  * because ExpressionRangePartitionInfo is not easily scalable
  * and get more extensions by extracting objects
  * in the future this will replace all expr range partition info
+ * As of 2023-09, it's used to describe range using expr like partition by range cast((substring(col, 3)) as int)
  */
 public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         implements GsonPreProcessable, GsonPostProcessable {

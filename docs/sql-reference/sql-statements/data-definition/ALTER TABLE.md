@@ -19,17 +19,17 @@ alter_clause1[, alter_clause2, ...]
 
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - rollup: creates or drops a rollup index.
-- schema change: adds, drops, or reorder columns, or modify column type.
-- rename: renames a table, rollup index, or partition. **Note that column name cannot be modified.**
+- schema change: adds, drops, or reorders columns, or modifies column type.
+- rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
 - index: modifies index (only Bitmap index can be modified).
 - swap: atomic exchange of two tables.
 - comment: modifies the table comment (supported from v3.1 onwards).
 
 > **NOTE**
 >
-> - Schema change, rollup, and partition cannot be used in one ALTER TABLE statement.
-> - Schema change, rollup, and swap are asynchronous operations and are returned if the task is submitted successfully. User can use the [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md) command to check the progress.
-> - Partition, rename, and index are synchronous operations, and a command return indicates that the execution is finished.
+> - Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
+> - Schema change and rollup are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md) command to check the progress.
+> - Partition, rename, swap, and index are synchronous operations, and a command return indicates that the execution is finished.
 
 ### Modify partition
 
@@ -112,22 +112,25 @@ DROP TEMPORARY PARTITION <partition_name>
 
 #### Modify partition properties
 
-Syntax:
+**Syntax**
 
 ```sql
 ALTER TABLE [database.]table
-MODIFY PARTITION p1|(p1[, p2, ...]) SET ("key" = "value", ...)
+    MODIFY PARTITION { <partition_name> | partition_name_list | (*) }
+        SET ("key" = "value", ...);
 ```
 
-Note:
+**Usages**
 
-1. The following properties of a partition can be modified:
+- The following properties of a partition can be modified:
 
-   - storage_medium
-   - storage_cooldown_time
-   - replication_num
+  - storage_medium
+  - storage_cooldown_ttl or storage_cooldown_time
+  - replication_num
 
-2. For single-partition tables, partition name is the same as the table name.
+- For the table that has only one partition, the partition name is the same as the table name. If the table is divided into multiple partitions, you can use `(*)`to modify the properties of all partitions, which is more convenient.
+
+- Execute `SHOW PARTITIONS FROM <table_name>` to view the partition properties after modification.
 
 ### Modify rollup index
 
@@ -325,7 +328,7 @@ You can add a generated column and specify its expression. [The generated column
 
 #### Modify table properties
 
-Currently, StarRocks supports modifying bloomfilter columns, colocate_with property, dynamic_partition property, enable_persistent_index property, replication_num property and default.replication_num property.
+Currently, StarRocks supports modifying `bloom_filter_columns` property,`colocate_with` property, dynamic partitioning related properties, `enable_persistent_index` property, `replication_num` property and `default.replication_num` property, `storage_cooldown_ttl` property and `storage_cooldown_time` property.
 
 Syntax:
 

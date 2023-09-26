@@ -221,31 +221,95 @@ build_thrift() {
 
 # llvm
 build_llvm() {
+    export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -D_POSIX_C_SOURCE=200112L"
+    export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess"
+
     LLVM_TARGET="X86"
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         LLVM_TARGET="AArch64"
     fi
 
+    LLVM_TARGETS_TO_BUILD=(
+        "LLVMBitstreamReader"
+        "LLVMRuntimeDyld" 
+        "LLVMOption"
+        "LLVMAsmPrinter"
+        "LLVMProfileData"
+        "LLVMAsmParser"
+        "LLVMOrcTargetProcess"
+        "LLVMExecutionEngine"
+        "LLVMBinaryFormat"
+        "LLVMDebugInfoDWARF"
+        "LLVMObjCARCOpts"
+        "LLVMCodeGen"
+        "LLVMMCDisassembler"
+        "LLVMSupport"
+        "LLVMJITLink"
+        "LLVMCFGuard"
+        "LLVMInstrumentation"
+        "LLVMIRReader"
+        "LLVMCore"
+        "LLVMTarget"
+        "LLVMMC"
+        "LLVMAnalysis"
+        "LLVMGlobalISel"
+        "LLVMScalarOpts"
+        "LLVMTargetParser"
+        "LLVMDemangle"
+        "LLVMRemarks"
+        "LLVMDebugInfoCodeView"
+        "LLVMOrcShared"
+        "LLVMOrcJIT"
+        "LLVMTextAPI"
+        "LLVMBitWriter"
+        "LLVMBitReader"
+        "LLVMObject"
+        "LLVMTransformUtils"
+        "LLVMSelectionDAG"
+        "LLVMMCParser"
+    )
+    if [ "${LLVM_TARGET}" == "X86" ]; then
+        LLVM_TARGETS_TO_BUILD+=("LLVMX86Info" "LLVMX86Desc" "LLVMX86CodeGen")
+    elif [ "${LLVM_TARGET}" == "AArch64" ]; then
+        LLVM_TARGETS_TO_BUILD+=("LLVMAArch64Info" "LLVMAArch64Desc" "LLVMAArch64CodeGen")
+    fi
+
+    LLVM_TARGETS_TO_INSTALL=()
+    for target in ${LLVM_TARGETS_TO_BUILD[@]}; do
+        LLVM_TARGETS_TO_INSTALL+=("install-${target}")
+    done
+
     check_if_source_exist $LLVM_SOURCE
-    check_if_source_exist $CLANG_SOURCE
-    check_if_source_exist $COMPILER_RT_SOURCE
-
-    if [ ! -d $TP_SOURCE_DIR/$LLVM_SOURCE/tools/clang ]; then
-        cp -rf $TP_SOURCE_DIR/$CLANG_SOURCE $TP_SOURCE_DIR/$LLVM_SOURCE/tools/clang
-    fi
-
-    if [ ! -d $TP_SOURCE_DIR/$LLVM_SOURCE/projects/compiler-rt ]; then
-        cp -rf $TP_SOURCE_DIR/$COMPILER_RT_SOURCE $TP_SOURCE_DIR/$LLVM_SOURCE/projects/compiler-rt
-    fi
 
     cd $TP_SOURCE_DIR
     mkdir -p llvm-build
     cd llvm-build
     rm -rf CMakeCache.txt CMakeFiles/
+
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DLLVM_REQUIRES_RTTI:Bool=True -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGET} -DLLVM_ENABLE_TERMINFO=OFF LLVM_BUILD_LLVM_DYLIB:BOOL=OFF -DLLVM_ENABLE_PIC=true -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE="RELEASE" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/llvm ../$LLVM_SOURCE
-    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1
-    ${BUILD_SYSTEM} install
+    $CMAKE_CMD -S ../${LLVM_SOURCE}/llvm -G "${CMAKE_GENERATOR}" \
+    -DLLVM_ENABLE_EH:Bool=True \
+    -DLLVM_ENABLE_RTTI:Bool=True \
+    -DLLVM_ENABLE_PIC:Bool=True \
+    -DLLVM_ENABLE_TERMINFO:Bool=False \
+    -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGET} \
+    -DLLVM_BUILD_LLVM_DYLIB:BOOL=False \
+    -DLLVM_INCLUDE_TOOLS:BOOL=False \
+    -DLLVM_BUILD_TOOLS:BOOL=False \
+    -DLLVM_INCLUDE_EXAMPLES:BOOL=False \
+    -DLLVM_INCLUDE_TESTS:BOOL=False \
+    -DLLVM_INCLUDE_BENCHMARKS:BOOL=False \
+    -DBUILD_SHARED_LIBS:BOOL=False \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../${LLVM_SOURCE}
+
+    # TODO(yueyang): Add more targets.
+    # This is a little bit hack, we need to minimize the build time and binary size.
+    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1 ${LLVM_TARGETS_TO_BUILD[@]}
+    ${BUILD_SYSTEM} install-llvm-headers
+    ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
+
+    restore_compile_flags
 }
 
 # protobuf
@@ -506,7 +570,7 @@ build_rocksdb() {
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    CFLAGS= ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=no --enable-static=yes --enable-shared=no
+    CFLAGS= ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=no --enable-static=yes --enable-shared=no --with-openssl=$TP_INSTALL_DIR
     make -j$PARALLEL
     make install
 }
@@ -914,8 +978,6 @@ build_broker_thirdparty_jars() {
 }
 
 build_aws_cpp_sdk() {
-    export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -D_POSIX_C_SOURCE=200112L"
-
     check_if_source_exist $AWS_SDK_CPP_SOURCE
     cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
     # only build s3, s3-crt, transfer manager, identity-management and sts, you can add more components if you want.
@@ -923,7 +985,6 @@ build_aws_cpp_sdk() {
                -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DENABLE_TESTING=OFF \
                -DENABLE_CURL_LOGGING=OFF \
                -G "${CMAKE_GENERATOR}" \
-               -D_POSIX_C_SOURCE=200112L \
                -DCURL_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libcurl.a   \
                -DZLIB_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libz.a      \
                -DOPENSSL_ROOT_DIR=${TP_INSTALL_DIR}                     \
@@ -1018,6 +1079,11 @@ build_fast_float() {
 build_cachelib() {
     check_if_source_exist $CACHELIB_SOURCE
     rm -rf $TP_INSTALL_DIR/$CACHELIB_SOURCE && mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $TP_INSTALL_DIR/
+}
+
+build_starcache() {
+    check_if_source_exist $STARCACHE_SOURCE
+    rm -rf $TP_INSTALL_DIR/$STARCACHE_SOURCE && mv $TP_SOURCE_DIR/$STARCACHE_SOURCE $TP_INSTALL_DIR/
 }
 
 # streamvbyte
@@ -1153,7 +1219,7 @@ strip_binary() {
 # set GLOBAL_C*FLAGS for easy restore in each sub build process
 export GLOBAL_CPPFLAGS="-I ${TP_INCLUDE_DIR}"
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
-export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=199309L"
+export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=200112L"
 export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g"
 
 # set those GLOBAL_*FLAGS to the CFLAGS/CXXFLAGS/CPPFLAGS
@@ -1210,6 +1276,7 @@ build_opentelemetry
 build_benchmark
 build_fast_float
 build_cachelib
+build_starcache
 build_streamvbyte
 build_jansson
 build_avro_c
@@ -1217,6 +1284,7 @@ build_serdes
 build_datasketches
 build_async_profiler
 build_fiu
+build_llvm
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

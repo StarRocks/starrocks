@@ -58,10 +58,10 @@ public class SetTest extends PlanTestBase {
         String sql = "select b from (select t1a as a, t1b as b, t1c as c, t1d as d from test_all_type " +
                 "union all select 1 as a, 2 as b, 3 as c, 4 as d) t1;";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains(
-                "TExprNode(node_type:INT_LITERAL, type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
-                        "scalar_type:TScalarType(type:TINYINT))]), num_children:0, int_literal:TIntLiteral(value:2)," +
-                        " output_scale:-1, has_nullable_child:false, is_nullable:false, is_monotonic:true"));
+        assertContains(plan, "[TExprNode(node_type:INT_LITERAL, type:TTypeDesc(types:" +
+                "[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:SMALLINT))])," +
+                " num_children:0, int_literal:TIntLiteral(value:2), output_scale:-1, " +
+                "has_nullable_child:false, is_nullable:false, is_monotonic:true)]");
     }
 
     @Test
@@ -591,5 +591,15 @@ public class SetTest extends PlanTestBase {
                 "SELECT DISTINCT NULL\n" +
                 "WHERE NULL";
         getThriftPlan(sql);
+    }
+
+    @Test
+    public void testCast() throws Exception {
+        String sql = "select * from t0 union all select 1, 1, 1 from t1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:Project\n" +
+                "  |  <slot 10> : 1\n" +
+                "  |  <slot 11> : 1\n" +
+                "  |  <slot 12> : 1");
     }
 }

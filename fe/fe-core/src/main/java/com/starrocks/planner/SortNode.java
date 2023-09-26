@@ -158,6 +158,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         rf.setExprOrder(0);
         rf.setJoinMode(JoinNode.DistributionMode.BROADCAST);
         rf.setOnlyLocal(true);
+        rf.setSortInfo(getSortInfo());
         rf.setBuildExpr(orderBy);
         rf.setRuntimeFilterType(RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER);
 
@@ -340,11 +341,6 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                     + outputSmap.debugString());
             LOG.debug("sort input exprs: " + Expr.debugString(resolvedTupleExprs));
         }
-    }
-
-    @Override
-    public boolean canUsePipeLine() {
-        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 
     @Override

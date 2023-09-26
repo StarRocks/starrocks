@@ -301,6 +301,13 @@ public:
      */
     DEFINE_VECTORIZED_FN(split_part);
 
+    /**
+     * @param: [string_value, delimiter, field]
+     * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(substring_index);
+
     // regex method
     static Status regexp_extract_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status regexp_replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
@@ -336,6 +343,15 @@ public:
     DEFINE_VECTORIZED_FN(replace);
     static Status replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status replace_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /**
+     * @param: [string_value, from_value, to_value]
+     * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(translate);
+    static Status translate_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status translate_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [DOUBLE]

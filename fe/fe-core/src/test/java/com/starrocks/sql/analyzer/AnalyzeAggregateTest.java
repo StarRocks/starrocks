@@ -40,13 +40,15 @@ public class AnalyzeAggregateTest {
         analyzeFail("select sum(v1) from t0 order by sum(abs(max(v2) over ()))",
                 "Unsupported nest window function inside aggregation.");
         analyzeFail("select sum(v1) from t0 order by sum(max(v2))",
-                "Unsupported nest window function inside aggregation.");
+                "Unsupported nest aggregation function inside aggregation.");
         analyzeFail("select sum(v1) from t0 order by sum(abs(max(v2)))",
-                "Unsupported nest window function inside aggregation.");
+                "Unsupported nest aggregation function inside aggregation.");
         analyzeFail("select sum(max(v2)) from t0",
-                "Unsupported nest window function inside aggregation.");
+                "Unsupported nest aggregation function inside aggregation.");
         analyzeFail("select sum(1 + max(v2)) from t0",
-                "Unsupported nest window function inside aggregation.");
+                "Unsupported nest aggregation function inside aggregation.");
+        analyzeFail("select min(v1) col from t0 order by min(col) + 1,  min(col)",
+                "Column 'col' cannot be resolved");
 
         analyzeFail("select v1 from t0 group by v1,cast(v2 as int) having cast(v2 as boolean)",
                 "must be an aggregate expression or appear in GROUP BY clause");
@@ -153,8 +155,7 @@ public class AnalyzeAggregateTest {
         analyzeFail("select distinct v1,v2 from t0 order by v3");
         analyzeFail("select distinct v1 from t0 order by sum(v2)");
 
-        analyzeFail("select count(distinct v1), count(distinct v3) from tarray",
-                "No matching function with signature: multi_distinct_count(array");
+        analyzeSuccess("select count(distinct v1), count(distinct v3) from tarray");
 
         analyzeFail("select abs(distinct v1) from t0");
         analyzeFail("SELECT VAR_SAMP ( DISTINCT v2 ) FROM v0");
@@ -166,30 +167,23 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select count(*) from ttypes group by va");
 
         // more than one count distinct
-        analyzeFail("select count(distinct va), count(distinct va1) from ttypes group by v1");
-        analyzeFail("select count(distinct va), count(distinct va1) from ttypes");
-        analyzeFail("select count(distinct vm), count(distinct vm1) from ttypes group by v1");
-        analyzeFail("select count(distinct vm), count(distinct vm1) from ttypes");
-        analyzeFail("select count(distinct vs), count(distinct vs1) from ttypes group by v1");
-        analyzeFail("select count(distinct vs), count(distinct vs1) from ttypes");
+        analyzeSuccess("select count(distinct va), count(distinct va1) from ttypes group by v1");
+        analyzeSuccess("select count(distinct va), count(distinct va1) from ttypes");
+        analyzeSuccess("select count(distinct vm), count(distinct vm1) from ttypes group by v1");
+        analyzeSuccess("select count(distinct vm), count(distinct vm1) from ttypes");
+        analyzeSuccess("select count(distinct vs), count(distinct vs1) from ttypes group by v1");
+        analyzeSuccess("select count(distinct vs), count(distinct vs1) from ttypes");
         analyzeFail("select count(distinct vj), count(distinct vj1) from ttypes group by v1");
         analyzeFail("select count(distinct vj), count(distinct vj1) from ttypes");
 
         // single count distinct
-        analyzeFail("select count(distinct vm) from ttypes",
-                "No matching function with signature: multi_distinct_count(map");
-        analyzeFail("select count(distinct vs) from ttypes",
-                "No matching function with signature: multi_distinct_count(struct");
-        analyzeFail("select count(distinct vj) from ttypes",
-                "No matching function with signature: multi_distinct_count(json");
-        analyzeFail("select count(distinct vm) from ttypes group by v1",
-                "No matching function with signature: multi_distinct_count(map");
-        analyzeFail("select count(distinct vs) from ttypes group by v1",
-                "No matching function with signature: multi_distinct_count(struct");
-        analyzeFail("select count(distinct vj) from ttypes group by v1",
-                "No matching function with signature: multi_distinct_count(json");
-        analyzeFail("select count(distinct va),count(distinct vm) from ttypes group by v1",
-                "No matching function with signature: multi_distinct_count(array");
+        analyzeSuccess("select count(distinct vm) from ttypes");
+        analyzeSuccess("select count(distinct vs) from ttypes");
+        analyzeFail("select count(distinct vj) from ttypes");
+        analyzeSuccess("select count(distinct vm) from ttypes group by v1");
+        analyzeSuccess("select count(distinct vs) from ttypes group by v1");
+        analyzeFail("select count(distinct vj) from ttypes group by v1");
+        analyzeSuccess("select count(distinct va),count(distinct vm) from ttypes group by v1");
 
         // group by complex types
         analyzeSuccess("select count(*) from ttypes group by vm");

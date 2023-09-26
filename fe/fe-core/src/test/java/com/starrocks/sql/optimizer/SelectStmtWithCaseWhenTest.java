@@ -296,7 +296,11 @@ class SelectStmtWithCaseWhenTest {
                                 "     tabletList=\n" +
                                 "     actualRows=0, avgRowSize=5.0\n" +
                                 "     cardinality: 1"
-                }
+                },
+
+                {"select * from test.t0 where (case region when 'USA' then 1 when 'UK' then 2 else 3  end in (2, 3, null))" +
+                        " is null",
+                        " CASE 1: region WHEN 'USA' THEN 1 WHEN 'UK' THEN 2 ELSE 3 END IN (2, 3, NULL) IS NULL"},
         };
 
         List<Arguments> argumentsList = Lists.newArrayList();
@@ -639,6 +643,10 @@ class SelectStmtWithCaseWhenTest {
                         "     actualRows=0, avgRowSize=5.0\n" +
                         "     cardinality: 1\n"},
                 {"select * from test.t0 where if(region='USA', 1, 0) in (2,3)", "0:EMPTYSET"},
+                {"select * from test.t0 where (if(region='USA', 1, 0) in (2,3, null))",
+                        "if(1: region = 'USA', 1, 0) IN (2, 3, NULL)"},
+                {"select * from test.t0 where (if(region='USA', 1, 0) in (2,3, null)) is null",
+                        "if(1: region = 'USA', 1, 0) IN (2, 3, NULL) IS NULL"},
                 {"select * from test.t0 where if(region='USA', 1, 0) not in (0)", "[1: region, VARCHAR, false] = 'USA'"},
 
                 {"select * from test.t0 where if(region='USA', 1, 0) not in (0,1)", "0:EMPTYSET"},
@@ -681,14 +689,34 @@ class SelectStmtWithCaseWhenTest {
                 {"select * from test.t0 where nullif('China', region) = 'China'", "[1: region, VARCHAR, false] != 'China'"},
                 {"select * from test.t0 where nullif('China', region) <> 'China'", "0:EMPTYSET"},
                 {"select * from test.t0 where nullif('China', region) is NULL", "[1: region, VARCHAR, false] = 'China'"},
+                {"select * from test.t0 where (nullif('China', region) is NULL) is NULL",
+                        "0:EMPTYSET"},
+                {"select * from test.t0 where (nullif('China', region) is NULL) is NOT NULL",
+                        "0:OlapScanNode\n" +
+                                "     table: t0, rollup: t0\n" +
+                                "     preAggregation: on"},
                 {"select * from test.t0 where nullif('China', region) is NOT NULL", "[1: region, VARCHAR, false] != 'China'"},
+                {"select * from test.t0 where (nullif('China', region) is NOT NULL) is NULL",
+                        "1: region != 'China' IS NULL"},
+                {"select * from test.t0 where (nullif('China', region) is NOT NULL) is NOT NULL",
+                        "1: region != 'China' IS NOT NULL"},
+
                 {"select * from test.t0 where nullif('China', region) = 'USA'", "0:EMPTYSET"},
                 {"select * from test.t0 where nullif('China', region) <>  'USA'", "[1: region, VARCHAR, false] != 'China'"},
 
                 {"select * from test.t0 where nullif(1, ship_code) = 1", "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
                 {"select * from test.t0 where nullif(1, ship_code) <> 1", "0:EMPTYSET"},
                 {"select * from test.t0 where nullif(1, ship_code) is NULL", "[5: ship_code, INT, true] = 1"},
+                {"select * from test.t0 where (nullif(1, ship_code) is NULL) is NULL", "0:EMPTYSET"},
+                {"select * from test.t0 where (nullif(1, ship_code) is NULL) is NOT NULL",
+                        "0:OlapScanNode\n" +
+                        "     table: t0, rollup: t0\n" +
+                        "     preAggregation: on"},
                 {"select * from test.t0 where nullif(1, ship_code) is NOT NULL", "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
+                {"select * from test.t0 where (nullif(1, ship_code) is NOT NULL) is NULL",
+                        "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
+                {"select * from test.t0 where (nullif(1, ship_code) is NOT NULL) is NOT NULL",
+                        "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
                 {"select * from test.t0 where nullif(1, ship_code) = 2", "0:EMPTYSET"},
                 {"select * from test.t0 where nullif(1, ship_code) <>  2", "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
         };
@@ -717,19 +745,19 @@ class SelectStmtWithCaseWhenTest {
                 },
                 {"select * from test.t0 where \n" +
                         "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (1,NULL)",
-                        "[1: region, VARCHAR, false] = 'China'",
+                        "CASE 1: region WHEN 'China' THEN 1 WHEN 'Japan' THEN 2 ELSE 3 END IN (1, NULL)",
                 },
                 {"select * from test.t0 where \n" +
                         "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) not in (1,NULL)",
-                        "[1: region, VARCHAR, false] != 'China'",
+                        "CASE 1: region WHEN 'China' THEN 1 WHEN 'Japan' THEN 2 ELSE 3 END NOT IN (1, NULL)",
                 },
                 {"select * from test.t0 where \n" +
                         "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (NULL,NULL)",
-                        "0:EMPTYSET",
+                        "CASE 1: region WHEN 'China' THEN 1 WHEN 'Japan' THEN 2 ELSE 3 END IN (NULL, NULL)",
                 },
                 {"select * from test.t0 where \n" +
                         "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) not in (NULL,NULL)",
-                        "0:EMPTYSET",
+                        "CASE 1: region WHEN 'China' THEN 1 WHEN 'Japan' THEN 2 ELSE 3 END NOT IN (NULL, NULL)",
                 },
                 {"select * from test.t0 where \n" +
                         "if (region = 'China', 1, 2) = NULL",
@@ -737,7 +765,7 @@ class SelectStmtWithCaseWhenTest {
                 },
                 {"select * from test.t0 where \n" +
                         "if (region = 'China', 1, 2) not in (NULL, 1)",
-                        "[1: region, VARCHAR, false] != 'China'",
+                        "if(1: region = 'China', 1, 2) NOT IN (NULL, 1)",
                 },
                 {"select * from test.t0 where (case when ship_code is null then true when 1 then false end) is null",
                         "0:EMPTYSET"

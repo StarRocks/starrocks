@@ -26,7 +26,7 @@ public:
     ExceptProbeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                             std::shared_ptr<ExceptContext> except_ctx, const std::vector<ExprContext*>& dst_exprs,
                             const int32_t dependency_index)
-            : Operator(factory, id, "except_probe_sink", plan_node_id, driver_sequence),
+            : Operator(factory, id, "except_probe_sink", plan_node_id, false, driver_sequence),
               _except_ctx(std::move(except_ctx)),
               _buffer_state(std::make_unique<ExceptBufferState>()),
               _dst_exprs(dst_exprs),

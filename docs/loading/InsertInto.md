@@ -401,11 +401,11 @@ The following example checks the status of the INSERT task `async`.
 SELECT * FROM information_schema.task_runs WHERE task_name = 'async';
 ```
 
-## Check the INSERT transaction status
+## Check the INSERT job status
 
 ### Check via the result
 
-The INSERT transaction returns different status in accordance with the result of the transaction.
+A synchronous INSERT transaction returns different status in accordance with the result of the transaction.
 
 - **Transaction succeeds**
 
@@ -426,42 +426,57 @@ ERROR 1064 (HY000): Insert has filtered data in strict mode, tracking_url=http:/
 
 You can locate the problem by checking the log with `tracking_url`.
 
-### Check via SHOW LOAD
+### Check via Information Schema
 
-You can check the INSERT transaction status by using [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) command.
+You can use the [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) statement to query the results of one or more load jobs from the `loads` table in the `information_schema` database. This feature is supported from v3.1 onwards.
 
-The following example checks the status of the transaction with label `insert_load_wikipedia`.
+Example 1: Query the results of load jobs executed on the `load_test` database, sort the results by creation time (`CREATE_TIME`) in descending order, and only return the top result.
 
 ```SQL
-SHOW LOAD WHERE label="insert_load_wikipedia"\G
+SELECT * FROM information_schema.loads
+WHERE database_name = 'load_test'
+ORDER BY create_time DESC
+LIMIT 1\G
+```
+
+Example 2: Query the result of the load job (whose label is `insert_load_wikipedia`) executed on the `load_test` database:
+
+```SQL
+SELECT * FROM information_schema.loads
+WHERE database_name = 'load_test' and label = 'insert_load_wikipedia'\G
 ```
 
 The return is as follows:
 
 ```Plain
 *************************** 1. row ***************************
-         JobId: 10278
-         Label: insert_load_wikipedia
-         State: FINISHED
-      Progress: ETL:100%; LOAD:100%
-          Type: INSERT
-      Priority: NORMAL
-      ScanRows: 0
-  FilteredRows: 0
-UnselectedRows: 0
-      SinkRows: 2
-       EtlInfo: NULL
-      TaskInfo: resource:N/A; timeout(s):300; max_filter_ratio:0.0
-      ErrorMsg: NULL
-    CreateTime: 2023-06-12 18:31:07
-  EtlStartTime: 2023-06-12 18:31:07
- EtlFinishTime: 2023-06-12 18:31:07
- LoadStartTime: 2023-06-12 18:31:07
-LoadFinishTime: 2023-06-12 18:31:08
-   TrackingSQL: 
-    JobDetails: {"All backends":{"3d96e21a-090c-11ee-9083-00163e0e2cf9":[10142]},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":175,"InternalTableLoadRows":2,"ScanBytes":0,"ScanRows":0,"TaskNumber":1,"Unfinished backends":{"3d96e21a-090c-11ee-9083-00163e0e2cf9":[]}}
-1 row in set (0.00 sec)
+              JOB_ID: 21319
+               LABEL: insert_load_wikipedia
+       DATABASE_NAME: load_test
+               STATE: FINISHED
+            PROGRESS: ETL:100%; LOAD:100%
+                TYPE: INSERT
+            PRIORITY: NORMAL
+           SCAN_ROWS: 0
+       FILTERED_ROWS: 0
+     UNSELECTED_ROWS: 0
+           SINK_ROWS: 2
+            ETL_INFO: 
+           TASK_INFO: resource:N/A; timeout(s):300; max_filter_ratio:0.0
+         CREATE_TIME: 2023-08-09 10:42:23
+      ETL_START_TIME: 2023-08-09 10:42:23
+     ETL_FINISH_TIME: 2023-08-09 10:42:23
+     LOAD_START_TIME: 2023-08-09 10:42:23
+    LOAD_FINISH_TIME: 2023-08-09 10:42:24
+         JOB_DETAILS: {"All backends":{"5ebf11b5-365e-11ee-9e4a-7a563fb695da":[10006]},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":175,"InternalTableLoadRows":2,"ScanBytes":0,"ScanRows":0,"TaskNumber":1,"Unfinished backends":{"5ebf11b5-365e-11ee-9e4a-7a563fb695da":[]}}
+           ERROR_MSG: NULL
+        TRACKING_URL: NULL
+        TRACKING_SQL: NULL
+REJECTED_RECORD_PATH: NULL
+1 row in set (0.01 sec)
 ```
+
+For information about the fields in the return results, see [Information Schema > loads](../administration/information_schema.md#loads).
 
 ### Check via curl command
 

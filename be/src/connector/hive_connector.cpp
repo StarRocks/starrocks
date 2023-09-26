@@ -63,6 +63,10 @@ Status HiveDataSource::_check_all_slots_nullable() {
     return Status::OK();
 }
 
+std::string HiveDataSource::name() const {
+    return "HiveDataSource";
+}
+
 Status HiveDataSource::open(RuntimeState* state) {
     // right now we don't force user to set JAVA_HOME.
     // but when we access hdfs via JNI, we have to make sure JAVA_HOME is set,
@@ -247,6 +251,9 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
         }
         if (!single_slot || slot_ids.empty()) {
             _scanner_conjunct_ctxs.emplace_back(ctx);
+            for (SlotId slot_id : slot_ids) {
+                _slots_of_mutli_slot_conjunct.insert(slot_id);
+            }
             continue;
         }
 
@@ -269,16 +276,16 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.rows_skip_counter = ADD_COUNTER(_runtime_profile, "RowsSkip", TUnit::UNIT);
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 
-    _profile.reader_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ReaderInit", "IOTaskExecTime");
-    _profile.open_file_timer = ADD_CHILD_TIMER(_runtime_profile, "OpenFile", "IOTaskExecTime");
-    _profile.expr_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ExprFilterTime", "IOTaskExecTime");
+    _profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
+    _profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
+    _profile.expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
 
-    _profile.column_read_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnReadTime", "IOTaskExecTime");
-    _profile.column_convert_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnConvertTime", "IOTaskExecTime");
+    _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
+    _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
 
     {
         static const char* prefix = "SharedBuffered";
-        ADD_CHILD_COUNTER(_runtime_profile, prefix, TUnit::UNIT, "IOTaskExecTime");
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
         _profile.shared_buffered_shared_io_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "SharedIOBytes", TUnit::BYTES, prefix);
         _profile.shared_buffered_shared_io_count =
@@ -293,7 +300,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     if (_use_block_cache) {
         static const char* prefix = "BlockCache";
-        ADD_CHILD_COUNTER(_runtime_profile, prefix, TUnit::UNIT, "IOTaskExecTime");
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
         _profile.block_cache_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadCounter", TUnit::UNIT, prefix);
         _profile.block_cache_read_bytes =
@@ -316,12 +323,12 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     {
         static const char* prefix = "InputStream";
-        ADD_CHILD_COUNTER(_runtime_profile, prefix, TUnit::UNIT, "IOTaskExecTime");
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
         _profile.app_io_bytes_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "AppIOBytesRead", TUnit::BYTES, prefix);
         _profile.app_io_timer = ADD_CHILD_TIMER(_runtime_profile, "AppIOTime", prefix);
         _profile.app_io_counter = ADD_CHILD_COUNTER(_runtime_profile, "AppIOCounter", TUnit::UNIT, prefix);
-        _profile.fs_bytes_read_counter = ADD_CHILD_COUNTER(_runtime_profile, "FSBytesRead", TUnit::BYTES, prefix);
+        _profile.fs_bytes_read_counter = ADD_CHILD_COUNTER(_runtime_profile, "FSIOBytesRead", TUnit::BYTES, prefix);
         _profile.fs_io_counter = ADD_CHILD_COUNTER(_runtime_profile, "FSIOCounter", TUnit::UNIT, prefix);
         _profile.fs_io_timer = ADD_CHILD_TIMER(_runtime_profile, "FSIOTime", prefix);
     }
@@ -421,7 +428,16 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(FSOptions& options) {
         required_fields.append(",");
     }
     required_fields = required_fields.substr(0, required_fields.size() - 1);
-
+    std::string nested_fields;
+    for (auto slot : _tuple_desc->slots()) {
+        const TypeDescriptor& type = slot->type();
+        if (type.is_complex_type()) {
+            build_nested_fields(type, slot->col_name(), &nested_fields);
+        }
+    }
+    if (!nested_fields.empty()) {
+        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
+    }
     std::map<std::string, std::string> jni_scanner_params;
     jni_scanner_params["catalog_type"] = paimon_table->get_catalog_type();
     jni_scanner_params["metastore_uri"] = paimon_table->get_metastore_uri();
@@ -431,6 +447,7 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(FSOptions& options) {
     jni_scanner_params["required_fields"] = required_fields;
     jni_scanner_params["split_info"] = _scan_range.paimon_split_info;
     jni_scanner_params["predicate_info"] = _scan_range.paimon_predicate_info;
+    jni_scanner_params["nested_fields"] = nested_fields;
 
     string option_info = "";
     if (options.cloud_configuration != nullptr && options.cloud_configuration->cloud_type == TCloudType::AWS) {
@@ -499,6 +516,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.conjunct_ctxs = _scanner_conjunct_ctxs;
     scanner_params.conjunct_ctxs_by_slot = _conjunct_ctxs_by_slot;
     scanner_params.slots_in_conjunct = _slots_in_conjunct;
+    scanner_params.slots_of_mutli_slot_conjunct = _slots_of_mutli_slot_conjunct;
     scanner_params.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;

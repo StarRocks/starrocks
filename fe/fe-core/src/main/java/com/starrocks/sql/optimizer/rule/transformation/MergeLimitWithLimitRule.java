@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -74,27 +72,38 @@ public class MergeLimitWithLimitRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator l1 = (LogicalLimitOperator) input.getOp();
+        // l2 must global
         LogicalLimitOperator l2 = (LogicalLimitOperator) input.getInputs().get(0).getOp();
 
-        Preconditions.checkState(!l1.hasOffset());
-
-        // l2 range
-        long l2Max = l2.getLimit();
-
-        // l1 range
-        long l1Max = l1.getLimit();
-
-        long limit = Math.min(l2Max, l1Max);
-
-        if (limit <= 0) {
-            limit = 0;
-        }
-
         Operator result;
-        if (l1.getLimit() <= l2.getLimit()) {
-            result = LogicalLimitOperator.local(limit, l2.getOffset());
+        if (l1.hasOffset() || l2.hasOffset()) {
+            // l2 range
+            long l2Min = l2.hasOffset() ? l2.getOffset() : Operator.DEFAULT_OFFSET;
+            long l2Max = l2Min + l2.getLimit();
+
+            // l1 range
+            long l1Min = l1.hasOffset() ? l2Min + l1.getOffset() : l2Min;
+            long l1Max = l1Min + l1.getLimit();
+
+            long offset = Math.max(l2Min, l1Min);
+            long limit = Math.min(l2Max, l1Max) - offset;
+
+            if (limit <= 0) {
+                limit = 0;
+                offset = Operator.DEFAULT_OFFSET;
+            }
+
+            if (offset <= 0) {
+                offset = Operator.DEFAULT_OFFSET;
+            }
+
+            result = LogicalLimitOperator.init(limit, offset);
         } else {
-            result = LogicalLimitOperator.init(limit, l2.getOffset());
+            if (l1.getLimit() <= l2.getLimit()) {
+                result = LogicalLimitOperator.init(l1.getLimit());
+            } else {
+                result = l2;
+            }
         }
 
         return Lists.newArrayList(OptExpression.create(result, input.getInputs().get(0).getInputs()));

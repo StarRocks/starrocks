@@ -79,6 +79,8 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
@@ -357,6 +359,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     copiedShadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
                                     tbl.isInMemory(),
                                     tbl.enablePersistentIndex(),
+                                    tbl.primaryIndexCacheExpireSec(),
                                     tbl.getPartitionInfo().getTabletType(partitionId),
                                     tbl.getCompressionType(), copiedSortKeyIdxes);
                             createReplicaTask.setBaseTablet(
@@ -501,8 +504,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                     long originIdxId = indexIdMap.get(shadowIdxId);
 
-                    boolean hasNewMaterializedColumn = false;
-                    List<Column> diffMaterializedColumnSchema = Lists.newArrayList();
+                    boolean hasNewGeneratedColumn = false;
+                    List<Column> diffGeneratedColumnSchema = Lists.newArrayList();
                     if (originIdxId == tbl.getBaseIndexId()) {
                         List<String> originSchema = tbl.getSchemaByIndexId(originIdxId).stream().map(col ->
                                                         new String(col.getName())).collect(Collectors.toList());
@@ -512,26 +515,26 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         if (originSchema.size() != 0 && newSchema.size() != 0) {
                             for (String colNameInNewSchema : newSchema) {
                                 if (!originSchema.contains(colNameInNewSchema) &&
-                                        tbl.getColumn(colNameInNewSchema).isMaterializedColumn()) {
-                                    diffMaterializedColumnSchema.add(tbl.getColumn(colNameInNewSchema));
+                                        tbl.getColumn(colNameInNewSchema).isGeneratedColumn()) {
+                                    diffGeneratedColumnSchema.add(tbl.getColumn(colNameInNewSchema));
                                 }
                             }
                         }
 
-                        if (diffMaterializedColumnSchema.size() != 0) {
-                            hasNewMaterializedColumn = true;
+                        if (diffGeneratedColumnSchema.size() != 0) {
+                            hasNewGeneratedColumn = true;
                         }
                     }
                     Map<Integer, TExpr> mcExprs = new HashMap<>();
-                    TAlterTabletMaterializedColumnReq materializedColumnReq = new TAlterTabletMaterializedColumnReq();
-                    if (hasNewMaterializedColumn) {
+                    TAlterTabletMaterializedColumnReq generatedColumnReq = new TAlterTabletMaterializedColumnReq();
+                    if (hasNewGeneratedColumn) {
                         DescriptorTable descTbl = new DescriptorTable();
                         TupleDescriptor tupleDesc = descTbl.createTupleDescriptor();
                         Map<String, SlotDescriptor> slotDescByName = new HashMap<>();
 
                         /*
                           * The expression substitution is needed here, because all slotRefs in 
-                          * MaterializedColumnExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
+                          * GeneratedColumnExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
                           * if it is init by SlotDescriptor. The slot information will be used by be to indentify
                           * the column location in a chunk.
                         */
@@ -545,16 +548,16 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             slotDescByName.put(col.getName(), slotDesc);
                         }
 
-                        for (Column materializedColumn : diffMaterializedColumnSchema) {
-                            Column column = materializedColumn;
-                            Expr expr = column.materializedColumnExpr();
+                        for (Column generatedColumn : diffGeneratedColumnSchema) {
+                            Column column = generatedColumn;
+                            Expr expr = column.generatedColumnExpr();
                             List<Expr> outputExprs = Lists.newArrayList();
 
                             for (Column col : tbl.getBaseSchema()) {
                                 SlotDescriptor slotDesc = slotDescByName.get(col.getName());
 
                                 if (slotDesc == null) {
-                                    throw new AlterCancelException("Expression for materialized column can not find " +
+                                    throw new AlterCancelException("Expression for generated column can not find " +
                                                                    "the ref column");
                                 }
 
@@ -582,9 +585,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                                 new RewriteAliasVisitor(sourceScope, outputScope,
                                                     outputExprs, ConnectContext.get());
 
-                            Expr materializedColumnExpr = expr.accept(visitor, null);
+                            ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                                    new RelationFields(tbl.getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                        col.getType(), tableName, null)).collect(Collectors.toList()))),
+                                            ConnectContext.get());
 
-                            materializedColumnExpr = Expr.analyzeAndCastFold(materializedColumnExpr);
+                            Expr generatedColumnExpr = expr.accept(visitor, null);
+
+                            generatedColumnExpr = Expr.analyzeAndCastFold(generatedColumnExpr);
 
                             int columnIndex = -1;
                             if (column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) ||
@@ -595,7 +603,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                 columnIndex = tbl.getFullSchema().indexOf(column);
                             }
 
-                            mcExprs.put(columnIndex, materializedColumnExpr.treeToThrift());
+                            mcExprs.put(columnIndex, generatedColumnExpr.treeToThrift());
                         }
                         // we need this thing, otherwise some expr evalution will fail in BE
                         TQueryGlobals queryGlobals = new TQueryGlobals();
@@ -606,12 +614,13 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                         TQueryOptions queryOptions = new TQueryOptions();
 
-                        materializedColumnReq.setQuery_globals(queryGlobals);
-                        materializedColumnReq.setQuery_options(queryOptions);
-                        materializedColumnReq.setMc_exprs(mcExprs);
+                        generatedColumnReq.setQuery_globals(queryGlobals);
+                        generatedColumnReq.setQuery_options(queryOptions);
+                        generatedColumnReq.setMc_exprs(mcExprs);
                     }
                     int shadowSchemaHash = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash;
                     int originSchemaHash = tbl.getSchemaHashByIndexId(indexIdMap.get(shadowIdxId));
+                    List<Column> originSchemaColumns = tbl.getSchemaByIndexId(originIdxId);
 
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
@@ -620,7 +629,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             AlterReplicaTask rollupTask = AlterReplicaTask.alterLocalTablet(
                                     shadowReplica.getBackendId(), dbId, tableId, partitionId,
                                     shadowIdxId, shadowTabletId, originTabletId, shadowReplica.getId(),
-                                    shadowSchemaHash, originSchemaHash, visibleVersion, jobId, materializedColumnReq);
+                                    shadowSchemaHash, originSchemaHash, visibleVersion, jobId,
+                                    generatedColumnReq, originSchemaColumns);
                             schemaChangeBatchTask.addTask(rollupTask);
                         }
                     }
@@ -743,6 +753,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             inactiveRelatedMv(modifiedColumns, tbl);
 
             pruneMeta();
+            tbl.onReload();
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
 
@@ -752,7 +763,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             db.writeUnlock();
         }
 
-        editLog.waitInfinity(start, future);
+        EditLog.waitInfinity(start, future);
 
         LOG.info("schema change job finished: {}", jobId);
         this.span.end();
@@ -905,6 +916,17 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         if (indexChange) {
             tbl.setIndexes(indexes);
         }
+
+        //update max column unique id
+        int maxColUniqueId = tbl.getMaxColUniqueId();
+        for (Column column : tbl.getFullSchema()) {
+            if (column.getUniqueId() > maxColUniqueId) {
+                maxColUniqueId = column.getUniqueId();
+            }
+        }
+        tbl.setMaxColUniqueId(maxColUniqueId);
+        LOG.debug("fullSchema:{}, maxColUniqueId:{}", tbl.getFullSchema(), maxColUniqueId);
+
 
         tbl.setState(OlapTableState.NORMAL);
         tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());
@@ -1066,6 +1088,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 OlapTable tbl = (OlapTable) db.getTable(tableId);
                 if (tbl != null) {
                     onFinished(tbl);
+                    tbl.onReload();
                 }
             } finally {
                 db.writeUnlock();

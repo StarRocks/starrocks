@@ -26,7 +26,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -75,10 +74,15 @@ public class EquationRewriter {
             }
 
             @Override
+            public Optional<ScalarOperator> preprocess(ScalarOperator scalarOperator) {
+                return replace(scalarOperator);
+            }
+
+            @Override
             public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-                ScalarOperator tmp = replace(predicate);
-                if (tmp != null) {
-                    return tmp;
+                Optional<ScalarOperator> tmp = replace(predicate);
+                if (tmp.isPresent()) {
+                    return tmp.get();
                 }
 
                 ScalarOperator left = predicate.getChild(0);
@@ -100,25 +104,25 @@ public class EquationRewriter {
             }
 
             @Override
-            public ScalarOperator visitCall(CallOperator predicate, Void context) {
+            public ScalarOperator visitCall(CallOperator call, Void context) {
                 // 1. rewrite query's predicate
-                ScalarOperator tmp = replace(predicate);
-                if (tmp != null) {
-                    return tmp;
+                Optional<ScalarOperator> tmp = replace(call);
+                if (tmp.isPresent()) {
+                    return tmp.get();
                 }
 
                 // 2. normalize predicate to better match mv
                 // TODO: merge into aggregateFunctionRewriter later.
-                predicate = normalizeCallOperator(predicate);
-                tmp = replace(predicate);
-                if (tmp != null) {
-                    return tmp;
+                CallOperator normalizedCall = normalizeCallOperator(call);
+                tmp = replace(normalizedCall);
+                if (tmp.isPresent()) {
+                    return tmp.get();
                 }
 
                 // 3. retry again by using aggregateFunctionRewriter when predicate cannot be rewritten.
-                if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(predicate) &&
+                if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(normalizedCall) &&
                         !isUnderAggFunctionRewriteContext()) {
-                    ScalarOperator newChooseScalarOp = aggregateFunctionRewriter.rewriteAggFunction(predicate);
+                    ScalarOperator newChooseScalarOp = aggregateFunctionRewriter.rewriteAggFunction(normalizedCall);
                     if (newChooseScalarOp != null) {
                         setUnderAggFunctionRewriteContext(true);
                         // NOTE: To avoid repeating `rewriteAggFunction` by `aggregateFunctionRewriter`, use
@@ -129,22 +133,10 @@ public class EquationRewriter {
                     }
                 }
 
-                return super.visitCall(predicate, context);
+                return super.visitCall(call, context);
             }
 
-            @Override
-            public ScalarOperator visitCastOperator(CastOperator cast, Void context) {
-                ScalarOperator tmp = replace(cast);
-                return tmp != null ? tmp : super.visitCastOperator(cast, context);
-            }
-
-            @Override
-            public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
-                ScalarOperator tmp = replace(variable);
-                return tmp != null ? tmp : super.visitVariableReference(variable, context);
-            }
-
-            ScalarOperator replace(ScalarOperator scalarOperator) {
+            Optional<ScalarOperator> replace(ScalarOperator scalarOperator) {
                 if (equationMap.containsKey(scalarOperator)) {
                     Optional<Pair<ColumnRefOperator, ScalarOperator>> mappedColumnAndExprRef =
                             equationMap.get(scalarOperator).stream().findFirst();
@@ -153,23 +145,23 @@ public class EquationRewriter {
                     ScalarOperator extendedExpr = mappedColumnAndExprRef.get().second;
 
                     if (columnMapping == null) {
-                        return extendedExpr == null ? basedColumn.clone() : extendedExpr.clone();
+                        return extendedExpr == null ? Optional.of(basedColumn.clone()) : Optional.of(extendedExpr.clone());
                     }
 
                     ColumnRefOperator replaced = columnMapping.get(basedColumn);
                     if (replaced == null) {
-                        return null;
+                        return Optional.empty();
                     }
 
                     if (extendedExpr == null) {
-                        return replaced.clone();
+                        return Optional.of(replaced.clone());
                     }
                     ScalarOperator newExpr = extendedExpr.clone();
                     return replaceColInExpr(newExpr, basedColumn,
-                            replaced.clone()) ? newExpr : null;
+                            replaced.clone()) ? Optional.of(newExpr) : Optional.empty();
                 }
 
-                return null;
+                return Optional.empty();
             }
 
             private boolean replaceColInExpr(ScalarOperator expr, ColumnRefOperator oldCol, ScalarOperator newCol) {
@@ -185,6 +177,7 @@ public class EquationRewriter {
             }
 
         };
+
         return expr.accept(shuttle, null);
     }
 

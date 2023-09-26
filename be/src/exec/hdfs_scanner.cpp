@@ -21,7 +21,6 @@
 #include "util/compression/stream_compression.h"
 
 static constexpr int64_t ROW_FORMAT_ESTIMATED_MEMORY_USAGE = 32LL * 1024 * 1024;
-
 namespace starrocks {
 
 class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
@@ -48,10 +47,6 @@ public:
 
     StatusOr<std::string_view> peek(int64_t count) override {
         auto st = _stream->peek(count);
-        if (st.ok()) {
-            _stats->io_count += 1;
-            _stats->bytes_read += count;
-        }
         return st;
     }
 
@@ -105,6 +100,9 @@ Status HdfsScanner::_build_scanner_context() {
         column.col_type = slot->type();
         column.slot_id = slot->id();
         column.col_name = slot->col_name();
+        column.decode_needed =
+                slot->is_output_column() || _scanner_params.slots_of_mutli_slot_conjunct.find(slot->id()) !=
+                                                    _scanner_params.slots_of_mutli_slot_conjunct.end();
 
         ctx.materialized_columns.emplace_back(std::move(column));
     }
@@ -162,7 +160,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     if (_opened) {
         return Status::OK();
     }
-    _build_scanner_context();
+    RETURN_IF_ERROR(_build_scanner_context());
     auto status = do_open(runtime_state);
     if (status.ok()) {
         _opened = true;

@@ -65,9 +65,12 @@ SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type)
           _parent(0),
           _null_indicator_offset(0, 0),
           _col_name(std::move(name)),
+          _col_unique_id(-1),
           _slot_idx(0),
           _slot_size(_type.get_slot_size()),
-          _is_materialized(false) {}
+          _is_materialized(false),
+          _is_output_column(false),
+          _is_nullable(true) {}
 
 SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
         : _id(tdesc.id),
@@ -75,9 +78,12 @@ SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
           _parent(tdesc.parent),
           _null_indicator_offset(tdesc.nullIndicatorByte, tdesc.nullIndicatorBit),
           _col_name(tdesc.colName),
+          _col_unique_id(tdesc.col_unique_id),
           _slot_idx(tdesc.slotIdx),
           _slot_size(_type.get_slot_size()),
-          _is_materialized(tdesc.isMaterialized) {}
+          _is_materialized(tdesc.isMaterialized),
+          _is_output_column(tdesc.__isset.isOutputColumn ? tdesc.isOutputColumn : true),
+          _is_nullable(tdesc.__isset.isNullable ? tdesc.isNullable : true) {}
 
 SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
         : _id(pdesc.id()),
@@ -85,9 +91,13 @@ SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
           _parent(pdesc.parent()),
           _null_indicator_offset(pdesc.null_indicator_byte(), pdesc.null_indicator_bit()),
           _col_name(pdesc.col_name()),
+          _col_unique_id(-1),
           _slot_idx(pdesc.slot_idx()),
           _slot_size(_type.get_slot_size()),
-          _is_materialized(pdesc.is_materialized()) {}
+          _is_materialized(pdesc.is_materialized()),
+          _is_output_column(true),
+          // keep same as is_nullable()
+          _is_nullable(_null_indicator_offset.bit_mask != 0) {}
 
 void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
     pslot->set_id(_id);

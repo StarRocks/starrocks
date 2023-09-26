@@ -1,23 +1,23 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//   http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.sql.ast.pipe;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
@@ -41,9 +41,8 @@ public class ShowPipeStmt extends ShowStmt {
                     .addColumn(new Column("NAME", ScalarType.createVarchar(64)))
                     .addColumn(new Column("TABLE_NAME", ScalarType.createVarchar(64)))
                     .addColumn(new Column("STATE", ScalarType.createVarcharType(8)))
-                    .addColumn(new Column("LOADED_FILES", ScalarType.BIGINT))
-                    .addColumn(new Column("LOADED_ROWS", ScalarType.BIGINT))
-                    .addColumn(new Column("LOADED_BYTES", ScalarType.BIGINT))
+                    .addColumn(new Column("LOAD_STATUS", ScalarType.createVarchar(512)))
+                    .addColumn(new Column("LAST_ERROR", ScalarType.createVarchar(1024)))
                     .addColumn(new Column("CREATED_TIME", ScalarType.DATETIME))
                     .build();
 
@@ -68,15 +67,13 @@ public class ShowPipeStmt extends ShowStmt {
      * NOTE: Must be consistent with the META_DATA
      */
     public static void handleShow(List<Comparable> row, Pipe pipe) {
-        Pipe.LoadStatus loadStatus = pipe.getLoadStatus();
         row.add(String.valueOf(pipe.getPipeId().getDbId()));
         row.add(String.valueOf(pipe.getPipeId().getId()));
         row.add(pipe.getName());
         row.add(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
         row.add(String.valueOf(pipe.getState()));
-        row.add(String.valueOf(loadStatus.loadFiles));
-        row.add(String.valueOf(loadStatus.loadRows));
-        row.add(String.valueOf(loadStatus.loadBytes));
+        row.add(pipe.getLoadStatus().toJson());
+        row.add(pipe.getLastErrorInfo().toJson());
         if (pipe.getCreatedTime() == -1) {
             row.add(null);
         } else {
@@ -133,6 +130,11 @@ public class ShowPipeStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    @Override
+    public RedirectStatus getRedirectStatus() {
+        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

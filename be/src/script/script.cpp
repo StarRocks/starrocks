@@ -82,7 +82,7 @@ static std::string tablet_set_tablet_state(Tablet& tablet, int state) {
 }
 
 static const TabletSchema& tablet_tablet_schema(Tablet& tablet) {
-    return tablet.tablet_schema();
+    return tablet.unsafe_tablet_schema_ref();
 }
 
 static uint64_t tablet_tablet_id(Tablet& tablet) {
@@ -97,12 +97,12 @@ static DataDir* tablet_data_dir(Tablet& tablet) {
     return tablet.data_dir();
 }
 
-static uint64_t get_major(EditVersion& self) {
-    return self.major();
+static uint64_t get_major_number(EditVersion& self) {
+    return self.major_number();
 }
 
-static uint64_t get_minor(EditVersion& self) {
-    return self.minor();
+static uint64_t get_minor_number(EditVersion& self) {
+    return self.minor_number();
 }
 
 static void bind_common(ForeignModule& m) {
@@ -400,8 +400,8 @@ public:
         }
         {
             auto& cls = m.klass<EditVersion>("EditVersion");
-            cls.funcExt<&get_major>("major");
-            cls.funcExt<&get_minor>("minor");
+            cls.funcExt<&get_major_number>("major_number");
+            cls.funcExt<&get_minor_number>("minor_number");
             cls.func<&EditVersion::to_string>("toString");
         }
         {
@@ -421,7 +421,7 @@ public:
         {
             auto& cls = m.klass<Rowset>("Rowset");
             REG_METHOD(Rowset, rowset_id_str);
-            REG_METHOD(Rowset, schema);
+            REG_METHOD(Rowset, schema_ref);
             REG_METHOD(Rowset, start_version);
             REG_METHOD(Rowset, end_version);
             REG_METHOD(Rowset, creation_time);

@@ -114,14 +114,14 @@ OutPut Exchange Id: 03
 |  7 <-> [7: l_discount, DECIMAL64(15,2), true]
 |  9 <-> [9: l_returnflag, VARCHAR, true]
 |  10 <-> [10: l_linestatus, VARCHAR, true]
-|  17 <-> [32: multiply, DECIMAL128(33,4), true]
-|  18 <-> [32: multiply, DECIMAL128(33,4), true] * cast(1 + [8: l_tax, DECIMAL64(15,2), true] as DECIMAL128(16,2))
+|  17 <-> [31: multiply, DECIMAL128(33,4), true]
+|  18 <-> [31: multiply, DECIMAL128(33,4), true] * cast(1 + [8: l_tax, DECIMAL64(15,2), true] as DECIMAL128(16,2))
 |  common expressions:
-|  32 <-> [28: cast, DECIMAL128(15,2), true] * [31: cast, DECIMAL128(18,2), true]
-|  28 <-> cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2))
-|  29 <-> [7: l_discount, DECIMAL64(15,2), true]
-|  30 <-> 1 - [29: cast, DECIMAL64(18,2), true]
-|  31 <-> cast([30: subtract, DECIMAL64(18,2), true] as DECIMAL128(18,2))
+|  27 <-> cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2))
+|  28 <-> [7: l_discount, DECIMAL64(15,2), true]
+|  29 <-> 1 - [28: cast, DECIMAL64(18,2), true]
+|  30 <-> cast([29: subtract, DECIMAL64(18,2), true] as DECIMAL128(18,2))
+|  31 <-> [27: cast, DECIMAL128(15,2), true] * [30: cast, DECIMAL128(18,2), true]
 |  cardinality: 600037902
 |  column statistics:
 |  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
@@ -135,7 +135,7 @@ OutPut Exchange Id: 03
 0:HdfsScanNode
 TABLE: lineitem
 NON-PARTITION PREDICATES: 11: l_shipdate <= '1998-12-01'
-MIN/MAX PREDICATES: 27: l_shipdate <= '1998-12-01'
+MIN/MAX PREDICATES: 11: l_shipdate <= '1998-12-01'
 partitions=1/1
 avgRowSize=70.0
 cardinality: 600037902

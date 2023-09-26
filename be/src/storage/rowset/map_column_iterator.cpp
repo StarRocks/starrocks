@@ -15,6 +15,7 @@
 #include "storage/rowset/map_column_iterator.h"
 
 #include "column/column_access_path.h"
+#include "column/const_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "storage/rowset/scalar_column_iterator.h"
@@ -106,14 +107,23 @@ Status MapColumnIterator::next_batch(size_t* n, Column* dst) {
     if (_access_keys) {
         RETURN_IF_ERROR(_keys->next_batch(&num_to_read, map_column->keys_column().get()));
     } else {
-        // todo: unpack struct in scan, and don't need append default values
-        map_column->keys_column()->append_default(num_to_read);
+        if (!map_column->keys_column()->is_constant()) {
+            map_column->keys_column()->append_default(1);
+            map_column->keys_column() = ConstColumn::create(map_column->keys_column(), num_to_read);
+        } else {
+            map_column->keys_column()->append_default(num_to_read);
+        }
     }
 
     if (_access_values) {
         RETURN_IF_ERROR(_values->next_batch(&num_to_read, map_column->values_column().get()));
     } else {
-        map_column->values_column()->append_default(num_to_read);
+        if (!map_column->values_column()->is_constant()) {
+            map_column->values_column()->append_default(1);
+            map_column->values_column() = ConstColumn::create(map_column->values_column(), num_to_read);
+        } else {
+            map_column->values_column()->append_default(num_to_read);
+        }
     }
 
     return Status::OK();
@@ -154,8 +164,8 @@ Status MapColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
         // if array column in nullable or element of array is empty, element_read_range may be empty.
         // so we should reseek the element_ordinal
         if (element_read_range.span_size() == 0) {
-            _keys->seek_to_ordinal(element_ordinal);
-            _values->seek_to_ordinal(element_ordinal);
+            RETURN_IF_ERROR(_keys->seek_to_ordinal(element_ordinal));
+            RETURN_IF_ERROR(_values->seek_to_ordinal(element_ordinal));
         }
         // 2. Read offset column
         // [1, 2, 3], [4, 5, 6]
@@ -186,13 +196,23 @@ Status MapColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
     if (_access_keys) {
         RETURN_IF_ERROR(_keys->next_batch(element_read_range, map_column->keys_column().get()));
     } else {
-        map_column->keys_column()->append_default(read_rows);
+        if (!map_column->keys_column()->is_constant()) {
+            map_column->keys_column()->append_default(1);
+            map_column->keys_column() = ConstColumn::create(map_column->keys_column(), read_rows);
+        } else {
+            map_column->keys_column()->append_default(read_rows);
+        }
     }
 
     if (_access_values) {
         RETURN_IF_ERROR(_values->next_batch(element_read_range, map_column->values_column().get()));
     } else {
-        map_column->values_column()->append_default(read_rows);
+        if (!map_column->values_column()->is_constant()) {
+            map_column->values_column()->append_default(1);
+            map_column->values_column() = ConstColumn::create(map_column->values_column(), read_rows);
+        } else {
+            map_column->values_column()->append_default(read_rows);
+        }
     }
 
     return Status::OK();
@@ -247,11 +267,21 @@ Status MapColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t si
     }
 
     if (!_access_keys) {
-        map_column->keys_column()->append_default(offset - start);
+        if (!map_column->keys_column()->is_constant()) {
+            map_column->keys_column()->append_default(1);
+            map_column->keys_column() = ConstColumn::create(map_column->keys_column(), offset - start);
+        } else {
+            map_column->keys_column()->append_default(offset - start);
+        }
     }
 
     if (!_access_values) {
-        map_column->values_column()->append_default(offset - start);
+        if (!map_column->values_column()->is_constant()) {
+            map_column->values_column()->append_default(1);
+            map_column->values_column() = ConstColumn::create(map_column->values_column(), offset - start);
+        } else {
+            map_column->values_column()->append_default(offset - start);
+        }
     }
 
     return Status::OK();

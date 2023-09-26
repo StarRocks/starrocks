@@ -38,6 +38,7 @@ add_library(Storage STATIC
     metadata_util.cpp
     kv_store.cpp
     local_tablet_reader.cpp
+    publish_version_manager.cpp
     olap_common.cpp
     olap_server.cpp
     options.cpp
@@ -81,6 +82,7 @@ add_library(Storage STATIC
     rowset/default_value_column_iterator.cpp
     rowset/dictcode_column_iterator.cpp
     rowset/encoding_info.cpp
+    rowset/fill_subfield_iterator.cpp
     rowset/scalar_column_iterator.cpp
     rowset/index_page.cpp
     rowset/indexed_column_reader.cpp

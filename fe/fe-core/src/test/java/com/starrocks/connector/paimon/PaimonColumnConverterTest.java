@@ -36,7 +36,6 @@ import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
 import org.apache.paimon.types.VarCharType;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -84,8 +83,7 @@ public class PaimonColumnConverterTest {
         Assert.assertEquals(result, srType);
     }
 
-
-    @Ignore
+    @Test
     public void testConvertTinyInt() {
         TinyIntType paimonType = new TinyIntType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
@@ -141,7 +139,7 @@ public class PaimonColumnConverterTest {
         Assert.assertEquals(result, Type.DATETIME);
     }
 
-    @Ignore
+    @Test
     public void testConvertArray() {
         ArrayType paimonType = new ArrayType(new SmallIntType());
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
@@ -150,7 +148,7 @@ public class PaimonColumnConverterTest {
         Assert.assertEquals(Type.SMALLINT, srType.getItemType());
     }
 
-    @Ignore
+    @Test
     public void testConvertMap() {
         MapType paimonType = new MapType(new VarCharType(20), new TimestampType());
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
@@ -160,7 +158,7 @@ public class PaimonColumnConverterTest {
         Assert.assertEquals(Type.DATETIME, srType.getValueType());
     }
 
-    @Ignore
+    @Test
     public void testConvertStruct() {
         List<DataField> fields =
                 Arrays.asList(

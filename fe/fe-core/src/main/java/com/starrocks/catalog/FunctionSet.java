@@ -113,8 +113,9 @@ public class FunctionSet {
     public static final String YEARS_SUB = "years_sub";
     public static final String MONTHS_ADD = "months_add";
     public static final String MONTHS_SUB = "months_sub";
-    public static final String DAYS_ADD = "days_add";
-    public static final String DAYS_SUB = "days_sub";
+    public static final String ADD_MONTHS = "add_months";
+    public static final String DAYS_ADD   = "days_add";
+    public static final String DAYS_SUB   = "days_sub";
     public static final String ADDDATE = "adddate";
     public static final String SUBDATE = "subdate";
     public static final String TIME_SLICE = "time_slice";
@@ -194,6 +195,7 @@ public class FunctionSet {
     public static final String PARSE_URL = "parse_url";
     public static final String TRIM = "trim";
     public static final String UPPER = "upper";
+    public static final String SUBSTRING_INDEX = "substring_index";
 
     // Json functions:
     public static final String JSON_ARRAY = "json_array";
@@ -223,6 +225,7 @@ public class FunctionSet {
     public static final String HOST_NAME = "host_name";
     // Aggregate functions:
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
+    public static final String APPROX_TOP_K = "approx_top_k";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
     public static final String HLL_UNION_AGG = "hll_union_agg";
@@ -289,6 +292,7 @@ public class FunctionSet {
     public static final String EXCHANGE_SPEED = "exchange_speed";
     // Array functions:
     public static final String ARRAY_AGG = "array_agg";
+    public static final String ARRAY_AGG_DISTINCT = "array_agg_distinct";
     public static final String ARRAY_CONCAT = "array_concat";
     public static final String ARRAY_DIFFERENCE = "array_difference";
     public static final String ARRAY_INTERSECT = "array_intersect";
@@ -448,6 +452,22 @@ public class FunctionSet {
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
 
+    // dict query function
+    public static final String DICT_MAPPING = "dict_mapping";
+
+    public static final String QUARTERS_ADD = "quarters_add";
+    public static final String QUARTERS_SUB = "quarters_sub";
+    public static final String WEEKS_ADD = "weeks_add";
+    public static final String WEEKS_SUB = "weeks_sub";
+    public static final String HOURS_ADD = "hours_add";
+    public static final String HOURS_SUB = "hours_sub";
+    public static final String MINUTES_ADD = "minutes_add";
+    public static final String MINUTES_SUB = "minutes_sub";
+    public static final String SECONDS_ADD = "seconds_add";
+    public static final String SECONDS_SUB = "seconds_sub";
+    public static final String MILLISECONDS_ADD = "milliseconds_add";
+    public static final String MILLISECONDS_SUB = "milliseconds_sub";
+
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
     private static final Set<Type> STDDEV_ARG_TYPE =
@@ -507,7 +527,7 @@ public class FunctionSet {
     public final ImmutableSet<String> couldApplyDictOptimizationFunctions =
             ImmutableSet.of(APPEND_TRAILING_CHAR_IF_ABSENT, CONCAT, CONCAT_WS, HEX, LEFT, LIKE, LOWER, LPAD, LTRIM,
                     REGEXP_EXTRACT, REGEXP_REPLACE, REPEAT, REPLACE, REVERSE, RIGHT, RPAD, RTRIM, SPLIT_PART, SUBSTR,
-                    SUBSTRING,
+                    SUBSTRING, SUBSTRING_INDEX,
                     TRIM, UPPER, IF);
 
     public static final Set<String> alwaysReturnNonNullableFunctions =
@@ -519,6 +539,7 @@ public class FunctionSet {
                     .add(FunctionSet.HLL_UNION_AGG)
                     .add(FunctionSet.NDV)
                     .add(FunctionSet.APPROX_COUNT_DISTINCT)
+                    .add(FunctionSet.APPROX_TOP_K)
                     .add(FunctionSet.BITMAP_UNION_INT)
                     .add(FunctionSet.BITMAP_UNION_COUNT)
                     .add(FunctionSet.BITMAP_COUNT)
@@ -605,6 +626,14 @@ public class FunctionSet {
             .add(ARRAY_SLICE)
             .build();
 
+    public static final java.util.function.Function<Type, ArrayType> APPROX_TOP_N_RET_TYPE_BUILDER =
+            (Type itemType) -> {
+                List<StructField> fields = Lists.newArrayList();
+                fields.add(new StructField("item", itemType));
+                fields.add(new StructField("count", Type.BIGINT));
+                return new ArrayType(new StructType(fields, true));
+            };
+
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
     }
@@ -620,22 +649,24 @@ public class FunctionSet {
     public static boolean isCastMatchAllowed(Function desc, Function candicate) {
         final String functionName = desc.getFunctionName().getFunction();
         final Type[] descArgTypes = desc.getArgs();
-        final Type[] candicateArgTypes = candicate.getArgs();
+        final Type[] candidateArgTypes = candicate.getArgs();
         if (functionName.equalsIgnoreCase(HEX)
                 || functionName.equalsIgnoreCase(LEAD)
-                || functionName.equalsIgnoreCase(LAG)) {
+                || functionName.equalsIgnoreCase(LAG)
+                || functionName.equalsIgnoreCase(APPROX_TOP_K)) {
             final ScalarType descArgType = (ScalarType) descArgTypes[0];
-            final ScalarType candicateArgType = (ScalarType) candicateArgTypes[0];
+            final ScalarType candidateArgType = (ScalarType) candidateArgTypes[0];
             if (functionName.equalsIgnoreCase(LEAD) ||
-                    functionName.equalsIgnoreCase(LAG)) {
+                    functionName.equalsIgnoreCase(LAG) ||
+                    functionName.equalsIgnoreCase(APPROX_TOP_K)) {
                 // lead and lag function respect first arg type
-                return descArgType.isNull() || descArgType.matchesType(candicateArgType);
+                return descArgType.isNull() || descArgType.matchesType(candidateArgType);
             } else if (descArgType.isOnlyMetricType()) {
                 // Bitmap, HLL, PERCENTILE type don't allow cast
                 return false;
             } else {
                 // The implementations of hex for string and int are different.
-                return descArgType.isStringType() || !candicateArgType.isStringType();
+                return descArgType.isStringType() || !candidateArgType.isStringType();
             }
         }
 
@@ -655,8 +686,8 @@ public class FunctionSet {
                     break;
                 }
             }
-            Type candicateArgType = candicateArgTypes[arg_index];
-            if (descIsAllDateType && !candicateArgType.isDateType()) {
+            Type candidateArgType = candidateArgTypes[arg_index];
+            if (descIsAllDateType && !candidateArgType.isDateType()) {
                 return false;
             }
         }
@@ -825,6 +856,10 @@ public class FunctionSet {
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.ANY_ARRAY, Type.ANY_STRUCT, true,
                 true, false, false));
 
+        addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
+                Lists.newArrayList(Type.ANY_ELEMENT), Type.VARCHAR, Type.ANY_STRUCT, true,
+                false, false, false));
+
         for (Type t : Type.getSupportedTypes()) {
             if (t.isFunctionType()) {
                 continue;
@@ -838,6 +873,10 @@ public class FunctionSet {
             // Count
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
                     Lists.newArrayList(t), Type.BIGINT, Type.BIGINT, false, true, true));
+
+            // ANY_VALUE
+            addBuiltin(AggregateFunction.createBuiltin(ANY_VALUE,
+                    Lists.newArrayList(t), t, t, true, false, false));
 
             if (t.isPseudoType()) {
                 continue; // Only function `Count` support pseudo types now.
@@ -874,10 +913,6 @@ public class FunctionSet {
                     Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
                     true, false, true));
 
-            // ANY_VALUE
-            addBuiltin(AggregateFunction.createBuiltin(ANY_VALUE,
-                    Lists.newArrayList(t), t, t, true, false, false));
-
             // APPROX_COUNT_DISTINCT
             // alias of ndv, compute approx count distinct use HyperLogLog
             addBuiltin(AggregateFunction.createBuiltin(APPROX_COUNT_DISTINCT,
@@ -906,12 +941,16 @@ public class FunctionSet {
                     Type.BIGINT,
                     Type.VARBINARY,
                     false, true, true));
+
         }
 
         // Sum
         registerBuiltinSumAggFunction(SUM);
         // MultiDistinctSum
         registerBuiltinMultiDistinctSumAggFunction();
+
+        // array_agg(distinct)
+        registerBuiltinArrayAggDistinctFunction();
 
         // Avg
         registerBuiltinAvgAggFunction();
@@ -970,14 +1009,6 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(RETENTION, Lists.newArrayList(Type.ARRAY_BOOLEAN),
                 Type.ARRAY_BOOLEAN, Type.BIGINT, false, false, false));
 
-        // Group_concat(string)
-        addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
-                Lists.newArrayList(Type.VARCHAR), Type.VARCHAR, Type.VARCHAR,
-                false, false, false));
-        // Group_concat(string, string)
-        addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
-                Lists.newArrayList(Type.VARCHAR, Type.VARCHAR), Type.VARCHAR, Type.VARCHAR,
-                false, false, false));
 
         // Type.DATE must before Type.DATATIME, because DATE could be considered as DATETIME.
         addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL,
@@ -1017,10 +1048,11 @@ public class FunctionSet {
                 Lists.newArrayList(Type.BIGINT, Type.INT), Type.BIGINT, Type.BIGINT));
         addBuiltin(AggregateFunction.createAnalyticBuiltin(SESSION_NUMBER,
                 Lists.newArrayList(Type.INT, Type.INT), Type.BIGINT, Type.BIGINT));
-
+        // Approx top k
+        registerBuiltinApproxTopKWindowFunction();
+        // Dict merge
         addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.VARCHAR),
                 Type.VARCHAR, Type.VARCHAR, true, false, false));
-
         addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.ARRAY_VARCHAR),
                 Type.VARCHAR, Type.VARCHAR, true, false, false));
 
@@ -1114,6 +1146,31 @@ public class FunctionSet {
                 Lists.newArrayList(Type.DECIMALV2), Type.DECIMALV2, Type.VARBINARY, false, true, false));
     }
 
+    private void registerBuiltinArrayAggDistinctFunction() {
+        // array_agg(distinct)
+        for (ScalarType type : Type.getNumericTypes()) {
+            Type arrayType = new ArrayType(type);
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
+                    Lists.newArrayList(type), arrayType, arrayType,
+                    false, false, false));
+        }
+        for (ScalarType type : Type.STRING_TYPES) {
+            Type arrayType = new ArrayType(type);
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
+                    Lists.newArrayList(type), arrayType, arrayType,
+                    false, false, false));
+        }
+
+        for (ScalarType type : Type.DATE_TYPES) {
+            Type arrayType = new ArrayType(type);
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
+                    Lists.newArrayList(type), arrayType, arrayType,
+                    false, false, false));
+        }
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
+                Lists.newArrayList(Type.TIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
+                false, false, false));
+    }
     private void registerBuiltinAvgAggFunction() {
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available
         for (ScalarType type : Type.FLOAT_TYPES) {
@@ -1213,6 +1270,31 @@ public class FunctionSet {
                     Lists.newArrayList(type, Type.DOUBLE), type, Type.VARBINARY,
                     false, false, false));
         }
+    }
+
+    private void registerBuiltinApproxTopKWindowFunction() {
+        java.util.function.Consumer<ScalarType> registerBuiltinForType = (ScalarType type) -> {
+            ArrayType retType = APPROX_TOP_N_RET_TYPE_BUILDER.apply(type);
+            addBuiltin(AggregateFunction.createBuiltin(APPROX_TOP_K,
+                    Lists.newArrayList(type), retType, Type.VARBINARY,
+                    false, true, true));
+            addBuiltin(AggregateFunction.createBuiltin(APPROX_TOP_K,
+                    Lists.newArrayList(type, Type.INT), retType, Type.VARBINARY,
+                    false, true, true));
+            addBuiltin(AggregateFunction.createBuiltin(APPROX_TOP_K,
+                    Lists.newArrayList(type, Type.INT, Type.INT), retType, Type.VARBINARY,
+                    false, true, true));
+        };
+        java.util.function.Consumer<List<ScalarType>> registerBuiltinForTypes = (List<ScalarType> types) -> {
+            for (ScalarType type : types) {
+                registerBuiltinForType.accept(type);
+            }
+        };
+        registerBuiltinForTypes.accept(Type.FLOAT_TYPES);
+        registerBuiltinForTypes.accept(Type.INTEGER_TYPES);
+        registerBuiltinForTypes.accept(Type.DECIMAL_TYPES);
+        registerBuiltinForTypes.accept(Type.STRING_TYPES);
+        registerBuiltinForTypes.accept(Type.DATE_TYPES);
     }
 
     public List<Function> getBuiltinFunctions() {

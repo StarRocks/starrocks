@@ -45,7 +45,6 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -219,8 +218,6 @@ public class MaterializedViewHandler extends AlterHandler {
         addAlterJobV2(rollupJobV2);
 
         olapTable.setState(OlapTableState.ROLLUP);
-
-
 
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(rollupJobV2);
         LOG.info("finished to create materialized view job: {}", rollupJobV2.getJobId());
@@ -446,21 +443,27 @@ public class MaterializedViewHandler extends AlterHandler {
     private List<Column> checkAndPrepareMaterializedView(CreateMaterializedViewStmt addMVClause, Database db,
                                                          OlapTable olapTable)
             throws DdlException {
-        // check if mv index already exists
-        if (olapTable.hasMaterializedIndex(addMVClause.getMVName())) {
-            throw new DdlException("Materialized view[" + addMVClause.getMVName() + "] already exists");
-        }
+        String mvName = addMVClause.getMVName();
+        // ensure mv's name is unique in the db and olap table's materialized indexes
+        {
+            // check if mv index already exists in this table
+            if (olapTable.hasMaterializedIndex(mvName)) {
+                throw new DdlException("Materialized view[" + mvName + "] already exists in the table "
+                        + olapTable.getName());
+            }
 
-        for (Table tbl : db.getTables()) {
-            if (tbl.getType() == Table.TableType.OLAP) {
-                if (addMVClause.getMVName().equals(tbl.getName())) {
-                    throw new DdlException("Table [" + addMVClause.getMVName() + "] already exists, ");
-                }
+            // check if mv index already exists in db
+            if (db.tryGetTable(mvName).isPresent()) {
+                throw new DdlException("Table [" + mvName + "] already exists in the db " + db.getFullName());
+            }
 
-                List<MaterializedIndexMeta> visibleMaterializedViews = ((OlapTable) tbl).getVisibleIndexMetas();
-                for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
-                    if (((OlapTable) tbl).getIndexNameById(mvMeta.getIndexId()).equals(addMVClause.getMVName())) {
-                        throw new DdlException("Materialized view[" + addMVClause.getMVName() + "] already exists");
+            // check if mv index already exists in other table's materialized indexes
+            for (Table tbl : db.getTables()) {
+                if (tbl.isOlapTable()) {
+                    OlapTable otherOlapTable = (OlapTable) tbl;
+                    if (otherOlapTable.getIndexNameToId().size() > 1 && otherOlapTable.hasMaterializedIndex(mvName)) {
+                        throw new DdlException("Materialized view[" + mvName + "] already exists in table "
+                                + tbl.getName());
                     }
                 }
             }
@@ -531,6 +534,9 @@ public class MaterializedViewHandler extends AlterHandler {
                 newMVColumns.add(mvColumnItem.toMVColumn(olapTable));
             }
         }
+
+        // set MV column unique id to Column.COLUMN_UNIQUE_ID_INIT_VALUE support old unique id rule.
+        newMVColumns.forEach(column -> column.setUniqueId(Column.COLUMN_UNIQUE_ID_INIT_VALUE));
         return newMVColumns;
     }
 

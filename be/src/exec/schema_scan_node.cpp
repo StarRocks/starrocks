@@ -17,8 +17,8 @@
 #include <boost/algorithm/string.hpp>
 
 #include "column/column_helper.h"
-#include "exec/pipeline/scan/olap_schema_scan_context.h"
-#include "exec/pipeline/scan/olap_schema_scan_operator.h"
+#include "exec/pipeline/scan/schema_scan_context.h"
+#include "exec/pipeline/scan/schema_scan_operator.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
@@ -307,8 +307,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> SchemaScanNode::decompos
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
             buffer_capacity, buffer_capacity, _mem_limit, runtime_state()->chunk_size());
 
-    auto scan_op = std::make_shared<pipeline::OlapSchemaScanOperatorFactory>(context->next_operator_id(), this, dop,
-                                                                             _tnode, std::move(buffer_limiter));
+    auto scan_op = std::make_shared<pipeline::SchemaScanOperatorFactory>(context->next_operator_id(), this, dop, _tnode,
+                                                                         std::move(buffer_limiter));
     return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 }
 

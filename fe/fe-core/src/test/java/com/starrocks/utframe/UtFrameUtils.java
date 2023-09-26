@@ -54,8 +54,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.meta.MetaContext;
@@ -70,7 +73,6 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
-import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -410,10 +412,10 @@ public class UtFrameUtils {
     private static <R> R buildPlan(ConnectContext connectContext, String originStmt,
                                    GetPlanHook<R> returnedSupplier) throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
-        originStmt = LogUtil.removeCommentAndLineSeparator(originStmt);
+        originStmt = LogUtil.removeLineSeparator(originStmt);
 
         List<StatementBase> statements;
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Parser")) {
+        try (Timer ignored = Tracers.watchScope("Parser")) {
             statements = SqlParser.parse(originStmt, connectContext.getSessionVariable());
         }
         connectContext.getDumpInfo().setOriginStmt(originStmt);
@@ -437,7 +439,7 @@ public class UtFrameUtils {
             }
 
             ExecPlan execPlan;
-            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Planner")) {
+            try (Timer ignored = Tracers.watchScope("Planner")) {
                 execPlan = StatementPlanner.plan(statementBase, connectContext);
             }
 
@@ -466,6 +468,19 @@ public class UtFrameUtils {
                     scheduler.startScheduling();
 
                     return scheduler;
+                });
+    }
+
+    public static Pair<String, DefaultCoordinator> getPlanAndStartScheduling(ConnectContext connectContext, String originStmt)
+            throws Exception {
+        return buildPlan(connectContext, originStmt,
+                (context, statementBase, execPlan) -> {
+                    DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
+
+                    scheduler.startSchedulingWithoutDeploy();
+                    String plan = scheduler.getSchedulerExplain();
+
+                    return Pair.create(plan, scheduler);
                 });
     }
 
@@ -507,7 +522,7 @@ public class UtFrameUtils {
             String viewName = "view" + INDEX.getAndIncrement();
             String createView = "create view " + viewName + " as " + originStmt;
             CreateViewStmt createTableStmt;
-            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Test View")) {
+            try (Timer ignored = Tracers.watchScope("Test View")) {
                 createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
                 try {
                     StatementBase viewStatement =
@@ -686,14 +701,14 @@ public class UtFrameUtils {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
 
         LogicalPlan logicalPlan;
-        try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Transformer")) {
+        try (Timer t = Tracers.watchScope("Transformer")) {
             logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
                     .transform((statement).getQueryRelation());
 
         }
 
         OptExpression optimizedPlan;
-        try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Optimizer")) {
+        try (Timer t = Tracers.watchScope("Optimizer")) {
             Optimizer optimizer = new Optimizer();
             optimizedPlan = optimizer.optimize(
                     connectContext,
@@ -704,7 +719,7 @@ public class UtFrameUtils {
         }
 
         ExecPlan execPlan;
-        try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Builder")) {
+        try (Timer t = Tracers.watchScope("Builder")) {
             execPlan = PlanFragmentBuilder
                     .createPhysicalPlan(optimizedPlan, connectContext,
                             logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
@@ -715,7 +730,7 @@ public class UtFrameUtils {
     }
 
     private static Pair<String, ExecPlan> getInsertExecPlan(InsertStmt statement, ConnectContext connectContext) {
-        PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Planner");
+        Timer t = Tracers.watchScope("Planner");
         ExecPlan execPlan = new InsertPlanner().plan(statement, connectContext);
         t.close();
         return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
@@ -724,11 +739,11 @@ public class UtFrameUtils {
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
                                                                        QueryDumpInfo replayDumpInfo) throws Exception {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
-        replaySql = LogUtil.removeCommentAndLineSeparator(replaySql);
+        replaySql = LogUtil.removeLineSeparator(replaySql);
         Map<String, Database> dbs = null;
         try {
             StatementBase statementBase;
-            try (PlannerProfile.ScopedTimer st = PlannerProfile.getScopedTimer("Parse")) {
+            try (Timer st = Tracers.watchScope("Parse")) {
                 statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
                         connectContext.getSessionVariable()).get(0);
                 if (statementBase instanceof QueryStatement) {
@@ -736,7 +751,8 @@ public class UtFrameUtils {
                 }
             }
 
-            try (PlannerProfile.ScopedTimer st1 = PlannerProfile.getScopedTimer("Analyze")) {
+            Tracers.init(connectContext, statementBase.getTraceMode(), statementBase.getTraceModule());
+            try (Timer st1 = Tracers.watchScope("Analyze")) {
                 com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
             }
 
@@ -869,6 +885,7 @@ public class UtFrameUtils {
         protected static synchronized void setUp() {
             assert (fakeJournalWriter == null);
             GlobalStateMgr.getCurrentState().setEditLog(new EditLog(masterJournalQueue));
+            GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
 
             // simulate the process of master journal synchronizing to the follower
             fakeJournalWriter = new Thread(new Runnable() {

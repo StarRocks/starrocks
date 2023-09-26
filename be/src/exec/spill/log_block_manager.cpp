@@ -45,6 +45,8 @@ public:
     ~LogBlockContainer() {
         TRACE_SPILL_LOG << "delete spill container file: " << path();
         WARN_IF_ERROR(_dir->fs()->delete_file(path()), fmt::format("cannot delete spill container file: {}", path()));
+        // try to delete related dir, only the last one can success, we ignore the error
+        (void)(_dir->fs()->delete_dir(parent_path()));
     }
 
     Status open();
@@ -60,11 +62,9 @@ public:
         return _writable_file->size();
     }
     std::string path() const {
-        std::ostringstream oss;
-        oss << _dir->dir() << "/" << print_id(_query_id) << "/" << _plan_node_name << "-" << _plan_node_id << "-"
-            << _id;
-        return oss.str();
+        return fmt::format("{}/{}/{}-{}-{}", _dir->dir(), print_id(_query_id), _plan_node_name, _plan_node_id, _id);
     }
+    std::string parent_path() const { return fmt::format("{}/{}", _dir->dir(), print_id(_query_id)); }
     uint64_t id() const { return _id; }
 
     Status ensure_preallocate(size_t length);
@@ -167,9 +167,15 @@ public:
     Status append(const std::vector<Slice>& data) override {
         size_t total_size = 0;
         std::for_each(data.begin(), data.end(), [&](const Slice& slice) { total_size += slice.size; });
+        if (_container->dir()->get_current_size() + total_size > _container->dir()->get_max_size()) {
+            return Status::Aborted(
+                    fmt::format("Dir current used size has exceeded limit {}! Current size {}, total_size {}!",
+                                _container->dir()->get_max_size(), _container->dir()->get_current_size(), total_size));
+        }
         RETURN_IF_ERROR(_container->ensure_preallocate(total_size));
         RETURN_IF_ERROR(_container->append_data(data));
         _size += total_size;
+        _container->dir()->set_current_size(_container->dir()->get_current_size() + total_size);
         return Status::OK();
     }
 
@@ -223,9 +229,6 @@ LogBlockManager::~LogBlockManager() {
         for (auto& [_, containers] : *container_map) {
             containers.reset();
         }
-        std::string container_dir = dir->dir() + "/" + print_id(_query_id);
-        WARN_IF_ERROR(dir->fs()->delete_dir(container_dir),
-                      fmt::format("cannot delete spill container dir: {}", container_dir));
     }
 }
 

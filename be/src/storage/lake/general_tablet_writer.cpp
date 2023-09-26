@@ -64,9 +64,11 @@ void HorizontalGeneralTabletWriter::close() {
         auto maybe_fs = FileSystem::CreateSharedFromString(_tablet.root_location());
         if (maybe_fs.ok()) {
             auto fs = std::move(maybe_fs).value();
+            // TODO: batch delete
             for (const auto& name : _files) {
                 auto path = _tablet.segment_location(name);
-                (void)fs->delete_file(path);
+                auto st = fs->delete_file(path);
+                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << path;
             }
         }
     }
@@ -78,7 +80,7 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer() {
     auto name = gen_segment_filename(_txn_id);
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.segment_location(name)));
     SegmentWriterOptions opts;
-    auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema.get(), opts);
+    auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init());
     _seg_writer = std::move(w);
     _files.emplace_back(std::move(name));
@@ -229,7 +231,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     auto name = gen_segment_filename(_txn_id);
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.segment_location(name)));
     SegmentWriterOptions opts;
-    auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema.get(), opts);
+    auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init(column_indexes, is_key));
     _files.emplace_back(std::move(name));
     return w;

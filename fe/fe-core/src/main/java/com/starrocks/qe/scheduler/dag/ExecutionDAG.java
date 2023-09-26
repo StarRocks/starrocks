@@ -122,6 +122,10 @@ public class ExecutionDAG {
         return instanceIdToInstance.values();
     }
 
+    public FragmentInstance getInstanceByInstanceId(TUniqueId instanceId) {
+        return instanceIdToInstance.get(instanceId);
+    }
+
     public ExecutionFragment getRootFragment() {
         return fragments.get(0);
     }
@@ -258,7 +262,7 @@ public class ExecutionDAG {
      * <ul>
      *  <li>Assign instance id to fragment instances.
      *  <li>Assign monotonic unique indexInJob to fragment instances to keep consistent order with indexInFragment.
-     *      Also see {@link FragmentInstance#indexInJob}.
+     *      Also see {@link FragmentInstance#getIndexInJob()}.
      *  <li>Connect each fragment to its destination fragments
      *  <li>Setup {@link #workerIdToNumInstances}, {@link #channelIdToBEHTTP}, and {@link #channelIdToBEPort}
      * </ul>

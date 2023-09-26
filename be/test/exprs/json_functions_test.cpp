@@ -61,7 +61,7 @@ public:
         EXPECT_EQ(simdjson::error_code::SUCCESS, doc.get_object().get(obj));
 
         std::vector<SimpleJsonPath> path;
-        JsonFunctions::parse_json_paths(jsonpath, &path);
+        RETURN_IF_ERROR(JsonFunctions::parse_json_paths(jsonpath, &path));
 
         simdjson::ondemand::value val;
         RETURN_IF_ERROR(JsonFunctions::extract_from_object(obj, path, &val));
@@ -353,7 +353,8 @@ TEST_P(JsonQueryTestFixture, json_query) {
     Columns columns{ints, builder.build(true)};
 
     ctx.get()->set_constant_columns(columns);
-    JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    std::ignore =
+            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
 
     ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
@@ -732,6 +733,14 @@ TEST_F(JsonFunctionsTest, extract_from_object_test) {
     EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": {}})", "$.data.key", &output));
 
     EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": 1})", "$.data.key", &output));
+
+    EXPECT_OK(test_extract_from_object(R"({"key1": [1,2]})", "$.key1[1]", &output));
+    EXPECT_STREQ(output.data(), "2");
+
+    EXPECT_OK(test_extract_from_object(R"({"key1": [{"key2":3},{"key4": 5}]})", "$.key1[1].key4", &output));
+    EXPECT_STREQ(output.data(), "5");
+
+    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"key1": null})", "$.key1[1].key4", &output));
 }
 
 class JsonLengthTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, int>> {};
@@ -872,7 +881,8 @@ public:
         Columns columns{ints, builder.build(true)};
 
         _ctx->set_constant_columns(columns);
-        JsonFunctions::native_json_path_prepare(_ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        std::ignore = JsonFunctions::native_json_path_prepare(_ctx.get(),
+                                                              FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         return columns;
     }
 

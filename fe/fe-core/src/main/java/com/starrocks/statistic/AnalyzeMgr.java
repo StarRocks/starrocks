@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
@@ -70,6 +71,7 @@ public class AnalyzeMgr implements Writable {
     private final Map<Long, AnalyzeJob> analyzeJobMap;
     private final Map<Long, AnalyzeStatus> analyzeStatusMap;
     private final Map<Long, BasicStatsMeta> basicStatsMetaMap;
+    private final Map<StatsMetaKey, ExternalBasicStatsMeta> externalBasicStatsMetaMap;
     private final Map<Pair<Long, String>, HistogramStatsMeta> histogramStatsMetaMap;
 
     // ConnectContext of all currently running analyze tasks
@@ -86,6 +88,7 @@ public class AnalyzeMgr implements Writable {
         analyzeJobMap = Maps.newConcurrentMap();
         analyzeStatusMap = Maps.newConcurrentMap();
         basicStatsMetaMap = Maps.newConcurrentMap();
+        externalBasicStatsMetaMap = Maps.newConcurrentMap();
         histogramStatsMetaMap = Maps.newConcurrentMap();
     }
 
@@ -123,6 +126,16 @@ public class AnalyzeMgr implements Writable {
         return Lists.newLinkedList(analyzeJobMap.values());
     }
 
+    public List<NativeAnalyzeJob> getAllNativeAnalyzeJobList() {
+        return analyzeJobMap.values().stream().filter(AnalyzeJob::isNative).map(job -> (NativeAnalyzeJob) job).
+                collect(Collectors.toList());
+    }
+
+    public List<ExternalAnalyzeJob> getAllExternalAnalyzeJobList() {
+        return analyzeJobMap.values().stream().filter(job -> !job.isNative()).map(job -> (ExternalAnalyzeJob) job).
+                collect(Collectors.toList());
+    }
+
     public void replayAddAnalyzeJob(AnalyzeJob job) {
         analyzeJobMap.put(job.getId(), job);
     }
@@ -137,10 +150,6 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void replayAddAnalyzeStatus(AnalyzeStatus status) {
-        analyzeStatusMap.put(status.getId(), status);
-    }
-
-    public void addOrUpdateAnalyzeStatus(AnalyzeStatus status) {
         analyzeStatusMap.put(status.getId(), status);
     }
 
@@ -180,13 +189,19 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
-    public void dropExternalStats(String tableUUID) {
+    public void dropExternalAnalyzeStatus(String tableUUID) {
         List<AnalyzeStatus> expireList = analyzeStatusMap.values().stream().
                 filter(status -> status instanceof ExternalAnalyzeStatus).
                 filter(status -> ((ExternalAnalyzeStatus) status).getTableUUID().equals(tableUUID)).
                 collect(Collectors.toList());
 
         expireList.forEach(status -> analyzeStatusMap.remove(status.getId()));
+        for (AnalyzeStatus status : expireList) {
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeStatus(status);
+        }
+    }
+
+    public void dropExternalBasicStatsData(String tableUUID) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         statisticExecutor.dropTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
     }
@@ -198,6 +213,30 @@ public class AnalyzeMgr implements Writable {
 
     public void replayAddBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
         basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
+    }
+
+    public void addExternalBasicStatsMeta(ExternalBasicStatsMeta basicStatsMeta) {
+        externalBasicStatsMetaMap.put(new StatsMetaKey(basicStatsMeta.getCatalogName(),
+                basicStatsMeta.getDbName(), basicStatsMeta.getTableName()), basicStatsMeta);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddExternalBasicStatsMeta(basicStatsMeta);
+    }
+
+    public void replayAddExternalBasicStatsMeta(ExternalBasicStatsMeta basicStatsMeta) {
+        externalBasicStatsMetaMap.put(new StatsMetaKey(basicStatsMeta.getCatalogName(),
+                basicStatsMeta.getDbName(), basicStatsMeta.getTableName()), basicStatsMeta);
+    }
+
+    public void removeExternalBasicStatsMeta(String catalogName, String dbName, String tableName) {
+        StatsMetaKey key = new StatsMetaKey(catalogName, dbName, tableName);
+        if (externalBasicStatsMetaMap.containsKey(key)) {
+            ExternalBasicStatsMeta basicStatsMeta = externalBasicStatsMetaMap.remove(key);
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveExternalBasicStatsMeta(basicStatsMeta);
+        }
+    }
+
+    public void replayRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta basicStatsMeta) {
+        externalBasicStatsMetaMap.remove(new StatsMetaKey(basicStatsMeta.getCatalogName(),
+                basicStatsMeta.getDbName(), basicStatsMeta.getTableName()));
     }
 
     public void refreshBasicStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
@@ -218,12 +257,33 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
+    public void refreshConnectorTableBasicStatisticsCache(String catalogName, String dbName, String tableName,
+                                                          List<String> columns, boolean async) {
+        Table table;
+        try {
+            table = MetaUtils.getTable(catalogName, dbName, tableName);
+        } catch (SemanticException e) {
+            return;
+        }
+
+        GlobalStateMgr.getCurrentStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+        if (async) {
+            GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatistics(table, columns);
+        } else {
+            GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatisticsSync(table, columns);
+        }
+    }
+
     public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
         basicStatsMetaMap.remove(basicStatsMeta.getTableId());
     }
 
     public Map<Long, BasicStatsMeta> getBasicStatsMetaMap() {
         return basicStatsMetaMap;
+    }
+
+    public Map<StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+        return externalBasicStatsMetaMap;
     }
 
     public void addHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
@@ -509,7 +569,9 @@ public class AnalyzeMgr implements Writable {
                 long loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
                 if (loadRows == 0) {
                     OlapTable table = (OlapTable) db.getTable(basicStatsMeta.getTableId());
-                    basicStatsMeta.increaseUpdateRows(table.getRowCount());
+                    if (table != null) {
+                        basicStatsMeta.increaseUpdateRows(table.getRowCount());
+                    }
                 } else {
                     basicStatsMeta.increaseUpdateRows(((InsertTxnCommitAttachment) attachment).getLoadedRows());
                 }
@@ -524,7 +586,7 @@ public class AnalyzeMgr implements Writable {
 
         if (null != data) {
             if (null != data.jobs) {
-                for (AnalyzeJob job : data.jobs) {
+                for (NativeAnalyzeJob job : data.jobs) {
                     replayAddAnalyzeJob(job);
                 }
             }
@@ -553,7 +615,7 @@ public class AnalyzeMgr implements Writable {
     public void write(DataOutput out) throws IOException {
         // save history
         SerializeData data = new SerializeData();
-        data.jobs = getAllAnalyzeJobList();
+        data.jobs = getAllNativeAnalyzeJobList();
         data.nativeStatus = new ArrayList<>(getAnalyzeStatusMap().values().stream().
                 filter(AnalyzeStatus::isNative).
                 map(status -> (NativeAnalyzeStatus) status).collect(Collectors.toSet()));
@@ -580,15 +642,14 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-
-        List<NativeAnalyzeStatus> analyzeStatuses = getAnalyzeStatusMap().values().stream().
-                filter(AnalyzeStatus::isNative).
-                map(status -> (NativeAnalyzeStatus) status).distinct().collect(Collectors.toList());
+        List<AnalyzeStatus> analyzeStatuses = getAnalyzeStatusMap().values().stream()
+                .distinct().collect(Collectors.toList());
 
         int numJson = 1 + analyzeJobMap.size()
                 + 1 + analyzeStatuses.size()
                 + 1 + basicStatsMetaMap.size()
-                + 1 + histogramStatsMetaMap.size();
+                + 1 + histogramStatsMetaMap.size()
+                + 1 + externalBasicStatsMetaMap.size();
 
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.ANALYZE_MGR, numJson);
 
@@ -612,6 +673,11 @@ public class AnalyzeMgr implements Writable {
             writer.writeJson(histogramStatsMeta);
         }
 
+        writer.writeJson(externalBasicStatsMetaMap.size());
+        for (ExternalBasicStatsMeta basicStatsMeta : externalBasicStatsMetaMap.values()) {
+            writer.writeJson(basicStatsMeta);
+        }
+
         writer.close();
     }
 
@@ -624,7 +690,7 @@ public class AnalyzeMgr implements Writable {
 
         int analyzeStatusSize = reader.readInt();
         for (int i = 0; i < analyzeStatusSize; ++i) {
-            NativeAnalyzeStatus analyzeStatus = reader.readJson(NativeAnalyzeStatus.class);
+            AnalyzeStatus analyzeStatus = reader.readJson(AnalyzeStatus.class);
             replayAddAnalyzeStatus(analyzeStatus);
         }
 
@@ -639,11 +705,17 @@ public class AnalyzeMgr implements Writable {
             HistogramStatsMeta histogramStatsMeta = reader.readJson(HistogramStatsMeta.class);
             replayAddHistogramStatsMeta(histogramStatsMeta);
         }
+
+        int externalBasicStatsMetaSize = reader.readInt();
+        for (int i = 0; i < externalBasicStatsMetaSize; ++i) {
+            ExternalBasicStatsMeta basicStatsMeta = reader.readJson(ExternalBasicStatsMeta.class);
+            replayAddExternalBasicStatsMeta(basicStatsMeta);
+        }
     }
 
     private static class SerializeData {
         @SerializedName("analyzeJobs")
-        public List<AnalyzeJob> jobs;
+        public List<NativeAnalyzeJob> jobs;
 
         @SerializedName("analyzeStatus")
         public List<NativeAnalyzeStatus> nativeStatus;
@@ -653,5 +725,35 @@ public class AnalyzeMgr implements Writable {
 
         @SerializedName("histogramStatsMeta")
         public List<HistogramStatsMeta> histogramStatsMeta;
+    }
+
+    public static class StatsMetaKey {
+        String catalogName;
+        String dbName;
+        String tableName;
+        public StatsMetaKey(String catalogName, String dbName, String tableName) {
+            this.catalogName = catalogName;
+            this.dbName = dbName;
+            this.tableName = tableName;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof StatsMetaKey)) {
+                return false;
+            }
+            StatsMetaKey that = (StatsMetaKey) o;
+            return Objects.equal(catalogName, that.catalogName) &&
+                    Objects.equal(dbName, that.dbName) &&
+                    Objects.equal(tableName, that.tableName);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hashCode(catalogName, dbName, tableName);
+        }
     }
 }

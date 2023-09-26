@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.server.GlobalStateMgr;
@@ -893,7 +892,7 @@ public class ViewPlanTest extends PlanTestBase {
     @Test
     public void testSql196() throws Exception {
         String sql = "select k2 from baseall group by ((10800861)/(((NULL)%(((-1114980787)+(-1182952114)))))), " +
-                        "((10800861)*(-9223372036854775808)), k2";
+                "((10800861)*(-9223372036854775808)), k2";
         testView(sql);
     }
 
@@ -1728,7 +1727,6 @@ public class ViewPlanTest extends PlanTestBase {
         Assert.assertEquals(sqlPlan, viewPlan);
     }
 
-
     @Test
     public void testLateralJoin() throws Exception {
         starRocksAssert.withTable("CREATE TABLE json_test (" +
@@ -1756,6 +1754,18 @@ public class ViewPlanTest extends PlanTestBase {
                 "    FROM\n" +
                 "      json_test ge\n" +
                 "      ,lateral json_each(cast (ge.v_json as json) -> '$.') ie(`key`, `value`)";
+        testView(sql);
+    }
+
+    @Test
+    public void testArrayMapView() throws Exception {
+        String sql = "SELECT [1,2,3]";
+        testView(sql);
+        sql = "SELECT ARRAY<INT>[1,2,3]";
+        testView(sql);
+        sql = "SELECT Map<INT, INT>{1:10,2:20,3:30}";
+        testView(sql);
+        sql = "SELECT Map{1:10,2:20,3:30}";
         testView(sql);
     }
 }

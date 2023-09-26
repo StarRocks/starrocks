@@ -70,9 +70,13 @@ public:
 
     Status init();
 
+    void stop();
+
     void set_cache_expire_ms(int64_t expire_ms) { _cache_expire_ms = expire_ms; }
 
     int64_t get_cache_expire_ms() const { return _cache_expire_ms; }
+
+    int64_t get_index_cache_expire_ms(const Tablet& tablet) const;
 
     Status get_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, int64_t version, DelVector* delvec,
                                int64_t* latest_version);
@@ -138,6 +142,13 @@ public:
         return Status::OK();
     }
 
+    bool keep_pindex_bf() { return _keep_pindex_bf; }
+    void set_keep_pindex_bf(bool keep_pindex_bf) { _keep_pindex_bf = keep_pindex_bf; }
+
+    // Used in UT only
+    bool TEST_update_state_exist(Tablet* tablet, Rowset* rowset);
+    bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
+
 private:
     // default 6min
     int64_t _cache_expire_ms = 360000;
@@ -168,6 +179,8 @@ private:
     std::unique_ptr<ThreadPool> _apply_thread_pool;
     std::unique_ptr<ThreadPool> _get_pindex_thread_pool;
     std::unique_ptr<PersistentIndexCompactionManager> _persistent_index_compaction_mgr;
+
+    bool _keep_pindex_bf = true;
 
     UpdateManager(const UpdateManager&) = delete;
     const UpdateManager& operator=(const UpdateManager&) = delete;

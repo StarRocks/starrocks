@@ -14,16 +14,17 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
-import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.ast.RefreshSchemeClause;
+import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -61,7 +62,7 @@ public class AlterMaterializedViewTest {
         AlterMaterializedViewStmt alterMvStmt =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
         TableName oldMvName = alterMvStmt.getMvName();
-        String newMvName = alterMvStmt.getNewMvName();
+        String newMvName = ((TableRenameClause) alterMvStmt.getAlterTableClause()).getNewTableName();
         Assert.assertEquals("test", oldMvName.getDb());
         Assert.assertEquals("mv1", oldMvName.getTbl());
         Assert.assertEquals("mv2", newMvName);
@@ -78,7 +79,8 @@ public class AlterMaterializedViewTest {
         String alterMvSql = "alter materialized view mv1 refresh sync";
         AlterMaterializedViewStmt alterMvStmt =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        Assert.assertEquals(alterMvStmt.getRefreshSchemeDesc().getType(), MaterializedView.RefreshType.SYNC);
+        RefreshSchemeClause refreshSchemeClause = (RefreshSchemeClause) alterMvStmt.getAlterTableClause();
+        Assert.assertEquals(refreshSchemeClause.getType(), MaterializedView.RefreshType.SYNC);
     }
 
     @Test
@@ -86,11 +88,11 @@ public class AlterMaterializedViewTest {
         String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 hour)";
         AlterMaterializedViewStmt alterMvStmt =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        new AlterJobMgr().processAlterMaterializedView(alterMvStmt);
+        new AlterMVJobExecutor().process(alterMvStmt, ConnectContext.get());
 
         alterMvSql = "alter materialized view mv1 refresh ASYNC";
         alterMvStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        new AlterJobMgr().processAlterMaterializedView(alterMvStmt);
+        new AlterMVJobExecutor().process(alterMvStmt, ConnectContext.get());
         MaterializedView mv = (MaterializedView) currentState.getDb("test").getTable("mv1");
         String showCreateStmt = mv.getMaterializedViewDdlStmt(false);
         Assert.assertFalse(showCreateStmt.contains("EVERY(INTERVAL 1 HOUR)"));
@@ -101,7 +103,8 @@ public class AlterMaterializedViewTest {
         String alterMvSql = "alter materialized view mv1 refresh manual";
         AlterMaterializedViewStmt alterMvStmt =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        Assert.assertEquals(alterMvStmt.getRefreshSchemeDesc().getType(), MaterializedView.RefreshType.MANUAL);
+        RefreshSchemeClause refreshSchemeClause = (RefreshSchemeClause) alterMvStmt.getAlterTableClause();
+        Assert.assertEquals(refreshSchemeClause.getType(), MaterializedView.RefreshType.MANUAL);
     }
 
     @Test
@@ -109,7 +112,7 @@ public class AlterMaterializedViewTest {
         String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 hour)";
         AlterMaterializedViewStmt alterMvStmt =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        final RefreshSchemeDesc asyncRefreshSchemeDesc = alterMvStmt.getRefreshSchemeDesc();
+        final RefreshSchemeClause asyncRefreshSchemeDesc = (RefreshSchemeClause) alterMvStmt.getAlterTableClause();
         assertTrue(asyncRefreshSchemeDesc instanceof AsyncRefreshSchemeDesc);
         Assert.assertEquals(asyncRefreshSchemeDesc.getType(), MaterializedView.RefreshType.ASYNC);
         assertNotNull(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getStartTime());
@@ -151,7 +154,7 @@ public class AlterMaterializedViewTest {
             String alterMvSql = "alter materialized view mv1 set (\"query_timeout\" = \"10000\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            Assert.assertThrows(DdlException.class, () -> currentState.alterMaterializedView(stmt));
+            Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
         }
     }
 
@@ -161,7 +164,7 @@ public class AlterMaterializedViewTest {
         String alterMvSql = "alter materialized view mv1 set (\"colocate_with\" = \"group1\")";
         AlterMaterializedViewStmt stmt =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        Assert.assertThrows(DdlException.class, () -> currentState.alterMaterializedView(stmt));
+        Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
     }
 
     @Test
@@ -177,7 +180,7 @@ public class AlterMaterializedViewTest {
             String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"abc\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            Assert.assertThrows(DdlException.class, () -> currentState.alterMaterializedView(stmt));
+            Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
         }
     }
 }

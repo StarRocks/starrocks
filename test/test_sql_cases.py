@@ -279,7 +279,7 @@ Start to run: %s
             uuid_vars = re.findall(r"\${(uuid[0-9]*)}", sql)
             for each_uuid in uuid_vars:
                 if each_uuid not in variable_dict:
-                    variable_dict[each_uuid] = uuid.uuid1().hex
+                    variable_dict[each_uuid] = uuid.uuid4().hex
 
         for sql in sql_list:
             for each_var in variable_dict:

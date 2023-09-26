@@ -146,8 +146,8 @@ void StreamLoadAction::handle(HttpRequest* req) {
     if (ctx->status.ok()) {
         ctx->status = _handle(ctx);
         if (!ctx->status.ok() && ctx->status.code() != TStatusCode::PUBLISH_TIMEOUT) {
-            LOG(WARNING) << "Fail to handle streaming load, id=" << ctx->id
-                         << " errmsg=" << ctx->status.get_error_msg();
+            LOG(WARNING) << "Fail to handle streaming load, id=" << ctx->id << " errmsg=" << ctx->status.get_error_msg()
+                         << " " << ctx->brief();
         }
     }
     ctx->load_cost_nanos = MonotonicNanos() - ctx->start_nanos;
@@ -200,7 +200,6 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
     int64_t commit_and_publish_start_time = MonotonicNanos();
     RETURN_IF_ERROR(_exec_env->stream_load_executor()->commit_txn(ctx));
     ctx->commit_and_publish_txn_cost_nanos = MonotonicNanos() - commit_and_publish_start_time;
-
     return Status::OK();
 }
 
@@ -324,7 +323,6 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
     int64_t begin_txn_start_time = MonotonicNanos();
     RETURN_IF_ERROR(_exec_env->stream_load_executor()->begin_txn(ctx));
     ctx->begin_txn_cost_nanos = MonotonicNanos() - begin_txn_start_time;
-
     // process put file
     return _process_put(http_req, ctx);
 }
@@ -568,7 +566,8 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);
-        rpc_timeout_ms = std::min(ctx->timeout_second * 1000, config::txn_commit_rpc_timeout_ms);
+        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
+        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
     }
     request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
     // plan this load
@@ -606,7 +605,6 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         }
         ctx->put_result.params.query_options.mem_limit = exec_mem_limit;
     }
-
     return _exec_env->stream_load_executor()->execute_plan_fragment(ctx);
 }
 

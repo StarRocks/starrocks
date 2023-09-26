@@ -43,6 +43,7 @@ import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -64,6 +65,10 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
     private static final Logger LOG = LogManager.getLogger(PartitionKey.class);
     private List<LiteralExpr> keys;
     private List<PrimitiveType> types;
+    // Records the string corresponding to partition value when the partition value is null
+    // for hive, it's __HIVE_DEFAULT_PARTITION__
+    // for hudi， it's __HIVE_DEFAULT_PARTITION__ or default
+    private String nullPartitionValue = "";
 
     private static final DateLiteral SHADOW_DATE_LITERAL = new DateLiteral(0, 0, 0);
     private static final DateLiteral SHADOW_DATETIME_LITERAL = new DateLiteral(0, 0, 0, 0, 0, 0, 0);
@@ -78,6 +83,14 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
     public PartitionKey(List<LiteralExpr> keyValue, List<PrimitiveType> keyType) {
         keys = keyValue;
         types = keyType;
+    }
+
+    public void setNullPartitionValue(String nullPartitionValue) {
+        this.nullPartitionValue = nullPartitionValue;
+    }
+
+    public String getNullPartitionValue() {
+        return nullPartitionValue;
     }
 
     // Factory methods
@@ -282,6 +295,12 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
                 key.pushColumn(dateLiteral, type);
                 return key;
             }
+            case CHAR:
+            case VARCHAR: {
+                StringLiteral stringLiteral = (StringLiteral) literal;
+                key.pushColumn(new StringLiteral(stringLiteral.getStringValue()), type);
+                return key;
+            }
             default:
                 Preconditions.checkArgument(false, "Never reach here");
                 return null;
@@ -345,6 +364,12 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
                     dateLiteral = new DateLiteral(year, mon, day, hour, min, sec, 0);
                 }
                 key.pushColumn(dateLiteral, type);
+                return key;
+            }
+            case CHAR:
+            case VARCHAR: {
+                StringLiteral stringLiteral = (StringLiteral) literal;
+                key.pushColumn(new StringLiteral(stringLiteral.getStringValue()), type);
                 return key;
             }
             default:
@@ -479,6 +504,10 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
                     case DATE:
                     case DATETIME:
                         literal = DateLiteral.read(in);
+                        break;
+                    case CHAR:
+                    case VARCHAR:
+                        literal =  StringLiteral.read(in);
                         break;
                     default:
                         throw new IOException("type[" + type.name() + "] not supported: ");

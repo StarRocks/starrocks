@@ -26,6 +26,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -231,7 +232,7 @@ public class AggregationAnalyzer {
                             arg.getFn() instanceof AggregateFunction, aggFunc);
                     return !aggFunc.isEmpty();
                 })) {
-                    throw new SemanticException(PARSER_ERROR_MSG.unsupportedNestAgg("window function"), expr.getPos());
+                    throw new SemanticException(PARSER_ERROR_MSG.unsupportedNestAgg("aggregation function"), expr.getPos());
                 }
 
                 if (expr.getChildren().stream().anyMatch(childExpr -> {
@@ -334,6 +335,11 @@ public class AggregationAnalyzer {
         @Override
         public Boolean visitCloneExpr(CloneExpr node, Void context) {
             return visit(node.getChild(0));
+        }
+
+        @Override
+        public Boolean visitDictQueryExpr(DictQueryExpr node, Void context) {
+            return node.getChildren().stream().allMatch(this::visit);
         }
     }
 }

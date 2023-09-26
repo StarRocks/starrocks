@@ -37,7 +37,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static com.starrocks.connector.hive.MockedRemoteFileSystem.TEST_FILES;
+import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABLE;
 
 public class HiveConnectorTest {
     private HiveMetaClient client;
@@ -60,7 +60,7 @@ public class HiveConnectorTest {
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
                 metastore, executorForHmsRefresh, 100, 10, 1000, false);
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
-        FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
         hiveRemoteFileIO.setFileSystem(fs);
         cachingRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
                 hiveRemoteFileIO, executorForRemoteFileRefresh, 100, 10, 10);
@@ -102,8 +102,7 @@ public class HiveConnectorTest {
         HiveConnector hiveConnector = new HiveConnector(new ConnectorContext("hive_catalog", "hive", properties));
         ConnectorMetadata metadata = hiveConnector.getMetadata();
         Assert.assertTrue(metadata instanceof HiveMetadata);
-        HiveMetadata hiveMetadata = (HiveMetadata) metadata;
-        com.starrocks.catalog.Table table = hiveMetadata.getTable("db1", "tbl1");
+        com.starrocks.catalog.Table table = metadata.getTable("db1", "tbl1");
         HiveTable hiveTable = (HiveTable) table;
         Assert.assertEquals("db1", hiveTable.getDbName());
         Assert.assertEquals("tbl1", hiveTable.getTableName());

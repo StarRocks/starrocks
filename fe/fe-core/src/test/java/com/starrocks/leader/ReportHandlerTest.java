@@ -14,25 +14,41 @@
 
 package com.starrocks.leader;
 
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryQueueManager;
+import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.Backend.BackendStatus;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTaskExecutor;
+import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
+import com.starrocks.thrift.TTaskType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -43,6 +59,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,8 +83,11 @@ public class ReportHandlerTest {
                 .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
                         "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
                 .withTable("CREATE TABLE test.binlog_report_handler_test(k1 int, v1 int) " +
-                        "duplicate key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
-                        "'binlog_enable' = 'true', 'binlog_max_size' = '100');");
+                        "duplicate key(k1) distributed by hash(k1) buckets 50 properties('replication_num' = '1', " +
+                        "'binlog_enable' = 'true', 'binlog_max_size' = '100');")
+                .withTable("CREATE TABLE test.primary_index_cache_expire_sec_test(k1 int, v1 int) " +
+                        "primary key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
+                        "'primary_index_cache_expire_sec' = '3600');");
     }
 
     @Test
@@ -92,6 +112,31 @@ public class ReportHandlerTest {
 
         ReportHandler handler = new ReportHandler();
         handler.testHandleSetTabletEnablePersistentIndex(backendId, backendTablets);
+    }
+
+    @Test
+    public void testHandleSetPrimaryIndexCacheExpireSec() {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        long dbId = db.getId();
+        OlapTable olapTable = (OlapTable) db.getTable("primary_index_cache_expire_sec_test");
+        long backendId = 10001L;
+        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
+        Assert.assertFalse(tabletIds.isEmpty());
+
+        Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
+        List<TTabletInfo> tabletInfos = Lists.newArrayList();
+        TTablet tablet = new TTablet(tabletInfos);
+        for (Long tabletId : tabletIds) {
+            TTabletInfo tabletInfo = new TTabletInfo();
+            tabletInfo.setTablet_id(tabletId);
+            tabletInfo.setSchema_hash(60000);
+            tabletInfo.setPrimary_index_cache_expire_sec(7200);
+            tablet.tablet_infos.add(tabletInfo);
+        }
+        backendTablets.put(backendId, tablet);
+
+        ReportHandler handler = new ReportHandler();
+        handler.testHandleSetPrimaryIndexCacheExpireSec(backendId, backendTablets);
     }
 
     @Test
@@ -144,7 +189,7 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleResourceUsageReport() {
-        QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
+        ResourceUsageMonitor resourceUsageMonitor = GlobalStateMgr.getCurrentState().getResourceUsageMonitor();
 
         Backend backend = new Backend(0, "127.0.0.1", 80);
         ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
@@ -162,9 +207,9 @@ public class ReportHandlerTest {
             }
         };
 
-        new Expectations(queryQueueManager) {
+        new Expectations(resourceUsageMonitor) {
             {
-                queryQueueManager.maybeNotifyAfterLock();
+                resourceUsageMonitor.notifyResourceUsageUpdate();
                 times = 2;
             }
         };
@@ -221,7 +266,6 @@ public class ReportHandlerTest {
             }
         };
 
-
         ReportHandler handler = new ReportHandler();
         TResourceUsage resourceUsage = genResourceUsage(1, 2L, 3L, 100);
 
@@ -265,5 +309,90 @@ public class ReportHandlerTest {
             TMasterResult res = handler.handleReport(req);
             Assert.assertEquals(TStatusCode.INTERNAL_ERROR, res.getStatus().getStatus_code());
         }
+    }
+
+    @Test
+    public void testHandleMigration() throws TException {
+        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
+        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();;
+        for (Long tabletId : tabletIds) {
+            tabletMetaMigrationMap.put(TStorageMedium.SSD, tabletId);
+        }
+        ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
+
+        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
+        Backend reportBackend = currentSystemInfo.getBackend(10001);
+        BackendStatus backendStatus = reportBackend.getBackendStatus();
+        backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(Long.MAX_VALUE);
+
+        ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
+
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
+        for (int i = 0; i < tabletMetaList.size(); i++) {
+            long tabletId = tabletIds.get(i);
+            TabletMeta tabletMeta = tabletMetaList.get(i);
+            Database db = GlobalStateMgr.getCurrentState().getDb("test");
+            if (db == null) {
+                continue;
+            }
+            OlapTable table = null;
+            db.readLock();
+            try {
+                table = (OlapTable) db.getTable(tabletMeta.getTableId());
+            } finally {
+                db.readUnlock();
+            }
+
+            Partition partition = table.getPartition(tabletMeta.getPartitionId());
+            MaterializedIndex idx = partition.getIndex(tabletMeta.getIndexId());
+            LocalTablet tablet = (LocalTablet) idx.getTablet(tabletId);
+
+
+            for (Replica replica : tablet.getImmutableReplicas()) {
+                replica.setMaxRowsetCreationTime(System.currentTimeMillis() / 1000);
+            }
+        }
+        Config.primary_key_disk_schedule_time = 0;
+        ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
+    }
+
+    @Test
+    public void testHandleMigrationTaskControl() {
+        long backendId = 10001L;
+        // mock the task execution on BE
+        new MockUp<AgentTaskExecutor>() {
+            @Mock
+            public void submit(AgentBatchTask task) {
+
+            }
+        };
+
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getDb("test").getTable("binlog_report_handler_test");
+        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();;
+        List<Long> allTablets = new ArrayList<>();
+        for (MaterializedIndex index : olapTable.getPartition("binlog_report_handler_test")
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (Tablet tablet : index.getTablets()) {
+                tabletMetaMigrationMap.put(TStorageMedium.HDD, tablet.getId());
+                allTablets.add(tablet.getId());
+            }
+        }
+
+        Assert.assertEquals(50, tabletMetaMigrationMap.size());
+
+        ReportHandler.handleMigration(tabletMetaMigrationMap, backendId);
+
+        Assert.assertEquals(50, AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false));
+
+        // finish 30 tablets migration
+        for (int i = 0; i < 30; i++) {
+            AgentTaskQueue.removeTask(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, allTablets.get(49 - i));
+        }
+        // limit the batch size to 30
+        Config.tablet_sched_max_migration_task_sent_once = 30;
+        ReportHandler.handleMigration(tabletMetaMigrationMap, backendId);
+        Assert.assertEquals(30, AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false));
     }
 }

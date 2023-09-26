@@ -82,6 +82,7 @@ message TabletSchemaPB {
     optional int64 deprecated_id = 9; // deprecated
     optional CompressionTypePB compression_type = 10 [default=LZ4_FRAME];
     repeated uint32 sort_key_idxes = 11;
+    optional int32 schema_version = 12;
     optional int64 id = 50;
 }
 

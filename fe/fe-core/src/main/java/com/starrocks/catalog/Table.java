@@ -286,6 +286,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.VIEW;
     }
 
+    public boolean isHiveView() {
+        return type == TableType.HIVE_VIEW;
+    }
+
     public boolean isOlapTableOrMaterializedView() {
         return isOlapTable() || isOlapMaterializedView();
     }
@@ -314,6 +318,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return isOlapTable() || isCloudNativeTable();
     }
 
+    public boolean isExternalTableWithFileSystem() {
+        return isHiveTable() || isIcebergTable() || isHudiTable() || isDeltalakeTable() || isPaimonTable();
+    }
+
     public boolean isHiveTable() {
         return type == TableType.HIVE;
     }
@@ -332,6 +340,14 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public boolean isPaimonTable() {
         return type == TableType.PAIMON;
+    }
+
+    public boolean isJDBCTable() {
+        return type == TableType.JDBC;
+    }
+
+    public boolean isTableFunctionTable() {
+        return type == TableType.TABLE_FUNCTION;
     }
 
     // for create table
@@ -634,8 +650,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             }
         }
 
-        OlapTable olapTable = (OlapTable) this;
-        return !isLocalBalance || olapTable.getKeysType() != KeysType.PRIMARY_KEYS;
+        return true;
     }
 
     public boolean hasAutoIncrementColumn() {

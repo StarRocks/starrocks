@@ -24,8 +24,10 @@ import static com.starrocks.catalog.system.SystemTable.builder;
 import static com.starrocks.thrift.TSchemaTableType.SCH_PROCEDURES;
 
 public class RoutinesSystemTable {
-    public static SystemTable create() {
-        return new SystemTable(SystemId.ROUTINES_ID,
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.ROUTINES_ID,
                 "routines",
                 Table.TableType.SCHEMA,
                 builder()

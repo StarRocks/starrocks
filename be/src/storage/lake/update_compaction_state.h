@@ -20,27 +20,32 @@
 #include "common/status.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 
 namespace lake {
 class Rowset;
+class UpdateManager;
 
 class CompactionState {
 public:
-    CompactionState(Rowset* rowset);
+    CompactionState(Rowset* rowset, UpdateManager* update_manager);
     ~CompactionState();
 
     CompactionState(const CompactionState&) = delete;
     CompactionState& operator=(const CompactionState&) = delete;
 
-    Status load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id);
+    Status load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id);
     void release_segments(uint32_t segment_id);
 
     std::vector<ColumnUniquePtr> pk_cols;
 
 private:
-    Status _load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id);
+    Status _load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id);
+
+    UpdateManager* _update_manager;
+    size_t _memory_usage = 0;
 };
 
 } // namespace lake

@@ -57,6 +57,10 @@ FileDataSource::FileDataSource(const FileDataSourceProvider* provider, const TSc
     }
 }
 
+std::string FileDataSource::name() const {
+    return "FileDataSource";
+}
+
 Status FileDataSource::open(RuntimeState* state) {
     DCHECK(state != nullptr);
     RETURN_IF_CANCELLED(state);
@@ -171,7 +175,7 @@ void FileDataSource::_init_counter() {
     _scanner_total_timer = ADD_TIMER(_runtime_profile, "ScannerTotalTime");
     {
         static const char* prefix = "FileScanner";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
         RuntimeProfile* p = _runtime_profile;
         _scanner_fill_timer = ADD_CHILD_TIMER(p, "FillTime", prefix);
         _scanner_read_timer = ADD_CHILD_TIMER(p, "ReadTime", prefix);

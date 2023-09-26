@@ -97,6 +97,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -124,7 +125,7 @@ public class Load {
      * @return
      * @throws UserException
      */
-    public static void checkMergeCondition(String mergeCondition, OlapTable table,
+    public static void checkMergeCondition(String mergeCondition, OlapTable table, List<Column> columns,
             boolean missAutoIncrementColumn) throws DdlException {
         if (mergeCondition == null || mergeCondition.isEmpty()) {
             return;
@@ -134,15 +135,20 @@ public class Load {
             throw new DdlException("Conditional update only support primary key table " + table.getName());
         }
 
-        if (table.getColumn(mergeCondition) != null) {
-            if (table.getColumn(mergeCondition).isKey()) {
+        Optional<Column> conditionCol = columns.stream().filter(c -> c.getName().equalsIgnoreCase(mergeCondition)).findFirst();
+        if (!conditionCol.isPresent()) {
+            throw new DdlException("Merge condition column " + mergeCondition + 
+                    " does not exist. If you are doing partial update with condition update, please check condition column" +
+                    " is in the given update columns. Otherwise please check condition column is in table " + table.getName());
+        } else {
+            if (conditionCol.get().isKey()) {
                 throw new DdlException("Merge condition column " + mergeCondition
                         + " should not be primary key!");
             }
-            if (missAutoIncrementColumn && table.getColumn(mergeCondition).isAutoIncrement()) {
+            if (missAutoIncrementColumn && conditionCol.get().isAutoIncrement()) {
                 throw new DdlException("Merge condition column can not be auto increment column in partial update");
             }
-            switch (table.getColumn(mergeCondition).getPrimitiveType()) {
+            switch (conditionCol.get().getPrimitiveType()) {
                 case CHAR:
                 case VARCHAR:
                 case PERCENTILE:
@@ -160,9 +166,6 @@ public class Load {
                 default:
                     return;
             }
-        } else {
-            throw new DdlException("Merge condition column " + mergeCondition
-                    + " should be a column of the table " + table.getName());
         }
     }
 
@@ -182,7 +185,7 @@ public class Load {
                 continue;
             }
 
-            if (column.isMaterializedColumn()) {
+            if (column.isGeneratedColumn()) {
                 continue;
             }
 
@@ -227,7 +230,7 @@ public class Load {
     public static List<ImportColumnDesc> getMaterializedShadowColumnDesc(Table tbl, String dbName, boolean analyze) {
         List<ImportColumnDesc> shadowColumnDescs = Lists.newArrayList();
         for (Column column : tbl.getFullSchema()) {
-            if (!column.isMaterializedColumn()) {
+            if (!column.isGeneratedColumn()) {
                 continue;
             }
 
@@ -239,7 +242,7 @@ public class Load {
             connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
 
             // If fe restart and execute the streamload, this re-analyze is needed.
-            Expr expr = column.materializedColumnExpr();
+            Expr expr = column.generatedColumnExpr();
             // In case of spark load, we should get the unanalyzed expression
             if (analyze) {
                 ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(),
@@ -320,8 +323,8 @@ public class Load {
             String columnName = importColumnDesc.getColumnName();
 
             if (tbl.getColumns().size() != 0 && tbl.getColumn(columnName) != null
-                    && tbl.getColumn(columnName).isMaterializedColumn()) {
-                throw new DdlException("materialized column: " + columnName + " can not be specified");
+                    && tbl.getColumn(columnName).isGeneratedColumn()) {
+                throw new DdlException("generated column: " + columnName + " can not be specified");
             }
 
             if (importColumnDesc.isColumn()) {
@@ -355,7 +358,7 @@ public class Load {
                 continue;
             }
 
-            if (refColumn.isMaterializedColumn()) {
+            if (refColumn.isGeneratedColumn()) {
                 throw new DdlException("Mapping column can not ref generated column: " + refName);
             }
         }
@@ -370,7 +373,7 @@ public class Load {
         if (!specifyFileFieldNames) {
             List<Column> columns = tbl.getBaseSchema();
             for (Column column : columns) {
-                if (!column.isMaterializedColumn() && !column.isAutoIncrement()) {
+                if (!column.isGeneratedColumn() && !column.isAutoIncrement()) {
                     ImportColumnDesc columnDesc = new ImportColumnDesc(column.getName());
                     copiedColumnExprs.add(columnDesc);
                 }
@@ -446,7 +449,7 @@ public class Load {
                 }
                 Column.DefaultValueType defaultValueType = column.getDefaultValueType();
                 if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() && !column.isAutoIncrement()
-                        && !column.isMaterializedColumn()) {
+                        && !column.isGeneratedColumn()) {
                     throw new DdlException("Column has no default value. column: " + columnName);
                 }
             }
@@ -663,16 +666,16 @@ public class Load {
                     missAutoIncrementColumn.add(Boolean.TRUE);
                 }
                 ret.add(col);
-            } else if (col.isMaterializedColumn()) {
+            } else if (col.isGeneratedColumn()) {
                 ret.add(col);
             }
         }
-        // partial update column must be specified if materialized column need it.
+        // partial update column must be specified if generated column need it.
         if (tbl instanceof OlapTable) {
             OlapTable olaptable = ((OlapTable) tbl);
-            if (olaptable.hasMaterializedColumn()) {
+            if (olaptable.hasGeneratedColumn()) {
                 for (Column col : olaptable.getBaseSchema()) {
-                    List<SlotRef> slots = col.getMaterializedColumnRef();
+                    List<SlotRef> slots = col.getGeneratedColumnRef();
                     if (slots != null) {
                         for (SlotRef slot : slots) {
                             Column originColumn = olaptable.getColumn(slot.getColumnName());
@@ -754,7 +757,7 @@ public class Load {
                                             boolean useVectorizedLoad) throws UserException {
         for (Map.Entry<String, Expr> entry : exprsByName.entrySet()) {
             // only for normal column here
-            if (tbl.getColumn(entry.getKey()) != null && tbl.getColumn(entry.getKey()).isMaterializedColumn()) {
+            if (tbl.getColumn(entry.getKey()) != null && tbl.getColumn(entry.getKey()).isGeneratedColumn()) {
                 continue;
             }
 
@@ -792,7 +795,7 @@ public class Load {
 
         for (Map.Entry<String, Expr> entry : exprsByName.entrySet()) {
             // only for generated column here
-            if (tbl.getColumn(entry.getKey()) == null || !tbl.getColumn(entry.getKey()).isMaterializedColumn()) {
+            if (tbl.getColumn(entry.getKey()) == null || !tbl.getColumn(entry.getKey()).isGeneratedColumn()) {
                 continue;
             }
 

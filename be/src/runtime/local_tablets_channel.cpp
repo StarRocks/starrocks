@@ -71,8 +71,8 @@ LocalTabletsChannel::~LocalTabletsChannel() {
     _mem_pool.reset();
 }
 
-Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
-                                 bool is_incremental) {
+Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
+                                 std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) {
     std::unique_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     _txn_id = params.txn_id();
     _index_id = params.index_id();
@@ -90,6 +90,14 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, std::sh
     }
 
     RETURN_IF_ERROR(_open_all_writers(params));
+
+    for (auto& [id, writer] : _delta_writers) {
+        if (writer->is_immutable()) {
+            result->add_immutable_tablet_ids(id);
+            result->add_immutable_partition_ids(writer->partition_id());
+        }
+    }
+
     return Status::OK();
 }
 
@@ -329,6 +337,14 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         }
     }
 
+    for (auto tablet_id : request.tablet_ids()) {
+        auto& writer = _delta_writers[tablet_id];
+        if (writer->is_immutable()) {
+            response->add_immutable_tablet_ids(tablet_id);
+            response->add_immutable_partition_ids(writer->partition_id());
+        }
+    }
+
     if (close_channel) {
         _load_channel->remove_tablets_channel(_index_id);
 
@@ -514,6 +530,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         options.timeout_ms = params.timeout_ms();
         options.write_quorum = params.write_quorum();
         options.miss_auto_increment_column = params.miss_auto_increment_column();
+        options.ptable_schema_param = params.schema();
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {
                 options.replicas.emplace_back(replica);
@@ -531,6 +548,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         }
         options.merge_condition = params.merge_condition();
         options.partial_update_mode = params.partial_update_mode();
+        options.min_immutable_tablet_size = params.min_immutable_tablet_size();
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         if (res.status().ok()) {
@@ -662,7 +680,7 @@ StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel
     return std::move(context);
 }
 
-Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& params,
+Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                              std::shared_ptr<OlapTableSchemaParam> schema) {
     std::unique_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     std::vector<SlotDescriptor*>* index_slots = nullptr;
@@ -705,6 +723,7 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         options.timeout_ms = params.timeout_ms();
         options.write_quorum = params.write_quorum();
         options.miss_auto_increment_column = params.miss_auto_increment_column();
+        options.min_immutable_tablet_size = params.min_immutable_tablet_size();
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {
                 options.replicas.emplace_back(replica);
@@ -748,9 +767,13 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         _num_remaining_senders.fetch_add(1, std::memory_order_release);
         _senders[params.sender_id()].has_incremental_open = true;
         ss << " on incremental channel _num_remaining_senders: " << _num_remaining_senders;
+        ++incremental_tablet_num;
     }
 
-    LOG(INFO) << ss.str();
+    // no update no need to log
+    if (incremental_tablet_num > 0) {
+        LOG(INFO) << ss.str();
+    }
 
     return Status::OK();
 }

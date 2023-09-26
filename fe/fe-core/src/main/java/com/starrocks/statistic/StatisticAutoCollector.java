@@ -69,7 +69,7 @@ public class StatisticAutoCollector extends FrontendDaemon {
         if (Config.enable_collect_full_statistic) {
             LOG.info("auto collect full statistic on all databases start");
             List<StatisticsCollectJob> allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                    new AnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
+                    new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
                             AnalyzeType.FULL, ScheduleType.SCHEDULE,
                             Maps.newHashMap(),
                             ScheduleStatus.PENDING,
@@ -88,32 +88,48 @@ public class StatisticAutoCollector extends FrontendDaemon {
             }
             LOG.info("auto collect full statistic on all databases end");
         } else {
-            List<AnalyzeJob> allAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList();
-            allAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
-            String jobIds = allAnalyzeJobs.stream().map(j -> String.valueOf(j.getId()))
+            List<NativeAnalyzeJob> allNativeAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllNativeAnalyzeJobList();
+            allNativeAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
+            String jobIds = allNativeAnalyzeJobs.stream().map(j -> String.valueOf(j.getId()))
                     .collect(Collectors.joining(", "));
             LOG.info("auto collect statistic on analyze job[{}] start", jobIds);
-            for (AnalyzeJob analyzeJob : allAnalyzeJobs) {
+            for (NativeAnalyzeJob nativeAnalyzeJob : allNativeAnalyzeJobs) {
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 statsConnectCtx.setStatisticsConnection(true);
                 statsConnectCtx.setThreadLocalInfo();
-                analyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR);
+                nativeAnalyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR);
             }
             LOG.info("auto collect statistic on analyze job[{}] end", jobIds);
+        }
+
+        // collect external table statistic
+        List<ExternalAnalyzeJob> allExternalAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllExternalAnalyzeJobList();
+        if (!allExternalAnalyzeJobs.isEmpty()) {
+            allExternalAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
+            String jobIds = allExternalAnalyzeJobs.stream().map(j -> String.valueOf(j.getId()))
+                    .collect(Collectors.joining(", "));
+            LOG.info("auto collect external statistic on analyze job[{}] start", jobIds);
+            for (ExternalAnalyzeJob externalAnalyzeJob : allExternalAnalyzeJobs) {
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                statsConnectCtx.setStatisticsConnection(true);
+                statsConnectCtx.setThreadLocalInfo();
+                externalAnalyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR);
+            }
+            LOG.info("auto collect external statistic on analyze job[{}] end", jobIds);
         }
     }
 
     private void initDefaultJob() {
         // Add a default sample job if wasn't collect
-        List<AnalyzeJob> allAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList();
-        if (allAnalyzeJobs.stream().anyMatch(j -> j.getScheduleType() == ScheduleType.SCHEDULE)) {
+        List<NativeAnalyzeJob> allNativeAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllNativeAnalyzeJobList();
+        if (allNativeAnalyzeJobs.stream().anyMatch(j -> j.getScheduleType() == ScheduleType.SCHEDULE)) {
             return;
         }
 
-        AnalyzeJob analyzeJob = new AnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID,
+        NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID,
                 Collections.emptyList(), AnalyzeType.SAMPLE, ScheduleType.SCHEDULE, Maps.newHashMap(),
                 ScheduleStatus.PENDING, LocalDateTime.MIN);
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeJob(analyzeJob);
+        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeJob(nativeAnalyzeJob);
     }
 
     private boolean checkoutAnalyzeTime(LocalTime now) {

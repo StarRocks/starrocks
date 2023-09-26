@@ -1,17 +1,16 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//   http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.load.pipe.filelist;
 
@@ -43,16 +42,22 @@ import java.util.List;
 public class RepoExecutor {
 
     private static final Logger LOG = LogManager.getLogger(RepoExecutor.class);
-    private static final RepoExecutor INSTANCE = new RepoExecutor();
+
+    private static class SingletonHolder {
+        private static final RepoExecutor INSTANCE = new RepoExecutor();
+    }
 
     public static RepoExecutor getInstance() {
-        return INSTANCE;
+        return SingletonHolder.INSTANCE;
+    }
+
+    private RepoExecutor() {
     }
 
     public void executeDML(String sql) {
         try {
-            ConnectContext context = StatisticUtils.buildConnectContext();
-            context.setThreadLocalInfo();
+            ConnectContext context = createConnectContext();
+
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement should be dml");
             DmlStmt dmlStmt = (DmlStmt) parsedStmt;
@@ -62,8 +67,8 @@ public class RepoExecutor {
             context.setQueryId(UUIDUtil.genUUID());
             executor.handleDMLStmt(execPlan, dmlStmt);
         } catch (Exception e) {
-            LOG.error("Repo execute SQL failed {}", sql, e);
-            throw new SemanticException("execute sql failed with exception", e);
+            LOG.error("RepoExecutor execute SQL {} failed: {}", sql, e.getMessage(), e);
+            throw new SemanticException(String.format("execute sql failed: %s", e.getMessage()), e);
         } finally {
             ConnectContext.remove();
         }
@@ -71,8 +76,7 @@ public class RepoExecutor {
 
     public List<TResultBatch> executeDQL(String sql) {
         try {
-            ConnectContext context = StatisticUtils.buildConnectContext();
-            context.setThreadLocalInfo();
+            ConnectContext context = createConnectContext();
 
             // TODO: use json sink protocol, instead of statistic protocol
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
@@ -95,8 +99,7 @@ public class RepoExecutor {
 
     public void executeDDL(String sql) {
         try {
-            ConnectContext context = StatisticUtils.buildConnectContext();
-            context.setThreadLocalInfo();
+            ConnectContext context = createConnectContext();
 
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             Analyzer.analyze(parsedStmt, context);
@@ -107,6 +110,13 @@ public class RepoExecutor {
         } finally {
             ConnectContext.remove();
         }
+    }
+
+    private static ConnectContext createConnectContext() {
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        context.setThreadLocalInfo();
+        context.setNeedQueued(false);
+        return context;
     }
 
 }

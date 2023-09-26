@@ -34,7 +34,8 @@ public class PipeFileSystemTable {
 
                         .column("FILE_NAME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .column("FILE_VERSION", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("FILE_ROWS", ScalarType.BIGINT)
+                        // TODO
+                        // .column("FILE_ROWS", ScalarType.BIGINT)
                         .column("FILE_SIZE", ScalarType.BIGINT)
                         .column("LAST_MODIFIED", ScalarType.createVarcharType(16))
 
@@ -44,8 +45,9 @@ public class PipeFileSystemTable {
                         .column("FINISH_LOAD_TIME", ScalarType.createVarcharType(16))
 
                         .column("ERROR_MSG", ScalarType.createVarcharType(512))
-                        .column("ERROR_COUNT", ScalarType.BIGINT)
-                        .column("ERROR_LINE", ScalarType.BIGINT)
+                        // TODO
+                        // .column("ERROR_COUNT", ScalarType.BIGINT)
+                        // .column("ERROR_LINE", ScalarType.BIGINT)
                         .build(),
                 TSchemaTableType.SCH_PIPE_FILES);
     }

@@ -78,7 +78,7 @@ public abstract class AlterJobV2 implements Writable {
 
     public enum JobType {
         // DECOMMISSION_BACKEND is for compatible with older versions of metadata
-        ROLLUP, SCHEMA_CHANGE, DECOMMISSION_BACKEND 
+        ROLLUP, SCHEMA_CHANGE, DECOMMISSION_BACKEND, OPTIMIZE 
     }
 
     @SerializedName(value = "type")
@@ -134,6 +134,10 @@ public abstract class AlterJobV2 implements Writable {
         return jobState;
     }
 
+    public void setJobState(JobState jobState) {
+        this.jobState = jobState;
+    }
+
     public JobType getType() {
         return type;
     }
@@ -164,6 +168,10 @@ public abstract class AlterJobV2 implements Writable {
 
     public long getFinishedTimeMs() {
         return finishedTimeMs;
+    }
+
+    public void setFinishedTimeMs(long finishedTimeMs) {
+        this.finishedTimeMs = finishedTimeMs;
     }
 
     /**

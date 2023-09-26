@@ -117,6 +117,9 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     if (table_sink.__isset.label) {
         state->set_load_label(table_sink.label);
     }
+    if (table_sink.__isset.automatic_bucket_size) {
+        _automatic_bucket_size = table_sink.automatic_bucket_size;
+    }
 
     // profile must add to state's object pool
     _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
@@ -175,6 +178,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _profile->add_info_string("IndexNum", fmt::format("{}", _schema->indexes().size()));
     _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
     _profile->add_info_string("AutomaticPartition", fmt::format("{}", _enable_automatic_partition));
+    _profile->add_info_string("AutomaticBucketSize", fmt::format("{}", _automatic_bucket_size));
     _ts_profile->alloc_auto_increment_timer = ADD_TIMER(_profile, "AllocAutoIncrementTime");
 
     SCOPED_TIMER(_profile->total_time_counter());
@@ -392,6 +396,58 @@ Status OlapTableSink::_automatic_create_partition() {
     return Status(result.status);
 }
 
+Status OlapTableSink::_update_immutable_partition(const std::set<int64_t>& partition_ids) {
+    std::set<int64_t> partition_ids_to_be_updated;
+    for (auto partition_id : partition_ids) {
+        if (!_immutable_partition_ids.contains(partition_id)) {
+            _immutable_partition_ids.insert(partition_id);
+            partition_ids_to_be_updated.insert(partition_id);
+        }
+    }
+
+    if (partition_ids_to_be_updated.empty()) {
+        return Status::OK();
+    }
+
+    TImmutablePartitionRequest request;
+    TImmutablePartitionResult result;
+    request.__set_txn_id(_txn_id);
+    request.__set_db_id(_vectorized_partition->db_id());
+    request.__set_table_id(_vectorized_partition->table_id());
+    request.__isset.partition_ids = true;
+    for (auto partition_id : partition_ids_to_be_updated) {
+        request.partition_ids.push_back(partition_id);
+    }
+
+    RETURN_IF_ERROR(_vectorized_partition->remove_partitions(request.partition_ids));
+
+    LOG(INFO) << "immutable partition rpc begin request " << request;
+    TNetworkAddress master_addr = get_master_address();
+    auto timeout_ms = _runtime_state->query_options().query_timeout * 1000 / 2;
+    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+            master_addr.hostname, master_addr.port,
+            [&request, &result](FrontendServiceConnection& client) {
+                client->updateImmutablePartition(result, request);
+            },
+            timeout_ms));
+    LOG(INFO) << "immutable partition rpc end response " << result;
+    if (result.status.status_code == TStatusCode::OK) {
+        // add new created partitions
+        RETURN_IF_ERROR(_vectorized_partition->add_partitions(result.partitions));
+
+        // add new tablet locations
+        _location->add_locations(result.tablets);
+
+        // update new node info
+        _nodes_info->add_nodes(result.nodes);
+
+        // incremental open node channel
+        RETURN_IF_ERROR(_incremental_open_node_channel(result.partitions));
+    }
+
+    return Status(result.status);
+}
+
 Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTablePartition>& partitions) {
     std::map<int64_t, std::vector<PTabletWithPartition>> index_tablets_map;
     IndexIdToTabletBEMap index_tablet_bes_map;
@@ -407,7 +463,7 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
 
                 auto* location = _location->find_tablet(tablet);
                 if (location == nullptr) {
-                    auto msg = fmt::format("Failed to find tablet {} location info", tablet);
+                    auto msg = fmt::format("Failed to find tablet {} location info in incremental open", tablet);
                     return Status::NotFound(msg);
                 }
 
@@ -519,6 +575,12 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
         {
             uint32_t num_rows_after_validate = SIMD::count_nonzero(_validate_selection);
             std::vector<int> invalid_row_indexs;
+
+            // automatic bucket
+            std::set<int64_t> immutable_partition_ids;
+            if (_tablet_sink_sender->get_immutable_partition_ids(&immutable_partition_ids)) {
+                _update_immutable_partition(immutable_partition_ids);
+            }
 
             // _enable_automatic_partition is true means destination table using automatic partition
             // _has_automatic_partition is true means last send_chunk already create partition in nonblocking mode

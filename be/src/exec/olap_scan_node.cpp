@@ -30,6 +30,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "glog/logging.h"
+#include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -61,6 +62,10 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     if (tnode.olap_scan_node.__isset.sorted_by_keys_per_tablet) {
         _sorted_by_keys_per_tablet = tnode.olap_scan_node.sorted_by_keys_per_tablet;
+    }
+
+    if (tnode.olap_scan_node.__isset.output_chunk_by_bucket) {
+        _output_chunk_by_bucket = tnode.olap_scan_node.output_chunk_by_bucket;
     }
 
     if (_olap_scan_node.__isset.bucket_exprs) {
@@ -186,7 +191,7 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         // is the first time of calling `get_next`, pass the second argument of `_fill_chunk_pool` as
         // true to ensure that the newly allocated column objects will be returned back into the column
         // pool.
-        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1, first_call));
+        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1, first_call && state->use_column_pool()));
         eval_join_runtime_filters(chunk);
         _num_rows_returned += (*chunk)->num_rows();
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
@@ -392,6 +397,13 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
     }
 
+    if (output_chunk_by_bucket()) {
+        std::sort(morsels.begin(), morsels.end(), [](auto& l, auto& r) {
+            return down_cast<pipeline::ScanMorsel*>(l.get())->owner_id() <
+                   down_cast<pipeline::ScanMorsel*>(r.get())->owner_id();
+        });
+    }
+
     // None tablet to read shouldn't use tablet internal parallel.
     if (morsels.empty()) {
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
@@ -459,7 +471,7 @@ StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(
 StatusOr<bool> OlapScanNode::_could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const {
     // Keys type needn't merge or aggregate.
     ASSIGN_OR_RETURN(TabletSharedPtr first_tablet, get_tablet(&(scan_ranges[0].scan_range.internal_scan_range)));
-    KeysType keys_type = first_tablet->tablet_schema().keys_type();
+    KeysType keys_type = first_tablet->tablet_schema()->keys_type();
     const auto skip_aggr = thrift_olap_scan_node().is_preaggregation;
     bool is_keys_type_matched = keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
                                 ((keys_type == UNIQUE_KEYS || keys_type == AGG_KEYS) && skip_aggr);
@@ -676,7 +688,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     COUNTER_SET(_task_concurrency, (int64_t)concurrency);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
-    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, true));
+    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, state->use_column_pool()));
     std::lock_guard<std::mutex> l(_mtx);
     for (int i = 0; i < concurrency; i++) {
         CHECK(_submit_scanner(_pending_scanners.pop(), true));

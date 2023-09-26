@@ -1,0 +1,45 @@
+-- name: test_bucket_agg
+
+CREATE TABLE `t0` (
+  `c0` bigint DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` bigint DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+
+
+insert into t0 SELECT generate_series, 4096 - generate_series, generate_series FROM TABLE(generate_series(1,  4096));
+insert into t0 select * from t0;
+
+set tablet_internal_parallel_mode="force_split";
+
+select distinct c0 from t0 order by 1 limit 5;
+select distinct c0, c1 from t0 order by 1, 2 limit 5;
+select distinct c0, c1, c2 from t0 order by 1, 2, 3 limit 5;
+select sum(c1) from t0 group by c0, c2 order by 1 limit 5;
+select sum(c2) from t0 group by c0, c1 order by 1 limit 5;
+select sum(c1), max(c2) from t0 group by c0 order by 1, 2 limit 5;
+
+select count(*) from (select distinct c0 from t0) tb;
+select count(*) from (select c0, c1, sum(c2) from t0 group by c0, c1) tb;
+-- distinct with limit
+select count(*) from (select distinct c0 from t0 limit 100) tb;
+
+set tablet_internal_parallel_mode="auto";
+
+select distinct c0 from t0 order by 1 limit 5;
+select distinct c0, c1 from t0 order by 1, 2 limit 5;
+select distinct c0, c1, c2 from t0 order by 1, 2, 3 limit 5;
+select sum(c1) from t0 group by c0, c2 order by 1 limit 5;
+select sum(c2) from t0 group by c0, c1 order by 1 limit 5;
+select sum(c1), max(c2) from t0 group by c0 order by 1, 2 limit 5;
+
+select count(*) from (select distinct c0 from t0) tb;
+select count(*) from (select c0, c1, sum(c2) from t0 group by c0, c1) tb;
+-- distinct with limit
+select count(*) from (select distinct c0 from t0 limit 100) tb;

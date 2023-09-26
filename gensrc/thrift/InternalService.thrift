@@ -49,7 +49,7 @@ include "RuntimeFilter.thrift"
 
 // constants for function version
 enum TFunctionVersion {
-    RUNTIME_FILTER_SERIALIZE_VERSION_2 = 6,
+    RUNTIME_FILTER_SERIALIZE_VERSION_2 = 7,
 }
 
 enum TQueryType {
@@ -95,9 +95,8 @@ struct TLoadErrorHubInfo {
 }
 
 enum TPipelineProfileLevel {
-  CORE_METRICS,
-  ALL_METRICS,
-  DETAIL
+  MERGE = 1;
+  DETAIL = 2;
 }
 
 enum TSpillMode {
@@ -117,6 +116,11 @@ enum TSpillableOperatorType {
 enum TTabletInternalParallelMode {
   AUTO,
   FORCE_SPLIT
+}
+
+enum TOverflowMode {
+  OUTPUT_NULL = 0;
+  REPORT_ERROR = 1;
 }
 
 // Query options with their respective defaults
@@ -215,7 +219,17 @@ struct TQueryOptions {
   // used to judge whether the profile need to report to FE, only meaningful when enable_profile=true
   97: optional i64 load_profile_collect_second;
 
+  100: optional i64 group_concat_max_len = 1024;
   101: optional i64 runtime_profile_report_interval = 30;
+
+  102: optional bool enable_collect_table_level_scan_stats;
+
+  103: optional i32 interleaving_group_size;
+
+  104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
+  105: optional bool use_column_pool = true;
+
+  106: optional bool enable_agg_spill_preaggregation;
 }
 
 

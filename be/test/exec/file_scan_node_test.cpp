@@ -153,8 +153,9 @@ DescriptorTbl* FileScanNodeTest::_create_table_desc(const std::vector<TypeDescri
     tuple_desc_builder.build(&desc_tbl_builder);
 
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(_runtime_state.get(), _pool, desc_tbl_builder.desc_tbl(), &tbl, config::vector_chunk_size);
-
+    CHECK(DescriptorTbl::create(_runtime_state.get(), _pool, desc_tbl_builder.desc_tbl(), &tbl,
+                                config::vector_chunk_size)
+                  .ok());
     _runtime_state->set_desc_tbl(tbl);
     return tbl;
 }

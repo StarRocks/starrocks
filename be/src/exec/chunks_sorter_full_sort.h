@@ -48,9 +48,9 @@ public:
     ~ChunksSorterFullSort() override;
 
     // Append a Chunk for sort.
-    Status update(RuntimeState* state, const ChunkPtr& chunk) override;
-    Status do_done(RuntimeState* state) override;
-    Status get_next(ChunkPtr* chunk, bool* eos) override;
+    [[nodiscard]] Status update(RuntimeState* state, const ChunkPtr& chunk) override;
+    [[nodiscard]] Status do_done(RuntimeState* state) override;
+    [[nodiscard]] Status get_next(ChunkPtr* chunk, bool* eos) override;
 
     size_t get_output_rows() const override;
 
@@ -64,9 +64,9 @@ private:
     // 1. Accumulate input chunks into a big chunk(but not exceed the kMaxBufferedChunkSize), to reduce the memory copy during merge
     // 2. Sort the accumulated big chunk partially
     // 3. Merge all big-chunks into global sorted
-    Status _merge_unsorted(RuntimeState* state, const ChunkPtr& chunk);
-    Status _partial_sort(RuntimeState* state, bool done);
-    Status _merge_sorted(RuntimeState* state);
+    [[nodiscard]] Status _merge_unsorted(RuntimeState* state, const ChunkPtr& chunk);
+    [[nodiscard]] Status _partial_sort(RuntimeState* state, bool done);
+    [[nodiscard]] Status _merge_sorted(RuntimeState* state);
     void _split_late_and_early_chunks();
     static constexpr SlotId ORDINAL_COLUMN_SLOT_ID = -2;
     void _assign_ordinals();

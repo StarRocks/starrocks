@@ -14,6 +14,7 @@
 
 #include "connector/es_connector.h"
 
+#include "common/logging.h"
 #include "exec/es/es_predicate.h"
 #include "exec/es/es_query_builder.h"
 #include "exec/es/es_scan_reader.h"
@@ -49,6 +50,10 @@ const TupleDescriptor* ESDataSourceProvider::tuple_descriptor(RuntimeState* stat
 
 ESDataSource::ESDataSource(const ESDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.es_scan_range) {}
+
+std::string ESDataSource::name() const {
+    return "ESDataSource";
+}
 
 Status ESDataSource::open(RuntimeState* state) {
     _runtime_state = state;
@@ -215,7 +220,7 @@ Status ESDataSource::_create_scanner() {
 
 void ESDataSource::close(RuntimeState* state) {
     if (_es_reader != nullptr) {
-        _es_reader->close();
+        WARN_IF_ERROR(_es_reader->close(), "close es reader failed");
     }
 }
 

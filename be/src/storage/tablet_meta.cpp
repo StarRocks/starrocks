@@ -44,6 +44,7 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/tablet_updates.h"
+#include "storage/utils.h"
 #include "util/uid_util.h"
 #include "util/url_coding.h"
 
@@ -56,9 +57,10 @@ Status TabletMeta::create(const TCreateTabletReq& request, const TabletUid& tabl
     *tablet_meta = std::make_shared<TabletMeta>(
             request.table_id, request.partition_id, request.tablet_id, request.tablet_schema.schema_hash, shard_id,
             request.tablet_schema, next_unique_id,
-            request.__isset.enable_persistent_index ? request.enable_persistent_index : false, col_ordinal_to_unique_id,
+            request.__isset.enable_persistent_index && request.enable_persistent_index, col_ordinal_to_unique_id,
             tablet_uid, request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK,
-            request.__isset.compression_type ? request.compression_type : TCompressionType::LZ4_FRAME);
+            request.__isset.compression_type ? request.compression_type : TCompressionType::LZ4_FRAME,
+            request.__isset.primary_index_cache_expire_sec ? request.primary_index_cache_expire_sec : 0);
 
     if (request.__isset.binlog_config) {
         BinlogConfig binlog_config;
@@ -73,12 +75,20 @@ TabletMetaSharedPtr TabletMeta::create() {
     return std::make_shared<TabletMeta>();
 }
 
+RowsetMetaSharedPtr& TabletMeta::rowset_meta_with_max_rowset_version(std::vector<RowsetMetaSharedPtr> rowsets) {
+    return *std::max_element(
+            rowsets.begin(), rowsets.end(), [](const RowsetMetaSharedPtr& a, const RowsetMetaSharedPtr& b) {
+                return !a->tablet_schema() || (b->tablet_schema() && a->tablet_schema()->schema_version() <
+                                                                             b->tablet_schema()->schema_version());
+            });
+}
+
 TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash,
                        uint64_t shard_id, const TTabletSchema& tablet_schema, uint32_t next_unique_id,
                        bool enable_persistent_index,
                        const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                        const TabletUid& tablet_uid, TTabletType::type tabletType,
-                       TCompressionType::type compression_type)
+                       TCompressionType::type compression_type, int32_t primary_index_cache_expire_sec)
         : _tablet_uid(0, 0) {
     TabletMetaPB tablet_meta_pb;
     tablet_meta_pb.set_table_id(table_id);
@@ -94,10 +104,12 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
     tablet_meta_pb.set_tablet_type(tabletType == TTabletType::TABLET_TYPE_MEMORY ? TabletTypePB::TABLET_TYPE_MEMORY
                                                                                  : TabletTypePB::TABLET_TYPE_DISK);
     tablet_meta_pb.set_in_restore_mode(false);
+    tablet_meta_pb.set_primary_index_cache_expire_sec(primary_index_cache_expire_sec);
 
     TabletSchemaPB* schema = tablet_meta_pb.mutable_schema();
-    convert_t_schema_to_pb_schema(tablet_schema, next_unique_id, col_ordinal_to_unique_id, schema, compression_type);
-
+    auto st = convert_t_schema_to_pb_schema(tablet_schema, next_unique_id, col_ordinal_to_unique_id, schema,
+                                            compression_type);
+    CHECK(st.ok()) << st;
     init_from_pb(&tablet_meta_pb);
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
@@ -196,7 +208,7 @@ Status TabletMeta::deserialize(std::string_view data) {
     return Status::OK();
 }
 
-void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaPB* ptablet_schema_pb) {
+void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
     auto& tablet_meta_pb = *ptablet_meta_pb;
     _table_id = tablet_meta_pb.table_id();
     _partition_id = tablet_meta_pb.partition_id();
@@ -242,20 +254,11 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaP
     }
 
     // init _schema
-    if (ptablet_schema_pb == nullptr) {
-        if (tablet_meta_pb.schema().has_id() && tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
-            // Does not collect the memory usage of |_schema|.
-            _schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema()).first;
-        } else {
-            _schema = std::make_shared<const TabletSchema>(tablet_meta_pb.schema());
-        }
+    if (tablet_meta_pb.schema().has_id() && tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
+        // Does not collect the memory usage of |_schema|.
+        _schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema()).first;
     } else {
-        if (ptablet_schema_pb->has_id() && ptablet_schema_pb->id() != TabletSchema::invalid_id()) {
-            // Does not collect the memory usage of |_schema|.
-            _schema = GlobalTabletSchemaMap::Instance()->emplace(*ptablet_schema_pb).first;
-        } else {
-            _schema = std::make_shared<const TabletSchema>(*ptablet_schema_pb);
-        }
+        _schema = std::make_shared<const TabletSchema>(tablet_meta_pb.schema());
     }
 
     // init _rs_metas
@@ -291,6 +294,7 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaP
     }
 
     _enable_shortcut_compaction = tablet_meta_pb.enable_shortcut_compaction();
+    _primary_index_cache_expire_sec = tablet_meta_pb.primary_index_cache_expire_sec();
 }
 
 void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
@@ -349,6 +353,7 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
     }
 
     tablet_meta_pb->set_enable_shortcut_compaction(_enable_shortcut_compaction);
+    tablet_meta_pb->set_primary_index_cache_expire_sec(_primary_index_cache_expire_sec);
 }
 
 void TabletMeta::to_json(string* json_string, json2pb::Pb2JsonOptions& options) {
@@ -530,13 +535,23 @@ void TabletMeta::create_inital_updates_meta() {
     _updatesPB = std::make_unique<TabletUpdatesPB>();
     auto edit_version_meta_pb = _updatesPB->add_versions();
     auto edit_version_pb = edit_version_meta_pb->mutable_version();
-    edit_version_pb->set_major(1);
-    edit_version_pb->set_minor(0);
+    edit_version_pb->set_major_number(1);
+    edit_version_pb->set_minor_number(0);
     edit_version_meta_pb->set_creation_time(creation_time());
-    _updatesPB->mutable_apply_version()->set_major(edit_version_pb->major());
-    _updatesPB->mutable_apply_version()->set_minor(edit_version_pb->minor());
+    _updatesPB->mutable_apply_version()->set_major_number(edit_version_pb->major_number());
+    _updatesPB->mutable_apply_version()->set_minor_number(edit_version_pb->minor_number());
     _updatesPB->set_next_log_id(0);
     _updatesPB->set_next_rowset_id(0);
+}
+
+void TabletMeta::reset_tablet_schema_for_restore(const TabletSchemaPB& schema_pb) {
+    _schema.reset();
+    if (schema_pb.has_id() && schema_pb.id() != TabletSchema::invalid_id()) {
+        // Does not collect the memory usage of |_schema|.
+        _schema = GlobalTabletSchemaMap::Instance()->emplace(schema_pb).first;
+    } else {
+        _schema = std::make_shared<const TabletSchema>(schema_pb);
+    }
 }
 
 bool operator==(const TabletMeta& a, const TabletMeta& b) {

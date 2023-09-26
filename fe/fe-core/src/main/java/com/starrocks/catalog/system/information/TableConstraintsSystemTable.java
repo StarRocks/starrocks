@@ -22,8 +22,10 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class TableConstraintsSystemTable {
-    public static SystemTable create() {
-        return new SystemTable(SystemId.TABLE_CONSTRAINTS_ID,
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.TABLE_CONSTRAINTS_ID,
                 "table_constraints",
                 Table.TableType.SCHEMA,
                 builder()

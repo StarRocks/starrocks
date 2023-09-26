@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
@@ -137,6 +136,29 @@ public class CachingHiveMetastoreTest {
     }
 
     @Test
+    public void testRefreshTableSync() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        Assert.assertFalse(cachingHiveMetastore.tableNameLockMap.containsKey(
+                HiveTableName.of("db1", "tbl1")));
+        try {
+            cachingHiveMetastore.refreshTable("db1", "tbl1", true);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        Assert.assertTrue(cachingHiveMetastore.tableNameLockMap.containsKey(
+                HiveTableName.of("db1", "tbl1")));
+
+        try {
+            cachingHiveMetastore.refreshTable("db1", "tbl1", true);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+
+        Assert.assertEquals(1, cachingHiveMetastore.tableNameLockMap.size());
+    }
+
+    @Test
     public void testGetPartitionKeys() {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
@@ -229,5 +251,82 @@ public class CachingHiveMetastoreTest {
         hivePartitionKey.pushColumn(new StringLiteral(HiveMetaClient.PARTITION_NULL_VALUE), PrimitiveType.NULL_TYPE);
         List<String> value = PartitionUtil.fromPartitionKey(hivePartitionKey);
         Assert.assertEquals(HiveMetaClient.PARTITION_NULL_VALUE, value.get(0));
+    }
+
+    @Test
+    public void testPartitionExist() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        Assert.assertTrue(cachingHiveMetastore.partitionExists("db", "tbl", Lists.newArrayList()));
+    }
+
+    @Test
+    public void testDropPartition() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        cachingHiveMetastore.dropPartition("db", "table", Lists.newArrayList("1"), false);
+    }
+
+    @Test
+    public void testUpdateTableStats() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        HivePartitionStats partitionStats = HivePartitionStats.empty();
+        cachingHiveMetastore.updateTableStatistics("db", "table", ignore -> partitionStats);
+    }
+
+    @Test
+    public void testUpdatePartitionStats() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        HivePartitionStats partitionStats = HivePartitionStats.empty();
+        cachingHiveMetastore.updatePartitionStatistics("db", "table", "p1=1", ignore -> partitionStats);
+    }
+
+    @Test
+    public void testRefreshTableByEvent() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+
+        HiveCommonStats stats = new HiveCommonStats(10, 100);
+
+        // unpartition
+        {
+            HiveTable table = (HiveTable) cachingHiveMetastore.getTable("db1", "tbl1");
+            Partition partition = cachingHiveMetastore.getPartition(
+                    "db1", "tbl1", Lists.newArrayList("par1"));
+            cachingHiveMetastore.refreshTableByEvent(table, stats, partition);
+        }
+
+        // partition
+        {
+            HiveTable table = (HiveTable) cachingHiveMetastore.getTable("db1", "unpartitioned_table");
+            Partition partition = cachingHiveMetastore.getPartition(
+                    "db1", "unpartitioned_table", Lists.newArrayList("col1"));
+            cachingHiveMetastore.refreshTableByEvent(table, stats, partition);
+        }
+    }
+
+    @Test
+    public void testRefreshPartitionByEvent() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+
+        HiveCommonStats stats = new HiveCommonStats(10, 100);
+        HivePartitionName hivePartitionName = HivePartitionName.of("db1", "unpartitioned_table", "col1=1");
+        Partition partition = cachingHiveMetastore.getPartition(
+                "db1", "unpartitioned_table", Lists.newArrayList("col1"));
+        cachingHiveMetastore.refreshPartitionByEvent(hivePartitionName, stats, partition);
+    }
+
+    @Test
+    public void testRefreshPartition() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, true);
+
+        List<HivePartitionName> partitionNames = Lists.newArrayList(
+                HivePartitionName.of("db1", "table1", "col1=1"),
+                HivePartitionName.of("db1", "table1", "col1=2"));
+        cachingHiveMetastore.refreshPartition(partitionNames);
     }
 }

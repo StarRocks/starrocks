@@ -61,12 +61,48 @@ public class MetricsAction extends RestBaseAction {
     // `with_table_metrics=minified` : without tables that have empty values
     // `with_table_metrics=all` : with all table metrics
     protected static final String WITH_TABLE_METRICS_PARAM = "with_table_metrics";
-    protected static final String WITH_TABLE_METRICS_MINIFIED = "minified";
-    protected static final String WITH_TABLE_METRICS_ALL = "all";
+    protected static final String WITH_MATERIALIZED_VIEW_METRICS_PARAM = "with_materialized_view_metrics";
+    protected static final String COLLECT_MODE_METRICS_MINIFIED = "minified";
+    protected static final String COLLECT_MODE_METRICS_ALL = "all";
     public static final String API_PATH = "/metrics";
 
     public MetricsAction(ActionController controller) {
         super(controller);
+    }
+
+
+    public final class RequestParams {
+        // Whether to collect per table metrics
+        private final boolean collectTableMetrics;
+        // Whether to collect per table metrics in minified mode, Ignore some heavy metrics if true
+        private final boolean minifyTableMetrics;
+        // Whether to collect per materialized view metrics
+        private final boolean collectMVMetrics;
+        // Whether to collect per materialized view metrics in minified mode, Ignore some heavy metrics if true
+        private final boolean minifyMVMetrics;
+        RequestParams(boolean collectTableMetrics, boolean minifyTableMetrics,
+                      boolean collectMVMetrics, boolean minifyMVMetrics) {
+            this.collectTableMetrics = collectTableMetrics;
+            this.minifyTableMetrics = minifyTableMetrics;
+            this.collectMVMetrics = collectMVMetrics;
+            this.minifyMVMetrics = minifyMVMetrics;
+        }
+
+        public boolean isCollectTableMetrics() {
+            return collectTableMetrics;
+        }
+
+        public boolean isMinifyTableMetrics() {
+            return minifyTableMetrics;
+        }
+
+        public boolean isCollectMVMetrics() {
+            return collectMVMetrics;
+        }
+
+        public boolean isMinifyMVMetrics() {
+            return minifyMVMetrics;
+        }
     }
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
@@ -75,6 +111,7 @@ public class MetricsAction extends RestBaseAction {
 
     @Override
     public void execute(BaseRequest request, BaseResponse response) throws DdlException {
+        // parse visitor type
         String type = request.getSingleParameter(TYPE_PARAM);
         MetricVisitor visitor = null;
         if (!Strings.isNullOrEmpty(type) && type.equalsIgnoreCase("core")) {
@@ -84,27 +121,34 @@ public class MetricsAction extends RestBaseAction {
         } else {
             visitor = new PrometheusMetricVisitor("starrocks_fe");
         }
-        boolean collectTableMetrics = false;
-        boolean minifyTableMetrics = true;
+
+        // parse request params
+        RequestParams requestParams = parseRequestParams(request);
+
+        response.setContentType("text/plain");
+        response.getContent().append(MetricRepo.getMetric(visitor, requestParams));
+        sendResult(request, response);
+    }
+
+    private RequestParams parseRequestParams(BaseRequest request) {
         String withTableMetrics = request.getSingleParameter(WITH_TABLE_METRICS_PARAM);
-        UserIdentity currentUser = null;
-        if (WITH_TABLE_METRICS_MINIFIED.equalsIgnoreCase(withTableMetrics) ||
-                WITH_TABLE_METRICS_ALL.equalsIgnoreCase(withTableMetrics)) {
+        String withMaterializedViewsMetrics = request.getSingleParameter(WITH_MATERIALIZED_VIEW_METRICS_PARAM);
+        // check request authorization
+        if (Strings.isNullOrEmpty(withMaterializedViewsMetrics) || Strings.isNullOrEmpty(withTableMetrics)) {
+            UserIdentity currentUser = null;
             try {
                 ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
                 currentUser = checkPassword(authInfo);
                 checkUserOwnsAdminRole(currentUser);
-                collectTableMetrics = true;
-                if (WITH_TABLE_METRICS_ALL.equalsIgnoreCase(withTableMetrics)) {
-                    minifyTableMetrics = false;
-                }
             } catch (AccessDeniedException e) {
                 LOG.warn("Auth failure when getting table level metrics, current user: {}, error msg: {}",
                         currentUser, e.getMessage(), e);
             }
         }
-        response.setContentType("text/plain");
-        response.getContent().append(MetricRepo.getMetric(visitor, collectTableMetrics, minifyTableMetrics));
-        sendResult(request, response);
+        boolean collectTableMetrics = COLLECT_MODE_METRICS_MINIFIED.equalsIgnoreCase(withTableMetrics);
+        boolean minifyTableMetrics = COLLECT_MODE_METRICS_ALL.equalsIgnoreCase(withTableMetrics);
+        boolean collectMVMetrics = COLLECT_MODE_METRICS_ALL.equalsIgnoreCase(withMaterializedViewsMetrics);
+        boolean minifyMVMetrics = COLLECT_MODE_METRICS_MINIFIED.equalsIgnoreCase(withMaterializedViewsMetrics);
+        return new RequestParams(collectTableMetrics, minifyTableMetrics, collectMVMetrics, minifyMVMetrics);
     }
 }

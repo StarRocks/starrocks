@@ -295,4 +295,75 @@ TEST(TestRuntimeProfile, testConflictInfoString) {
     ASSERT_EQ(expected_values, actual_values);
 }
 
+TEST(TestRuntimeProfile, testCopyCounterWithParent) {
+    auto strategy_unit = create_strategy(TUnit::UNIT);
+    auto strategy_time = create_strategy(TUnit::TIME_NS);
+    auto src1 = std::make_shared<RuntimeProfile>("src profile1");
+
+    auto* time1 = src1->add_counter("time1", TUnit::TIME_NS, strategy_time);
+    time1->set(1L);
+    auto* time2 = src1->add_child_counter("time2", TUnit::TIME_NS, strategy_time, "time1");
+    time2->set(2L);
+    auto* time3 = src1->add_child_counter("time3", TUnit::TIME_NS, strategy_time, "time2");
+    time3->set(3L);
+    auto* time4 = src1->add_counter("time4", TUnit::TIME_NS, strategy_time);
+    time4->set(4L);
+
+    auto src2 = std::make_shared<RuntimeProfile>("src profile2");
+    auto* count1 = src2->add_counter("count1", TUnit::UNIT, strategy_unit);
+    count1->set(11L);
+    auto* count2 = src2->add_child_counter("count2", TUnit::UNIT, strategy_unit, "count1");
+    count2->set(12L);
+    auto* count3 = src2->add_child_counter("count3", TUnit::UNIT, strategy_unit, "count2");
+    count3->set(13L);
+    auto* count4 = src2->add_counter("count4", TUnit::UNIT, strategy_unit);
+    count4->set(14L);
+
+    auto dest = std::make_shared<RuntimeProfile>("destination");
+    dest->add_counter("cascade1", TUnit::UNIT, strategy_unit);
+    dest->add_child_counter("cascade2", TUnit::UNIT, strategy_unit, "cascade1");
+
+    dest->copy_all_counters_from(src1.get(), "cascade1");
+    dest->copy_all_counters_from(src2.get(), "cascade2");
+
+    auto kv = dest->get_counter_pair("time1");
+    ASSERT_TRUE(kv.first != nullptr);
+    ASSERT_EQ(1L, kv.first->value());
+    ASSERT_EQ("cascade1", kv.second);
+
+    kv = dest->get_counter_pair("time2");
+    ASSERT_TRUE(kv.first != nullptr);
+    ASSERT_EQ(2L, kv.first->value());
+    ASSERT_EQ("time1", kv.second);
+
+    kv = dest->get_counter_pair("time3");
+    ASSERT_TRUE(kv.first != nullptr);
+    ASSERT_EQ(3L, kv.first->value());
+    ASSERT_EQ("time2", kv.second);
+
+    kv = dest->get_counter_pair("time4");
+    ASSERT_TRUE(kv.first != nullptr);
+    ASSERT_EQ(4L, kv.first->value());
+    ASSERT_EQ("cascade1", kv.second);
+
+    kv = dest->get_counter_pair("count1");
+    ASSERT_TRUE(kv.first != nullptr);
+    ASSERT_EQ(11L, kv.first->value());
+    ASSERT_EQ("cascade2", kv.second);
+
+    kv = dest->get_counter_pair("count2");
+    ASSERT_TRUE(kv.first != nullptr);
+    ASSERT_EQ(12L, kv.first->value());
+    ASSERT_EQ("count1", kv.second);
+
+    kv = dest->get_counter_pair("count3");
+    ASSERT_TRUE(kv.first != nullptr);
+    ASSERT_EQ(13L, kv.first->value());
+    ASSERT_EQ("count2", kv.second);
+
+    kv = dest->get_counter_pair("count4");
+    ASSERT_TRUE(kv.first != nullptr);
+    ASSERT_EQ(14L, kv.first->value());
+    ASSERT_EQ("cascade2", kv.second);
+}
 } // namespace starrocks

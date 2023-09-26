@@ -19,7 +19,7 @@
     + [Check environment configurations](./deployment/environment_configurations.md)
     + [Prepare deployment files](./deployment/prepare_deployment_files.md)
   + Deploy
-    + Deploy classic StarRocks
+    + Deploy shared-nothing StarRocks
       + [Deploy StarRocks manually](./deployment/deploy_manually.md)
       + Deploy on Kubernetes
         + [Deploy StarRocks with Operator](./deployment/sr_operator.md)
@@ -53,9 +53,12 @@
   + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from HDFS](./loading/hdfs_load.md)
   + [Load data from cloud storage](./loading/cloud_storage_load.md)
+  + Load data from Apache Kafka®
+    + [Load data using Kafka connector](/loading/Kafka-connector-starrocks.md)
+    + [Load data using Routine Load](/loading/RoutineLoad.md)
   + [Continuously load data from Apache Kafka®](./loading/RoutineLoad.md)
-  + Load data using Apache Spark™
-    + [Load data using Spark Connector](./loading/Spark-connector-starrocks.md)
+  + Load data from Apache Spark™
+    + [Load data using Spark Connector (recommended)](./loading/Spark-connector-starrocks.md)
     + [Load data in bulk using Spark Load](./loading/SparkLoad.md)
   + [Load data using INSERT](./loading/InsertInto.md)
   + [Load data using Stream Load transaction interface](./loading/Stream_Load_transaction_interface.md)
@@ -67,7 +70,7 @@
   + [Export data using EXPORT](./unloading/Export.md)
   + [Read data from StarRocks using Spark connector](./unloading/Spark_connector.md)
   + [Read data from StarRocks using Flink connector](./unloading/Flink_connector.md)
-+ Query Data Sources
++ Query Data Lakes
   + Catalog
     + [Overview](./data_source/catalog/catalog_overview.md)
     + [Default catalog](./data_source/catalog/default_catalog.md)
@@ -85,8 +88,20 @@
   + [Data lake-related FAQ](./data_source/datalake_faq.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
-  + [Synchronous materialized view](./using_starrocks/Materialized_view-single_table.md)
-  + [Asynchronous materialized view](./using_starrocks/Materialized_view.md)
+  + [Synchronous materialized views](./using_starrocks/Materialized_view-single_table.md)
+  + Asynchronous materialized views
+    + [Overview](./using_starrocks/Materialized_view.md)
+    + Use cases
+      + [Data modeling](./using_starrocks/data_modeling_with_materialized_views.md)
+      + [Query rewrite](./using_starrocks/query_rewrite_with_materialized_views.md)
+      + [Data lake query acceleration](./using_starrocks/data_lake_query_acceleration_with_materialized_views.md)
+    + Usage
+      + [CREATE MATERIALIZED VIEW](./sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md)
+      + [ALTER MATERIALIZED VIEW](./sql-reference/sql-statements/data-definition/ALTER%20MATERIALIZED%20VIEW.md)
+      + [DROP MATERIALIZED VIEW](./sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md)
+      + [SHOW MATERIALIZED VIEWS](./sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md)
+      + [information_schema.materialized_views](./administration/information_schema.md#materialized_views)
+      + [Troubleshooting](./using_starrocks/troubleshooting_asynchronous_materialized_views.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + [Query Cache](./using_starrocks/query_cache.md)
@@ -97,14 +112,15 @@
     + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
     + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
   + [Sorted streaming aggregate](./using_starrocks/sorted_aggregate.md)
-+ Integration
++ Integrations
   + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
   + [Authenticate to Microsoft Azure Storage](./integrations/authenticate_to_azure_storage.md)
   + [Authenticate to Google Cloud Storage](./integrations/authenticate_to_gcs.md)
   + BI tools
+    + [Apache Superset](./integrations/BI_integrations/Superset.md)
+    + [FineBI](./integrations/BI_integrations/FineBI.md)
     + [Hex](./integrations/BI_integrations/Hex.md)
     + [Querybook](./integrations/BI_integrations/Querybook.md)
-    + [Apache Superset](./integrations/BI_integrations/Superset.md)
     + [Tableau Desktop](./integrations/BI_integrations/Tableau_Desktop.md)
   + IDE tools
     + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
@@ -136,6 +152,7 @@
     + [Overview of privileges](./administration/privilege_overview.md)
     + [Privileges](./administration/privilege_item.md)
     + [Manage user privileges](./administration/User_privilege.md)
+    + [Privilege FAQ](./administration/privilege_faq.md)
     + [Authentication](./administration/Authentication.md)
   + Performance Tuning
     + [Query planning](./administration/Query_planning.md)
@@ -301,6 +318,7 @@
     + Auxiliary Commands
       + [DESC](./sql-reference/sql-statements/Utility/DESCRIBE.md)
     + Data Types
+      + [Data type list](./sql-reference/sql-statements/data-types/data-type-list.md)
       + Numeric
         + [TINYINT](./sql-reference/sql-statements/data-types/TINYINT.md)
         + [SMALLINT](./sql-reference/sql-statements/data-types/SMALLINT.md)
@@ -328,9 +346,8 @@
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
     + [Keywords](./sql-reference/sql-statements/keywords.md)
-    + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
-    + [Generated columns](./sql-reference/sql-statements/generated_columns.md)
   + Function Reference
+    + [Function list](./sql-reference/sql-functions/function-list.md)
     + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
     + [Window functions](./sql-reference/sql-functions/Window_function.md)
     + [Lambda expression](./sql-reference/sql-functions/Lambda_expression.md)
@@ -586,6 +603,8 @@
       + [conv](/sql-reference/sql-functions/math-functions/conv.md)
       + [cos](./sql-reference/sql-functions/math-functions/cos.md)
       + [cosh](./sql-reference/sql-functions/math-functions/cosh.md)
+      + [cosine_similarity](./sql-reference/sql-functions/math-functions/cos_similarity.md)
+      + [cosine_similarity_norm](./sql-reference/sql-functions/math-functions/cos_similarity_norm.md)
       + [cot](/sql-reference/sql-functions/math-functions/cot.md)
       + [degrees](/sql-reference/sql-functions/math-functions/degrees.md)
       + [divide](./sql-reference/sql-functions/math-functions/divide.md)
@@ -651,6 +670,7 @@
       + [space](./sql-reference/sql-functions/string-functions/space.md)
       + [split](./sql-reference/sql-functions/string-functions/split.md)
       + [split_part](./sql-reference/sql-functions/string-functions/split_part.md)
+      + [substring_index](./sql-reference/sql-functions/string-functions/substring_index.md)
       + [starts_with](./sql-reference/sql-functions/string-functions/starts_with.md)
       + [strleft](./sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](./sql-reference/sql-functions/string-functions/strright.md)
@@ -665,9 +685,9 @@
     + Pattern Matching Functions
       + [like](./sql-reference/sql-functions/like_predicate-functions/like.md)
       + [regexp](./sql-reference/sql-functions/like_predicate-functions/regexp.md)
-      + [regexp_extract](./sql-reference/sql-functions/string-functions/regexp_extract.md)
+      + [regexp_extract](./sql-reference/sql-functions/like_predicate-functions/regexp_extract.md)
       + [regexp_extract_all](./sql-reference/sql-functions/like_predicate-functions/regexp_extract_all.md)
-      + [regexp_replace](./sql-reference/sql-functions/string-functions/regexp_replace.md)
+      + [regexp_replace](./sql-reference/sql-functions/like_predicate-functions/regexp_replace.md)
     + Percentile Functions
       + [percentile_approx_raw](./sql-reference/sql-functions/percentile-functions/percentile_approx_raw.md)
       + [percentile_empty](./sql-reference/sql-functions/percentile-functions/percentile_empty.md)
@@ -684,8 +704,10 @@
       + [json_each](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
       + [unnest](./sql-reference/sql-functions/array-functions/unnest.md)
     + Utility Functions
+      + [catalog](./sql-reference/sql-functions/utility-functions/catalog.md)
       + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
+      + [database](./sql-reference/sql-functions/utility-functions/database.md)
       + [host_name](./sql-reference/sql-functions/utility-functions/host_name.md)
       + [isnull](./sql-reference/sql-functions/utility-functions/isnull.md)
       + [isnotnull](./sql-reference/sql-functions/utility-functions/isnotnull.md)
@@ -696,10 +718,13 @@
       + [version](./sql-reference/sql-functions/utility-functions/version.md)
     + [cast function](./sql-reference/sql-functions/cast.md)
     + [hash function](./sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
+  + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
+  + [Generated columns](./sql-reference/sql-statements/generated_columns.md)
   + [System variables](./reference/System_variable.md)
   + [User-defined variables](./reference/user_defined_variables.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
+  + [AWS IAM policies](./reference/aws_iam_policies.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
@@ -712,6 +737,8 @@
       + [Synchronize data from MySQL in real time](/faq/loading/synchronize_mysql_into_sr.md)
       + [Flink connector](./faq/loading/Flink_connector_faq.md)
     + [Data Unloading](./faq/Exporting_faq.md)
+  + [Privilege](./administration/privilege_faq.md)
+  + [Data lake](./data_source/datalake_faq.md)
   + [SQL](./faq/Sql_faq.md)
   + [query_dump](./faq/Dump_query.md)
   + [Other FAQs](./faq/Others.md)
@@ -732,6 +759,10 @@
     + [Build Handbook](./developers/build-starrocks/handbook.md)
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
++ Ecosystem Release Notes
+  + [Kafka connector](./ecosystem_release/kafka_connector.md)
+  + [Spark connector](./ecosystem_release/spark_connector.md)
+  + [Flink connector](./ecosystem_release/flink_connector.md)
 + Release Notes
   + [v3.1](./release_notes/release-3.1.md)
   + [v3.0](./release_notes/release-3.0.md)

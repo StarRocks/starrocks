@@ -96,6 +96,7 @@ statement
     | dropExternalCatalogStatement
     | showCatalogsStatement
     | showCreateExternalCatalogStatement
+    | alterCatalogStatement
 
     // DML Statement
     | insertStatement
@@ -110,6 +111,7 @@ statement
     | pauseRoutineLoadStatement
     | showRoutineLoadStatement
     | showRoutineLoadTaskStatement
+    | showCreateRoutineLoadStatement
 
     // StreamLoad Statement
     | showStreamLoadStatement
@@ -152,6 +154,7 @@ statement
     | dropResourceGroupStatement
     | alterResourceGroupStatement
     | showResourceGroupStatement
+    | showResourceGroupUsageStatement
 
     // External Resource Statement
     | createResourceStatement
@@ -190,6 +193,7 @@ statement
     | showProcStatement
     | showProcesslistStatement
     | showProfilelistStatement
+    | showRunningQueriesStatement
     | showStatusStatement
     | showTabletStatement
     | showTransactionStatement
@@ -298,6 +302,11 @@ statement
     | updateFailPointStatusStatement
     | showFailPointStatement
 
+    // prepare_stmt
+    | prepareStatement
+    | executeStatement
+    | deallocateStatement
+
     // Unsupported Statement
     | unsupportedStatement
     ;
@@ -371,7 +380,7 @@ createTableStatement
 
 columnDesc
     : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)?
-    (defaultDesc | AUTO_INCREMENT | materializedColumnDesc)?
+    (defaultDesc | AUTO_INCREMENT | generatedColumnDesc)?
     (withMaskingPolicy)?
     comment?
     ;
@@ -386,7 +395,7 @@ defaultDesc
     : DEFAULT (string | NULL | CURRENT_TIMESTAMP | '(' qualifiedName '(' ')' ')')
     ;
 
-materializedColumnDesc
+generatedColumnDesc
     : AS expression
     ;
 
@@ -511,7 +520,7 @@ refreshTableStatement
     ;
 
 showAlterStatement
-    : SHOW ALTER TABLE (COLUMN | ROLLUP) ((FROM | IN) db=qualifiedName)?
+    : SHOW ALTER TABLE (COLUMN | ROLLUP | OPTIMIZE) ((FROM | IN) db=qualifiedName)?
         (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     | SHOW ALTER MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
               (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
@@ -542,7 +551,7 @@ truncateTableStatement
     ;
 
 cancelAlterTableStatement
-    : CANCEL ALTER TABLE (COLUMN | ROLLUP)? FROM qualifiedName ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?
+    : CANCEL ALTER TABLE (COLUMN | ROLLUP | OPTIMIZE)? FROM qualifiedName ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?
     | CANCEL ALTER MATERIALIZED VIEW FROM qualifiedName
     ;
 
@@ -621,7 +630,7 @@ alterMaterializedViewStatement
     : ALTER MATERIALIZED VIEW mvName=qualifiedName (
         refreshSchemeDesc |
         tableRenameClause |
-        modifyTablePropertiesClause |
+        modifyPropertiesClause |
         swapTableClause )
     | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
     | ALTER MATERIALIZED VIEW qualifiedName applyMaskingPolicyClause
@@ -708,6 +717,9 @@ showCatalogsStatement
     : SHOW CATALOGS
     ;
 
+alterCatalogStatement
+    : ALTER CATALOG catalogName=identifierOrString modifyPropertiesClause
+    ;
 
 // ---------------------------------------- Warehouse Statement ---------------------------------------------------------
 
@@ -825,7 +837,7 @@ alterClause
     | dropIndexClause
     | tableRenameClause
     | swapTableClause
-    | modifyTablePropertiesClause
+    | modifyPropertiesClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
@@ -835,6 +847,7 @@ alterClause
     | rollupRenameClause
     | compactionClause
     | modifyCommentClause
+    | optimizeClause
 
     //Apply Policy clause
     | applyMaskingPolicyClause
@@ -924,13 +937,21 @@ swapTableClause
     : SWAP WITH identifier
     ;
 
-modifyTablePropertiesClause
+modifyPropertiesClause
     : SET propertyList
     ;
 
 modifyCommentClause
     : COMMENT '=' string
     ;
+
+optimizeClause
+    : keyDesc?
+      partitionDesc?
+      orderByDesc?
+      distributionDesc?
+      partitionNames?
+     ;
 
 addColumnClause
     : ADD COLUMN columnDesc (FIRST | AFTER identifier)? ((TO | IN) rollupName=identifier)? properties?
@@ -1006,7 +1027,7 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT (INTO | OVERWRITE) qualifiedName partitionNames?
+    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName | (FILES propertyList)) partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
@@ -1097,6 +1118,10 @@ showRoutineLoadTaskStatement
         WHERE expression
     ;
 
+showCreateRoutineLoadStatement
+    : SHOW CREATE ROUTINE LOAD (db=qualifiedName '.')? name=identifier
+    ;
+
 showStreamLoadStatement
     : SHOW ALL? STREAM LOAD (FOR (db=qualifiedName '.')? name=identifier)?
         (FROM db=qualifiedName)?
@@ -1179,6 +1204,11 @@ alterResourceGroupStatement
 showResourceGroupStatement
     : SHOW RESOURCE GROUP identifier
     | SHOW RESOURCE GROUPS ALL?
+    ;
+
+showResourceGroupUsageStatement
+    : SHOW USAGE RESOURCE GROUP identifier
+    | SHOW USAGE RESOURCE GROUPS
     ;
 
 createResourceStatement
@@ -1375,6 +1405,10 @@ showProcesslistStatement
 
 showProfilelistStatement
     : SHOW PROFILELIST (LIMIT limit =INTEGER_VALUE)?
+    ;
+
+showRunningQueriesStatement
+    : SHOW RUNNING QUERIES (LIMIT limit =INTEGER_VALUE)?
     ;
 
 showStatusStatement
@@ -1758,7 +1792,11 @@ dropPipeStatement
     ;
 
 alterPipeClause
-    : SUSPEND | RESUME
+    : SUSPEND |
+        RESUME |
+        RETRY ALL |
+        RETRY FILE fileName=string |
+        SET propertyList
     ;
 
 alterPipeStatement
@@ -2021,6 +2059,23 @@ tabletList
     : TABLET '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     ;
 
+prepareStatement
+    : PREPARE identifier FROM prepareSql
+    ;
+
+prepareSql
+    : statement
+    | SINGLE_QUOTED_TEXT
+    ;
+
+executeStatement
+    : EXECUTE identifier (USING  '@'identifierOrString (',' '@'identifierOrString)*)?
+    ;
+
+deallocateStatement
+    : (DEALLOCATE | DROP) PREPARE identifier
+    ;
+
 replicaList
     : REPLICA '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     ;
@@ -2157,6 +2212,7 @@ literalExpression
     | interval                                                                            #intervalLiteral
     | unitBoundary                                                                        #unitBoundaryLiteral
     | binary                                                                              #binaryLiteral
+    | PARAMETER                                                                           #Parameter
     ;
 
 functionCall
@@ -2178,7 +2234,8 @@ aggregationFunction
     | MAX '(' setQuantifier? expression ')'
     | MIN '(' setQuantifier? expression ')'
     | SUM '(' setQuantifier? expression ')'
-    | ARRAY_AGG '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
+    | ARRAY_AGG '(' setQuantifier? expression (ORDER BY sortItem (',' sortItem)*)? ')'
+    | GROUP_CONCAT '(' setQuantifier? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
     ;
 
 userVariable
@@ -2289,11 +2346,11 @@ restoreTableDesc
     ;
 
 explainDesc
-    : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | ANALYZE |VERBOSE | COSTS)?
+    : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | ANALYZE | VERBOSE | COSTS | SCHEDULER)?
     ;
 
 optimizerTrace
-    : TRACE (OPTIMIZER | REWRITE)
+    : TRACE (ALL | LOGS | TIMES | VALUES) identifier?
     ;
 
 partitionDesc
@@ -2567,31 +2624,32 @@ number
 
 nonReserved
     : ACCESS | ACTIVE | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
+    | ARRAY_AGG
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
     | BUILTIN | BASE
     | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
-    | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED
+    | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DEALLOCATE
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS
-    | GLOBAL | GRANTS
+    | GLOBAL | GRANTS | GROUP_CONCAT
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HUB
     | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
     | INTERVAL | ISOLATION
     | JOB
-    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
+    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
     | MASKING | MANUAL | MAP | MAPPING | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE | MINUS
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PLUGIN | PLUGINS | POLICY | POLICIES
     | PERCENT_RANK | PRECEDING | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
-    | QUARTER | QUERY | QUEUE | QUOTA | QUALIFY
+    | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
     | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
-    | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW
-    | SAMPLE | SCHEDULER | SECOND | SECURITY | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START
+    | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING
+    | SAMPLE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE

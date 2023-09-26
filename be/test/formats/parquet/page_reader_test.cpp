@@ -18,12 +18,12 @@
 
 #include <iostream>
 
+#include "exec/hdfs_scanner.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/parquet_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "io/string_input_stream.h"
 #include "util/thrift_util.h"
-
 namespace starrocks::parquet {
 
 class ParquetPageReaderTest : public testing::Test {
@@ -34,6 +34,7 @@ public:
 
 TEST_F(ParquetPageReaderTest, Normal) {
     std::string buffer;
+    HdfsScanStats stats;
 
     std::vector<uint8_t> read_buffer;
     read_buffer.reserve(1024);
@@ -50,7 +51,7 @@ TEST_F(ParquetPageReaderTest, Normal) {
         ThriftSerializer ser(true, 100);
         uint32_t len = 0;
         uint8_t* header_ser = nullptr;
-        ser.serialize(&page_header, &len, &header_ser);
+        CHECK(ser.serialize(&page_header, &len, &header_ser).ok());
         buffer.append((char*)header_ser, len);
 
         buffer.resize(buffer.size() + page_header.compressed_page_size);
@@ -68,7 +69,7 @@ TEST_F(ParquetPageReaderTest, Normal) {
         ThriftSerializer ser(true, 100);
         uint32_t len = 0;
         uint8_t* header_ser = nullptr;
-        ser.serialize(&page_header, &len, &header_ser);
+        CHECK(ser.serialize(&page_header, &len, &header_ser).ok());
         buffer.append((char*)header_ser, len);
 
         buffer.resize(buffer.size() + page_header.compressed_page_size);
@@ -80,7 +81,7 @@ TEST_F(ParquetPageReaderTest, Normal) {
 
     io::SharedBufferedInputStream stream(file.stream(), file.filename(), file.get_size().value());
 
-    PageReader reader(&stream, 0, total_size, 30);
+    PageReader reader(&stream, 0, total_size, 30, &stats);
 
     // read page 1
     auto st = reader.next_header();
@@ -106,6 +107,7 @@ TEST_F(ParquetPageReaderTest, Normal) {
 
 TEST_F(ParquetPageReaderTest, ExtraBytes) {
     std::string buffer;
+    HdfsScanStats stats;
 
     std::vector<uint8_t> read_buffer;
     read_buffer.reserve(1024);
@@ -122,7 +124,7 @@ TEST_F(ParquetPageReaderTest, ExtraBytes) {
         ThriftSerializer ser(true, 100);
         uint32_t len = 0;
         uint8_t* header_ser = nullptr;
-        ser.serialize(&page_header, &len, &header_ser);
+        CHECK(ser.serialize(&page_header, &len, &header_ser).ok());
         buffer.append((char*)header_ser, len);
 
         buffer.resize(buffer.size() + page_header.compressed_page_size);
@@ -140,7 +142,7 @@ TEST_F(ParquetPageReaderTest, ExtraBytes) {
         ThriftSerializer ser(true, 100);
         uint32_t len = 0;
         uint8_t* header_ser = nullptr;
-        ser.serialize(&page_header, &len, &header_ser);
+        CHECK(ser.serialize(&page_header, &len, &header_ser).ok());
         buffer.append((char*)header_ser, len);
 
         buffer.resize(buffer.size() + page_header.compressed_page_size);
@@ -154,7 +156,7 @@ TEST_F(ParquetPageReaderTest, ExtraBytes) {
 
     io::SharedBufferedInputStream stream(file.stream(), file.filename(), file.get_size().value());
 
-    PageReader reader(&stream, 0, total_size, 30);
+    PageReader reader(&stream, 0, total_size, 30, &stats);
 
     // read page 1
     auto st = reader.next_header();

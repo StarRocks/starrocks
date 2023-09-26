@@ -41,7 +41,7 @@ namespace starrocks::config {
 CONF_Int32(cluster_id, "-1");
 // The port on which ImpalaInternalService is exported.
 CONF_Int32(be_port, "9060");
-CONF_Int32(thrift_port, "9060");
+CONF_Int32(thrift_port, "0");
 
 // The port for brpc.
 CONF_Int32(brpc_port, "8060");
@@ -491,7 +491,7 @@ CONF_Bool(thrift_rpc_strict_mode, "true");
 CONF_Int32(thrift_rpc_max_body_size, "0");
 
 // txn commit rpc timeout
-CONF_mInt32(txn_commit_rpc_timeout_ms, "20000");
+CONF_mInt32(txn_commit_rpc_timeout_ms, "60000");
 
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
@@ -669,6 +669,9 @@ CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 // The number of execution threads for pipeline engine.
 CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // The number of threads for preparing fragment instances in pipeline engine, vCPUs by default.
+// *  "n": positive integer, fixed number of threads to n.
+// *  "0": default value, means the same as number of cpu cores.
+// * "-n": negative integer, means n times of number of cpu cores.
 CONF_Int64(pipeline_prepare_thread_pool_thread_num, "0");
 CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
 // The number of threads for executing sink io task in pipeline engine, vCPUs by default.
@@ -728,6 +731,7 @@ CONF_Bool(rewrite_partial_segment, "true");
 CONF_String(object_storage_access_key_id, "");
 CONF_String(object_storage_secret_access_key, "");
 CONF_String(object_storage_endpoint, "");
+CONF_String(object_storage_bucket, "");
 // Tencent cos needs to add region information
 CONF_String(object_storage_region, "");
 CONF_Int64(object_storage_max_connection, "102400");
@@ -907,6 +911,10 @@ CONF_mInt32(spill_init_partition, "16");
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
 CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
+// The maximum size of a single spill directory, for some case the spill directory may
+// be the same with storage path. Spill will return with error when used size has exceeded
+// the limit.
+CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 
@@ -956,13 +964,14 @@ CONF_Bool(block_cache_direct_io_enable, "false");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
-CONF_mInt64(l0_max_mem_usage, "67108864");  // 64MB
+CONF_mInt64(l0_min_mem_usage, "2097152");   // 2MB
+CONF_mInt64(l0_max_mem_usage, "104857600"); // 100MB
 // if l0_mem_size exceeds this value, l0 need snapshot
 CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
 CONF_mInt64(max_tmp_l1_num, "10");
 CONF_mBool(enable_parallel_get_and_bf, "true");
 // Control if using the minor compaction strategy
-CONF_mBool(enable_pindex_minor_compaction, "true");
+CONF_Bool(enable_pindex_minor_compaction, "true");
 // if l2 num is larger than this, stop doing async compaction,
 // add this config to prevent l2 grow too large.
 CONF_mInt64(max_allow_pindex_l2_num, "5");
@@ -970,6 +979,14 @@ CONF_mInt64(max_allow_pindex_l2_num, "5");
 CONF_mInt64(pindex_major_compaction_num_threads, "0");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
+// enable use bloom filter for pindex or not
+CONF_mBool(enable_pindex_filter, "true");
+// use bloom filter in pindex can reduce disk io, but in the following scenarios, we should skip the bloom filter
+// 1. The records to be found are in the index, bloom filter is no usage
+// 2. The records to be found is very small but bloom filter is very large, read bloom filter may cost a lot of disk io
+// So the bloom filter bytes should less than the index data we need to scan in disk, and the default strategy is if bloom
+// filter bytes is less or equal than 10% of pindex bytes, we will use bloom filter to filter some records
+CONF_mInt32(max_bf_read_bytes_percent, "10");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
@@ -1012,7 +1029,7 @@ CONF_mInt64(file_write_history_size, "10000");
 CONF_mInt32(update_cache_evict_internal_sec, "11");
 CONF_mBool(enable_auto_evict_update_cache, "true");
 
-CONF_mInt64(load_tablet_timeout_seconds, "30");
+CONF_mInt64(load_tablet_timeout_seconds, "60");
 
 CONF_mBool(enable_pk_value_column_zonemap, "true");
 
@@ -1023,13 +1040,21 @@ CONF_Int32(default_mv_resource_group_cpu_limit, "1");
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");
 
+// used for control the max memory cost when batch get pk index in each tablet
+CONF_mInt64(primary_key_batch_get_index_memory_limit, "104857600"); // 100MB
+
 // If your sort key cardinality is very high,
 // You could enable this config to speed up the point lookup query,
 // otherwise, StarRocks will use zone map for one column filter
 CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
 CONF_mBool(enable_http_stream_load_limit, "false");
+CONF_mInt32(finish_publish_version_internal, "100");
+
+CONF_mInt32(get_txn_status_internal_sec, "30");
 
 CONF_mBool(dump_metrics_with_bvar, "true");
+
+CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 
 } // namespace starrocks::config

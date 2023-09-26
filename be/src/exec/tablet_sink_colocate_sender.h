@@ -46,6 +46,8 @@ public:
     bool is_full() override;
     bool is_close_done() override;
 
+    bool get_immutable_partition_ids(std::set<int64_t>* partition_ids) override;
+
 private:
     Status _send_chunks(const OlapTableSchemaParam* schema, Chunk* chunk,
                         const std::vector<std::vector<int64_t>>& index_tablet_ids,

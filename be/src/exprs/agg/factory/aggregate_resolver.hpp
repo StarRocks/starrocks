@@ -106,6 +106,19 @@ public:
         }
     }
 
+    template <class StateType, typename SpecificAggFunctionPtr = AggregateFunctionPtr, bool IgnoreNull = true>
+    void add_general_mapping(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
+        _general_mapping.emplace(std::make_tuple(name, false, false), fun);
+        auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, false, IgnoreNull>(fun);
+        _general_mapping.emplace(std::make_tuple(name, false, true), nullable_agg);
+
+        if (is_window) {
+            _general_mapping.emplace(std::make_tuple(name, true, false), fun);
+            auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, true, IgnoreNull>(fun);
+            _general_mapping.emplace(std::make_tuple(name, true, true), nullable_agg);
+        }
+    }
+
     template <LogicalType ArgType, LogicalType RetType, typename SpecificAggFunctionPtr = AggregateFunctionPtr>
     void add_aggregate_mapping_notnull(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);

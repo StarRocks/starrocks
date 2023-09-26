@@ -60,6 +60,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -69,7 +70,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
@@ -81,7 +81,6 @@ import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -434,7 +433,6 @@ public class RestoreJob extends AbstractJob {
      */
     private void checkAndPrepareMeta() {
         MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(1L);
-        WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouse(), 1L);
         Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
@@ -459,8 +457,8 @@ public class RestoreJob extends AbstractJob {
                     continue;
                 }
 
-                if (!tbl.isOlapOrCloudNativeTable()) {
-                    status = new Status(ErrCode.COMMON_ERROR, "Only support retore OLAP table: " + tbl.getName());
+                if (!tbl.isNativeTableOrMaterializedView()) {
+                    status = new Status(ErrCode.COMMON_ERROR, "Only support restore OLAP table: " + tbl.getName());
                     return;
                 }
 
@@ -498,7 +496,7 @@ public class RestoreJob extends AbstractJob {
 
                     tblInfo.checkAndRecoverAutoIncrementId(localTbl);
                     // table already exist, check schema
-                    if (!localTbl.isOlapOrCloudNativeTable()) {
+                    if (!localTbl.isNativeTableOrMaterializedView()) {
                         status = new Status(ErrCode.COMMON_ERROR,
                                 "Only support retore olap table: " + localTbl.getName());
                         return;
@@ -869,6 +867,7 @@ public class RestoreJob extends AbstractJob {
                             localTbl.getCopiedIndexes(),
                             localTbl.isInMemory(),
                             localTbl.enablePersistentIndex(),
+                            localTbl.primaryIndexCacheExpireSec(),
                             localTbl.getPartitionInfo().getTabletType(restorePart.getId()),
                             localTbl.getCompressionType(), indexMeta.getSortKeyIdxes());
                     task.setInRestoreMode(true);
@@ -1213,6 +1212,7 @@ public class RestoreJob extends AbstractJob {
             unfinishedSignatureToId.put(signature, beId);
         }
     }
+
     protected void sendDownloadTasks() {
         for (AgentTask task : batchTask.getAllTasks()) {
             AgentTaskQueue.addTask(task);
@@ -1263,7 +1263,6 @@ public class RestoreJob extends AbstractJob {
                 status = st;
             }
             MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
-            WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouse(), -1L);
             return;
         }
         LOG.info("waiting {} tablets to commit. {}", unfinishedSignatureToId.size(), this);
@@ -1325,20 +1324,46 @@ public class RestoreJob extends AbstractJob {
 
             globalStateMgr.getEditLog().logRestoreJob(this);
 
-            // register table in DynamicPartitionScheduler after restore job finished
             db.readLock();
             try {
                 for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                     Table tbl = db.getTable(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
                     if (tbl == null) {
+                        LOG.warn("skip post actions after restore success, table name does not existed: %s",
+                                tblInfo.name);
                         continue;
                     }
-                    if (tbl.getType() != TableType.OLAP) {
+                    if (!tbl.isNativeTableOrMaterializedView()) {
                         continue;
+                    }
+                    LOG.info("do post actions for table : {}", tbl.getName());
+
+                    // only for olap table
+                    if (tbl.isOlapTable()) {
+                        try {
+                            // register table in DynamicPartitionScheduler after restore job finished
+                            DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), (OlapTable) tbl);
+                        } catch (Exception e) {
+                            // no throw exceptions
+                            LOG.warn(String.format("register table %s for dynamic partition scheduler failed: ",
+                                    tbl.getName()), e);
+                        }
                     }
 
-                    DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), (OlapTable) tbl);
+                    if (tbl.isMaterializedView()) {
+                        // rebuild materialized view after restore job finished
+                        MaterializedView mv = (MaterializedView) tbl;
+                        try {
+                            mv.doAfterRestore(db);
+                        } catch (Exception e) {
+                            // no throw exceptions
+                            LOG.warn(String.format("rebuild materialized view %s failed: ", mv.getName()), e);
+                        }
+                    }
                 }
+            } catch (Exception e) {
+                LOG.warn("Do post actions after restore success failed: ", e);
+                throw e;
             } finally {
                 db.readUnlock();
             }
@@ -1429,7 +1454,6 @@ public class RestoreJob extends AbstractJob {
         status = new Status(ErrCode.COMMON_ERROR, "user cancelled, current state: " + state.name());
         cancelInternal(false);
         MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
-        WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouse(), -1L);
         return Status.OK;
     }
 
@@ -1525,7 +1549,7 @@ public class RestoreJob extends AbstractJob {
                 continue;
             }
 
-            if (!tbl.isOlapOrCloudNativeTable()) {
+            if (!tbl.isNativeTableOrMaterializedView()) {
                 continue;
             }
 

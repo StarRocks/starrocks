@@ -73,6 +73,7 @@ public class CreateTableAnalyzer {
 
     private static final String DEFAULT_CHARSET_NAME = "utf8";
 
+    private static final String UNIFIED = "unified";
     private static final String ELASTICSEARCH = "elasticsearch";
     private static final String ICEBERG = "iceberg";
     private static final String HIVE = "hive";
@@ -93,19 +94,26 @@ public class CreateTableAnalyzer {
                     throw new SemanticException("Unknown engine name: %s", engineName);
                 }
             }
-        } else {
-            String catalogType = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(catalogName);
-            if (Strings.isNullOrEmpty(engineName)) {
-                if (!catalogType.equalsIgnoreCase(ICEBERG) && !catalogType.equalsIgnoreCase(HIVE)) {
-                    throw new SemanticException("Currently doesn't support creating tables of type " + catalogType);
-                }
-                return catalogType;
-            } else if (!engineName.equalsIgnoreCase(catalogType)) {
-                throw new SemanticException("Can't create %s table in the %s catalog", engineName, catalogType);
-            } else {
-                return engineName;
-            }
         }
+
+        String catalogType = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(catalogName);
+        if (catalogType.equalsIgnoreCase(UNIFIED)) {
+            if (Strings.isNullOrEmpty(engineName)) {
+                throw new SemanticException("Create table in unified catalog requires engine clause " +
+                        "(ENGINE = ENGINE_NAME)");
+            }
+            return engineName;
+        }
+
+        if (Strings.isNullOrEmpty(engineName)) {
+            return catalogType; // use catalog type if engine is not specified
+        }
+
+        if (!engineName.equalsIgnoreCase(catalogType)) {
+            throw new SemanticException("Can't create %s table in the %s catalog", engineName, catalogType);
+        }
+
+        return engineName;
     }
 
     private static String analyzeCharsetName(String charsetName) {
@@ -361,8 +369,8 @@ public class CreateTableAnalyzer {
             }
             if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS
                     && !(keysDesc.getKeysType() == KeysType.AGG_KEYS && !hasReplace)) {
-                throw new SemanticException("Random distribution must be used in DUP_KEYS or AGG_KEYS without replace",
-                        distributionDesc.getPos());
+                throw new SemanticException(keysDesc.getKeysType().toSql() + (hasReplace ? " with replace " : "")
+                        + " must use hash distribution", distributionDesc.getPos());
             }
             distributionDesc.analyze(columnSet);
             statement.setDistributionDesc(distributionDesc);
@@ -403,47 +411,47 @@ public class CreateTableAnalyzer {
             }
             columns.add(col);
         }
-        boolean hasMaterializedColum = false;
+        boolean hasGeneratedColumn = false;
         for (Column column : columns) {
-            if (column.isMaterializedColumn()) {
-                hasMaterializedColum = true;
+            if (column.isGeneratedColumn()) {
+                hasGeneratedColumn = true;
                 break;
             }
         }
 
-        if (hasMaterializedColum && !statement.isOlapEngine()) {
+        if (hasGeneratedColumn && !statement.isOlapEngine()) {
             throw new SemanticException("Generated Column only support olap table");
         }
 
-        if (hasMaterializedColum && keysDesc.getKeysType() == KeysType.AGG_KEYS) {
+        if (hasGeneratedColumn && keysDesc.getKeysType() == KeysType.AGG_KEYS) {
             throw new SemanticException("Generated Column does not support AGG table");
         }
 
         Map<String, Column> columnsMap = Maps.newHashMap();
         for (Column column : columns) {
             columnsMap.put(column.getName(), column);
-            if (column.isMaterializedColumn() && keysDesc.containsCol(column.getName())) {
-                throw new SemanticException("Materialized Column can not be KEY");
+            if (column.isGeneratedColumn() && keysDesc.containsCol(column.getName())) {
+                throw new SemanticException("Generated Column can not be KEY");
             }
         }
 
-        if (hasMaterializedColum) {
+        if (hasGeneratedColumn) {
             if (!statement.isOlapEngine()) {
-                throw new SemanticException("Materialized Column only support olap table");
+                throw new SemanticException("Generated Column only support olap table");
             }
 
             if (RunMode.allowCreateLakeTable()) {
-                throw new SemanticException("Table with Generated column can not be lake table");
+                throw new SemanticException("Does not support generated column in shared data cluster yet");
             }
 
             boolean found = false;
             for (Column column : columns) {
-                if (found && !column.isMaterializedColumn()) {
-                    throw new SemanticException("All materialized columns must be defined after ordinary columns");
+                if (found && !column.isGeneratedColumn()) {
+                    throw new SemanticException("All generated columns must be defined after ordinary columns");
                 }
 
-                if (column.isMaterializedColumn()) {
-                    Expr expr = column.materializedColumnExpr();
+                if (column.isGeneratedColumn()) {
+                    Expr expr = column.generatedColumnExpr();
 
                     ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
                             new RelationFields(columns.stream().map(col -> new Field(
@@ -455,18 +463,18 @@ public class CreateTableAnalyzer {
                     expr.collect(FunctionCallExpr.class, funcs);
                     for (FunctionCallExpr fn : funcs) {
                         if (fn.isAggregateFunction()) {
-                            throw new SemanticException("Materialized Column don't support aggregation function");
+                            throw new SemanticException("Generated Column don't support aggregation function");
                         }
                     }
 
-                    // check if the expression refers to other materialized columns
+                    // check if the expression refers to other Generated columns
                     List<SlotRef> slots = Lists.newArrayList();
                     expr.collect(SlotRef.class, slots);
                     if (slots.size() != 0) {
                         for (SlotRef slot : slots) {
                             Column refColumn = columnsMap.get(slot.getColumnName());
-                            if (refColumn.isMaterializedColumn()) {
-                                throw new SemanticException("Expression can not refers to other materialized columns");
+                            if (refColumn.isGeneratedColumn()) {
+                                throw new SemanticException("Expression can not refers to other generated columns");
                             }
                             if (refColumn.isAutoIncrement()) {
                                 throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
@@ -475,7 +483,7 @@ public class CreateTableAnalyzer {
                     }
 
                     if (!column.getType().matchesType(expr.getType())) {
-                        throw new SemanticException("Illege expression type for Materialized Column " +
+                        throw new SemanticException("Illege expression type for Generated Column " +
                                 "Column Type: " + column.getType().toString() +
                                 ", Expression Type: " + expr.getType().toString());
                     }

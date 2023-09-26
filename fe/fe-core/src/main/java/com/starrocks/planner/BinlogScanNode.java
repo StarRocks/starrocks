@@ -21,7 +21,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -132,7 +132,7 @@ public class BinlogScanNode extends ScanNode {
         long localBeId = -1;
         long dbId = -1;
         String dbName = null;
-        for (Partition partition : CollectionUtils.emptyIfNull(olapTable.getAllPartitions())) {
+        for (PhysicalPartition partition : CollectionUtils.emptyIfNull(olapTable.getAllPhysicalPartitions())) {
             MaterializedIndex table = partition.getBaseIndex();
             long partitionId = partition.getId();
             long tableId = olapTable.getId();

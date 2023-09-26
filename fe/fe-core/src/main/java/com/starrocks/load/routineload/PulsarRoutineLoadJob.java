@@ -275,6 +275,11 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+    public String dataSourcePropertiesToSql() {
+        return "";
+    }
+
+    @Override
     protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws UserException {
         super.updateProgress(attachment);
         this.progress.update(attachment);
@@ -406,7 +411,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         try {
             unprotectedCheckMeta(db, stmt.getTableName(), stmt.getRoutineLoadDesc());
             Table table = db.getTable(stmt.getTableName());
-            Load.checkMergeCondition(stmt.getMergeConditionStr(), (OlapTable) table, false);
+            Load.checkMergeCondition(stmt.getMergeConditionStr(), (OlapTable) table, table.getFullSchema(), false);
             tableId = table.getId();
         } finally {
             db.readUnlock();

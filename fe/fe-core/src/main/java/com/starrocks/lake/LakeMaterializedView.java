@@ -52,25 +52,15 @@ public class LakeMaterializedView extends MaterializedView {
 
     private static final Logger LOG = LogManager.getLogger(LakeMaterializedView.class);
 
+    public LakeMaterializedView() {
+        this.type = TableType.CLOUD_NATIVE_MATERIALIZED_VIEW;
+    }
+
     public LakeMaterializedView(long id, long dbId, String mvName, List<Column> baseSchema, KeysType keysType,
                                 PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
                                 MvRefreshScheme refreshScheme) {
         super(id, dbId, mvName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, refreshScheme);
         this.type = TableType.CLOUD_NATIVE_MATERIALIZED_VIEW;
-    }
-
-    private FilePathInfo getDefaultFilePathInfo() {
-        return tableProperty.getStorageInfo().getFilePathInfo();
-    }
-
-    @Override
-    public String getStoragePath() {
-        return getDefaultFilePathInfo().getFullPath();
-    }
-
-    @Override
-    public FilePathInfo getPartitionFilePathInfo() {
-        return getDefaultFilePathInfo();
     }
 
     @Override
@@ -159,12 +149,9 @@ public class LakeMaterializedView extends MaterializedView {
 
         // storage_volume
         StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-        String storageVolumeId = svm.getStorageVolumeIdOfTable(id);
-        if (storageVolumeId != null) {
-            String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeName(storageVolumeId);
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
-                    PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME).append("\" = \"").append(volume).append("\"");
-        }
+        String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfTable(id);
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
+                PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME).append("\" = \"").append(volume).append("\"");
     }
 
     @Override

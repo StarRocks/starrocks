@@ -20,6 +20,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.planner.PartitionPruner;
@@ -208,6 +209,22 @@ public class ListPartitionPruner implements PartitionPruner {
         return false;
     }
 
+    private LiteralExpr castLiteralExpr(LiteralExpr literalExpr, Type type) {
+        LiteralExpr result = null;
+        String value = literalExpr.getStringValue();
+        if (literalExpr.getType() == Type.DATE && type.isNumericType()) {
+            value = String.valueOf(literalExpr.getLongValue() / 1000000);
+        }
+        try {
+            result = LiteralExpr.create(value, type);
+        } catch (Exception e) {
+            LOG.warn(e);
+            throw new StarRocksConnectorException("can not cast literal value " + literalExpr.getStringValue() +
+                    " to target type " + type.prettyPrint());
+        }
+        return result;
+    }
+
     // generate new partition value map using cast operator' type.
     // eg. string partition value cast to int
     // string_col = '01'  1
@@ -220,36 +237,43 @@ public class ListPartitionPruner implements PartitionPruner {
         ConcurrentNavigableMap<LiteralExpr, Set<Long>> newPartitionValueMap = new ConcurrentSkipListMap<>();
 
         for (Map.Entry<LiteralExpr, Set<Long>> entry : partitionValueMap.entrySet()) {
-            LiteralExpr literalExpr = null;
             LiteralExpr key = entry.getKey();
-            try {
-                literalExpr = LiteralExpr.create(key.getStringValue(), castOperator.getType());
-            } catch (Exception e) {
-                // ignore
-            }
-            if (literalExpr == null) {
-                try {
-                    literalExpr = (LiteralExpr) key.uncheckedCastTo(castOperator.getType());
-                } catch (Exception e) {
-                    LOG.error(e);
-                    throw new StarRocksConnectorException("can not cast partition value" + key.getStringValue() +
-                            "to target type " + castOperator.getType().prettyPrint());
-                }
-            }
+            LiteralExpr literalExpr = castLiteralExpr(key, castOperator.getType());
             Set<Long> partitions = newPartitionValueMap.computeIfAbsent(literalExpr, k -> Sets.newHashSet());
             partitions.addAll(entry.getValue());
         }
         return newPartitionValueMap;
     }
 
+    private ConstantOperator evaluateConstant(ScalarOperator operator) {
+        if (operator.isConstantRef()) {
+            return (ConstantOperator) operator;
+        }
+        if (operator instanceof CastOperator && operator.getChild(0).isConstantRef()) {
+            ConstantOperator child = (ConstantOperator) operator.getChild(0);
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(new HashMap<>());
+            LiteralExpr literal = (LiteralExpr) ScalarOperatorToExpr.buildExecExpression(child, formatterContext);
+            try {
+                literal = castLiteralExpr(literal, operator.getType());
+                return ConstantOperator.createObject(literal.getRealObjectValue(), operator.getType());
+            } catch (Exception e) {
+                LOG.warn("can not cast literal value " + literal.getStringValue() +
+                        " to target type " + operator.getType().prettyPrint());
+                return null;
+            }
+        }
+        return null;
+    }
+
     private Set<Long> evalBinaryPredicate(BinaryPredicateOperator binaryPredicate) {
         Preconditions.checkNotNull(binaryPredicate);
         ScalarOperator right = binaryPredicate.getChild(1);
-
-        if (!(right.isConstantRef())) {
+        // eval the right child only if it is a constant or cast(constant)
+        ConstantOperator rightChild = evaluateConstant(right);
+        if (rightChild == null) {
             return null;
         }
-        ConstantOperator rightChild = (ConstantOperator) binaryPredicate.getChild(1);
 
         if (!isSinglePartitionColumn(binaryPredicate)) {
             return null;

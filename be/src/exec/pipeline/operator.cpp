@@ -28,15 +28,9 @@
 
 namespace starrocks::pipeline {
 
-/// Operator.
-const int32_t Operator::s_pseudo_plan_node_id_for_memory_scratch_sink = -96;
-const int32_t Operator::s_pseudo_plan_node_id_for_export_sink = -97;
-const int32_t Operator::s_pseudo_plan_node_id_for_olap_table_sink = -98;
-const int32_t Operator::s_pseudo_plan_node_id_for_result_sink = -99;
-const int32_t Operator::s_pseudo_plan_node_id_upper_bound = -100;
-const int32_t Operator::s_pseudo_plan_node_id_for_iceberg_table_sink = -101;
+const int32_t Operator::s_pseudo_plan_node_id_for_final_sink = -1;
 
-Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id,
+Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
                    int32_t driver_sequence)
         : _factory(factory),
           _id(id),
@@ -45,14 +39,7 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
           _driver_sequence(driver_sequence) {
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
-    std::string profile_name;
-    if (plan_node_id >= 0) {
-        profile_name = strings::Substitute("$0 (plan_node_id=$1)", upper_name, _plan_node_id);
-    } else if (plan_node_id > Operator::s_pseudo_plan_node_id_upper_bound) {
-        profile_name = strings::Substitute("$0", upper_name, _plan_node_id);
-    } else {
-        profile_name = strings::Substitute("$0 (pseudo_plan_node_id=$1)", upper_name, _plan_node_id);
-    }
+    std::string profile_name = strings::Substitute("$0 (plan_node_id=$1)", upper_name, _plan_node_id);
     _runtime_profile = std::make_shared<RuntimeProfile>(profile_name);
     _runtime_profile->set_metadata(_id);
 
@@ -61,6 +48,15 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 
     _unique_metrics = std::make_shared<RuntimeProfile>("UniqueMetrics");
     _runtime_profile->add_child(_unique_metrics.get(), true, nullptr);
+    if (_plan_node_id == s_pseudo_plan_node_id_for_final_sink) {
+        _common_metrics->add_info_string("IsFinalSink");
+    }
+    if (is_subordinate) {
+        _common_metrics->add_info_string("IsSubordinate");
+    }
+    if (is_combinatorial_operator()) {
+        _common_metrics->add_info_string("IsCombinatorial");
+    }
 }
 
 Status Operator::prepare(RuntimeState* state) {
@@ -82,6 +78,10 @@ Status Operator::prepare(RuntimeState* state) {
     if (state->query_ctx() && state->query_ctx()->spill_manager()) {
         _mem_resource_manager.prepare(this, state->query_ctx()->spill_manager());
     }
+    for_each_child_operator([&](Operator* child) {
+        child->_common_metrics->add_info_string("IsSubordinate");
+        child->_common_metrics->add_info_string("IsChild");
+    });
     return Status::OK();
 }
 
@@ -287,8 +287,8 @@ void OperatorFactory::_prepare_runtime_in_filters(RuntimeState* state) {
 
         auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
         for (auto* filter : in_filters) {
-            filter->prepare(state);
-            filter->open(state);
+            WARN_IF_ERROR(filter->prepare(state), "prepare filter expression failed");
+            WARN_IF_ERROR(filter->open(state), "open filter expression failed");
             _runtime_in_filters.push_back(filter);
         }
     }

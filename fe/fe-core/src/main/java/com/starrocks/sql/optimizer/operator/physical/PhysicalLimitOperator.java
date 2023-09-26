@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
-import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -29,10 +29,14 @@ public class PhysicalLimitOperator extends PhysicalOperator {
     private final long offset;
 
     public PhysicalLimitOperator(long offset, long limit, Projection projection) {
-        super(OperatorType.PHYSICAL_LIMIT, GatherDistributionSpec.createGatherDistributionSpec(limit));
+        super(OperatorType.PHYSICAL_LIMIT, DistributionSpec.createGatherDistributionSpec());
         this.offset = offset;
         this.limit = limit;
         this.projection = projection;
+    }
+
+    public boolean hasOffset() {
+        return offset != Operator.DEFAULT_OFFSET;
     }
 
     public long getOffset() {

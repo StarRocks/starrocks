@@ -10,12 +10,12 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
 
 - Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or other S3-compatible storage system (for example, MinIO)
 
-- Metastore like Hive metastore, AWS Glue, or REST
+- Metastore like Hive metastore, AWS Glue, or Tabular
 
   > **NOTE**
   >
   > - If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
-  > - If you use Tabular Iceberg Catalog, you must choose REST as metastore.
+  > - If you choose Tabular as metastore, you need to use the Iceberg REST catalog.
 
 ## Usage notes
 
@@ -166,9 +166,9 @@ The following table describes the parameters you need to configure in `Metastore
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
-##### REST
+##### Tabular
 
-If you use Tabular Iceberg Catalog, you must choose REST as metastore and configure `MetastoreParams` as follows:
+If you use Tabular as metastore, you must specify the metastore type as REST (`"iceberg.catalog.type" = "rest"`). Configure `MetastoreParams` as follows:
 
 ```SQL
 "iceberg.catalog.type" = "rest",
@@ -182,11 +182,11 @@ The following table describes the parameters you need to configure in `Metastore
 | Parameter                  | Required | Description                                                         |
 | -------------------------- | -------- | ------------------------------------------------------------------- |
 | iceberg.catalog.type       | Yes      | The type of metastore that you use for your Iceberg cluster. Set the value to `rest`.           |
-| iceberg.catalog.uri        | Yes      | The URI of the REST service endpoint. Example: `https://api.tabular.io/ws`.      |
+| iceberg.catalog.uri        | Yes      | The URI of the Tabular service endpoint. Example: `https://api.tabular.io/ws`.      |
 | iceberg.catalog.credential | Yes      | The authentication information of the Tabular service.                                        |
 | iceberg.catalog.warehouse  | No       | The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`. |
 
-The following example creates an Iceberg catalog named `tabular` that uses REST as metastore:
+The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
 
 ```SQL
 CREATE EXTERNAL CATALOG tabular
@@ -195,7 +195,7 @@ PROPERTIES
     "type" = "iceberg",
     "iceberg.catalog.type" = "rest",
     "iceberg.catalog.uri" = "https://api.tabular.io/ws",
-    "iceberg.catalog.credential" = "t-5Ii8e3FIbT9m0",
+    "iceberg.catalog.credential" = "t-5Ii8e3FIbT9m0:aaaa-3bbbbbbbbbbbbbbbbbbb",
     "iceberg.catalog.warehouse" = "sandbox"
 );
 ```
@@ -204,9 +204,11 @@ PROPERTIES
 
 A set of parameters about how StarRocks integrates with your storage system. This parameter set is optional.
 
-If you use HDFS as storage, you do not need to configure `StorageCredentialParams`.
+Note the following points:
 
-If you use AWS S3, other S3-compatible storage system, Microsoft Azure Storage, or Google GCS as storage, you must configure `StorageCredentialParams`.
+- If you use HDFS as storage, you do not need to configure `StorageCredentialParams` and can skip this section. If you use AWS S3, other S3-compatible storage system, Microsoft Azure Storage, or Google GCS as storage, you must configure `StorageCredentialParams`.
+
+- If you use Tabular as metastore, you do not need to configure `StorageCredentialParams` and can skip this section. If you use HMS or AWS Glue as metastore, you must configure `StorageCredentialParams`.
 
 ##### AWS S3
 
@@ -255,8 +257,8 @@ Iceberg catalogs support S3-compatible storage systems from v2.5 onwards.
 If you choose an S3-compatible storage system, such as MinIO, as storage for your Iceberg cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
 
 ```SQL
-"aws.s3.enable_ssl" = "{true | false}",
-"aws.s3.enable_path_style_access" = "{true | false}",
+"aws.s3.enable_ssl" = "false",
+"aws.s3.enable_path_style_access" = "true",
 "aws.s3.endpoint" = "<s3_endpoint>",
 "aws.s3.access_key" = "<iam_user_access_key>",
 "aws.s3.secret_key" = "<iam_user_secret_key>"
@@ -267,7 +269,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | Parameter                        | Required | Description                                                  |
 | -------------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.enable_ssl                | Yes      | Specifies whether to enable SSL connection.<br>Valid values: `true` and `false`. Default value: `true`. |
-| aws.s3.enable_path_style_access  | Yes      | Specifies whether to enable path-style access.<br>Valid values: `true` and `false`. Default value: `false`.<br>Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. |
+| aws.s3.enable_path_style_access  | Yes      | Specifies whether to enable path-style access.<br>Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`.<br>Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. |
 | aws.s3.endpoint                  | Yes      | The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3. |
 | aws.s3.access_key                | Yes      | The access key of your IAM user. |
 | aws.s3.secret_key                | Yes      | The secret key of your IAM user. |

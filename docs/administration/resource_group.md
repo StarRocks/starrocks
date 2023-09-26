@@ -120,7 +120,7 @@ StarRocks calculates the degree of matching between a query and a classifier by 
 
 If multiple classifiers match a query, the classifier with a larger number of conditions has a higher degree of matching.
 
-```Plain%20Text
+```plaintext
 -- Classifier B has more conditions than Classifier A. Therefore, Classifier B has a higher degree of matching than Classifier A.
 
 
@@ -132,7 +132,7 @@ classifier B (user='Alice', source_ip = '192.168.1.0/24')
 
 If multiple matching classifiers have the same number of conditions, the classifier whose conditions are described more accurately has a higher degree of matching.
 
-```Plain%20Text
+```plaintext
 -- The CIDR block that is specified in Classifier B is smaller in range than Classifier A. Therefore, Classifier B has a higher degree of matching than Classifier A.
 classifier A (user='Alice', source_ip = '192.168.1.0/16')
 classifier B (user='Alice', source_ip = '192.168.1.0/24')
@@ -148,17 +148,18 @@ You can isolate computing resources among queries by configuring resource groups
 
 ### Enable resource groups
 
-Execute the following statement to enable resource groups:
+To use resource group, you must enable Pipeline Engine for your StarRcosk cluster:
 
 ```SQL
-SET enable_resource_group = true;
+-- Enable Pipeline Engine in the current session.
+SET enable_pipeline_engine = true;
+-- Enable Pipeline Engine globally.
+SET GLOBAL enable_pipeline_engine = true;
 ```
 
-If you want to globally enable resource groups, execute the following statement:
-
-```SQL
-SET GLOBAL enable_resource_group = true;
-```
+> **NOTE**
+>
+> From v3.1.0 onwards, Resource Group is enabled by default, and the session variable `enable_resource_group` is deprecated.
 
 ### Create resource groups and classifiers
 

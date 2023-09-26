@@ -82,9 +82,4 @@ public class MysqlTableSink extends DataSink {
     public DataPartition getOutputPartition() {
         return null;
     }
-
-    @Override
-    public boolean canUsePipeLine() {
-        return true;
-    }
 }

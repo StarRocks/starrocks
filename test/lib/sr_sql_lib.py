@@ -590,7 +590,7 @@ class StarrocksSQLApiLib(object):
 
             # check str
             log.info("[check type]: Str")
-            tools.assert_equal(type(exp), type(act), "exp and act results' type not match")
+            tools.assert_equal(type(exp), type(act), "exp and act results' type not match for %s" % sql)
 
             if exp.startswith("E:") and act.startswith("E:"):
                 if "url:" in exp and "url:" in act:
@@ -693,6 +693,8 @@ class StarrocksSQLApiLib(object):
         use_res = self.use_database(T_R_DB)
         tools.assert_true(use_res["status"], "use db: [%s] error" % T_R_DB)
 
+        self.execute_sql("set group_concat_max_len = 1024000;", True)
+        
         # get records
         query_sql = """
         select file, log_type, name, group_concat(log, ""), group_concat(hex(sequence), ",") 
@@ -727,15 +729,25 @@ class StarrocksSQLApiLib(object):
             file_dict[file] = self.merge_case_info(part, file, logs)
 
         for file, logs in file_dict.items():
+            t_file = file.replace("/R/", "/T/")
+            case_names = self._get_case_names(t_file)
             # write into file
             file_path = os.path.join(self.root_path, file)
 
             if not os.path.exists(os.path.dirname(file_path)):
                 os.makedirs(os.path.dirname(file_path))
 
+            lines = list()
+            for case_name in case_names:
+                lines.append(logs.get(case_name, ""))
+                if case_name in logs.keys():
+                    logs.pop(case_name)
+
+            if len(logs) > 0:
+                log.info("% has case logs not write to R files: %s" % (file, logs))
+
             with open(file_path, "w") as f:
-                lines = "\n".join(logs.values())
-                f.write(lines)
+                f.write("\n".join(lines))
 
         # drop db
         self.connect_starrocks()
@@ -790,6 +802,22 @@ class StarrocksSQLApiLib(object):
             info_dict[case_name] = "".join(case_log)
 
         return info_dict
+
+    def _get_case_names(self, t_file):
+        file_path = os.path.join(self.root_path, t_file)
+
+        case_names = list()
+        if not os.path.exists(file_path):
+            return case_names
+
+        with open(file_path, "r") as f:
+            contents = f.readlines()
+
+        for line in contents:
+            if not line.startswith(NAME_FLAG):
+                continue
+            case_names.append(re.compile("name: ([a-zA-Z0-9_-]+)").findall(line)[0])
+        return case_names
 
     def show_schema_change_task(self):
         show_sql = "show alter table column"
@@ -889,6 +917,29 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
+    def wait_for_pipe_finish(self, db_name, pipe_name, check_count=60):
+        """
+        wait pipe load finish
+        """
+        status = ""
+        show_sql = "select state from information_schema.pipes where database_name='{}' and pipe_name='{}'".format(db_name, pipe_name)
+        count = 0
+        print("waiting for pipe {}.{} finish".format(db_name, pipe_name))
+        while count < check_count:
+            res = self.execute_sql(show_sql, True)
+            print(res)
+            status = res["result"][0][0]
+            if status != "FINISHED":
+                print("pipe status is " + status)
+                time.sleep(1)
+            else:
+                # sleep another 5s to avoid FE's async action.
+                time.sleep(1)
+                break
+            count += 1
+        tools.assert_equal("FINISHED", status, "didn't wait pipe finish")
+
+
     def check_hit_materialized_view(self, query, mv_name):
         """
         assert mv_name is hit in query
@@ -922,6 +973,25 @@ class StarrocksSQLApiLib(object):
                 return ""
 
             status = res["result"][0][9]
+            if status == "FINISHED" or status == "CANCELLED" or status == "":
+                break
+            time.sleep(0.5)
+        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
+    def wait_optimize_table_finish(self, alter_type="OPTIMIZE"):
+        """
+        wait alter table job finish and return status
+        """
+        status = ""
+        while True:
+            res = self.execute_sql(
+                "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
+                True,
+            )
+            if (not res["status"]) or len(res["result"]) <= 0:
+                return ""
+
+            status = res["result"][0][6]
             if status == "FINISHED" or status == "CANCELLED" or status == "":
                 break
             time.sleep(0.5)
@@ -1093,6 +1163,8 @@ class StarrocksSQLApiLib(object):
         # load data
         data_files = self.get_common_data_files(data_name)
         for data in data_files:
+            if ".gitkeep" in data:
+                continue
             label = "%s_load_label_%s" % (data_name, uuid.uuid1().hex)
             file_name = data.split("/")[-1]
             table_name = file_name.split(".")[0]

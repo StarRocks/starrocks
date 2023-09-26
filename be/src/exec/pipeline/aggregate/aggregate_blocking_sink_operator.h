@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <utility>
 
 #include "exec/aggregator.h"
@@ -25,7 +26,7 @@ class AggregateBlockingSinkOperator : public Operator {
 public:
     AggregateBlockingSinkOperator(AggregatorPtr aggregator, OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                   int32_t driver_sequence, const char* name = "aggregate_blocking_sink")
-            : Operator(factory, id, name, plan_node_id, driver_sequence), _aggregator(std::move(aggregator)) {
+            : Operator(factory, id, name, plan_node_id, false, driver_sequence), _aggregator(std::move(aggregator)) {
         _aggregator->set_aggr_phase(AggrPhase2);
         _aggregator->ref();
     }
@@ -54,7 +55,7 @@ protected:
 
 private:
     // Whether prev operator has no output
-    bool _is_finished = false;
+    std::atomic_bool _is_finished = false;
     // whether enable aggregate group by limit optimize
     bool _agg_group_by_with_limit = false;
 };

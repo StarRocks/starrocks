@@ -46,6 +46,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
@@ -68,6 +69,7 @@ import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TResourceGroupUsage;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.commons.collections.CollectionUtils;
@@ -122,13 +124,7 @@ public class SystemInfoService implements GsonPostProcessable {
             throws DdlException {
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            // check is already exist
-            if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
-                throw new DdlException("Same backend already exists[" + pair.first + ":" + pair.second + "]");
-            }
-            if (getComputeNodeWithHeartbeatPort(pair.first, pair.second) != null) {
-                throw new DdlException("Same compute node already exists[" + pair.first + ":" + pair.second + "]");
-            }
+            checkSameNodeExist(pair.first, pair.second);
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
@@ -184,14 +180,22 @@ public class SystemInfoService implements GsonPostProcessable {
      */
     public void addBackends(List<Pair<String, Integer>> hostPortPairs) throws DdlException {
         for (Pair<String, Integer> pair : hostPortPairs) {
-            // check is already exist
-            if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
-                throw new DdlException("Same backend already exists[" + pair.first + ":" + pair.second + "]");
-            }
+            checkSameNodeExist(pair.first, pair.second);
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
             addBackend(pair.first, pair.second);
+        }
+    }
+
+    private void checkSameNodeExist(String host, int heartPort) throws DdlException {
+        // check is already exist
+        if (getBackendWithHeartbeatPort(host, heartPort) != null) {
+            throw new DdlException("Backend already exists with same host " + host + " and port " + heartPort);
+        }
+
+        if (getComputeNodeWithHeartbeatPort(host, heartPort) != null) {
+            throw new DdlException("Compute node already exists with same host " + host + " and port " + heartPort);
         }
     }
 
@@ -300,6 +304,9 @@ public class SystemInfoService implements GsonPostProcessable {
         // update idToComputeNode
         idToComputeNodeRef.remove(dropComputeNode.getId());
 
+        // remove from BackendCoreStat
+        BackendCoreStat.removeNumOfHardwareCoresOfBe(dropComputeNode.getId());
+
         // remove worker
         if (RunMode.allowCreateLakeTable()) {
             long starletPort = dropComputeNode.getStarletPort();
@@ -355,7 +362,7 @@ public class SystemInfoService implements GsonPostProcessable {
                         .map(table -> (OlapTable) table)
                         .filter(table -> table.getTableProperty().getReplicationNum() == 1)
                         .forEach(table -> {
-                            table.getAllPartitions().forEach(partition -> {
+                            table.getAllPhysicalPartitions().forEach(partition -> {
                                 String errMsg = String.format("Tables such as [%s.%s] on the backend[%s:%d]" +
                                                 " have only one replica. To avoid data loss," +
                                                 " please change the replication_num of [%s.%s] to three." +
@@ -404,6 +411,9 @@ public class SystemInfoService implements GsonPostProcessable {
         copiedReportVerions.remove(droppedBackend.getId());
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
 
+        // remove from BackendCoreStat
+        BackendCoreStat.removeNumOfHardwareCoresOfBe(droppedBackend.getId());
+
         // remove worker
         if (RunMode.allowCreateLakeTable()) {
             long starletPort = droppedBackend.getStarletPort();
@@ -446,9 +456,42 @@ public class SystemInfoService implements GsonPostProcessable {
         return backend;
     }
 
+    public void updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
+                                    int cpuUsedPermille, List<TResourceGroupUsage> groupUsages) {
+        ComputeNode node = getBackendOrComputeNode(backendId);
+        if (node == null) {
+            LOG.warn("updateResourceUsage receives a non-exist backend/compute [id={}]", backendId);
+            return;
+        }
+
+        node.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+
+        if (groupUsages != null) {
+            List<Pair<ResourceGroup, TResourceGroupUsage>> groupAndUsages = new ArrayList<>(groupUsages.size());
+            for (TResourceGroupUsage usage : groupUsages) {
+                ResourceGroup group = GlobalStateMgr.getCurrentState().getResourceGroupMgr()
+                        .getResourceGroupIncludingDefault(usage.getGroup_id());
+                if (group == null) {
+                    continue;
+                }
+                groupAndUsages.add(Pair.create(group, usage));
+            }
+            node.updateResourceGroupUsage(groupAndUsages);
+        }
+
+        GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyResourceUsageUpdate();
+    }
+
     public boolean checkBackendAvailable(long backendId) {
         Backend backend = idToBackendRef.get(backendId);
         return backend != null && backend.isAvailable();
+    }
+
+    public boolean checkNodeAvailable(ComputeNode node) {
+        if (node instanceof Backend) {
+            return node != null && node.isAvailable();
+        }
+        return node != null && node.isAlive();
     }
 
     public boolean checkBackendAlive(long backendId) {
@@ -540,6 +583,14 @@ public class SystemInfoService implements GsonPostProcessable {
             }
         }
         return null;
+    }
+
+    public ComputeNode getBackendOrComputeNodeWithBePort(String host, int bePort) {
+        ComputeNode node = getBackendWithBePort(host, bePort);
+        if (node == null) {
+            node = getComputeNodeWithBePort(host, bePort);
+        }
+        return node;
     }
 
     public List<Backend> getBackendOnlyWithHost(String host) {
@@ -712,7 +763,7 @@ public class SystemInfoService implements GsonPostProcessable {
      * @param srcBackends list of the candidate backends
      * @return empty list if not enough backend, otherwise return a list of backend's id
      */
-    private synchronized List<Long> seqChooseBackendIds(int backendNum, boolean isCreate, final List<Backend> srcBackends) {
+    public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean isCreate, final List<Backend> srcBackends) {
 
         long lastBackendId;
 
@@ -821,13 +872,8 @@ public class SystemInfoService implements GsonPostProcessable {
         if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db != null) {
-                db.readLock();
-                try {
-                    atomicLong.set(newReportVersion);
-                    LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
-                } finally {
-                    db.readUnlock();
-                }
+                atomicLong.set(newReportVersion);
+                LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
             } else {
                 LOG.warn("failed to update backend report version, db {} does not exist", dbId);
             }
@@ -965,6 +1011,12 @@ public class SystemInfoService implements GsonPostProcessable {
         // update idToComputeNode
         ComputeNode cn = idToComputeNodeRef.remove(computeNodeId);
 
+        // BackendCoreStat is a global state, checkpoint should not modify it.
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            // remove from BackendCoreStat
+            BackendCoreStat.removeNumOfHardwareCoresOfBe(computeNodeId);
+        }
+
         // clear map in starosAgent
         if (RunMode.allowCreateLakeTable()) {
             long starletPort = cn.getStarletPort();
@@ -985,6 +1037,12 @@ public class SystemInfoService implements GsonPostProcessable {
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.remove(backend.getId());
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
+
+        // BackendCoreStat is a global state, checkpoint should not modify it.
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            // remove from BackendCoreStat
+            BackendCoreStat.removeNumOfHardwareCoresOfBe(backend.getId());
+        }
 
         // clear map in starosAgent
         if (RunMode.allowCreateLakeTable()) {
@@ -1121,12 +1179,15 @@ public class SystemInfoService implements GsonPostProcessable {
         }
         idToReportVersionRef = ImmutableMap.copyOf(idToReportVersion);
 
-        // update BackendCoreStat
-        for (ComputeNode node : idToBackendRef.values()) {
-            BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
-        }
-        for (ComputeNode node : idToComputeNodeRef.values()) {
-            BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
+        // BackendCoreStat is a global state, checkpoint should not modify it.
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            // update BackendCoreStat
+            for (ComputeNode node : idToBackendRef.values()) {
+                BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
+            }
+            for (ComputeNode node : idToComputeNodeRef.values()) {
+                BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
+            }
         }
     }
 }

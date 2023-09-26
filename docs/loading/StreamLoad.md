@@ -1,5 +1,7 @@
 # Load data from a local file system or a streaming data source using HTTP PUT
 
+import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+
 StarRocks provides the loading method HTTP-based Stream Load to help you load data from a local file system or a streaming data source.
 
 Stream Load runs in synchronous loading mode. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result.
@@ -218,16 +220,6 @@ Stream Load does not allow you to query the result of a load job by using the SH
 ### Cancel a load job
 
 Stream Load does not allow you to cancel a load job. If a load job times out or encounters errors, StarRocks automatically cancels the job.
-
-## Load streaming data
-
-Stream Load allows you to load streaming data into StarRocks in real time by using programs. For more information, see the following topics:
-
-- For information about how to run Stream Load jobs by using Flink, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
-
-- For information about how to run Stream Load jobs by using Java programs, visit [https://github.com/StarRocks/demo/MiscDemo/stream_load](https://github.com/StarRocks/demo/tree/master/MiscDemo/stream_load).
-
-- For information about how to run Stream Load jobs by using Apache Spark™, see [01_sparkStreaming2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/01_sparkStreaming2StarRocks.md).
 
 ## Parameter configurations
 

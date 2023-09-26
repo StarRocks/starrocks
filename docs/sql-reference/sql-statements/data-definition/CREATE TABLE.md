@@ -10,7 +10,7 @@ Creates a new table in StarRocks.
 
 ## Syntax
 
-```Plain%20Text
+```plaintext
 CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...]
 [, index_definition1[, index_definition12,]])
@@ -103,9 +103,11 @@ Default value: olap. If this parameter is not specified, an OLAP table (StarRock
 
 Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and hudi (2.2 and later). If you want to create an external table to query external data sources, specify `CREATE EXTERNAL TABLE` and set `ENGINE` to any of these values. You can refer to [External table](../../../data_source/External_table.md) for more information.
 
+**Since v3.0, we recommend that you use catalogs to query data from Hive, Iceberg, Hudi, and JDBC data sources. External tables are deprecated. For more information, see [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../data_source/catalog/hudi_catalog.md), and [JDBC catalog](../data_source/catalog/jdbc_catalog.md).**
+
 - For MySQL, specify the following properties:
 
-    ```Plain%20Text
+    ```plaintext
     PROPERTIES (
         "host" = "mysql_server_host",
         "port" = "mysql_server_port",
@@ -124,7 +126,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For Elasticsearch, specify the following properties:
 
-    ```Plain%20Text
+    ```plaintext
     PROPERTIES (
 
     "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
@@ -143,7 +145,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For Hive, specify the following properties:
 
-    ```Plain%20Text
+    ```plaintext
     PROPERTIES (
 
         "database" = "hive_db_name",
@@ -156,7 +158,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For JDBC, specify the following properties:
 
-    ```Plain%20Text
+    ```plaintext
     PROPERTIES (
     "resource"="jdbc0",
     "table"="dest_tbl"
@@ -167,7 +169,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For Iceberg, specify the following properties:
 
-   ```Plain%20Text
+   ```plaintext
     PROPERTIES (
     "resource" = "iceberg0", 
     "database" = "iceberg", 
@@ -179,7 +181,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For Hudi, specify the following properties:
 
-  ```Plain%20Text
+  ```plaintext
     PROPERTIES (
     "resource" = "hudi0", 
     "database" = "hudi", 
@@ -374,34 +376,78 @@ Since version 3.0, the primary key and sort key are decoupled in the Primary Key
 
 ### PROPERTIES
 
-#### Specify storage medium, storage cooldown time, replica number
+#### Specify initial storage medium, automatic storage cooldown time, replica number
 
-If the engine type is `olap`, you can specify storage medium, storage cooldown time, and replica number when you create a table.
+If the engine type is `OLAP`, you can specify initial storage medium (`storage_medium`), automatic storage cooldown time (`storage_cooldown_time`) or time interval (`storage_cooldown_ttl`), and replica number (`replication_num`) when you create a table.
 
-  > **NOTE**
-  >
-  > `storage_cooldown_time` can be configured only when `storage_medium` is set to `SSD`. If you want to set `storage_medium` to SSD, make sure that your cluster uses SSD disks, that is, `storage_root_path` reported by BEs includes SSD. For more information about `storage_root_path`, see [Configuration](../../../administration/Configuration.md#configure-be-static-parameters).
+The scope where the properties take effect: If the table has only one partition, the properties belong to the table. If the table is divided into multiple partitions, the properties belong to each partition. And when you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](../data-definition/ALTER%20TABLE.md) after table creation.
 
-```Plain%20Text
+**Set initial storage medium and automatic storage cooldown time**
+
+```sql
 PROPERTIES (
     "storage_medium" = "[SSD|HDD]",
-    [ "storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss", ]
-    [ "replication_num" = "3" ]
+    { "storage_cooldown_ttl" = "<num> { YEAR | MONTH | DAY | HOUR } "
+    | "storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss" }
 )
 ```
 
-**storage_medium**: the initial storage medium, which can be set to SSD or HDD.
+- `storage_medium`: the initial storage medium, which can be set to `SSD` or `HDD`. Make sure that the type of storage medium you explicitly specified is consistent with the BE disk types for your StarRocks cluster specified in the BE static parameter `storage_root_path`.<br>
 
-> **NOTE**
->
-> - From 2.5.1, the system automatically infers storage medium based on BE disk type if `storage_medium` is not explicitly specified. Inference mechanism: If `storage_root_path` reported by BEs contain only SSD, the system automatically sets this parameter to SSD. If `storage_root_path` reported by BEs contain only HDD, the system automatically sets this parameter to HDD. If `storage_root_path` reported by BEs contain both SSD and HDD, the system automatically sets this parameter to SSD. From 2.3.10, 2.4.5, 2.5.4 onwards, if `storage_root_path` reported by BEs contain both SSD and HDD and the property `storage_cooldown_time` is specified, `storage_medium` is set to SSD; if the property `storage_cooldown_time` is not specified, `storage_medium` is set to HDD.
-> - If the FE configuration item `enable_strict_storage_medium_check` is set to `true`, the system strictly checks BE disk type when you create a table. If the storage medium you specified in CREATE TABLE is inconsistent with BE disk type, an error "Failed to find enough host in all backends with storage medium is SSD|HDD." is returned and table creation fails. If `enable_strict_storage_medium_check` is set to `false`, the system ignores this error and forcibly creates the table. However, cluster disk space may be unevenly distributed after data is loaded.
+    If the FE configuration item `enable_strict_storage_medium_check` is set to `true`, the system strictly checks BE disk type when you create a table. If the storage medium you specified in CREATE TABLE is inconsistent with BE disk type, an error "Failed to find enough host in all backends with storage medium is SSD|HDD." is returned and table creation fails. If `enable_strict_storage_medium_check` is set to `false`, the system ignores this error and forcibly creates the table. However, cluster disk space may be unevenly distributed after data is loaded.<br>
 
-**storage_cooldown_time**: the storage cooldown time for a partition. If the storage medium is SSD, SSD is switched to HDD after the time specified by this parameter. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this parameter is not explicitly specified, storage cooldown is not performed by default.
+    From v2.3.6, v2.4.2, v2.5.1, and v3.0 onwards, the system automatically infers storage medium based on BE disk type if `storage_medium` is not explicitly specified.<br>
 
-**replication_num**: number of replicas in the specified partition. Default number: 3.
+  - The system automatically sets this parameter to SSD in the following scenarios:
 
-If the table has only one partition, the properties belong to the table. If the table has two levels of partitions, the properties belong to each partition. You can also specify different properties for different partitions by using ALTER TABLE ADD PARTITION or ALTER TABLE MODIFY PARTITION.
+    - The disk types reported by BEs (`storage_root_path`) contain only SSD.
+    - The disk types reported by BEs (`storage_root_path`) contain both SSD and HDD. Note that from v2.3.10, v2.4.5, v2.5.4, and v3.0 onwards, the system sets `storage_medium` to SSD when `storage_root_path` reported by BEs contain both SSD and HDD and the property `storage_cooldown_time` is specified.
+
+  - The system automatically sets this parameter to HDD in the following scenarios:
+
+    - The disk types reported by BEs (`storage_root_path`) contain only HDD.
+    - From 2.3.10, 2.4.5, 2.5.4, and 3.0 onwards,  the system sets `storage_medium` to HDD when `storage_root_path` reported by BEs contain both SSD and HDD and the property `storage_cooldown_time` is not specified.
+
+- `storage_cooldown_ttl` or `storage_cooldown_time`: the automatic storage cooldown time or time interval. Automatic storage cooldown refers to automatically migrate data from SSD to HDD. This feature is only effective when the initial storage medium is SSD.
+
+  **Parameter**
+
+  - `storage_cooldown_ttl`：the **time interval** of automatic storage cooldown for the partitions in this table. If you need to retain the most recent partitions on SSD and automatically cool down older partitions to HDD after a certain time interval, you can use this parameter. The automatic storage cooldown time for each partition is calculated using the value of this parameter plus the upper time bound of the partition.
+
+  The supported values are `<num> YEAR`, `<num> MONTH`, `<num> DAY`, and `<num> HOUR`. `<num>` is a non-negative integer. The default value is null, indicating that storage cooldown is not automatically performed.
+
+  For example, you specify the value as `"storage_cooldown_ttl"="1 DAY"` when creating the table, and the partition `p20230801` with a range of `[2023-08-01 00:00:00,2023-08-02 00:00:00)` exists. The automatic storage cooldown time for this partition is `2023-08-03 00:00:00`, which is `2023-08-02 00:00:00 + 1 DAY`. If you specify the value as `"storage_cooldown_ttl"="0 DAY"` when creating the table, the automatic storage cooldown time for this partition is `2023-08-02 00:00:00`.
+
+  - `storage_cooldown_time`: the automatic storage cooldown time (**absolute time**) when the table is cooled down from SSD to HDD. The specified time needs to be later than the current time. Format: "yyyy-MM-dd HH:mm:ss". When you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](../data-definition/ALTER%20TABLE.md).
+
+**Usages**
+
+- The comparison between the parameters related to automatic storage cooldown is as follows:
+  - `storage_cooldown_ttl`: A table property that specifies the time interval of automatic storage cooldown for partitions in the table. The system automatically cools down a partition at the time `the value of this parameter plus the upper time bound of the partition`. So automatic storage cooldown is performed at the partition granularity, which is more flexible.
+  - `storage_cooldown_time`: A table property that specifies the automatic storage cooldown time (**absolute time**) for this table. Also, you can configure different properties for specified partitions after table creation.
+  - `storage_cooldown_second`: A static FE parameter that specifies the automatic storage cooldown latency for all tables within the cluster.
+
+- The table property `storage_cooldown_ttl` or `storage_cooldown_time` takes precedence over the FE static parameter `storage_cooldown_second`.
+- When configuring these parameters, you need to specify `"storage_medium = "SSD"`.
+- If you do not configure these parameters, automatic storage cooldown is not be automatically performed.
+- Execute `SHOW PARTITIONS FROM <table_name>` to view the automatic storage cooldown time for each partition.
+
+**Limit**
+
+- Expression and List partitioning are not supported.
+- The partition column need to be of date type.
+- Multiple partition columns are not supported.
+- Primary Key tables are not supported.
+
+**Set the number of replicas for each tablet in partitions**
+
+`replication_num`: number of replicas for each table in the partitions. Default number: `3`.
+
+```sql
+PROPERTIES (
+    "replication_num" = "<num>"
+)
+```
 
 #### Add bloom filter index for a column
 
@@ -489,8 +535,8 @@ The valid values of `write_quorum` are:
 
 If your StarRocks cluster has multiple data replicas, you can specify the `replicated_storage` parameter in `PROPERTIES` to configure the data writing and replication mode among replicas.
 
-- `true` (**default value**) indicates "single leader replication", which means data is written only to the primary replica. Other replicas synchronize data from the primary replica. This mode significantly reduces CPU cost caused by data writing to multiple replicas. It is supported from v2.5.
-- `false` indicates "leaderless replication", which means data is directly written to multiple replicas, without differentiating primary and secondary replicas. The CPU cost is multiplied by the number of replicas.
+- `true` (default in v3.0 and later) indicates "single leader replication", which means data is written only to the primary replica. Other replicas synchronize data from the primary replica. This mode significantly reduces CPU cost caused by data writing to multiple replicas. It is supported from v2.5.
+- `false` (default in v2.5) indicates "leaderless replication", which means data is directly written to multiple replicas, without differentiating primary and secondary replicas. The CPU cost is multiplied by the number of replicas.
 
 In most cases, using the default value gains better data writing performance. If you want to change the data writing and replication mode among replicas, run the ALTER TABLE command. Example:
 
@@ -807,7 +853,7 @@ The dynamic partitioning function must be enabled ("dynamic_partition.enable" = 
 
 This example creates partitions for the next three days and deletes partitions created three days ago. For example, if today is 2020-01-08, partitions with the following names will be created: p20200108, p20200109, p20200110, p20200111, and their ranges are:
 
-```Plain%20Text
+```plaintext
 [types: [DATE]; keys: [2020-01-08]; ‥types: [DATE]; keys: [2020-01-09]; )
 [types: [DATE]; keys: [2020-01-09]; ‥types: [DATE]; keys: [2020-01-10]; )
 [types: [DATE]; keys: [2020-01-10]; ‥types: [DATE]; keys: [2020-01-11]; )

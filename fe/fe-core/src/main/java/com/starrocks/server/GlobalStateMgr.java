@@ -141,7 +141,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
-import com.starrocks.credential.CloudCredentialUtil;
+import com.starrocks.credential.CredentialUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -201,6 +201,7 @@ import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
+import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RenameMaterializedViewLog;
@@ -228,6 +229,9 @@ import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
+import com.starrocks.qe.scheduler.slot.SlotManager;
+import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
@@ -294,7 +298,6 @@ import com.starrocks.thrift.TNodeInfo;
 import com.starrocks.thrift.TNodesInfo;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
-import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -304,7 +307,6 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import com.starrocks.warehouse.Warehouse;
-import com.starrocks.warehouse.WarehouseInfo;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -539,6 +541,10 @@ public class GlobalStateMgr {
     private PipeManager pipeManager;
     private PipeListener pipeListener;
     private PipeScheduler pipeScheduler;
+
+    private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
+    private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
+    private final SlotProvider slotProvider = new SlotProvider();
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -780,12 +786,14 @@ public class GlobalStateMgr {
         getConfigRefreshDaemon().registerListener(() -> {
             try {
                 if (Config.max_broker_load_job_concurrency != loadingLoadTaskScheduler.getCorePoolSize()) {
-                    loadingLoadTaskScheduler.setCorePoolSize(Config.max_broker_load_job_concurrency);
+                    loadingLoadTaskScheduler.setPoolSize(Config.max_broker_load_job_concurrency);
                 }
             } catch (Exception e) {
                 LOG.warn("check config failed", e);
             }
         });
+
+        nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
     }
 
     public static void destroyCheckpoint() {
@@ -993,10 +1001,6 @@ public class GlobalStateMgr {
 
     public WarehouseManager getWarehouseMgr() {
         return warehouseMgr;
-    }
-
-    public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {
-        return nodeMgr.getWarehouseInfosFromOtherFEs();
     }
 
     public StorageVolumeMgr getStorageVolumeMgr() {
@@ -1309,6 +1313,11 @@ public class GlobalStateMgr {
         createBuiltinStorageVolume();
     }
 
+    public void setFrontendNodeType(FrontendNodeType newType) {
+        // just for test, don't call it directly
+        feType = newType;
+    }
+
     // start all daemon threads only running on Master
     private void startLeaderOnlyDaemonThreads() {
         if (RunMode.allowCreateLakeTable()) {
@@ -1412,6 +1421,8 @@ public class GlobalStateMgr {
             compactionMgr.start();
         }
         configRefreshDaemon.start();
+
+        slotManager.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -2111,7 +2122,8 @@ public class GlobalStateMgr {
     }
 
     public void createTxnTimeoutChecker() {
-        txnTimeoutChecker = new FrontendDaemon("txnTimeoutChecker", Config.transaction_clean_interval_second) {
+        txnTimeoutChecker = new FrontendDaemon("txnTimeoutChecker",
+                Config.transaction_clean_interval_second * 1000L) {
             @Override
             protected void runAfterCatalogReady() {
                 globalTransactionMgr.abortTimeoutTxns();
@@ -2435,6 +2447,14 @@ public class GlobalStateMgr {
         localMetastore.createTable(stmt.getCreateTableStmt());
     }
 
+    public void addSubPartitions(Database db, String tableName, Partition partition, int num) throws DdlException {
+        localMetastore.addSubPartitions(db, tableName, partition, num);
+    }
+
+    public void replayAddSubPartition(PhysicalPartitionPersistInfoV2 info) throws DdlException {
+        localMetastore.replayAddSubPartition(info);
+    }
+
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException, AnalysisException {
         localMetastore.addPartitions(db, tableName, addPartitionClause);
@@ -2640,6 +2660,13 @@ public class GlobalStateMgr {
                         .append(partitionDuration).append("\"");
             }
 
+            if (olapTable.getAutomaticBucketSize() > 0) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)
+                        .append("\" = \"")
+                        .append(olapTable.getAutomaticBucketSize()).append("\"");
+            }
+
             if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
 
@@ -2718,6 +2745,12 @@ public class GlobalStateMgr {
                     sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
                 }
 
+                // show lightSchemaChange only when it is set true
+                if (olapTable.getUseLightSchemaChange()) {
+                    sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE).append("\" = \"");
+                    sb.append(olapTable.getUseLightSchemaChange()).append("\"");
+                }
+
                 // storage media
                 Map<String, String> properties = olapTable.getTableProperty().getProperties();
 
@@ -2759,6 +2792,13 @@ public class GlobalStateMgr {
                     sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(olapTable.getForeignKeyConstraints()))
                             .append("\"");
                 }
+            }
+
+            if (olapTable.primaryIndexCacheExpireSec() > 0) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)
+                        .append("\" = \"");
+                sb.append(olapTable.primaryIndexCacheExpireSec()).append("\"");
             }
 
             // compression type
@@ -2864,15 +2904,15 @@ public class GlobalStateMgr {
             sb.append("\"database\" = \"").append(hiveTable.getDbName()).append("\",\n");
             sb.append("\"table\" = \"").append(hiveTable.getTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\"");
-            if (!hiveTable.getHiveProperties().isEmpty()) {
+            if (!hiveTable.getProperties().isEmpty()) {
                 sb.append(",\n");
             }
-            sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
+            sb.append(new PrintableMap<>(hiveTable.getProperties(), " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.FILE) {
             FileTable fileTable = (FileTable) table;
             Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
-            CloudCredentialUtil.maskCloudCredential(clonedFileProperties);
+            CredentialUtil.maskCredential(clonedFileProperties);
             addTableComment(sb, table);
 
             sb.append("\nPROPERTIES (\n");
@@ -3398,11 +3438,9 @@ public class GlobalStateMgr {
         this.alterJobMgr.replayAlterMaterializedViewProperties(opCode, log);
     }
 
-
     public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
         this.alterJobMgr.replayAlterMaterializedViewStatus(log);
     }
-
 
     /*
      * used for handling CancelAlterStmt (for client is the CANCEL ALTER
@@ -3545,7 +3583,7 @@ public class GlobalStateMgr {
         }
         if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
             try {
-                Authorizer.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                Authorizer.checkAnyActionOnCatalog(ctx.getCurrentUserIdentity(),
                         ctx.getCurrentRoleIds(), newCatalogName);
             } catch (AccessDeniedException e) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
@@ -3576,7 +3614,7 @@ public class GlobalStateMgr {
             }
             if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
                 try {
-                    Authorizer.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                    Authorizer.checkAnyActionOnCatalog(ctx.getCurrentUserIdentity(),
                             ctx.getCurrentRoleIds(), newCatalogName);
                 } catch (AccessDeniedException e) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
@@ -3653,8 +3691,13 @@ public class GlobalStateMgr {
     }
 
     public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {
-        refreshExternalTable(stmt.getTableName(), stmt.getPartitions());
+        TableName tableName = stmt.getTableName();
+        List<String> partitionNames = stmt.getPartitions();
+        refreshExternalTable(tableName, partitionNames);
+        refreshOthersFeTable(tableName, partitionNames, true);
+    }
 
+    public void refreshOthersFeTable(TableName tableName, List<String> partitions, boolean isSync) throws DdlException {
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getFrontends(null);
         Map<String, Future<TStatus>> resultMap = Maps.newHashMapWithExpectedSize(allFrontends.size() - 1);
         for (Frontend fe : allFrontends) {
@@ -3662,8 +3705,8 @@ public class GlobalStateMgr {
                 continue;
             }
 
-            resultMap.put(fe.getHost(), refreshOtherFesTable(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                    stmt.getTableName(), stmt.getPartitions()));
+            resultMap.put(fe.getHost(), refreshOtherFesTable(
+                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()), tableName, partitions));
         }
 
         String errMsg = "";
@@ -3681,15 +3724,25 @@ public class GlobalStateMgr {
                 errMsg += "refresh fe " + entry.getKey() + " failed: " + e.getMessage();
             }
         }
+
         if (!errMsg.equals("")) {
-            ErrorReport.reportDdlException(ErrorCode.ERROR_REFRESH_EXTERNAL_TABLE_FAILED, errMsg);
+            if (isSync) {
+                ErrorReport.reportDdlException(ErrorCode.ERROR_REFRESH_EXTERNAL_TABLE_FAILED, errMsg);
+            } else {
+                LOG.error("Background refresh others fe failed, {}", errMsg);
+            }
         }
     }
 
     public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, TableName tableName,
                                                 List<String> partitions) {
-        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
-                + Config.thrift_rpc_timeout_ms;
+        int timeout;
+        if (ConnectContext.get() == null || ConnectContext.get().getSessionVariable() == null) {
+            timeout = Config.thrift_rpc_timeout_ms * 10;
+        } else {
+            timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000 + Config.thrift_rpc_timeout_ms;
+        }
+
         FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
             TRefreshTableRequest request = new TRefreshTableRequest();
             request.setCatalog_name(tableName.getCatalog());
@@ -3800,9 +3853,9 @@ public class GlobalStateMgr {
 
     public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
                                                               String namePostfix, List<Long> sourcePartitionIds,
-                                                              List<Long> tmpPartitionIds) {
+                                                              List<Long> tmpPartitionIds, boolean isOptimize) {
         return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds,
-                tmpPartitionIds);
+                tmpPartitionIds, isOptimize);
     }
 
     public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
@@ -3811,10 +3864,6 @@ public class GlobalStateMgr {
 
     public void replayTruncateTable(TruncateTableInfo info) {
         localMetastore.replayTruncateTable(info);
-    }
-
-    public void updateResourceUsage(long backendId, TResourceUsage usage) {
-        nodeMgr.updateResourceUsage(backendId, usage);
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
@@ -4097,5 +4146,17 @@ public class GlobalStateMgr {
         } catch (PrivilegeException e) {
             LOG.warn("Failed to grant builtin storage volume usage to public role", e);
         }
+    }
+
+    public SlotManager getSlotManager() {
+        return slotManager;
+    }
+
+    public SlotProvider getSlotProvider() {
+        return slotProvider;
+    }
+
+    public ResourceUsageMonitor getResourceUsageMonitor() {
+        return resourceUsageMonitor;
     }
 }

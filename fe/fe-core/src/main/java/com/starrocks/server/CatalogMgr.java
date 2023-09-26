@@ -35,11 +35,12 @@ import com.starrocks.common.proc.ExternalDbsProcDir;
 import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.connector.Connector;
+import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.ConnectorType;
+import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -47,8 +48,13 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.privilege.NativeAccessController;
+import com.starrocks.privilege.ranger.hive.RangerHiveAccessController;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -107,7 +113,7 @@ public class CatalogMgr {
         writeLock();
         try {
             Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
-            Connector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
+            CatalogConnector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
             if (null == connector) {
                 LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
                 throw new DdlException("connector create failed");
@@ -116,6 +122,13 @@ public class CatalogMgr {
                     ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
                     GlobalStateMgr.getCurrentState().getNextId();
             Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
+            String serviceName = properties.get("ranger.plugin.hive.service.name");
+            if (serviceName == null || serviceName.isEmpty()) {
+                Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+            } else {
+                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
+            }
+
             catalogs.put(catalogName, catalog);
 
             if (!isResourceMappingCatalog(catalogName)) {
@@ -138,10 +151,39 @@ public class CatalogMgr {
         writeLock();
         try {
             connectorMgr.removeConnector(catalogName);
+            Authorizer.getInstance().removeAccessControl(catalogName);
             catalogs.remove(catalogName);
             if (!isResourceMappingCatalog(catalogName)) {
                 DropCatalogLog dropCatalogLog = new DropCatalogLog(catalogName);
                 GlobalStateMgr.getCurrentState().getEditLog().logDropCatalog(dropCatalogLog);
+            }
+        } finally {
+            writeUnLock();
+        }
+    }
+
+    public void alterCatalog(AlterCatalogStmt stmt) {
+        String catalogName = stmt.getCatalogName();
+        writeLock();
+        try {
+            Catalog catalog = catalogs.get(catalogName);
+            if (catalog == null) {
+                return;
+            }
+
+            if (stmt.getAlterClause() instanceof ModifyTablePropertiesClause) {
+                Map<String, String> properties = ((ModifyTablePropertiesClause) stmt.getAlterClause()).getProperties();
+                String serviceName = properties.get("ranger.plugin.hive.service.name");
+                if (serviceName.isEmpty()) {
+                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+                } else {
+                    Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
+                }
+
+                catalog.getConfig().put("ranger.plugin.hive.service.name", serviceName);
+
+                AlterCatalogLog alterCatalogLog = new AlterCatalogLog(catalogName, properties);
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterCatalog(alterCatalogLog);
             }
         } finally {
             writeUnLock();
@@ -205,11 +247,20 @@ public class CatalogMgr {
             readUnlock();
         }
 
-        Connector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
-        if (null == connector) {
+        CatalogConnector catalogConnector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
+        if (catalogConnector == null) {
             LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
             throw new DdlException("connector create failed");
         }
+
+        Map<String, String> properties = catalog.getConfig();
+        String serviceName = properties.get("ranger.plugin.hive.service.name");
+        if (serviceName == null || serviceName.isEmpty()) {
+            Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+        } else {
+            Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
+        }
+
         writeLock();
         try {
             catalogs.put(catalogName, catalog);
@@ -234,6 +285,25 @@ public class CatalogMgr {
         writeLock();
         try {
             catalogs.remove(catalogName);
+        } finally {
+            writeUnLock();
+        }
+    }
+
+    public void replayAlterCatalog(AlterCatalogLog log) {
+        writeLock();
+        try {
+            String catalogName = log.getCatalogName();
+            Map<String, String> properties = log.getProperties();
+            String serviceName = properties.get("ranger.plugin.hive.service.name");
+            if (serviceName.isEmpty()) {
+                Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+            } else {
+                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
+            }
+
+            Catalog catalog = catalogs.get(catalogName);
+            catalog.getConfig().put("ranger.plugin.hive.service.name", serviceName);
         } finally {
             writeUnLock();
         }

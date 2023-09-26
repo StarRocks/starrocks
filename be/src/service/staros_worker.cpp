@@ -114,6 +114,14 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::get_shard_info(ShardId 
     return it->second.shard_info;
 }
 
+absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::retrieve_shard_info(ShardId id) {
+    auto st = get_shard_info(id);
+    if (absl::IsNotFound(st.status())) {
+        return _fetch_shard_info_from_remote(id);
+    }
+    return st;
+}
+
 std::vector<staros::starlet::ShardInfo> StarOSWorker::shards() const {
     std::vector<staros::starlet::ShardInfo> vec;
     vec.reserve(_shards.size());
@@ -183,8 +191,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
     }
 }
 
-absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,
-                                                                                            const Configuration& conf) {
+absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_remote(ShardId id) {
     static const int64_t kGetShardInfoTimeout = 5 * 1000 * 1000; // 5s (heartbeat interval)
     static const int64_t kCheckInterval = 10 * 1000;             // 10ms
     Awaitility wait;
@@ -195,7 +202,12 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
     }
 
     // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
-    auto info_or = g_starlet->get_shard_info(id);
+    return g_starlet->get_shard_info(id);
+}
+
+absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,
+                                                                                            const Configuration& conf) {
+    auto info_or = _fetch_shard_info_from_remote(id);
     if (!info_or.ok()) {
         return info_or.status();
     }
@@ -266,19 +278,19 @@ absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(co
             conf[fslib::kS3OverrideEndpoint] = s3_info.endpoint();
         }
         if (s3_info.has_credential()) {
-            auto credential = s3_info.credential();
+            auto& credential = s3_info.credential();
             if (credential.has_default_credential()) {
                 conf[fslib::kS3CredentialType] = "default";
             } else if (credential.has_simple_credential()) {
                 conf[fslib::kS3CredentialType] = "simple";
-                auto simple_credential = credential.simple_credential();
+                auto& simple_credential = credential.simple_credential();
                 conf[fslib::kS3CredentialSimpleAccessKeyId] = simple_credential.access_key();
                 conf[fslib::kS3CredentialSimpleAccessKeySecret] = simple_credential.access_key_secret();
             } else if (credential.has_profile_credential()) {
                 conf[fslib::kS3CredentialType] = "instance_profile";
             } else if (credential.has_assume_role_credential()) {
                 conf[fslib::kS3CredentialType] = "assume_role";
-                auto role_credential = credential.assume_role_credential();
+                auto& role_credential = credential.assume_role_credential();
                 conf[fslib::kS3CredentialAssumeRoleArn] = role_credential.iam_role_arn();
                 conf[fslib::kS3CredentialAssumeRoleExternalId] = role_credential.external_id();
             } else {
@@ -307,7 +319,7 @@ absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(co
     }
 
     if (need_enable_cache(info)) {
-        auto cache_info = info.cache_info;
+        auto& cache_info = info.cache_info;
         const static std::string conf_prefix("cachefs.");
 
         // rebuild configuration for cachefs

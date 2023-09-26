@@ -612,4 +612,104 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  other predicates: [15: expr, INT, true] = 2");
         assertContains(plan, "ColumnAccessPath: [/st1/s2, /st2/s2, /st3/s1, /st4/ss3/s31]");
     }
+
+    @Test
+    public void testExprRefMultipleTableCols() throws Exception {
+        String sql = "select t.c1, t.c2.s1 from (select array_map(x -> (x + t.v1), t.a1) c1, t.st1 c2 from " +
+                "(select pc0.a1, sc0.* from pc0 join sc0) t) t join pc0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 8> : 8: v1\n" +
+                "  |  <slot 27> : 9: st1.s1",
+                "5:Project\n" +
+                        "  |  <slot 16> : array_map(<slot 15> -> CAST(<slot 15> AS BIGINT) + 8: v1, 7: a1)\n" +
+                        "  |  <slot 27> : 27: expr");
+    }
+
+    @Test
+    public void testLiteralArrayPredicates() throws Exception {
+        {
+            String sql = "select pc0.a1 from pc0 where (([]) is not NULL)";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "  0:OlapScanNode\n" +
+                    "     table: pc0, rollup: pc0\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: array_length([]) IS NOT NULL\n" +
+                    "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                    "     tabletList=\n" +
+                    "     actualRows=0, avgRowSize=1.0\n" +
+                    "     Pruned type: 7 <-> [ARRAY<INT>]\n" +
+                    "     cardinality: 1");
+
+        }
+        {
+            String sql = "select st3.sa3, array_length(st3.sa3) from sc0 where (([1,2,3]) is NOT NULL)";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "  0:OlapScanNode\n" +
+                    "     table: sc0, rollup: sc0\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: array_length([1,2,3]) IS NOT NULL\n" +
+                    "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                    "     tabletList=\n" +
+                    "     actualRows=0, avgRowSize=3.0\n" +
+                    "     Pruned type: 4 <-> [struct<s1 int(11), s2 int(11), sa3 array<int(11)>>]\n" +
+                    "     ColumnAccessPath: [/st3/sa3]\n" +
+                    "     cardinality: 1\n");
+        }
+    }
+
+    @Test
+    public void testCommonPathMerge() throws Exception {
+        {
+            String sql = "select pc0.a1[0],pc0.a1[1] from pc0 where (([]) is not NULL)";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "  0:OlapScanNode\n" +
+                    "     table: pc0, rollup: pc0\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: array_length([]) IS NOT NULL\n" +
+                    "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                    "     tabletList=\n" +
+                    "     actualRows=0, avgRowSize=3.0\n" +
+                    "     Pruned type: 7 <-> [ARRAY<INT>]\n" +
+                    "     ColumnAccessPath: [/a1/INDEX]\n" +
+                    "     cardinality: 1");
+        }
+        {
+            String sql = "select st3.sa3[0], array_length(st3.sa3) from sc0 where (([1,2,3]) is NOT NULL)";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "  0:OlapScanNode\n" +
+                    "     table: sc0, rollup: sc0\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: array_length([1,2,3]) IS NOT NULL\n" +
+                    "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                    "     tabletList=\n" +
+                    "     actualRows=0, avgRowSize=3.0\n" +
+                    "     Pruned type: 4 <-> [struct<s1 int(11), s2 int(11), sa3 array<int(11)>>]\n" +
+                    "     ColumnAccessPath: [/st3/sa3/ALL]\n" +
+                    "     cardinality: 1\n");
+        }
+    }
+
+    @Test
+    public void testSubfieldWithoutCols() throws Exception {
+        String sql = "select [1, 2, 3] is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "5:Project\n" +
+                "  |  <slot 15> : array_length([1,2,3]) IS NULL");
+
+        sql = "select [1, 2, 3][1] is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "5:Project\n" +
+                "  |  <slot 15> : [1,2,3][1] IS NULL");
+
+        sql = "select map_keys(map{'a':1,'b':2}) is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "5:Project\n" +
+                "  |  <slot 15> : array_length(map_keys(map{'a':1,'b':2})) IS NULL");
+
+        sql = "select row(1,2,3).col2 is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "5:Project\n" +
+                "  |  <slot 15> : row(1, 2, 3).col2 IS NULL");
+    }
 }

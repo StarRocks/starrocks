@@ -16,6 +16,7 @@
 
 #include "column/array_column.h"
 #include "column/column_access_path.h"
+#include "column/const_column.h"
 #include "column/nullable_column.h"
 #include "storage/rowset/scalar_column_iterator.h"
 
@@ -85,7 +86,12 @@ Status ArrayColumnIterator::next_batch(size_t* n, Column* dst) {
     if (_access_values) {
         RETURN_IF_ERROR(_element_iterator->next_batch(&num_to_read, array_column->elements_column().get()));
     } else {
-        array_column->elements_column()->append_default(num_to_read);
+        if (!array_column->elements_column()->is_constant()) {
+            array_column->elements_column()->append_default(1);
+            array_column->elements_column() = ConstColumn::create(array_column->elements_column(), num_to_read);
+        } else {
+            array_column->elements_column()->append_default(num_to_read);
+        }
     }
 
     return Status::OK();
@@ -127,7 +133,7 @@ Status ArrayColumnIterator::next_batch(const SparseRange<>& range, Column* dst) 
         // if array column in nullable or element of array is empty, element_read_range may be empty.
         // so we should reseek the element_ordinal
         if (element_read_range.span_size() == 0) {
-            _element_iterator->seek_to_ordinal(element_ordinal);
+            RETURN_IF_ERROR(_element_iterator->seek_to_ordinal(element_ordinal));
         }
         // 2. Read offset column
         // [1, 2, 3], [4, 5, 6]
@@ -158,7 +164,12 @@ Status ArrayColumnIterator::next_batch(const SparseRange<>& range, Column* dst) 
         DCHECK(element_read_range.empty() || (element_read_range.begin() == _element_iterator->get_current_ordinal()));
         RETURN_IF_ERROR(_element_iterator->next_batch(element_read_range, array_column->elements_column().get()));
     } else {
-        array_column->elements_column()->append_default(read_rows);
+        if (!array_column->elements_column()->is_constant()) {
+            array_column->elements_column()->append_default(1);
+            array_column->elements_column() = ConstColumn::create(array_column->elements_column(), read_rows);
+        } else {
+            array_column->elements_column()->append_default(read_rows);
+        }
     }
 
     return Status::OK();
@@ -195,17 +206,31 @@ Status ArrayColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t 
     }
 
     // 3. Read elements
-    for (size_t i = 0; i < size; ++i) {
-        RETURN_IF_ERROR(_array_size_iterator->seek_to_ordinal_and_calc_element_ordinal(rowids[i]));
-        size_t element_ordinal = _array_size_iterator->element_ordinal();
-        RETURN_IF_ERROR(_element_iterator->seek_to_ordinal(element_ordinal));
-        size_t size_to_read = array_size.get_data()[i];
-        if (_access_values) {
+    if (_access_values) {
+        for (size_t i = 0; i < size; ++i) {
+            RETURN_IF_ERROR(_array_size_iterator->seek_to_ordinal_and_calc_element_ordinal(rowids[i]));
+            size_t element_ordinal = _array_size_iterator->element_ordinal();
+            RETURN_IF_ERROR(_element_iterator->seek_to_ordinal(element_ordinal));
+            size_t size_to_read = array_size.get_data()[i];
             RETURN_IF_ERROR(_element_iterator->next_batch(&size_to_read, array_column->elements_column().get()));
-        } else {
-            array_column->elements_column()->append_default(size_to_read);
         }
+    } else {
+        if (!array_column->elements_column()->is_constant()) {
+            array_column->elements_column()->append_default(1);
+            array_column->elements_column() = ConstColumn::create(array_column->elements_column());
+        }
+
+        size_t size_to_read = 0;
+        for (size_t i = 0; i < size; ++i) {
+            RETURN_IF_ERROR(_array_size_iterator->seek_to_ordinal_and_calc_element_ordinal(rowids[i]));
+            size_t element_ordinal = _array_size_iterator->element_ordinal();
+            RETURN_IF_ERROR(_element_iterator->seek_to_ordinal(element_ordinal));
+            size_to_read += array_size.get_data()[i];
+        }
+
+        array_column->elements_column()->append_default(size_to_read);
     }
+
     return Status::OK();
 }
 

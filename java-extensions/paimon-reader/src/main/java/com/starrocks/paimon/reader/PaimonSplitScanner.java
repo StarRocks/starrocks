@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
+import com.starrocks.jni.connector.SelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -29,6 +30,7 @@ import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.options.Options;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.RecordReader;
+import org.apache.paimon.reader.RecordReaderIterator;
 import org.apache.paimon.table.Table;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
@@ -62,11 +64,10 @@ public class PaimonSplitScanner extends ConnectorScanner {
     private ColumnType[] requiredTypes;
     private DataType[] logicalTypes;
     private Table table;
-    private RecordReader<InternalRow> reader;
-    private RecordReader.RecordIterator<InternalRow> batch;
-    private boolean continueCurrentBatch;
+    private RecordReaderIterator<InternalRow> iterator;
     private final int fetchSize;
     private final ClassLoader classLoader;
+    private final String[] nestedFields;
 
     public PaimonSplitScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
@@ -76,6 +77,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
         this.databaseName = params.get("database_name");
         this.tableName = params.get("table_name");
         this.requiredFields = params.get("required_fields").split(",");
+        this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
         this.splitInfo = params.get("split_info");
         this.predicateInfo = params.get("predicate_info");
 
@@ -128,6 +130,17 @@ public class PaimonSplitScanner extends ConnectorScanner {
             requiredTypes[i] = new ColumnType(type);
             logicalTypes[i] = dataType;
         }
+
+        // prune fields
+        SelectedFields ssf = new SelectedFields();
+        for (String nestField : nestedFields) {
+            ssf.addNestedPath(nestField);
+        }
+        for (int i = 0; i < requiredFields.length; i++) {
+            ColumnType type = requiredTypes[i];
+            String name = requiredFields[i];
+            type.pruneOnField(ssf, name);
+        }
     }
 
     private void initReader() throws IOException {
@@ -142,7 +155,8 @@ public class PaimonSplitScanner extends ConnectorScanner {
         List<Predicate> predicates = PaimonScannerUtils.decodeStringToObject(predicateInfo);
         readBuilder.withFilter(predicates);
         Split split = PaimonScannerUtils.decodeStringToObject(splitInfo);
-        reader = readBuilder.newRead().createReader(split);
+        RecordReader<InternalRow> reader = readBuilder.newRead().createReader(split);
+        iterator = new RecordReaderIterator<>(reader);
     }
 
     @Override
@@ -163,10 +177,10 @@ public class PaimonSplitScanner extends ConnectorScanner {
     @Override
     public void close() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            if (reader != null) {
-                reader.close();
+            if (iterator != null) {
+                iterator.close();
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             String msg = "Failed to close the paimon reader.";
             LOG.error(msg, e);
             throw new IOException(msg, e);
@@ -176,32 +190,22 @@ public class PaimonSplitScanner extends ConnectorScanner {
     @Override
     public int getNext() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            if (batch == null || !continueCurrentBatch) {
-                if (batch != null) {
-                    this.batch.releaseBatch();
-                }
-                this.batch = reader.readBatch();
-            }
             int numRows = 0;
-            if (batch != null) {
-                InternalRow row = null;
-                while (numRows < fetchSize) {
-                    row = batch.next();
-                    if (row == null) {
-                        break;
-                    }
-                    for (int i = 0; i < requiredFields.length; i++) {
-                        Object fieldData = InternalRowUtils.get(row, i, logicalTypes[i]);
-                        if (fieldData == null) {
-                            appendData(i, null);
-                        } else {
-                            ColumnValue fieldValue = new PaimonColumnValue(fieldData);
-                            appendData(i, fieldValue);
-                        }
-                    }
-                    numRows++;
+            while (iterator.hasNext() && numRows < fetchSize) {
+                InternalRow row = iterator.next();
+                if (row == null) {
+                    break;
                 }
-                this.continueCurrentBatch = row != null;
+                for (int i = 0; i < requiredFields.length; i++) {
+                    Object fieldData = InternalRowUtils.get(row, i, logicalTypes[i]);
+                    if (fieldData == null) {
+                        appendData(i, null);
+                    } else {
+                        ColumnValue fieldValue = new PaimonColumnValue(fieldData, logicalTypes[i]);
+                        appendData(i, fieldValue);
+                    }
+                }
+                numRows++;
             }
             return numRows;
         } catch (Exception e) {

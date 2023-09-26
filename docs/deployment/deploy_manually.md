@@ -1,6 +1,8 @@
 # Deploy StarRocks manually
 
-This topic describes how to manually deploy StarRocks. For other modes of installation, see [Deployment Overview](../deployment/deployment_overview.md).
+This topic describes how to manually deploy shared-nothing StarRocks (in which the BE is responsible for both storage and computing). For other modes of installation, see [Deployment Overview](../deployment/deployment_overview.md).
+
+To deploy a shared-data StarRocks cluster (decoupled storage and computing), see [Deploy and use shared-data StarRocks](../deployment/deploy_shared_data.md)
 
 ## Step 1: Start the Leader FE node
 
@@ -164,7 +166,7 @@ A Compute Node (CN) is a stateless computing service that does not maintain data
    a. If any of the CN ports mentioned in the [Environment Configuration Checklist](../deployment/environment_configurations.md) are occupied, you must assign valid alternatives in the CN configuration file.
 
       ```YAML
-      thrift_port = vvvv               # Default: 9060
+      be_port = vvvv                   # Default: 9060
       be_http_port = xxxx              # Default: 8040
       heartbeat_service_port = yyyy    # Default: 9050
       brpc_port = zzzz                 # Default: 8060

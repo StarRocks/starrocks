@@ -36,6 +36,7 @@ package com.starrocks.qe;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.cluster.ClusterNamespace;
@@ -52,7 +53,6 @@ import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
@@ -186,13 +186,15 @@ public class ConnectContext {
     protected boolean isHTTPQueryDump = false;
 
     protected boolean isStatisticsConnection = false;
+    protected boolean isStatisticsJob = false;
+    protected boolean isStatisticsContext = false;
+    protected boolean needQueued = true;
 
     protected DumpInfo dumpInfo;
 
     // The related db ids for current sql
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
 
-    protected PlannerProfile plannerProfile;
     protected StatementBase.ExplainLevel explainLevel;
 
     protected TWorkGroup resourceGroup;
@@ -204,6 +206,8 @@ public class ConnectContext {
     private ConnectContext parent;
 
     private boolean relationAliasCaseInsensitive = false;
+
+    private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
     public StmtExecutor getExecutor() {
         return executor;
@@ -240,7 +244,6 @@ public class ConnectContext {
         userVariables = new HashMap<>();
         command = MysqlCommand.COM_SLEEP;
         queryDetail = null;
-        plannerProfile = new PlannerProfile();
 
         mysqlChannel = new MysqlChannel(channel);
         if (channel != null) {
@@ -252,6 +255,18 @@ public class ConnectContext {
         if (shouldDumpQuery()) {
             this.dumpInfo = new QueryDumpInfo(this);
         }
+    }
+
+    public void putPreparedStmt(String stmtName, PrepareStmtContext ctx) {
+        this.preparedStmtCtxs.put(stmtName, ctx);
+    }
+
+    public PrepareStmtContext getPreparedStmt(String stmtName) {
+        return this.preparedStmtCtxs.get(stmtName);
+    }
+
+    public void removePreparedStmt(String stmtName) {
+        this.preparedStmtCtxs.remove(stmtName);
     }
 
     public long getStmtId() {
@@ -342,7 +357,7 @@ public class ConnectContext {
 
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
         VariableMgr.setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
-        if (!setVar.getType().equals(SetType.GLOBAL) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
+        if (!SetType.GLOBAL.equals(setVar.getType()) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
     }
@@ -581,10 +596,6 @@ public class ConnectContext {
         this.currentSqlDbIds = currentSqlDbIds;
     }
 
-    public PlannerProfile getPlannerProfile() {
-        return plannerProfile;
-    }
-
     public StatementBase.ExplainLevel getExplainLevel() {
         return explainLevel;
     }
@@ -632,6 +643,26 @@ public class ConnectContext {
         isStatisticsConnection = statisticsConnection;
     }
 
+    public boolean isStatisticsJob() {
+        return isStatisticsJob || isStatisticsContext;
+    }
+
+    public void setStatisticsJob(boolean statisticsJob) {
+        isStatisticsJob = statisticsJob;
+    }
+
+    public void setStatisticsContext(boolean isStatisticsContext) {
+        this.isStatisticsContext = isStatisticsContext;
+    }
+
+    public boolean isNeedQueued() {
+        return needQueued;
+    }
+
+    public void setNeedQueued(boolean needQueued) {
+        this.needQueued = needQueued;
+    }
+
     public ConnectContext getParent() {
         return parent;
     }
@@ -653,7 +684,6 @@ public class ConnectContext {
         if (killConnection) {
             isKilled = true;
         }
-        QueryQueueManager.getInstance().cancelQuery(this);
         if (executorRef != null) {
             executorRef.cancel();
         }
@@ -697,9 +727,6 @@ public class ConnectContext {
             }
         } else {
             long timeoutSecond = sessionVariable.getQueryTimeoutS();
-            if (isPending) {
-                timeoutSecond += GlobalVariable.getQueryQueuePendingTimeoutSecond();
-            }
             if (delta > timeoutSecond * 1000L) {
                 LOG.warn("kill query timeout, remote: {}, query timeout: {}",
                         getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS());
@@ -815,7 +842,6 @@ public class ConnectContext {
             }
             row.add(stmt);
             row.add(Boolean.toString(isPending));
-            row.add(currentWarehouse);
             return row;
         }
     }

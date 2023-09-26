@@ -160,13 +160,16 @@ public:
 
         const auto& read_stats = (*stream_st)->get_read_stats();
         auto stats = std::make_unique<io::NumericStatistics>();
-        stats->reserve(6);
+        stats->reserve(9);
         stats->append(kBytesReadLocalDisk, read_stats.bytes_read_local_disk);
         stats->append(kBytesReadRemote, read_stats.bytes_read_remote);
         stats->append(kIOCountLocalDisk, read_stats.io_count_local_disk);
         stats->append(kIOCountRemote, read_stats.io_count_remote);
         stats->append(kIONsLocalDisk, read_stats.io_ns_local_disk);
         stats->append(kIONsRemote, read_stats.io_ns_remote);
+        stats->append(kPrefetchHitCount, read_stats.prefetch_hit_count);
+        stats->append(kPrefetchWaitFinishNs, read_stats.prefetch_wait_finish_ns);
+        stats->append(kPrefetchPendingNs, read_stats.prefetch_pending_ns);
         return std::move(stats);
     }
 
@@ -502,6 +505,38 @@ public:
             return to_status(fs_st.status());
         }
         return to_status((*fs_st)->drop_cache(pair.first));
+    }
+
+    Status delete_files(const std::vector<std::string>& paths) override {
+        if (paths.empty()) {
+            return Status::OK();
+        }
+
+        std::vector<std::string> parsed_paths;
+        parsed_paths.reserve(paths.size());
+        std::shared_ptr<staros::starlet::fslib::FileSystem> fs = nullptr;
+        int64_t shard_id;
+        for (auto&& path : paths) {
+            ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+            auto fs_st = get_shard_filesystem(pair.second);
+            if (!fs_st.ok()) {
+                return to_status(fs_st.status());
+            }
+            if (fs == nullptr) {
+                shard_id = pair.second;
+                fs = *fs_st;
+            }
+            if (shard_id != pair.second) {
+                return Status::InternalError("Not all paths have the same scheme");
+            }
+            parsed_paths.emplace_back(std::move(pair.first));
+        }
+        std::vector<std::string_view> parsed_path_views;
+        parsed_path_views.reserve(parsed_paths.size());
+        for (auto& parsed_path : parsed_paths) {
+            parsed_path_views.emplace_back(parsed_path);
+        }
+        return to_status(fs->delete_files(parsed_path_views));
     }
 
 private:

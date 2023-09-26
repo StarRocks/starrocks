@@ -24,6 +24,7 @@
 namespace starrocks::lake {
 
 class MetaFileBuilder;
+class LakePrimaryIndex;
 
 class LakeLocalPersistentIndex : public PersistentIndex {
 public:
