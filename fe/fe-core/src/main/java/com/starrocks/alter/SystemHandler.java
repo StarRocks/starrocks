@@ -254,6 +254,10 @@ public class SystemHandler extends AlterHandler {
             throw new DdlException("It will cause insufficient disk space if these BEs are decommissioned.");
         }
 
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            return decommissionBackends;
+        }
+
         short maxReplicationNum = 0;
         LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         for (long dbId : localMetastore.getDbIds()) {
@@ -273,13 +277,12 @@ public class SystemHandler extends AlterHandler {
                                 maxReplicationNum = replicationNum;
                                 if (infoService.getAvailableBackendIds().size() - decommissionBackends.size() <
                                         maxReplicationNum) {
-                                    if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-                                        decommissionBackends.clear();
-                                        throw new DdlException(
-                                                "It will cause insufficient BE number if these BEs are decommissioned " +
-                                                        "because the table " + db.getFullName() + "." + olapTable.getName() +
-                                                        " requires " + maxReplicationNum + " replicas.");
-                                    }
+                                    decommissionBackends.clear();
+                                    throw new DdlException(
+                                            "It will cause insufficient BE number if these BEs are decommissioned " +
+                                                    "because the table " + db.getFullName() + "." + olapTable.getName() +
+                                                    " requires " + maxReplicationNum + " replicas.");
+
                                 }
                             }
                         }
