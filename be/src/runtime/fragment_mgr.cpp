@@ -75,7 +75,7 @@ class RuntimeProfile;
 class FragmentExecState {
 public:
     FragmentExecState(const TUniqueId& query_id, const TUniqueId& instance_id, int backend_num, ExecEnv* exec_env,
-                      const TNetworkAddress& coord_hostport);
+                      const TNetworkAddress& coord_hostport, FragmentType fragment_type);
 
     ~FragmentExecState();
 
@@ -140,6 +140,7 @@ private:
     int _backend_num;
     ExecEnv* _exec_env;
     TNetworkAddress _coord_addr;
+    FragmentType _fragment_type;
 
     PlanFragmentExecutor _executor;
     DateTimeValue _start_time;
@@ -151,12 +152,13 @@ private:
 };
 
 FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, int backend_num,
-                                     ExecEnv* exec_env, const TNetworkAddress& coord_addr)
+                                     ExecEnv* exec_env, const TNetworkAddress& coord_addr, FragmentType fragment_type)
         : _query_id(query_id),
           _fragment_instance_id(fragment_instance_id),
           _backend_num(backend_num),
           _exec_env(exec_env),
           _coord_addr(coord_addr),
+          _fragment_type(fragment_type),
           _executor(exec_env, std::bind<void>(std::mem_fn(&FragmentExecState::coordinator_callback), this,
                                               std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)) {
     _start_time = DateTimeValue::local_time();
@@ -170,6 +172,7 @@ Status FragmentExecState::prepare(const TExecPlanFragmentParams& params) {
     int func_version = params.__isset.func_version ? params.func_version : 2;
     _runtime_state->set_func_version(func_version);
     _runtime_state->init_mem_trackers(_query_id);
+    _runtime_state->set_is_streaming_load(_fragment_type == FragmentType::STREAMING_LOAD);
     _executor.set_runtime_state(_runtime_state.get());
 
     if (params.__isset.query_options) {
@@ -404,7 +407,7 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
 }
 
 Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, const StartSuccCallback& start_cb,
-                                       const FinishCallback& cb) {
+                                       const FinishCallback& cb, FragmentType fragment_type) {
     RETURN_IF_ERROR(_exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
 
     const TUniqueId& fragment_instance_id = params.params.fragment_instance_id;
@@ -418,7 +421,7 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
         }
     }
     exec_state.reset(new FragmentExecState(params.params.query_id, fragment_instance_id, params.backend_num, _exec_env,
-                                           params.coord));
+                                           params.coord, fragment_type));
     RETURN_IF_ERROR_WITH_WARN(exec_state->prepare(params), "Fail to prepare Fragment");
 
     {

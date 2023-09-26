@@ -367,6 +367,18 @@ CONF_Double(dictionary_encoding_ratio, "0.7");
 // The minimum chunk size for dictionary encoding speculation
 CONF_Int32(dictionary_speculate_min_chunk_size, "10000");
 
+// Whether to use special thread pool for streaming load to dismiss the deadlock
+// for concurrent streaming loads. The maximum number of threads and queue size
+// are set Integer.MAX_VALUE which indicate there is no limit for the thread pool.
+// But the limit will not be reached easily because fragment_pool_thread_num_max
+// and webserver_num_workers also limit the streaming load concurrency. Note you
+// don't need to change these configurations in general.
+CONF_mBool(enable_streaming_load_thread_pool, "true");
+CONF_Int32(streaming_load_thread_pool_num_min, "0");
+CONF_Int32(streaming_load_thread_pool_num_max, "2147483647");
+CONF_Int32(streaming_load_thread_pool_queue_size, "2147483647");
+CONF_Int32(streaming_load_thread_pool_idle_time_ms, "2000");
+
 // The maximum amount of data that can be processed by a stream load
 CONF_mInt64(streaming_load_max_mb, "10240");
 // Some data formats, such as JSON, cannot be streamed.
