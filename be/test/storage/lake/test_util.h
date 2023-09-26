@@ -15,6 +15,8 @@
 #pragma once
 #include <gtest/gtest.h>
 
+#include <utility>
+
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
@@ -30,7 +32,7 @@ namespace starrocks::lake {
 
 class TestBase : public ::testing::Test {
 public:
-    virtual ~TestBase() override {
+    ~TestBase() override {
         // Wait for all vacuum tasks finished processing before destroying
         // _tablet_mgr.
         ExecEnv::GetInstance()->vacuum_thread_pool()->wait();
@@ -38,8 +40,8 @@ public:
     }
 
 protected:
-    explicit TestBase(const std::string& test_dir, int64_t cache_limit = 1024 * 1024)
-            : _test_dir(test_dir),
+    explicit TestBase(std::string test_dir, int64_t cache_limit = 1024 * 1024)
+            : _test_dir(std::move(test_dir)),
               _parent_tracker(std::make_unique<MemTracker>(-1)),
               _mem_tracker(std::make_unique<MemTracker>(-1, "", _parent_tracker.get())),
               _lp(std::make_unique<FixedLocationProvider>(_test_dir)),
