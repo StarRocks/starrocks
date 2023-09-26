@@ -3792,10 +3792,10 @@ public class LocalMetastore implements ConnectorMetadata {
                 olapTable.setHasForbitGlobalDict(isForbit);
                 if (isForbit) {
                     property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.DISABLE_LOW_CARD_DICT);
-                    IDictManager.getInstance().disableGlobalDict(olapTable.getId());
+                    IDictManager.getInstance().disableGlobalDict(olapTable);
                 } else {
                     property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.ABLE_LOW_CARD_DICT);
-                    IDictManager.getInstance().enableGlobalDict(olapTable.getId());
+                    IDictManager.getInstance().enableGlobalDict(olapTable);
                 }
                 ModifyTablePropertyOperationLog info =
                         new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
@@ -3842,10 +3842,10 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (olapTable != null) {
                     if (enAble.equals(PropertyAnalyzer.DISABLE_LOW_CARD_DICT)) {
                         olapTable.setHasForbitGlobalDict(true);
-                        IDictManager.getInstance().disableGlobalDict(olapTable.getId());
+                        IDictManager.getInstance().disableGlobalDict(olapTable);
                     } else {
                         olapTable.setHasForbitGlobalDict(false);
-                        IDictManager.getInstance().enableGlobalDict(olapTable.getId());
+                        IDictManager.getInstance().enableGlobalDict(olapTable);
                     }
                 }
             } else {
@@ -4358,7 +4358,8 @@ public class LocalMetastore implements ConnectorMetadata {
             //
             // So we can only discard this information, in this case, it is equivalent to losing the record of these operations.
             // But it doesn't matter, these records are currently only used to record whether a replica is in a bad state.
-            // This state has little effect on the system, and it can be restored after the system has processed the bad state replica.
+            // This state has little effect on the system, and it can be restored after the system has processed the bad state
+            // replica.
             for (Pair<Long, Integer> tabletInfo : tabletsWithSchemaHash) {
                 LOG.warn("find an old backendTabletsInfo for tablet {}, ignore it", tabletInfo.first);
             }

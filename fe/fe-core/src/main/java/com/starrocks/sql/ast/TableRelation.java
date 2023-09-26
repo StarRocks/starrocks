@@ -80,6 +80,8 @@ public class TableRelation extends Relation {
 
     public void setTable(Table table) {
         this.table = table;
+        table.catalogName = this.name.getCatalog();
+        table.dbName = this.name.getDb();
     }
 
     public PartitionNames getPartitionNames() {

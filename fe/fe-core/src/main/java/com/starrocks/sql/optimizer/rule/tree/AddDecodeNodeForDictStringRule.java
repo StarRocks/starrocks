@@ -917,9 +917,9 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 }
 
                 // Condition 3: the varchar column has collected global dict
-                if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getName(), version)) {
+                if (IDictManager.getInstance().hasGlobalDict(table, column.getName(), version)) {
                     Optional<ColumnDict> dict =
-                            IDictManager.getInstance().getGlobalDict(table.getId(), column.getName());
+                            IDictManager.getInstance().getGlobalDict(table, column.getName());
                     // cache reaches capacity limit, randomly eliminate some keys
                     // then we will get an empty dictionary.
                     if (!dict.isPresent()) {
@@ -949,19 +949,20 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     continue;
                 }
 
-                ColumnStatistic columnStatistic =
-                        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(table, column.getName());
+                //                ColumnStatistic columnStatistic =
+                //                        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(table, column.getName());
                 // Condition 2: the varchar column is low cardinality string column
-                if (!FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
-                        columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
-                    LOG.debug("{} isn't low cardinality string column", column.getName());
-                    continue;
-                }
+                //                if (!FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
+                //                        columnStatistic.getDistinctValuesCount() > CacheDictManager
+                //                        .LOW_CARDINALITY_THRESHOLD)) {
+                //                    LOG.debug("{} isn't low cardinality string column", column.getName());
+                //                    continue;
+                //                }
 
                 // Condition 3: the varchar column has collected global dict
-                if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getName(), 1)) {
+                if (IDictManager.getInstance().hasGlobalDict(table, column.getName(), 1)) {
                     Optional<ColumnDict> dict =
-                            IDictManager.getInstance().getGlobalDict(table.getId(), column.getName());
+                            IDictManager.getInstance().getGlobalDict(table, column.getName());
                     // cache reaches capacity limit, randomly eliminate some keys
                     // then we will get an empty dictionary.
                     if (!dict.isPresent()) {

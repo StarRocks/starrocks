@@ -196,6 +196,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     protected Map<PartitionKey, Long> partitionKeyToId;
 
+    public String catalogName = "";
+    public String dbName = "";
+
     public Table(TableType type) {
         this.type = type;
         this.fullSchema = Lists.newArrayList();
