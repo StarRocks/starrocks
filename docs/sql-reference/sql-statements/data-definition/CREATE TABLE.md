@@ -619,6 +619,8 @@ PROPERTIES (
   - When this property is set to `true`, the load task returns success as soon as the data is written into the local disk cache, and the data is written into the object storage asynchronously. This allows better loading performance, but it also risks data reliability under potential system failures.
   - When this property is set to `false`, the load task returns success only after the data is written into both object storage and the local disk cache. This guarantees higher availability but leads to lower loading performance.
 
+- `light_schema_change`: whether to enable the light schema change. valid values: `true` and `false` (default). Enabling this property can accelerate the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using ALTER TABLE after table creation.
+
 ## Examples
 
 ### Create an Aggregate table that uses Hash bucketing and columnar storage
