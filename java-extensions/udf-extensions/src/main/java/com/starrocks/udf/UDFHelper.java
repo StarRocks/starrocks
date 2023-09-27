@@ -26,6 +26,7 @@ import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.nio.charset.StandardCharsets;
 import java.sql.Date;
+import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -214,6 +215,16 @@ public class UDFHelper {
         getStringBoxedResult(numRows, results, columnAddr);
     }
 
+    private static void getStringTimeResult(int numRows, Time[] column, long columnAddr) {
+        String[] results = new String[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] != null) {
+                results[i] = column[i].toString();
+            }
+        }
+        getStringBoxedResult(numRows, results, columnAddr);
+    }
+
     public static void getStringDateTimeResult(int numRows, LocalDateTime[] column, long columnAddr) {
         // TODO:
         String[] results = new String[numRows];
@@ -303,6 +314,8 @@ public class UDFHelper {
                     getStringDateTimeResult(numRows, (LocalDateTime[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof Timestamp[]) {
                     getStringTimeStampResult(numRows, (Timestamp[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof Time[]) {
+                    getStringTimeResult(numRows, (Time[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof BigDecimal[]) {
                     getStringDecimalResult(numRows, (BigDecimal[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof BigInteger[]) {

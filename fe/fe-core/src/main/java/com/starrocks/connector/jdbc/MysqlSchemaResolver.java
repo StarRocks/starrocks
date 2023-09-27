@@ -113,6 +113,9 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;
+            case Types.TIME:
+                primitiveType = PrimitiveType.TIME;
+                break;
             case Types.TIMESTAMP:
                 primitiveType = PrimitiveType.DATETIME;
                 break;
