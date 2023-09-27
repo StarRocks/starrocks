@@ -62,6 +62,7 @@ import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeTableAlterMetaJob;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
@@ -240,7 +241,8 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory.of(AlterJobV2.class, "clazz")
                     .registerSubtype(RollupJobV2.class, "RollupJobV2")
                     .registerSubtype(SchemaChangeJobV2.class, "SchemaChangeJobV2")
-                    .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob");
+                    .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
+                    .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob");
 
     // runtime adapter for class "LoadJobStateUpdateInfo"
     private static final RuntimeTypeAdapterFactory<LoadJobStateUpdateInfo>

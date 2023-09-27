@@ -3787,6 +3787,11 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         tableProperty.buildEnablePersistentIndex();
 
+        if (table.isCloudNativeTable()) {
+            // now default to LOCAL
+            tableProperty.buildPersistentIndexType();
+        }
+
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
         GlobalStateMgr.getCurrentState().getEditLog().logModifyEnablePersistentIndex(info);
@@ -4005,6 +4010,9 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 } else if (opCode == OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX) {
                     olapTable.setEnablePersistentIndex(tableProperty.enablePersistentIndex());
+                    if (olapTable.isCloudNativeTable()) {
+                        olapTable.setPersistentIndexType(tableProperty.getPersistentIndexType());
+                    }
                 } else if (opCode == OperationType.OP_MODIFY_BINLOG_CONFIG) {
                     if (!olapTable.isBinlogEnabled()) {
                         olapTable.clearBinlogAvailableVersion();
