@@ -965,7 +965,7 @@ You can specify the table attributes in the `"key" = "value"` format in `propert
    );
    ```
 
-2. Create a partitioned table named `partition_tbl`. The table consists of three columns, `action`, `id`, and `dt`, of which `id` and `dt` are defined as partition columns, as shown below:
+2. Create a partitioned table named `partition_tbl_1`. The table consists of three columns, `action`, `id`, and `dt`, of which `id` and `dt` are defined as partition columns, as shown below:
 
    ```SQL
    CREATE TABLE partition_tbl_1
@@ -1026,36 +1026,52 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ### Examples
 
-1. Insert a data row into the `partition_tbl` table:
+1. Insert three data rows into the `partition_tbl_1` table:
 
    ```SQL
-   INSERT INTO partition_tbl SELECT 'pv', 1, '2023-07-21';
+   INSERT INTO partition_tbl_1
+   VALUES
+       ("buy", 1, "2023-09-01"),
+       ("sell", 2, "2023-09-02"),
+       ("buy", 3, "2023-09-03");
    ```
 
-2. Insert the result of a SELECT query, which contains simple computations, into the `partition_tbl` table:
+2. Insert the result of a SELECT query, which contains simple computations, into the `partition_tbl_1` table:
 
    ```SQL
-   INSERT INTO partition_tbl (id, action, dt) SELECT 1+1, 'buy', '2023-07-21';
+   INSERT INTO partition_tbl_1 (id, action, dt) SELECT 1+1, 'buy', '2023-09-03';
    ```
 
-3. Insert the result of a SELECT query, which reads data from the `partition_tbl` table, into the same table:
+3. Insert the result of a SELECT query, which reads data from the `partition_tbl_1` table, into the same table:
 
    ```SQL
-   INSERT INTO partition_tbl SELECT 'buy', 1, date_add(dt, INTERVAL 2 DAY) FROM partition_tbl WHERE id=1;
+   INSERT INTO partition_tbl_1 SELECT 'buy', 1, date_add(dt, INTERVAL 2 DAY)
+   FROM partition_tbl_1
+   WHERE id=1;
    ```
 
-4. Insert the result of a SELECT query into the partitions that meet two conditions, `dt=‘2023-07-21’` and `id=1`, of the `partition_table` table:
+4. Insert the result of a SELECT query into the partitions that meet two conditions, `dt='2023-09-01'` and `id=1`, of the `partition_tbl_2` table:
 
    ```SQL
-   INSERT INTO partition_table SELECT 'order', 1, '2023-07-21';
-   INSERT INTO partition_table (dt='2023-07-21',id=1) SELECT 'order';
+   INSERT INTO partition_tbl_2 SELECT 'order', 1, '2023-09-01';
    ```
 
-5. Overwrite all `action` column values in the partitions that meet two conditions, `dt=‘2023-07-21’` and `id=1`, of the `partition_table` table with `close`:
+   Or
 
    ```SQL
-   INSERT OVERWRITE partition_table SELECT 'close', 1, '2023-07-21';
-   INSERT OVERWRITE partition_table (dt='2023-07-21',id=1) SELECT 'close';
+   INSERT INTO partition_tbl_2 partition(dt='2023-09-01',id=1) SELECT 'order';
+   ```
+
+5. Overwrite all `action` column values in the partitions that meet two conditions, `dt='2023-09-01'` and `id=1`, of the `partition_tbl_1` table with `close`:
+
+   ```SQL
+   INSERT OVERWRITE partition_tbl_1 SELECT 'close', 1, '2023-09-01';
+   ```
+
+   Or
+
+   ```SQL
+   INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
 ## Drop an Iceberg table
