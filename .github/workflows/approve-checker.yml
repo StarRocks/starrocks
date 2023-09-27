@@ -1,4 +1,4 @@
-name: APPROVE CHECKER
+name: REVIEW CHECKER
 
 on:
   pull_request_target:
@@ -86,4 +86,5 @@ jobs:
           done
           
           echo "Lack of META-TEAM members' approval!"
+          echo "::error::Lack of META-TEAM members' approval"
           exit 1
