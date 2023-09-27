@@ -42,8 +42,7 @@ public:
     AsyncDeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                          const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
                          bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
-                         MemTracker* mem_tracker)
-            : _queue_id{kInvalidQueueId}, _mtx(), _status(), _opened(false), _closed(false) {
+                         MemTracker* mem_tracker) {
         _writer = DeltaWriterBuilder()
                           .set_tablet_manager(tablet_manager)
                           .set_tablet_id(tablet_id)
@@ -95,13 +94,13 @@ private:
     Status do_open();
     bool closed();
 
-    std::unique_ptr<DeltaWriter> _writer;
-    bthread::ExecutionQueueId<Task> _queue_id;
-    StackTraceMutex<bthread::Mutex> _mtx;
+    std::unique_ptr<DeltaWriter> _writer{};
+    bthread::ExecutionQueueId<Task> _queue_id{kInvalidQueueId};
+    StackTraceMutex<bthread::Mutex> _mtx{};
     // _status、_opened and _closed are protected by _mtx
-    Status _status;
-    bool _opened;
-    bool _closed;
+    Status _status{};
+    bool _opened{false};
+    bool _closed{false};
 };
 
 AsyncDeltaWriterImpl::~AsyncDeltaWriterImpl() {

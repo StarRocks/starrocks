@@ -82,7 +82,6 @@ public:
               _mem_tracker(mem_tracker),
               _slots(slots),
               _max_buffer_size(max_buffer_size > 0 ? max_buffer_size : config::write_buffer_size),
-              _schema_initialized(false),
               _immutable_tablet_size(immutable_tablet_size),
               _merge_condition(std::move(merge_condition)),
               _miss_auto_increment_column(miss_auto_increment_column),
@@ -154,7 +153,7 @@ private:
     std::unique_ptr<FlushToken> _flush_token;
     std::shared_ptr<const TabletSchema> _tablet_schema;
     Schema _vectorized_schema;
-    bool _schema_initialized;
+    bool _schema_initialized{false};
 
     // for automatic bucket
     int64_t _immutable_tablet_size = 0;

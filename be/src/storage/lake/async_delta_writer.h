@@ -170,16 +170,16 @@ public:
     }
 
 private:
-    TabletManager* _tablet_mgr = nullptr;
-    int64_t _txn_id = 0;
-    int64_t _table_id;
-    int64_t _partition_id = 0;
-    int64_t _tablet_id = 0;
-    const std::vector<SlotDescriptor*>* _slots = nullptr;
-    int64_t _immutable_tablet_size = 0;
-    MemTracker* _mem_tracker = nullptr;
-    std::string _merge_condition;
-    bool _miss_auto_increment_column = false;
+    TabletManager* _tablet_mgr{nullptr};
+    int64_t _txn_id{0};
+    int64_t _table_id{0};
+    int64_t _partition_id{0};
+    int64_t _tablet_id{0};
+    const std::vector<SlotDescriptor*>* _slots{nullptr};
+    int64_t _immutable_tablet_size{0};
+    MemTracker* _mem_tracker{nullptr};
+    std::string _merge_condition{};
+    bool _miss_auto_increment_column{false};
 };
 
 } // namespace starrocks::lake
