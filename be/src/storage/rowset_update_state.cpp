@@ -410,8 +410,8 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
     read_column[0] = column->clone_empty();
     _auto_increment_partial_update_states[idx].write_column = column->clone_empty();
 
-    tablet->updates()->get_rss_rowids_by_pk_unlock(tablet, *_upserts[idx], nullptr,
-                                                   &_auto_increment_partial_update_states[idx].src_rss_rowids);
+    RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk_unlock(
+            tablet, *_upserts[idx], nullptr, &_auto_increment_partial_update_states[idx].src_rss_rowids));
 
     std::vector<uint32_t> rowids;
     uint32_t n = _auto_increment_partial_update_states[idx].src_rss_rowids.size();
@@ -523,7 +523,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
     // get rss_rowids to identify conflict exist or not
     int64_t t_start = MonotonicMillis();
     std::vector<uint64_t> new_rss_rowids(_upserts[segment_id]->size());
-    index.get(*_upserts[segment_id], &new_rss_rowids);
+    RETURN_IF_ERROR(index.get(*_upserts[segment_id], &new_rss_rowids));
     int64_t t_read_index = MonotonicMillis();
 
     size_t total_conflicts = 0;
@@ -625,7 +625,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
 
     auto src_path = Rowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), segment_id);
     auto dest_path = Rowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), segment_id);
-    DeferOp clean_temp_files([&] { FileSystem::Default()->delete_file(dest_path); });
+    DeferOp clean_temp_files([&] { (void)FileSystem::Default()->delete_file(dest_path); });
     int64_t t_rewrite_start = MonotonicMillis();
     if (txn_meta.has_auto_increment_partial_update_column_id() &&
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
@@ -647,8 +647,10 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     // we should reload segment after rewrite segment file because we may read data from the segment during
     // the subsequent apply process. And the segment will be treated as a full segment, so we must reload
     // segment[segment_id] of partial rowset
-    FileSystem::Default()->rename_file(dest_path, src_path);
-    RETURN_IF_ERROR(rowset->reload_segment(segment_id));
+    if (FileSystem::Default()->path_exists(dest_path).ok()) {
+        RETURN_IF_ERROR(FileSystem::Default()->rename_file(dest_path, src_path));
+        RETURN_IF_ERROR(rowset->reload_segment(segment_id));
+    }
 
     if (!txn_meta.partial_update_column_ids().empty()) {
         for (auto& write_column : _partial_update_states[segment_id].write_columns) {
