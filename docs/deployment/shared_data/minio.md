@@ -1,4 +1,4 @@
-# Deploy StarRocks using MinIO 
+# Use MinIO for shared-data
 
 This topic describes how to deploy and use a shared-data StarRocks cluster. This feature is supported from v3.0.
 
