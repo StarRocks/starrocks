@@ -9,6 +9,3 @@ Compared to the classic StarRocks architecture, separation of storage and comput
 - Local disk cache for hot data to boost query performance.
 - Asynchronous data ingestion into object storage, allowing a significant improvement in loading performance.
 
-## Architecture
-
-![Shared-data Architecture](../../assets/share_data_arch.png)

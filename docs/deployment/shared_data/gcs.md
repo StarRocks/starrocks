@@ -5,6 +5,9 @@ import SharedDataCNandUse from '../../assets/commonMarkdown/sharedDataCNandUse.m
 
 <SharedDataIntro />
 
+## Architecture
+
+![Shared-data Architecture](../../assets/share_data_arch.png)
 
 ## Deploy a shared-data StarRocks cluster
 
@@ -109,22 +112,6 @@ The ARN of the IAM role that has privileges on your S3 bucket in which your data
 
 The external ID of the AWS account that is used for cross-account access to your S3 bucket.
 
-#### azure_blob_path
-
-The Azure Blob Storage path used to store data. It consists of the name of the container within your storage account and the sub-path (if any) under the container, for example, `testcontainer/subpath`.
-
-#### azure_blob_endpoint
-
-The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`.
-
-#### azure_blob_shared_key
-
-The Shared Key used to authorize requests for your Azure Blob Storage.
-
-#### azure_blob_sas_token
-
-The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.
-
 > **Note**
 >
 > Only credential-related configuration items can be modified after your shared-data StarRocks cluster is created. If you changed the original storage path-related configuration items, the databases and tables you created before the change become read-only, and you cannot load data into them.
@@ -137,148 +124,8 @@ cloud_native_meta_port = <meta_port>
 enable_load_volume_from_conf = false
 ```
 
-If you want to specify the properties of your object storage in the FE configuration file, examples are as follows:
-
-- If you use AWS S3
-
-  - If you use the default authentication credential of AWS SDK to access S3, add the following configuration items:
-
-    ```Properties
-    run_mode = shared_data
-    cloud_native_meta_port = <meta_port>
-    cloud_native_storage_type = S3
-
-    # For example, testbucket/subpath
-    aws_s3_path = <s3_path>
-
-    # For example, us-west-2
-    aws_s3_region = <region>
-
-    # For example, https://s3.us-west-2.amazonaws.com
-    aws_s3_endpoint = <endpoint_url>
-
-    aws_s3_use_aws_sdk_default_behavior = true
-    ```
-
-  - If you use IAM user-based credential (Access Key and Secret Key) to access S3, add the following configuration items:
-
-    ```Properties
-    run_mode = shared_data
-    cloud_native_meta_port = <meta_port>
-    cloud_native_storage_type = S3
-
-    # For example, testbucket/subpath
-    aws_s3_path = <s3_path>
-
-    # For example, us-west-2
-    aws_s3_region = <region>
-
-    # For example, https://s3.us-west-2.amazonaws.com
-    aws_s3_endpoint = <endpoint_url>
-
-    aws_s3_access_key = <access_key>
-    aws_s3_secret_key = <secret_key>
-    ```
-
-  - If you use Instance Profile to access S3, add the following configuration items:
-
-    ```Properties
-    run_mode = shared_data
-    cloud_native_meta_port = <meta_port>
-    cloud_native_storage_type = S3
-
-    # For example, testbucket/subpath
-    aws_s3_path = <s3_path>
-
-    # For example, us-west-2
-    aws_s3_region = <region>
-
-    # For example, https://s3.us-west-2.amazonaws.com
-    aws_s3_endpoint = <endpoint_url>
-
-    aws_s3_use_instance_profile = true
-    ```
-
-  - If you use Assumed Role to access S3, add the following configuration items:
-
-    ```Properties
-    run_mode = shared_data
-    cloud_native_meta_port = <meta_port>
-    cloud_native_storage_type = S3
-
-    # For example, testbucket/subpath
-    aws_s3_path = <s3_path>
-
-    # For example, us-west-2
-    aws_s3_region = <region>
-
-    # For example, https://s3.us-west-2.amazonaws.com
-    aws_s3_endpoint = <endpoint_url>
-
-    aws_s3_use_instance_profile = true
-    aws_s3_iam_role_arn = <role_arn>
-    ```
-
-  - If you use Assumed Role to access S3 from an external AWS account, add the following configuration items:
-
-    ```Properties
-    run_mode = shared_data
-    cloud_native_meta_port = <meta_port>
-    cloud_native_storage_type = S3
-
-    # For example, testbucket/subpath
-    aws_s3_path = <s3_path>
-
-    # For example, us-west-2
-    aws_s3_region = <region>
-
-    # For example, https://s3.us-west-2.amazonaws.com
-    aws_s3_endpoint = <endpoint_url>
-
-    aws_s3_use_instance_profile = true
-    aws_s3_iam_role_arn = <role_arn>
-    aws_s3_external_id = <external_id>
-    ```
-
-- If you use Azure Blob Storage (supported from v3.1.1 onwards):
-
-  - If you use Shared Key to access Azure Blob Storage, add the following configuration items:
-
-    ```Properties
-    run_mode = shared_data
-    cloud_native_meta_port = <meta_port>
-    cloud_native_storage_type = AZBLOB
-
-    # For example, testcontainer/subpath
-    azure_blob_path = <blob_path>
-
-    # For example, https://test.blob.core.windows.net
-    azure_blob_endpoint = <endpoint_url>
-
-    azure_blob_shared_key = <shared_key>
-    ```
-
-  - If you use shared access signatures (SAS) to access Azure Blob Storage, add the following configuration items:
-
-    ```Properties
-    run_mode = shared_data
-    cloud_native_meta_port = <meta_port>
-    cloud_native_storage_type = AZBLOB
-
-    # For example, testcontainer/subpath
-    azure_blob_path = <blob_path>
-
-    # For example, https://test.blob.core.windows.net
-    azure_blob_endpoint = <endpoint_url>
-
-    azure_blob_sas_token = <sas_token>
-    ```
-
-  > **CAUTION**
-  >
-  > The hierarchical namespace must be disabled when you create the Azure Blob Storage Account.
-
-- If you use GCP Cloud Storage:
+If you want to specify the properties of your object storage in the FE configuration file, this
+example is for GCS:
 
   ```Properties
   run_mode = shared_data
@@ -298,20 +145,4 @@ If you want to specify the properties of your object storage in the FE configura
   aws_s3_secret_key = <secret_key>
   ```
 
-- If you use MinIO:
-
-  ```Properties
-  run_mode = shared_data
-  cloud_native_meta_port = <meta_port>
-  cloud_native_storage_type = S3
-
-  # For example, testbucket/subpath
-  aws_s3_path = <s3_path>
-
-  # For example: http://172.26.xx.xxx:39000
-  aws_s3_endpoint = <endpoint_url>
-  
-  aws_s3_access_key = <access_key>
-  aws_s3_secret_key = <secret_key>
-  ```
 <SharedDataCNandUse />
