@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
+import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
 import com.starrocks.sql.optimizer.rule.transformation.LimitPruneTabletsRule;
@@ -349,6 +350,7 @@ public class Optimizer {
         if (cteContext.needOptimizeCTE()) {
             cteContext.reset();
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.COLLECT_CTE);
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new ForceCTEReuseRule());
             rootTaskContext.setRequiredColumns(requiredColumns.clone());
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
             if (cteContext.needPushLimit() || cteContext.needPushPredicate()) {

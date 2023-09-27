@@ -1,0 +1,214 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
+package com.starrocks.sql.optimizer.rule.transformation;
+
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.sql.optimizer.CTEContext;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.RuleType;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+public class ForceCTEReuseRule extends TransformationRule {
+    public ForceCTEReuseRule() {
+        super(RuleType.TF_FORCE_CTE_REUSE,
+                Pattern.create(OperatorType.LOGICAL_CTE_PRODUCE, OperatorType.PATTERN_LEAF));
+    }
+
+    @Override
+    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        CTEContext cteContext = context.getCteContext();
+        LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) input.getOp();
+        int cteId = produce.getCteId();
+        NonDeterministicVisitor visitor = new NonDeterministicVisitor();
+        boolean hasNonDeterministicFunc = false;
+        for (OptExpression child : input.getInputs()) {
+            if (visitor.visit(child, null)) {
+                hasNonDeterministicFunc = true;
+                break;
+            }
+        }
+        if (hasNonDeterministicFunc) {
+            cteContext.addForceCTE(cteId);
+        }
+
+        return Collections.emptyList();
+    }
+
+    private static class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void> {
+        boolean checkColumnRefMap(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
+            if (columnRefMap == null) {
+                return false;
+            }
+            for (ScalarOperator ref : columnRefMap.values()) {
+                if (hasNonDeterministicFunc(ref)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // If a scalarOperator contains any non-deterministic function, it cannot be reused
+        // because the non-deterministic function results returned each time are inconsistent.
+        // a lambda-dependent expressions also can't be reused if reuseLambdaDependentExpr is false.
+        // For example, array_map(x->2x+1+2x,array),2x is lambda-dependent, so it can't be reused if
+        // reuseLambdaDependentExpr is false, but array_map(x->2x+1+2x,array) can be reused if needed.
+        private boolean hasNonDeterministicFunc(ScalarOperator scalarOperator) {
+            if (scalarOperator instanceof CallOperator) {
+                String fnName = ((CallOperator) scalarOperator).getFnName();
+                if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
+                    return true;
+                }
+            } else if (scalarOperator instanceof LambdaFunctionOperator) {
+                LambdaFunctionOperator lambdaOp = (LambdaFunctionOperator) scalarOperator;
+                Map<ColumnRefOperator, ScalarOperator> columnRefMap = lambdaOp.getColumnRefMap();
+                if (checkColumnRefMap(columnRefMap)) {
+                    return true;
+                }
+            }
+            for (ScalarOperator child : scalarOperator.getChildren()) {
+                if (hasNonDeterministicFunc(child)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private boolean checkAggCall(Map<ColumnRefOperator, CallOperator> aggregations) {
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregations.entrySet()) {
+                CallOperator aggCall = entry.getValue();
+                for (ScalarOperator arg : aggCall.getArguments()) {
+                    if (hasNonDeterministicFunc(arg)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        private boolean checkProject(Projection projection) {
+            if (projection == null) {
+                return false;
+            }
+            Map<ColumnRefOperator, ScalarOperator> columnRefMap =
+                    projection.getColumnRefMap();
+            if (columnRefMap == null) {
+                return false;
+            }
+            for (ScalarOperator scalarOperator : columnRefMap.values()) {
+                if (hasNonDeterministicFunc(scalarOperator)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private boolean checkOptExpression(OptExpression optExpression) {
+            Operator operator = optExpression.getOp();
+            if (operator.getProjection() != null && checkProject(operator.getProjection())) {
+                return true;
+            }
+            if (operator.accept(this, optExpression, null)) {
+                return true;
+            }
+            return false;
+        }
+
+        private Boolean visitChildren(OptExpression optExpression) {
+            for (OptExpression input : optExpression.getInputs()) {
+                if (checkOptExpression(input)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        @Override
+        public Boolean visit(OptExpression optExpression, Void context) {
+            if (checkOptExpression(optExpression)) {
+                return true;
+            }
+            return visitChildren(optExpression);
+        }
+
+        @Override
+        public Boolean visitLogicalJoin(OptExpression optExpression, Void context) {
+            LogicalJoinOperator joinOperator = (LogicalJoinOperator) optExpression.getOp();
+            if (joinOperator.getOnPredicate() != null &&
+                    hasNonDeterministicFunc(joinOperator.getOnPredicate())) {
+                return true;
+            }
+            return visitChildren(optExpression);
+        }
+
+        @Override
+        public Boolean visitLogicalAggregate(OptExpression optExpression, Void context) {
+            LogicalAggregationOperator operator = (LogicalAggregationOperator) optExpression.getOp();
+            if (checkAggCall(operator.getAggregations())) {
+                return true;
+            }
+            return visitChildren(optExpression);
+        }
+
+        @Override
+        public Boolean visitLogicalWindow(OptExpression optExpression, Void context) {
+            LogicalWindowOperator operator = (LogicalWindowOperator) optExpression.getOp();
+            if (checkAggCall(operator.getWindowCall())) {
+                return true;
+            }
+            return visitChildren(optExpression);
+        }
+
+        @Override
+        public Boolean visitLogicalProject(OptExpression optExpression, Void context) {
+            Map<ColumnRefOperator, ScalarOperator> map = ((LogicalProjectOperator) optExpression.getOp())
+                    .getColumnRefMap();
+            for (ScalarOperator scalarOperator : map.values()) {
+                if (hasNonDeterministicFunc(scalarOperator)) {
+                    return true;
+                }
+            }
+            return visitChildren(optExpression);
+        }
+
+        @Override
+        public Boolean visitLogicalFilter(OptExpression optExpression, Void context) {
+            LogicalFilterOperator filter = (LogicalFilterOperator) optExpression.getOp();
+            if (filter.getPredicate() != null && hasNonDeterministicFunc(filter.getPredicate()))  {
+                return true;
+            }
+            return visitChildren(optExpression);
+        }
+    }
+}

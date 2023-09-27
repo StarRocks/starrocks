@@ -712,4 +712,36 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "5:Project\n" +
                 "  |  <slot 15> : row(1, 2, 3).col2 IS NULL");
     }
+
+    @Test
+    public void testForceReuseCTE1() throws Exception {
+        String sql = "with cte1 as (select array_map((x -> uuid()), t.a1) c1, t.map1 c2 from pc0 t) " +
+                "select * from " +
+                "(select * from cte1) t1 join " +
+                "(select * from cte1) t2 on t1.c1=t2.c1 ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 07\n" +
+                "    RANDOM");
+    }
+
+    @Test
+    public void testForceReuseCTE2() throws Exception {
+        String sql = "with cte1 as (select rand() as c1, t.map1 c2 from pc0 t) " +
+                "select * from " +
+                "(select * from cte1) t1 join " +
+                "(select * from cte1) t2 on t1.c1=t2.c1 ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    RANDOM");
+    }
 }
