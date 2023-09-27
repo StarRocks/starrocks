@@ -1,0 +1,8 @@
+-- name: testIcebergCatalog
+
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+
+-- only partition column Predicate with runtime filter
+select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_trans_part;
+
+drop catalog iceberg_sql_test_${uuid0}
