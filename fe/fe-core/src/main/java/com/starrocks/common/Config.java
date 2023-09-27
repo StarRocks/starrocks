@@ -2477,6 +2477,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int routine_load_scheduler_interval_millisecond = 10000;
 
+    @ConfField(mutable = true)
+    public static int routine_load_kafka_all_brokers_down_backoff_interval_second = 60;
+
     /**
      * Only when the stream load time exceeds this value,
      * the profile will be put into the profileManager
