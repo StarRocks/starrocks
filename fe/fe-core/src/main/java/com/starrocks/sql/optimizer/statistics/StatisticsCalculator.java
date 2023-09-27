@@ -1400,7 +1400,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     BinaryPredicateOperator bop = scalarOperator.cast();
                     if (bop.getBinaryType().isEqualOrRange()
                             && bop.getChild(1).isConstantRef()
-                            && shouldRemove(bop.getChild(0), partitionColNames)) {
+                            && isPartitionCol(bop.getChild(0), partitionColNames)) {
                         // do nothing
                     } else {
                         newPredicates.add(scalarOperator);
@@ -1409,7 +1409,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     InPredicateOperator inOp = scalarOperator.cast();
                     if (!inOp.isNotIn()
                             && inOp.getChildren().stream().skip(1).allMatch(ScalarOperator::isConstant)
-                            && shouldRemove(inOp.getChild(0), partitionColNames)) {
+                            && isPartitionCol(inOp.getChild(0), partitionColNames)) {
                         // do nothing
                     } else {
                         newPredicates.add(scalarOperator);
@@ -1421,7 +1421,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return predicate;
     }
 
-    private boolean shouldRemove(ScalarOperator scalarOperator, Collection<String> partitionColumns) {
+    private boolean isPartitionCol(ScalarOperator scalarOperator, Collection<String> partitionColumns) {
         if (scalarOperator.isColumnRef()) {
             String colName = ((ColumnRefOperator) scalarOperator).getName();
             return partitionColumns.contains(StringUtils.lowerCase(colName));

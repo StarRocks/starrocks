@@ -112,6 +112,7 @@ public class PredicateStatisticsCalculator {
 
             // using ndv to estimate string col inPredicate
             if (!predicate.isNotIn() && firstChild.getType().getPrimitiveType().isCharFamily()
+                    && firstChild.isColumnRef()
                     && !inColumnStatistic.isUnknown()) {
                 selectivity = Math.min(otherChildrenList.size() / inColumnStatistic.getDistinctValuesCount(), 1);
 

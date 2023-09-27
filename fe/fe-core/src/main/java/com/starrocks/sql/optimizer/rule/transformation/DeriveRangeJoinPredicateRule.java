@@ -142,7 +142,9 @@ public class DeriveRangeJoinPredicateRule extends TransformationRule {
             }
             if (StringUtils.isEmpty(columnStatistic.getMinString()) ||
                     StringUtils.isEmpty(columnStatistic.getMaxString())) {
-                LOG.debug("column minString value: {}, maxString value: {}");
+                LOG.debug("column minString value: {}, maxString value: {}",
+                        columnStatistic.getMinString(),
+                        columnStatistic.getMaxValue());
                 continue;
             }
 

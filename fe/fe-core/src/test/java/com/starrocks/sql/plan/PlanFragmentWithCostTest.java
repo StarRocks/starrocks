@@ -2309,7 +2309,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         sql = "SELECT t1a from test_all_type where t1a not in ('a', 'b', 'c');";
         plan = getCostExplain(sql);
-        assertContains(plan, "cardinality: 1");
+        assertContains(plan, "cardinality: 5000");
 
         sql = "SELECT t1a from test_all_type where t1a  in ('a', 'b', 'c', 'd', 'e');";
         plan = getCostExplain(sql);
