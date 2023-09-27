@@ -151,7 +151,7 @@ public:
 
     ~StreamLoadContext() noexcept {
         if (need_rollback) {
-            _exec_env->stream_load_executor()->rollback_txn(this);
+            (void)_exec_env->stream_load_executor()->rollback_txn(this);
             need_rollback = false;
         }
 
