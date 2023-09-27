@@ -328,6 +328,53 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
     return Status::OK();
 }
 
+Status SchemaChangeHandler::process_update_tablet_meta(const TUpdateTabletMetaInfoReq& request) {
+    if (!request.__isset.txn_id) {
+        LOG(WARNING) << "txn_id not set in request";
+        return Status::InternalError("txn_id not set in request");
+    }
+    int64_t txn_id = request.txn_id;
+
+    for (const auto& tablet_meta_info : request.tabletMetaInfos) {
+        RETURN_IF_ERROR(do_process_update_tablet_meta(tablet_meta_info, txn_id));
+    }
+
+    return Status::OK();
+}
+
+Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo& tablet_meta_info, int64_t txn_id) {
+    if (tablet_meta_info.meta_type != TTabletMetaType::ENABLE_PERSISTENT_INDEX) {
+        // Only support ENABLE_PERSISTENT_INDEX for now
+        LOG(WARNING) << "not supported update meta type: " + tablet_meta_info.meta_type;
+        return Status::InternalError("not supported update meta type:" + tablet_meta_info.meta_type);
+    }
+
+    MonotonicStopWatch timer;
+    timer.start();
+    LOG(INFO) << "begin to update tablet, tablet: " << tablet_meta_info.tablet_id
+              << ", update meta type: " << tablet_meta_info.meta_type;
+
+    auto tablet_id = tablet_meta_info.tablet_id;
+    ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(tablet_id));
+
+    // create txn log
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(tablet_id);
+    txn_log->set_txn_id(txn_id);
+    auto op_alter_metadata = txn_log->mutable_op_alter_metadata();
+
+    auto metadata_update_info = op_alter_metadata->add_metadata_update_infos();
+    metadata_update_info->set_enable_persistent_index(tablet_meta_info.enable_persistent_index);
+
+    LOG(INFO) << "update lake tablet: " << tablet_id
+              << ", enable_persistent_index: " << tablet_meta_info.enable_persistent_index
+              << ", cost: " << timer.elapsed_time();
+
+    // write txn log
+    RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
+    return Status::OK();
+}
+
 Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams& sc_params,
                                                        TxnLogPB_OpSchemaChange* op_schema_change) {
     auto base_tablet = sc_params.base_tablet;

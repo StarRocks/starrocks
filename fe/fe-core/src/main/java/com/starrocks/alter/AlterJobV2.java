@@ -78,7 +78,11 @@ public abstract class AlterJobV2 implements Writable {
 
     public enum JobType {
         // DECOMMISSION_BACKEND is for compatible with older versions of metadata
+<<<<<<< HEAD
         ROLLUP, SCHEMA_CHANGE, DECOMMISSION_BACKEND 
+=======
+        ROLLUP, SCHEMA_CHANGE, DECOMMISSION_BACKEND, OPTIMIZE
+>>>>>>> 0fe4022233 ([Feature]Support alter `enable_persistent_index`of lake table (#28329))
     }
 
     @SerializedName(value = "type")
