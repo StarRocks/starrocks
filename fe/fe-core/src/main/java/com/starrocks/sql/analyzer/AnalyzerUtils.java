@@ -68,6 +68,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.PartitionMeasure;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -336,7 +337,11 @@ public class AnalyzerUtils {
                 return;
             }
 
-            Database db = session.getGlobalStateMgr().getMetadataMgr().getDb(catalog, dbName);
+            if (!CatalogMgr.isInternalCatalog(catalog)) {
+                return;
+            }
+
+            Database db = session.getGlobalStateMgr().getDb(dbName);
             if (db == null) {
                 return;
             }
@@ -1203,7 +1208,7 @@ public class AnalyzerUtils {
     }
 
     private static void checkPartitionColumnTypeValid(FunctionCallExpr expr, List<ColumnDef> columnDefs,
-                                                      NodePosition pos, String partitionColumnName, String fmt) {
+                                               NodePosition pos, String partitionColumnName, String fmt) {
         // For materialized views currently columnDefs == null
         if (columnDefs != null && "hour".equalsIgnoreCase(fmt)) {
             ColumnDef partitionDef = findPartitionDefByName(columnDefs, partitionColumnName);
@@ -1225,6 +1230,7 @@ public class AnalyzerUtils {
         }
         return null;
     }
+
 
     public static Expr resolveSlotRef(SlotRef slotRef, QueryStatement queryStatement) {
         AstVisitor<Expr, Void> slotRefResolver = new AstVisitor<Expr, Void>() {

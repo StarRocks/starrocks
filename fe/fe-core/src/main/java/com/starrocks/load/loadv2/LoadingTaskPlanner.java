@@ -124,11 +124,10 @@ public class LoadingTaskPlanner {
     private Boolean missAutoIncrementColumn = Boolean.FALSE;
 
     public LoadingTaskPlanner(Long loadJobId, long txnId, long dbId, OlapTable table,
-                              BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
-                              boolean strictMode, String timezone, long timeoutS,
-                              long startTime, boolean partialUpdate, Map<String, String> sessionVariables,
-                              String mergeConditionStr,
-                              TPartialUpdateMode partialUpdateMode) {
+            BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
+            boolean strictMode, String timezone, long timeoutS,
+            long startTime, boolean partialUpdate, Map<String, String> sessionVariables, String mergeConditionStr, 
+            TPartialUpdateMode partialUpdateMode) {
         this.loadJobId = loadJobId;
         this.txnId = txnId;
         this.dbId = dbId;
@@ -180,7 +179,7 @@ public class LoadingTaskPlanner {
                 }
                 List<Boolean> isMissAutoIncrementColumn = Lists.newArrayList();
                 destColumns = Load.getPartialUpateColumns(table, fileGroups.get(0).getColumnExprList(),
-                        isMissAutoIncrementColumn);
+                    isMissAutoIncrementColumn);
 
                 if (isMissAutoIncrementColumn.size() != 0) {
                     this.missAutoIncrementColumn = isMissAutoIncrementColumn.get(0);
@@ -199,8 +198,9 @@ public class LoadingTaskPlanner {
             slotDesc.setColumn(col);
             slotDesc.setIsNullable(col.isAllowNull());
 
-            if (col.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(table, col.getName())) {
-                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(table, col.getName());
+            if (col.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(table.getId(),
+                    col.getName())) {
+                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(table.getId(), col.getName());
                 dict.ifPresent(columnDict -> globalDicts.add(new Pair<>(slotDesc.getId().asInt(), columnDict)));
             }
         }
@@ -225,7 +225,7 @@ public class LoadingTaskPlanner {
     }
 
     public void buildDirectPlan(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusesList,
-                                int filesAdded, boolean forceReplicatedStorage)
+            int filesAdded, boolean forceReplicatedStorage)
             throws UserException {
         // Generate plan trees
         // 1. Broker scan node
@@ -312,7 +312,7 @@ public class LoadingTaskPlanner {
             partitionExprs.add(new SlotRef(tupleDesc.getColumnSlot(column.getName())));
         });
 
-        DataPartition dataPartition = new DataPartition(TPartitionType.HASH_PARTITIONED, partitionExprs);
+        DataPartition dataPartition = new DataPartition(TPartitionType.HASH_PARTITIONED, partitionExprs); 
         ExchangeNode exchangeNode = new ExchangeNode(new PlanNodeId(nextNodeId++), scanFragment.getPlanRoot(),
                 dataPartition);
         PlanFragment sinkFragment = new PlanFragment(new PlanFragmentId(1), exchangeNode, dataPartition);

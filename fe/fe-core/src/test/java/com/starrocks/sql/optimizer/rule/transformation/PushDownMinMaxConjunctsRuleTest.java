@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Memo;
@@ -31,9 +31,6 @@ import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import mockit.Mocked;
 import org.junit.Test;
 
-import java.util.HashMap;
-import java.util.Map;
-
 import static org.junit.Assert.assertEquals;
 
 public class PushDownMinMaxConjunctsRuleTest {
@@ -41,38 +38,19 @@ public class PushDownMinMaxConjunctsRuleTest {
     public void transformIceberg(@Mocked IcebergTable table) {
         ExternalScanPartitionPruneRule rule0 = ExternalScanPartitionPruneRule.ICEBERG_SCAN;
 
-        ColumnRefOperator colRef = new ColumnRefOperator(1, Type.INT, "id", true);
-        Column col = new Column("id", Type.INT, true);
-        PredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(BinaryType.EQ, colRef,
+        PredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(
+                BinaryType.EQ, new ColumnRefOperator(1, Type.INT, "id", true),
                 ConstantOperator.createInt(1));
 
-        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<>();
-        Map<Column, ColumnRefOperator> columnMetaToColRefMap = new HashMap<>();
-        colRefToColumnMetaMap.put(colRef, col);
-        columnMetaToColRefMap.put(col, colRef);
         OptExpression scan =
-                new OptExpression(new LogicalIcebergScanOperator(table, colRefToColumnMetaMap, columnMetaToColRefMap,
-                        -1, binaryPredicateOperator));
+                new OptExpression(new LogicalIcebergScanOperator(table,
+                                Maps.newHashMap(), Maps.newHashMap(), -1, binaryPredicateOperator));
+        scan.getInputs().add(scan);
 
         assertEquals(0, ((LogicalIcebergScanOperator) scan.getOp()).getScanOperatorPredicates().getMinMaxConjuncts().size());
 
         rule0.transform(scan, new OptimizerContext(new Memo(), new ColumnRefFactory()));
 
         assertEquals(2, ((LogicalIcebergScanOperator) scan.getOp()).getScanOperatorPredicates().getMinMaxConjuncts().size());
-
-        PredicateOperator binaryPredicateOperatorNoPushDown = new BinaryPredicateOperator(BinaryType.EQ,
-                new ColumnRefOperator(2, Type.INT, "id_noexist", true), ConstantOperator.createInt(1));
-
-        OptExpression scanNoPushDown =
-                new OptExpression(new LogicalIcebergScanOperator(table, colRefToColumnMetaMap, columnMetaToColRefMap,
-                        -1, binaryPredicateOperatorNoPushDown));
-
-        assertEquals(0,
-                ((LogicalIcebergScanOperator) scanNoPushDown.getOp()).getScanOperatorPredicates().getMinMaxConjuncts().size());
-
-        rule0.transform(scanNoPushDown, new OptimizerContext(new Memo(), new ColumnRefFactory()));
-
-        assertEquals(0,
-                ((LogicalIcebergScanOperator) scanNoPushDown.getOp()).getScanOperatorPredicates().getMinMaxConjuncts().size());
     }
 }

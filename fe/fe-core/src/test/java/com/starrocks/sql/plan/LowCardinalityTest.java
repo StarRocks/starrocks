@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -1579,9 +1578,9 @@ public class LowCardinalityTest extends PlanTestBase {
 
         new Expectations(dictManager) {
             {
-                dictManager.hasGlobalDict((Table) any, "S_ADDRESS", anyLong);
+                dictManager.hasGlobalDict(anyLong, "S_ADDRESS", anyLong);
                 result = true;
-                dictManager.getGlobalDict((Table) any, "S_ADDRESS");
+                dictManager.getGlobalDict(anyLong, "S_ADDRESS");
                 result = Optional.empty();
             }
         };

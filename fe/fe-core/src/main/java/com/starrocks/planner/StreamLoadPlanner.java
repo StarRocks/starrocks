@@ -38,6 +38,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.util.DebugUtil;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
@@ -53,13 +57,9 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.service.FrontendOptions;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.InternalServiceVersion;
@@ -160,8 +160,9 @@ public class StreamLoadPlanner {
             }
 
             if (col.getType().isVarchar() && Config.enable_dict_optimize_stream_load &&
-                    IDictManager.getInstance().hasGlobalDict(destTable, col.getName())) {
-                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable, col.getName());
+                    IDictManager.getInstance().hasGlobalDict(destTable.getId(),
+                            col.getName())) {
+                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
                 dict.ifPresent(columnDict -> globalDicts.add(new Pair<>(slotDesc.getId().asInt(), columnDict)));
             }
         }
@@ -199,8 +200,7 @@ public class StreamLoadPlanner {
             olapTableSink.setMissAutoIncrementColumn();
         }
         olapTableSink.init(loadId, streamLoadInfo.getTxnId(), db.getId(), streamLoadInfo.getTimeout());
-        Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, destColumns,
-                olapTableSink.missAutoIncrementColumn());
+        Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, destColumns, olapTableSink.missAutoIncrementColumn());
         olapTableSink.setPartialUpdateMode(streamLoadInfo.getPartialUpdateMode());
         olapTableSink.complete(streamLoadInfo.getMergeConditionStr());
 
