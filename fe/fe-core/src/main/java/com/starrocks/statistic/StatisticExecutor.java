@@ -18,7 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -33,8 +33,8 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultBatch;
@@ -151,33 +151,27 @@ public class StatisticExecutor {
     }
 
     // If you call this function, you must ensure that the db lock is added
-    public static Pair<List<TStatisticData>, Status> queryDictSync(ColumnIdentifier identifier)
+    public static Pair<List<TStatisticData>, Status> queryDictSync(Long dbId, Long tableId, String column)
             throws Exception {
-        String column = identifier.getColumnName();
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable(identifier.catalogName, identifier.dbName, identifier.tableName);
+        if (dbId == -1) {
+            return Pair.create(Collections.emptyList(), Status.OK);
+        }
+
+        Database db = MetaUtils.getDatabase(dbId);
+        Table table = MetaUtils.getTable(dbId, tableId);
         if (!(table.isOlapOrCloudNativeTable() || table.isMaterializedView() || table.isIcebergTable())) {
             throw new SemanticException("Table '%s' is not a OLAP table or LAKE table or Materialize View",
                     table.getName());
         }
 
-        String sql;
-        if (table.isIcebergTable()) {
-            IcebergTable icebergTable = (IcebergTable) table;
-            long version = icebergTable.getNativeTable().currentSnapshot().snapshotId();
-            sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
-                    "cast(" + version + " as bigint), " +
-                    "dict_merge(array<string>[" + StatisticUtils.quoting(column) + "]) as _dict_merge_" + column +
-                    " from " + StatisticUtils.quoting(table.catalogName, table.dbName, table.getName());
-        } else {
-            OlapTable olapTable = (OlapTable) table;
-            long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
-                    .max(Long::compareTo).orElse(0L);
-            sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
-                    "cast(" + version + " as bigint), " +
-                    "dict_merge(" + StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
-                    " from " + StatisticUtils.quoting(table.catalogName, table.dbName, table.getName()) + " [_META_]";
-        }
+        OlapTable olapTable = (OlapTable) table;
+        long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
+                .max(Long::compareTo).orElse(0L);
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
+                "cast(" + version + " as bigint), " +
+                "dict_merge(" + StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
+                " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
 
         ConnectContext context = StatisticUtils.buildConnectContext();
         // The parallelism degree of low-cardinality dict collect task is uniformly set to 1 to

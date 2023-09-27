@@ -69,7 +69,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
 
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
                 for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
-                    IDictManager.getInstance().removeGlobalDict(table, column);
+                    IDictManager.getInstance().removeGlobalDict(tableId, column);
                 }
             }
             if (!partitionCommitInfo.getValidDictCacheColumns().isEmpty()) {
@@ -86,7 +86,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                 String columnName = validDictCacheColumns.get(i);
                 long collectedVersion = dictCollectedVersions.get(i);
                 IDictManager.getInstance()
-                        .updateGlobalDict(table, columnName, collectedVersion, maxPartitionVersionTime);
+                        .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
             }
         }
     }

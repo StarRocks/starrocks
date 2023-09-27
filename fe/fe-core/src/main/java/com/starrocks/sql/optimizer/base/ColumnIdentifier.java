@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.optimizer.base;
 
-import com.starrocks.catalog.Table;
+package com.starrocks.sql.optimizer.base;
 
 import java.util.Objects;
 
@@ -23,22 +22,36 @@ import java.util.Objects;
  * so we use table id + column name to identify one column
  */
 public final class ColumnIdentifier {
-    public final String catalogName;
-    public final String dbName;
-    public final String tableName;
+    private final long tableId;
     private final String columnName;
-    public final long tableId;
 
-    public ColumnIdentifier(Table t, String columnName) {
-        this.catalogName = t.catalogName;
-        this.dbName = t.dbName;
-        this.tableName = t.getName();
+    private long dbId = -1;
+
+    public ColumnIdentifier(long tableId, String columnName) {
+        this.tableId = tableId;
         this.columnName = columnName;
-        tableId = t.getId();
+    }
+
+    public ColumnIdentifier(long dbId, long tableId, String columnName) {
+        this.dbId = dbId;
+        this.tableId = tableId;
+        this.columnName = columnName;
+    }
+
+    public long getTableId() {
+        return tableId;
     }
 
     public String getColumnName() {
         return columnName;
+    }
+
+    public long getDbId() {
+        return dbId;
+    }
+
+    public void setDbId(long dbId) {
+        this.dbId = dbId;
     }
 
     @Override
@@ -51,13 +64,11 @@ public final class ColumnIdentifier {
         if (this == columnIdentifier) {
             return true;
         }
-        return catalogName.equals(columnIdentifier.catalogName) &&
-                dbName.equals(columnIdentifier.dbName) && tableName.equals(columnIdentifier.tableName) &&
-                columnName.equalsIgnoreCase(columnIdentifier.columnName);
+        return tableId == columnIdentifier.tableId && columnName.equalsIgnoreCase(columnIdentifier.columnName);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(catalogName, dbName, tableName, columnName);
+        return Objects.hash(tableId, columnName);
     }
 }
