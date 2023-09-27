@@ -1095,8 +1095,11 @@ public class CoordinatorPreprocessor {
                 if ((hasColocate || hasBucket) && scanNode instanceof IcebergScanNode) {
                     IcebergScanNode icebergScanNode = (IcebergScanNode) scanNode;
                     Set<Integer> bucketIds = new HashSet<>(icebergScanNode.getFileToBucketId().values());
+
+                    List<Long> backendIds = hasComputeNode ? Lists.newArrayList(idToComputeNode.keySet()) :
+                            Lists.newArrayList(idToBackend.keySet());
                     bucketIds.forEach(bucketId -> icebergBucketIdToBeId.put(bucketId,
-                            (long) (bucketId % idToBackend.size())));
+                            backendIds.get(bucketId % backendIds.size())));
 
                     IcebergBucketBackendSelector selector =
                             new IcebergBucketBackendSelector(scanNode, locations, assignment, idToBackend,
