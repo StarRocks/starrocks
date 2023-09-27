@@ -708,6 +708,7 @@
 + Benchmark
   + [SSB Benchmark](./benchmarking/SSB_Benchmarking.md)
   + [TPC-H Benchmark](./benchmarking/TPC-H_Benchmarking.md)
+  + [TPC-DS Benchmark](./benchmarking/TPC_DS_Benchmark.md)
 + Developers
   + [Contribute to StarRocks](./developers/How_to_Contribute.md)
   + [Use the debuginfo file for debugging](./developers/debuginfo.md)
