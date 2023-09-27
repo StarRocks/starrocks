@@ -114,6 +114,7 @@ jobs:
           contains(toJson(github.event.pull_request.body), '[ ] I have checked the version labels')
         run: |
           echo "::error::You must mark this checkbox - I have checked the version labels which the pr will be auto-backported to the target branch"
+          exit 1
 
   behavior-check:
     runs-on: ubuntu-latest
@@ -131,6 +132,7 @@ jobs:
           contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior'))
         run: |
           echo "::error::Please check the format of your pr body about the behavior change checkbox!"
+          exit 1
 
       - name: Behavior Unchanged Label
         id: unchanged
@@ -153,6 +155,7 @@ jobs:
           contains(toJson(github.event.pull_request.body), '[ ] Miscellaneous: upgrade & downgrade compatibility, etc')
         run: |
           echo "::error::You must specify the type of change!"
+          exit 1
 
       - name: Behavior Changed Label
         if: >
