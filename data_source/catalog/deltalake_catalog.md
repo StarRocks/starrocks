@@ -245,6 +245,20 @@ StarRocks 默认采用[自动异步更新策略](#附录理解元数据自动异
 
 以下示例创建了一个名为 `deltalake_catalog_hms` 或 `deltalake_catalog_glue` 的 Delta Lake Catalog，用于查询 Delta Lake 集群里的数据。
 
+#### HDFS
+
+使用 HDFS 作为存储时，可以按如下创建 Delta Lake Catalog：
+
+```SQL
+CREATE EXTERNAL CATALOG deltalake_catalog_hms
+PROPERTIES
+(
+    "type" = "deltalake",
+    "hive.metastore.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+);
+```
+
 #### AWS S3
 
 ##### 如果基于 Instance Profile 进行鉴权和认证

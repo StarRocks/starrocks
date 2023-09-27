@@ -245,6 +245,20 @@ StarRocks 默认采用[自动异步更新策略](#附录理解元数据自动异
 
 以下示例创建了一个名为 `hudi_catalog_hms` 或 `hudi_catalog_glue` 的 Hudi Catalog，用于查询 Hudi 集群里的数据。
 
+#### HDFS
+
+使用 HDFS 作为存储时，可以按如下创建 Hudi Catalog：
+
+```SQL
+CREATE EXTERNAL CATALOG hudi_catalog_hms
+PROPERTIES
+(
+    "type" = "hudi",
+    "hive.metastore.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+);
+```
+
 #### AWS S3
 
 ##### 如果基于 Instance Profile 进行鉴权和认证

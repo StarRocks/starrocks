@@ -231,6 +231,20 @@ Iceberg Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
 
 以下示例创建了一个名为 `iceberg_catalog_hms` 或 `iceberg_catalog_glue` 的 Iceberg Catalog，用于查询 Iceberg 集群里的数据。
 
+#### HDFS
+
+使用 HDFS 作为存储时，可以按如下创建 Iceberg Catalog：
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog_hms
+PROPERTIES
+(
+    "type" = "iceberg",
+    "hive.metastore.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+);
+```
+
 #### AWS S3
 
 ##### 如果基于 Instance Profile 进行鉴权和认证
