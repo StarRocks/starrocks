@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <parquet/types.h>
+
 #include "common/status.h"
 #include "formats/parquet/schema.h"
 #include "gen_cpp/parquet_types.h"
@@ -41,5 +43,11 @@ private:
     uint64_t _num_rows{0};
     SchemaDescriptor _schema;
 };
+
+std::shared_ptr<const ::parquet::LogicalType> LogicalTypeFromThrift(const tparquet::SchemaElement& schema_element);
+
+::parquet::ConvertedType::type ConvertedTypeFromThrift(const tparquet::SchemaElement& schema_element);
+
+::parquet::Type::type PrimitiveTypeFromThrift(const tparquet::SchemaElement& schema_element);
 
 } // namespace starrocks::parquet

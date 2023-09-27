@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <parquet/types.h>
+
 #include <cstdint>
 #include <memory>
 
@@ -102,12 +104,7 @@ private:
                                   const tparquet::ColumnOrder* column_order, ColumnPtr* min_column,
                                   ColumnPtr* max_column, bool* decode_ok) const;
     bool _can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
-                                const tparquet::ColumnOrder* column_order) const;
-    // statistics.min_value max_value
-    static bool _can_use_stats(const tparquet::Type::type& type, const tparquet::ColumnOrder* column_order);
-    // statistics.min max
-    static bool _can_use_deprecated_stats(const tparquet::Type::type& type, const tparquet::ColumnOrder* column_order);
-    static bool _is_integer_type(const tparquet::Type::type& type);
+                                const ::parquet::SortOrder::type& sort_order) const;
 
     // get the data page start offset in parquet file
     static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group);

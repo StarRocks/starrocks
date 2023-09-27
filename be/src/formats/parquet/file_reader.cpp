@@ -304,9 +304,21 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
                                           ColumnPtr* max_column, bool* decode_ok) const {
     DCHECK_EQ(field.physical_type, column_meta.type);
     *decode_ok = true;
+
+    auto sort_order = ::parquet::SortOrder::UNKNOWN;
+    const auto logical_type = LogicalTypeFromThrift(field.schema_element);
+    const auto primitive_type = PrimitiveTypeFromThrift(field.schema_element);
+    const auto converted_type = ConvertedTypeFromThrift(field.schema_element);
+
+    if (logical_type) {
+        sort_order = ::parquet::GetSortOrder(logical_type, primitive_type);
+    } else {
+        sort_order = ::parquet::GetSortOrder(converted_type, primitive_type);
+    }
+
     // We need to make sure min_max column append value succeed
     bool ret = true;
-    if (!_can_use_min_max_stats(column_meta, column_order)) {
+    if (!_can_use_min_max_stats(column_meta, sort_order)) {
         *decode_ok = false;
         return Status::OK();
     }
@@ -407,7 +419,7 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
 
 // Reference: arrow/cpp/src/parquet/metadata.cc
 bool FileReader::_can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
-                                        const tparquet::ColumnOrder* column_order) const {
+                                        const ::parquet::SortOrder::type& sort_order) const {
     // created_by is not populated, which could have been caused by
     // parquet-mr during the same time as PARQUET-251, see PARQUET-297
     if (!_file_metadata->t_metadata().__isset.created_by) {
@@ -415,53 +427,41 @@ bool FileReader::_can_use_min_max_stats(const tparquet::ColumnMetaData& column_m
     }
 
     auto application_version = ::parquet::ApplicationVersion(_file_metadata->t_metadata().created_by);
-    auto min_equals_max = (column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.max_value &&
-                           column_meta.statistics.min_value == column_meta.statistics.max_value) ||
-                          (column_meta.statistics.__isset.min && column_meta.statistics.__isset.max &&
-                           column_meta.statistics.min == column_meta.statistics.max);
 
-    // disregard column sort order if statistics max/min are equal
-    if (min_equals_max) {
-        if (column_meta.type != tparquet::Type::BYTE_ARRAY &&
-            column_meta.type != tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
+    // parquet-cpp version 1.3.0 and parquet-mr 1.10.0 onwards stats are computed
+    // correctly for all types
+    if (application_version.VersionLt(::parquet::ApplicationVersion::PARQUET_MR_FIXED_STATS_VERSION()) ||
+        application_version.VersionLt(::parquet::ApplicationVersion::PARQUET_CPP_FIXED_STATS_VERSION())) {
+        // Only SIGNED are valid unless max and min are the same
+        // (in which case the sort order does not matter)
+        auto min_equals_max = (column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.max_value &&
+                               column_meta.statistics.min_value == column_meta.statistics.max_value) ||
+                              (column_meta.statistics.__isset.min && column_meta.statistics.__isset.max &&
+                               column_meta.statistics.min == column_meta.statistics.max);
+        if (::parquet::SortOrder::SIGNED != sort_order) {
+            if (!min_equals_max) {
+                return false;
+            }
+        }
+
+        auto col_type = column_meta.type;
+        // Statistics of other types are OK
+        if (col_type != ::parquet::Type::FIXED_LEN_BYTE_ARRAY && col_type != ::parquet::Type::BYTE_ARRAY) {
             return true;
         }
-        // PARQUET-251: stats are incorrect for binary columns
-        return !application_version.VersionLt(::parquet::ApplicationVersion::PARQUET_251_FIXED_VERSION());
     }
 
-    if (column_meta.statistics.__isset.min_value && _can_use_stats(column_meta.type, column_order)) {
-        return true;
-    }
-    if (column_meta.statistics.__isset.min && _can_use_deprecated_stats(column_meta.type, column_order)) {
-        return true;
-    }
-    return false;
-}
-
-bool FileReader::_can_use_stats(const tparquet::Type::type& type, const tparquet::ColumnOrder* column_order) {
-    // If column order is not set, only statistics for numeric types can be trusted.
-    if (column_order == nullptr) {
-        // is boolean | is interger | is floating
-        return type == tparquet::Type::type::BOOLEAN || _is_integer_type(type) || type == tparquet::Type::type::DOUBLE;
-    }
-    // Stats can be used if the column order is TypeDefinedOrder (see parquet.thrift).
-    return column_order->__isset.TYPE_ORDER;
-}
-
-bool FileReader::_can_use_deprecated_stats(const tparquet::Type::type& type,
-                                           const tparquet::ColumnOrder* column_order) {
-    // If column order is set to something other than TypeDefinedOrder, we shall not use the
-    // stats (see parquet.thrift).
-    if (column_order != nullptr && !column_order->__isset.TYPE_ORDER) {
+    // Unknown sort order has incorrect stats
+    if (::parquet::SortOrder::UNKNOWN == sort_order) {
         return false;
     }
-    return type == tparquet::Type::type::BOOLEAN || _is_integer_type(type) || type == tparquet::Type::type::DOUBLE;
-}
 
-bool FileReader::_is_integer_type(const tparquet::Type::type& type) {
-    return type == tparquet::Type::type::INT32 || type == tparquet::Type::type::INT64 ||
-           type == tparquet::Type::type::INT96;
+    // PARQUET-251
+    if (application_version.VersionLt(::parquet::ApplicationVersion::PARQUET_251_FIXED_VERSION())) {
+        return false;
+    }
+
+    return true;
 }
 
 void FileReader::_prepare_read_columns() {
