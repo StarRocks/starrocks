@@ -133,6 +133,8 @@ public:
     // release index entry if it isn't nullptr
     void release_primary_index(IndexEntry* index_entry);
 
+    DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
+
 private:
     // print memory tracker state
     void _print_memory_stats();
