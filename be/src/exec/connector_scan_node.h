@@ -60,6 +60,9 @@ private:
     Status _start_scan_thread(RuntimeState* state);
     Status _create_and_init_scanner(RuntimeState* state, TScanRange& scan_range);
     bool _submit_scanner(ConnectorScanner* scanner, bool blockable);
+    // The logic of _submit_streaming_load_scanner is almost the same as _submit_scanner,
+    // and the main difference if that we use a ThreadPool rather than PriorityPool
+    bool _submit_streaming_load_scanner(ConnectorScanner* scanner, bool blockable);
     void _scanner_thread(ConnectorScanner* scanner);
     void _release_scanner(ConnectorScanner* scanner);
     void _update_status(const Status& status);
