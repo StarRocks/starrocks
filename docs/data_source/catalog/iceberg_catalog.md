@@ -977,7 +977,7 @@ You can specify the table attributes in the `"key" = "value"` format in `propert
    PARTITION BY (id,dt);
    ```
 
-3. Query an existing table named `partition_tbl_1`, and create a partitioned table named `partition_tbl_2` into which the query result on `partition_tbl_1` is inserted. For `partition_tbl_2`, `id` and `dt` are defined as partition columns, as shown below:
+3. Query an existing table named `partition_tbl_1`, and create a partitioned table named `partition_tbl_2` based on the query result of `partition_tbl_1`. For `partition_tbl_2`, `id` and `dt` are defined as partition columns, as shown below:
 
    ```SQL
    CREATE TABLE partition_tbl_2
