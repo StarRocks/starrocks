@@ -24,10 +24,10 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -1007,9 +1007,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         }
 
         for (PhysicalIcebergScanOperator externalScanOperator : externalScanOperators) {
-            Table table = externalScanOperator.getTable();
-
-            // TODO: implements versionTime
+            IcebergTable table = (IcebergTable) externalScanOperator.getTable();
+            long snapshotId = table.getNativeTable().currentSnapshot().snapshotId();
             for (ColumnRefOperator column : externalScanOperator.getColRefToColumnMetaMap().keySet()) {
                 // Condition 1:
                 if (!column.getType().isVarchar()) {
@@ -1027,7 +1026,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 //                }
 
                 // Condition 3: the varchar column has collected global dict
-                if (IDictManager.getInstance().hasGlobalDict(table, column.getName(), 1)) {
+                if (IDictManager.getInstance().hasGlobalDict(table, column.getName(), snapshotId)) {
                     Optional<ColumnDict> dict =
                             IDictManager.getInstance().getGlobalDict(table, column.getName());
                     // cache reaches capacity limit, randomly eliminate some keys
