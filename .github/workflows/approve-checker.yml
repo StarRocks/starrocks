@@ -68,6 +68,7 @@ jobs:
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
       REPO: ${{ github.repository }}
       META_TEAM: test-team
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: META-REVIEW
