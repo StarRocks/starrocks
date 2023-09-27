@@ -841,7 +841,7 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
    SHOW DATABASES FROM <catalog_name>
    ```
 
-2. [Switch to an Iceberg Catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it).
+2. [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it).
 
 3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
 
@@ -857,7 +857,7 @@ Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](
 >
 > You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
-[Switch to a Hive catalog](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to create a Hive database in that catalog:
+[Switch to an Iceberg catalog](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to create a Hive database in that catalog:
 
 ```SQL
 CREATE DATABASE <database_name>
@@ -887,7 +887,7 @@ Similar to the internal databases of StarRocks, if you have the [DROP](../../adm
 
 When you drop an Iceberg database, the database's file path on your HDFS cluster or cloud storage will not be dropped along with the database.
 
-[Switch to a Hive catalog](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to drop a Hive database in that catalog:
+[Switch to an Iceberg catalog](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to drop a Hive database in that catalog:
 
 ```SQL
 DROP DATABASE <database_name>;
@@ -901,7 +901,7 @@ Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](.
 >
 > You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
-[Switch to a Hive Catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to create a Hive table in that database.
+[Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to create a Hive table in that database.
 
 ### Syntax
 
@@ -993,7 +993,7 @@ Similar to the internal tables of StarRocks, if you have the [INSERT](../../admi
 >
 > You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
-[Switch to a Hive Catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to sink the data of StarRocks table to a Parquet-formatted Hive table in that database.
+[Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to sink the data of StarRocks table to a Parquet-formatted Hive table in that database.
 
 ### Syntax
 
@@ -1070,7 +1070,7 @@ When you drop an Iceberg table, the table's file path and data on your HDFS clus
 
 When you forcibly drop an Iceberg table (namely, with the `FORCE` keyword specified in the DROP TABLE statement), the table's data on your HDFS cluster or cloud storage will be dropped along with the table, but the table's file path is retained.
 
-[Switch to a Hive Catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to drop a Hive table in that database.
+[Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to drop a Hive table in that database.
 
 ```SQL
 DROP TABLE <table_name> [FORCE];
