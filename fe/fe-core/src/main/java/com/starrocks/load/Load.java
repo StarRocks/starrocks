@@ -570,10 +570,14 @@ public class Load {
                     slotDesc.setIsMaterialized(true);
                 }
                 smap.getLhs().add(slot);
-                smap.getRhs().add(new SlotRef(slotDesc));
+                SlotRef slotRef = new SlotRef(slotDesc);
+                slotRef.setCol(slot.getColumnName());
+                smap.getRhs().add(slotRef);
             }
             Expr expr = entry.getValue().clone(smap);
             expr.analyze(analyzer);
+
+            expr = Expr.castFold(expr);
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();

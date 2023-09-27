@@ -31,6 +31,8 @@ import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.PlaceHolderExpr;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Function;
@@ -67,7 +69,16 @@ import java.util.stream.Collectors;
 
 public class ScalarOperatorToExpr {
     public static Expr buildExecExpression(ScalarOperator expression, FormatterContext descTbl) {
-        return expression.accept(new Formatter(), descTbl);
+        return expression.accept(new Formatter(ScalarOperatorToExpr::buildExecExpression), descTbl);
+    }
+
+    public static Expr buildExprIgnoreSlot(ScalarOperator expression, FormatterContext descTbl) {
+        return expression.accept(new IgnoreSlotFormatter(ScalarOperatorToExpr::buildExprIgnoreSlot), descTbl);
+    }
+
+    @FunctionalInterface
+    interface BuildExpr {
+        Expr build(ScalarOperator expression, FormatterContext descTbl);
     }
 
     public static class FormatterContext {
@@ -92,6 +103,12 @@ public class ScalarOperatorToExpr {
     }
 
     public static class Formatter extends ScalarOperatorVisitor<Expr, FormatterContext> {
+
+        protected BuildExpr buildExpr;
+
+        Formatter(BuildExpr buildExpr) {
+            this.buildExpr = buildExpr;
+        }
 
         /**
          * For now, backend cannot see the TYPE_NULL and other derived types, like array<null>
@@ -324,7 +341,7 @@ public class ScalarOperatorToExpr {
 
         @Override
         public Expr visitIsNullPredicate(IsNullPredicateOperator predicate, FormatterContext context) {
-            Expr expr = new IsNullPredicate(buildExecExpression(predicate.getChild(0), context), predicate.isNotNull());
+            Expr expr = new IsNullPredicate(buildExpr.build(predicate.getChild(0), context), predicate.isNotNull());
 
             // for set function name
             if (predicate.isNotNull()) {
@@ -440,7 +457,7 @@ public class ScalarOperatorToExpr {
                     break;
                 default:
                     List<Expr> arg = call.getChildren().stream()
-                            .map(expr -> buildExecExpression(expr, context))
+                            .map(expr -> buildExpr.build(expr, context))
                             .collect(Collectors.toList());
                     if (call.isCountStar()) {
                         callExpr = new FunctionCallExpr(call.getFnName(), FunctionParams.createStarParam());
@@ -459,7 +476,7 @@ public class ScalarOperatorToExpr {
         @Override
         public Expr visitCastOperator(CastOperator operator, FormatterContext context) {
             CastExpr expr =
-                    new CastExpr(operator.getType(), buildExecExpression(operator.getChild(0), context));
+                    new CastExpr(operator.getType(), buildExpr.build(operator.getChild(0), context));
             expr.setImplicit(context.implicitCast);
             hackTypeNull(expr);
             return expr;
@@ -523,6 +540,19 @@ public class ScalarOperatorToExpr {
         @Override
         public Expr visitCloneOperator(CloneOperator operator, FormatterContext context) {
             return new CloneExpr(buildExecExpression(operator.getChild(0), context));
+        }
+    }
+
+    static class IgnoreSlotFormatter extends Formatter {
+        IgnoreSlotFormatter(BuildExpr buildExpr) {
+            super(buildExpr);
+        }
+
+        @Override
+        public Expr visitVariableReference(ColumnRefOperator node, FormatterContext context) {
+            SlotDescriptor descriptor = new SlotDescriptor(new SlotId(node.getId()), node.getName(),
+                    node.getType(), node.isNullable());
+            return new SlotRef(descriptor);
         }
     }
 }
