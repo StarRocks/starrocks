@@ -47,22 +47,31 @@ public class ExchangeSortToMergeRule extends OptExpressionVisitor<OptExpression,
             PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpr.inputAt(0).getOp();
 
             if (topN.getSortPhase().isFinal() && !topN.isSplit() && topN.getLimit() == Operator.DEFAULT_LIMIT) {
-                OptExpression child = OptExpression.create(new PhysicalTopNOperator(
-                        topN.getOrderSpec(), topN.getLimit(), topN.getOffset(), topN.getPartitionByColumns(),
-                        topN.getPartitionLimit(), SortPhase.PARTIAL, topN.getTopNType(), false, false, null, null
-                ), optExpr.inputAt(0).getInputs());
-                child.setLogicalProperty(optExpr.inputAt(0).getLogicalProperty());
-                child.setStatistics(optExpr.getStatistics());
 
-                OptExpression newOpt = OptExpression.create(new PhysicalTopNOperator(
+                OptExpression.Builder partialSortOptBuilder = OptExpression.buildWithOpAndInputs(
+                        new PhysicalTopNOperator(
                                 topN.getOrderSpec(), topN.getLimit(), topN.getOffset(), topN.getPartitionByColumns(),
-                                topN.getPartitionLimit(), SortPhase.FINAL, topN.getTopNType(), true, false, null,
-                                topN.getProjection()),
-                        Lists.newArrayList(child));
-                newOpt.setLogicalProperty(optExpr.getLogicalProperty());
-                newOpt.setStatistics(optExpr.getStatistics());
+                                topN.getPartitionLimit(), SortPhase.PARTIAL, topN.getTopNType(), false, false, null, null
+                        ),
+                        optExpr.inputAt(0).getInputs()
+                );
+                partialSortOptBuilder.setLogicalProperty(optExpr.inputAt(0).getLogicalProperty())
+                        .setStatistics(optExpr.getStatistics())
+                        .setCost(optExpr.getCost())
+                        .setRequiredProperties(optExpr.getRequiredProperties());
 
-                return visit(newOpt, null);
+
+                OptExpression.Builder newOptBuilder = OptExpression.buildWithOpAndInputs(new PhysicalTopNOperator(
+                        topN.getOrderSpec(), topN.getLimit(), topN.getOffset(), topN.getPartitionByColumns(),
+                        topN.getPartitionLimit(), SortPhase.FINAL, topN.getTopNType(), true, false, null,
+                        topN.getProjection()),
+                        Lists.newArrayList(partialSortOptBuilder.build()));
+                newOptBuilder.setLogicalProperty(optExpr.getLogicalProperty())
+                        .setStatistics(optExpr.getStatistics())
+                        .setCost(optExpr.getCost())
+                        .setRequiredProperties(optExpr.getRequiredProperties());
+
+                return visit(newOptBuilder.build(), null);
             } else {
                 return visit(optExpr, null);
             }

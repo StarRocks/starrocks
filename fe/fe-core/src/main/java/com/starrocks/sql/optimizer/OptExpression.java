@@ -206,4 +206,60 @@ public class OptExpression {
         }
         return sb.toString();
     }
+
+    public static Builder buildWithOpAndInputs(Operator op, List<OptExpression> inputs) {
+        return new Builder(op, inputs);
+    }
+
+    public static final class Builder {
+
+        private Operator op;
+
+        private List<OptExpression> inputs;
+
+        private LogicalProperty property;
+
+        private Statistics statistics;
+
+        private double cost = 0;
+
+        private List<PhysicalPropertySet> requiredProperties;
+
+
+        public Builder(Operator op, List<OptExpression> inputs) {
+            this.op = op;
+            this.inputs = inputs;
+        }
+
+        public Builder setLogicalProperty(LogicalProperty property) {
+            this.property = property;
+            return this;
+        }
+
+        public Builder setStatistics(Statistics statistics) {
+            this.statistics = statistics;
+            return this;
+        }
+
+        public Builder setCost(double cost) {
+            this.cost = cost;
+            return this;
+        }
+
+        public Builder setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {
+            this.requiredProperties = requiredProperties;
+            return this;
+        }
+
+        public OptExpression build() {
+            Preconditions.checkState(op != null);
+            OptExpression result = OptExpression.create(op, inputs);
+            result.setStatistics(statistics);
+            result.setCost(cost);
+            result.setLogicalProperty(property);
+            result.setRequiredProperties(requiredProperties);
+            return result;
+        }
+    }
+
 }
