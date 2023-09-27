@@ -93,12 +93,12 @@ private:
     StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
 
     // decode min/max value from row group stats
-    static Status _decode_min_max_column(const ParquetField& field, const std::string& timezone,
-                                         const TypeDescriptor& type, const tparquet::ColumnMetaData& column_meta,
-                                         const tparquet::ColumnOrder* column_order, ColumnPtr* min_column,
-                                         ColumnPtr* max_column, bool* decode_ok);
-    static bool _can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
-                                       const tparquet::ColumnOrder* column_order);
+    Status _decode_min_max_column(const ParquetField& field, const std::string& timezone, const TypeDescriptor& type,
+                                  const tparquet::ColumnMetaData& column_meta,
+                                  const tparquet::ColumnOrder* column_order, ColumnPtr* min_column,
+                                  ColumnPtr* max_column, bool* decode_ok) const;
+    bool _can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
+                                const tparquet::ColumnOrder* column_order) const;
     // statistics.min_value max_value
     static bool _can_use_stats(const tparquet::Type::type& type, const tparquet::ColumnOrder* column_order);
     // statistics.min max
