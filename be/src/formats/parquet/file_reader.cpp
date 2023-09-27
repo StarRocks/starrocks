@@ -14,6 +14,8 @@
 
 #include "formats/parquet/file_reader.h"
 
+#include <parquet/metadata.h>
+
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
@@ -205,6 +207,11 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
             bool exist = false;
             RETURN_IF_ERROR(_read_min_max_chunk(row_group, min_max_slots, &min_chunk, &max_chunk, &exist));
             if (!exist) continue;
+
+            LOG(INFO) << "rf: " << filter->debug_string();
+            LOG(INFO) << "min: " << min_chunk->columns()[0]->debug_string();
+            LOG(INFO) << "max: " << max_chunk->columns()[0]->debug_string();
+
             bool discard = RuntimeFilterHelper::filter_zonemap_with_min_max(
                     slot->type().type, filter, min_chunk->columns()[0].get(), max_chunk->columns()[0].get());
             if (discard) {
@@ -299,7 +306,7 @@ int32_t FileReader::_get_partition_column_idx(const std::string& col_name) const
 Status FileReader::_decode_min_max_column(const ParquetField& field, const std::string& timezone,
                                           const TypeDescriptor& type, const tparquet::ColumnMetaData& column_meta,
                                           const tparquet::ColumnOrder* column_order, ColumnPtr* min_column,
-                                          ColumnPtr* max_column, bool* decode_ok) {
+                                          ColumnPtr* max_column, bool* decode_ok) const {
     DCHECK_EQ(field.physical_type, column_meta.type);
     *decode_ok = true;
     // We need to make sure min_max column append value succeed
@@ -403,16 +410,28 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
     return Status::OK();
 }
 
+// Reference: arrow/cpp/src/parquet/metadata.cc
 bool FileReader::_can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
-                                        const tparquet::ColumnOrder* column_order) {
-    // disregard column sort order if statistics max/min are equal
-    if (column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.max_value &&
-        column_meta.statistics.min_value == column_meta.statistics.max_value) {
+                                        const tparquet::ColumnOrder* column_order) const {
+    // created_by is not populated, which could have been caused by
+    // parquet-mr during the same time as PARQUET-251, see PARQUET-297
+    if (!_file_metadata->t_metadata().__isset.created_by) {
         return true;
     }
-    if (column_meta.statistics.__isset.min && column_meta.statistics.__isset.max &&
-        column_meta.statistics.min == column_meta.statistics.max) {
-        return true;
+
+    auto application_version = ::parquet::ApplicationVersion(_file_metadata->t_metadata().created_by);
+    auto min_equals_max = (column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.max_value &&
+                          column_meta.statistics.min_value == column_meta.statistics.max_value) ||
+                          (column_meta.statistics.__isset.min && column_meta.statistics.__isset.max &&
+                          column_meta.statistics.min == column_meta.statistics.max);
+
+    // disregard column sort order if statistics max/min are equal
+    if (min_equals_max) {
+        if (column_meta.type != tparquet::Type::BYTE_ARRAY && column_meta.type != tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
+            return true;
+        }
+        // PARQUET-251: stats are incorrect for binary columns
+        return !application_version.VersionLt(::parquet::ApplicationVersion::PARQUET_251_FIXED_VERSION());
     }
 
     if (column_meta.statistics.__isset.min_value && _can_use_stats(column_meta.type, column_order)) {
