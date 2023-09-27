@@ -63,6 +63,7 @@ jobs:
     needs: info
     runs-on: ubuntu-latest
     if: contains(needs.info.outputs.LABELS, 'META-REVIEW')
+    continue-on-error: false
     env:
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
       REPO: ${{ github.repository }}
@@ -85,5 +86,4 @@ jobs:
             done
           done
           
-          echo "Lack of META-TEAM members' approval!"
           echo "::error title=test::Lack of META-TEAM members' approval"
