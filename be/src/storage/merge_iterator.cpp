@@ -163,6 +163,7 @@ public:
         }
         return Status::OK();
     }
+
     [[nodiscard]] Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
         RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
         for (auto& i : _children) {

@@ -1657,7 +1657,7 @@ Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id) {
     string prefix = strings::Substitute("$0$1_", HEADER_PREFIX, tablet_id);
     RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, prefix, traverse_tabletmeta_func));
     if (is_primary) {
-        remove_primary_key_meta(store, &batch, tablet_id);
+        (void)remove_primary_key_meta(store, &batch, tablet_id);
     }
     return meta->write_batch(&batch);
 }
@@ -1680,13 +1680,13 @@ Status TabletMetaManager::remove_table_meta(DataDir* store, TTableId table_id) {
                 if (!st.ok()) {
                     LOG(WARNING) << "batch.Delete failed, key:" << key;
                 } else if (is_primary) {
-                    remove_primary_key_meta(store, &batch, tablet_meta_pb.tablet_id());
+                    (void)remove_primary_key_meta(store, &batch, tablet_meta_pb.tablet_id());
                 }
             }
         }
         return true;
     };
-    meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_tabletmeta_func);
+    RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_tabletmeta_func));
     return meta->write_batch(&batch);
 }
 
@@ -1707,7 +1707,7 @@ Status TabletMetaManager::remove_table_persistent_index_meta(DataDir* store, TTa
         }
         return true;
     };
-    meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_tabletmeta_func);
+    RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_tabletmeta_func));
     return meta->write_batch(&batch);
 }
 

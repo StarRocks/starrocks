@@ -251,7 +251,8 @@ void TabletColumn::init_from_thrift(const TColumn& tcolumn) {
     auto shared_tcolumn_desc = std::make_shared<TColumn>(tcolumn);
     convert_to_new_version(shared_tcolumn_desc.get());
 
-    t_column_to_pb_column(_unique_id, *shared_tcolumn_desc, &column_pb);
+    WARN_IF_ERROR(t_column_to_pb_column(_unique_id, *shared_tcolumn_desc, &column_pb),
+                  "failed to covert TColumn to ColumnPB");
     init_from_pb(column_pb);
 }
 

@@ -995,9 +995,13 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
         tsid.tablet_id = tablet_id;
         for (auto& delvec_pair : new_del_vecs) {
             tsid.segment_id = delvec_pair.first;
-            manager->set_cached_del_vec(tsid, delvec_pair.second);
+            st = manager->set_cached_del_vec(tsid, delvec_pair.second);
+            if (!st.ok()) {
+                failure_handler("set_cached_del_vec failed", st);
+                return;
+            }
             // try to set empty dcg cache, for improving latency when reading
-            manager->set_cached_empty_delta_column_group(_tablet.data_dir()->get_meta(), tsid);
+            (void)manager->set_cached_empty_delta_column_group(_tablet.data_dir()->get_meta(), tsid);
             num_dels += delvec_pair.second->cardinality();
         }
         if (rowset->num_segments() > 0) {
@@ -1172,7 +1176,13 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     int64_t full_rowset_size = 0;
     if (rowset->rowset_meta()->get_meta_pb().delfile_idxes_size() == 0) {
         for (uint32_t i = 0; i < rowset->num_segments(); i++) {
-            state.load_upserts(rowset.get(), i);
+            st = state.load_upserts(rowset.get(), i);
+            if (!st.ok()) {
+                std::string msg = strings::Substitute("_apply_rowset_commit error: load upserts failed: $0 $1",
+                                                      st.to_string(), debug_string());
+                failure_handler(msg, true);
+                return;
+            }
             auto& upserts = state.upserts();
             if (upserts[i] != nullptr) {
                 // used for auto increment delete-partial update conflict
@@ -1198,7 +1208,13 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                 }
                 manager->index_cache().update_object_size(index_entry, index.memory_usage());
                 if (delete_pks != nullptr) {
-                    index.erase(*delete_pks, &new_deletes);
+                    st = index.erase(*delete_pks, &new_deletes);
+                    if (!st.ok()) {
+                        std::string msg = strings::Substitute("_apply_rowset_commit error: index erase failed: $0 $1",
+                                                              st.to_string(), debug_string());
+                        failure_handler(msg, true);
+                        return;
+                    }
                 }
             }
             state.release_upserts(i);
@@ -1208,10 +1224,22 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
         // 1. upgrade from old version. delfile_idxes in rowset meta is empty, we still need to load delete files
         // 2. pure upsert. no delete files, the following logic will be skip
         for (uint32_t i = 0; i < rowset->num_delete_files(); i++) {
-            state.load_deletes(rowset.get(), i);
+            st = state.load_deletes(rowset.get(), i);
+            if (!st.ok()) {
+                std::string msg = strings::Substitute("_apply_rowset_commit error: load deletes failed: $0 $1",
+                                                      st.to_string(), debug_string());
+                failure_handler(msg, true);
+                return;
+            }
             auto& deletes = state.deletes();
             delete_op += deletes[i]->size();
-            index.erase(*deletes[i], &new_deletes);
+            st = index.erase(*deletes[i], &new_deletes);
+            if (!st.ok()) {
+                std::string msg = strings::Substitute("_apply_rowset_commit error: index erase failed: $0 $1",
+                                                      st.to_string(), debug_string());
+                failure_handler(msg, true);
+                return;
+            }
             state.release_deletes(i);
         }
     } else {
@@ -1228,7 +1256,13 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                 del_idx = rowset->rowset_meta()->get_meta_pb().delfile_idxes(loaded_delfile);
             }
             while (i < del_idx) {
-                state.load_upserts(rowset.get(), loaded_upsert);
+                st = state.load_upserts(rowset.get(), loaded_upsert);
+                if (!st.ok()) {
+                    std::string msg = strings::Substitute("_apply_rowset_commit error: load upserts failed: $0 $1",
+                                                          st.to_string(), debug_string());
+                    failure_handler(msg, true);
+                    return;
+                }
                 auto& upserts = state.upserts();
                 if (upserts[loaded_upsert] != nullptr) {
                     // used for auto increment delete-partial update conflict
@@ -1254,7 +1288,14 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                     }
                     manager->index_cache().update_object_size(index_entry, index.memory_usage());
                     if (delete_pks != nullptr) {
-                        index.erase(*delete_pks, &new_deletes);
+                        st = index.erase(*delete_pks, &new_deletes);
+                        if (!st.ok()) {
+                            std::string msg =
+                                    strings::Substitute("_apply_rowset_commit error: index erase failed: $0 $1",
+                                                        st.to_string(), debug_string());
+                            failure_handler(msg, true);
+                            return;
+                        }
                     }
                 }
                 i++;
@@ -1263,10 +1304,22 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
             }
             if (loaded_delfile < delfile_num) {
                 DCHECK(i == del_idx);
-                state.load_deletes(rowset.get(), loaded_delfile);
+                st = state.load_deletes(rowset.get(), loaded_delfile);
+                if (!st.ok()) {
+                    std::string msg = strings::Substitute("_apply_rowset_commit error: load deletes failed: $0 $1",
+                                                          st.to_string(), debug_string());
+                    failure_handler(msg, true);
+                    return;
+                }
                 auto& deletes = state.deletes();
                 delete_op += deletes[loaded_delfile]->size();
-                index.erase(*deletes[loaded_delfile], &new_deletes);
+                st = index.erase(*deletes[loaded_delfile], &new_deletes);
+                if (!st.ok()) {
+                    std::string msg = strings::Substitute("_apply_rowset_commit error: index erase failed: $0 $1",
+                                                          st.to_string(), debug_string());
+                    failure_handler(msg, true);
+                    return;
+                }
                 state.release_deletes(loaded_delfile);
                 i++;
                 loaded_delfile++;
@@ -1420,9 +1473,15 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
         tsid.tablet_id = tablet_id;
         for (auto& delvec_pair : new_del_vecs) {
             tsid.segment_id = delvec_pair.first;
-            manager->set_cached_del_vec(tsid, delvec_pair.second);
+            st = manager->set_cached_del_vec(tsid, delvec_pair.second);
+            if (!st.ok()) {
+                std::string msg = strings::Substitute("_apply_rowset_commit error: set cached delvec failed: $0 $1",
+                                                      st.to_string(), _debug_string(false));
+                failure_handler(msg, false);
+                return;
+            }
             // try to set empty dcg cache, for improving latency when reading
-            manager->set_cached_empty_delta_column_group(_tablet.data_dir()->get_meta(), tsid);
+            (void)manager->set_cached_empty_delta_column_group(_tablet.data_dir()->get_meta(), tsid);
         }
         // 5. apply memory
         _next_log_id++;
@@ -1680,7 +1739,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     RETURN_IF_ERROR(_commit_compaction(pinfo, *output_rowset, &version));
     // already committed, so we can ignore timeout error here
     std::unique_lock<std::mutex> ul(_lock);
-    _wait_for_version(version, 120000, ul);
+    RETURN_IF_ERROR(_wait_for_version(version, 120000, ul));
     return Status::OK();
 }
 
@@ -1847,6 +1906,10 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     if (!_compaction_state) {
         _compaction_state = std::make_unique<CompactionState>();
     }
+    auto failure_handler = [&](const std::string& msg) {
+        LOG(ERROR) << msg;
+        _set_error(msg);
+    };
     int64_t t_start = MonotonicMillis();
     auto manager = StorageEngine::instance()->update_manager();
     auto tablet_id = _tablet.tablet_id();
@@ -1864,33 +1927,44 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
     // avoid inconsistency between persistent index file and PersistentIndexMeta
     bool enable_persistent_index = index.enable_persistent_index();
+    // release or remove index entry when function end
+    DeferOp index_defer([&]() {
+        if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
+            manager->index_cache().remove(index_entry);
+        } else {
+            manager->index_cache().release(index_entry);
+        }
+    });
     if (!st.ok()) {
         manager->index_cache().remove(index_entry);
         _compaction_state.reset();
         std::string msg = strings::Substitute("_apply_compaction_commit error: load primary index failed: $0 $1",
                                               st.to_string(), debug_string());
-        LOG(ERROR) << msg;
-        _set_error(msg);
+        failure_handler(msg);
         return;
     }
     Rowset* output_rowset = _get_rowset(rowset_id).get();
     if (output_rowset == nullptr) {
         string msg = strings::Substitute("_apply_compaction_commit rowset not found tablet=$0 rowset=$1",
                                          _tablet.tablet_id(), rowset_id);
-        LOG(ERROR) << msg;
-        _set_error(msg);
+        failure_handler(msg);
         return;
     }
     if (!(st = _compaction_state->load(output_rowset)).ok()) {
-        manager->index_cache().release(index_entry);
         _compaction_state.reset();
         std::string msg = strings::Substitute("_apply_compaction_commit error: load compaction state failed: $0 $1",
                                               st.to_string(), debug_string());
-        LOG(ERROR) << msg;
-        _set_error(msg);
+        failure_handler(msg);
         return;
     }
-    index.prepare(version, 0);
+    st = index.prepare(version, 0);
+    if (!st.ok()) {
+        _compaction_state.reset();
+        std::string msg = strings::Substitute("_apply_compaction_commit error: index prepare failed: $0 $1",
+                                              st.to_string(), debug_string());
+        failure_handler(msg);
+        return;
+    }
     int64_t t_load = MonotonicMillis();
     // 2. iterator new rowset's pks, update primary index, generate delvec
     size_t total_deletes = 0;
@@ -1905,20 +1979,17 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     if (rowset == nullptr) {
         string msg = strings::Substitute("_apply_compaction_commit rowset not found tablet=$0 rowset=$1",
                                          _tablet.tablet_id(), max_rowset_id);
-        LOG(ERROR) << msg;
-        _set_error(msg);
+        failure_handler(msg);
         return;
     }
     uint32_t max_src_rssid = max_rowset_id + rowset->num_segments() - 1;
 
     for (size_t i = 0; i < _compaction_state->pk_cols.size(); i++) {
         if (st = _compaction_state->load_segments(output_rowset, i); !st.ok()) {
-            manager->index_cache().release(index_entry);
             _compaction_state.reset();
             std::string msg = strings::Substitute("_apply_compaction_commit error: load compaction state failed: $0 $1",
                                                   st.to_string(), debug_string());
-            LOG(ERROR) << msg;
-            _set_error(msg);
+            failure_handler(msg);
             return;
         }
         auto& pk_col = _compaction_state->pk_cols[i];
@@ -1926,7 +1997,14 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         uint32_t rssid = rowset_id + i;
         tmp_deletes.clear();
         // replace will not grow hashtable, so don't need to check memory limit
-        index.try_replace(rssid, 0, *pk_col, max_src_rssid, &tmp_deletes);
+        st = index.try_replace(rssid, 0, *pk_col, max_src_rssid, &tmp_deletes);
+        if (!st.ok()) {
+            _compaction_state.reset();
+            std::string msg = strings::Substitute("_apply_compaction_commit error: index try replace failed: $0 $1",
+                                                  st.to_string(), debug_string());
+            failure_handler(msg);
+            return;
+        }
         DelVectorPtr dv = std::make_shared<DelVector>();
         if (tmp_deletes.empty()) {
             dv->init(version.major_number(), nullptr, 0);
@@ -1947,17 +2025,17 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         index.get_persistent_index_meta_lock_guard(&index_meta_lock_guard);
         st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
         if (!st.ok() && !st.is_not_found()) {
-            std::string msg = strings::Substitute("get persistent index meta failed: $0", st.to_string());
-            LOG(ERROR) << msg << " " << _debug_string(false, true);
-            _set_error(msg);
+            std::string msg = strings::Substitute("get persistent index meta failed: $0 $1", st.to_string(),
+                                                  _debug_string(false, true));
+            failure_handler(msg);
             return;
         }
     }
     st = index.commit(&index_meta);
     if (!st.ok()) {
-        std::string msg = strings::Substitute("primary index commit failed: $0", st.to_string());
-        LOG(ERROR) << msg << " " << _debug_string(false, true);
-        _set_error(msg);
+        std::string msg =
+                strings::Substitute("primary index commit failed: $0 $1", st.to_string(), _debug_string(false, true));
+        failure_handler(msg);
         return;
     }
 
@@ -1971,11 +2049,9 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version_info.version,
                                                     delvecs, index_meta, enable_persistent_index, nullptr);
         if (!st.ok()) {
-            manager->index_cache().release(index_entry);
             std::string msg = strings::Substitute("_apply_compaction_commit error: write meta failed: $0 $1",
                                                   st.to_string(), _debug_string(false));
-            LOG(ERROR) << msg;
-            _set_error(msg);
+            failure_handler(msg);
             return;
         }
         // 4. put delvec in cache
@@ -1983,9 +2059,15 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         tsid.tablet_id = _tablet.tablet_id();
         for (auto& delvec_pair : delvecs) {
             tsid.segment_id = delvec_pair.first;
-            manager->set_cached_del_vec(tsid, delvec_pair.second);
+            st = manager->set_cached_del_vec(tsid, delvec_pair.second);
+            if (!st.ok()) {
+                std::string msg = strings::Substitute("_apply_compaction_commit error: set cached delvec failed: $0 $1",
+                                                      st.to_string(), _debug_string(false));
+                failure_handler(msg);
+                return;
+            }
             // try to set empty dcg cache, for improving latency when reading
-            manager->set_cached_empty_delta_column_group(_tablet.data_dir()->get_meta(), tsid);
+            (void)manager->set_cached_empty_delta_column_group(_tablet.data_dir()->get_meta(), tsid);
         }
         // 5. apply memory
         _next_log_id++;
@@ -1996,18 +2078,8 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     st = index.on_commited();
     if (!st.ok()) {
         std::string msg = strings::Substitute("primary index on_commit failed: $0", st.to_string());
-        LOG(ERROR) << msg;
-        _set_error(msg);
+        failure_handler(msg);
         return;
-    }
-
-    // if `enable_persistent_index` of tablet is change(maybe changed by alter table)
-    // we should try to remove the index_entry from cache
-    // Otherwise index may be used for later commits, keep in cache
-    if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
-        manager->index_cache().remove(index_entry);
-    } else {
-        manager->index_cache().release(index_entry);
     }
 
     {
@@ -3010,7 +3082,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
         std::unique_lock wrlock(_tablet.get_header_lock());
-        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        RETURN_IF_ERROR(_tablet.set_tablet_state(TabletState::TABLET_RUNNING));
         _tablet.save_meta();
         return Status::OK();
     }
@@ -3163,7 +3235,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
         LOG(WARNING) << err_msg_header << "link_from skipped: max_version:" << this->max_version()
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
-        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        RETURN_IF_ERROR(_tablet.set_tablet_state(TabletState::TABLET_RUNNING));
         _tablet.save_meta();
         return Status::OK();
     }
@@ -3184,7 +3256,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
         LOG(WARNING) << err_msg_header << "_load_from_pb failed tablet_id:" << tablet_id << " " << st;
         return st;
     }
-    _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+    RETURN_IF_ERROR(_tablet.set_tablet_state(TabletState::TABLET_RUNNING));
     LOG(INFO) << err_msg_header << "link_from finish tablet:" << _tablet.tablet_id()
               << " version:" << this->max_version() << " base tablet:" << base_tablet->tablet_id()
               << " #pending:" << _pending_commits.size() << " time:" << watch.get_elapse_second() << "s"
@@ -3214,7 +3286,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
         std::unique_lock wrlock(_tablet.get_header_lock());
-        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        RETURN_IF_ERROR(_tablet.set_tablet_state(TabletState::TABLET_RUNNING));
         _tablet.save_meta();
         return Status::OK();
     }
@@ -3367,7 +3439,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         LOG(WARNING) << err_msg_header << "convert_from skipped: max_version:" << this->max_version()
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
-        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        RETURN_IF_ERROR(_tablet.set_tablet_state(TabletState::TABLET_RUNNING));
         _tablet.save_meta();
         return Status::OK();
     }
@@ -3390,7 +3462,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         return status;
     }
 
-    _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+    RETURN_IF_ERROR(_tablet.set_tablet_state(TabletState::TABLET_RUNNING));
     LOG(INFO) << err_msg_header << "convert_from finish tablet:" << _tablet.tablet_id()
               << " version:" << this->max_version() << " base tablet:" << base_tablet->tablet_id()
               << " #pending:" << _pending_commits.size() << " time:" << watch.get_elapse_second() << "s"
@@ -3466,7 +3538,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
         std::unique_lock wrlock(_tablet.get_header_lock());
-        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        RETURN_IF_ERROR(_tablet.set_tablet_state(TabletState::TABLET_RUNNING));
         _tablet.save_meta();
         return Status::OK();
     }
@@ -3670,7 +3742,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         LOG(WARNING) << err_msg_header << "reorder_from skipped: max_version:" << this->max_version()
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
-        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        RETURN_IF_ERROR(_tablet.set_tablet_state(TabletState::TABLET_RUNNING));
         _tablet.save_meta();
         return Status::OK();
     }
@@ -3693,7 +3765,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         return status;
     }
 
-    _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+    RETURN_IF_ERROR(_tablet.set_tablet_state(TabletState::TABLET_RUNNING));
     LOG(INFO) << err_msg_header << "reorder_from finish tablet:" << _tablet.tablet_id()
               << " version:" << this->max_version() << " base tablet:" << base_tablet->tablet_id()
               << " #pending:" << _pending_commits.size() << " time:" << watch.get_elapse_second() << "s"
@@ -4159,13 +4231,13 @@ Status TabletUpdates::clear_meta() {
     _set_error("clear_meta inprogress"); // Mark this tablet unusable first.
 
     // Clear permanently stored meta.
-    TabletMetaManager::clear_pending_rowset(data_store, &wb, _tablet.tablet_id());
-    TabletMetaManager::clear_rowset(data_store, &wb, _tablet.tablet_id());
-    TabletMetaManager::clear_del_vector(data_store, &wb, _tablet.tablet_id());
-    TabletMetaManager::clear_delta_column_group(data_store, &wb, _tablet.tablet_id());
-    TabletMetaManager::clear_log(data_store, &wb, _tablet.tablet_id());
-    TabletMetaManager::clear_persistent_index(data_store, &wb, _tablet.tablet_id());
-    TabletMetaManager::remove_tablet_meta(data_store, &wb, _tablet.tablet_id(), _tablet.schema_hash());
+    RETURN_IF_ERROR(TabletMetaManager::clear_pending_rowset(data_store, &wb, _tablet.tablet_id()));
+    RETURN_IF_ERROR(TabletMetaManager::clear_rowset(data_store, &wb, _tablet.tablet_id()));
+    RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(data_store, &wb, _tablet.tablet_id()));
+    RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(data_store, &wb, _tablet.tablet_id()));
+    RETURN_IF_ERROR(TabletMetaManager::clear_log(data_store, &wb, _tablet.tablet_id()));
+    RETURN_IF_ERROR(TabletMetaManager::clear_persistent_index(data_store, &wb, _tablet.tablet_id()));
+    RETURN_IF_ERROR(TabletMetaManager::remove_tablet_meta(data_store, &wb, _tablet.tablet_id(), _tablet.schema_hash()));
     RETURN_IF_ERROR(meta_store->write_batch(&wb));
 
     // Clear cached delete vectors and cached delta column group
@@ -4421,7 +4493,7 @@ Status TabletUpdates::get_rss_rowids_by_pk_unlock(Tablet* tablet, const Column& 
         return Status::InternalError(msg);
     }
 
-    index.get(keys, rss_rowids);
+    RETURN_IF_ERROR(index.get(keys, rss_rowids));
 
     // if `enable_persistent_index` of tablet is change(maybe changed by alter table)
     // we should try to remove the index_entry from cache

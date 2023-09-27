@@ -1177,7 +1177,7 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
     std::vector<Slice> keys;
     std::vector<uint64_t> values;
     values.reserve(pks.size());
-    _build_persistent_values(rssid, rowids, 0, pks.size(), &values);
+    RETURN_IF_ERROR(_build_persistent_values(rssid, rowids, 0, pks.size(), &values));
     const Slice* vkeys = _build_persistent_keys(pks, 0, pks.size(), &keys);
     RETURN_IF_ERROR(_persistent_index->insert(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()), true));
     return Status::OK();
@@ -1267,7 +1267,7 @@ Status PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_st
 Status PrimaryIndex::insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     if (_persistent_index != nullptr) {
-        _insert_into_persistent_index(rssid, rowids, pks);
+        RETURN_IF_ERROR(_insert_into_persistent_index(rssid, rowids, pks));
     }
     return _pkey_to_rssid_rowid->insert(rssid, rowids, pks, 0, pks.size());
 }

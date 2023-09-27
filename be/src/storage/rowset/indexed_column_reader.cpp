@@ -190,7 +190,7 @@ Status IndexedColumnIterator::seek_at_or_after(const void* key, bool* exact_matc
 
     // seek inside data page
     RETURN_IF_ERROR(_data_page->data_decoder()->seek_at_or_after_value(key, exact_match));
-    _data_page->seek(_data_page->data_decoder()->current_index());
+    RETURN_IF_ERROR(_data_page->seek(_data_page->data_decoder()->current_index()));
     _current_ordinal = _data_page->first_ordinal() + _data_page->offset();
     DCHECK(_data_page->contains(_current_ordinal));
     _seeked = true;

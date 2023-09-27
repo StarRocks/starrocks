@@ -152,7 +152,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             _queue.shutdown();
             // cancel all consumers
             for (auto& consumer : _consumers) {
-                consumer->cancel(ctx);
+                (void)consumer->cancel(ctx);
             }
 
             // waiting all threads finished
@@ -172,7 +172,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 // we need to commit and tell fe to move offset to the newest offset, otherwise, fe will retry consume.
                 for (auto& item : cmt_offset) {
                     if (item.second > ctx->kafka_info->cmt_offset[item.first]) {
-                        kafka_pipe->finish();
+                        RETURN_IF_ERROR(kafka_pipe->finish());
                         ctx->kafka_info->cmt_offset = std::move(cmt_offset);
                         ctx->receive_bytes = 0;
                         return Status::OK();
@@ -182,7 +182,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 return Status::Cancelled("Cancelled");
             } else {
                 DCHECK(left_bytes < ctx->max_batch_size);
-                kafka_pipe->finish();
+                RETURN_IF_ERROR(kafka_pipe->finish());
                 ctx->kafka_info->cmt_offset = std::move(cmt_offset);
                 ctx->receive_bytes = ctx->max_batch_size - left_bytes;
                 return Status::OK();
@@ -359,7 +359,7 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             _queue.shutdown();
             // cancel all consumers
             for (auto& consumer : _consumers) {
-                consumer->cancel(ctx);
+                (void)consumer->cancel(ctx);
             }
 
             // waiting all threads finished
@@ -378,7 +378,7 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 return Status::Cancelled("Cancelled");
             } else {
                 DCHECK(left_bytes < ctx->max_batch_size);
-                pulsar_pipe->finish();
+                RETURN_IF_ERROR(pulsar_pipe->finish());
                 ctx->pulsar_info->ack_offset = std::move(ack_offset);
                 ctx->receive_bytes = ctx->max_batch_size - left_bytes;
                 get_backlog_nums(ctx);

@@ -320,7 +320,8 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
                                         GlobalEnv::GetInstance()->load_mem_tracker());
-        StorageEngine::instance()->execute_task(&engine_task);
+        // EngineBatchLoadTask execute always return OK
+        (void)(StorageEngine::instance()->execute_task(&engine_task));
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
             // remove the task and not return to fe
@@ -432,10 +433,10 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         LOG(INFO) << "get delete push task. signature: " << agent_task_req->signature << " priority: " << priority
                   << " push_type: " << push_req.push_type;
         std::vector<TTabletInfo> tablet_infos;
-
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
                                         GlobalEnv::GetInstance()->load_mem_tracker());
-        StorageEngine::instance()->execute_task(&engine_task);
+        // EngineBatchLoadTask execute always return OK
+        (void)(StorageEngine::instance()->execute_task(&engine_task));
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
             // remove the task and not return to fe

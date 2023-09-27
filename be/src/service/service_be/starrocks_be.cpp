@@ -268,7 +268,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
 #if defined(WITH_CACHELIB) || defined(WITH_STARCACHE)
     if (config::block_cache_enable) {
-        BlockCache::instance()->shutdown();
+        (void)BlockCache::instance()->shutdown();
         LOG(INFO) << process_name << " exit step " << exit_step++ << ": block cache shutdown successfully";
     }
 #endif
