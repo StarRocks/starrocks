@@ -173,7 +173,7 @@ public class HDFSBackendSelector implements BackendSelector {
             }
         }
         if (node == null) {
-            Random rand = new Random();
+            Random rand = new Random(System.currentTimeMillis());
             int i = rand.nextInt(backends.size());
             node = backends.get(i);
         }
