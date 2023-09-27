@@ -7,8 +7,10 @@ TPC-H can be used to build models based on real production environments to simul
 
 We perform a test on 22 queries against a TPC-H 100 GB dataset. The following figure shows the test result.
 ![comparison](../assets/7.2-1.png)
-StarRocks native storage and StarRocks Hive external tables are used for queries. We use StarRocks Hive external tables and Trino to query the same copy of data that is stored in the ORC format and compressed in the ZLIB format.
-StarRocks native storage has a query response time of 21s, that for StarRocks Hive external tables is 92s, and for Trino is as long as 307s.
+
+In the test, StarRocks queries data from both its native storage and Hive external tables. StarRocks and Trino query the same copy of data from Hive external tables. Data is ZLIB-compressed and stored in the ORC format.
+
+The latency for StarRocks to query data from its native storage is 21s, that for StarRocks to query Hive external tables is 92s, and that for Trino to query Hive external tables is **as long as 307s**.
 
 ## 2. Test Preparation
 
@@ -500,7 +502,7 @@ order by
 
 ## 4. Test Procedure
 
-### 4.1 StarRocks Internal Tables
+### 4.1 Query StarRocks Native Table
 
 #### 4.1.1 Generate Data
 
@@ -524,7 +526,7 @@ order by
 
 #### 4.1.2 Create Table Schema
 
-1. Modify the configuration file conf/starrocks.conf and specify the cluster address.
+1. Modify the configuration file `conf/starrocks.conf` and specify the cluster address.
 
     ```SQL
     # StarRocks configuration
@@ -721,7 +723,7 @@ order by
         l_suppkey;
     ```
 
-#### 4.1.3 Import Data
+#### 4.1.3 Load Data
 
 ```Python
 ./bin/stream_load.sh data_100
@@ -742,13 +744,13 @@ ANALYZE FULL TABLE region;
 ANALYZE FULL TABLE supplier;
 ```
 
-#### 4.1.5  Query Data
+#### 4.1.5 Query Data
 
 ```Python
 ./bin/benchmark.sh -p -d tpch
 ```
 
-### 4.2 StarRocks Hive External Tables
+### 4.2 Query Hive External Tables
 
 #### 4.2.1 Create Table Schema
 
@@ -1063,7 +1065,7 @@ group by
     l_suppkey;
 ```
 
-#### 4.2.2 Import Data
+#### 4.2.2 Load Data
 
 1. Create Hive external tables in Hive. The table format is CSV. Upload CSV test data to the data storage directory on HDFS. In this example, the HDFS data storage path of the Hive external table is /user/tmp/csv/.
 
