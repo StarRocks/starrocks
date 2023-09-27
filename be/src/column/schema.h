@@ -88,6 +88,8 @@ public:
 
     KeysType keys_type() const { return static_cast<KeysType>(_keys_type); }
 
+    void init_sort_key_idxes() { _init_sort_key_idxes(); }
+
 private:
     void _build_index_map(const Fields& fields);
     void _init_sort_key_idxes() {
