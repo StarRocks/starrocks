@@ -198,20 +198,20 @@ sh bin/gen_data/gen-tpcds.sh 100 data_100
 
 Modify the configuration file `conf/starrocks.conf` and specify the cluster address. Pay attention to `mysql_host` and `mysql_port`.
 
-```SQL
+```Bash
 sh bin/create_db_table.sh ddl_100
 ```
 
 #### 4.1.3 Load Data
 
-```Python
+```Bash
 sh bin/stream_load.sh data_100
 ```
 
 #### 4.1.4 Query Data
 
-```Python
-./bin/benchmark.sh -p -d tpch
+```Bash
+sh bin/benchmark.sh -p -d tpcds
 ```
 
 ### 4.2 Query Hive External Tables
