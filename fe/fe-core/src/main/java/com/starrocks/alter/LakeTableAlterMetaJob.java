@@ -26,7 +26,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -256,7 +256,8 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = partitionIndexMap.row(partitionId);
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
-                    Utils.publishVersion(index.getTablets(), watershedTxnId, commitVersion - 1, commitVersion);
+                    Utils.publishVersion(index.getTablets(), watershedTxnId, commitVersion - 1, commitVersion,
+                            finishedTimeMs / 1000);
                 }
             }
             return true;
@@ -286,19 +287,18 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
                         "Partition[" + partitionName + "] does not exist in table[" + olapTable.getName() + "]");
             }
 
-            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
-                        MaterializedIndex.IndexExtState.VISIBLE)) {
-                    addDirtyPartitionIndex(partition.getId(), index.getId(), index);
-                    int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
-                    for (Tablet tablet : index.getTablets()) {
-                        Long backendId = Utils.chooseBackend((LakeTablet) tablet);
-                        Set<Pair<Long, Integer>> tabletIdWithHash =
-                                beIdToTabletIdWithHash.computeIfAbsent(backendId, k -> Sets.newHashSet());
-                        tabletIdWithHash.add(new Pair<>(tablet.getId(), schemaHash));
-                    }
+            for (MaterializedIndex index : partition.getMaterializedIndices(
+                    MaterializedIndex.IndexExtState.VISIBLE)) {
+                addDirtyPartitionIndex(partition.getId(), index.getId(), index);
+                int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
+                for (Tablet tablet : index.getTablets()) {
+                    Long backendId = Utils.chooseBackend((LakeTablet) tablet);
+                    Set<Pair<Long, Integer>> tabletIdWithHash =
+                            beIdToTabletIdWithHash.computeIfAbsent(backendId, k -> Sets.newHashSet());
+                    tabletIdWithHash.add(new Pair<>(tablet.getId(), schemaHash));
                 }
             }
+
         } finally {
             db.readUnlock();
         }
@@ -458,7 +458,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             return;
         }
 
-        try  {
+        try {
             if (jobState == JobState.FINISHED_REWRITING) {
                 updateNextVersion(table);
             } else if (jobState == JobState.FINISHED) {
@@ -482,7 +482,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
     }
 
     // for test
-    public  Map<Long, Long> getCommitVersionMap() {
+    public Map<Long, Long> getCommitVersionMap() {
         return commitVersionMap;
     }
 
