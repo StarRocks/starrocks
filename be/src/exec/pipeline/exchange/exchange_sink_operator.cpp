@@ -437,14 +437,9 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
-<<<<<<< HEAD
-    _uncompressed_bytes_counter = ADD_COUNTER(_unique_metrics, "UncompressedBytes", TUnit::BYTES);
-=======
     _sender_input_bytes_counter = ADD_COUNTER(_unique_metrics, "SenderInputBytes", TUnit::BYTES);
     _serialized_bytes_counter = ADD_COUNTER(_unique_metrics, "SerializedBytes", TUnit::BYTES);
     _compressed_bytes_counter = ADD_COUNTER(_unique_metrics, "CompressedBytes", TUnit::BYTES);
-
->>>>>>> b9263bb7f1 ([Refactor] add RawSendBytes, SerializedBytes and CompressedBytes for exchange sink (#31721))
     _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
