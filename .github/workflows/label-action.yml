@@ -31,7 +31,6 @@ jobs:
     steps:
       - name: ADD REVIEWER
         run: |
-          set -x
           curl -L \
             -X POST \
             -H "Accept: application/vnd.github+json" \
