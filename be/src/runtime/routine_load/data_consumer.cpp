@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "fmt/format.h"
 #include "gutil/strings/split.h"
 #include "runtime/small_file_mgr.h"
 #include "service/backend_options.h"
@@ -54,7 +55,7 @@ namespace starrocks {
         const std::string& _msg = msg;                                               \
         if (UNLIKELY(_err != RdKafka::ERR_NO_ERROR)) {                               \
             auto err_msg = fmt::format("{}, err: {}", _msg, RdKafka::err2str(_err)); \
-            LOG(WARNING) << err_msg);                                                \
+            LOG(WARNING) << err_msg;                                                 \
             if (_err == RdKafka::ERR__ALL_BROKERS_DOWN) {                            \
                 return Status::ServiceUnavailable(err_msg);                          \
             }                                                                        \
@@ -315,7 +316,8 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
         }
         RdKafka::ErrorCode err =
                 _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset, left_ms);
-        RETURN_IF_KAFKA_ERROR(err, "failed to query watermark offset of topic: " + _topic + ", partition: " + std::to_string(p_id);
+        RETURN_IF_KAFKA_ERROR(
+                err, "failed to query watermark offset of topic: " + _topic + ", partition: " + std::to_string(p_id));
         beginning_offsets->push_back(beginning_offset);
         latest_offsets->push_back(latest_offset);
     }
