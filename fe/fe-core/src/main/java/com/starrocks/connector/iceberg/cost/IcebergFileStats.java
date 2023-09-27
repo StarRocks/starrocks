@@ -23,11 +23,13 @@ import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 
+import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -119,6 +121,39 @@ public class IcebergFileStats {
 
     public Map<Integer, Object> getMinValues() {
         return minValues;
+    }
+
+    public Optional<Double> getMinValue(Integer fieldId) {
+        return getBoundStatistic(fieldId, minValues);
+    }
+
+    public boolean canUseStats(Integer fieldId, Map<Integer, Object> values) {
+        if (idToTypeMapping == null || values == null) {
+            return false;
+        }
+
+        if (idToTypeMapping.get(fieldId) == null || values.get(fieldId) == null) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private Optional<Double> getBoundStatistic(Integer fieldId, Map<Integer, Object> boundValues) {
+        if (idToTypeMapping == null || boundValues == null) {
+            return Optional.empty();
+        }
+        if (idToTypeMapping.get(fieldId) == null || boundValues.get(fieldId) == null) {
+            return Optional.empty();
+        }
+        Type.PrimitiveType type = idToTypeMapping.get(fieldId);
+        Object value = boundValues.get(fieldId);
+        return convertObjectToOptionalDouble(type, value);
+    }
+
+
+    public Optional<Double> getMaxValue(Integer fieldId) {
+        return getBoundStatistic(fieldId, maxValues);
     }
 
     public Map<Integer, Object> getMaxValues() {
@@ -220,5 +255,34 @@ public class IcebergFileStats {
             }
         });
         return map.build();
+    }
+
+    public static Optional<Double> convertObjectToOptionalDouble(Type.PrimitiveType type, Object value) {
+        double valueConvert = 0;
+        if (type instanceof Types.BooleanType) {
+            valueConvert = (boolean) value ? 1 : 0;
+        } else if (type instanceof Types.IntegerType) {
+            valueConvert = (int) value;
+        } else if (type instanceof Types.LongType) {
+            valueConvert = (long) value;
+        } else if (type instanceof Types.FloatType) {
+            valueConvert = (float) value;
+        } else if (type instanceof Types.DoubleType) {
+            valueConvert = (double) value;
+        } else if (type instanceof Types.TimestampType) {
+            // we deal iceberg TimestampType as seconds in columnstatistics
+            // in iceberg it's microsecond
+            valueConvert = ((long) value) / 1000000;
+        } else if (type instanceof Types.DateType) {
+            // we deal iceberg DateType as seconds in columnstatistics
+            // in iceberg it's num of day from 1970-01-01
+            valueConvert = ((long) ((int) value)) * 86400;
+        } else if (type instanceof Types.DecimalType) {
+            valueConvert = ((BigDecimal) value).doubleValue();
+        } else {
+            return Optional.empty();
+        }
+
+        return Optional.of(valueConvert);
     }
 }

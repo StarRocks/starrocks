@@ -249,7 +249,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
             ImmutableList.Builder<FileScanTask> builder = ImmutableList.builder();
             org.apache.iceberg.Table nativeTable = table.getNativeTable();
-            TableScan scan = nativeTable.newScan().useSnapshot(snapshotId);
+            TableScan scan = nativeTable.newScan().useSnapshot(snapshotId).includeColumnStats();
             if (icebergPredicate.op() != Expression.Operation.TRUE) {
                 scan = scan.filter(icebergPredicate);
             }
@@ -286,7 +286,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate) {
-        return statisticProvider.getTableStatistics((IcebergTable) table, predicate, columns);
+        return statisticProvider.getTableStatistics((IcebergTable) table, predicate, columns, session);
     }
 
     @Override
