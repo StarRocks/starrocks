@@ -146,6 +146,7 @@ public class CoordinatorPreprocessor {
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
     private final Map<PlanFragmentId, BucketSeqToScanRange> fragmentIdBucketSeqToScanRangeMap = Maps.newHashMap();
+
     // fragment_id -> bucket_num
     private final Map<PlanFragmentId, Integer> fragmentIdToBucketNumMap = Maps.newHashMap();
     // fragment_id -> < be_id -> bucket_count >
@@ -157,8 +158,6 @@ public class CoordinatorPreprocessor {
     private final Map<Integer, TNetworkAddress> channelIdToBEPort = Maps.newHashMap();
     // used only by channel stream load, records the mapping from be port to be's webserver port
     private final Map<TNetworkAddress, TNetworkAddress> bePortToBeWebServerPort = Maps.newHashMap();
-
-    private final Map<Integer, Long> icebergBucketIdToBeId = Maps.newHashMap();
 
     // backends which this query will use
     private ImmutableMap<Long, ComputeNode> idToBackend;
@@ -1085,34 +1084,24 @@ public class CoordinatorPreprocessor {
             if (scanNode instanceof SchemaScanNode) {
                 BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment);
                 selector.computeScanRangeAssignment();
-            } else if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
+            } else if ((scanNode instanceof HdfsScanNode) ||
+                    (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
                     scanNode instanceof FileTableScanNode || scanNode instanceof PaimonScanNode) {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());
-                boolean hasBucket =
-                        isBucketShuffleJoin(scanNode.getFragmentId().asInt(), scanNode.getFragment().getPlanRoot());
-
-                if ((hasColocate || hasBucket) && scanNode instanceof IcebergScanNode) {
-                    IcebergScanNode icebergScanNode = (IcebergScanNode) scanNode;
-                    Set<Integer> bucketIds = new HashSet<>(icebergScanNode.getFileToBucketId().values());
-
-                    List<Long> backendIds = hasComputeNode ? Lists.newArrayList(idToComputeNode.keySet()) :
-                            Lists.newArrayList(idToBackend.keySet());
-                    bucketIds.forEach(bucketId -> icebergBucketIdToBeId.put(bucketId,
-                            backendIds.get(bucketId % backendIds.size())));
-
-                    IcebergBucketBackendSelector selector =
-                            new IcebergBucketBackendSelector(scanNode, locations, assignment, idToBackend,
-                                    icebergBucketIdToBeId, addressToBackendID, usedBackendIDs, hasComputeNode,
-                                    fragmentIdBucketSeqToScanRangeMap, fragmentIdToSeqToAddressMap, fragmentIdToBucketNumMap);
-                    selector.computeScanRangeAssignment();
-                } else {
+                boolean hasBucket = isBucketShuffleJoin(scanNode.getFragmentId().asInt(), scanNode.getFragment().getPlanRoot());
+                if (!hasColocate && !hasBucket) {
                     HDFSBackendSelector selector =
                             new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
                                     getSelectorComputeNodes(hasComputeNode),
                                     hasComputeNode,
                                     sv.getForceScheduleLocal(),
                                     sv.getHDFSBackendSelectorScanRangeShuffle());
+                    selector.computeScanRangeAssignment();
+                } else {
+                    IcebergBucketBackendSelector selector =
+                            new IcebergBucketBackendSelector(scanNode, assignment, idToBackend, addressToBackendID, usedBackendIDs,
+                                    fragmentIdBucketSeqToScanRangeMap, fragmentIdToSeqToAddressMap, fragmentIdToBucketNumMap);
                     selector.computeScanRangeAssignment();
                 }
             } else {
