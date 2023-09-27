@@ -86,5 +86,4 @@ jobs:
           done
           
           echo "Lack of META-TEAM members' approval!"
-          echo "::error::Lack of META-TEAM members' approval"
-          exit 1
+          echo "::error title=test::Lack of META-TEAM members' approval"
