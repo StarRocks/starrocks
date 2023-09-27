@@ -91,6 +91,29 @@ public class ColumnFilterConverter {
         return result;
     }
 
+<<<<<<< HEAD
+=======
+    public static void convertColumnFilterWithoutExpr(ScalarOperator predicate, Map<String,
+            PartitionColumnFilter> result, Table table) {
+        if (predicate == null) {
+            return;
+        }
+        if (predicate.getChildren().size() <= 0) {
+            return;
+        }
+
+        if (!checkColumnRefCanPartition(predicate.getChild(0), table)) {
+            return;
+        }
+
+        if (predicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {
+            return;
+        }
+
+        predicate.accept(COLUMN_FILTER_VISITOR, result);
+    }
+
+>>>>>>> 030e3d5f83 ([Feature] support add/drop partition for partition by expr (#31803))
     public static void convertColumnFilter(ScalarOperator predicate, Map<String, PartitionColumnFilter> result,
                                            Table table) {
         if (CollectionUtils.isEmpty(predicate.getChildren())) {
