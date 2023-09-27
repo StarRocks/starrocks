@@ -56,6 +56,13 @@ public:
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
     const std::string get_custom_coredump_msg() const override;
+<<<<<<< HEAD
+=======
+    std::atomic<int32_t>* get_lazy_column_coalesce_counter() {
+        return _provider->_scan_node->get_lazy_column_coalesce_counter();
+    }
+    int32_t is_scan_range_indicate_const_column(SlotId id) const;
+>>>>>>> f82b51ca89 ([Enhancement] optimize iceberg const column (#31632))
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
@@ -127,6 +134,8 @@ private:
     bool _can_use_any_column = false;
     bool _can_use_min_max_count_opt = false;
     const HiveTableDescriptor* _hive_table = nullptr;
+
+    bool _has_scan_range_indicate_const_column = false;
 
     // ======================================
     // The following are profile metrics

@@ -237,7 +237,40 @@ public class IcebergScanNodeTest {
         setUpMock(true, table, iTable, snapshot, dataTableScan);
 
         IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode");
+<<<<<<< HEAD
         scanNode.setupScanRangeLocations();
+=======
+
+        new MockUp<SnapshotScan>() {
+            @Mock
+            public CloseableIterable<FileScanTask> planFiles()  {
+                List<FileScanTask> tasks = new ArrayList<>();
+                DataFile data = DataFiles.builder(PartitionSpec.unpartitioned())
+                        .withInputFile(new LocalFileIO().newInputFile("input.orc"))
+                        .withRecordCount(1)
+                        .withFileSizeInBytes(1024)
+                        .withFormat(FileFormat.ORC)
+                        .build();
+
+                FileMetadata.Builder builder;
+                    builder = FileMetadata.deleteFileBuilder(PartitionSpec.unpartitioned())
+                            .ofPositionDeletes();
+                DeleteFile delete = builder.withPath("delete.orc")
+                        .withFileSizeInBytes(1024)
+                        .withRecordCount(1)
+                        .withFormat(FileFormat.ORC)
+                        .build();
+
+
+                FileScanTask scanTask = new TestFileScanTask(data, new DeleteFile[]{delete});
+                tasks.add(scanTask);
+
+                return CloseableIterable.withNoopClose(tasks);
+            }
+        };
+
+        scanNode.setupScanRangeLocations(descTable);
+>>>>>>> f82b51ca89 ([Enhancement] optimize iceberg const column (#31632))
 
         List<TScanRangeLocations> result = scanNode.getScanRangeLocations(1);
         Assert.assertTrue(result.size() > 0);
