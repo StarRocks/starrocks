@@ -374,7 +374,7 @@ echo "Finished patching $CROARINGBITMAP_SOURCE"
 
 # patch pulsar
 cd $TP_SOURCE_DIR/$PULSAR_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $PULSAR_SOURCE = "pulsar-2.10.1" ]; then
+if [ ! -f $PATCHED_MARK ] && [ $PULSAR_SOURCE = "pulsar-client-cpp-3.3.0" ]; then
     patch -p1 < $TP_PATCH_DIR/pulsar.patch
     touch $PATCHED_MARK
 fi
