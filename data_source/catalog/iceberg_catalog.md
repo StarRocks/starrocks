@@ -479,6 +479,20 @@ Iceberg Catalog 从 3.0 版本起支持 Google GCS。
 
 以下示例创建了一个名为 `iceberg_catalog_hms` 或 `iceberg_catalog_glue` 的 Iceberg Catalog，用于查询 Iceberg 集群里的数据。
 
+#### HDFS
+
+使用 HDFS 作为存储时，可以按如下创建 Iceberg Catalog：
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog_hms
+PROPERTIES
+(
+    "type" = "iceberg",
+    "hive.metastore.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+);
+```
+
 #### AWS S3
 
 ##### 如果基于 Instance Profile 进行鉴权和认证
@@ -788,6 +802,25 @@ SHOW CATALOGS;
 SHOW CREATE CATALOG iceberg_catalog_glue;
 ```
 
+## 切换 Iceberg Catalog 和数据库
+
+您可以通过如下方法切换至目标 Iceberg Catalog 和数据库：
+
+- 先通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 指定当前会话生效的 Iceberg Catalog，然后再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定数据库：
+
+  ```SQL
+  -- 切换当前会话生效的 Catalog：
+  SET CATALOG <catalog_name>
+  -- 指定当前会话生效的数据库：
+  USE <db_name>
+  ```
+
+- 通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Iceberg Catalog 下的指定数据库：
+
+  ```SQL
+  USE <catalog_name>.<db_name>
+  ```
+
 ## 删除 Iceberg Catalog
 
 您可以通过 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) 删除某个 External Catalog。
@@ -822,23 +855,7 @@ DROP Catalog iceberg_catalog_glue;
    SHOW DATABASES FROM <catalog_name>
    ```
 
-2. 通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 切换当前会话生效的 Catalog：
-
-   ```SQL
-   SET CATALOG <catalog_name>;
-   ```
-
-   再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定当前会话生效的数据库：
-
-   ```SQL
-   USE <db_name>;
-   ```
-
-   或者，也可以通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
-
-   ```SQL
-   USE <catalog_name>.<db_name>;
-   ```
+2. [切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)。
 
 3. 通过 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
 
@@ -854,12 +871,28 @@ DROP Catalog iceberg_catalog_glue;
 >
 > 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
+[切换至目标 Iceberg Catalog](#切换-iceberg-catalog-和数据库)，然后通过如下语句创建 Iceberg 数据库：
+
 ```SQL
 CREATE DATABASE <database_name>
-[properties ("location" = "s3://path_to_db/<database_name.db>/")]
+[properties ("location" = "<prefix>://<path_to_database>/<database_name.db>/")]
 ```
 
 您可以通过 `location` 参数来为该数据库设置具体的文件路径，支持 HDFS 和对象存储。如果您不指定 `location` 参数，则 StarRocks 会在当前 Iceberg Catalog 的默认路径下创建该数据库。
+
+`prefix` 根据存储系统的不同而不同：
+
+| **存储系统**                           | **`Prefix` 取值**                                        |
+| -------------------------------------- | ------------------------------------------------------------ |
+| HDFS                                   | `hdfs`                                                       |
+| Google GCS                             | `gs`                                                         |
+| Azure Blob Storage                     | <ul><li>如果您的存储账号支持通过 HTTP 协议进行访问，`prefix` 为 `wasb`。</li><li>如果您的存储账号支持通过 HTTPS 协议进行访问，`prefix` 为 `wasbs`。</li></ul> |
+| Azure Data Lake Storage Gen1           | `adl`                                                        |
+| Azure Data Lake Storage Gen2           | <ul><li>如果您的存储账号支持通过 HTTP 协议进行访问，`prefix` 为 `abfs`。</li><li>如果您的存储账号支持通过 HTTPS 协议进行访问，`prefix` 为 `abfss`。</li></ul> |
+| 阿里云 OSS                             | `oss`                                                        |
+| 腾讯云 COS                             | `cosn`                                                       |
+| 华为云 OBS                             | `obs`                                                        |
+| AWS S3 及其他兼容 S3 的存储（如 MinIO)   | `s3`                                                         |
 
 ## 删除 Iceberg 数据库
 
@@ -870,6 +903,8 @@ CREATE DATABASE <database_name>
 > 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
 删除数据库操作并不会将 HDFS 或对象存储上的对应文件路径删除。
+
+[切换至目标 Iceberg Catalog](#切换-iceberg-catalog-和数据库)，然后通过如下语句删除 Iceberg 数据库：
 
 ```SQL
 DROP DATABASE <database_name>;
@@ -882,6 +917,8 @@ DROP DATABASE <database_name>;
 > **说明**
 >
 > 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+[切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)。然后通过如下语法创建 Iceberg 表：
 
 ### 语法
 
@@ -945,10 +982,10 @@ PARTITION BY (par_col1[, par_col2...])
    );
    ```
 
-2. 创建分区表 `partition_tbl`，包含 `action`、`id`、`dt` 三列，并定义 `id` 和 `dt` 为分区列，如下所示：
+2. 创建分区表 `partition_tbl_1`，包含 `action`、`id`、`dt` 三列，并定义 `id` 和 `dt` 为分区列，如下所示：
 
    ```SQL
-   CREATE TABLE partition_tbl
+   CREATE TABLE partition_tbl_1
    (
        action varchar(20),
        id int,
@@ -957,18 +994,12 @@ PARTITION BY (par_col1[, par_col2...])
    PARTITION BY (id,dt);
    ```
 
-3. 创建分区表 `partition_tbl`，包含 `v1`、`v2`、`k1`、`k2` 四列，定义 `k1` 和 `k2` 为分区列，并同步查询原表 `employee` 的数据、然后将查询结果插入到新表 `partition_tbl`：
+3. 查询原表 `partition_tbl_1` 的数据，并根据查询结果创建分区表 `partition_tbl_2`，定义 `id` 和 `dt` 为 `partition_tbl_2` 的分区列：
 
    ```SQL
-   CREATE TABLE partition_tbl 
-   (
-       v1 int,
-       v2 int,
-       k1 int,
-       k2 int
-   )
-   PARTITION BY (k1, k2)
-   AS SELECT * from employee;
+   CREATE TABLE partition_tbl_2
+   PARTITION BY (id, dt)
+   AS SELECT * from partition_tbl_1;
    ```
 
 ## 向 Iceberg 表中插入数据
@@ -978,6 +1009,8 @@ PARTITION BY (par_col1[, par_col2...])
 > **说明**
 >
 > 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+[切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)，然后通过如下语法将 StarRocks 表数据写入到 Parquet 格式的 Iceberg 表中：
 
 ### 语法
 
@@ -1010,36 +1043,52 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ### 示例
 
-1. 向表 `partition_tbl` 中插入一行数据：
+1. 向表 `partition_tbl_1` 中插入如下三行数据：
 
    ```SQL
-   INSERT INTO partition_tbl SELECT 'pv', 1, '2023-07-21';
+   INSERT INTO partition_tbl_1
+   VALUES
+       ("buy", 1, "2023-09-01"),
+       ("sell", 2, "2023-09-02"),
+       ("buy", 3, "2023-09-03");
    ```
 
-2. 向表 `partition_tbl` 按指定列顺序插入一个包含简单计算的 SELECT 查询的结果数据：
+2. 向表 `partition_tbl_1` 按指定列顺序插入一个包含简单计算的 SELECT 查询的结果数据：
 
    ```SQL
-   INSERT INTO partition_tbl (id, action, dt) SELECT 1+1, 'buy', '2023-07-21';
+   INSERT INTO partition_tbl_1 (id, action, dt) SELECT 1+1, 'buy', '2023-09-03';
    ```
 
-3. 向表 `partition_tbl` 中插入一个从其自身读取数据的 SELECT 查询的结果数据：
+3. 向表 `partition_tbl_1` 中插入一个从其自身读取数据的 SELECT 查询的结果数据：
 
    ```SQL
-   INSERT INTO partition_tbl SELECT 'buy', 1, date_add(dt, INTERVAL 2 DAY) FROM partition_tbl WHERE id=1;
+   INSERT INTO partition_tbl_1 SELECT 'buy', 1, date_add(dt, INTERVAL 2 DAY)
+   FROM partition_tbl_1
+   WHERE id=1;
    ```
 
-4. 向表 `partition_table` 中 `dt=‘2023-07-21’`、`id=1` 的分区插入一个 SELECT 查询的结果数据：
+4. 向表 `partition_tbl_2` 中 `dt='2023-09-01'`、`id=1` 的分区插入一个 SELECT 查询的结果数据：
 
    ```SQL
-   INSERT INTO partition_table SELECT 'order', 1, '2023-07-21';
-   INSERT INTO partition_table (dt='2023-07-21',id=1) SELECT 'order';
+   INSERT INTO partition_tbl_2 SELECT 'order', 1, '2023-09-01';
    ```
 
-5. 将表 `partition_table` 中 `dt=‘2023-07-21’`、`id=1` 的分区下所有 `action` 列值全部覆盖为 `close`：
+   Or
 
    ```SQL
-   INSERT OVERWRITE partition_table SELECT 'close', 1, '2023-07-21';
-   INSERT OVERWRITE partition_table (dt='2023-07-21',id=1) SELECT 'close';
+   INSERT INTO partition_tbl_2 partition(dt='2023-09-01',id=1) SELECT 'order';
+   ```
+
+5. 将表 `partition_tbl_1` 中 `dt='2023-09-01'`、`id=1` 的分区下所有 `action` 列值全部覆盖为 `close`：
+
+   ```SQL
+   INSERT OVERWRITE partition_tbl_1 SELECT 'close', 1, '2023-09-01';
+   ```
+
+   Or
+
+   ```SQL
+   INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
 ## 删除 Iceberg 表
@@ -1053,6 +1102,8 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 删除表操作并不会将 HDFS 或对象存储上的对应文件路径和数据删除。
 
 强制删除表（增加 `FORCE` 关键字）会将 HDFS 或对象存储上的数据删除，但不会删除对应文件路径。
+
+[切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)，然后通过如下语句删除 Iceberg 表：
 
 ```SQL
 DROP TABLE <table_name> [FORCE];
