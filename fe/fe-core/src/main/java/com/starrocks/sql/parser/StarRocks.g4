@@ -153,6 +153,7 @@ statement
     | dropResourceGroupStatement
     | alterResourceGroupStatement
     | showResourceGroupStatement
+    | showResourceGroupUsageStatement
 
     // External Resource Statement
     | createResourceStatement
@@ -191,6 +192,7 @@ statement
     | showProcStatement
     | showProcesslistStatement
     | showProfilelistStatement
+    | showRunningQueriesStatement
     | showStatusStatement
     | showTabletStatement
     | showTransactionStatement
@@ -1159,6 +1161,11 @@ showResourceGroupStatement
     | SHOW RESOURCE GROUPS ALL?
     ;
 
+showResourceGroupUsageStatement
+    : SHOW USAGE RESOURCE GROUP identifier
+    | SHOW USAGE RESOURCE GROUPS
+    ;
+
 createResourceStatement
     : CREATE EXTERNAL? RESOURCE resourceName=identifierOrString properties?
     ;
@@ -1353,6 +1360,10 @@ showProcesslistStatement
 
 showProfilelistStatement
     : SHOW PROFILELIST (LIMIT limit =INTEGER_VALUE)?
+    ;
+
+showRunningQueriesStatement
+    : SHOW RUNNING QUERIES (LIMIT limit =INTEGER_VALUE)?
     ;
 
 showStatusStatement

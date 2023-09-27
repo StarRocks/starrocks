@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
@@ -81,12 +80,13 @@ public class AlterResourceGroupStmt extends DdlStmt {
             if (changedProperties.getCpuCoreLimit() == null &&
                     changedProperties.getMemLimit() == null &&
                     changedProperties.getConcurrencyLimit() == null &&
+                    changedProperties.getMaxCpuCores() == null &&
                     changedProperties.getBigQueryCpuSecondLimit() == null &&
                     changedProperties.getBigQueryMemLimit() == null &&
                     changedProperties.getBigQueryScanRowsLimit() == null) {
-                throw new SemanticException(
-                        "At least one of ('cpu_core_limit', 'mem_limit', 'concurrency_limit','big_query_mem_limit', " +
-                                "'big_query_scan_rows_limit', 'big_query_cpu_second_limit', should be specified");
+                throw new SemanticException("At least one of ('cpu_core_limit', 'mem_limit', 'max_cpu_cores', " +
+                        "'concurrency_limit','big_query_mem_limit', 'big_query_scan_rows_limit', 'big_query_cpu_second_limit', " +
+                        "should be specified");
             }
         }
     }

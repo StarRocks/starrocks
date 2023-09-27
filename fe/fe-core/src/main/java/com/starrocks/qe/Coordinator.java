@@ -73,6 +73,7 @@ import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
@@ -105,6 +106,7 @@ import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -206,6 +208,10 @@ public class Coordinator {
     private ExecPlan execPlan;
     private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis());
 
+    private final boolean isStatisticsJob;
+    private final boolean needQueued;
+    private LogicalSlot slot = null;
+
     // only used for sync stream load profile
     // so only init relative data structure
     public Coordinator(StreamLoadPlanner planner, TNetworkAddress address) {
@@ -239,12 +245,18 @@ public class Coordinator {
         this.needReport = true;
         this.coordinatorPreprocessor = null;
         this.fragments = null;
+        this.isStatisticsJob = false;
+        this.needQueued = true;
     }
-
 
     // Used for new planner
     public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
                        TDescriptorTable descTable) {
+        this(context, fragments, scanNodes, descTable, TQueryType.SELECT);
+    }
+
+    public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
+                       TDescriptorTable descTable, TQueryType queryType) {
         this.isBlockQuery = false;
         this.queryId = context.getExecutionId();
         this.connectContext = context;
@@ -253,6 +265,7 @@ public class Coordinator {
         this.descTable = descTable;
         this.returnedAllResults = false;
         this.queryOptions = context.getSessionVariable().toThrift();
+        this.queryOptions.setQuery_type(queryType);
         long startTime = context.getStartTime();
         String timezone = context.getSessionVariable().getTimeZone();
         this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
@@ -264,6 +277,8 @@ public class Coordinator {
         this.coordinatorPreprocessor =
                 new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, descTable, queryGlobals,
                         queryOptions);
+        this.isStatisticsJob = context.isStatisticsJob();
+        this.needQueued = context.isNeedQueued();
     }
 
     // Used for broker export task coordinator
@@ -302,6 +317,8 @@ public class Coordinator {
         this.coordinatorPreprocessor =
                 new CoordinatorPreprocessor(queryId, connectContext, fragments, scanNodes, this.descTable, queryGlobals,
                         queryOptions);
+        this.isStatisticsJob = false;
+        this.needQueued = true;
     }
 
     // Used for broker load task coordinator
@@ -316,6 +333,7 @@ public class Coordinator {
         this.fragments = fragments;
         this.scanNodes = scanNodes;
         this.queryOptions = new TQueryOptions();
+        this.queryOptions.setQuery_type(TQueryType.LOAD);
         if (sessionVariables.containsKey(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE)) {
             final TCompressionType loadCompressionType = CompressionUtils
                     .findTCompressionByName(
@@ -334,6 +352,8 @@ public class Coordinator {
         this.coordinatorPreprocessor =
                 new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, this.descTable, queryGlobals,
                         queryOptions);
+        this.isStatisticsJob = context != null && context.isStatisticsJob();
+        this.needQueued = context != null && connectContext.isNeedQueued();
     }
 
     public Coordinator(LoadPlanner loadPlanner) {
@@ -383,6 +403,37 @@ public class Coordinator {
         this.coordinatorPreprocessor =
                 new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, descTable, queryGlobals,
                         queryOptions);
+        this.isStatisticsJob = context.isStatisticsJob();
+        this.needQueued = connectContext.isNeedQueued();
+    }
+
+    public LogicalSlot getSlot() {
+        return slot;
+    }
+
+    public void setSlot(LogicalSlot slot) {
+        this.slot = slot;
+    }
+
+    public TWorkGroup getResourceGroup() {
+        return coordinatorPreprocessor.getResourceGroup();
+    }
+
+    public TQueryOptions getQueryOptions() {
+        return queryOptions;
+    }
+
+    public boolean isStatisticsJob() {
+        return isStatisticsJob;
+    }
+
+    public boolean isNeedQueued() {
+        return needQueued;
+    }
+
+    public void onFinished() {
+        GlobalStateMgr.getCurrentState().getSlotProvider().cancelSlotRequirement(slot);
+        GlobalStateMgr.getCurrentState().getSlotProvider().releaseSlot(slot);
     }
 
     public long getJobId() {
@@ -555,12 +606,15 @@ public class Coordinator {
     }
 
     public void exec() throws Exception {
-        QueryQueueManager.getInstance().maybeWait(connectContext, this);
-        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("CoordPrepareExec")) {
+        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Pending")) {
+            QueryQueueManager.getInstance().maybeWait(connectContext, this);
+        }
+
+        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Prepare")) {
             prepareExec();
         }
 
-        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("CoordDeliverExec")) {
+        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Deploy")) {
             deliverExecFragments();
         }
     }
@@ -1486,6 +1540,7 @@ public class Coordinator {
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
+        GlobalStateMgr.getCurrentState().getSlotProvider().cancelSlotRequirement(slot);
         if (StringUtils.isEmpty(connectContext.getState().getErrorMessage())) {
             connectContext.getState().setError(cancelReason.toString());
         }
@@ -2015,7 +2070,6 @@ public class Coordinator {
         TNetworkAddress address;
         ComputeNode backend;
         long lastMissingHeartbeatTime = -1;
-
 
         // fake backendExecState, only user for stream load profile
         public BackendExecState(TUniqueId fragmentInstanceId, TNetworkAddress address) {

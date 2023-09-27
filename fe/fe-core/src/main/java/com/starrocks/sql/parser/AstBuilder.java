@@ -342,11 +342,13 @@ import com.starrocks.sql.ast.ShowProcesslistStmt;
 import com.starrocks.sql.ast.ShowProfilelistStmt;
 import com.starrocks.sql.ast.ShowRepositoriesStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowResourceGroupUsageStmt;
 import com.starrocks.sql.ast.ShowResourcesStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
+import com.starrocks.sql.ast.ShowRunningQueriesStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
@@ -2642,6 +2644,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowProfilelistStatement(StarRocksParser.ShowProfilelistStatementContext context) {
         int limit = context.LIMIT() != null ? Integer.parseInt(context.limit.getText()) : -1;
         return new ShowProfilelistStmt(limit, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowRunningQueriesStatement(StarRocksParser.ShowRunningQueriesStatementContext context) {
+        int limit = context.LIMIT() != null ? Integer.parseInt(context.limit.getText()) : -1;
+        return new ShowRunningQueriesStmt(limit, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowResourceGroupUsageStatement(StarRocksParser.ShowResourceGroupUsageStatementContext context) {
+        if (context.GROUPS() != null) {
+            return new ShowResourceGroupUsageStmt(null, createPos(context));
+        }
+
+        Identifier groupName = (Identifier) visit(context.identifier());
+        return new ShowResourceGroupUsageStmt(groupName.getValue(), createPos(context));
     }
 
     @Override

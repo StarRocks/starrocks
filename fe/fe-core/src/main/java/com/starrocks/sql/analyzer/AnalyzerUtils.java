@@ -118,6 +118,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class AnalyzerUtils {
 
@@ -240,6 +241,11 @@ public class AnalyzerUtils {
             return (CallOperator) operator;
         }
         return null;
+    }
+
+    public static boolean isStatisticsJob(ConnectContext context, StatementBase stmt) {
+        Map<String, Database> dbs = collectAllDatabase(context, stmt);
+        return dbs.values().stream().anyMatch(db -> STATISTICS_DB_NAME.equals(db.getFullName()));
     }
 
     private static class DBCollector extends AstVisitor<Void, Void> {
@@ -1209,7 +1215,7 @@ public class AnalyzerUtils {
     }
 
     private static void checkPartitionColumnTypeValid(FunctionCallExpr expr, List<ColumnDef> columnDefs,
-                                               NodePosition pos, String partitionColumnName, String fmt) {
+                                                      NodePosition pos, String partitionColumnName, String fmt) {
         // For materialized views currently columnDefs == null
         if (columnDefs != null && "hour".equalsIgnoreCase(fmt)) {
             ColumnDef partitionDef = findPartitionDefByName(columnDefs, partitionColumnName);
@@ -1231,7 +1237,6 @@ public class AnalyzerUtils {
         }
         return null;
     }
-
 
     public static Expr resolveSlotRef(SlotRef slotRef, QueryStatement queryStatement) {
         AstVisitor<Expr, Void> slotRefResolver = new AstVisitor<Expr, Void>() {

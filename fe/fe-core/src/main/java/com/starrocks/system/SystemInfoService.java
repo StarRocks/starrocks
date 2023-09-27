@@ -49,6 +49,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
@@ -72,6 +73,7 @@ import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TResourceGroupUsage;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.commons.validator.routines.InetAddressValidator;
@@ -474,6 +476,32 @@ public class SystemInfoService implements GsonPostProcessable {
             backend = idToComputeNodeRef.get(nodeId);
         }
         return backend;
+    }
+
+    public void updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
+                                    int cpuUsedPermille, List<TResourceGroupUsage> groupUsages) {
+        ComputeNode node = getBackendOrComputeNode(backendId);
+        if (node == null) {
+            LOG.warn("updateResourceUsage receives a non-exist backend/compute [id={}]", backendId);
+            return;
+        }
+
+        node.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+
+        if (groupUsages != null) {
+            List<Pair<ResourceGroup, TResourceGroupUsage>> groupAndUsages = new ArrayList<>(groupUsages.size());
+            for (TResourceGroupUsage usage : groupUsages) {
+                ResourceGroup group = GlobalStateMgr.getCurrentState().getResourceGroupMgr()
+                        .getResourceGroupIncludingDefault(usage.getGroup_id());
+                if (group == null) {
+                    continue;
+                }
+                groupAndUsages.add(Pair.create(group, usage));
+            }
+            node.updateResourceGroupUsage(groupAndUsages);
+        }
+
+        GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyResourceUsageUpdate();
     }
 
     public boolean checkBackendAvailable(long backendId) {
