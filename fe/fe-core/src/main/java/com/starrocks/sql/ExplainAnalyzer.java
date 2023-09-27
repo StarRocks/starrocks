@@ -67,6 +67,7 @@ public class ExplainAnalyzer {
 
     private static final int FINAL_SINK_PSEUDO_PLAN_NODE_ID = -1;
     private static final Pattern PLAN_NODE_ID = Pattern.compile("^.*?\\(.*?plan_node_id=([-0-9]+)\\)$");
+    private static final Pattern PLAN_OP_NAME = Pattern.compile("^(.*?) \\(.*?plan_node_id=[-0-9]+\\)$");
 
     // ANSI Characters
     private static final String ANSI_RESET = "\u001B[0m";
@@ -109,6 +110,20 @@ public class ExplainAnalyzer {
         }
 
         private final String content;
+    }
+
+    private enum SearchMode {
+        NATIVE_ONLY,
+        SUBORDINATE_ONLY,
+        BOTH;
+
+        public boolean isNative() {
+            return this == NATIVE_ONLY || this == BOTH;
+        }
+
+        public boolean isSubordinate() {
+            return this == SUBORDINATE_ONLY || this == BOTH;
+        }
     }
 
     private final ProfilingExecPlan plan;
@@ -234,14 +249,16 @@ public class ExplainAnalyzer {
             if (nodeInfo.planNodeId == FINAL_SINK_PSEUDO_PLAN_NODE_ID) {
                 nodeInfo.outputRowNums = searchOutputRows(nodeInfo, "CommonMetrics", "PushRowNum");
             } else if (nodeInfo.element.instanceOf(UnionNode.class)) {
-                nodeInfo.outputRowNums = sumUpMetric(nodeInfo, false, false, "CommonMetrics", "PullRowNum");
+                nodeInfo.outputRowNums = sumUpMetric(nodeInfo, SearchMode.NATIVE_ONLY,
+                        false, "CommonMetrics", "PullRowNum");
             } else {
                 nodeInfo.outputRowNums = searchOutputRows(nodeInfo, "CommonMetrics", "PullRowNum");
             }
 
             // Broadcast exchange
             if (nodeInfo.element.instanceOf(ExchangeNode.class)) {
-                String partType = searchInfoString(nodeInfo, false, null, "UniqueMetrics", "PartType");
+                String partType = searchInfoString(nodeInfo, SearchMode.NATIVE_ONLY,
+                        null, "UniqueMetrics", "PartType");
                 if (TPartitionType.UNPARTITIONED.name().equalsIgnoreCase(partType) &&
                         nodeInfo.fragmentProfile != null) {
                     Counter instanceNum = nodeInfo.fragmentProfile.getCounter("InstanceNum");
@@ -258,7 +275,8 @@ public class ExplainAnalyzer {
             HashSet<String> mvs = Sets.newHashSet(mvContent.split(","));
             allNodeInfos.values().forEach(nodeInfo -> {
                 if (nodeInfo.element.instanceOf(ScanNode.class)) {
-                    String mv = searchInfoString(nodeInfo, false, null, "UniqueMetrics", "Rollup");
+                    String mv = searchInfoString(nodeInfo, SearchMode.NATIVE_ONLY,
+                            null, "UniqueMetrics", "Rollup");
                     if (StringUtils.isNotBlank(mv) && mvs.contains(mv)) {
                         nodeInfo.element.addTitleAttribute("MV");
                     }
@@ -596,9 +614,9 @@ public class ExplainAnalyzer {
         }
 
         // 5. Runtime Filters
-        Counter rfInputRows = searchMetric(nodeInfo, false, null, false,
+        Counter rfInputRows = searchMetric(nodeInfo, SearchMode.NATIVE_ONLY, null, false,
                 "CommonMetrics", "JoinRuntimeFilterInputRows");
-        Counter rfOutputRows = searchMetric(nodeInfo, false, null, false,
+        Counter rfOutputRows = searchMetric(nodeInfo, SearchMode.NATIVE_ONLY, null, false,
                 "CommonMetrics", "JoinRuntimeFilterOutputRows");
         if (rfInputRows != null && rfOutputRows != null && rfInputRows.getValue() > 0) {
             appendDetailLine("RuntimeFilter: ", rfInputRows, " -> ", rfOutputRows, String.format(" (%.2f%%)",
@@ -619,7 +637,10 @@ public class ExplainAnalyzer {
         // 7. Unique Infos
         appendOperatorUniqueInfo(nodeInfo);
 
-        // 8. Details
+        // 8. Subordinate Infos
+        appendSubordinateInfos(nodeInfo);
+
+        // 9. Details
         appendOperatorDetailInfo(nodeInfo);
     }
 
@@ -649,9 +670,9 @@ public class ExplainAnalyzer {
 
     private void appendOperatorUniqueInfo(NodeInfo nodeInfo) {
         if (nodeInfo.element.instanceOf(JoinNode.class)) {
-            Counter buildTime = searchMetric(nodeInfo, false, "_JOIN_BUILD (", true,
+            Counter buildTime = searchMetric(nodeInfo, SearchMode.NATIVE_ONLY, "_JOIN_BUILD (", true,
                     "CommonMetrics", "OperatorTotalTime");
-            Counter probeTime = searchMetric(nodeInfo, false, "_JOIN_PROBE (", true,
+            Counter probeTime = searchMetric(nodeInfo, SearchMode.NATIVE_ONLY, "_JOIN_PROBE (", true,
                     "CommonMetrics", "OperatorTotalTime");
             appendDetailLine("BuildTime: ", buildTime);
             appendDetailLine("ProbeTime: ", probeTime);
@@ -663,14 +684,14 @@ public class ExplainAnalyzer {
                     nodeInfo.element.getChild(0).instanceOf(ScanNode.class)) {
                 ProfilingExecPlan.ProfilingElement scanNode = nodeInfo.element.getChild(0);
                 NodeInfo scanNodeInfo = allNodeInfos.get(scanNode.getId());
-                Counter tabletNum = searchMetric(scanNodeInfo, false, null, false,
+                Counter tabletNum = searchMetric(scanNodeInfo, SearchMode.NATIVE_ONLY, null, false,
                         "UniqueMetrics", "TabletCount");
-                Counter cachePassthroughTabletNum = searchMetric(nodeInfo, true, "CACHE (", false,
-                        "UniqueMetrics", "CachePassthroughTabletNum");
-                Counter cacheProbeTabletNum = searchMetric(nodeInfo, true, "CACHE (", false,
-                        "UniqueMetrics", "CacheProbeTabletNum");
-                Counter cachePopulateTabletNum = searchMetric(nodeInfo, true, "CACHE (", false,
-                        "UniqueMetrics", "CachePopulateTabletNum");
+                Counter cachePassthroughTabletNum = searchMetric(nodeInfo, SearchMode.SUBORDINATE_ONLY,
+                        "CACHE (", false, "UniqueMetrics", "CachePassthroughTabletNum");
+                Counter cacheProbeTabletNum = searchMetric(nodeInfo, SearchMode.SUBORDINATE_ONLY,
+                        "CACHE (", false, "UniqueMetrics", "CacheProbeTabletNum");
+                Counter cachePopulateTabletNum = searchMetric(nodeInfo, SearchMode.SUBORDINATE_ONLY,
+                        "CACHE (", false, "UniqueMetrics", "CachePopulateTabletNum");
                 if (tabletNum != null && tabletNum.getValue() > 0 && cachePassthroughTabletNum != null &&
                         cacheProbeTabletNum != null && cachePopulateTabletNum != null) {
                     appendDetailLine("TabletNum: ", tabletNum, " [",
@@ -689,6 +710,47 @@ public class ExplainAnalyzer {
         }
 
         nodeInfo.element.getUniqueInfos().forEach((key, value) -> appendDetailLine(key, ": ", value));
+    }
+
+    private void appendSubordinateInfos(NodeInfo nodeInfo) {
+        List<RuntimeProfile> subordinateOperatorProfiles = nodeInfo.subordinateOperatorProfiles;
+        if (CollectionUtils.isEmpty(subordinateOperatorProfiles)) {
+            return;
+        }
+        Set<String> names = Sets.newTreeSet();
+        for (RuntimeProfile profile : subordinateOperatorProfiles) {
+            Matcher matcher = PLAN_OP_NAME.matcher(profile.getName());
+            Preconditions.checkState(matcher.matches());
+            String name = matcher.group(1);
+            if (name.endsWith("_SINK")) {
+                name = name.substring(0, name.length() - 5);
+            }
+            if (name.endsWith("_SOURCE")) {
+                name = name.substring(0, name.length() - 7);
+            }
+            names.add(name);
+        }
+        appendDetailLine("SubordinateOperators: ");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        for (String name : names) {
+            StringBuilder titleBuilder = new StringBuilder();
+            titleBuilder.append(name);
+            List<String> attributes = Lists.newArrayList();
+            if ("LOCAL_EXCHANGE".equalsIgnoreCase(name)) {
+                String shuffleType = searchInfoString(nodeInfo, SearchMode.SUBORDINATE_ONLY, "LOCAL_EXCHANGE",
+                        "UniqueMetrics", "Type");
+                attributes.add(shuffleType);
+            }
+            if (CollectionUtils.isNotEmpty(attributes)) {
+                titleBuilder.append(' ')
+                        .append('[')
+                        .append(String.join(", ", attributes))
+                        .append(']');
+            }
+
+            appendDetailLine(titleBuilder.toString());
+        }
+        popIndent(); // metric indent
     }
 
     private void appendOperatorDetailInfo(NodeInfo nodeInfo) {
@@ -822,11 +884,13 @@ public class ExplainAnalyzer {
         appendDetailLine(items.toArray());
     }
 
-    private static String searchInfoString(NodeInfo nodeInfo, boolean searchSubordinateOperator, String pattern,
+    private static String searchInfoString(NodeInfo nodeInfo, SearchMode searchMode, String pattern,
                                            String... nameLevels) {
         List<RuntimeProfile> profiles = Lists.newArrayList();
-        profiles.addAll(nodeInfo.operatorProfiles);
-        if (searchSubordinateOperator) {
+        if (searchMode.isNative()) {
+            profiles.addAll(nodeInfo.operatorProfiles);
+        }
+        if (searchMode.isSubordinate()) {
             profiles.addAll(nodeInfo.subordinateOperatorProfiles);
         }
         for (RuntimeProfile operatorProfile : profiles) {
@@ -845,11 +909,13 @@ public class ExplainAnalyzer {
         return null;
     }
 
-    private static Counter searchMetric(NodeInfo nodeInfo, boolean searchSubordinateOperator, String pattern,
+    private static Counter searchMetric(NodeInfo nodeInfo, SearchMode searchMode, String pattern,
                                         boolean useMaxValue, String... nameLevels) {
         List<RuntimeProfile> profiles = Lists.newArrayList();
-        profiles.addAll(nodeInfo.operatorProfiles);
-        if (searchSubordinateOperator) {
+        if (searchMode.isNative()) {
+            profiles.addAll(nodeInfo.operatorProfiles);
+        }
+        if (searchMode.isSubordinate()) {
             profiles.addAll(nodeInfo.subordinateOperatorProfiles);
         }
         for (RuntimeProfile operatorProfile : profiles) {
@@ -891,15 +957,18 @@ public class ExplainAnalyzer {
         return null;
     }
 
-    private static Counter sumUpMetric(NodeInfo nodeInfo, boolean searchSubordinateOperator, boolean useMaxValue,
+    private static Counter sumUpMetric(NodeInfo nodeInfo, SearchMode searchMode, boolean useMaxValue,
                                        String... nameLevels) {
         Counter counterSumUp = null;
-        List<RuntimeProfile> operatorProfiles = Lists.newArrayList(nodeInfo.operatorProfiles);
-        if (searchSubordinateOperator) {
-            operatorProfiles.addAll(nodeInfo.subordinateOperatorProfiles);
+        List<RuntimeProfile> profiles = Lists.newArrayList();
+        if (searchMode.isNative()) {
+            profiles.addAll(nodeInfo.operatorProfiles);
         }
-        for (RuntimeProfile operatorProfile : operatorProfiles) {
-            RuntimeProfile cur = getLastLevel(operatorProfile, nameLevels);
+        if (searchMode.isSubordinate()) {
+            profiles.addAll(nodeInfo.subordinateOperatorProfiles);
+        }
+        for (RuntimeProfile profile : profiles) {
+            RuntimeProfile cur = getLastLevel(profile, nameLevels);
             int lastIndex = nameLevels.length - 1;
             Counter counter;
             if (useMaxValue) {
@@ -1106,17 +1175,17 @@ public class ExplainAnalyzer {
 
         public void computeTimeUsage(long cumulativeOperatorTime) {
             totalTime = new Counter(TUnit.TIME_NS, null, 0);
-            cpuTime = sumUpMetric(this, true, true, "CommonMetrics", "OperatorTotalTime");
+            cpuTime = sumUpMetric(this, SearchMode.BOTH, true, "CommonMetrics", "OperatorTotalTime");
             if (cpuTime != null) {
                 totalTime.update(cpuTime.getValue());
             }
             if (element.instanceOf(ExchangeNode.class)) {
-                networkTime = searchMetric(this, false, null, true, "UniqueMetrics", "NetworkTime");
+                networkTime = searchMetric(this, SearchMode.NATIVE_ONLY, null, true, "UniqueMetrics", "NetworkTime");
                 if (networkTime != null) {
                     totalTime.update(networkTime.getValue());
                 }
             } else if (element.instanceOf(ScanNode.class)) {
-                scanTime = searchMetric(this, false, null, true, "UniqueMetrics", "ScanTime");
+                scanTime = searchMetric(this, SearchMode.NATIVE_ONLY, null, true, "UniqueMetrics", "ScanTime");
                 if (scanTime != null) {
                     totalTime.update(scanTime.getValue());
                 }
@@ -1130,8 +1199,10 @@ public class ExplainAnalyzer {
         }
 
         public void computeMemoryUsage() {
-            peekMemory = sumUpMetric(this, false, true, "CommonMetrics", "OperatorPeakMemoryUsage");
-            allocatedMemory = sumUpMetric(this, false, false, "CommonMetrics", "OperatorAllocatedMemoryUsage");
+            peekMemory = sumUpMetric(this, SearchMode.NATIVE_ONLY,
+                    true, "CommonMetrics", "OperatorPeakMemoryUsage");
+            allocatedMemory = sumUpMetric(this, SearchMode.NATIVE_ONLY,
+                    false, "CommonMetrics", "OperatorAllocatedMemoryUsage");
         }
 
         public String getTitle() {
