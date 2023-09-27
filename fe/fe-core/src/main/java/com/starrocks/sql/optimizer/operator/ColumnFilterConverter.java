@@ -139,6 +139,9 @@ public class ColumnFilterConverter {
 
     public static void convertColumnFilterWithoutExpr(ScalarOperator predicate, Map<String,
             PartitionColumnFilter> result, Table table) {
+        if (predicate == null) {
+            return;
+        }
         if (predicate.getChildren().size() <= 0) {
             return;
         }
