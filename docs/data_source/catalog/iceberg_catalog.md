@@ -426,6 +426,20 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
 
 The following examples create an Iceberg catalog named `iceberg_catalog_hms` or `iceberg_catalog_glue`, depending on the type of metastore you use, to query data from your Iceberg cluster.
 
+#### HDFS
+
+If you use HDFS as storage, run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog_hms
+PROPERTIES
+(
+    "type" = "iceberg",
+    "hive.metastore.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+);
+```
+
 #### AWS S3
 
 ##### If you choose instance profile-based credential
@@ -734,6 +748,25 @@ You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-m
 SHOW CREATE CATALOG iceberg_catalog_glue;
 ```
 
+## Switch to an Iceberg Catalog and a database in it
+
+You can use one of the following methods to switch to an Iceberg catalog and a database in it:
+
+- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to specify an Iceberg catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+
+  ```SQL
+  -- Switch to a specified catalog in the current session:
+  SET CATALOG <catalog_name>
+  -- Specify the active database in the current session:
+  USE <db_name>
+  ```
+
+- Directly use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to switch to an Iceberg catalog and a database in it:
+
+  ```SQL
+  USE <catalog_name>.<db_name>
+  ```
+
 ## Drop an Iceberg catalog
 
 You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop an external catalog.
@@ -768,23 +801,7 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
    SHOW DATABASES FROM <catalog_name>
    ```
 
-2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to switch to the destination catalog in the current session:
-
-    ```SQL
-    SET CATALOG <catalog_name>;
-    ```
-
-    Then, use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify the active database in the current session:
-
-    ```SQL
-    USE <db_name>;
-    ```
-
-    Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly specify the active database in the destination catalog:
-
-    ```SQL
-    USE <catalog_name>.<db_name>;
-    ```
+2. [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it).
 
 3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
 
