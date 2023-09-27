@@ -416,13 +416,14 @@ bool FileReader::_can_use_min_max_stats(const tparquet::ColumnMetaData& column_m
 
     auto application_version = ::parquet::ApplicationVersion(_file_metadata->t_metadata().created_by);
     auto min_equals_max = (column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.max_value &&
-                          column_meta.statistics.min_value == column_meta.statistics.max_value) ||
+                           column_meta.statistics.min_value == column_meta.statistics.max_value) ||
                           (column_meta.statistics.__isset.min && column_meta.statistics.__isset.max &&
-                          column_meta.statistics.min == column_meta.statistics.max);
+                           column_meta.statistics.min == column_meta.statistics.max);
 
     // disregard column sort order if statistics max/min are equal
     if (min_equals_max) {
-        if (column_meta.type != tparquet::Type::BYTE_ARRAY && column_meta.type != tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
+        if (column_meta.type != tparquet::Type::BYTE_ARRAY &&
+            column_meta.type != tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
             return true;
         }
         // PARQUET-251: stats are incorrect for binary columns
