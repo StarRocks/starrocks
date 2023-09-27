@@ -72,60 +72,21 @@ private:
 class DeltaWriterImpl {
 public:
     explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                             const std::vector<SlotDescriptor*>* slots, int64_t immutable_tablet_size,
-                             MemTracker* mem_tracker)
-            : _tablet_manager(tablet_manager),
-              _tablet_id(tablet_id),
-              _txn_id(txn_id),
-              _partition_id(partition_id),
-              _mem_tracker(mem_tracker),
-              _slots(slots),
-              _schema_initialized(false),
-              _immutable_tablet_size(immutable_tablet_size),
-              _miss_auto_increment_column(false) {}
-
-    explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                             const std::vector<SlotDescriptor*>* slots, std::string merge_condition,
-                             int64_t immutable_tablet_size, MemTracker* mem_tracker)
-            : _tablet_manager(tablet_manager),
-              _tablet_id(tablet_id),
-              _txn_id(txn_id),
-              _partition_id(partition_id),
-              _mem_tracker(mem_tracker),
-              _slots(slots),
-              _schema_initialized(false),
-              _immutable_tablet_size(immutable_tablet_size),
-              _merge_condition(std::move(merge_condition)),
-              _miss_auto_increment_column(false) {}
-
-    explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                              const std::vector<SlotDescriptor*>* slots, std::string merge_condition,
                              bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
-                             MemTracker* mem_tracker)
+                             MemTracker* mem_tracker, int64_t max_buffer_size)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
               _partition_id(partition_id),
               _mem_tracker(mem_tracker),
               _slots(slots),
+              _max_buffer_size(max_buffer_size > 0 ? max_buffer_size : config::write_buffer_size),
               _schema_initialized(false),
               _immutable_tablet_size(immutable_tablet_size),
               _merge_condition(std::move(merge_condition)),
               _miss_auto_increment_column(miss_auto_increment_column),
               _table_id(table_id) {}
-
-    explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t max_buffer_size,
-                             int64_t immutable_tablet_size, MemTracker* mem_tracker)
-            : _tablet_manager(tablet_manager),
-              _tablet_id(tablet_id),
-              _txn_id(txn_id),
-              _partition_id(-1),
-              _mem_tracker(mem_tracker),
-              _slots(nullptr),
-              _max_buffer_size(max_buffer_size),
-              _schema_initialized(false),
-              _immutable_tablet_size(immutable_tablet_size),
-              _miss_auto_increment_column(false) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -185,7 +146,7 @@ private:
     const std::vector<SlotDescriptor*>* const _slots;
 
     // for schema change
-    int64_t _max_buffer_size = config::write_buffer_size;
+    int64_t _max_buffer_size;
 
     std::unique_ptr<TabletWriter> _tablet_writer;
     std::unique_ptr<MemTable> _mem_table;
@@ -654,37 +615,13 @@ void DeltaWriter::TEST_set_miss_auto_increment_column() {
     _impl->TEST_set_miss_auto_increment_column();
 }
 
-std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
-                                                 int64_t partition_id, const std::vector<SlotDescriptor*>* slots,
-                                                 int64_t immutable_tablet_size, MemTracker* mem_tracker) {
-    return std::make_unique<DeltaWriter>(new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots,
-                                                             immutable_tablet_size, mem_tracker));
-}
-
-std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
-                                                 int64_t partition_id, const std::vector<SlotDescriptor*>* slots,
-                                                 const std::string& merge_condition, int64_t immutable_tablet_size,
-                                                 MemTracker* mem_tracker) {
-    return std::make_unique<DeltaWriter>(new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots,
-                                                             merge_condition, immutable_tablet_size, mem_tracker));
-}
-
-std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
-                                                 int64_t partition_id, const std::vector<SlotDescriptor*>* slots,
-                                                 const std::string& merge_condition, bool miss_auto_increment_column,
-                                                 int64_t table_id, int64_t immutable_tablet_size,
-                                                 MemTracker* mem_tracker) {
-    return std::make_unique<DeltaWriter>(new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots,
-                                                             merge_condition, miss_auto_increment_column, table_id,
-                                                             immutable_tablet_size, mem_tracker));
-}
-
-std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
-                                                 int64_t max_buffer_size, int64_t immutable_tablet_size,
-                                                 MemTracker* mem_tracker) {
-    return std::make_unique<DeltaWriter>(new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, max_buffer_size,
-                                                             immutable_tablet_size, mem_tracker));
-}
+DeltaWriter::DeltaWriter(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                         const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
+                         bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
+                         MemTracker* mem_tracker, int64_t max_buffer_size)
+        : _impl(new DeltaWriterImpl(tablet_mgr, tablet_id, txn_id, partition_id, slots, merge_condition,
+                                    miss_auto_increment_column, table_id, immutable_tablet_size, mem_tracker,
+                                    max_buffer_size)) {}
 
 ThreadPool* DeltaWriter::io_threads() {
     if (UNLIKELY(StorageEngine::instance() == nullptr)) {
