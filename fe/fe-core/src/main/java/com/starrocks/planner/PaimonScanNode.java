@@ -141,6 +141,7 @@ public class PaimonScanNode extends ScanNode {
         hdfsScanRange.setPaimon_predicate_info(predicateInfo);
         long totalFileLength = getTotalFileLength(split);
         hdfsScanRange.setFile_length(totalFileLength);
+        hdfsScanRange.setLength(totalFileLength);
 
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
@@ -153,8 +154,7 @@ public class PaimonScanNode extends ScanNode {
     }
 
     long getTotalFileLength(DataSplit split) {
-        long totalFileLength = split.dataFiles().stream().map(DataFileMeta::fileSize).reduce(0L, Long::sum);
-        return totalFileLength;
+        return split.dataFiles().stream().map(DataFileMeta::fileSize).reduce(0L, Long::sum);
     }
 
     private long nextPartitionId() {
