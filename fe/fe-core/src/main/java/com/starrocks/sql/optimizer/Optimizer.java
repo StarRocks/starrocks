@@ -213,10 +213,6 @@ public class Optimizer {
             OptimizerTraceUtil.logOptExpression("final plan after physical rewrite:\n%s", finalPlan);
         }
 
-        // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator
-        // too early will prevent it from certain optimizations that depend on the equivalence of the ColumnRefOperator.
-        ColumnReuseGuarantor.handleColumnReuse(finalPlan);
-
         try (Timer ignored = Tracers.watchScope("PlanValidate")) {
             // valid the final plan
             PlanValidator.getInstance().validatePlan(finalPlan, rootTaskContext);
@@ -618,9 +614,11 @@ public class Optimizer {
         result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
 
         SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
-        if (sessionVariable.isEnableCboTablePrune() || sessionVariable.isEnableRboTablePrune()) {
-            result = new CloneDuplicateColRefRule().rewrite(result, rootTaskContext);
-        }
+
+        // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator
+        // too early will prevent it from certain optimizations that depend on the equivalence of the ColumnRefOperator.
+        result = new CloneDuplicateColRefRule().rewrite(result, rootTaskContext);
+
         result.setPlanCount(planCount);
         return result;
     }
