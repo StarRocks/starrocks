@@ -174,11 +174,13 @@ public class CallOperator extends ScalarOperator {
             return false;
         }
         CallOperator other = (CallOperator) obj;
+        if (fn != null && other.fn != null && !fn.equals(other.fn)) { // as fn may missed
+            return false;
+        }
         return isDistinct == other.isDistinct &&
                 Objects.equals(fnName, other.fnName) &&
                 Objects.equals(type, other.type) &&
-                Objects.equals(arguments, other.arguments) &&
-                Objects.equals(fn, other.fn);
+                Objects.equals(arguments, other.arguments);
     }
 
     @Override

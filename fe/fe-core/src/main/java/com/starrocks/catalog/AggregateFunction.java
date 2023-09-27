@@ -338,13 +338,12 @@ public class AggregateFunction extends Function {
             return false;
         }
         AggregateFunction agg = (AggregateFunction) obj;
-        if (!Objects.equals(intermediateType, agg.intermediateType) || ignoresDistinct != agg.ignoresDistinct ||
-                isAnalyticFn != agg.isAggregateFn || returnsNonNullOnEmpty != agg.returnsNonNullOnEmpty ||
-                !Objects.equals(symbolName, agg.symbolName) || isDistinct != agg.isDistinct ||
-                !Objects.equals(nullsFirst, agg.getNullsFirst()) || !Objects.equals(isAscOrder, agg.getIsAscOrder())) {
-            return false;
-        }
-        return super.equals(obj);
+
+        return Objects.equals(intermediateType, agg.intermediateType) && ignoresDistinct == agg.ignoresDistinct &&
+                isAnalyticFn == agg.isAnalyticFn && isAggregateFn == agg.isAggregateFn &&
+                returnsNonNullOnEmpty == agg.returnsNonNullOnEmpty && Objects.equals(symbolName, agg.symbolName)
+                && isDistinct == agg.isDistinct && Objects.equals(nullsFirst, agg.getNullsFirst()) &&
+                Objects.equals(isAscOrder, agg.getIsAscOrder()) && super.equals(obj);
     }
 
     @Override
