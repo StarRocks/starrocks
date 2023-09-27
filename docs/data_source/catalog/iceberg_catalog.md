@@ -466,6 +466,20 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
 
 The following examples create an Iceberg catalog named `iceberg_catalog_hms` or `iceberg_catalog_glue`, depending on the type of metastore you use, to query data from your Iceberg cluster.
 
+#### HDFS
+
+If you use HDFS as storage, run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog_hms
+PROPERTIES
+(
+    "type" = "iceberg",
+    "hive.metastore.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+);
+```
+
 #### AWS S3
 
 ##### If you choose instance profile-based credential
@@ -774,6 +788,25 @@ You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-m
 SHOW CREATE CATALOG iceberg_catalog_glue;
 ```
 
+## Switch to an Iceberg Catalog and a database in it
+
+You can use one of the following methods to switch to an Iceberg catalog and a database in it:
+
+- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to specify an Iceberg catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+
+  ```SQL
+  -- Switch to a specified catalog in the current session:
+  SET CATALOG <catalog_name>
+  -- Specify the active database in the current session:
+  USE <db_name>
+  ```
+
+- Directly use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to switch to an Iceberg catalog and a database in it:
+
+  ```SQL
+  USE <catalog_name>.<db_name>
+  ```
+
 ## Drop an Iceberg catalog
 
 You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop an external catalog.
@@ -808,23 +841,7 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
    SHOW DATABASES FROM <catalog_name>
    ```
 
-2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to switch to the destination catalog in the current session:
-
-    ```SQL
-    SET CATALOG <catalog_name>;
-    ```
-
-    Then, use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify the active database in the current session:
-
-    ```SQL
-    USE <db_name>;
-    ```
-
-    Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly specify the active database in the destination catalog:
-
-    ```SQL
-    USE <catalog_name>.<db_name>;
-    ```
+2. [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it).
 
 3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
 
@@ -840,12 +857,25 @@ Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](
 >
 > You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
+[Switch to an Iceberg catalog](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to create an Iceberg database in that catalog:
+
 ```SQL
 CREATE DATABASE <database_name>
-[properties ("location" = "s3://path_to_db/<database_name.db>/")]
+[properties ("location" = "<prefix>://<path_to_database>/<database_name.db>/")]
 ```
 
 You can use the `location` parameter to specify the file path in which you want to create the database. Both HDFS and cloud storage are supported. If you do not specify the `location` parameter, StarRocks creates the database in the default file path of the Iceberg catalog.
+
+The `prefix` varies based on the storage system you use:
+
+| **Storage system**                                         | **`Prefix` value**                                       |
+| ---------------------------------------------------------- | ------------------------------------------------------------ |
+| HDFS                                                       | `hdfs`                                                       |
+| Google GCS                                                 | `gs`                                                         |
+| Azure Blob Storage                                         | <ul><li>If your storage account allows access over HTTP, the `prefix` is `wasb`.</li><li>If your storage account allows access over HTTPS, the `prefix` is `wasbs`.</li></ul> |
+| Azure Data Lake Storage Gen1                               | `adl`                                                        |
+| Azure Data Lake Storage Gen2                               | <ul><li>If your storage account allows access over HTTP, the`prefix` is `abfs`.</li><li>If your storage account allows access over HTTPS, the `prefix` is `abfss`.</li></ul> |
+| AWS S3 or other S3-compatible storage (for example, MinIO) | `s3`                                                         |
 
 ## Drop an Iceberg database
 
@@ -856,6 +886,8 @@ Similar to the internal databases of StarRocks, if you have the [DROP](../../adm
 > You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
 When you drop an Iceberg database, the database's file path on your HDFS cluster or cloud storage will not be dropped along with the database.
+
+[Switch to an Iceberg catalog](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to drop an Iceberg database in that catalog:
 
 ```SQL
 DROP DATABASE <database_name>;
@@ -868,6 +900,8 @@ Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](.
 > **NOTE**
 >
 > You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+[Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to create an Iceberg table in that database.
 
 ### Syntax
 
@@ -931,10 +965,10 @@ You can specify the table attributes in the `"key" = "value"` format in `propert
    );
    ```
 
-2. Create a partitioned table named `partition_tbl`. The table consists of three columns, `action`, `id`, and `dt`, of which `id` and `dt` are defined as partition columns, as shown below:
+2. Create a partitioned table named `partition_tbl_1`. The table consists of three columns, `action`, `id`, and `dt`, of which `id` and `dt` are defined as partition columns, as shown below:
 
    ```SQL
-   CREATE TABLE partition_tbl
+   CREATE TABLE partition_tbl_1
    (
        action varchar(20),
        id int,
@@ -943,17 +977,11 @@ You can specify the table attributes in the `"key" = "value"` format in `propert
    PARTITION BY (id,dt);
    ```
 
-3. Create a partitioned table named `partition_tbl`. The table consists of four columns, `v1`, `v2`, `k1`, and `k2`, of which `k1` and `k2` are defined as partition columns. At the same time, specify that StarRocks synchronously queries an existing table named `employee` and inserts the query result into the new table `partition_tbl`, as shown below:
+3. Query an existing table named `partition_tbl_1`, and create a partitioned table named `partition_tbl_2` based on the query result of `partition_tbl_1`. For `partition_tbl_2`, `id` and `dt` are defined as partition columns, as shown below:
 
    ```SQL
-   CREATE TABLE partition_tbl 
-   (
-       v1 int,
-       v2 int,
-       k1 int,
-       k2 int
-   )
-   PARTITION BY (k1, k2)
+   CREATE TABLE partition_tbl_2
+   PARTITION BY (id, dt)
    AS SELECT * from employee;
    ```
 
@@ -964,6 +992,8 @@ Similar to the internal tables of StarRocks, if you have the [INSERT](../../admi
 > **NOTE**
 >
 > You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+[Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to sink the data of StarRocks table to a Parquet-formatted Iceberg table in that database.
 
 ### Syntax
 
@@ -996,36 +1026,52 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ### Examples
 
-1. Insert a data row into the `partition_tbl` table:
+1. Insert three data rows into the `partition_tbl_1` table:
 
    ```SQL
-   INSERT INTO partition_tbl SELECT 'pv', 1, '2023-07-21';
+   INSERT INTO partition_tbl_1
+   VALUES
+       ("buy", 1, "2023-09-01"),
+       ("sell", 2, "2023-09-02"),
+       ("buy", 3, "2023-09-03");
    ```
 
-2. Insert the result of a SELECT query, which contains simple computations, into the `partition_tbl` table:
+2. Insert the result of a SELECT query, which contains simple computations, into the `partition_tbl_1` table:
 
    ```SQL
-   INSERT INTO partition_tbl (id, action, dt) SELECT 1+1, 'buy', '2023-07-21';
+   INSERT INTO partition_tbl_1 (id, action, dt) SELECT 1+1, 'buy', '2023-09-03';
    ```
 
-3. Insert the result of a SELECT query, which reads data from the `partition_tbl` table, into the same table:
+3. Insert the result of a SELECT query, which reads data from the `partition_tbl_1` table, into the same table:
 
    ```SQL
-   INSERT INTO partition_tbl SELECT 'buy', 1, date_add(dt, INTERVAL 2 DAY) FROM partition_tbl WHERE id=1;
+   INSERT INTO partition_tbl_1 SELECT 'buy', 1, date_add(dt, INTERVAL 2 DAY)
+   FROM partition_tbl_1
+   WHERE id=1;
    ```
 
-4. Insert the result of a SELECT query into the partitions that meet two conditions, `dt=‘2023-07-21’` and `id=1`, of the `partition_table` table:
+4. Insert the result of a SELECT query into the partitions that meet two conditions, `dt='2023-09-01'` and `id=1`, of the `partition_tbl_2` table:
 
    ```SQL
-   INSERT INTO partition_table SELECT 'order', 1, '2023-07-21';
-   INSERT INTO partition_table (dt='2023-07-21',id=1) SELECT 'order';
+   INSERT INTO partition_tbl_2 SELECT 'order', 1, '2023-09-01';
    ```
 
-5. Overwrite all `action` column values in the partitions that meet two conditions, `dt=‘2023-07-21’` and `id=1`, of the `partition_table` table with `close`:
+   Or
 
    ```SQL
-   INSERT OVERWRITE partition_table SELECT 'close', 1, '2023-07-21';
-   INSERT OVERWRITE partition_table (dt='2023-07-21',id=1) SELECT 'close';
+   INSERT INTO partition_tbl_2 partition(dt='2023-09-01',id=1) SELECT 'order';
+   ```
+
+5. Overwrite all `action` column values in the partitions that meet two conditions, `dt='2023-09-01'` and `id=1`, of the `partition_tbl_1` table with `close`:
+
+   ```SQL
+   INSERT OVERWRITE partition_tbl_1 SELECT 'close', 1, '2023-09-01';
+   ```
+
+   Or
+
+   ```SQL
+   INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
 ## Drop an Iceberg table
@@ -1039,6 +1085,8 @@ Similar to the internal tables of StarRocks, if you have the [DROP](../../admini
 When you drop an Iceberg table, the table's file path and data on your HDFS cluster or cloud storage will not be dropped along with the table.
 
 When you forcibly drop an Iceberg table (namely, with the `FORCE` keyword specified in the DROP TABLE statement), the table's data on your HDFS cluster or cloud storage will be dropped along with the table, but the table's file path is retained.
+
+[Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to drop an Iceberg table in that database.
 
 ```SQL
 DROP TABLE <table_name> [FORCE];

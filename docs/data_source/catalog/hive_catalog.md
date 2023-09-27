@@ -463,6 +463,20 @@ However, if the frequency of data updates in Hive is high, you can tune these pa
 
 The following examples create a Hive catalog named `hive_catalog_hms` or `hive_catalog_glue`, depending on the type of metastore you use, to query data from your Hive cluster.
 
+#### HDFS
+
+If you use HDFS as storage, run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG hive_catalog_hms
+PROPERTIES
+(
+    "type" = "hive",
+    "hive.metastore.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+);
+```
+
 #### AWS S3
 
 ##### Instance profile-based authentication
@@ -771,6 +785,25 @@ You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-m
 SHOW CREATE CATALOG hive_catalog_glue;
 ```
 
+## Switch to a Hive Catalog and a database in it
+
+You can use one of the following methods to switch to a Hive catalog and a database in it:
+
+- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to specify a Hive catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+
+  ```SQL
+  -- Switch to a specified catalog in the current session:
+  SET CATALOG <catalog_name>
+  -- Specify the active database in the current session:
+  USE <db_name>
+  ```
+
+- Directly use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to switch to a Hive catalog and a database in it:
+
+  ```SQL
+  USE <catalog_name>.<db_name>
+  ```
+
 ## Drop a Hive catalog
 
 You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop an external catalog.
@@ -805,23 +838,7 @@ You can use one of the following syntaxes to view the schema of a Hive table:
    SHOW DATABASES FROM <catalog_name>
    ```
 
-2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to switch to the destination catalog in the current session:
-
-    ```SQL
-    SET CATALOG <catalog_name>;
-    ```
-
-    Then, use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify the active database in the current session:
-
-    ```SQL
-    USE <db_name>;
-    ```
-
-    Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly specify the active database in the destination catalog:
-
-    ```SQL
-    USE <catalog_name>.<db_name>;
-    ```
+2. [Switch to a Hive Catalog and a database in it](#switch-to-a-hive-catalog-and-a-database-in-it).
 
 3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
 
