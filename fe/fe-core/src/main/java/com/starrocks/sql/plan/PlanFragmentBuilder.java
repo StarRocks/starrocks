@@ -425,9 +425,58 @@ public class PlanFragmentBuilder {
         }
 
         public PlanFragment translate(OptExpression optExpression, ExecPlan context) {
-            return visit(optExpression, context);
+            PlanFragment fragment = visit(optExpression, context);
+            if (context.getConnectContext().getSessionVariable().enableAdaptiveExecuteNodeNum()) {
+                computeHostFactor(context, fragment);
+            }
+            return fragment;
         }
 
+        /*
+         * Reduce the compute node when input data decreases, example:
+         *                      Agg(1 rows)                      5 be
+         *                         |                              ^
+         *                    Join(50 rows)                      10 be
+         *                   /             \                      ^
+         *      Join(200 rows)            Scan(100 rows)         10 be
+         *     /              \                                   ^
+         *  Scan(200 rows)    Scan(100 rows)                     10 be
+         */
+        private double computeHostFactor(ExecPlan context, PlanFragment fragment) {
+            double childNodeCost = 0;
+            for (PlanFragment child : fragment.getChildren()) {
+                childNodeCost += computeHostFactor(context, child);
+            }
+
+            OptExpression output = getOptExpression(context, fragment.getPlanRoot());
+
+            // scan fragment
+            if (fragment.getLeftMostNode() instanceof ScanNode) {
+                fragment.setHostFactor(PlanFragment.HOST_FACTOR_MAX);
+                return output.getCost();
+            }
+
+            List<OptExpression> inputs = fragment.getChildren().stream().map(PlanFragment::getPlanRoot)
+                    .map(p -> getOptExpression(context, p)).collect(Collectors.toList());
+
+            double childPlanCost = inputs.stream().map(OptExpression::getCost).reduce(Double::sum).orElse(0D);
+            double selfCost = output.getCost() - childPlanCost;
+
+            double factor = selfCost / childNodeCost;
+            factor = Math.min(PlanFragment.HOST_FACTOR_MAX, factor);
+            factor = Math.max(factor,
+                    context.getConnectContext().getSessionVariable().getAdaptiveExecuteNodeMinFactor());
+            fragment.setHostFactor(factor);
+
+            return selfCost;
+        }
+
+        private OptExpression getOptExpression(ExecPlan context, PlanNode node) {
+            if (context.getOptExpression(node.getId().asInt()) == null && node instanceof ProjectNode) {
+                node = node.getChild(0);
+            }
+            return context.getOptExpression(node.getId().asInt());
+        }
         @Override
         public PlanFragment visit(OptExpression optExpression, ExecPlan context) {
             canUseLocalShuffleAgg &= optExpression.arity() <= 1;

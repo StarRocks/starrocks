@@ -510,6 +510,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_ICEBERG_NDV = "enable_iceberg_ndv";
 
+    public static final String ENABLE_ADAPTIVE_EXECUTE_NODE_NUM = "enable_adaptive_execute_node_num";
+
+    public static final String ADAPTIVE_EXECUTE_NODE_NUM_MIN_FACTOR = "adaptive_execute_node_num_min_factor";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1298,6 +1302,24 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
     private boolean cboDeriveRangeJoinPredicate = false;
+
+    @VarAttr(name = ENABLE_ADAPTIVE_EXECUTE_NODE_NUM)
+    private boolean enableAdaptiveExecuteNodeNum = false;
+
+    @VarAttr(name = ADAPTIVE_EXECUTE_NODE_NUM_MIN_FACTOR)
+    private double adaptiveExecuteNodeMinFactor = 0.5;
+
+    public boolean enableAdaptiveExecuteNodeNum() {
+        return enableAdaptiveExecuteNodeNum;
+    }
+
+    public double getAdaptiveExecuteNodeMinFactor() {
+        return adaptiveExecuteNodeMinFactor;
+    }
+
+    public void setAdaptiveExecuteNodeMinFactor(double adaptiveExecuteNodeMinFactor) {
+        this.adaptiveExecuteNodeMinFactor = adaptiveExecuteNodeMinFactor;
+    }
 
     public boolean enableCboDeriveRangeJoinPredicate() {
         return cboDeriveRangeJoinPredicate;

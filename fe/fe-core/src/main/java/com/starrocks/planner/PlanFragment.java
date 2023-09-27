@@ -98,6 +98,8 @@ import java.util.stream.Stream;
  * fix that
  */
 public class PlanFragment extends TreeNode<PlanFragment> {
+    public static final int HOST_FACTOR_MAX = 1;
+
     // id for this plan fragment
     protected final PlanFragmentId fragmentId;
 
@@ -137,6 +139,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     protected int parallelExecNum = 1;
     protected int pipelineDop = 1;
     protected boolean dopEstimated = false;
+    private double hostFactor = HOST_FACTOR_MAX;
 
     // Whether to assign scan ranges to each driver sequence of pipeline,
     // for the normal backend assignment (not colocate, bucket, and replicated join).
@@ -189,6 +192,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         for (PlanNode child : node.getChildren()) {
             setFragmentInPlanTree(child);
         }
+    }
+
+    public double getHostFactor() {
+        return hostFactor;
+    }
+
+    public void setHostFactor(double hostFactor) {
+        this.hostFactor = hostFactor;
     }
 
     public boolean canUsePipeline() {
@@ -483,6 +494,9 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
         str.append(outputBuilder.toString());
         str.append("\n");
+        if (hostFactor != HOST_FACTOR_MAX) {
+            str.append("  Host Factor: ").append(hostFactor).append("\n");
+        }
         str.append("  Input Partition: ").append(dataPartition.getExplainString(TExplainLevel.NORMAL));
         if (sink != null) {
             str.append(sink.getVerboseExplain("  ")).append("\n");
@@ -681,4 +695,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
         return olapScanNodes;
     }
+
+    public PlanNode getLeftMostNode() {
+        PlanNode node = planRoot;
+        while (!node.getChildren().isEmpty() && !(node instanceof ExchangeNode)) {
+            node = node.getChild(0);
+        }
+        return node;
+    }
+
 }

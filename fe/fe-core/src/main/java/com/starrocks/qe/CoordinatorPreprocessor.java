@@ -628,7 +628,16 @@ public class CoordinatorPreprocessor {
                         hostSet.add(addr);
                         this.recordUsedBackend(addr, computeNode.getId());
                     }
-                    //make olapScan maxParallelism equals prefer compute node number
+                    // make olapScan maxParallelism equals prefer compute node number
+                    if (connectContext.getSessionVariable().enableAdaptiveExecuteNodeNum()) {
+                        long size = (long) Math.min(fragment.getHostFactor() * hostSet.size(), hostSet.size());
+                        size = Math.max(size, 1);
+                        if (size != hostSet.size()) {
+                            List<TNetworkAddress> ss = Lists.newArrayList(hostSet);
+                            Collections.shuffle(ss, random);
+                            hostSet = ss.stream().limit(size).collect(Collectors.toSet());
+                        }
+                    }
                     maxParallelism = hostSet.size() * fragment.getParallelExecNum();
                 } else {
                     if (isUnionFragment(fragment) && isGatherOutput) {
@@ -643,6 +652,16 @@ public class CoordinatorPreprocessor {
                     } else {
                         for (FInstanceExecParam execParams : maxParallelismFragmentExecParams.instanceExecParams) {
                             hostSet.add(execParams.host);
+                        }
+
+                        if (connectContext.getSessionVariable().enableAdaptiveExecuteNodeNum()) {
+                            long size = (long) Math.min(fragment.getHostFactor() * hostSet.size(), hostSet.size());
+                            size = Math.max(size, 1);
+                            if (size != hostSet.size()) {
+                                List<TNetworkAddress> ss = Lists.newArrayList(hostSet);
+                                Collections.shuffle(ss, random);
+                                hostSet = ss.stream().limit(size).collect(Collectors.toSet());
+                            }
                         }
                     }
                 }
