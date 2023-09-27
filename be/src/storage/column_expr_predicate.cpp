@@ -168,6 +168,7 @@ bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
     if (!evaluate(col.get(), selection, 0, size).ok()) {
         return true;
     }
+
     for (uint16_t i = 0; i < size; i++) {
         if (selection[i] != 0) {
             return true;

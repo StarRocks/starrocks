@@ -115,7 +115,7 @@ bool PublishVersionManager::_left_task_applied(const TFinishTaskRequest& finish_
     return applied;
 }
 
-Status PublishVersionManager::wait_publish_task_apply_finish(std::vector<TFinishTaskRequest> finish_task_requests) {
+void PublishVersionManager::wait_publish_task_apply_finish(std::vector<TFinishTaskRequest> finish_task_requests) {
     std::lock_guard wl(_lock);
     for (size_t i = 0; i < finish_task_requests.size(); i++) {
         if (_all_task_applied(finish_task_requests[i])) {
@@ -125,7 +125,6 @@ Status PublishVersionManager::wait_publish_task_apply_finish(std::vector<TFinish
         }
     }
     CHECK(has_pending_task());
-    return Status::OK();
 }
 
 void PublishVersionManager::update_tablet_version(TFinishTaskRequest& finish_task_request) {
@@ -139,7 +138,7 @@ void PublishVersionManager::update_tablet_version(TFinishTaskRequest& finish_tas
     }
 }
 
-Status PublishVersionManager::finish_publish_version_task() {
+void PublishVersionManager::finish_publish_version_task() {
     std::vector<int64_t> erase_finish_task_signature;
     std::vector<int64_t> erase_waitting_finish_task_signature;
     {
@@ -155,7 +154,9 @@ Status PublishVersionManager::finish_publish_version_task() {
 #endif
                         remove_task_info(finish_request.task_type, finish_request.signature);
                     });
-            erase_finish_task_signature.emplace_back(signature);
+            if (st.ok()) {
+                erase_finish_task_signature.emplace_back(signature);
+            }
         }
 
         std::vector<int64_t> clear_txn;
@@ -169,7 +170,9 @@ Status PublishVersionManager::finish_publish_version_task() {
 #endif
                             remove_task_info(finish_request.task_type, finish_request.signature);
                         });
-                erase_waitting_finish_task_signature.emplace_back(signature);
+                if (st.ok()) {
+                    erase_waitting_finish_task_signature.emplace_back(signature);
+                }
             }
         }
         for (auto& signature : erase_finish_task_signature) {
@@ -180,7 +183,6 @@ Status PublishVersionManager::finish_publish_version_task() {
             _unapplied_tablet_by_txn.erase(signature);
         }
     }
-    return Status::OK();
 }
 
 } // namespace starrocks

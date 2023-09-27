@@ -237,7 +237,7 @@ Status RowsetColumnUpdateState::_resolve_conflict(Tablet* tablet, uint32_t rowse
     int64_t t_start = MonotonicMillis();
     // rebuild src_rss_rowids;
     _upserts[start_idx]->src_rss_rowids.resize(_upserts[start_idx]->upserts_size(), 0);
-    index.get(*(_upserts[start_idx]->upserts), &(_upserts[start_idx]->src_rss_rowids));
+    RETURN_IF_ERROR(index.get(*(_upserts[start_idx]->upserts), &(_upserts[start_idx]->src_rss_rowids)));
     int64_t t_read_index = MonotonicMillis();
     for (uint32_t idx = start_idx; idx < end_idx; idx++) {
         _partial_update_states[idx].src_rss_rowids.clear();

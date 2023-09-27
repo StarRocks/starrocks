@@ -440,7 +440,7 @@ private:
         auto tablet_schema_ptr = tablet.tablet_schema();
         for (size_t i = 1; i < column_groups.size(); ++i) {
             // read mask buffer from the beginning
-            mask_buffer->flip_to_read();
+            RETURN_IF_ERROR(mask_buffer->flip_to_read());
 
             _entries.clear();
             _entries.reserve(rowsets.size());
@@ -450,7 +450,7 @@ private:
             Schema schema = ChunkHelper::convert_schema(tablet_schema_ptr, column_groups[i]);
             for (size_t j = 0; j < rowsets.size(); j++) {
                 const auto& rowset = rowsets[j];
-                rowsets_mask_buffer[j]->flip_to_read();
+                RETURN_IF_ERROR(rowsets_mask_buffer[j]->flip_to_read());
                 _entries.emplace_back(new MergeEntry<T>());
                 MergeEntry<T>& entry = *_entries.back();
                 entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
