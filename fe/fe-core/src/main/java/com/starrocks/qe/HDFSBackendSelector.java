@@ -55,6 +55,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 /**
@@ -180,7 +181,9 @@ public class HDFSBackendSelector implements BackendSelector {
             }
         }
         if (node == null) {
-            node = backends.get(0);
+            Random rand = new Random(System.currentTimeMillis());
+            int i = rand.nextInt(backends.size());
+            node = backends.get(i);
         }
         return node;
     }
