@@ -27,6 +27,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -117,6 +118,7 @@ public class JDBCScanner {
             java.sql.Date.class,
             Timestamp.class,
             LocalDateTime.class,
+            Time.class,
             String.class
     ));
 
