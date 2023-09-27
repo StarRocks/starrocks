@@ -529,7 +529,7 @@ build_librdkafka() {
 build_pulsar() {
     check_if_source_exist $PULSAR_SOURCE
 
-    cd $TP_SOURCE_DIR/$PULSAR_SOURCE/pulsar-client-cpp
+    cd $TP_SOURCE_DIR/$PULSAR_SOURCE
 
     $CMAKE_CMD -DCMAKE_LIBRARY_PATH=$TP_INSTALL_DIR/lib -DCMAKE_INCLUDE_PATH=$TP_INSTALL_DIR/include \
         -DPROTOC_PATH=$TP_INSTALL_DIR/bin/protoc -DBUILD_TESTS=OFF -DBUILD_PYTHON_WRAPPER=OFF -DBUILD_DYNAMIC_LIB=OFF .
