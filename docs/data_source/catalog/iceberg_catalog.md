@@ -868,7 +868,7 @@ You can use the `location` parameter to specify the file path in which you want 
 
 The `prefix` varies based on the storage system you use:
 
-| **Storage system**                                         | **`Prefix`** **value**                                       |
+| **Storage system**                                         | **`Prefix` value**                                       |
 | ---------------------------------------------------------- | ------------------------------------------------------------ |
 | HDFS                                                       | `hdfs`                                                       |
 | Google GCS                                                 | `gs`                                                         |
