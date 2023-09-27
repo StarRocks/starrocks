@@ -253,6 +253,18 @@ However, if the frequency of data updates in Hudi is high, you can tune these pa
 
 The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_catalog_glue`, depending on the type of metastore you use, to query data from your Hudi cluster.
 
+#### HDFS
+If you use HDFS as storage, run a command like below:
+```SQL
+CREATE EXTERNAL CATALOG hudi_catalog_hms
+PROPERTIES
+(
+    "type" = "hudi",
+    "hive.metastore.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+);
+```
+
 #### AWS S3
 
 ##### If you choose instance profile-based credential
