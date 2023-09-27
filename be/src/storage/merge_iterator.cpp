@@ -163,8 +163,14 @@ public:
         }
         return Status::OK();
     }
+<<<<<<< HEAD
     Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
         ChunkIterator::init_output_schema(unused_output_column_ids);
+=======
+
+    [[nodiscard]] Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+        RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
+>>>>>>> 24c5088a5e ([Refactor] check and handle the error status for functions (#31463) (#31466))
         for (auto& i : _children) {
             RETURN_IF_ERROR(i->init_output_schema(unused_output_column_ids));
         }

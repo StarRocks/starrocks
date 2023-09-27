@@ -818,7 +818,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         RETURN_IF_ERROR(mask_buffer->flush());
 
         for (size_t i = 1; i < column_groups.size(); ++i) {
-            mask_buffer->flip_to_read();
+            RETURN_IF_ERROR(mask_buffer->flip_to_read());
 
             seg_iterators.clear();
 

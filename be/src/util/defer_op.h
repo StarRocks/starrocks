@@ -45,7 +45,7 @@ class DeferOp {
 public:
     explicit DeferOp(DeferFunction func) : _func(std::move(func)) {}
 
-    ~DeferOp() noexcept { _func(); }
+    ~DeferOp() noexcept { (void)_func(); }
 
 private:
     DeferFunction _func;

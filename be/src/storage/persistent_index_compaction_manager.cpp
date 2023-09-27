@@ -48,6 +48,7 @@ public:
             : _tablet(std::move(tablet)), _mgr(mgr) {}
 
     void run() override {
+<<<<<<< HEAD
         DeferOp defer([&]() {
             // Must call `unmark_running()` after run() end.
             _mgr->unmark_running(_tablet->tablet_id(), _tablet->data_dir());
@@ -58,6 +59,10 @@ public:
             return;
         }
         WARN_IF_ERROR(_tablet->updates()->pk_index_major_compaction(), "Failed to run PkIndexMajorCompactionTask");
+=======
+        WARN_IF_ERROR(_tablet->updates()->pk_index_major_compaction(), "Failed to run PkIndexMajorCompactionTask");
+        _mgr->unmark_running(_tablet->tablet_id());
+>>>>>>> 24c5088a5e ([Refactor] check and handle the error status for functions (#31463) (#31466))
     }
 
 private:

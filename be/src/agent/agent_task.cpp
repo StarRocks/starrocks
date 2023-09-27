@@ -533,7 +533,7 @@ void run_compaction_task(const std::shared_ptr<CompactionTaskRequest>& agent_tas
     for (auto tablet_id : compaction_req.tablet_ids) {
         EngineManualCompactionTask engine_task(GlobalEnv::GetInstance()->compaction_mem_tracker(), tablet_id,
                                                compaction_req.is_base_compaction);
-        StorageEngine::instance()->execute_task(&engine_task);
+        (void)StorageEngine::instance()->execute_task(&engine_task);
     }
 
     task_status.__set_status_code(status_code);

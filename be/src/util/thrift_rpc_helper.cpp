@@ -140,6 +140,17 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
             LOG(WARNING) << "client reopen failed. address=" << address << ", status=" << st.message();
             break;
         }
+<<<<<<< HEAD
+=======
+    } catch (apache::thrift::TException& e) {
+        std::stringstream ss;
+        ss << "call frontend service failed, address=" << address << ", reason=" << e.what();
+        LOG(WARNING) << ss.str();
+        SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms * 2));
+        // just reopen to disable this connection
+        (void)client.reopen(timeout_ms);
+        return Status::ThriftRpcError(ss.str());
+>>>>>>> 24c5088a5e ([Refactor] check and handle the error status for functions (#31463) (#31466))
     }
     return status;
 }

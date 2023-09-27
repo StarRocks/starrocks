@@ -225,7 +225,11 @@ Status RowsetColumnUpdateState::_resolve_conflict(Tablet* tablet, uint32_t rowse
     CHECK_MEM_LIMIT("RowsetColumnUpdateState::_resolve_conflict");
     int64_t t_start = MonotonicMillis();
     // rebuild src_rss_rowids;
+<<<<<<< HEAD
     TRY_CATCH_BAD_ALLOC(_upserts[start_idx]->src_rss_rowids.resize(_upserts[start_idx]->upserts_size(), 0));
+=======
+    _upserts[start_idx]->src_rss_rowids.resize(_upserts[start_idx]->upserts_size(), 0);
+>>>>>>> 24c5088a5e ([Refactor] check and handle the error status for functions (#31463) (#31466))
     RETURN_IF_ERROR(index.get(*(_upserts[start_idx]->upserts), &(_upserts[start_idx]->src_rss_rowids)));
     int64_t t_read_index = MonotonicMillis();
     for (uint32_t idx = start_idx; idx < end_idx; idx++) {

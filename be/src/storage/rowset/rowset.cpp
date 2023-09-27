@@ -914,7 +914,7 @@ Status Rowset::verify() {
         }
     }
     if (!st.ok()) {
-        st.clone_and_append(strings::Substitute("rowset:$0 path:$1", rowset_id().to_string(), rowset_path()));
+        (void)st.clone_and_append(strings::Substitute("rowset:$0 path:$1", rowset_id().to_string(), rowset_path()));
     }
     return st;
 }

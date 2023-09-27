@@ -184,7 +184,7 @@ Status TransactionMgr::begin_transaction(const HttpRequest* req, std::string* re
         if (!st.ok()) {
             ctx->status = st;
             if (ctx->need_rollback) {
-                _rollback_transaction(ctx);
+                (void)_rollback_transaction(ctx);
             }
         }
         LOG(INFO) << "new transaction manage request. " << ctx->brief() << ", tbl=" << ctx->table << " op=begin";
@@ -262,7 +262,7 @@ Status TransactionMgr::commit_transaction(const HttpRequest* req, std::string* r
             LOG(ERROR) << "Fail to commit txn: " << st << " " << ctx->brief();
             ctx->status = st;
             if (ctx->need_rollback) {
-                _rollback_transaction(ctx);
+                (void)_rollback_transaction(ctx);
             }
         }
         *resp = _build_reply(TXN_COMMIT, ctx);
@@ -331,7 +331,7 @@ Status TransactionMgr::_commit_transaction(StreamLoadContext* ctx, bool prepare)
         // 1. finish stream pipe & wait it done
         if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
             ctx->buffer->flip();
-            ctx->body_sink->append(std::move(ctx->buffer));
+            RETURN_IF_ERROR(ctx->body_sink->append(std::move(ctx->buffer)));
             ctx->buffer = nullptr;
         }
         RETURN_IF_ERROR(ctx->body_sink->finish());

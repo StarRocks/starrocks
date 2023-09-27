@@ -295,7 +295,11 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
         LOG(WARNING) << "Fail to load new rowset: " << st;
         return st;
     }
+<<<<<<< HEAD
     (*new_rowset)->rowset_meta()->get_full_meta_pb(new_rs_meta_pb);
+=======
+    (*new_rowset)->rowset_meta()->to_rowset_pb(new_rs_meta_pb);
+>>>>>>> 24c5088a5e ([Refactor] check and handle the error status for functions (#31463) (#31466))
     RETURN_IF_ERROR(org_rowset->remove());
     return Status::OK();
 }

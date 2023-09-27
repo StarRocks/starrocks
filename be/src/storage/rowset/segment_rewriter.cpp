@@ -92,7 +92,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     }
     uint32_t segment_id = auto_increment_partial_update_state.segment_id;
     Rowset* rowset = auto_increment_partial_update_state.rowset;
-    rowset->load();
+    RETURN_IF_ERROR(rowset->load());
 
     uint32_t num_rows = rowset->segments()[segment_id]->num_rows();
 

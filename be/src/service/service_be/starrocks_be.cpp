@@ -308,9 +308,15 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 #endif
 
 #if defined(WITH_CACHELIB) || defined(WITH_STARCACHE)
+<<<<<<< HEAD
     if (config::datacache_enable) {
         (void)BlockCache::instance()->shutdown();
         LOG(INFO) << process_name << " exit step " << exit_step++ << ": datacache shutdown successfully";
+=======
+    if (config::block_cache_enable) {
+        (void)BlockCache::instance()->shutdown();
+        LOG(INFO) << process_name << " exit step " << exit_step++ << ": block cache shutdown successfully";
+>>>>>>> 24c5088a5e ([Refactor] check and handle the error status for functions (#31463) (#31466))
     }
 #endif
 

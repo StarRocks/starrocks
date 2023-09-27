@@ -306,7 +306,11 @@ Status DataDir::load() {
             return s;
         }
         for (auto tablet_id : tablet_ids) {
-            _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
+            Status s = _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
+            if (!s.ok()) {
+                LOG(ERROR) << "data dir " << _path << " drop_tablet failed: " << s.get_error_msg();
+                return s;
+            }
         }
         LOG(WARNING) << "compact meta finished, retry load tablets from rocksdb. path: " << _path;
         tablet_ids.clear();
@@ -346,7 +350,11 @@ Status DataDir::load() {
             tablet->set_tablet_schema_into_rowset_meta()) {
             TabletMetaPB tablet_meta_pb;
             tablet->tablet_meta()->to_meta_pb(&tablet_meta_pb);
-            TabletMetaManager::save(this, tablet_meta_pb);
+            Status s = TabletMetaManager::save(this, tablet_meta_pb);
+            if (!s.ok()) {
+                LOG(ERROR) << "data dir " << _path << " save tablet meta failed: " << s.get_error_msg();
+                return s;
+            }
         }
     }
 
@@ -391,9 +399,14 @@ Status DataDir::load() {
             if (!rowset_meta->tablet_schema()) {
                 auto tablet_schema_ptr = tablet->tablet_schema();
                 rowset_meta->set_tablet_schema(tablet_schema_ptr);
+<<<<<<< HEAD
                 RowsetMetaPB meta_pb;
                 rowset_meta->get_full_meta_pb(&meta_pb);
                 Status rs_meta_save_status = RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), meta_pb);
+=======
+                Status rs_meta_save_status =
+                        RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), rowset_meta->get_meta_pb());
+>>>>>>> 24c5088a5e ([Refactor] check and handle the error status for functions (#31463) (#31466))
                 if (!rs_meta_save_status.ok()) {
                     LOG(WARNING) << "Failed to save rowset meta, rowset=" << rowset_meta->rowset_id()
                                  << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();
@@ -418,9 +431,14 @@ Status DataDir::load() {
             Status publish_status = tablet->load_rowset(rowset);
             if (!rowset_meta->tablet_schema()) {
                 rowset_meta->set_tablet_schema(tablet->tablet_schema());
+<<<<<<< HEAD
                 RowsetMetaPB meta_pb;
                 rowset_meta->get_full_meta_pb(&meta_pb);
                 Status rs_meta_save_status = RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), meta_pb);
+=======
+                Status rs_meta_save_status =
+                        RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), rowset_meta->get_meta_pb());
+>>>>>>> 24c5088a5e ([Refactor] check and handle the error status for functions (#31463) (#31466))
                 if (!rs_meta_save_status.ok()) {
                     LOG(WARNING) << "Failed to save rowset meta, rowset=" << rowset_meta->rowset_id()
                                  << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();

@@ -326,7 +326,9 @@ public:
                 if (_refs_by_reader == 0 && _rowset_state_machine.rowset_state() == ROWSET_UNLOADING) {
                     // first do close, then change state
                     do_close();
-                    _rowset_state_machine.on_release();
+                    WARN_IF_ERROR(_rowset_state_machine.on_release(),
+                                  strings::Substitute("rowset state on_release error, $0",
+                                                      _rowset_state_machine.rowset_state()));
                 }
             }
             if (_rowset_state_machine.rowset_state() == ROWSET_UNLOADED) {

@@ -597,10 +597,11 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
 
 ImmutableIndexWriter::~ImmutableIndexWriter() {
     if (_idx_wb) {
-        FileSystem::Default()->delete_file(_idx_file_path_tmp);
+        WARN_IF_ERROR(FileSystem::Default()->delete_file(_idx_file_path_tmp),
+                      "Failed to delete file:" + _idx_file_path_tmp);
     }
     if (_bf_wb) {
-        FileSystem::Default()->delete_file(_bf_file_path);
+        WARN_IF_ERROR(FileSystem::Default()->delete_file(_bf_file_path), "Failed to delete file:" + _bf_file_path);
     }
 }
 
@@ -655,7 +656,7 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
         // update memory usage is too high, flush bloom filter advance to avoid use too much memory
         if (!StorageEngine::instance()->update_manager()->keep_pindex_bf()) {
             for (auto& bf : _bf_vec) {
-                _bf_wb->append(Slice(bf->data(), bf->size()));
+                RETURN_IF_ERROR(_bf_wb->append(Slice(bf->data(), bf->size())));
             }
             _bf_vec.clear();
             _bf_flushed = true;
@@ -738,7 +739,7 @@ Status ImmutableIndexWriter::write_bf() {
         }
     }
     for (auto& bf : _bf_vec) {
-        _idx_wb->append(Slice(bf->data(), bf->size()));
+        RETURN_IF_ERROR(_idx_wb->append(Slice(bf->data(), bf->size())));
     }
     _meta.mutable_shard_bf_off()->Add(pos_before);
     for (auto bf_len : _shard_bf_size) {
@@ -792,7 +793,7 @@ Status ImmutableIndexWriter::finish() {
     RETURN_IF_ERROR(FileSystem::Default()->rename_file(_idx_file_path_tmp, _idx_file_path));
     _idx_wb.reset();
     RETURN_IF_ERROR(_bf_wb->close());
-    FileSystem::Default()->delete_file(_bf_file_path);
+    (void)FileSystem::Default()->delete_file(_bf_file_path);
     _bf_wb.reset();
     return Status::OK();
 }
@@ -2019,7 +2020,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wblock_opts, file_name));
         DeferOp close_block([&wfile] {
             if (wfile) {
-                wfile->close();
+                WARN_IF_ERROR(wfile->close(), fmt::format("failed to close writable_file: {}", wfile->filename()));
             }
         });
         meta->clear_wals();
@@ -2040,7 +2041,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         std::string file_name = get_l0_index_file_name(_path, version);
         // be maybe crash after create index file during last commit
         // so we delete expired index file first to make sure no garbage left
-        FileSystem::Default()->delete_file(file_name);
+        (void)FileSystem::Default()->delete_file(file_name);
         std::set<uint32_t> dumped_shard_idxes;
         {
             // File is closed when archive object is destroyed and file size will be updated after file is
@@ -3670,9 +3671,15 @@ public:
               _io_stat_entry(io_stat_entry) {}
 
     void run() override {
+<<<<<<< HEAD
         auto scope = IOProfiler::scope(_io_stat_entry);
         _index->get_from_one_immutable_index(_immu_index, _num, _keys, _values, _keys_info_by_key_size,
                                              _found_keys_info);
+=======
+        WARN_IF_ERROR(_index->get_from_one_immutable_index(_immu_index, _num, _keys, _values, _keys_info_by_key_size,
+                                                           _found_keys_info),
+                      "Failed to run GetFromImmutableIndexTask");
+>>>>>>> 24c5088a5e ([Refactor] check and handle the error status for functions (#31463) (#31466))
     }
 
 private:

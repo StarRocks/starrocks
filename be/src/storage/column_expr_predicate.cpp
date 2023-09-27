@@ -168,7 +168,14 @@ bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
         size += 2;
     }
     // if all of them are evaluated to false, we don't need this zone.
+<<<<<<< HEAD
     evaluate(col.get(), selection, 0, size);
+=======
+    if (!evaluate(col.get(), selection, 0, size).ok()) {
+        return true;
+    }
+
+>>>>>>> 24c5088a5e ([Refactor] check and handle the error status for functions (#31463) (#31466))
     for (uint16_t i = 0; i < size; i++) {
         if (selection[i] != 0) {
             return true;

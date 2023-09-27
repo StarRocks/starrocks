@@ -341,7 +341,7 @@ Status JsonReader::open() {
 }
 
 JsonReader::~JsonReader() {
-    close();
+    (void)close();
 }
 
 Status JsonReader::close() {
