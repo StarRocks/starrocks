@@ -273,6 +273,12 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                         computeColocatJoinOutPutPropertyForIcebergTable(node.getJoinType(), leftDistributionSpec,
                                 rightDistributionSpec),
                         leftOnPredicateColumns, rightOnPredicateColumns);
+            } else if (leftDistributionDesc.isIcebergLocal() && rightDistributionDesc.isBucketJoin()) {
+                // bucket join
+                PhysicalPropertySet outputProperty = computeBucketJoinDistributionPropertyInfo(node.getJoinType(),
+                        leftDistributionSpec, leftChildOutputProperty);
+                return computeHashJoinDistributionPropertyInfo(node, outputProperty,
+                        leftOnPredicateColumns, rightOnPredicateColumns);
             } else {
                 LOG.error("Children output property distribution error.left child property: {}, " +
                                 "right child property: {}, join node: {}",
