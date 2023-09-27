@@ -438,6 +438,20 @@ StarRocks 默认采用[自动异步更新策略](#附录理解元数据自动异
 
 以下示例创建了一个名为 `deltalake_catalog_hms` 或 `deltalake_catalog_glue` 的 Delta Lake Catalog，用于查询 Delta Lake 集群里的数据。
 
+#### HDFS
+
+使用 HDFS 作为存储时，可以按如下创建 Delta Lake Catalog：
+
+```SQL
+CREATE EXTERNAL CATALOG deltalake_catalog_hms
+PROPERTIES
+(
+    "type" = "deltalake",
+    "hive.metastore.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+);
+```
+
 #### AWS S3
 
 ##### 如果基于 Instance Profile 进行鉴权和认证
@@ -746,6 +760,25 @@ SHOW CATALOGS;
 SHOW CREATE CATALOG deltalake_catalog_glue;
 ```
 
+## 切换 Delta Lake Catalog 和数据库
+
+您可以通过如下方法切换至目标 Delta Lake Catalog 和数据库：
+
+- 先通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 指定当前会话生效的 Delta Lake Catalog，然后再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定数据库：
+
+  ```SQL
+  -- 切换当前会话生效的 Catalog：
+  SET CATALOG <catalog_name>
+  -- 指定当前会话生效的数据库：
+  USE <db_name>
+  ```
+
+- 通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Delta Lake Catalog 下的指定数据库：
+
+  ```SQL
+  USE <catalog_name>.<db_name>
+  ```
+
 ## 删除 Delta Lake Catalog
 
 您可以通过 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) 删除某个 External Catalog。
@@ -780,23 +813,7 @@ DROP Catalog deltalake_catalog_glue;
    SHOW DATABASES FROM <catalog_name>
    ```
 
-2. 通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 切换当前会话生效的 Catalog：
-
-   ```SQL
-   SET CATALOG <catalog_name>;
-   ```
-
-   再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定当前会话生效的数据库：
-
-   ```SQL
-   USE <db_name>;
-   ```
-
-   或者，也可以通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
-
-   ```SQL
-   USE <catalog_name>.<db_name>;
-   ```
+2. [切换至目标 Delta Lake Catalog 和数据库](#切换-delta-lake-catalog-和数据库)。
 
 3. 通过 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
 
