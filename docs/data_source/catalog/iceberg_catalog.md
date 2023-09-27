@@ -234,7 +234,9 @@ The following table describes the parameters you need to configure in `StorageCr
 The following examples create an Iceberg catalog named `iceberg_catalog_hms` or `iceberg_catalog_glue`, depending on the type of metastore you use, to query data from your Iceberg cluster.
 
 #### HDFS
+
 If you use HDFS as storage, run a command like below:
+
 ```SQL
 CREATE EXTERNAL CATALOG iceberg_catalog_hms
 PROPERTIES
