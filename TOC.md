@@ -743,6 +743,7 @@
 + 性能测试
   + [SSB Flat Table 性能测试](/benchmarking/SSB_Benchmarking.md)
   + [TPC-H 基准测试](/benchmarking/TPC-H_Benchmark.md)
+  + [TPC-DS 基准测试](/benchmarking/TPC_DS_Benchmark.md)
 + 开发指南
   + [编译 StarRocks](/developers/build-starrocks/Build_in_docker.md)
   + [使用 debuginfo 文件进行调试](/developers/debuginfo.md)
