@@ -35,7 +35,7 @@ For more information on how to create a storage volume for other object storages
 
 ### Create a database and a cloud-native table
 
-After you created a default storage volume, you can then create a database and a cloud-native table using this storage volume.
+After you create a default storage volume, you can then create a database and a cloud-native table using this storage volume.
 
 Currently, shared-data StarRocks clusters support the following table types:
 
@@ -73,7 +73,7 @@ PROPERTIES (
 >
 > The default storage volume is used when you create a database or a cloud-native table in a shared-data StarRocks cluster if no storage volume is specified.
 
-In addition to the regular table PROPERTIES, you need to specify the following PROPERTIES when creating a table for shared-data StarRocks cluster:
+In addition to the regular table `PROPERTIES`, you need to specify the following `PROPERTIES` when creating a table for shared-data StarRocks cluster:
 
 #### datacache.enable
 

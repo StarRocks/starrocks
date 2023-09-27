@@ -1,7 +1,8 @@
 # Deploy StarRocks using GCS 
 
 import SharedDataIntro from '../../assets/commonMarkdown/sharedDataIntro.md'
-import SharedDataCNandUse from '../../assets/commonMarkdown/sharedDataCNandUse.md'
+import SharedDataCNconf from '../../assets/commonMarkdown/sharedDataCNconf.md'
+import SharedDataUse from '../../assets/commonMarkdown/sharedDataUse.md'
 
 <SharedDataIntro />
 
@@ -13,9 +14,40 @@ import SharedDataCNandUse from '../../assets/commonMarkdown/sharedDataCNandUse.m
 
 The deployment of a shared-data StarRocks cluster is similar to that of a shared-nothing StarRocks cluster. The only difference is that you need to deploy CNs instead of BEs in a shared-data cluster. This section only lists the extra FE and CN configuration items you need to add in the configuration files of FE and CN **fe.conf** and **cn.conf** when you deploy a shared-data StarRocks cluster. For detailed instructions on deploying a StarRocks cluster, see [Deploy StarRocks](../deployment/deploy_manually.md).
 
-### Configure FE nodes for shared-data StarRocks
+> **Note**
+>
+> Do not start the cluster until after it is configured for shared-storage in the next section of this document.
 
-Before starting FEs, add the following configuration items in the FE configuration file **fe.conf**.
+## Configure FE nodes for shared-data StarRocks
+
+Before starting the cluster configure the FEs and CNs. An example configuration is provided below, and then the details for each parameter are provided.
+
+### Example FE configuration for GCS
+
+The example shared-data additions for your `fe.conf` can be added to the `fe.conf` file on each
+of your FE nodes. Because GCS storage is accessed using the
+[Cloud Storage XML API](https://cloud.google.com/storage/docs/xml-api/overview), the parameters
+use the prefix `aws_s3`.
+
+  ```Properties
+  run_mode = shared_data
+  cloud_native_meta_port = <meta_port>
+  cloud_native_storage_type = S3
+
+  # For example, testbucket/subpath
+  aws_s3_path = <s3_path>
+
+  # For example: us-east1
+  aws_s3_region = <region>
+
+  # For example: https://storage.googleapis.com
+  aws_s3_endpoint = <endpoint_url>
+
+  aws_s3_access_key = <HMAC access_key>
+  aws_s3_secret_key = <HMAC secret_key>
+  ```
+
+### All FE parameters related to shared-storage with GCS
 
 #### run_mode
 
@@ -51,16 +83,10 @@ Supported from v3.1.0.
 
 #### cloud_native_storage_type
 
-The type of object storage you use. In shared-data mode, StarRocks supports storing data in Azure Blob (supported from v3.1.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value:
+The type of object storage you use. In shared-data mode, StarRocks supports storing data in Azure Blob (supported from v3.1.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCS, and MinIO). Valid value:
 
 - `S3` (Default)
 - `AZBLOB`.
-
-> Note
->
-> If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`.
->
-> If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`.
 
 #### aws_s3_path
 
@@ -68,49 +94,42 @@ The S3 path used to store data. It consists of the name of your S3 bucket and th
 
 #### aws_s3_endpoint
 
-The endpoint used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`.
+The endpoint used to access your S3 bucket, for example, `https://storage.googleapis.com/`
 
 #### aws_s3_region
 
 The region in which your S3 bucket resides, for example, `us-west-2`.
 
-#### aws_s3_use_aws_sdk_default_behavior
-
-Whether to use the [AWS SDK default credentials provider chain](https://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/auth/DefaultAWSCredentialsProviderChain.html). Valid values:
-
-- `true`
-- `false` (Default).
-
 #### aws_s3_use_instance_profile
 
-Whether to use Instance Profile and Assumed Role as credential methods for accessing S3. Valid values:
+Whether to use Instance Profile and Assumed Role as credential methods for accessing GCS. Valid values:
 
 - `true`
 - `false` (Default).
 
-If you use IAM user-based credential (Access Key and Secret Key) to access S3, you must specify this item as `false`, and specify `aws_s3_access_key` and `aws_s3_secret_key`.
+If you use IAM user-based credential (Access Key and Secret Key) to access GCS, you must specify this item as `false`, and specify `aws_s3_access_key` and `aws_s3_secret_key`.
 
-If you use Instance Profile to access S3, you must specify this item as `true`.
+If you use Instance Profile to access GCS, you must specify this item as `true`.
 
-If you use Assumed Role to access S3, you must specify this item as `true`, and specify `aws_s3_iam_role_arn`.
+If you use Assumed Role to access GCS, you must specify this item as `true`, and specify `aws_s3_iam_role_arn`.
 
 And if you use an external AWS account,  you must also specify `aws_s3_external_id`.
 
 #### aws_s3_access_key
 
-The Access Key ID used to access your S3 bucket.
+The HMAC access Key ID used to access your GCS bucket.
 
 #### aws_s3_secret_key
 
-The Secret Access Key used to access your S3 bucket.
+The HMAC Secret Access Key used to access your GCS bucket.
 
 #### aws_s3_iam_role_arn
 
-The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored.
+The ARN of the IAM role that has privileges on your GCS bucket in which your data files are stored.
 
 #### aws_s3_external_id
 
-The external ID of the AWS account that is used for cross-account access to your S3 bucket.
+The external ID of the AWS account that is used for cross-account access to your GCS bucket.
 
 > **Note**
 >
@@ -124,25 +143,9 @@ cloud_native_meta_port = <meta_port>
 enable_load_volume_from_conf = false
 ```
 
-If you want to specify the properties of your object storage in the FE configuration file, this
-example is for GCS:
+## Configure CN nodes for shared-data StarRocks
+<SharedDataCNconf />
 
-  ```Properties
-  run_mode = shared_data
-  cloud_native_meta_port = <meta_port>
-  cloud_native_storage_type = S3
+## Use your shared-data StarRocks cluster
+<SharedDataUse />
 
-  # For example, testbucket/subpath
-  aws_s3_path = <s3_path>
-
-  # For example: us-east-1
-  aws_s3_region = <region>
-
-  # For example: https://storage.googleapis.com
-  aws_s3_endpoint = <endpoint_url>
-
-  aws_s3_access_key = <access_key>
-  aws_s3_secret_key = <secret_key>
-  ```
-
-<SharedDataCNandUse />
