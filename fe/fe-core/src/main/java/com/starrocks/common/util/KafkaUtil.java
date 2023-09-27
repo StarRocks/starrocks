@@ -231,13 +231,11 @@ public class KafkaUtil {
                     }
                     TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                     if (code != TStatusCode.OK) {
+                        LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
                         if (code == TStatusCode.SERVICE_UNAVAILABLE) {
-                            String msg = "all kafka brokers down, via backend: " + address +
-                                    ", err: " + result.status.errorMsgs;
-                            LOG.warn(msg);
+                            String msg = "all kafka brokers down, be: " + address + ", err: " + result.status.errorMsgs;
                             throw new KafkaAllBrokersDownException(msg);
                         }
-                        LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
                         throw new UserException(
                                 "failed to send proxy request to " + address + " err " + result.status.errorMsgs);
                     } else {
