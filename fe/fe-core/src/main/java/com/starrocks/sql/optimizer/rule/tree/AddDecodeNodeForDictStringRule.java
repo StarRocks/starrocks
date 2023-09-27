@@ -368,7 +368,10 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         private void adjustScanOperator(PhysicalScanOperator scanOperator,
                                         DecodeContext context, List<ScalarOperator> predicates,
                                         Map<ColumnRefOperator, Column> newColRefToColumnMetaMap,
-                                        Map<ColumnRefOperator, ColumnRefOperator> mapping) {
+                                        Map<Integer, ColumnRefOperator> mapping) {
+            if (predicates.isEmpty()) {
+                return;
+            }
             long tableId = scanOperator.getTable().getId();
             // check column could apply dict optimize and replace string column to dict column
             for (Integer columnId : context.tableIdToStringColumnIds.get(tableId)) {
@@ -397,23 +400,25 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     continue;
                 }
 
-                if (!mapping.containsKey(stringColumn)) {
+                // to avoid duplicated mapping from string -> dict column.
+                if (!mapping.containsKey(columnId)) {
                     ColumnRefOperator newDictColumn = createNewDictColumn(context, stringColumn);
-                    mapping.put(stringColumn, newDictColumn);
+                    mapping.put(columnId, newDictColumn);
+
+                    // get dict from cache
+                    ColumnDict columnDict = context.globalDictCache.get(new Pair<>(tableId, stringColumn.getName()));
+                    Preconditions.checkState(columnDict != null);
+                    context.globalDicts.add(new Pair<>(newDictColumn.getId(), columnDict));
+                    context.stringColumnIdToDictColumnIds.put(columnId, newDictColumn.getId());
                 }
-                ColumnRefOperator newDictColumn = mapping.get(stringColumn);
+
+                ColumnRefOperator newDictColumn = mapping.get(columnId);
                 Column oldColumn = newColRefToColumnMetaMap.get(stringColumn);
                 Column newColumn = new Column(oldColumn);
                 newColumn.setType(ID_TYPE);
                 newColRefToColumnMetaMap.remove(stringColumn);
                 newColRefToColumnMetaMap.put(newDictColumn, newColumn);
 
-                // get dict from cache
-                ColumnDict columnDict = context.globalDictCache.get(new Pair<>(tableId, stringColumn.getName()));
-                Preconditions.checkState(columnDict != null);
-                context.globalDicts.add(new Pair<>(newDictColumn.getId(), columnDict));
-
-                context.stringColumnIdToDictColumnIds.put(columnId, newDictColumn.getId());
                 context.hasEncoded = true;
             }
 
@@ -438,10 +443,10 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             }
         }
 
-        private void adjustOutputColumns(Map<ColumnRefOperator, ColumnRefOperator> mapping,
+        private void adjustOutputColumns(Map<Integer, ColumnRefOperator> mapping,
                                          List<ColumnRefOperator> outputColumns) {
             for (int i = 0; i < outputColumns.size(); i++) {
-                ColumnRefOperator replaced = mapping.get(outputColumns.get(i));
+                ColumnRefOperator replaced = mapping.get(outputColumns.get(i).getId());
                 if (replaced != null) {
                     outputColumns.set(i, replaced);
                 }
@@ -462,7 +467,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                         Maps.newHashMap(scanOperator.getColRefToColumnMetaMap());
                 List<ColumnRefOperator> newOutputColumns = Lists.newArrayList(scanOperator.getOutputColumns());
                 List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
-                Map<ColumnRefOperator, ColumnRefOperator> replaced = new HashMap<>();
+                Map<Integer, ColumnRefOperator> replaced = new HashMap<>();
                 adjustScanOperator(scanOperator, context, predicates, newColRefToColumnMetaMap, replaced);
                 adjustOutputColumns(replaced, newOutputColumns);
 
@@ -507,7 +512,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 Map<ColumnRefOperator, Column> newColRefToColumnMetaMap =
                         Maps.newHashMap(scanOperator.getColRefToColumnMetaMap());
                 List<ColumnRefOperator> newOutputColumns = Lists.newArrayList(scanOperator.getOutputColumns());
-                Map<ColumnRefOperator, ColumnRefOperator> replaced = new HashMap<>();
+                Map<Integer, ColumnRefOperator> replaced = new HashMap<>();
 
                 List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
                 adjustScanOperator(scanOperator, context, predicates, newColRefToColumnMetaMap, replaced);
@@ -1180,8 +1185,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
         @Override
         public Void visitBinaryPredicate(BinaryPredicateOperator predicate, CouldApplyDictOptimizeContext context) {
-            if (predicate.getBinaryType() == EQ_FOR_NULL || !predicate.getChild(1).isConstant() ||
-                    !predicate.getChild(0).isColumnRef()) {
+            if (predicate.getBinaryType() == EQ_FOR_NULL || !predicate.getChild(1).isConstant()) {
                 context.canDictOptBeApplied = false;
                 context.stopOptPropagateUpward = true;
                 return null;

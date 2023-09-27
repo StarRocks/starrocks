@@ -192,7 +192,20 @@ public class StatisticExecutor {
         if (!sqlResult.second.ok()) {
             return Pair.create(Collections.emptyList(), sqlResult.second);
         } else {
-            return Pair.create(deserializerStatisticData(sqlResult.first), sqlResult.second);
+            List<TStatisticData> statisticDataList = deserializerStatisticData(sqlResult.first);
+            if (LOG.isDebugEnabled()) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("sql = '" + sql);
+                sb.append("', result = [");
+                for (TStatisticData data : statisticDataList) {
+                    sb.append("{");
+                    sb.append(data.toString());
+                    sb.append("}");
+                }
+                sb.append("]");
+                LOG.debug(sb.toString());
+            }
+            return Pair.create(statisticDataList, sqlResult.second);
         }
     }
 
