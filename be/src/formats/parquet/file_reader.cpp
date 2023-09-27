@@ -207,11 +207,6 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
             bool exist = false;
             RETURN_IF_ERROR(_read_min_max_chunk(row_group, min_max_slots, &min_chunk, &max_chunk, &exist));
             if (!exist) continue;
-
-            LOG(INFO) << "rf: " << filter->debug_string();
-            LOG(INFO) << "min: " << min_chunk->columns()[0]->debug_string();
-            LOG(INFO) << "max: " << max_chunk->columns()[0]->debug_string();
-
             bool discard = RuntimeFilterHelper::filter_zonemap_with_min_max(
                     slot->type().type, filter, min_chunk->columns()[0].get(), max_chunk->columns()[0].get());
             if (discard) {
