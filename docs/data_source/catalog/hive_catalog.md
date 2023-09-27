@@ -271,7 +271,9 @@ However, if the frequency of data updates in Hive is high, you can tune these pa
 The following examples create a Hive catalog named `hive_catalog_hms` or `hive_catalog_glue`, depending on the type of metastore you use, to query data from your Hive cluster.
 
 #### HDFS
+
 If you use HDFS as storage, run a command like below:
+
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_hms
 PROPERTIES
