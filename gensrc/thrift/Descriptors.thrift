@@ -152,14 +152,13 @@ enum TSchemaTableType {
     SCH_BE_LOGS,
     SCH_BE_BVARS,
     SCH_BE_CLOUD_NATIVE_COMPACTIONS,
+    STARROCKS_ROLE_EDGES,
+    STARROCKS_GRANT_TO_ROLES,
+    STARROCKS_GRANT_TO_USERS,
     SCH_ROUTINE_LOAD_JOBS,
     SCH_STREAM_LOADS,
     SCH_PIPE_FILES,
-    SCH_PIPES,
-
-    STARROCKS_ROLE_EDGES,
-    STARROCKS_GRANT_TO_ROLES,
-    STARROCKS_GRANT_TO_USERS
+    SCH_PIPES
 }
 
 enum THdfsCompression {
@@ -259,7 +258,7 @@ struct TOlapTableIndexSchema {
     1: required i64 id
     2: required list<string> columns
     3: required i32 schema_hash
-    4: required list<TColumn> columns_desc
+    4: optional list<TColumn> columns_desc
 }
 
 struct TOlapTableSchemaParam {

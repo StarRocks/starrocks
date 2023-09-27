@@ -948,7 +948,7 @@ public class StmtExecutor {
 
         coord.exec();
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
-        coord.setExecPlanSupplier(() -> execPlan);
+        coord.setExecPlan(execPlan);
 
         RowBatch batch;
         boolean isOutfileQuery = false;
@@ -1766,6 +1766,15 @@ public class StmtExecutor {
                     sourceType,
                     context.getSessionVariable().getQueryTimeoutS());
 
+            // The metadata may be changed between plan() and beginTransaction().
+            // When to beginTransaction(), the plan is not ready and the tablet is dropped by balance.
+            // So we need to get txn first, to make the dropping tablet procedure to wait.
+            // This is the re-plan of the insert to fix the issue
+
+            if (Config.replan_on_insert) {
+                execPlan = StatementPlanner.plan(stmt, context);
+            }
+
             // add table indexes to transaction state
             txnState = transactionMgr.getTransactionState(database.getId(), transactionId);
             if (txnState == null) {
@@ -1850,7 +1859,7 @@ public class StmtExecutor {
 
             coord.exec();
             coord.setTopProfileSupplier(this::buildTopLevelProfile);
-            coord.setExecPlanSupplier(() -> execPlan);
+            coord.setExecPlan(execPlan);
 
             long jobDeadLineMs = System.currentTimeMillis() + context.getSessionVariable().getQueryTimeoutS() * 1000;
             coord.join(context.getSessionVariable().getQueryTimeoutS());
@@ -1936,6 +1945,25 @@ public class StmtExecutor {
                     }
                     context.getState().setError("Insert has filtered data in strict mode, txn_id = " + transactionId +
                             " tracking sql = " + trackingSql);
+                    insertError = true;
+                    return;
+                }
+            }
+
+            if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
+                    || stmt instanceof UpdateStmt)) {
+                // when the target table is not ExternalOlapTable or OlapTable
+                // if there is no data to load, the result of the insert statement is success
+                // otherwise, the result of the insert statement is failed
+                GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+                String errorMsg = TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG;
+                if (!(targetTable instanceof ExternalOlapTable || targetTable instanceof OlapTable)) {
+                    if (!(targetTable instanceof SystemTable || targetTable instanceof IcebergTable ||
+                            targetTable instanceof HiveTable)) {
+                        // schema table and iceberg table does not need txn
+                        mgr.abortTransaction(database.getId(), transactionId, errorMsg);
+                    }
+                    context.getState().setOk();
                     insertError = true;
                     return;
                 }

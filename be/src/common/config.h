@@ -41,7 +41,7 @@ namespace starrocks::config {
 CONF_Int32(cluster_id, "-1");
 // The port on which ImpalaInternalService is exported.
 CONF_Int32(be_port, "9060");
-CONF_Int32(thrift_port, "9060");
+CONF_Int32(thrift_port, "0");
 
 // The port for brpc.
 CONF_Int32(brpc_port, "8060");
@@ -1039,6 +1039,9 @@ CONF_Int32(default_mv_resource_group_cpu_limit, "1");
 
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");
+
+// used for control the max memory cost when batch get pk index in each tablet
+CONF_mInt64(primary_key_batch_get_index_memory_limit, "104857600"); // 100MB
 
 // If your sort key cardinality is very high,
 // You could enable this config to speed up the point lookup query,
