@@ -506,6 +506,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_EXPR_PRUNE_PARTITION = "enable_expr_prune_partition";
 
+    public static final String ENABLE_ICEBERG_NDV = "enable_iceberg_ndv";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -699,6 +701,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // The current time zone
     @VariableMgr.VarAttr(name = TIME_ZONE)
     private String timeZone = TimeUtils.getSystemTimeZone().getID();
+
+    @VariableMgr.VarAttr(name = ENABLE_ICEBERG_NDV)
+    private boolean enableIcebergNdv = true;
 
     @VariableMgr.VarAttr(name = INNODB_READ_ONLY)
     private boolean innodbReadOnly = true;
@@ -1087,6 +1092,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableParallelMerge(boolean enableParallelMerge) {
         this.enableParallelMerge = enableParallelMerge;
+    }
+
+    public boolean isEnableIcebergNdv() {
+        return enableIcebergNdv;
+    }
+
+    public void setEnableIcebergNdv(boolean enableIcebergNdv) {
+        this.enableIcebergNdv = enableIcebergNdv;
     }
 
     @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
