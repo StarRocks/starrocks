@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The assignment strategy for fragments whose left most node is not a scan node.
@@ -98,6 +99,16 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
         if (!selectedComputedNodes.isEmpty()) {
             workerIdSet.addAll(selectedComputedNodes);
             // make olapScan maxParallelism equals prefer compute node number
+            if (connectContext.getSessionVariable().enableAdaptiveExecuteNodeNum()) {
+                long size = (long) Math.min(fragment.getHostFactor() * workerIdSet.size(), workerIdSet.size());
+                size = Math.max(size, 1);
+
+                if (size != workerIdSet.size()) {
+                    List<Long> ss = Lists.newArrayList(workerIdSet);
+                    Collections.shuffle(ss, random);
+                    workerIdSet = ss.stream().limit(size).collect(Collectors.toSet());
+                }
+            }
             maxParallelism = workerIdSet.size() * fragment.getParallelExecNum();
         } else if (fragment.isUnionFragment() && isGatherOutput) {
             // union fragment use all children's host
@@ -131,6 +142,16 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
             maxFragment.getInstances().stream()
                     .map(FragmentInstance::getWorkerId)
                     .forEach(workerIdSet::add);
+
+            if (connectContext.getSessionVariable().enableAdaptiveExecuteNodeNum()) {
+                long size = (long) Math.min(fragment.getHostFactor() * workerIdSet.size(), workerIdSet.size());
+                size = Math.max(size, 1);
+                if (size != workerIdSet.size()) {
+                    List<Long> ss = Lists.newArrayList(workerIdSet);
+                    Collections.shuffle(ss, random);
+                    workerIdSet = ss.stream().limit(size).collect(Collectors.toSet());
+                }
+            }
         }
 
         if (enableDopAdaption) {
