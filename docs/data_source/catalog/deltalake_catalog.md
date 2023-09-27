@@ -254,7 +254,9 @@ However, if the frequency of data updates in Delta Lake is high, you can tune th
 The following examples create a Delta Lake catalog named `deltalake_catalog_hms` or `deltalake_catalog_glue`, depending on the type of metastore you use, to query data from your Delta Lake cluster.
 
 #### HDFS
+
 If you use HDFS as storage, run a command like below:
+
 ```SQL
 CREATE EXTERNAL CATALOG deltalake_catalog_hms
 PROPERTIES
