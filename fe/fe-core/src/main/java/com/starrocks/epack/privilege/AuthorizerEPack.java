@@ -6,6 +6,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
 
@@ -35,7 +36,10 @@ public class AuthorizerEPack extends Authorizer {
 
     public static void checkAnyActionOnWarehouse(UserIdentity currentUser, Set<Long> roleIds, String name)
             throws AccessDeniedException {
-        ((AccessControlEPack) getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))
-                .checkAnyActionOnWarehouse(currentUser, roleIds, name);
+        // Any user has an implicit usage permission on the default_warehouse
+        if (!WarehouseManager.isDefaultWarehouse(name)) {
+            ((AccessControlEPack) getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))
+                    .checkAnyActionOnWarehouse(currentUser, roleIds, name);
+        }
     }
 }

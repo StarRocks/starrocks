@@ -422,8 +422,8 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
 
     public Void visitSetWarehouseStatement(SetWarehouseStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.USAGE);
+            AuthorizerEPack.checkAnyActionOnWarehouse(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getWarehouseName());
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),

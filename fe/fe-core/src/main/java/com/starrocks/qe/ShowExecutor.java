@@ -2856,7 +2856,19 @@ public class ShowExecutor {
                     CaseSensibility.WAREHOUSE.getCaseSensibility());
         }
 
-        for (Warehouse wh : warehouseMgr.getAllWarehouses()) {
+        List<Warehouse> warehouseList = warehouseMgr.getAllWarehouses().stream().filter(
+                warehouse -> {
+                    try {
+                        AuthorizerEPack.checkAnyActionOnWarehouse(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), warehouse.getName());
+                    } catch (AccessDeniedException e) {
+                        return false;
+                    }
+                    return true;
+                }
+        ).collect(Collectors.toList());
+
+        for (Warehouse wh : warehouseList) {
             if (warehouseName != null && !wh.getName().equalsIgnoreCase(warehouseName)) {
                 continue;
             }

@@ -148,6 +148,7 @@ import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
 import com.starrocks.epack.privilege.AuthenticationMgrEPack;
 import com.starrocks.epack.privilege.AuthorizationMgrEpack;
+import com.starrocks.epack.privilege.AuthorizerEPack;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.ha.FrontendNodeType;
@@ -3640,9 +3641,16 @@ public class GlobalStateMgr {
     }
 
     // Change current warehouse of this session.
-    public void changeWarehouse(ConnectContext ctx, String newWarehouseName) throws AnalysisException {
+    public void changeWarehouse(ConnectContext ctx, String newWarehouseName) throws DdlException {
         if (!warehouseMgr.warehouseExists(newWarehouseName)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, newWarehouseName);
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, newWarehouseName);
+        }
+
+        try {
+            AuthorizerEPack.checkAnyActionOnWarehouse(ctx.getCurrentUserIdentity(),
+                    ctx.getCurrentRoleIds(), newWarehouseName);
+        } catch (AccessDeniedException e) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "SET WAREHOUSE");
         }
         ctx.setCurrentWarehouse(newWarehouseName);
     }

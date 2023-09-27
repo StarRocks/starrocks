@@ -68,6 +68,10 @@ public class WarehouseManager implements Writable {
     public WarehouseManager() {
     }
 
+    public static boolean isDefaultWarehouse(String name) {
+        return name.equalsIgnoreCase(DEFAULT_WAREHOUSE_NAME);
+    }
+
     public void initDefaultWarehouse() {
         // gen a default warehouse
         // NOTE: default warehouse use DEFAULT_WORKER_GROUP_ID, which is 0,
