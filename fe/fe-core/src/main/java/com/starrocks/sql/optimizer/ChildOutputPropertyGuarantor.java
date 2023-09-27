@@ -438,6 +438,10 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                     enforceChildShuffleDistribution(rightShuffleColumns, rightChild, rightChildOutputProperty, 1);
                 }
                 return visitOperator(node, context);
+            } else if (leftDistributionDesc.isIcebergLocal() && rightDistributionDesc.isShuffle()) {
+                // iceberg bucket join
+                transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
+                return visitOperator(node, context);
             } else {
                 //noinspection ConstantConditions
                 checkState(false, "Children output property distribution error");
