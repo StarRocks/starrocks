@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.base;
 
 import com.starrocks.catalog.Table;
-import com.starrocks.connector.ConnectorTableId;
 
 import java.util.Objects;
 
@@ -28,7 +27,7 @@ public final class ColumnIdentifier {
     public final String dbName;
     public final String tableName;
     private final String columnName;
-    private long tableId;
+    public final long tableId;
 
     public ColumnIdentifier(Table t, String columnName) {
         this.catalogName = t.catalogName;
@@ -36,33 +35,10 @@ public final class ColumnIdentifier {
         this.tableName = t.getName();
         this.columnName = columnName;
         tableId = t.getId();
-        if (tableId >= ConnectorTableId.CONNECTOR_TABLE_ID_OFFSET) {
-            tableId = -1;
-        }
-    }
-
-    public String getCatalogName() {
-        return catalogName;
-    }
-
-    public String getDbName() {
-        return dbName;
-    }
-
-    public String getTableName() {
-        return tableName;
     }
 
     public String getColumnName() {
         return columnName;
-    }
-
-    public String getFullTableName() {
-        return catalogName + "." + dbName + "." + tableName;
-    }
-
-    public long getTableId() {
-        return tableId;
     }
 
     @Override
@@ -75,20 +51,13 @@ public final class ColumnIdentifier {
         if (this == columnIdentifier) {
             return true;
         }
-
-        if (this.tableId == -1 && columnIdentifier.tableId == -1) {
-            // Both tables in catalog, needs to compare names.
-            return catalogName.equals(columnIdentifier.catalogName) &&
-                    dbName.equals(columnIdentifier.dbName) && tableName.equals(columnIdentifier.tableName) &&
-                    columnName.equalsIgnoreCase(columnIdentifier.columnName);
-        } else {
-            // internal table can be compared via tableId.
-            return this.tableId == columnIdentifier.tableId && columnName.equalsIgnoreCase(columnIdentifier.columnName);
-        }
+        return catalogName.equals(columnIdentifier.catalogName) &&
+                dbName.equals(columnIdentifier.dbName) && tableName.equals(columnIdentifier.tableName) &&
+                columnName.equalsIgnoreCase(columnIdentifier.columnName);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(catalogName, dbName, tableName, columnName, tableId);
+        return Objects.hash(catalogName, dbName, tableName, columnName);
     }
 }

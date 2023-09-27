@@ -68,7 +68,7 @@ public class CacheDictManager implements IDictManager {
                         try {
                             Pair<List<TStatisticData>, Status> result = queryDictSync(columnIdentifier);
                             if (result.second.isGlobalDictError()) {
-                                LOG.debug("{}-{} isn't low cardinality string column", columnIdentifier.getFullTableName(),
+                                LOG.debug("{}-{} isn't low cardinality string column", columnIdentifier.tableName,
                                         columnIdentifier.getColumnName());
                                 NO_DICT_STRING_COLUMNS.add(columnIdentifier);
                                 return Optional.empty();
@@ -138,7 +138,7 @@ public class CacheDictManager implements IDictManager {
             dicts.put(tGlobalDict.strings.get(i), tGlobalDict.ids.get(i));
         }
         LOG.info("collected dictionary table:{} column:{}, version:{} size:{}",
-                columnIdentifier.getFullTableName(), columnIdentifier.getColumnName(), statisticData.meta_version, dictSize);
+                columnIdentifier.tableName, columnIdentifier.getColumnName(), statisticData.meta_version, dictSize);
         return Optional.of(new ColumnDict(dicts.build(), statisticData.meta_version));
     }
 
@@ -146,12 +146,12 @@ public class CacheDictManager implements IDictManager {
     public boolean hasGlobalDict(Table t, String columnName, long versionTime) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(t, columnName);
         if (NO_DICT_STRING_COLUMNS.contains(columnIdentifier)) {
-            LOG.debug("{}-{} isn't low cardinality string column", columnIdentifier.getFullTableName(), columnName);
+            LOG.debug("{}-{} isn't low cardinality string column", columnIdentifier.tableId, columnName);
             return false;
         }
 
-        if (FORBIDDEN_DICT_TABLE_IDS.contains(columnIdentifier.getTableId())) {
-            LOG.debug("table {} forbid low cardinality global dict", columnIdentifier.getFullTableName());
+        if (FORBIDDEN_DICT_TABLE_IDS.contains(columnIdentifier.tableId)) {
+            LOG.debug("table {} forbid low cardinality global dict", columnIdentifier.tableId);
             return false;
         }
 
@@ -161,7 +161,7 @@ public class CacheDictManager implements IDictManager {
             try {
                 realResult = result.get();
             } catch (Exception e) {
-                LOG.warn(String.format("get dict cache for %s: %s failed", columnIdentifier.getFullTableName(), columnName), e);
+                LOG.warn(String.format("get dict cache for %d: %s failed", columnIdentifier.tableId, columnName), e);
                 return false;
             }
             if (!realResult.isPresent()) {
@@ -186,8 +186,8 @@ public class CacheDictManager implements IDictManager {
             return false;
         }
 
-        if (FORBIDDEN_DICT_TABLE_IDS.contains(columnIdentifier.getTableId())) {
-            LOG.debug("table {} forbid low cardinality global dict", columnIdentifier.getFullTableName());
+        if (FORBIDDEN_DICT_TABLE_IDS.contains(columnIdentifier.tableId)) {
+            LOG.debug("table {} forbid low cardinality global dict", columnIdentifier.tableId);
             return false;
         }
 
@@ -207,7 +207,7 @@ public class CacheDictManager implements IDictManager {
             return;
         }
 
-        LOG.info("remove dict for table:{} column:{}", columnIdentifier.getFullTableName(), columnName);
+        LOG.info("remove dict for table:{} column:{}", columnIdentifier.tableId, columnName);
         dictStatistics.synchronous().invalidate(columnIdentifier);
     }
 
@@ -249,12 +249,11 @@ public class CacheDictManager implements IDictManager {
                         return;
                     }
                     columnDict.updateVersionTime(versionTime);
-                    LOG.info("update dict for table {} column {} from version {} to {}",
-                            columnIdentifier.getFullTableName(), columnName, lastVersion, versionTime);
+                    LOG.info("update dict for table {} column {} from version {} to {}", columnIdentifier.tableId, columnName,
+                            lastVersion, versionTime);
                 }
             } catch (Exception e) {
-                LOG.warn(String.format("update dict cache for %s: %s failed", columnIdentifier.getFullTableName(), columnName),
-                        e);
+                LOG.warn(String.format("update dict cache for %d: %s failed", columnIdentifier.tableId, columnName), e);
             }
         }
     }
@@ -267,7 +266,7 @@ public class CacheDictManager implements IDictManager {
             try {
                 return columnFuture.get();
             } catch (Exception e) {
-                LOG.warn(String.format("get dict cache for %s: %s failed", columnIdentifier.getFullTableName(), columnName), e);
+                LOG.warn(String.format("get dict cache for %d: %s failed", columnIdentifier.tableId, columnName), e);
             }
         }
         return Optional.empty();

@@ -155,7 +155,7 @@ public class StatisticExecutor {
             throws Exception {
         String column = identifier.getColumnName();
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable(identifier.getCatalogName(), identifier.getDbName(), identifier.getTableName());
+                .getTable(identifier.catalogName, identifier.dbName, identifier.tableName);
         if (!(table.isOlapOrCloudNativeTable() || table.isMaterializedView() || table.isIcebergTable())) {
             throw new SemanticException("Table '%s' is not a OLAP table or LAKE table or Materialize View",
                     table.getName());
@@ -192,20 +192,7 @@ public class StatisticExecutor {
         if (!sqlResult.second.ok()) {
             return Pair.create(Collections.emptyList(), sqlResult.second);
         } else {
-            List<TStatisticData> statisticDataList = deserializerStatisticData(sqlResult.first);
-            if (LOG.isDebugEnabled()) {
-                StringBuilder sb = new StringBuilder();
-                sb.append("sql = '" + sql);
-                sb.append("', result = [");
-                for (TStatisticData data : statisticDataList) {
-                    sb.append("{");
-                    sb.append(data.toString());
-                    sb.append("}");
-                }
-                sb.append("]");
-                LOG.debug(sb.toString());
-            }
-            return Pair.create(statisticDataList, sqlResult.second);
+            return Pair.create(deserializerStatisticData(sqlResult.first), sqlResult.second);
         }
     }
 
