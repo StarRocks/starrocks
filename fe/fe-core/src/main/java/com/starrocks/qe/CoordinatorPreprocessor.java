@@ -1066,36 +1066,11 @@ public class CoordinatorPreprocessor {
         return fragmentExecParamsMap.get(fragmentId).scanRangeAssignment;
     }
 
-    void buildIcebergBucketToNodeMapping() {
-        Set<Integer> bucketIds = new HashSet<>();
-        scanNodes.stream()
-                .map(x -> (IcebergScanNode) x)
-                .forEach(x -> bucketIds.addAll(x.getFileToBucketId().values()));
-        List<Long> backendIds = Lists.newArrayList(idToBackend.keySet());
-
-        for (int bucketId : bucketIds) {
-            icebergBucketIdToBeId.put(bucketId, backendIds.get((offset++) % idToBackend.size()));
-        }
-    }
-
     // Populates scan_range_assignment_.
     // <fragment, <server, nodeId>>
     @VisibleForTesting
     void computeScanRangeAssignment() throws Exception {
         SessionVariable sv = connectContext.getSessionVariable();
-
-        boolean useIcebergBucket = scanNodes.stream()
-                .allMatch(node -> {
-                    if (node instanceof IcebergScanNode) {
-                        IcebergScanNode icebergNode = (IcebergScanNode) node;
-                        return isColocateFragment(icebergNode.getFragment().getPlanRoot());
-                    }
-                    return false;
-                });
-
-        if (useIcebergBucket) {
-            buildIcebergBucketToNodeMapping();
-        }
 
         // set scan ranges/locations for scan nodes
         for (ScanNode scanNode : scanNodes) {
