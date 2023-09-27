@@ -200,7 +200,10 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(Chunk* chunk, int32_t d
         _chunks[driver_sequence]->set_num_rows(0);
     }
 
-    _chunks[driver_sequence]->append_selective(*chunk, indexes, from, size);
+    {
+        SCOPED_TIMER(_parent->_shuffle_chunk_append_timer);
+        _chunks[driver_sequence]->append_selective(*chunk, indexes, from, size);
+    }
     return Status::OK();
 }
 
@@ -445,6 +448,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
 
     _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");
+    _shuffle_chunk_append_timer = ADD_TIMER(_unique_metrics, "ShuffleChunkAppendTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
     _pass_through_buffer_peak_mem_usage = _unique_metrics->AddHighWaterMarkCounter(
             "PassThroughBufferPeakMemoryUsage", TUnit::BYTES,
