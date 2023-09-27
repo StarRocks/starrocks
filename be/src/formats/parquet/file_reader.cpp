@@ -84,11 +84,12 @@ Status FileReader::_parse_footer() {
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
         RETURN_IF_ERROR(_file->read_at_fully(_file_size - footer_read_size, footer_buffer.data(), footer_read_size));
-        _scanner_ctx->stats->request_bytes_read += footer_read_size;
-        _scanner_ctx->stats->request_bytes_read_uncompressed += footer_read_size;
     }
 
     ASSIGN_OR_RETURN(uint32_t metadata_length, _parse_metadata_length(footer_buffer));
+
+    _scanner_ctx->stats->request_bytes_read += metadata_length + PARQUET_FOOTER_SIZE;
+    _scanner_ctx->stats->request_bytes_read_uncompressed += metadata_length + PARQUET_FOOTER_SIZE;
 
     if (footer_read_size < (metadata_length + PARQUET_FOOTER_SIZE)) {
         // footer_buffer's size is not enough to read the whole metadata, we need to re-read for larger size
@@ -97,8 +98,6 @@ Status FileReader::_parse_footer() {
         {
             SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
             RETURN_IF_ERROR(_file->read_at_fully(_file_size - re_read_size, footer_buffer.data(), re_read_size));
-            _scanner_ctx->stats->request_bytes_read += re_read_size;
-            _scanner_ctx->stats->request_bytes_read_uncompressed += re_read_size;
         }
     }
 
@@ -213,7 +212,9 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
                 return true;
             }
 
-            if (min_chunk->columns()[0]->equals(0, *max_chunk->columns()[0], 0)) {
+            // skip topn runtime filter, because it has taken effect on min/max filtering
+            // if row-group contains exactly one value(i.e. min_value = max_value), use bloom filter to test
+            if (!filter->always_true() && min_chunk->columns()[0]->equals(0, *max_chunk->columns()[0], 0)) {
                 ColumnPtr& chunk_part_column = min_chunk->columns()[0];
                 JoinRuntimeFilter::RunningContext ctx;
                 ctx.use_merged_selection = false;
@@ -518,7 +519,16 @@ Status FileReader::_init_group_readers() {
             auto row_group_reader =
                     std::make_shared<GroupReader>(_group_reader_param, i, _need_skip_rowids, row_group_first_row);
             _row_group_readers.emplace_back(row_group_reader);
-            _total_row_count += _file_metadata->t_metadata().row_groups[i].num_rows;
+            int64_t num_rows = _file_metadata->t_metadata().row_groups[i].num_rows;
+            // for iceberg v2 pos delete
+            if (_need_skip_rowids != nullptr && !_need_skip_rowids->empty()) {
+                auto start_str = _need_skip_rowids->lower_bound(row_group_first_row);
+                auto end_str = _need_skip_rowids->upper_bound(row_group_first_row + num_rows - 1);
+                for (; start_str != end_str; start_str++) {
+                    num_rows--;
+                }
+            }
+            _total_row_count += num_rows;
         } else {
             continue;
         }

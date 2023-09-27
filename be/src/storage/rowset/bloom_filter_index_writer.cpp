@@ -160,7 +160,7 @@ public:
         RETURN_IF_ERROR(bf_writer.init());
         for (auto& bf : _bfs) {
             Slice data(bf->data(), bf->size());
-            bf_writer.add(&data);
+            RETURN_IF_ERROR(bf_writer.add(&data));
         }
         RETURN_IF_ERROR(bf_writer.finish(meta->mutable_bloom_filter()));
         return Status::OK();

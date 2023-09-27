@@ -223,7 +223,7 @@ Status StreamLoadPipe::no_block_read(uint8_t* data, size_t* data_size, bool* eof
 Status StreamLoadPipe::finish() {
     if (_write_buf != nullptr) {
         _write_buf->flip();
-        _append(_write_buf);
+        RETURN_IF_ERROR(_append(_write_buf));
         _write_buf.reset();
     }
     {

@@ -161,7 +161,7 @@ void TransactionStreamLoadAction::handle(HttpRequest* req) {
 
     if (!ctx->status.ok()) {
         if (ctx->need_rollback) {
-            _exec_env->transaction_mgr()->_rollback_transaction(ctx);
+            (void)_exec_env->transaction_mgr()->_rollback_transaction(ctx);
         }
     }
 
@@ -170,7 +170,8 @@ void TransactionStreamLoadAction::handle(HttpRequest* req) {
     // For JSON, now the buffer contains a complete json.
     if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
         ctx->buffer->flip();
-        ctx->body_sink->append(std::move(ctx->buffer));
+        WARN_IF_ERROR(ctx->body_sink->append(std::move(ctx->buffer)),
+                      "append MessageBodySink failed when handle TransactionStreamLoad");
         ctx->buffer = nullptr;
     }
 
@@ -231,7 +232,7 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
     if (!st.ok()) {
         ctx->status = st;
         if (ctx->need_rollback) {
-            _exec_env->transaction_mgr()->_rollback_transaction(ctx);
+            (void)_exec_env->transaction_mgr()->_rollback_transaction(ctx);
         }
         auto resp = _exec_env->transaction_mgr()->_build_reply(TXN_LOAD, ctx);
         ctx->lock.unlock();

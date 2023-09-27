@@ -66,7 +66,7 @@ jobs:
         id: info
         run: |
           echo ${{ steps.pr_details.outputs.PR_NUMBER }}
-          echo ${{ steps.pr_details.outputs.base_ref }}
+          echo ${{ steps.pr_details.outputs.BASE_REF }}
 
   FE-REPORT:
     runs-on: [ self-hosted, quick ]
@@ -109,7 +109,7 @@ jobs:
           fi
 
       - name: Publish UT Report
-        uses: mikepenz/action-junit-report@v4
+        uses: mikepenz/action-junit-report@v3
         id: publish_report
         if: steps.download-ut-xml.outputs.size != '0'
         env:

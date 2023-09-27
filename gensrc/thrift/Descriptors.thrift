@@ -152,14 +152,13 @@ enum TSchemaTableType {
     SCH_BE_LOGS,
     SCH_BE_BVARS,
     SCH_BE_CLOUD_NATIVE_COMPACTIONS,
+    STARROCKS_ROLE_EDGES,
+    STARROCKS_GRANT_TO_ROLES,
+    STARROCKS_GRANT_TO_USERS,
     SCH_ROUTINE_LOAD_JOBS,
     SCH_STREAM_LOADS,
     SCH_PIPE_FILES,
-    SCH_PIPES,
-
-    STARROCKS_ROLE_EDGES,
-    STARROCKS_GRANT_TO_ROLES,
-    STARROCKS_GRANT_TO_USERS
+    SCH_PIPES
 }
 
 enum THdfsCompression {
@@ -424,6 +423,9 @@ struct TIcebergTable {
 
     // partition column names
     4: optional list<string> partition_column_names
+
+    // Map from partition id to partition metadata.
+    5: optional map<i64, THdfsPartition> partitions
 }
 
 struct THudiTable {
