@@ -1100,8 +1100,9 @@ public class CoordinatorPreprocessor {
                     selector.computeScanRangeAssignment();
                 } else {
                     IcebergBucketBackendSelector selector =
-                            new IcebergBucketBackendSelector(scanNode, assignment, idToBackend, addressToBackendID, usedBackendIDs,
-                                    fragmentIdBucketSeqToScanRangeMap, fragmentIdToSeqToAddressMap, fragmentIdToBucketNumMap);
+                            new IcebergBucketBackendSelector(scanNode, assignment, idToBackend, addressToBackendID,
+                                    usedBackendIDs, fragmentIdBucketSeqToScanRangeMap, fragmentIdToSeqToAddressMap,
+                                    fragmentIdToBucketNumMap, rightOrFullBucketShuffleFragmentIds);
                     selector.computeScanRangeAssignment();
                 }
             } else {
@@ -1356,7 +1357,7 @@ public class CoordinatorPreprocessor {
         return new TNetworkAddress(computeNode.getHost(), computeNode.getBeRpcPort());
     }
 
-    private String backendInfosString(boolean chooseComputeNode) {
+    public String backendInfosString(boolean chooseComputeNode) {
         if (chooseComputeNode) {
             String infoStr = "compute node: ";
             for (Map.Entry<Long, ComputeNode> entry : this.idToComputeNode.entrySet()) {

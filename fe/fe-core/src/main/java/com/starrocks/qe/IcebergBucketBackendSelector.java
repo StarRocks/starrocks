@@ -14,9 +14,14 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.Reference;
+import com.starrocks.common.UserException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ScanNode;
@@ -32,54 +37,55 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.qe.CoordinatorPreprocessor.BucketSeqToScanRange;
+
 public class IcebergBucketBackendSelector implements BackendSelector {
     public static final Logger LOG = LogManager.getLogger(IcebergBucketBackendSelector.class);
-    Map<ComputeNode, Long> assignedScansPerComputeNode = Maps.newHashMap();
+    Map<String, Long> assignedScansPerComputeNode = Maps.newHashMap();
     Map<Integer, Long> assignedScansPerBucket = Maps.newHashMap();
 
     private final ScanNode scanNode;
+    private final Set<Long> usedBackendIDs;
     private final FragmentScanRangeAssignment assignment;
     private final ImmutableMap<Long, ComputeNode> idToBackend;
 
-    private final Set<Long> usedBackendIDs;
     private final Map<TNetworkAddress, Long> addressToBackendId;
 
     private final Map<PlanFragmentId, CoordinatorPreprocessor.BucketSeqToScanRange> fragmentIdBucketSeqToScanRangeMap;
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap;
     private final Map<PlanFragmentId, Integer> fragmentIdToBucketNumMap;
 
+    private final Set<Integer> rightOrFullBucketShuffleFragmentIds;
 
     public IcebergBucketBackendSelector(ScanNode scanNode,
                                         FragmentScanRangeAssignment assignment,
                                         ImmutableMap<Long, ComputeNode> idToBackend,
                                         Map<TNetworkAddress, Long> addressToBackendId,
                                         Set<Long> usedBackendIDs,
-                                        Map<PlanFragmentId, CoordinatorPreprocessor.BucketSeqToScanRange> fragmentIdBucketS,
+                                        Map<PlanFragmentId, BucketSeqToScanRange> fragmentIdBucketSeqToScanRangeMap,
                                         Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap,
-                                        Map<PlanFragmentId, Integer> fragmentIdToBucketNumMap) {
+                                        Map<PlanFragmentId, Integer> fragmentIdToBucketNumMap,
+                                        Set<Integer> rightOrFullBucketShuffleFragmentIds) {
         this.scanNode = scanNode;
         this.assignment = assignment;
         this.idToBackend = idToBackend;
         this.usedBackendIDs = usedBackendIDs;
         this.addressToBackendId = addressToBackendId;
-        this.fragmentIdBucketSeqToScanRangeMap = fragmentIdBucketS;
+        this.fragmentIdBucketSeqToScanRangeMap = fragmentIdBucketSeqToScanRangeMap;
         this.fragmentIdToSeqToAddressMap = fragmentIdToSeqToAddressMap;
         this.fragmentIdToBucketNumMap = fragmentIdToBucketNumMap;
+        this.rightOrFullBucketShuffleFragmentIds = rightOrFullBucketShuffleFragmentIds;
     }
 
     @Override
-    public void computeScanRangeAssignment() {
+    public void computeScanRangeAssignment() throws UserException {
         PlanFragmentId fragmentId = scanNode.getFragmentId();
+        IcebergScanNode icebergScanNode = (IcebergScanNode) scanNode;
 
         if (!fragmentIdToSeqToAddressMap.containsKey(fragmentId)) {
-            int res = 1;
-            for (Integer num : ((IcebergScanNode) scanNode).getBucketNums()) {
-                res = res * num;
-            }
-
             fragmentIdToSeqToAddressMap.put(fragmentId, Maps.newHashMap());
             fragmentIdBucketSeqToScanRangeMap.put(fragmentId, new CoordinatorPreprocessor.BucketSeqToScanRange());
-            fragmentIdToBucketNumMap.put(fragmentId, res);
+            fragmentIdToBucketNumMap.put(fragmentId, icebergScanNode.getTransformedBucketSize());
         }
 
         Map<Integer, TNetworkAddress> bucketSeqToAddress = fragmentIdToSeqToAddressMap.get(fragmentId);
@@ -90,35 +96,64 @@ public class IcebergBucketBackendSelector implements BackendSelector {
             if (!computeNode.isAlive() || SimpleScheduler.isInBlacklist(computeNode.getId())) {
                 continue;
             }
-            assignedScansPerComputeNode.put(computeNode, 0L);
+            assignedScansPerComputeNode.put(computeNode.getAddress().getHostname(), 0L);
         }
 
-        for (Integer bucketId : ((IcebergScanNode) scanNode).getBucketSeq2locations().keySet()) {
+        ArrayListMultimap<Integer, TScanRangeLocations> bucketSeqToScanRangeLocations = icebergScanNode.getBucketSeqToLocations();
+
+        for (Integer bucketId : bucketSeqToScanRangeLocations.keySet()) {
             assignedScansPerBucket.put(bucketId, 0L);
         }
 
-        int i = 0;
-        for (Integer bucketSeq : ((IcebergScanNode) scanNode).getBucketSeq2locations().keySet()) {
-            //fill scanRangeParamsList
-            List<TScanRangeLocations> tScanRangeLocations = ((IcebergScanNode) scanNode).getBucketSeq2locations().get(bucketSeq);
+        int pos = 0;
+        for (Integer bucketSeq : bucketSeqToScanRangeLocations.keySet()) {
+            List<TScanRangeLocations> scanRangeLocations = bucketSeqToScanRangeLocations.get(bucketSeq);
 
             ComputeNode node;
             if (!bucketSeqToAddress.containsKey(bucketSeq)) {
-                node = idToBackend.values().asList().get(i++ % idToBackend.size());
-                bucketSeqToAddress.put(bucketSeq, node.getAddress());
+                node = idToBackend.values().asList().get((pos++) % idToBackend.size());
             } else {
-                node = idToBackend.get(addressToBackendId.get(bucketSeqToAddress.get(bucketSeq)));
+                TNetworkAddress address = bucketSeqToAddress.get(bucketSeq);
+                Long beId = addressToBackendId.get(address);
+                if (beId == null) {
+                    throw new StarRocksConnectorException("Can't find be id with address : %s", address.hostname);
+                }
+                node = idToBackend.get(beId);
+                if (node == null) {
+                    throw new StarRocksConnectorException("Can't find be with id :%d", beId);
+                }
             }
 
-            for (TScanRangeLocations scanRangeLocations : tScanRangeLocations) {
-                recordScanRangeAssignment(node, scanRangeLocations, bucketSeq, bucketSeqToScanRange, bucketSeqToAddress);
-                recordScanRangeStatistic();
+            for (TScanRangeLocations tScanRangeLocations : scanRangeLocations) {
+                recordScanRangeAssignment(node, tScanRangeLocations, bucketSeq, bucketSeqToScanRange, bucketSeqToAddress);
+                recordScanRangeStatistic(bucketSeqToAddress);
+            }
+        }
+
+        if (rightOrFullBucketShuffleFragmentIds.contains(fragmentId.asInt())) {
+            int bucketNum = fragmentIdToBucketNumMap.get(fragmentId);
+
+            for (int bucketSeq = 0; bucketSeq < bucketNum; ++bucketSeq) {
+                if (!bucketSeqToAddress.containsKey(bucketSeq)) {
+                    Reference<Long> backendIdRef = new Reference<>();
+                    TNetworkAddress execHostport = SimpleScheduler.getBackendHost(idToBackend, backendIdRef);
+                    if (execHostport == null) {
+                        throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+                    }
+                    usedBackendIDs.add(backendIdRef.getRef());
+                    addressToBackendId.put(execHostport, backendIdRef.getRef());
+                    bucketSeqToAddress.put(bucketSeq, execHostport);
+                }
+                if (!bucketSeqToScanRange.containsKey(bucketSeq)) {
+                    bucketSeqToScanRange.put(bucketSeq, Maps.newHashMap());
+                    bucketSeqToScanRange.get(bucketSeq).put(scanNode.getId().asInt(), Lists.newArrayList());
+                }
             }
         }
 
         for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> entry : bucketSeqToScanRange.entrySet()) {
             Integer bucketSeq = entry.getKey();
-            // fill FragmentScanRangeAssignment only when there are scan id in the bucket
+
             if (entry.getValue().containsKey(scanNode.getId().asInt())) {
                 Map<Integer, List<TScanRangeParams>> scanRanges =
                         assignment.computeIfAbsent(bucketSeqToAddress.get(bucketSeq), k -> Maps.newHashMap());
@@ -132,43 +167,49 @@ public class IcebergBucketBackendSelector implements BackendSelector {
     private void recordScanRangeAssignment(ComputeNode node, TScanRangeLocations scanRangeLocations, int bucketId,
                                            CoordinatorPreprocessor.BucketSeqToScanRange bucketSeqToScanRange,
                                            Map<Integer, TNetworkAddress> bucketSeqToAddress) {
-        TNetworkAddress address = new TNetworkAddress(node.getHost(), node.getBePort());
+        TNetworkAddress address = node.getAddress();
 
         usedBackendIDs.add(node.getId());
         addressToBackendId.put(address, node.getId());
-        // update statistic
-        long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
-        assignedScansPerComputeNode.put(node, assignedScansPerComputeNode.get(node) + addedScans);
-        assignedScansPerBucket.put(bucketId, assignedScansPerBucket.get(bucketId) + addedScans);
+
         // add in assignment
         Map<Integer, List<TScanRangeParams>> scanRanges =
                 bucketSeqToScanRange.computeIfAbsent(bucketId, k -> Maps.newHashMap());
-
         List<TScanRangeParams> scanRangeParamsList =
                 scanRanges.computeIfAbsent(scanNode.getId().asInt(), k -> Lists.newArrayList());
+
         // add scan range params
         TScanRangeParams scanRangeParams = new TScanRangeParams();
         scanRangeParams.scan_range = scanRangeLocations.scan_range;
         scanRangeParamsList.add(scanRangeParams);
 
+        // fill bucket id to address
         bucketSeqToAddress.put(bucketId, address);
+
+        // update statistic
+        long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
+        assignedScansPerComputeNode.put(address.hostname, assignedScansPerComputeNode.get(address.hostname) + addedScans);
+        assignedScansPerBucket.put(bucketId, assignedScansPerBucket.get(bucketId) + addedScans);
     }
 
-    private void recordScanRangeStatistic() {
+    private void recordScanRangeStatistic(Map<Integer, TNetworkAddress> bucketSeqToAddr) {
         // record scan range size for each backend
         StringBuilder sb = new StringBuilder();
-        for (Map.Entry<ComputeNode, Long> entry : assignedScansPerComputeNode.entrySet()) {
-            sb.append(entry.getKey().getAddress().hostname).append(":").append(entry.getValue()).append(",");
+        for (Map.Entry<String, Long> entry : assignedScansPerComputeNode.entrySet()) {
+            sb.append(entry.getKey()).append(" : ").append(entry.getValue()).append(",");
         }
         PlannerProfile.addCustomProperties(scanNode.getTableName() + " node_scan_range_bytes", sb.toString());
 
         sb = new StringBuilder();
         for (Map.Entry<Integer, Long> entry : assignedScansPerBucket.entrySet()) {
-            sb.append(entry.getKey()).append(":").append(entry.getValue()).append(",");
+            sb.append(entry.getKey()).append(" : ").append(entry.getValue()).append(",");
         }
-
         PlannerProfile.addCustomProperties(scanNode.getTableName() + " bucket_scan_range_bytes", sb.toString());
 
+        sb = new StringBuilder();
+        for (Map.Entry<Integer, TNetworkAddress> entry : bucketSeqToAddr.entrySet()) {
+            sb.append(entry.getKey()).append(" : ").append(entry.getValue().hostname).append(",");
+        }
         PlannerProfile.addCustomProperties(scanNode.getTableName() + " bucket_id_to_be_addr", sb.toString());
     }
 }

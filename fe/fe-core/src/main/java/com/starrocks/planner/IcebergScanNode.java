@@ -79,6 +79,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -102,8 +103,6 @@ public class IcebergScanNode extends ScanNode {
 
     private final HashMultimap<String, Long> hostToBeId = HashMultimap.create();
 
-    private Map<String, Integer> fileToBucketId = new HashMap<>();
-
     private long totalBytes = 0;
 
     private boolean isFinalized = false;
@@ -111,7 +110,7 @@ public class IcebergScanNode extends ScanNode {
 
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
-    public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
+    private final ArrayListMultimap<Integer, TScanRangeLocations> bucketSeqToLocations = ArrayListMultimap.create();
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -119,16 +118,12 @@ public class IcebergScanNode extends ScanNode {
         setupCloudCredential();
     }
 
-    public Map<String, Integer> getFileToBucketId() {
-        return fileToBucketId;
-    }
-
     public IcebergTable getSrIcebergTable() {
         return srIcebergTable;
     }
 
-    public ArrayListMultimap<Integer, TScanRangeLocations> getBucketSeq2locations() {
-        return bucketSeq2locations;
+    public ArrayListMultimap<Integer, TScanRangeLocations> getBucketSeqToLocations() {
+        return bucketSeqToLocations;
     }
 
     private void setupCloudCredential() {
@@ -152,10 +147,6 @@ public class IcebergScanNode extends ScanNode {
         }
     }
 
-    public List<Integer> getBucketNums() {
-        return srIcebergTable.getBucketProperties().stream().map(IcebergTable.BucketProperty::getBucketNum).collect(Collectors.toList());
-    }
-
     @Override
     public void init(Analyzer analyzer) throws UserException {
         super.init(analyzer);
@@ -176,7 +167,12 @@ public class IcebergScanNode extends ScanNode {
         }
     }
 
-
+    public int getTransformedBucketSize() {
+        List<Integer> bucketNums = srIcebergTable.getBucketProperties().stream()
+                .map(IcebergTable.BucketProperty::getBucketNum)
+                .collect(Collectors.toList());
+        return bucketNums.stream().reduce((x, y) -> x * y + y).orElse(0);
+    }
 
     public void preProcessIcebergPredicate(ScalarOperator predicate) {
         this.predicate = predicate;
@@ -360,7 +356,7 @@ public class IcebergScanNode extends ScanNode {
             scanRangeLocations.addToLocations(scanRangeLocation);
 
             if (srIcebergTable.hasBucketProperties()) {
-                bucketSeq2locations.put(transformedBucketId, scanRangeLocations);
+                bucketSeqToLocations.put(transformedBucketId, scanRangeLocations);
             }
 
             result.add(scanRangeLocations);
