@@ -79,6 +79,18 @@
 
 namespace starrocks {
 
+namespace {
+static void wait_for_notify_small_steps(int32_t timeout_sec, bool from_report_tablet_thread,
+                                        const std::function<bool()>& stop_waiting) {
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeout_sec);
+    bool notified = false;
+    do {
+        // take 1 second per step
+        notified = StorageEngine::instance()->wait_for_report_notify(1, from_report_tablet_thread);
+    } while (!notified && std::chrono::steady_clock::now() < deadline && !stop_waiting());
+}
+} // namespace
+
 const size_t PUBLISH_VERSION_BATCH_SIZE = 10;
 
 std::atomic<int64_t> g_report_version(time(nullptr) * 10000);
@@ -308,7 +320,8 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
                                         GlobalEnv::GetInstance()->load_mem_tracker());
-        StorageEngine::instance()->execute_task(&engine_task);
+        // EngineBatchLoadTask execute always return OK
+        (void)(StorageEngine::instance()->execute_task(&engine_task));
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
             // remove the task and not return to fe
@@ -420,10 +433,10 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         LOG(INFO) << "get delete push task. signature: " << agent_task_req->signature << " priority: " << priority
                   << " push_type: " << push_req.push_type;
         std::vector<TTabletInfo> tablet_infos;
-
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
                                         GlobalEnv::GetInstance()->load_mem_tracker());
-        StorageEngine::instance()->execute_task(&engine_task);
+        // EngineBatchLoadTask execute always return OK
+        (void)(StorageEngine::instance()->execute_task(&engine_task));
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
             // remove the task and not return to fe
@@ -659,7 +672,8 @@ void* ReportDiskStateTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
 
         // wait for notifying until timeout
-        StorageEngine::instance()->wait_for_report_notify(config::report_disk_state_interval_seconds, false);
+        wait_for_notify_small_steps(config::report_disk_state_interval_seconds, false,
+                                    [&] { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;
@@ -687,7 +701,8 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         if (!st_report.ok()) {
             LOG(WARNING) << "Fail to report all tablets info, err=" << st_report.to_string();
             // wait for notifying until timeout
-            StorageEngine::instance()->wait_for_report_notify(config::report_tablet_interval_seconds, true);
+            wait_for_notify_small_steps(config::report_tablet_interval_seconds, true,
+                                        [&] { return worker_pool_this->_stopped.load(); });
             continue;
         }
         int64_t max_compaction_score =
@@ -706,7 +721,8 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
 
         // wait for notifying until timeout
-        StorageEngine::instance()->wait_for_report_notify(config::report_tablet_interval_seconds, true);
+        wait_for_notify_small_steps(config::report_tablet_interval_seconds, true,
+                                    [&] { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;

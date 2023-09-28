@@ -15,8 +15,10 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -118,6 +120,11 @@ public class ScalarOperatorToIcebergExpr {
 
     private static class IcebergExprVisitor extends ScalarOperatorVisitor<Expression, IcebergContext> {
 
+        private static Type.TypeID getResultTypeID(String columnName, IcebergContext context) {
+            Preconditions.checkNotNull(context);
+            return context.getSchema().fieldType(columnName).typeId();
+        }
+
         @Override
         public Expression visitCompoundPredicate(CompoundPredicateOperator operator, IcebergContext context) {
             CompoundPredicateOperator.CompoundType op = operator.getCompoundType();
@@ -125,14 +132,14 @@ public class ScalarOperatorToIcebergExpr {
                 if (operator.getChild(0) instanceof LikePredicateOperator) {
                     return null;
                 }
-                Expression expression = operator.getChild(0).accept(this, null);
+                Expression expression = operator.getChild(0).accept(this, context);
 
                 if (expression != null) {
                     return not(expression);
                 }
             } else {
-                Expression left = operator.getChild(0).accept(this, null);
-                Expression right = operator.getChild(1).accept(this, null);
+                Expression left = operator.getChild(0).accept(this, context);
+                Expression right = operator.getChild(1).accept(this, context);
                 if (left != null && right != null) {
                     return (op == CompoundPredicateOperator.CompoundType.OR) ? or(left, right) : and(left, right);
                 }
@@ -160,13 +167,12 @@ public class ScalarOperatorToIcebergExpr {
                 return null;
             }
 
-            Object literalValue = getLiteralValue(operator.getChild(1));
-            if (context != null && context.getSchema().fieldType(columnName).typeId() == Type.TypeID.BOOLEAN) {
-                literalValue = convertBoolLiteralValue(literalValue);
-            }
-
+            Object literalValue = getLiteralValue(operator.getChild(1), getResultTypeID(columnName, context));
             if (literalValue == null) {
                 return null;
+            }
+            if (context != null && context.getSchema().fieldType(columnName).typeId() == Type.TypeID.BOOLEAN) {
+                literalValue = convertBoolLiteralValue(literalValue);
             }
             switch (operator.getBinaryType()) {
                 case LT:
@@ -195,7 +201,8 @@ public class ScalarOperatorToIcebergExpr {
 
             List<Object> literalValues = operator.getListChildren().stream()
                     .map(childoperator -> {
-                        Object literalValue = ScalarOperatorToIcebergExpr.getLiteralValue(childoperator);
+                        Object literalValue = ScalarOperatorToIcebergExpr.getLiteralValue(childoperator,
+                                getResultTypeID(columnName, context));
                         if (context != null && context.getSchema().fieldType(columnName).typeId() == Type.TypeID.BOOLEAN) {
                             literalValue = convertBoolLiteralValue(literalValue);
                         }
@@ -218,7 +225,10 @@ public class ScalarOperatorToIcebergExpr {
 
             if (operator.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
                 if (operator.getChild(1).getType().isStringType()) {
-                    String literal = (String) getLiteralValue(operator.getChild(1));
+                    String literal = (String) getLiteralValue(operator.getChild(1), getResultTypeID(columnName, context));
+                    if (literal == null) {
+                        return null;
+                    }
                     if (literal.indexOf("%") == literal.length() - 1) {
                         return startsWith(columnName, literal.substring(0, literal.length() - 1));
                     }
@@ -233,12 +243,12 @@ public class ScalarOperatorToIcebergExpr {
         }
     }
 
-    private static Object getLiteralValue(ScalarOperator operator) {
+    private static Object getLiteralValue(ScalarOperator operator, Type.TypeID resultTypeID) {
         if (operator == null) {
             return null;
         }
 
-        return operator.accept(new ExtractLiteralValue(), null);
+        return operator.accept(new ExtractLiteralValue(), resultTypeID);
     }
 
     private static Object convertBoolLiteralValue(Object literalValue) {
@@ -249,14 +259,92 @@ public class ScalarOperatorToIcebergExpr {
         }
     }
 
-    private static class ExtractLiteralValue extends ScalarOperatorVisitor<Object, Void> {
+    private static class ExtractLiteralValue extends ScalarOperatorVisitor<Object, Type.TypeID> {
+        private boolean needCast(PrimitiveType sourceType, Type.TypeID dstTypeID) {
+            switch (sourceType) {
+                case BOOLEAN:
+                    return dstTypeID != Type.TypeID.BOOLEAN;
+                case TINYINT:
+                case SMALLINT:
+                case INT:
+                    return dstTypeID != Type.TypeID.INTEGER;
+                case BIGINT:
+                    return dstTypeID != Type.TypeID.LONG;
+                case FLOAT:
+                    return dstTypeID != Type.TypeID.FLOAT;
+                case DOUBLE:
+                    return dstTypeID != Type.TypeID.DOUBLE;
+                case DECIMALV2:
+                case DECIMAL32:
+                case DECIMAL64:
+                case DECIMAL128:
+                    return dstTypeID != Type.TypeID.DECIMAL;
+                case HLL:
+                case VARCHAR:
+                case CHAR:
+                    return dstTypeID != Type.TypeID.STRING;
+                case DATE:
+                    return dstTypeID != Type.TypeID.DATE;
+                case DATETIME:
+                    return dstTypeID != Type.TypeID.TIMESTAMP;
+                default:
+                    return true;
+            }
+        }
+
+        private ConstantOperator tryCastToResultType(ConstantOperator operator, Type.TypeID resultTypeID) {
+            try {
+                switch (resultTypeID) {
+                    case BOOLEAN:
+                        return operator.castTo(com.starrocks.catalog.Type.BOOLEAN);
+                    case DATE:
+                        return operator.castTo(com.starrocks.catalog.Type.DATE);
+                    case TIMESTAMP:
+                        return operator.castTo(com.starrocks.catalog.Type.DATETIME);
+                    case STRING:
+                    case UUID:
+                        // num and string has different comparator
+                        if (operator.getType().isNumericType()) {
+                            return null;
+                        }
+                        return operator.castTo(com.starrocks.catalog.Type.VARCHAR);
+                    case BINARY:
+                        return operator.castTo(com.starrocks.catalog.Type.VARBINARY);
+                    // num usually don't need cast, and num and string has different comparator
+                    // cast is dangerous.
+                    case INTEGER:
+                    case LONG:
+                    // usually not used as partition column, don't do much work
+                    case DECIMAL:
+                    case FLOAT:
+                    case DOUBLE:
+                    case STRUCT:
+                    case LIST:
+                    case MAP:
+                    // not supported
+                    case FIXED:
+                    case TIME:
+                        return null;
+                }
+            } catch (Exception e) {
+                return null;
+            }
+            return operator;
+        }
+
         @Override
-        public Object visit(ScalarOperator scalarOperator, Void context) {
+        public Object visit(ScalarOperator scalarOperator, Type.TypeID context) {
             return null;
         }
 
         @Override
-        public Object visitConstant(ConstantOperator operator, Void context) {
+        public Object visitConstant(ConstantOperator operator, Type.TypeID context) {
+            if (context != null && needCast(operator.getType().getPrimitiveType(), context)) {
+                operator = tryCastToResultType(operator, context);
+            }
+            if (operator == null) {
+                return null;
+            }
             switch (operator.getType().getPrimitiveType()) {
                 case BOOLEAN:
                     return operator.getBoolean();

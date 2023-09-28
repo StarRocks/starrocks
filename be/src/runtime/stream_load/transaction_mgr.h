@@ -188,10 +188,10 @@ public:
                     // 1. finish stream pipe & wait it done
                     if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
                         ctx->buffer->flip();
-                        ctx->body_sink->append(std::move(ctx->buffer));
+                        RETURN_IF_ERROR(ctx->body_sink->append(std::move(ctx->buffer)));
                         ctx->buffer = nullptr;
                     }
-                    ctx->body_sink->finish();
+                    RETURN_IF_ERROR(ctx->body_sink->finish());
                 } else {
                     std::string error_msg = fmt::format("stream load {} channel_id {}'s pipe doesn't exist", label,
                                                         std::to_string(channel_id));
