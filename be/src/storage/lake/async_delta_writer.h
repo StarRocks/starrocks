@@ -34,6 +34,7 @@ class Chunk;
 namespace starrocks::lake {
 
 class AsyncDeltaWriterImpl;
+class DeltaWriter;
 class TabletManager;
 
 // AsyncDeltaWriter is a wrapper on DeltaWriter to support non-blocking async write.
@@ -96,17 +97,13 @@ public:
     [[nodiscard]] Status check_immutable();
 
 private:
-    // |tablet_manager|、|slots| and |mem_tracker| must outlive the AsyncDeltaWriter
-    AsyncDeltaWriter(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                     const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
-                     bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
-                     MemTracker* mem_tracker);
-
     AsyncDeltaWriterImpl* _impl;
 };
 
 class AsyncDeltaWriterBuilder {
 public:
+    using AsyncDeltaWriterPtr = std::unique_ptr<AsyncDeltaWriter>;
+
     AsyncDeltaWriterBuilder() = default;
 
     ~AsyncDeltaWriterBuilder() = default;
@@ -163,11 +160,7 @@ public:
         return *this;
     }
 
-    std::unique_ptr<AsyncDeltaWriter> build() {
-        return std::unique_ptr<AsyncDeltaWriter>(
-                new AsyncDeltaWriter(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
-                                     _miss_auto_increment_column, _table_id, _immutable_tablet_size, _mem_tracker));
-    }
+    StatusOr<AsyncDeltaWriterPtr> build();
 
 private:
     TabletManager* _tablet_mgr{nullptr};

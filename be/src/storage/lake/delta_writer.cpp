@@ -15,6 +15,7 @@
 #include "storage/lake/delta_writer.h"
 
 #include <bthread/bthread.h>
+#include <fmt/format.h>
 
 #include <memory>
 #include <utility>
@@ -614,14 +615,6 @@ void DeltaWriter::TEST_set_miss_auto_increment_column() {
     _impl->TEST_set_miss_auto_increment_column();
 }
 
-DeltaWriter::DeltaWriter(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                         const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
-                         bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
-                         MemTracker* mem_tracker, int64_t max_buffer_size)
-        : _impl(new DeltaWriterImpl(tablet_mgr, tablet_id, txn_id, partition_id, slots, merge_condition,
-                                    miss_auto_increment_column, table_id, immutable_tablet_size, mem_tracker,
-                                    max_buffer_size)) {}
-
 ThreadPool* DeltaWriter::io_threads() {
     if (UNLIKELY(StorageEngine::instance() == nullptr)) {
         return nullptr;
@@ -630,6 +623,31 @@ ThreadPool* DeltaWriter::io_threads() {
         return nullptr;
     }
     return StorageEngine::instance()->memtable_flush_executor()->get_thread_pool();
+}
+
+StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
+    if (UNLIKELY(_tablet_mgr == nullptr)) {
+        return Status::InvalidArgument("tablet_manager not set");
+    }
+    if (UNLIKELY(_tablet_id == 0)) {
+        return Status::InvalidArgument("tablet_id not set");
+    }
+    if (UNLIKELY(_txn_id == 0)) {
+        return Status::InvalidArgument("txn_id not set");
+    }
+    if (UNLIKELY(_mem_tracker == nullptr)) {
+        return Status::InvalidArgument("mem_tracker not set");
+    }
+    if (UNLIKELY(_max_buffer_size < 0)) {
+        return Status::InvalidArgument(fmt::format("invalid max_buffer_size: {}", _max_buffer_size));
+    }
+    if (UNLIKELY(_miss_auto_increment_column && _table_id == 0)) {
+        return Status::InvalidArgument("must set table_id when miss_auto_increment_column is true");
+    }
+    auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
+                                    _miss_auto_increment_column, _table_id, _immutable_tablet_size, _mem_tracker,
+                                    _max_buffer_size);
+    return std::make_unique<DeltaWriter>(impl);
 }
 
 } // namespace starrocks::lake

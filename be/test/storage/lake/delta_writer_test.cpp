@@ -115,18 +115,63 @@ protected:
     int64_t _partition_id = 456;
 };
 
+TEST_F(LakeDeltaWriterTest, test_build) {
+    {
+        auto res = DeltaWriterBuilder().build();
+        ASSERT_TRUE(!res.ok());
+        ASSERT_EQ("tablet_manager not set", res.status().message());
+    }
+    {
+        auto res = DeltaWriterBuilder().set_tablet_manager(_tablet_mgr.get()).build();
+        ASSERT_TRUE(!res.ok());
+        ASSERT_EQ("tablet_id not set", res.status().message());
+    }
+    {
+        auto res = DeltaWriterBuilder().set_tablet_manager(_tablet_mgr.get()).set_tablet_id(10).build();
+        ASSERT_TRUE(!res.ok());
+        ASSERT_EQ("txn_id not set", res.status().message());
+    }
+    {
+        auto res = DeltaWriterBuilder().set_tablet_manager(_tablet_mgr.get()).set_tablet_id(10).set_txn_id(11).build();
+        ASSERT_TRUE(!res.ok());
+        ASSERT_EQ("mem_tracker not set", res.status().message());
+    }
+    {
+        auto res = DeltaWriterBuilder()
+                           .set_tablet_manager(_tablet_mgr.get())
+                           .set_tablet_id(10)
+                           .set_txn_id(11)
+                           .set_mem_tracker(_mem_tracker.get())
+                           .set_max_buffer_size(-1)
+                           .build();
+        ASSERT_TRUE(!res.ok());
+        ASSERT_EQ("invalid max_buffer_size: -1", res.status().message());
+    }
+    {
+        auto res = DeltaWriterBuilder()
+                           .set_tablet_manager(_tablet_mgr.get())
+                           .set_tablet_id(10)
+                           .set_txn_id(11)
+                           .set_mem_tracker(_mem_tracker.get())
+                           .set_miss_auto_increment_column(true)
+                           .build();
+        ASSERT_TRUE(!res.ok());
+        ASSERT_EQ("must set table_id when miss_auto_increment_column is true", res.status().message());
+    }
+}
+
 TEST_F(LakeDeltaWriterTest, test_open) {
     // Invalid tablet id
     {
         auto txn_id = next_id();
         auto tablet_id = -1;
-        auto delta_writer = DeltaWriterBuilder()
-                                    .set_tablet_manager(_tablet_mgr.get())
-                                    .set_tablet_id(tablet_id)
-                                    .set_txn_id(txn_id)
-                                    .set_partition_id(_partition_id)
-                                    .set_mem_tracker(_mem_tracker.get())
-                                    .build();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         delta_writer->close();
     }
@@ -144,13 +189,13 @@ TEST_F(LakeDeltaWriterTest, test_write) {
     // Create and open DeltaWriter
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    auto delta_writer = DeltaWriterBuilder()
-                                .set_tablet_manager(_tablet_mgr.get())
-                                .set_tablet_id(tablet_id)
-                                .set_txn_id(txn_id)
-                                .set_partition_id(_partition_id)
-                                .set_mem_tracker(_mem_tracker.get())
-                                .build();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .build());
     ASSERT_OK(delta_writer->open());
 
     // Write and flush
@@ -222,13 +267,13 @@ TEST_F(LakeDeltaWriterTest, test_close) {
     // Create and open DeltaWriter
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    auto delta_writer = DeltaWriterBuilder()
-                                .set_tablet_manager(_tablet_mgr.get())
-                                .set_tablet_id(tablet_id)
-                                .set_txn_id(txn_id)
-                                .set_partition_id(_partition_id)
-                                .set_mem_tracker(_mem_tracker.get())
-                                .build();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .build());
     ASSERT_OK(delta_writer->open());
 
     // write()
@@ -260,13 +305,13 @@ TEST_F(LakeDeltaWriterTest, test_finish_without_write_txn_log) {
     // Create and open DeltaWriter
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    auto delta_writer = DeltaWriterBuilder()
-                                .set_tablet_manager(_tablet_mgr.get())
-                                .set_tablet_id(tablet_id)
-                                .set_txn_id(txn_id)
-                                .set_partition_id(_partition_id)
-                                .set_mem_tracker(_mem_tracker.get())
-                                .build();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .build());
     ASSERT_OK(delta_writer->open());
 
     // write()
@@ -291,13 +336,13 @@ TEST_F(LakeDeltaWriterTest, test_finish_without_write_txn_log) {
 TEST_F(LakeDeltaWriterTest, test_empty_write) {
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    auto delta_writer = DeltaWriterBuilder()
-                                .set_tablet_manager(_tablet_mgr.get())
-                                .set_tablet_id(tablet_id)
-                                .set_txn_id(txn_id)
-                                .set_partition_id(_partition_id)
-                                .set_mem_tracker(_mem_tracker.get())
-                                .build();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .build());
     ASSERT_OK(delta_writer->open());
     ASSERT_OK(delta_writer->finish());
     delta_writer->close();
@@ -319,13 +364,13 @@ TEST_F(LakeDeltaWriterTest, test_empty_write) {
 
 TEST_F(LakeDeltaWriterTest, test_negative_txn_id) {
     auto tablet_id = _tablet_metadata->id();
-    auto delta_writer = DeltaWriterBuilder()
-                                .set_tablet_manager(_tablet_mgr.get())
-                                .set_tablet_id(tablet_id)
-                                .set_txn_id(-1)
-                                .set_partition_id(_partition_id)
-                                .set_mem_tracker(_mem_tracker.get())
-                                .build();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(-1)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .build());
     ASSERT_OK(delta_writer->open());
     ASSERT_ERROR(delta_writer->finish());
     delta_writer->close();
@@ -343,13 +388,13 @@ TEST_F(LakeDeltaWriterTest, test_memory_limit_unreached) {
     // Create and open DeltaWriter
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    auto delta_writer = DeltaWriterBuilder()
-                                .set_tablet_manager(_tablet_mgr.get())
-                                .set_tablet_id(tablet_id)
-                                .set_txn_id(txn_id)
-                                .set_partition_id(_partition_id)
-                                .set_mem_tracker(_mem_tracker.get())
-                                .build();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .build());
     ASSERT_OK(delta_writer->open());
 
     // Write three times
@@ -392,13 +437,13 @@ TEST_F(LakeDeltaWriterTest, test_reached_memory_limit) {
     // Create and open DeltaWriter
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    auto delta_writer = DeltaWriterBuilder()
-                                .set_tablet_manager(_tablet_mgr.get())
-                                .set_tablet_id(tablet_id)
-                                .set_txn_id(txn_id)
-                                .set_partition_id(_partition_id)
-                                .set_mem_tracker(_mem_tracker.get())
-                                .build();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .build());
     ASSERT_OK(delta_writer->open());
 
     // Write tree times
@@ -442,13 +487,13 @@ TEST_F(LakeDeltaWriterTest, test_reached_parent_memory_limit) {
     // Create and open DeltaWriter
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    auto delta_writer = DeltaWriterBuilder()
-                                .set_tablet_manager(_tablet_mgr.get())
-                                .set_tablet_id(tablet_id)
-                                .set_txn_id(txn_id)
-                                .set_partition_id(_partition_id)
-                                .set_mem_tracker(_mem_tracker.get())
-                                .build();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .build());
     ASSERT_OK(delta_writer->open());
 
     // Write tree times
@@ -493,13 +538,13 @@ TEST_F(LakeDeltaWriterTest, test_memtable_full) {
     // Create and open DeltaWriter
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    auto delta_writer = DeltaWriterBuilder()
-                                .set_tablet_manager(_tablet_mgr.get())
-                                .set_tablet_id(tablet_id)
-                                .set_txn_id(txn_id)
-                                .set_partition_id(_partition_id)
-                                .set_mem_tracker(_mem_tracker.get())
-                                .build();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .build());
     ASSERT_OK(delta_writer->open());
 
     // Write three times
