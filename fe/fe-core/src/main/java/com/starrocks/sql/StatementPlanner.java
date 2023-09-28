@@ -78,7 +78,7 @@ public class StatementPlanner {
                 OptimizerTraceUtil.logQueryStatement(session, "after analyze:\n%s", (QueryStatement) stmt);
             }
 
-            session.setCurrentSqlDatabases(dbs.values().stream().collect(Collectors.toSet()));
+            session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
 
             // Note: we only could get the olap table after Analyzing phase
             boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(stmt);
@@ -176,7 +176,7 @@ public class StatementPlanner {
 
             Set<OlapTable> olapTables = Sets.newHashSet();
             Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, queryStmt);
-            session.setCurrentSqlDatabases(dbs.values().stream().collect(Collectors.toSet()));
+            session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
 
             try {
                 // Need lock to avoid olap table metas ConcurrentModificationException

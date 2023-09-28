@@ -18,9 +18,6 @@
 #include "exec/exec_node.h"
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
-#include "runtime/global_dict/config.h"
-#include "runtime/types.h"
-#include "types/logical_type.h"
 #include "util/compression/stream_compression.h"
 
 static constexpr int64_t ROW_FORMAT_ESTIMATED_MEMORY_USAGE = 32LL * 1024 * 1024;
@@ -85,8 +82,7 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
     return status;
 }
 
-Status HdfsScanner::_build_scanner_context(RuntimeState* state) {
-    _scanner_ctx.runtime_state = state;
+Status HdfsScanner::_build_scanner_context() {
     HdfsScannerContext& ctx = _scanner_ctx;
     std::vector<ColumnPtr>& partition_values = ctx.partition_values;
 
@@ -165,9 +161,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     if (_opened) {
         return Status::OK();
     }
-    _build_scanner_context(runtime_state);
-    // process global dictionary optimize
-    // rewrite tuple desc
+    _build_scanner_context();
     auto status = do_open(runtime_state);
     if (status.ok()) {
         _opened = true;
@@ -176,7 +170,6 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
         }
         VLOG_FILE << "open file success: " << _scanner_params.path;
     }
-
     return status;
 }
 
@@ -420,17 +413,6 @@ void HdfsScannerContext::update_partition_column_of_chunk(ChunkPtr* chunk, size_
         auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_values[i]);
         ColumnPtr data_column = const_column->data_column();
         auto chunk_part_column = ck->get_column_by_slot_id(slot_desc->id());
-        if (!data_column->is_nullable()) {
-            if (auto iter = runtime_state->get_query_global_dict_map().find(slot_desc->id());
-                iter != runtime_state->get_query_global_dict_map().end()) {
-                if (auto code = iter->second.first.find(data_column->get(0).get_slice());
-                    code != iter->second.first.end()) {
-                    data_column = ColumnHelper::create_const_column<LowCardDictType>(code->second, 1);
-                    const_column = ColumnHelper::as_raw_column<ConstColumn>(data_column);
-                    data_column = const_column->data_column();
-                }
-            }
-        }
 
         if (data_column->is_nullable()) {
             chunk_part_column->append_nulls(1);
@@ -453,18 +435,6 @@ void HdfsScannerContext::append_partition_column_to_chunk(ChunkPtr* chunk, size_
         auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_values[i]);
         ColumnPtr data_column = const_column->data_column();
         auto chunk_part_column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
-
-        if (!data_column->is_nullable()) {
-            if (auto iter = runtime_state->get_query_global_dict_map().find(slot_desc->id());
-                iter != runtime_state->get_query_global_dict_map().end()) {
-                if (auto code = iter->second.first.find(data_column->get(0).get_slice());
-                    code != iter->second.first.end()) {
-                    data_column = ColumnHelper::create_const_column<LowCardDictType>(code->second, 1);
-                    const_column = ColumnHelper::as_raw_column<ConstColumn>(data_column);
-                    data_column = const_column->data_column();
-                }
-            }
-        }
 
         if (row_count > 0) {
             if (data_column->is_nullable()) {

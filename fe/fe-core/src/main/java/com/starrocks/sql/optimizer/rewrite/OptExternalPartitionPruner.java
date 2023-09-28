@@ -339,8 +339,8 @@ public class OptExternalPartitionPruner {
             throws AnalysisException {
         ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
         for (ScalarOperator scalarOperator : scanOperatorPredicates.getNonPartitionConjuncts()) {
-            if (isSupportedMinMaxConjuncts(operator, scalarOperator)) {
-                addMinMaxConjuncts(scalarOperator, operator);
+            if (isSupportedMinMaxConjuncts(scalarOperator)) {
+                addMinMaxConjuncts(scalarOperator, operator, context);
             }
         }
     }
@@ -349,14 +349,11 @@ public class OptExternalPartitionPruner {
      * Only conjuncts of the form <column> <op> <constant> and <column> in <constant> are supported,
      * and <op> must be one of LT, LE, GE, GT, or EQ.
      */
-    private static boolean isSupportedMinMaxConjuncts(LogicalScanOperator scanOperator, ScalarOperator operator) {
+    private static boolean isSupportedMinMaxConjuncts(ScalarOperator operator) {
         if (operator instanceof BinaryPredicateOperator) {
             ScalarOperator leftChild = operator.getChild(0);
             ScalarOperator rightChild = operator.getChild(1);
             if (!(leftChild.isColumnRef()) || !(rightChild.isConstantRef())) {
-                return false;
-            }
-            if (!scanOperator.getColRefToColumnMetaMap().containsKey((ColumnRefOperator) leftChild)) {
                 return false;
             }
             return !((ConstantOperator) rightChild).isNull();
@@ -367,9 +364,6 @@ public class OptExternalPartitionPruner {
             if (((InPredicateOperator) operator).isNotIn()) {
                 return false;
             }
-            if (!scanOperator.getColRefToColumnMetaMap().containsKey((ColumnRefOperator) operator.getChild(0))) {
-                return false;
-            }
             return ((InPredicateOperator) operator).allValuesMatch(ScalarOperator::isConstantRef) &&
                     !((InPredicateOperator) operator).hasAnyNullValues();
         } else {
@@ -377,19 +371,20 @@ public class OptExternalPartitionPruner {
         }
     }
 
-    private static void addMinMaxConjuncts(ScalarOperator scalarOperator, LogicalScanOperator operator)
-            throws AnalysisException {
+    private static void addMinMaxConjuncts(ScalarOperator scalarOperator, LogicalScanOperator operator,
+            OptimizerContext context) throws AnalysisException {
         List<ScalarOperator> minMaxConjuncts = operator.getScanOperatorPredicates().getMinMaxConjuncts();
         if (scalarOperator instanceof BinaryPredicateOperator) {
             BinaryPredicateOperator binaryPredicateOperator = (BinaryPredicateOperator) scalarOperator;
             ScalarOperator leftChild = binaryPredicateOperator.getChild(0);
             ScalarOperator rightChild = binaryPredicateOperator.getChild(1);
             if (binaryPredicateOperator.getBinaryType().isEqual()) {
-                minMaxConjuncts.add(buildMinMaxConjunct(BinaryType.LE, leftChild, rightChild, operator));
-                minMaxConjuncts.add(buildMinMaxConjunct(BinaryType.GE, leftChild, rightChild, operator));
+                minMaxConjuncts.add(buildMinMaxConjunct(BinaryType.LE, leftChild, rightChild, operator, context));
+                minMaxConjuncts.add(buildMinMaxConjunct(BinaryType.GE, leftChild, rightChild, operator, context));
             } else if (binaryPredicateOperator.getBinaryType().isRange()) {
                 minMaxConjuncts.add(
-                        buildMinMaxConjunct(binaryPredicateOperator.getBinaryType(), leftChild, rightChild, operator));
+                        buildMinMaxConjunct(binaryPredicateOperator.getBinaryType(), leftChild, rightChild, operator,
+                                context));
             }
         } else if (scalarOperator instanceof InPredicateOperator) {
             InPredicateOperator inPredicateOperator = (InPredicateOperator) scalarOperator;
@@ -407,20 +402,19 @@ public class OptExternalPartitionPruner {
             Preconditions.checkState(min != null);
 
             BinaryPredicateOperator minBound =
-                    buildMinMaxConjunct(BinaryType.GE, inPredicateOperator.getChild(0), min, operator);
+                    buildMinMaxConjunct(BinaryType.GE, inPredicateOperator.getChild(0), min, operator, context);
             BinaryPredicateOperator maxBound =
-                    buildMinMaxConjunct(BinaryType.LE, inPredicateOperator.getChild(0), max, operator);
+                    buildMinMaxConjunct(BinaryType.LE, inPredicateOperator.getChild(0), max, operator, context);
             minMaxConjuncts.add(minBound);
             minMaxConjuncts.add(maxBound);
         }
     }
 
     private static BinaryPredicateOperator buildMinMaxConjunct(BinaryType type, ScalarOperator left,
-            ScalarOperator right, LogicalScanOperator operator) throws AnalysisException {
+            ScalarOperator right, LogicalScanOperator operator, OptimizerContext context) throws AnalysisException {
         ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
-        ColumnRefOperator columnRefOperator = (ColumnRefOperator) left;
-        scanOperatorPredicates.getMinMaxColumnRefMap().putIfAbsent(columnRefOperator,
-                operator.getColRefToColumnMetaMap().get(columnRefOperator));
-        return new BinaryPredicateOperator(type, columnRefOperator, right);
+        ColumnRefOperator newColumnRef = context.getColumnRefFactory().create(left, left.getType(), left.isNullable());
+        scanOperatorPredicates.getMinMaxColumnRefMap().put(newColumnRef, operator.getColRefToColumnMetaMap().get(left));
+        return new BinaryPredicateOperator(type, newColumnRef, right);
     }
 }

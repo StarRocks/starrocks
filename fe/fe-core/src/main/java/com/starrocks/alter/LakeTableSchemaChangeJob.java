@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.alter;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -774,7 +775,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
         for (Column column : table.getColumns()) {
             if (Type.VARCHAR.equals(column.getType())) {
-                IDictManager.getInstance().removeGlobalDict(table, column.getName());
+                IDictManager.getInstance().removeGlobalDict(table.getId(), column.getName());
             }
         }
 

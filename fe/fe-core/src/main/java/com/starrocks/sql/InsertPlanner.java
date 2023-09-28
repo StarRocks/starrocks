@@ -201,8 +201,8 @@ public class InsertPlanner {
                 slotDescriptor.setColumn(column);
                 slotDescriptor.setIsNullable(column.isAllowNull());
                 if (column.getType().isVarchar() &&
-                        IDictManager.getInstance().hasGlobalDict(targetTable, column.getName())) {
-                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(targetTable, column.getName());
+                        IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
+                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
                     dict.ifPresent(
                             columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
                 }
@@ -320,8 +320,8 @@ public class InsertPlanner {
                 for (List<Expr> row : values.getRows()) {
                     if (isAutoIncrement && row.get(columnIdx).getType() == Type.NULL) {
                         throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
-                                targetColumn.getName() + " You can use `default` for an" +
-                                " AUTO INCREMENT column");
+                                                     targetColumn.getName() + " You can use `default` for an" +
+                                                     " AUTO INCREMENT column");
                     }
                     if (row.get(columnIdx) instanceof DefaultValueExpr) {
                         if (isAutoIncrement) {
@@ -339,8 +339,8 @@ public class InsertPlanner {
                     for (List<Expr> row : values.getRows()) {
                         if (isAutoIncrement && row.get(idx).getType() == Type.NULL) {
                             throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
-                                    targetColumn.getName() + " You can use `default` for an" +
-                                    " AUTO INCREMENT column");
+                                                        targetColumn.getName() + " You can use `default` for an" +
+                                                        " AUTO INCREMENT column");
                         }
                         if (row.get(idx) instanceof DefaultValueExpr) {
                             if (isAutoIncrement) {
@@ -411,8 +411,8 @@ public class InsertPlanner {
     }
 
     private OptExprBuilder fillGeneratedColumns(ColumnRefFactory columnRefFactory, InsertStmt insertStatement,
-                                                List<ColumnRefOperator> outputColumns, OptExprBuilder root,
-                                                ConnectContext session) {
+                                                   List<ColumnRefOperator> outputColumns, OptExprBuilder root,
+                                                   ConnectContext session) {
         List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
         Set<Column> baseSchema = Sets.newHashSet(insertStatement.getTargetTable().getBaseSchema());
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
@@ -424,10 +424,10 @@ public class InsertPlanner {
                 // If fe restart and Insert INTO is executed, the re-analyze is needed.
                 Expr expr = targetColumn.generatedColumnExpr();
                 ExpressionAnalyzer.analyzeExpression(expr,
-                        new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
-                                insertStatement.getTargetTable().getBaseSchema().stream().map(col -> new Field(col.getName(),
-                                                col.getType(), insertStatement.getTableName(), null))
-                                        .collect(Collectors.toList()))), session);
+                    new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
+                        insertStatement.getTargetTable().getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                col.getType(), insertStatement.getTableName(), null))
+                            .collect(Collectors.toList()))), session);
 
                 List<SlotRef> slots = new ArrayList<>();
                 expr.collect(SlotRef.class, slots);
@@ -494,8 +494,7 @@ public class InsertPlanner {
                 continue;
             }
 
-            // Target column which starts with "mv" should not be treated as materialized view column when this column exists
-            // in base schema,
+            // Target column which starts with "mv" should not be treated as materialized view column when this column exists in base schema,
             // this could be created by user.
             if (targetColumn.isNameWithPrefix(MATERIALIZED_VIEW_NAME_PREFIX) &&
                     !baseSchema.contains(targetColumn)) {

@@ -184,7 +184,7 @@ OutPut Exchange Id: 17
 15:HdfsScanNode
 TABLE: orders
 NON-PARTITION PREDICATES: 13: o_orderdate >= '1995-01-01', 13: o_orderdate < '1996-01-01'
-MIN/MAX PREDICATES: 13: o_orderdate >= '1995-01-01', 13: o_orderdate < '1996-01-01'
+MIN/MAX PREDICATES: 52: o_orderdate >= '1995-01-01', 53: o_orderdate < '1996-01-01'
 partitions=1/1
 avgRowSize=20.0
 numNodes=0
@@ -359,7 +359,7 @@ OutPut Exchange Id: 05
 3:HdfsScanNode
 TABLE: region
 NON-PARTITION PREDICATES: 46: r_name = 'AFRICA'
-MIN/MAX PREDICATES: 46: r_name <= 'AFRICA', 46: r_name >= 'AFRICA'
+MIN/MAX PREDICATES: 50: r_name <= 'AFRICA', 51: r_name >= 'AFRICA'
 partitions=1/1
 avgRowSize=10.8
 numNodes=0

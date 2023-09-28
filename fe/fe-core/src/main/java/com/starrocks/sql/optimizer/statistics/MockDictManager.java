@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.catalog.Table;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -37,34 +37,34 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
-    public boolean hasGlobalDict(Table t, String columnName, long versionTime) {
+    public boolean hasGlobalDict(long tableId, String columnName, long versionTime) {
         return true;
     }
 
     @Override
-    public void updateGlobalDict(Table t, String columnName, long collectedVersion, long versionTime) {
+    public void updateGlobalDict(long tableId, String columnName,  long collectedVersion, long versionTime) {
     }
 
     @Override
-    public boolean hasGlobalDict(Table t, String columnName) {
+    public boolean hasGlobalDict(long tableId, String columnName) {
         return true;
     }
 
     @Override
-    public void removeGlobalDict(Table t, String columnName) {
+    public void removeGlobalDict(long tableId, String columnName) {
     }
 
     @Override
-    public void disableGlobalDict(Table t) {
+    public void disableGlobalDict(long tableId) {
     }
 
     @Override
-    public void enableGlobalDict(Table t) {
+    public void enableGlobalDict(long tableId) {
 
     }
 
     @Override
-    public Optional<ColumnDict> getGlobalDict(Table t, String columnName) {
+    public Optional<ColumnDict> getGlobalDict(long tableId, String columnName) {
         return Optional.of(COLUMN_DICT);
     }
 }
