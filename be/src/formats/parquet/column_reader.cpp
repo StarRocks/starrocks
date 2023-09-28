@@ -118,11 +118,6 @@ public:
         return _reader->get_dict_values(dict_codes, nulls, column);
     }
 
-    Status get_global_code(std::vector<int32_t>& dict_codes, const NullableColumn& nulls, Column* column,
-                           GlobalDictMap* map) override {
-        return _reader->get_global_code(dict_codes, nulls, column, map);
-    }
-
     void set_need_parse_levels(bool need_parse_levels) override { _reader->set_need_parse_levels(need_parse_levels); }
 
 private:

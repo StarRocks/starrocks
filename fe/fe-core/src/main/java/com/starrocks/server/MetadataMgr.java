@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
@@ -71,10 +72,8 @@ public class MetadataMgr {
         this.connectorTblMetaInfoMgr = connectorTblMetaInfoMgr;
     }
 
-    /**
-     * get ConnectorMetadata by catalog name
+    /** get ConnectorMetadata by catalog name
      * if catalog is null or empty will return localMetastore
-     *
      * @param catalogName catalog's name
      * @return ConnectorMetadata
      */
@@ -192,7 +191,7 @@ public class MetadataMgr {
             }
             return connectorMetadata.get().createTable(stmt);
         } else {
-            throw new DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
+            throw new  DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
         }
     }
 
@@ -229,8 +228,6 @@ public class MetadataMgr {
             // Load meta information from ConnectorTblMetaInfoMgr for each external table.
             connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
         }
-        connectorTable.catalogName = catalogName;
-        connectorTable.dbName = dbName;
         return connectorTable;
     }
 
@@ -261,6 +258,7 @@ public class MetadataMgr {
      * SQL ： select dt,hh,mm from tbl where hh = '12' and mm = '30';
      * the partition columns are [dt,hh,mm]
      * the partition values should be [empty,'12','30']
+     *
      */
     public List<String> listPartitionNamesByValue(String catalogName, String dbName, String tableName,
                                                   List<Optional<String>> partitionValues) {

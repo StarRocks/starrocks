@@ -82,9 +82,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     }
 
     _runtime_state = state;
-    auto tuple_desc = state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
-    DictOptimizeParser::rewrite_descriptor(state, {}, {}, &(tuple_desc->decoded_slots()));
-    _tuple_desc = tuple_desc;
+    _tuple_desc = state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
     _hive_table = dynamic_cast<const HiveTableDescriptor*>(_tuple_desc->table_desc());
     if (_hive_table == nullptr) {
         return Status::RuntimeError(
@@ -143,10 +141,6 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_partition_conjunct_ctxs, state));
     _update_has_any_predicate();
 
-    // REWRITE conjunts
-    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
-    RETURN_IF_ERROR(_dict_optimize_parser.rewrite_conjuncts(&_conjunct_ctxs, state));
-
     RETURN_IF_ERROR(_decompose_conjunct_ctxs(state));
     return Status::OK();
 }
@@ -191,7 +185,6 @@ Status HiveDataSource::_init_partition_values() {
                                 _conjunct_ctxs_by_slot.at(slotId).end());
                 }
             }
-            // path
             RETURN_IF_ERROR(ExecNode::eval_conjuncts(ctxs, partition_chunk.get()));
         } else {
             RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
@@ -222,10 +215,9 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.min_max_tuple_id) {
         _min_max_tuple_id = hdfs_scan_node.min_max_tuple_id;
         _min_max_tuple_desc = state->desc_tbl().get_tuple_descriptor(_min_max_tuple_id);
-        DictOptimizeParser::rewrite_descriptor(state, {}, {}, &(_min_max_tuple_desc->decoded_slots()));
     }
 
-    const auto& slots = _tuple_desc->decoded_slots();
+    const auto& slots = _tuple_desc->slots();
     for (int i = 0; i < slots.size(); i++) {
         if (_hive_table != nullptr && _hive_table->is_partition_col(slots[i])) {
             _partition_slots.push_back(slots[i]);
@@ -619,7 +611,6 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     if (_no_data) {
         return Status::EndOfFile("no data");
     }
-    // TODO: (stdpain-lc) process this
     _init_chunk(chunk, _runtime_state->chunk_size());
     do {
         RETURN_IF_ERROR(_scanner->get_next(state, chunk));

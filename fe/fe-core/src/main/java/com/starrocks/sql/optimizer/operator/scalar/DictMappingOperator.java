@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -41,30 +42,23 @@ public class DictMappingOperator extends ScalarOperator {
         return originScalaOperator;
     }
 
-    // dict column is always variable
     @Override
-    public boolean isVariable() {
-        return true;
+    public boolean isNullable() {
+        return originScalaOperator.isNullable();
     }
 
     @Override
     public List<ScalarOperator> getChildren() {
-        return Lists.newArrayList(dictColumn);
-    }
-
-    @Override
-    public boolean isVariable() {
-        return true;
+        return Collections.emptyList();
     }
 
     @Override
     public ScalarOperator getChild(int index) {
-        return dictColumn;
+        return null;
     }
 
     @Override
     public void setChild(int index, ScalarOperator child) {
-        assert (dictColumn == child);
     }
 
     @Override

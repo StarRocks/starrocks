@@ -19,10 +19,11 @@ import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.thrift.TGlobalDict;
@@ -66,16 +67,18 @@ public class CacheDictManager implements IDictManager {
                         @NonNull Executor executor) {
                     return CompletableFuture.supplyAsync(() -> {
                         try {
-                            Pair<List<TStatisticData>, Status> result = queryDictSync(columnIdentifier);
+                            long tableId = columnIdentifier.getTableId();
+                            String columnName = columnIdentifier.getColumnName();
+                            Pair<List<TStatisticData>, Status> result = queryDictSync(columnIdentifier.getDbId(),
+                                    tableId, columnName);
                             if (result.second.isGlobalDictError()) {
-                                LOG.debug("{}-{} isn't low cardinality string column", columnIdentifier.getFullTableName(),
-                                        columnIdentifier.getColumnName());
+                                LOG.debug("{}-{} isn't low cardinality string column", tableId, columnName);
                                 NO_DICT_STRING_COLUMNS.add(columnIdentifier);
                                 return Optional.empty();
                             } else {
                                 // check TStatisticData is not empty, There may be no such column Statistics in BE
                                 if (!result.first.isEmpty()) {
-                                    return deserializeColumnDict(columnIdentifier, result.first.get(0));
+                                    return deserializeColumnDict(tableId, columnName, result.first.get(0));
                                 } else {
                                     return Optional.empty();
                                 }
@@ -101,7 +104,7 @@ public class CacheDictManager implements IDictManager {
             .maximumSize(Config.statistic_dict_columns)
             .buildAsync(dictLoader);
 
-    private Optional<ColumnDict> deserializeColumnDict(ColumnIdentifier columnIdentifier, TStatisticData statisticData) {
+    private Optional<ColumnDict> deserializeColumnDict(long tableId, String columnName, TStatisticData statisticData) {
         if (statisticData.dict == null) {
             throw new RuntimeException("Collect dict error in BE");
         }
@@ -111,6 +114,7 @@ public class CacheDictManager implements IDictManager {
             return Optional.empty();
         }
         int dictSize = tGlobalDict.getIdsSize();
+        ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         if (dictSize > LOW_CARDINALITY_THRESHOLD) {
             NO_DICT_STRING_COLUMNS.add(columnIdentifier);
             return Optional.empty();
@@ -138,20 +142,34 @@ public class CacheDictManager implements IDictManager {
             dicts.put(tGlobalDict.strings.get(i), tGlobalDict.ids.get(i));
         }
         LOG.info("collected dictionary table:{} column:{}, version:{} size:{}",
-                columnIdentifier.getFullTableName(), columnIdentifier.getColumnName(), statisticData.meta_version, dictSize);
+                tableId, columnName, statisticData.meta_version, dictSize);
         return Optional.of(new ColumnDict(dicts.build(), statisticData.meta_version));
     }
 
     @Override
-    public boolean hasGlobalDict(Table t, String columnName, long versionTime) {
-        ColumnIdentifier columnIdentifier = new ColumnIdentifier(t, columnName);
+    public boolean hasGlobalDict(long tableId, String columnName, long versionTime) {
+        ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         if (NO_DICT_STRING_COLUMNS.contains(columnIdentifier)) {
-            LOG.debug("{}-{} isn't low cardinality string column", columnIdentifier.getFullTableName(), columnName);
+            LOG.debug("{}-{} isn't low cardinality string column", tableId, columnName);
             return false;
         }
 
-        if (FORBIDDEN_DICT_TABLE_IDS.contains(columnIdentifier.getTableId())) {
-            LOG.debug("table {} forbid low cardinality global dict", columnIdentifier.getFullTableName());
+        if (FORBIDDEN_DICT_TABLE_IDS.contains(tableId)) {
+            LOG.debug("table {} forbid low cardinality global dict", tableId);
+            return false;
+        }
+
+        Set<Long> dbIds = ConnectContext.get().getCurrentSqlDbIds();
+        for (Long id : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(id);
+            if (db != null && db.getTable(tableId) != null) {
+                columnIdentifier.setDbId(db.getId());
+                break;
+            }
+        }
+
+        if (columnIdentifier.getDbId() == -1) {
+            LOG.debug("{} couldn't find db id", columnName);
             return false;
         }
 
@@ -161,7 +179,7 @@ public class CacheDictManager implements IDictManager {
             try {
                 realResult = result.get();
             } catch (Exception e) {
-                LOG.warn(String.format("get dict cache for %s: %s failed", columnIdentifier.getFullTableName(), columnName), e);
+                LOG.warn(String.format("get dict cache for %d: %s failed", tableId, columnName), e);
                 return false;
             }
             if (!realResult.isPresent()) {
@@ -179,15 +197,15 @@ public class CacheDictManager implements IDictManager {
     }
 
     @Override
-    public boolean hasGlobalDict(Table t, String columnName) {
-        ColumnIdentifier columnIdentifier = new ColumnIdentifier(t, columnName);
+    public boolean hasGlobalDict(long tableId, String columnName) {
+        ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         if (NO_DICT_STRING_COLUMNS.contains(columnIdentifier)) {
             LOG.debug("{} isn't low cardinality string column", columnName);
             return false;
         }
 
-        if (FORBIDDEN_DICT_TABLE_IDS.contains(columnIdentifier.getTableId())) {
-            LOG.debug("table {} forbid low cardinality global dict", columnIdentifier.getFullTableName());
+        if (FORBIDDEN_DICT_TABLE_IDS.contains(tableId)) {
+            LOG.debug("table {} forbid low cardinality global dict", tableId);
             return false;
         }
 
@@ -195,8 +213,8 @@ public class CacheDictManager implements IDictManager {
     }
 
     @Override
-    public void removeGlobalDict(Table t, String columnName) {
-        ColumnIdentifier columnIdentifier = new ColumnIdentifier(t, columnName);
+    public void removeGlobalDict(long tableId, String columnName) {
+        ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
 
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
@@ -207,29 +225,29 @@ public class CacheDictManager implements IDictManager {
             return;
         }
 
-        LOG.info("remove dict for table:{} column:{}", columnIdentifier.getFullTableName(), columnName);
+        LOG.info("remove dict for table:{} column:{}", tableId, columnName);
         dictStatistics.synchronous().invalidate(columnIdentifier);
     }
 
     @Override
-    public void disableGlobalDict(Table t) {
-        LOG.debug("disable dict optimize for table {}", t.getId());
-        FORBIDDEN_DICT_TABLE_IDS.add(t.getId());
+    public void disableGlobalDict(long tableId) {
+        LOG.debug("disable dict optimize for table {}", tableId);
+        FORBIDDEN_DICT_TABLE_IDS.add(tableId);
     }
 
     @Override
-    public void enableGlobalDict(Table t) {
-        FORBIDDEN_DICT_TABLE_IDS.remove(t.getId());
+    public void enableGlobalDict(long tableId) {
+        FORBIDDEN_DICT_TABLE_IDS.remove(tableId);
     }
 
     @Override
-    public void updateGlobalDict(Table t, String columnName, long collectVersion, long versionTime) {
+    public void updateGlobalDict(long tableId, String columnName, long collectVersion, long versionTime) {
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
 
-        ColumnIdentifier columnIdentifier = new ColumnIdentifier(t, columnName);
+        ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         if (!dictStatistics.asMap().containsKey(columnIdentifier)) {
             return;
         }
@@ -245,29 +263,28 @@ public class CacheDictManager implements IDictManager {
                     long dictCollectVersion = columnDict.getCollectedVersionTime();
                     if (collectVersion != dictCollectVersion) {
                         LOG.info("remove dict by unmatched version {}:{}", collectVersion, dictCollectVersion);
-                        removeGlobalDict(t, columnName);
+                        removeGlobalDict(tableId, columnName);
                         return;
                     }
                     columnDict.updateVersionTime(versionTime);
-                    LOG.info("update dict for table {} column {} from version {} to {}",
-                            columnIdentifier.getFullTableName(), columnName, lastVersion, versionTime);
+                    LOG.info("update dict for table {} column {} from version {} to {}", tableId, columnName,
+                            lastVersion, versionTime);
                 }
             } catch (Exception e) {
-                LOG.warn(String.format("update dict cache for %s: %s failed", columnIdentifier.getFullTableName(), columnName),
-                        e);
+                LOG.warn(String.format("update dict cache for %d: %s failed", tableId, columnName), e);
             }
         }
     }
 
     @Override
-    public Optional<ColumnDict> getGlobalDict(Table t, String columnName) {
-        ColumnIdentifier columnIdentifier = new ColumnIdentifier(t, columnName);
+    public Optional<ColumnDict> getGlobalDict(long tableId, String columnName) {
+        ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         CompletableFuture<Optional<ColumnDict>> columnFuture = dictStatistics.get(columnIdentifier);
         if (columnFuture.isDone()) {
             try {
                 return columnFuture.get();
             } catch (Exception e) {
-                LOG.warn(String.format("get dict cache for %s: %s failed", columnIdentifier.getFullTableName(), columnName), e);
+                LOG.warn(String.format("get dict cache for %d: %s failed", tableId, columnName), e);
             }
         }
         return Optional.empty();
