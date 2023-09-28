@@ -50,7 +50,7 @@ public:
         return st;
     }
 
-    StatusOr<int64_t> read_at(int64_t offset, void *out, int64_t count) override {
+    StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override {
         SCOPED_RAW_TIMER(&_stats->io_ns);
         _stats->io_count += 1;
         ASSIGN_OR_RETURN(auto nread, _stream->read_at(offset, out, count));
