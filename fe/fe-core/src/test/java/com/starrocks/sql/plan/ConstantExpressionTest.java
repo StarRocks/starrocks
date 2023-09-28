@@ -408,7 +408,7 @@ public class ConstantExpressionTest extends PlanTestBase {
             plan = getFragmentPlan(sql);
             assertContains(plan, "  2:Project\n" +
                     "  |  <slot 2> : 2: percentile_approx\n" +
-                    "  |  <slot 3> : 2: percentile_approx\n" +
+                    "  |  <slot 3> : clone(2: percentile_approx)\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update finalize)\n" +
                     "  |  output: percentile_approx(2.25, 0.0)\n" +
@@ -419,9 +419,9 @@ public class ConstantExpressionTest extends PlanTestBase {
             plan = getFragmentPlan(sql);
             assertContains(plan, "  2:Project\n" +
                     "  |  <slot 2> : 2: count\n" +
-                    "  |  <slot 3> : 2: count\n" +
-                    "  |  <slot 4> : 2: count\n" +
-                    "  |  <slot 5> : 2: count\n" +
+                    "  |  <slot 3> : clone(2: count)\n" +
+                    "  |  <slot 4> : clone(2: count)\n" +
+                    "  |  <slot 5> : clone(2: count)\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update finalize)\n" +
                     "  |  output: count(1)\n" +
