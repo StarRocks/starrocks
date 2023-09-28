@@ -49,6 +49,7 @@ import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
@@ -81,6 +82,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
@@ -185,6 +187,7 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
@@ -3078,16 +3081,32 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public static PartitionInfo buildPartitionInfo(CreateMaterializedViewStatement stmt) throws DdlException {
-        PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
-        PartitionInfo partitionInfo;
-        if (partitionDesc != null) {
-            partitionInfo = partitionDesc.toPartitionInfo(
+        ExpressionPartitionDesc expressionPartitionDesc = stmt.getPartitionExpDesc();
+        if (expressionPartitionDesc != null) {
+            Expr expr = expressionPartitionDesc.getExpr();
+            if (expr instanceof SlotRef) {
+                SlotRef slotRef = (SlotRef) expr;
+                if (slotRef.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
+                    return new ListPartitionInfo(PartitionType.LIST,
+                            Collections.singletonList(stmt.getPartitionColumn()));
+                }
+            }
+            if ((expr instanceof FunctionCallExpr)) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+                    Column partitionColumn = new Column(stmt.getPartitionColumn());
+                    partitionColumn.setType(com.starrocks.catalog.Type.DATE);
+                    return expressionPartitionDesc.toPartitionInfo(
+                            Collections.singletonList(partitionColumn),
+                            Maps.newHashMap(), false);
+                }
+            }
+            return expressionPartitionDesc.toPartitionInfo(
                     Collections.singletonList(stmt.getPartitionColumn()),
                     Maps.newHashMap(), false);
         } else {
-            partitionInfo = new SinglePartitionInfo();
+            return new SinglePartitionInfo();
         }
-        return partitionInfo;
     }
 
     private void createTaskForMaterializedView(String dbName, MaterializedView materializedView,
