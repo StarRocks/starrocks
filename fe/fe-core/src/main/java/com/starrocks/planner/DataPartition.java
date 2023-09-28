@@ -65,6 +65,7 @@ public class DataPartition {
 
     // for hash partition: exprs used to compute hash value
     private ImmutableList<Expr> partitionExprs;
+    private List<Integer> bucketNums;
 
     public DataPartition(TPartitionType type, List<Expr> exprs) {
         if (type != TPartitionType.UNPARTITIONED && type != TPartitionType.RANDOM) {
