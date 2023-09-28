@@ -45,6 +45,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -704,6 +705,43 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 .stream().map(BasePartitionInfo::fromExternalTable).collect(Collectors.toList());
     }
 
+    public Set<String> getUpdatedPartitionNamesOfIcebergTable(Table baseTable) {
+        Set<String> result = Sets.newHashSet();
+        IcebergTable icebergTable = (IcebergTable) baseTable;
+        Map<String, com.starrocks.connector.PartitionInfo> partitionNameWithPartition =
+                IcebergUtil.getPartition(icebergTable.getNativeTable());
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+
+            Map<String, BasePartitionInfo> baseTableInfoVisibleVersionMap = getRefreshScheme()
+                    .getAsyncRefreshContext()
+                    .getBaseTableInfoVisibleVersionMap()
+                    .computeIfAbsent(baseTableInfo, k -> Maps.newHashMap());
+
+            // check whether there are partitions added
+            for (String partitionName : partitionNameWithPartition.keySet()) {
+                if (!baseTableInfoVisibleVersionMap.containsKey(partitionName)) {
+                    result.add(partitionName);
+                }
+            }
+
+            for (Map.Entry<String, BasePartitionInfo> versionEntry : baseTableInfoVisibleVersionMap.entrySet()) {
+                String basePartitionName = versionEntry.getKey();
+                if (!partitionNameWithPartition.containsKey(basePartitionName)) {
+                    // partitions deleted
+                    result.addAll(partitionNameWithPartition.keySet());
+                    return result;
+                }
+                long basePartitionVersion = partitionNameWithPartition.get(basePartitionName).getModifiedTime();
+
+                BasePartitionInfo basePartitionInfo = versionEntry.getValue();
+                if (basePartitionInfo == null || basePartitionVersion > basePartitionInfo.getVersion()) {
+                    result.add(basePartitionName);
+                }
+            }
+        }
+        return result;
+    }
+
     private Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable, boolean isQueryRewrite) {
         if (!baseTable.isHiveTable() && !baseTable.isJDBCTable()) {
             // Only support hive table and jdbc table now
@@ -772,7 +810,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
             return result;
         } else {
-            Set<String> updatePartitionNames = getUpdatedPartitionNamesOfExternalTable(baseTable, isQueryRewrite);
+            Set<String> updatePartitionNames;
+            if (baseTable.isIcebergTable()) {
+                updatePartitionNames = getUpdatedPartitionNamesOfIcebergTable(baseTable);
+            }
+            updatePartitionNames = getUpdatedPartitionNamesOfExternalTable(baseTable, isQueryRewrite);
             Pair<Table, Column> partitionTableAndColumn = getBaseTableAndPartitionColumn();
             if (partitionTableAndColumn == null) {
                 return updatePartitionNames;
