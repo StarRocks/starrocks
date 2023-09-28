@@ -2513,6 +2513,38 @@ StatusOr<ColumnPtr> StringFunctions::unhex(FunctionContext* context, const starr
     return VectorizedStringStrictUnaryFunction<unhexImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
 }
 
+std::string proctol_heads[] = {"http", "https", "ftp"};
+
+std::string StringFunctions::url_extract_host_func(const std::string& value) {
+    std::string::size_type pos = std::string::npos;
+    std::string host = "";
+    for (const auto& head : proctol_heads) {
+        if (value.compare(0, head.size(), head) == 0) {
+            pos = value.find_first_of("://", 0);
+            break;
+        }
+    }
+    if (pos == std::string::npos) {
+        throw std::runtime_error("url format is not right, please check it again");
+    }
+    std::string sub_url = value.substr(pos + 3);
+    std::string::size_type end_pos_host = sub_url.find_first_of("/");
+    if (end_pos_host == std::string::npos) {
+        host = std::move(sub_url);
+    } else {
+        host = sub_url.substr(0, end_pos_host);
+    }
+    return host;
+}
+
+DEFINE_STRING_UNARY_FN_WITH_IMPL(url_extract_hostImpl, str) {
+    return StringFunctions::url_extract_host_func(str.to_string());
+}
+
+StatusOr<ColumnPtr> StringFunctions::url_extract_host(FunctionContext* context, const starrocks::Columns& columns) {
+    return VectorizedStringStrictUnaryFunction<url_extract_hostImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
+}
+
 DEFINE_STRING_UNARY_FN_WITH_IMPL(url_encodeImpl, str) {
     return StringFunctions::url_encode_func(str.to_string());
 }

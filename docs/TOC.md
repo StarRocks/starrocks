@@ -684,6 +684,7 @@
       + [ucase](./sql-reference/sql-functions/string-functions/ucase.md)
       + [unhex](./sql-reference/sql-functions/string-functions/unhex.md)
       + [upper](./sql-reference/sql-functions/string-functions/upper.md)
+      + [url_extract_host](./sql-reference/sql-functions/string-functions/url_extract_host.md)
       + [url_decode](./sql-reference/sql-functions/string-functions/url_decode.md)
       + [url_encode](./sql-reference/sql-functions/string-functions/url_encode.md)
     + Pattern Matching Functions
