@@ -1066,38 +1066,11 @@ public class CoordinatorPreprocessor {
         return fragmentExecParamsMap.get(fragmentId).scanRangeAssignment;
     }
 
-    void buildIcebergBucketToNodeMapping() {
-        Set<Integer> bucketIds = new HashSet<>();
-        scanNodes.stream()
-                .map(x -> (IcebergScanNode) x)
-                .forEach(x -> bucketIds.addAll(x.getFileToBucketId().values()));
-        int maxSelectedBucketSize = bucketIds.size();
-        int offset = GlobalStateMgr.getCurrentSystemInfo().getOffsetAndUpdate(maxSelectedBucketSize);
-        List<Long> backendIds = Lists.newArrayList(idToBackend.keySet());
-
-        for (int bucketId : bucketIds) {
-            icebergBucketIdToBeId.put(bucketId, backendIds.get((offset++) % idToBackend.size()));
-        }
-    }
-
     // Populates scan_range_assignment_.
     // <fragment, <server, nodeId>>
     @VisibleForTesting
     void computeScanRangeAssignment() throws Exception {
         SessionVariable sv = connectContext.getSessionVariable();
-
-        boolean useIcebergBucket = scanNodes.stream()
-                .allMatch(node -> {
-                    if (node instanceof IcebergScanNode) {
-                        IcebergScanNode icebergNode = (IcebergScanNode) node;
-                        return isColocateFragment(icebergNode.getFragment().getPlanRoot());
-                    }
-                    return false;
-                });
-
-        if (useIcebergBucket) {
-            buildIcebergBucketToNodeMapping();
-        }
 
         // set scan ranges/locations for scan nodes
         for (ScanNode scanNode : scanNodes) {
@@ -1112,24 +1085,36 @@ public class CoordinatorPreprocessor {
             if (scanNode instanceof SchemaScanNode) {
                 BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment);
                 selector.computeScanRangeAssignment();
-            } else if ((scanNode instanceof HdfsScanNode) ||
-                    (scanNode instanceof IcebergScanNode && !useIcebergBucket) ||
+            } else if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
                     scanNode instanceof FileTableScanNode || scanNode instanceof PaimonScanNode) {
+                boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());
+                boolean hasBucket =
+                        isBucketShuffleJoin(scanNode.getFragmentId().asInt(), scanNode.getFragment().getPlanRoot());
 
-                HDFSBackendSelector selector =
-                        new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
-                                getSelectorComputeNodes(hasComputeNode),
-                                hasComputeNode,
-                                sv.getForceScheduleLocal(),
-                                sv.getHDFSBackendSelectorScanRangeShuffle());
-                selector.computeScanRangeAssignment();
-            } else if (scanNode instanceof IcebergScanNode) {
-                IcebergBucketBackendSelector selector =
-                        new IcebergBucketBackendSelector(scanNode, locations, assignment, idToBackend,
-                                icebergBucketIdToBeId, addressToBackendID, usedBackendIDs, hasComputeNode,
-                                fragmentIdBucketSeqToScanRangeMap, fragmentIdToSeqToAddressMap, fragmentIdToBucketNumMap);
-                selector.computeScanRangeAssignment();
+                if ((hasColocate || hasBucket) && scanNode instanceof IcebergScanNode) {
+                    IcebergScanNode icebergScanNode = (IcebergScanNode) scanNode;
+                    Set<Integer> bucketIds = new HashSet<>(icebergScanNode.getFileToBucketId().values());
+
+                    List<Long> backendIds = hasComputeNode ? Lists.newArrayList(idToComputeNode.keySet()) :
+                            Lists.newArrayList(idToBackend.keySet());
+                    bucketIds.forEach(bucketId -> icebergBucketIdToBeId.put(bucketId,
+                            backendIds.get(bucketId % backendIds.size())));
+
+                    IcebergBucketBackendSelector selector =
+                            new IcebergBucketBackendSelector(scanNode, locations, assignment, idToBackend,
+                                    icebergBucketIdToBeId, addressToBackendID, usedBackendIDs, hasComputeNode,
+                                    fragmentIdBucketSeqToScanRangeMap, fragmentIdToSeqToAddressMap, fragmentIdToBucketNumMap);
+                    selector.computeScanRangeAssignment();
+                } else {
+                    HDFSBackendSelector selector =
+                            new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
+                                    getSelectorComputeNodes(hasComputeNode),
+                                    hasComputeNode,
+                                    sv.getForceScheduleLocal(),
+                                    sv.getHDFSBackendSelectorScanRangeShuffle());
+                    selector.computeScanRangeAssignment();
+                }
             } else {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());
                 boolean hasBucket =
