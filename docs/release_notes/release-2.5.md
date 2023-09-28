@@ -1,5 +1,30 @@
 # StarRocks version 2.5
 
+## 2.5.13
+
+Release date: September 28, 2023
+
+### Improvements
+
+- Window functions COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP now support the ORDER BY clause and Window clause. [#31352](https://github.com/StarRocks/starrocks/pull/31352)
+- An error instead of NULL is returned if a decimal overflow occurs during queries on the DECIMAL type data. [#30419](https://github.com/StarRocks/starrocks/pull/30419)
+- Executing SQL commands with invalid comments now returns results consistent with MySQL. [#30210](https://github.com/StarRocks/starrocks/pull/30210)
+- Rowsets corresponding to tablets that have been deleted are cleaned up, reducing the memory usage during BE startup. [#30625](https://github.com/StarRocks/starrocks/pull/30625)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- An error "Set cancelled by MemoryScratchSinkOperator" occurs when users read data from StarRocks using the Spark Connector or Flink Connector. [#30802](https://github.com/StarRocks/starrocks/pull/30802) [#30751](https://github.com/StarRocks/starrocks/pull/30751)
+- An error "java.lang.IllegalStateException: null" occurs during queries with an ORDER BY clause that includes aggregate functions. [#30427](https://github.com/StarRocks/starrocks/pull/30427)
+- FEs fail to restart when there are inactive materialized views. [#30015](https://github.com/StarRocks/starrocks/pull/30015)
+- Performing INSERT OVERWRITE operations on duplicate partitions corrupts the metadata, leading to FE restart failures. [#30498](https://github.com/StarRocks/starrocks/pull/30498)
+- An error "java.lang.NullPointerException: null" occurs when users modify columns that do not exist in a Primary Key table. [#30366](https://github.com/StarRocks/starrocks/pull/30366)
+- An error "get TableMeta failed from TNetworkAddress" occurs when users load data into a partitioned StarRocks external table. [#30466](https://github.com/StarRocks/starrocks/pull/30466)
+- In certain scenarios, an error occurs when users load data via CloudCanal. [#30799](https://github.com/StarRocks/starrocks/pull/30799)
+- An error "current running txns on db xxx is 200, larger than limit 200" occurs when users load data via the Flink Connector or perform DELETE and INSERT operations. [#31316](https://github.com/StarRocks/starrocks/pull/31316)
+- Asynchronous materialized views that use aggregate functions with HAVING clauses cannot rewrite queries properly. [#30157](https://github.com/StarRocks/starrocks/pull/30157)
+
 ## 2.5.12
 
 Release date: September 4, 2023
