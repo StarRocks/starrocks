@@ -1325,7 +1325,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     }
 
     @Test
-    public void testRangePartitionWithJDBCTableUseStr2DateWithMaxValue() throws Exception {
+    public void testRangePartitionWithJDBCTableUseStr2Date3() throws Exception {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
         MockedJDBCMetadata mockedJDBCMetadata =
                 (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
@@ -1342,10 +1342,9 @@ public class PartitionBasedMvRefreshProcessorTest {
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
         Collection<Partition> partitions = materializedView.getPartitions();
-        Assert.assertEquals(3, partitions.size());
+        Assert.assertEquals(2, partitions.size());
         Assert.assertNotNull(materializedView.getPartition("p20230801"));
         Assert.assertNotNull(materializedView.getPartition("p20230802"));
-        Assert.assertNotNull(materializedView.getPartition("pmaxvalue"));
     }
 
     @Test

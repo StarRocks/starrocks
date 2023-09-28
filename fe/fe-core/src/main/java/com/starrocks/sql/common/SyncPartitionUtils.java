@@ -109,7 +109,7 @@ public class SyncPartitionUtils {
             String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
             rollupRange = mappingRangeList(baseRangeMap, granularity, partitionType);
         } else if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
-            rollupRange = mappingRangeList(baseRangeMap);
+            rollupRange = baseRangeMap;
         }
         return getRangePartitionDiff(baseRangeMap, mvRangeMap, rollupRange);
     }
@@ -149,31 +149,6 @@ public class SyncPartitionUtils {
         RangePartitionDiff diff = new RangePartitionDiff(adds, deletes);
         diff.setRollupToBasePartitionMap(partitionRefMap);
         return diff;
-    }
-
-    private static Map<String, Range<PartitionKey>> mappingRangeList(Map<String, Range<PartitionKey>> baseRangeMap) {
-        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
-        try {
-            for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
-                LiteralExpr lowerExpr = rangeEntry.getValue().lowerEndpoint().getKeys().get(0);
-                LiteralExpr upperExpr = rangeEntry.getValue().upperEndpoint().getKeys().get(0);
-
-                Preconditions.checkArgument(lowerExpr instanceof StringLiteral
-                        && upperExpr instanceof StringLiteral);
-
-                PartitionKey lowerPartitionKey = new PartitionKey();
-                PartitionKey upperPartitionKey = new PartitionKey();
-                LocalDateTime lowerDate = DateUtils.parseStrictDateTime(lowerExpr.getStringValue());
-                LocalDateTime upperDate = DateUtils.parseStrictDateTime(upperExpr.getStringValue());
-                lowerPartitionKey.pushColumn(new DateLiteral(lowerDate, Type.DATE), PrimitiveType.DATE);
-                upperPartitionKey.pushColumn(new DateLiteral(upperDate, Type.DATE), PrimitiveType.DATE);
-
-                result.put(rangeEntry.getKey(), Range.closedOpen(lowerPartitionKey, upperPartitionKey));
-            }
-        } catch (AnalysisException e) {
-            throw new SemanticException("Convert to PartitionMapping failed:", e);
-        }
-        return result;
     }
 
     public static Map<String, Range<PartitionKey>> diffRange(List<PartitionRange> srcRanges,
@@ -581,7 +556,7 @@ public class SyncPartitionUtils {
                 baseTableVersionMap.keySet().removeIf(partitionName -> {
                     try {
                         Set<String> partitionNames = PartitionUtil.getMVPartitionName(baseTable, partitionColumn,
-                                Lists.newArrayList(partitionName));
+                                Lists.newArrayList(partitionName), expr);
                         return partitionNames != null && partitionNames.size() == 1 &&
                                 Lists.newArrayList(partitionNames).get(0).equals(mvPartitionName);
                     } catch (AnalysisException e) {
