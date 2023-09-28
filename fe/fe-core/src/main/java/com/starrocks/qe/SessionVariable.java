@@ -398,6 +398,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
 
+    public static final String ENABLE_APPEND_SELECTIVE_DEVIRTUALIZE = "enable_append_selective_devirtualize";
+
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
         DEFAULT,            // default, choose the materialized view or not by cost optimizer
@@ -1316,6 +1318,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
     private boolean enableIcebergIdentityColumnOptimize = true;
 
+
+    @VarAttr(name = ENABLE_APPEND_SELECTIVE_DEVIRTUALIZE)
+    private boolean enableAppendSelectiveDevirtualize = false;
+
+    public void setEnableAppendSelectiveDevirtualize(boolean on) {
+        this.enableAppendSelectiveDevirtualize = on;
+    }
+    public boolean isEnableAppendSelectiveDevirtualize() {
+        return enableAppendSelectiveDevirtualize;
+    }
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
@@ -2564,6 +2576,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
 
         tResult.setEnable_spill(enableSpill);
+        tResult.setEnable_append_selective_devirtualize(enableAppendSelectiveDevirtualize);
         if (enableSpill) {
             tResult.setSpill_mem_table_size(spillMemTableSize);
             tResult.setSpill_mem_table_num(spillMemTableNum);

@@ -96,6 +96,7 @@ private:
     static const int32_t DEFAULT_DRIVER_SEQUENCE = 0;
 
     const std::shared_ptr<SinkBuffer>& _buffer;
+    bool _devirtualize = false;
 
     const TPartitionType::type _part_type;
 
