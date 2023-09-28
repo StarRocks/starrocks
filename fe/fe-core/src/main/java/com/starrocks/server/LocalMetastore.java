@@ -2933,26 +2933,6 @@ public class LocalMetastore implements ConnectorMetadata {
         // otherwise, backends should be chosen from backendsPerBucketSeq;
         boolean chooseBackendsArbitrary;
 
-<<<<<<< HEAD
-            // add tablet to inverted index first
-            index.addTablet(tablet, tabletMeta);
-            tabletIdSet.add(tablet.getId());
-
-            // get BackendIds
-            List<Long> chosenBackendIds;
-            if (chooseBackendsArbitrary) {
-                // This is the first colocate table in the group, or just a normal table,
-                // randomly choose backends
-                if (Config.enable_strict_storage_medium_check) {
-                    chosenBackendIds =
-                            chosenBackendIdBySeq(replicationNum, tabletMeta.getStorageMedium());
-                } else {
-                    try {
-                        chosenBackendIds = chosenBackendIdBySeq(replicationNum);
-                    } catch (DdlException ex) {
-                        throw new DdlException(String.format("%stable=%s, default_replication_num=%d",
-                                ex.getMessage(), table.getName(), Config.default_replication_num));
-=======
         // We should synchronize the creation of colocate tables, otherwise it can have concurrent issues.
         // Considering the following situation,
         // T1: P1 issues `create colocate table` and finds that there isn't a bucket sequence associated
@@ -2984,7 +2964,6 @@ public class LocalMetastore implements ConnectorMetadata {
                                     colocateTableIndex.getBackendsPerBucketSeq(colocateWithGroupsInOtherDb.get(0));
                             initBucketSeqWithSameOrigNameGroup = true;
                         }
->>>>>>> 4dbab2b99b ([BugFix] Fix concurrency issues when creating colocate tables (#31771))
                     }
                     chooseBackendsArbitrary = backendsPerBucketSeq == null || backendsPerBucketSeq.isEmpty();
                     if (chooseBackendsArbitrary) {
