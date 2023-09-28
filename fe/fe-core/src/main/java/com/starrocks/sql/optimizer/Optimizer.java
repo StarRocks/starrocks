@@ -514,6 +514,16 @@ public class Optimizer {
                 rootTaskContext);
         result = new ExtractAggregateColumn().rewrite(result, rootTaskContext);
         result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
+<<<<<<< HEAD
+=======
+
+        SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
+
+        // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator
+        // too early will prevent it from certain optimizations that depend on the equivalence of the ColumnRefOperator.
+        result = new CloneDuplicateColRefRule().rewrite(result, rootTaskContext);
+
+>>>>>>> de6890529d ([BugFix] Solve column reuse problem (#31465))
         result.setPlanCount(planCount);
         return result;
     }
