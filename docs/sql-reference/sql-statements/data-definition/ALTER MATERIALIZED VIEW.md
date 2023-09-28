@@ -21,7 +21,7 @@ This SQL statement can：
   - `unique_constraints`
   - `foreign_key_constraints`
   - `colocate_with`
-  - All session variable-related properties. For information on session variables, see [System variables](/docs/reference/System_variable.md)。
+  - All session variable-related properties. For information on session variables, see [System variables](../../../reference/System_variable.md).
 
 ## Syntax
 
