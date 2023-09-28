@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
+import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
@@ -488,6 +489,11 @@ public class Optimizer {
         result = new PredicateReorderRule(rootTaskContext.getOptimizerContext().getSessionVariable()).rewrite(result,
                 rootTaskContext);
         result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
+
+        // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator
+        // too early will prevent it from certain optimizations that depend on the equivalence of the ColumnRefOperator.
+        result = new CloneDuplicateColRefRule().rewrite(result, rootTaskContext);
+
         result.setPlanCount(planCount);
         return result;
     }
