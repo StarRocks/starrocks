@@ -375,7 +375,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
-    public static final String ENABLE_PER_BUCKET_OPTIMIZE = "enable_per_bucket_optmize";
+    public static final String ENABLE_PER_BUCKET_OPTIMIZE = "enable_per_bucket_optimize";
     public static final String ENABLE_PARALLEL_MERGE = "enable_parallel_merge";
 
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
