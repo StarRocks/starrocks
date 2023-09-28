@@ -610,6 +610,10 @@ public class Coordinator {
             QueryQueueManager.getInstance().maybeWait(connectContext, this);
         }
 
+        if (slot != null && slot.getPipelineDop() > 0 && slot.getPipelineDop() != getQueryOptions().getPipeline_dop()) {
+            fragments.forEach(fragment -> fragment.limitMaxPipelineDop(slot.getPipelineDop()));
+        }
+
         try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Prepare")) {
             prepareExec();
         }
