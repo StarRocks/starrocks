@@ -6,12 +6,16 @@ insert into t1 values(1, 1);
 select * from t1 order by k;
 
 alter table t1 add column (v1 int, v2 int, v3 int);
+function: wait_alter_table_finish()
+
 select * from t1 order by k;
 insert into t1 values(2, 2, 3, 4, 5);
 select * from t1 order by k;
 alter table t1 drop column v;
+function: wait_alter_table_finish()
 
 alter table t1 drop column v2;
+function: wait_alter_table_finish()
 insert into t1 values(2, 2, 3);
 select * from t1 order by k;
 
@@ -40,7 +44,7 @@ ENGINE=OLAP
 PRIMARY KEY(`k1`,`k2`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 1
 PROPERTIES (
-    "replication_num" = "3",
+    "replication_num" = "1",
     "light_schema_change" = "true"
 );
 
@@ -54,6 +58,7 @@ insert into tab1 values (600, "k2_600", 600, 600, 600, "v4_600", "v5_600");
 select * from tab1;
 
 alter table tab1 add column v6 varchar(200) default "0" after v3;
+function: wait_alter_table_finish()
 select * from tab1;
 
 shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H label:stream_load_partial_update_123432 -H column_separator:, -H columns:k1,k2,v6,v2 ${url}/api/test_light_schema_change/tab1/_stream_load
@@ -62,6 +67,7 @@ select * from tab1;
 
 
 alter table tab1 drop column v4;
+function: wait_alter_table_finish()
 update tab1 set v3 = 999;
 select * from tab1;
 

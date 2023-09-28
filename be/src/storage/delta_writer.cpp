@@ -112,6 +112,7 @@ Status DeltaWriter::_init() {
         _set_state(kUninitialized, st);
         return st;
     }
+    LOG(INFO) << "init tablet:" << _tablet->tablet_id() << " delta writer";
     if (_tablet->updates() != nullptr) {
         auto tracker = _storage_engine->update_manager()->mem_tracker();
         if (tracker->limit_exceeded()) {
@@ -342,6 +343,11 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(_check_partial_update_with_sort_key(chunk));
+    LOG(INFO) << "chunk num row:" << chunk.num_rows();
+    for (size_t i = 0; i < chunk.num_rows(); i++) {
+        LOG(INFO) << "append chunk row[" << i << "]:" << chunk.debug_row(i);
+    }
+
     // Delay the creation memtables until we write data.
     // Because for the tablet which doesn't have any written data, we will not use their memtables.
     if (_mem_table == nullptr) {
@@ -500,22 +506,26 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
                                                  const TabletSchemaCSPtr& ori_tablet_schema) {
     Status st;
     _tablet_schema->copy_from(ori_tablet_schema);
-    // new tablet schema if new table
 
+    // new tablet schema if new table
     // find the right index id
     int i = 0;
     for (; i < ptable_schema_param.indexes_size(); i++) {
         if (ptable_schema_param.indexes(i).id() == index_id) break;
     }
-    if (ptable_schema_param.indexes_size() > 0 && ptable_schema_param.indexes(0).has_column_param() &&
-        ptable_schema_param.indexes(0).column_param().columns_desc_size() != 0 &&
-        ptable_schema_param.indexes(0).column_param().columns_desc(0).unique_id() >= 0) {
-        RETURN_IF_ERROR(_tablet_schema->build_current_tablet_schema(index_id, ptable_schema_param.version(),
-                                                                    ptable_schema_param.indexes(i), ori_tablet_schema));
+    if (i < ptable_schema_param.indexes_size()) {
+        if (ptable_schema_param.indexes_size() > 0 && ptable_schema_param.indexes(i).has_column_param() &&
+            ptable_schema_param.indexes(i).column_param().columns_desc_size() != 0 &&
+            ptable_schema_param.indexes(i).column_param().columns_desc(0).unique_id() >= 0) {
+            RETURN_IF_ERROR(_tablet_schema->build_current_tablet_schema(
+                    index_id, ptable_schema_param.version(), ptable_schema_param.indexes(i), ori_tablet_schema));
+        }
     }
+
     if (_tablet_schema->schema_version() > ori_tablet_schema->schema_version()) {
         _tablet->update_max_version_schema(_tablet_schema);
     }
+
     return st;
 }
 

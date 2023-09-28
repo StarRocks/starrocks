@@ -964,6 +964,7 @@ class StarrocksSQLApiLib(object):
         wait alter table job finish and return status
         """
         status = ""
+        sleep_time = 0
         while True:
             res = self.execute_sql(
                 "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
@@ -974,8 +975,11 @@ class StarrocksSQLApiLib(object):
 
             status = res["result"][0][9]
             if status == "FINISHED" or status == "CANCELLED" or status == "":
+                if sleep_time <= 1:
+                    time.sleep(1)
                 break
             time.sleep(0.5)
+            sleep_time += 0.5
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
     def wait_optimize_table_finish(self, alter_type="OPTIMIZE"):

@@ -43,6 +43,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.SlotRef;
@@ -61,6 +62,8 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -114,6 +117,7 @@ import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -245,8 +249,10 @@ public class SchemaChangeHandler extends AlterHandler {
         } else {
             for (int i = columns.size() - 1; i >= 0; --i) {
                 Column column = columns.get(i);
-                ligthSchemaChange = addColumnInternal(olapTable, column, alterClause.getGeneratedColumnPos(),
+                addColumnInternal(olapTable, column, alterClause.getGeneratedColumnPos(),
                         targetIndexId, baseIndexId, indexSchemaMap, newColNameSet);
+                // add a generated column need to rewrite data, can not use light schema change
+                ligthSchemaChange = false;
             }
         }
         return ligthSchemaChange;
@@ -761,6 +767,10 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         boolean lightSchemaChange = olapTable.getUseLightSchemaChange();
+        // if column is generated column, need to rewrite table data, so we can not use light schema change
+        if (newColumn.isAutoIncrement() || newColumn.isGeneratedColumn()) {
+            lightSchemaChange = false;
+        }
 
         String newColName = newColumn.getName();
         //make sure olapTable has locked
@@ -1551,12 +1561,7 @@ public class SchemaChangeHandler extends AlterHandler {
         if (lightSchemaChange) {
             long jobId = GlobalStateMgr.getCurrentState().getNextId();
             //for schema change add/drop value column optimize, direct modify table meta.
-            // Add a completed job to ensure consistency of user behavior.
-            AlterJobV2 job = createJob(db.getId(), olapTable, indexSchemaMap, propertyMap, newIndexes);
             modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, newIndexes, jobId, false);
-            job.setFinishedTimeMs(System.currentTimeMillis());
-            job.setJobState(AlterJobV2.JobState.FINISHED);
-            addAlterJobV2(job);
             return null;
         } else {
             return createJob(db.getId(), olapTable, indexSchemaMap, propertyMap, newIndexes);
@@ -2337,9 +2342,20 @@ public class SchemaChangeHandler extends AlterHandler {
             List<Long> indexIds = new ArrayList<Long>();
             indexIds.add(baseIndexId);
             indexIds.addAll(olapTable.getIndexIdListExceptBaseIndex());
+            Set<String> modifiedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            Boolean hasMv = !olapTable.getRelatedMaterializedViews().isEmpty();
             for (long idx : indexIds) {
                 List<Column> indexSchema = indexSchemaMap.get(idx);
                 MaterializedIndexMeta currentIndexMeta = olapTable.getIndexMetaByIndexId(idx);
+                List<Column> originSchema = currentIndexMeta.getSchema();
+                if (hasMv && indexSchema.size() < originSchema.size()) {
+                    // drop column
+                    List<Column> differences = originSchema.stream().filter(element ->
+                                   !indexSchema.contains(element)).collect(Collectors.toList());
+                    // can just drop one column one time, so just one element in differences
+                    Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
+                    modifiedColumns.add(originSchema.get(dropIdx).getName());
+                }
                 currentIndexMeta.setSchema(indexSchema);
 
                 int currentSchemaVersion = currentIndexMeta.getSchemaVersion();
@@ -2367,9 +2383,31 @@ public class SchemaChangeHandler extends AlterHandler {
                 LOG.debug("logModifyTableAddOrDropColumns info:{}", info);
                 GlobalStateMgr.getCurrentState().getEditLog().logModifyTableAddOrDropColumns(info);
             }
+
             schemaChangeJob.setJobState(AlterJobV2.JobState.FINISHED);
             schemaChangeJob.setFinishedTimeMs(System.currentTimeMillis());
             this.addAlterJobV2(schemaChangeJob);
+
+            // inactive related mv
+            if (!modifiedColumns.isEmpty()) {
+                for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
+                    MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
+                    if (mv == null) {
+                        LOG.warn("Ignore materialized view {} does not exists", mvId);
+                        continue;
+                    }
+                    for (Column mvColumn : mv.getColumns()) {
+                        if (modifiedColumns.contains(mvColumn.getName())) {
+                            LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                            "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
+                                    mvColumn.getName(), olapTable.getName());
+                            mv.setInactiveAndReason(
+                                    "base-table schema changed for columns: " + StringUtils.join(modifiedColumns, ","));
+                            break;
+                        }
+                    }
+                }
+            }
 
             LOG.info("finished modify table's add or drop columns. table: {}, is replay: {}", olapTable.getName(),
                     isReplay);
