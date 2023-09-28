@@ -200,7 +200,7 @@ public class RangePartitionInfo extends PartitionInfo {
     public Range<PartitionKey> handleNewSinglePartitionDesc(SingleRangePartitionDesc desc,
                                                             long partitionId, boolean isTemp) throws DdlException {
         Preconditions.checkArgument(desc.isAnalyzed());
-        Range<PartitionKey> range = null;
+        Range<PartitionKey> range;
         try {
             range = checkAndCreateRange(desc, isTemp);
             setRangeInternal(partitionId, isTemp, range);
