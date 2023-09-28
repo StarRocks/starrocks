@@ -99,7 +99,7 @@ Status DataDir::init(bool read_only, bool as_cn) {
     if (!as_cn) {
         RETURN_IF_ERROR_WITH_WARN(_init_meta(read_only), "_init_meta failed");
     }
-   
+
     _is_used = true;
     return Status::OK();
 }
