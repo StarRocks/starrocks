@@ -102,16 +102,13 @@ public:
     void TEST_set_miss_auto_increment_column();
 
 private:
-    DeltaWriter(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
-                bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
-                MemTracker* mem_tracker, int64_t max_buffer_size);
-
     DeltaWriterImpl* _impl;
 };
 
 class DeltaWriterBuilder {
 public:
+    using DeltaWriterPtr = std::unique_ptr<DeltaWriter>;
+
     DeltaWriterBuilder() = default;
     ~DeltaWriterBuilder() = default;
 
@@ -172,11 +169,7 @@ public:
         return *this;
     }
 
-    std::unique_ptr<DeltaWriter> build() {
-        return std::unique_ptr<DeltaWriter>(new DeltaWriter(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots,
-                                                            _merge_condition, _miss_auto_increment_column, _table_id,
-                                                            _immutable_tablet_size, _mem_tracker, _max_buffer_size));
-    }
+    StatusOr<DeltaWriterPtr> build();
 
 private:
     TabletManager* _tablet_mgr{nullptr};
