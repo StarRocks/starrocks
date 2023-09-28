@@ -43,7 +43,11 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 07
 
 6:AGGREGATE (update serialize)
+<<<<<<< HEAD
 |  aggregate: sum[([28: case, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([29: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
+=======
+|  aggregate: sum[(if[(22: P_TYPE LIKE 'PROMO%', [34: multiply, DOUBLE, true], 0.0); args: BOOLEAN,DOUBLE,DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([29: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
+>>>>>>> de6890529d ([BugFix] Solve column reuse problem (#31465))
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[-Infinity, Infinity, 0.0, 8.0, 1.0] ESTIMATE
@@ -53,6 +57,10 @@ OutPut Exchange Id: 07
 |  output columns:
 |  28 <-> if[(22: P_TYPE LIKE 'PROMO%', [34: multiply, DOUBLE, false], 0.0); args: BOOLEAN,DOUBLE,DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  29 <-> [34: multiply, DOUBLE, false]
+<<<<<<< HEAD
+=======
+|  34 <-> clone([34: multiply, DOUBLE, false])
+>>>>>>> de6890529d ([BugFix] Solve column reuse problem (#31465))
 |  common expressions:
 |  33 <-> 1.0 - [7: L_DISCOUNT, DOUBLE, false]
 |  34 <-> [6: L_EXTENDEDPRICE, DOUBLE, false] * [33: subtract, DOUBLE, false]
