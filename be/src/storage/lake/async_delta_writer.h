@@ -160,6 +160,11 @@ public:
         return *this;
     }
 
+    AsyncDeltaWriterBuilder& set_index_id(int64_t index_id) {
+        _index_id = index_id;
+        return *this;
+    }
+
     StatusOr<AsyncDeltaWriterPtr> build();
 
 private:
@@ -167,6 +172,7 @@ private:
     int64_t _txn_id{0};
     int64_t _table_id{0};
     int64_t _partition_id{0};
+    int64_t _index_id{0};
     int64_t _tablet_id{0};
     const std::vector<SlotDescriptor*>* _slots{nullptr};
     int64_t _immutable_tablet_size{0};
