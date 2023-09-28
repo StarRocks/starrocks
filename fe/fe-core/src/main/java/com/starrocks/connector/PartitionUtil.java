@@ -634,7 +634,7 @@ public class PartitionUtil {
             if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC) ||
                     functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
                 return SyncPartitionUtils.getRangePartitionDiffOfExpr(basePartitionMap,
-                        mvPartitionMap, functionCallExpr, partitionColumn.getPrimitiveType());
+                        mvPartitionMap, functionCallExpr, partitionColumn.getPrimitiveType(), null);
             } else {
                 throw new SemanticException("Materialized view partition function " +
                         functionCallExpr.getFnName().getFunction() +
