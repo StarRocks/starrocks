@@ -361,11 +361,11 @@ Used for MySQL client compatibility. No practical usage. Table names in StarRock
 
 Specifies the query rewrite mode of asynchronous materialized views. Valid values:
 
-* `disable`: Disable the automatic query rewrite of asynchronous materialized views.
-* `default` (Default value): Enable the automatic query rewrite of asynchronous materialized views, and allow the optimizer to decide whether a query can be rewritten using the materialized view based on the cost. If the query cannot be rewritten, it directly scans the data in the base table.
-* `default_or_error`: Enable the automatic query rewrite of asynchronous materialized views, and allow the optimizer to decide whether a query can be rewritten using the materialized view based on the cost. If the query cannot be rewritten, an error is returned.
-* `force`: Enable the automatic query rewrite of asynchronous materialized views, and the optimizer prioritizes query rewrite using the materialized view. If the query cannot be rewritten, it directly scans the data in the base table.
-* `force_or_error`: Enable the automatic query rewrite of asynchronous materialized views, and the optimizer prioritizes query rewrite using the materialized view. If the query cannot be rewritten, an error is returned.
+* `disable`: Disableautomatic query rewrite of asynchronous materialized views.
+* `default` (Default value): Enableautomatic query rewrite of asynchronous materialized views, and allow the optimizer to decide whether a query can be rewritten using the materialized view based on the cost. If the query cannot be rewritten, it directly scans the data in the base table.
+* `default_or_error`: Enableautomatic query rewrite of asynchronous materialized views, and allow the optimizer to decide whether a query can be rewritten using the materialized view based on the cost. If the query cannot be rewritten, an error is returned.
+* `force`: Enableautomatic query rewrite of asynchronous materialized views, and the optimizer prioritizes query rewrite using the materialized view. If the query cannot be rewritten, it directly scans the data in the base table.
+* `force_or_error`: Enableautomatic query rewrite of asynchronous materialized views, and the optimizer prioritizes query rewrite using the materialized view. If the query cannot be rewritten, an error is returned.
 
 ### max_allowed_packet
 
