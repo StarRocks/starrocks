@@ -55,6 +55,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.iceberg.IcebergApiConverter.getBucketSourceIdWithBucketNum;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
@@ -165,18 +166,17 @@ public class IcebergTable extends Table {
     }
 
     public boolean hasBucketProperties() {
-        org.apache.iceberg.Table nativeTable = getNativeTable();
-
-        return nativeTable.spec().isPartitioned() && Partitioning.hasBucketField(nativeTable.spec());
+        return nativeTable.spec().isPartitioned() && Partitioning.hasBucketField(getNativeTable().spec());
     }
 
     public List<BucketProperty> getBucketProperties() {
         if (!hasBucketProperties()) {
-            return null;
+            return Lists.newArrayList();
         }
+
         List<BucketProperty> bucketProperties = new ArrayList<>();
-        List<Pair<Integer, Integer>> bucketSourceIdWithBucketNums = IcebergApiConverter.
-                getBucketSourceIdWithBucketNum(nativeTable.spec());
+        List<Pair<Integer, Integer>> bucketSourceIdWithBucketNums = getBucketSourceIdWithBucketNum(getNativeTable().spec());
+
         for (Pair<Integer, Integer> bucket : bucketSourceIdWithBucketNums) {
             Column column = getColumn(nativeTable.schema().findColumnName(bucket.first));
             bucketProperties.add(new BucketProperty(bucket.second, column));
