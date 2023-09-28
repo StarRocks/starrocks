@@ -181,11 +181,13 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
 }
 
 Status StorageEngine::_open(const EngineOptions& options) {
+
+    _as_cn = options.as_cn;
+    _effective_cluster_id = config::cluster_id;
+
     // init store_map
     RETURN_IF_ERROR_WITH_WARN(_init_store_map(), "_init_store_map failed");
 
-    _effective_cluster_id = config::cluster_id;
-    _as_cn = options.as_cn;
     RETURN_IF_ERROR_WITH_WARN(_check_all_root_path_cluster_id(), "fail to check cluster id");
 
     _update_storage_medium_type_count();
@@ -256,8 +258,10 @@ Status StorageEngine::_init_store_map() {
         ScopedCleanup store_release_guard([&]() { delete store; });
         tmp_stores.emplace_back(true, store);
         store_release_guard.cancel();
-        auto as_cn = &_as_cn;
+        auto& as_cn = _as_cn;
         threads.emplace_back([store, &error_msg_lock, &error_msg, as_cn]() {
+            // for debug
+            LOG(INFO) << "as_cn captured in _init_store_map is " << as_cn;
             auto st = store->init(false, as_cn);
             if (!st.ok()) {
                 {
