@@ -331,13 +331,17 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
             auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
             for (size_t i = 0; i < chunk.num_rows(); i++) {
                 if (ops[i] == TOpType::UPSERT) {
-                    LOG(WARNING) << "table with sort key do not support partial update";
-                    return Status::NotSupported("table with sort key do not support partial update");
+                    std::string msg = strings::Substitute("tablet:$0 with sort key do not support partial update",
+                                                          _tablet->tablet_id());
+                    LOG(WARNING) << msg;
+                    return Status::NotSupported(msg);
                 }
             }
         } else {
-            LOG(WARNING) << "table with sort key do not support partial update";
-            return Status::NotSupported("table with sort key do not support partial update");
+            std::string msg =
+                    strings::Substitute("tablet:$0 with sort key do not support partial update", _tablet->tablet_id());
+            LOG(WARNING) << msg;
+            return Status::NotSupported(msg);
         }
     }
     return Status::OK();
