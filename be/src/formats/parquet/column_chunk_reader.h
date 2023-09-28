@@ -106,6 +106,12 @@ public:
         return _cur_decoder->get_dict_values(dict_codes, nulls, column);
     }
 
+    Status to_global_dict_code(std::vector<int32_t>& dict_codes, const NullableColumn& nulls, Column* column,
+                               GlobalDictMap* map) {
+        RETURN_IF_ERROR(_try_load_dictionary());
+        return _cur_decoder->to_global_dict_code(dict_codes, nulls, column, map);
+    }
+
 private:
     Status _parse_page_header();
     Status _parse_page_data();

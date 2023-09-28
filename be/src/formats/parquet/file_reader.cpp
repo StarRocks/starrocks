@@ -25,6 +25,7 @@
 #include "formats/parquet/metadata.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "util/coding.h"
 #include "util/defer_op.h"
@@ -43,7 +44,8 @@ FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
 
 FileReader::~FileReader() = default;
 
-Status FileReader::init(HdfsScannerContext* ctx) {
+Status FileReader::init(RuntimeState* runtime_state, HdfsScannerContext* ctx) {
+    _runtime_state = runtime_state;
     _scanner_ctx = ctx;
     RETURN_IF_ERROR(_parse_footer());
 
@@ -66,7 +68,7 @@ Status FileReader::init(HdfsScannerContext* ctx) {
         return Status::OK();
     }
     _prepare_read_columns();
-    RETURN_IF_ERROR(_init_group_readers());
+    RETURN_IF_ERROR(_init_group_readers(runtime_state));
     return Status::OK();
 }
 
@@ -149,11 +151,11 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
     // filter by min/max conjunct ctxs.
     if (!_scanner_ctx->min_max_conjunct_ctxs.empty()) {
         const TupleDescriptor& tuple_desc = *(_scanner_ctx->min_max_tuple_desc);
-        ChunkPtr min_chunk = ChunkHelper::new_chunk(tuple_desc, 0);
-        ChunkPtr max_chunk = ChunkHelper::new_chunk(tuple_desc, 0);
+        ChunkPtr min_chunk = ChunkHelper::new_chunk(tuple_desc.decoded_slots(), 0);
+        ChunkPtr max_chunk = ChunkHelper::new_chunk(tuple_desc.decoded_slots(), 0);
 
         bool exist = false;
-        RETURN_IF_ERROR(_read_min_max_chunk(row_group, tuple_desc.slots(), &min_chunk, &max_chunk, &exist));
+        RETURN_IF_ERROR(_read_min_max_chunk(row_group, tuple_desc.decoded_slots(), &min_chunk, &max_chunk, &exist));
         if (!exist) {
             return false;
         }
@@ -442,7 +444,7 @@ bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
     return false;
 }
 
-Status FileReader::_init_group_readers() {
+Status FileReader::_init_group_readers(RuntimeState* runtime_state) {
     const HdfsScannerContext& fd_scanner_ctx = *_scanner_ctx;
 
     // _group_reader_param is used by all group readers
@@ -508,7 +510,7 @@ Status FileReader::_init_group_readers() {
 
     // initialize row group readers.
     for (auto& r : _row_group_readers) {
-        RETURN_IF_ERROR(r->init());
+        RETURN_IF_ERROR(r->init(runtime_state));
     }
     return Status::OK();
 }

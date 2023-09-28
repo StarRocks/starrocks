@@ -409,14 +409,11 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     // create string -> dict code mapping
                     ColumnRefOperator newDictColumn = createNewDictColumn(context, stringColumn);
                     dictMapping.put(columnId, newDictColumn);
-
                     // get dict from cache
                     ColumnDict columnDict = context.globalDictCache.get(new Pair<>(tableId, stringColumn.getName()));
                     Preconditions.checkState(columnDict != null);
                     context.globalDicts.add(new Pair<>(newDictColumn.getId(), columnDict));
-
                     context.stringColumnIdToDictColumnIds.put(columnId, newDictColumn.getId());
-                    context.hasEncoded = true;
                 }
                 dictApplyColumnSet.forEach(dictApplyColumnRefSet::union);
             }
@@ -519,6 +516,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
             PhysicalIcebergScanOperator scanOperator = (PhysicalIcebergScanOperator) optExpression.getOp();
             if (context.tableIdToStringColumnIds.containsKey(scanOperator.getTable().getId())) {
+
                 AdjustScanOperatorContext adjustScanOperatorContext = new AdjustScanOperatorContext(context);
 
                 // analyze which columns can be used as dict columns.
