@@ -84,6 +84,8 @@ Whether to enable the local disk cache.
 
 > **NOTE**
 >
+> In version 3.0 this property was named `enable_storage_cache`.
+>
 > To enable the local disk cache, you must specify the directory of the disk in the CN configuration item `storage_root_path`.
 
 #### datacache.partition_duration
@@ -91,6 +93,8 @@ Whether to enable the local disk cache.
 The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
 
 > **NOTE**
+>
+> In version 3.0 this property was named `storage_cache_ttl`.
 >
 > This property is available only when `datacache.enable` is set to `true`.
 
