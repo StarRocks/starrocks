@@ -39,6 +39,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortField;
@@ -183,6 +184,45 @@ public class IcebergTable extends Table {
         }
 
         return bucketProperties;
+    }
+
+    public boolean isBucketColumn(int fieldId) {
+        PartitionSpec spec = getNativeTable().spec();
+        Optional<PartitionField> partitionField = spec.fields().stream()
+                .filter(field -> field.fieldId() == fieldId).findFirst();
+        if (!partitionField.isPresent()) {
+            throw new StarRocksConnectorException("Can't find partition field with id %d", fieldId);
+        } else {
+            int sourceId = partitionField.get().sourceId();
+            List<Pair<Integer, Integer>> sourceIdToBucketIds = getBucketSourceIdWithBucketNum(spec);
+            return sourceIdToBucketIds.stream().anyMatch(idToBucketId -> idToBucketId.first == sourceId);
+        }
+    }
+
+    public int getTransformedBucketId(List<Integer> bucketIds) {
+        PartitionSpec spec = getNativeTable().spec();
+        List<Integer> bucketNums = getBucketSourceIdWithBucketNum(spec).stream()
+                .map(pair -> pair.second)
+                .collect(Collectors.toList());
+
+        int size = bucketNums.size();
+        if (size != bucketIds.size()) {
+            throw new StarRocksConnectorException("bucket size error. %d vs %d", bucketNums.size(), bucketIds.size());
+        }
+
+        int res = 0;
+        for (int i = 0; i < size; i++) {
+            if (i == size - 1) {
+                res = res + bucketIds.get(i);
+            } else {
+                int tmp = bucketIds.get(i);
+                for (int j = i + 1; j <= size - 1; j++) {
+                    tmp = tmp * bucketNums.get(j);
+                }
+                res = res + tmp;
+            }
+        }
+        return res;
     }
 
     public List<Integer> partitionColumnIndexes() {
