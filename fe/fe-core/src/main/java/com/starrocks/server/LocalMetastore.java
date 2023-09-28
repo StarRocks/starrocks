@@ -244,9 +244,7 @@ public class LocalMetastore implements ConnectorMetadata {
     private EditLog editLog;
     private final CatalogRecycleBin recycleBin;
     private ColocateTableIndex colocateTableIndex;
-<<<<<<< HEAD
     private final SystemInfoService systemInfoService;
-=======
     /**
      * Concurrent colocate table creation process have dependency on each other
      * (even in different databases), but we do not want to affect the performance
@@ -254,7 +252,6 @@ public class LocalMetastore implements ConnectorMetadata {
      * synchronize only the creation of colocate tables.
      */
     private final CountingLatch colocateTableCreateSyncer = new CountingLatch(0);
->>>>>>> 4dbab2b99b ([BugFix] Fix concurrency issues when creating colocate tables (#31771))
 
     public LocalMetastore(GlobalStateMgr globalStateMgr, CatalogRecycleBin recycleBin,
                           ColocateTableIndex colocateTableIndex, SystemInfoService systemInfoService) {
@@ -2720,26 +2717,6 @@ public class LocalMetastore implements ConnectorMetadata {
         // otherwise, backends should be chosen from backendsPerBucketSeq;
         boolean chooseBackendsArbitrary;
 
-<<<<<<< HEAD
-            // add tablet to inverted index first
-            index.addTablet(tablet, tabletMeta);
-            tabletIdSet.add(tablet.getId());
-
-            // get BackendIds
-            List<Long> chosenBackendIds;
-            if (chooseBackendsArbitrary) {
-                // This is the first colocate table in the group, or just a normal table,
-                // randomly choose backends
-                if (Config.enable_strict_storage_medium_check) {
-                    chosenBackendIds =
-                            chosenBackendIdBySeq(replicationNum, tabletMeta.getStorageMedium());
-                } else {
-                    try {
-                        chosenBackendIds = chosenBackendIdBySeq(replicationNum);
-                    } catch (DdlException ex) {
-                        throw new DdlException(String.format("%stable=%s, default_replication_num=%d",
-                                ex.getMessage(), table.getName(), FeConstants.default_replication_num));
-=======
         // We should synchronize the creation of colocate tables, otherwise it can have concurrent issues.
         // Considering the following situation,
         // T1: P1 issues `create colocate table` and finds that there isn't a bucket sequence associated
@@ -2771,7 +2748,6 @@ public class LocalMetastore implements ConnectorMetadata {
                                     colocateTableIndex.getBackendsPerBucketSeq(colocateWithGroupsInOtherDb.get(0));
                             initBucketSeqWithSameOrigNameGroup = true;
                         }
->>>>>>> 4dbab2b99b ([BugFix] Fix concurrency issues when creating colocate tables (#31771))
                     }
                     chooseBackendsArbitrary = backendsPerBucketSeq == null || backendsPerBucketSeq.isEmpty();
                     if (chooseBackendsArbitrary) {
@@ -2790,19 +2766,6 @@ public class LocalMetastore implements ConnectorMetadata {
             chooseBackendsArbitrary = true;
         }
 
-<<<<<<< HEAD
-        // In the following two situations, we should set the bucket seq for colocate group and persist the info,
-        //   1. This is the first time we add a table to colocate group, and it doesn't have the same original name
-        //      with colocate group in other database.
-        //   2. It's indeed the first time, but it should colocate with group in other db
-        //      (because of having the same original name), we should use the bucket
-        //      seq of other group to initialize our own.
-        if ((groupId != null && chooseBackendsArbitrary) || initBucketSeqWithSameOrigNameGroup) {
-            colocateTableIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
-            ColocatePersistInfo info =
-                    ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
-            editLog.logColocateBackendsPerBucketSeq(info);
-=======
 
 
         try {
@@ -2866,7 +2829,6 @@ public class LocalMetastore implements ConnectorMetadata {
             if (isColocateTable && chooseBackendsArbitrary) {
                 colocateTableCreateSyncer.decrement();
             }
->>>>>>> 4dbab2b99b ([BugFix] Fix concurrency issues when creating colocate tables (#31771))
         }
     }
 
