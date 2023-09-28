@@ -40,38 +40,22 @@ public:
     constexpr static uint64_t kInvalidQueueId = (uint64_t)-1;
 
     AsyncDeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                         const std::vector<SlotDescriptor*>* slots, int64_t immutable_tablet_size,
-                         MemTracker* mem_tracker)
-            : _writer(DeltaWriter::create(tablet_manager, tablet_id, txn_id, partition_id, slots, immutable_tablet_size,
-                                          mem_tracker)),
-              _queue_id{kInvalidQueueId},
-              _mtx(),
-              _status(),
-              _opened(false),
-              _closed(false) {}
-
-    AsyncDeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                         const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
-                         int64_t immutable_tablet_size, MemTracker* mem_tracker)
-            : _writer(DeltaWriter::create(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
-                                          immutable_tablet_size, mem_tracker)),
-              _queue_id{kInvalidQueueId},
-              _mtx(),
-              _status(),
-              _opened(false),
-              _closed(false) {}
-
-    AsyncDeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                          const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
                          bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
-                         MemTracker* mem_tracker)
-            : _writer(DeltaWriter::create(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
-                                          miss_auto_increment_column, table_id, immutable_tablet_size, mem_tracker)),
-              _queue_id{kInvalidQueueId},
-              _mtx(),
-              _status(),
-              _opened(false),
-              _closed(false) {}
+                         MemTracker* mem_tracker) {
+        _writer = DeltaWriterBuilder()
+                          .set_tablet_manager(tablet_manager)
+                          .set_tablet_id(tablet_id)
+                          .set_txn_id(txn_id)
+                          .set_partition_id(partition_id)
+                          .set_slot_descriptors(slots)
+                          .set_merge_condition(merge_condition)
+                          .set_miss_auto_increment_column(miss_auto_increment_column)
+                          .set_table_id(table_id)
+                          .set_immutable_tablet_size(immutable_tablet_size)
+                          .set_mem_tracker(mem_tracker)
+                          .build();
+    }
 
     ~AsyncDeltaWriterImpl();
 
@@ -110,13 +94,13 @@ private:
     Status do_open();
     bool closed();
 
-    DeltaWriter::Ptr _writer;
-    bthread::ExecutionQueueId<Task> _queue_id;
-    StackTraceMutex<bthread::Mutex> _mtx;
+    std::unique_ptr<DeltaWriter> _writer{};
+    bthread::ExecutionQueueId<Task> _queue_id{kInvalidQueueId};
+    StackTraceMutex<bthread::Mutex> _mtx{};
     // _status、_opened and _closed are protected by _mtx
-    Status _status;
-    bool _opened;
-    bool _closed;
+    Status _status{};
+    bool _opened{false};
+    bool _closed{false};
 };
 
 AsyncDeltaWriterImpl::~AsyncDeltaWriterImpl() {
@@ -290,34 +274,11 @@ Status AsyncDeltaWriter::check_immutable() {
     return _impl->check_immutable();
 }
 
-std::unique_ptr<AsyncDeltaWriter> AsyncDeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id,
-                                                           int64_t txn_id, int64_t partition_id,
-                                                           const std::vector<SlotDescriptor*>* slots,
-                                                           int64_t immutable_tablet_size, MemTracker* mem_tracker) {
-    auto impl = new AsyncDeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, immutable_tablet_size,
-                                         mem_tracker);
-    return std::make_unique<AsyncDeltaWriter>(impl);
-}
-
-std::unique_ptr<AsyncDeltaWriter> AsyncDeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id,
-                                                           int64_t txn_id, int64_t partition_id,
-                                                           const std::vector<SlotDescriptor*>* slots,
-                                                           const std::string& merge_condition,
-                                                           int64_t immutable_tablet_size, MemTracker* mem_tracker) {
-    auto impl = new AsyncDeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
-                                         immutable_tablet_size, mem_tracker);
-    return std::make_unique<AsyncDeltaWriter>(impl);
-}
-
-std::unique_ptr<AsyncDeltaWriter> AsyncDeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id,
-                                                           int64_t txn_id, int64_t partition_id,
-                                                           const std::vector<SlotDescriptor*>* slots,
-                                                           const std::string& merge_condition,
-                                                           bool miss_auto_increment_column, int64_t table_id,
-                                                           int64_t immutable_tablet_size, MemTracker* mem_tracker) {
-    auto impl = new AsyncDeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
-                                         miss_auto_increment_column, table_id, immutable_tablet_size, mem_tracker);
-    return std::make_unique<AsyncDeltaWriter>(impl);
-}
+AsyncDeltaWriter::AsyncDeltaWriter(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
+                                   int64_t partition_id, const std::vector<SlotDescriptor*>* slots,
+                                   const std::string& merge_condition, bool miss_auto_increment_column,
+                                   int64_t table_id, int64_t immutable_tablet_size, MemTracker* mem_tracker)
+        : _impl(new AsyncDeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
+                                         miss_auto_increment_column, table_id, immutable_tablet_size, mem_tracker)) {}
 
 } // namespace starrocks::lake
