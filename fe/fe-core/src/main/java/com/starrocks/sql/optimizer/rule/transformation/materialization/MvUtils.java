@@ -1035,7 +1035,7 @@ public class MvUtils {
                                                                              Set<String> mvPartitionNamesToRefresh) {
         Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable, true);
         List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
-                modifiedPartitionNames);
+                modifiedPartitionNames, MaterializedView.getPartitionExpr(mv));
         List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
         List<Range<PartitionKey>> latestBaseTableRanges = Lists.newArrayList();
         for (Range<PartitionKey> range : baseTableRanges) {
@@ -1060,14 +1060,14 @@ public class MvUtils {
         return rangePartitionInfo.getRangeList(filteredIds, false);
     }
 
-    private static List<Range<PartitionKey>> getLatestPartitionRange(Table table, Column partitionColumn,
-                                                                     Set<String> modifiedPartitionNames) {
+    private static List<Range<PartitionKey>> getLatestPartitionRange(
+            Table table, Column partitionColumn, Set<String> modifiedPartitionNames, Expr partitionExpr) {
         if (table.isNativeTableOrMaterializedView()) {
             return getLatestPartitionRangeForNativeTable((OlapTable) table, modifiedPartitionNames);
         } else {
             Map<String, Range<PartitionKey>> partitionMap;
             try {
-                partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn);
+                partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn, partitionExpr);
             } catch (UserException e) {
                 LOG.warn("Materialized view Optimizer compute partition range failed.", e);
                 return Lists.newArrayList();
