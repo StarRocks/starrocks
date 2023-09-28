@@ -84,6 +84,7 @@ private:
 
     // =====================================
     ObjectPool _pool;
+    DictOptimizeParser _dict_optimize_parser;
     RuntimeState* _runtime_state = nullptr;
     HdfsScanner* _scanner = nullptr;
     bool _use_block_cache = false;

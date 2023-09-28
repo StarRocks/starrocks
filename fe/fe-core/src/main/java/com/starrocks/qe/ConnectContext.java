@@ -36,6 +36,7 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
@@ -76,6 +77,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import javax.net.ssl.SSLContext;
 
 // When one client connect in, we create a connection context for it.
@@ -188,6 +190,7 @@ public class ConnectContext {
 
     // The related db ids for current sql
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
+    protected Set<Database> currentSqlDatabases = Sets.newHashSet();
 
     protected PlannerProfile plannerProfile;
     protected StatementBase.ExplainLevel explainLevel;
@@ -576,6 +579,15 @@ public class ConnectContext {
 
     public void setCurrentSqlDbIds(Set<Long> currentSqlDbIds) {
         this.currentSqlDbIds = currentSqlDbIds;
+    }
+
+    public Set<Database> getCurrentSqlDatabases() {
+        return currentSqlDatabases;
+    }
+
+    public void setCurrentSqlDatabases(Set<Database> currentSqlDatabases) {
+        currentSqlDbIds = currentSqlDatabases.stream().map(x -> x.getId()).collect(Collectors.toSet());
+        this.currentSqlDatabases = currentSqlDatabases;
     }
 
     public PlannerProfile getPlannerProfile() {

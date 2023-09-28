@@ -25,6 +25,7 @@
 #include "io/cache_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
+#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
@@ -235,6 +236,8 @@ struct HdfsScannerContext {
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
 
+    RuntimeState* runtime_state = nullptr;
+
     // update materialized column against data file.
     // and to update not_existed slots and conjuncts.
     // and to update `conjunct_ctxs_by_slot` field.
@@ -327,7 +330,7 @@ private:
     bool _opened = false;
     std::atomic<bool> _closed = false;
     bool _keep_priority = false;
-    Status _build_scanner_context();
+    Status _build_scanner_context(RuntimeState* state);
     MonotonicStopWatch _pending_queue_sw;
     void update_hdfs_counter(HdfsScanProfile* profile);
 

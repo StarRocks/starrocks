@@ -506,9 +506,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     List<Column> diffGeneratedColumnSchema = Lists.newArrayList();
                     if (originIdxId == tbl.getBaseIndexId()) {
                         List<String> originSchema = tbl.getSchemaByIndexId(originIdxId).stream().map(col ->
-                                                        new String(col.getName())).collect(Collectors.toList());
+                                new String(col.getName())).collect(Collectors.toList());
                         List<String> newSchema = tbl.getSchemaByIndexId(shadowIdxId).stream().map(col ->
-                                                    new String(col.getName())).collect(Collectors.toList());
+                                new String(col.getName())).collect(Collectors.toList());
 
                         if (originSchema.size() != 0 && newSchema.size() != 0) {
                             for (String colNameInNewSchema : newSchema) {
@@ -531,11 +531,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         Map<String, SlotDescriptor> slotDescByName = new HashMap<>();
 
                         /*
-                          * The expression substitution is needed here, because all slotRefs in 
-                          * GeneratedColumnExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
-                          * if it is init by SlotDescriptor. The slot information will be used by be to indentify
-                          * the column location in a chunk.
-                        */
+                         * The expression substitution is needed here, because all slotRefs in
+                         * GeneratedColumnExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
+                         * if it is init by SlotDescriptor. The slot information will be used by be to indentify
+                         * the column location in a chunk.
+                         */
                         for (Column col : tbl.getFullSchema()) {
                             SlotDescriptor slotDesc = descTbl.addSlotDescriptor(tupleDesc);
                             slotDesc.setType(col.getType());
@@ -556,7 +556,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                                 if (slotDesc == null) {
                                     throw new AlterCancelException("Expression for generated column can not find " +
-                                                                   "the ref column");
+                                            "the ref column");
                                 }
 
                                 SlotRef slotRef = new SlotRef(slotDesc);
@@ -569,24 +569,24 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             // sourceScope must be set null tableName for its Field in RelationFields
                             // because we hope slotRef can not be resolved in sourceScope but can be
                             // resolved in outputScope to force to replace the node using outputExprs.
-                            Scope sourceScope = new Scope(RelationId.anonymous(), 
-                                                    new RelationFields(tbl.getBaseSchema().stream().map(col ->
-                                                        new Field(col.getName(), col.getType(), null, null))
-                                                            .collect(Collectors.toList())));
+                            Scope sourceScope = new Scope(RelationId.anonymous(),
+                                    new RelationFields(tbl.getBaseSchema().stream().map(col ->
+                                                    new Field(col.getName(), col.getType(), null, null))
+                                            .collect(Collectors.toList())));
 
-                            Scope outputScope = new Scope(RelationId.anonymous(), 
-                                                    new RelationFields(tbl.getBaseSchema().stream().map(col ->
-                                                        new Field(col.getName(), col.getType(), tableName, null))
-                                                            .collect(Collectors.toList())));
+                            Scope outputScope = new Scope(RelationId.anonymous(),
+                                    new RelationFields(tbl.getBaseSchema().stream().map(col ->
+                                                    new Field(col.getName(), col.getType(), tableName, null))
+                                            .collect(Collectors.toList())));
 
                             RewriteAliasVisitor visitor =
-                                                new RewriteAliasVisitor(sourceScope, outputScope,
-                                                    outputExprs, ConnectContext.get());
+                                    new RewriteAliasVisitor(sourceScope, outputScope,
+                                            outputExprs, ConnectContext.get());
 
                             ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
-                                    new RelationFields(tbl.getBaseSchema().stream().map(col -> new Field(col.getName(),
-                                        col.getType(), tableName, null)).collect(Collectors.toList()))),
-                                            ConnectContext.get());
+                                            new RelationFields(tbl.getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                                    col.getType(), tableName, null)).collect(Collectors.toList()))),
+                                    ConnectContext.get());
 
                             Expr generatedColumnExpr = expr.accept(visitor, null);
 
@@ -719,10 +719,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         // Mark schema changed tablet not to move to trash.
                         long baseTabletId = partitionIndexTabletMap.get(
-                                                    partitionId, shadowIdxId).get(shadowTablet.getId());
+                                partitionId, shadowIdxId).get(shadowTablet.getId());
                         // NOTE: known for sure that only LocalTablet uses this SchemaChangeJobV2 class
                         GlobalStateMgr.getCurrentInvertedIndex().
-                                    markTabletForceDelete(baseTabletId, shadowTablet.getBackendIds());
+                                markTabletForceDelete(baseTabletId, shadowTablet.getBackendIds());
                         List<Replica> replicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
                         int healthyReplicaNum = 0;
                         for (Replica replica : replicas) {
@@ -833,7 +833,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // dictionary invalid after schema change.
         for (Column column : tbl.getColumns()) {
             if (column.getType().isVarchar()) {
-                IDictManager.getInstance().removeGlobalDict(tbl.getId(), column.getName());
+                IDictManager.getInstance().removeGlobalDict(tbl, column.getName());
             }
         }
         // replace the origin index with shadow index, set index state as NORMAL

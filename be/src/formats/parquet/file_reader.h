@@ -50,7 +50,7 @@ public:
                const std::set<int64_t>* _need_skip_rowids = nullptr);
     ~FileReader();
 
-    Status init(HdfsScannerContext* scanner_ctx);
+    Status init(RuntimeState* runtime_state, HdfsScannerContext* scanner_ctx);
 
     Status get_next(ChunkPtr* chunk);
 
@@ -63,7 +63,7 @@ private:
     void _prepare_read_columns();
 
     // init row group readers.
-    Status _init_group_readers();
+    Status _init_group_readers(RuntimeState* runtime_state);
 
     // filter row group by min/max conjuncts
     StatusOr<bool> _filter_group(const tparquet::RowGroup& row_group);
@@ -127,6 +127,8 @@ private:
     GroupReaderParam _group_reader_param;
     std::shared_ptr<MetaHelper> _meta_helper = nullptr;
     const std::set<int64_t>* _need_skip_rowids;
+
+    RuntimeState* _runtime_state = nullptr;
 };
 
 } // namespace starrocks::parquet

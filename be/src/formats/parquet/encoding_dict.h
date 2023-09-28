@@ -15,12 +15,16 @@
 #pragma once
 
 #include <map>
+#include <optional>
 #include <vector>
 
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
+#include "gutil/casts.h"
+#include "runtime/global_dict/dict_column.h"
+#include "simd/gather.h"
 #include "simd/simd.h"
 #include "util/coding.h"
 #include "util/rle_encoding.h"
@@ -230,6 +234,59 @@ public:
         return Status::OK();
     }
 
+    Status to_global_dict_code(std::vector<int32_t>& dict_codes, const NullableColumn& nulls, Column* column,
+                               GlobalDictMap* global_dict) override {
+        RETURN_IF_ERROR(build_code_convert_map(global_dict));
+        const std::vector<uint8_t>& null_data = nulls.immutable_null_column_data();
+        bool has_null = nulls.has_null();
+
+        const uint8_t* null_data_ptr = null_data.data();
+        size_t size = dict_codes.size();
+
+        // mapping null to 0
+        if (has_null) {
+            for (size_t i = 0; i < size; i++) {
+                uint32_t mask = ~(static_cast<uint32_t>(-null_data_ptr[i]));
+                dict_codes[i] &= mask;
+            }
+        }
+
+        size_t current_rows = column->size();
+        column->resize_uninitialized(current_rows + size);
+        auto* data_column = down_cast<LowCardDictColumn*>(ColumnHelper::get_data_column(column));
+        auto& container = data_column->get_data();
+
+        SIMDGather::gather(container.data() + current_rows, _local_to_global, dict_codes.data(), DICT_DECODE_MAX_SIZE,
+                           size);
+
+        return Status::OK();
+    }
+
+    Status build_code_convert_map(GlobalDictMap* global_dict) {
+        if (_convert_map.has_value()) {
+            return Status::OK();
+        }
+        size_t dict_size = _dict.size();
+        _convert_map = {};
+        _convert_map->resize(dict_size);
+        auto local_to_global = _convert_map->data();
+        std::fill(_convert_map->begin(), _convert_map->end(), 0);
+
+        for (int i = 0; i < dict_size; ++i) {
+            auto slice = _dict[i];
+            auto res = global_dict->find(slice);
+            if (res == global_dict->end()) {
+                if (slice.size > 0) {
+                    return Status::InternalError(fmt::format("not found slice:{} in global dict", slice.to_string()));
+                }
+            } else {
+                local_to_global[i] = res->second;
+            }
+        }
+        _local_to_global = local_to_global;
+        return Status::OK();
+    }
+
     Status set_data(const Slice& data) override {
         if (data.size > 0) {
             uint8_t bit_width = *data.data;
@@ -292,6 +349,9 @@ private:
     std::vector<Slice> _dict;
     std::vector<uint32_t> _indexes;
     std::vector<Slice> _slices;
+
+    std::optional<std::vector<int16_t>> _convert_map;
+    int16_t* _local_to_global;
 
     size_t _max_value_length = 0;
 };
