@@ -405,7 +405,6 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     }
 
                     dictApplyColumnSet.add(columnId);
-                    context.hasEncoded = true;
 
                     // create string -> dict code mapping
                     ColumnRefOperator newDictColumn = createNewDictColumn(context, stringColumn);
