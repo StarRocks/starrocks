@@ -52,7 +52,7 @@
 
 ### 行为变更
 
-如果是新部署的 3.1 版本集群，执行 SET CATALOG 操作必须要有目标 Catalog 的 USAGE 权限。您可以使用 [GRANT](../account-management/GRANT.md) 命令进行授权操作。
+如果是新部署的 3.1 版本集群，执行 SET CATALOG 操作必须要有目标 Catalog 的 USAGE 权限。您可以使用 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 命令进行授权操作。
 
 如果是从低版本升级上来的集群，已经做好了升级逻辑，不需要重新赋权。[#29389](https://github.com/StarRocks/starrocks/pull/29389)
 
