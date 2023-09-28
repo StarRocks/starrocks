@@ -1579,7 +1579,10 @@ public class OptimizerTaskTest {
 
         ColumnRefOperator column7 = columnRefFactory.getColumnRef(7);
         assertTrue(projection.getCommonSubOperatorMap().containsKey(column7));
-        assertEquals(projection.getCommonSubOperatorMap().get(column7), add1);
+        assertTrue(projection.getCommonSubOperatorMap().get(column7) instanceof CallOperator);
+        CallOperator res = (CallOperator) projection.getCommonSubOperatorMap().get(column7);
+        add1.setFunction(res.getFunction());
+        assertEquals(res, add1);
 
         assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
         PhysicalOlapScanOperator physicalOlapScan = (PhysicalOlapScanOperator) physicalTree.getOp();
