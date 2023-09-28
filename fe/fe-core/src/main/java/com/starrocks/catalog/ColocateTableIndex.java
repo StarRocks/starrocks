@@ -181,7 +181,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     public boolean addTableToGroup(Database db,
-                                OlapTable olapTable, String colocateGroup, boolean expectLakeTable)
+                                   OlapTable olapTable, String colocateGroup, boolean expectLakeTable)
             throws DdlException {
         if (Strings.isNullOrEmpty(colocateGroup)) {
             return false;
