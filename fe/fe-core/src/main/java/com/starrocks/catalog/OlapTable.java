@@ -321,6 +321,8 @@ public class OlapTable extends Table {
         if (this.tableProperty != null) {
             olapTable.tableProperty = this.tableProperty.copy();
         }
+        olapTable.catalogName = this.catalogName;
+        olapTable.dbName = this.dbName;
         return olapTable;
     }
 

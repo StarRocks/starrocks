@@ -19,6 +19,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/parquet_types.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "utils.h"
 
 namespace starrocks {
@@ -59,6 +60,11 @@ public:
     virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
                                    Column* column) {
         return Status::NotSupported("get_dict_values is not supported");
+    }
+
+    virtual Status to_global_dict_code(std::vector<int32_t>& dict_codes, const NullableColumn& nulls, Column* column,
+                                       GlobalDictMap* global_dict) {
+        return Status::NotSupported("to_global_dict_code is not supported");
     }
 
     // used to set fixed length

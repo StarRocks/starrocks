@@ -17,6 +17,7 @@
 #include "formats/parquet/column_converter.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "io/shared_buffered_input_stream.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 
 namespace starrocks {
 class RandomAccessFile;
@@ -82,6 +83,11 @@ public:
     virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
                                    Column* column) {
         return Status::NotSupported("get_dict_values is not supported");
+    }
+
+    virtual Status get_global_code(std::vector<int32_t>& dict_codes, const NullableColumn& nulls, Column* column,
+                                   GlobalDictMap* map) {
+        return Status::NotSupported("get_global_code is not supported");
     }
 
     std::unique_ptr<ColumnConverter> converter;

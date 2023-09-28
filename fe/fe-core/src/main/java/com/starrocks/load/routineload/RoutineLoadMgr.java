@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
@@ -281,7 +282,11 @@ public class RoutineLoadMgr implements Writable {
         // add txn state callback in factory
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
         if (!Config.enable_dict_optimize_routine_load) {
-            IDictManager.getInstance().disableGlobalDict(routineLoadJob.getTableId());
+            Optional<Table> t =
+                    GlobalStateMgr.getCurrentState().mayGetTable(routineLoadJob.getDbId(), routineLoadJob.getTableId());
+            if (t.isPresent()) {
+                IDictManager.getInstance().disableGlobalDict(t.get());
+            }
         }
     }
 
