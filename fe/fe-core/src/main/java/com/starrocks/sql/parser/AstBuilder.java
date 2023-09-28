@@ -2979,8 +2979,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         // brokers
         BrokerDesc brokerDesc = getBrokerDesc(context.brokerDesc());
+        boolean sync = context.SYNC() != null;
         return new ExportStmt(tableRef, getColumnNames(context.columnAliases()),
-                stringLiteral.getValue(), properties, brokerDesc, createPos(context));
+                stringLiteral.getValue(), properties, brokerDesc, createPos(context), sync);
     }
 
     @Override
