@@ -864,7 +864,7 @@ public class LowCardinalityTest extends PlanTestBase {
         // binary columns only support slotRef op const
         sql = "select count(*) from supplier where S_ADDRESS + 2 > 'kks' group by S_ADDRESS";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("group by: 3: S_ADDRESS"));
+        Assert.assertTrue(plan.contains("group by: 10: S_ADDRESS"));
 
         // Test Predicate with if predicate
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks', true, false)";

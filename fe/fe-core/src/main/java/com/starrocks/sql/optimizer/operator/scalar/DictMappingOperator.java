@@ -53,8 +53,8 @@ public class DictMappingOperator extends ScalarOperator {
     }
 
     @Override
-    public boolean isVariable() {
-        return true;
+    public boolean isNullable() {
+        return originScalaOperator.isNullable();
     }
 
     @Override
