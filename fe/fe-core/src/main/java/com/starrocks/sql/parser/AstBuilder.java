@@ -577,7 +577,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 final PartitionDesc listPartitionDesc = (PartitionDesc) visit(listPartitionDescContext);
                 partitionDescList.add(listPartitionDesc);
             }
-            return new ListPartitionDesc(columnList, partitionDescList);
+            throw new ParsingException("List partition is not supported.");
         } else {
             if (context.listPartitionDesc().size() > 0) {
                 throw new ParsingException("Does not support creating partitions in advance");
