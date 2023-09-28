@@ -781,7 +781,6 @@ public class WindowTest extends PlanTestBase {
                     "  |  useHashBasedPartition");
         }
         {
-<<<<<<< HEAD
             String sql = "select sum(v1) over ([hash] partition by v1 )," +
                     "sum(v1/v3) over ([hash] partition by v1,v2 ) " +
                     "from t0";
@@ -794,70 +793,6 @@ public class WindowTest extends PlanTestBase {
                     "  |  functions: [, sum(CAST(1: v1 AS DOUBLE) / CAST(3: v3 AS DOUBLE)), ]\n" +
                     "  |  partition by: 1: v1, 2: v2\n" +
                     "  |  useHashBasedPartition");
-=======
-            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
-                String sql = "select approx_top_k(L_LINENUMBER, 1, '11111') over() from lineitem";
-                getFragmentPlan(sql);
-            });
-            String expectedMessage = "The third parameter of APPROX_TOP_K must be a constant positive integer";
-            String actualMessage = exception.getMessage();
-            Assert.assertTrue(actualMessage.contains(expectedMessage));
-        }
-        {
-            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
-                String sql = "select approx_top_k(L_LINENUMBER, 10001) over() from lineitem";
-                getFragmentPlan(sql);
-            });
-            String expectedMessage = "The maximum number of the second parameter is 10000";
-            String actualMessage = exception.getMessage();
-            Assert.assertTrue(actualMessage.contains(expectedMessage));
-        }
-        {
-            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
-                String sql = "select approx_top_k(L_LINENUMBER, 0) over() from lineitem";
-                getFragmentPlan(sql);
-            });
-            String expectedMessage = "The second parameter of APPROX_TOP_K must be a constant positive integer";
-            String actualMessage = exception.getMessage();
-            Assert.assertTrue(actualMessage.contains(expectedMessage));
-        }
-        {
-            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
-                String sql = "select approx_top_k(L_LINENUMBER, 1, 10001) over() from lineitem";
-                getFragmentPlan(sql);
-            });
-            String expectedMessage = "The maximum number of the third parameter is 10000";
-            String actualMessage = exception.getMessage();
-            Assert.assertTrue(actualMessage.contains(expectedMessage));
-        }
-        {
-            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
-                String sql = "select approx_top_k(L_LINENUMBER, 1, -1) over() from lineitem";
-                getFragmentPlan(sql);
-            });
-            String expectedMessage = "The third parameter of APPROX_TOP_K must be a constant positive integer";
-            String actualMessage = exception.getMessage();
-            Assert.assertTrue(actualMessage.contains(expectedMessage));
-        }
-        {
-            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
-                String sql = "select approx_top_k(L_LINENUMBER, 100, 99) over() from lineitem";
-                getFragmentPlan(sql);
-            });
-            String expectedMessage = "The second parameter must be smaller than or equal to the third parameter";
-            String actualMessage = exception.getMessage();
-            Assert.assertTrue(actualMessage.contains(expectedMessage));
-        }
-        {
-            Exception exception = Assertions.assertThrows(IllegalStateException.class, () -> {
-                String sql =
-                        "select approx_top_k(L_LINENUMBER, 10000, 10000) over(order by L_LINESTATUS) from lineitem";
-                getFragmentPlan(sql);
-            });
-            String expectedMessage = "Unexpected order by clause for approx_top_k()";
-            String actualMessage = exception.getMessage();
-            Assert.assertEquals(expectedMessage, actualMessage);
->>>>>>> de6890529d ([BugFix] Solve column reuse problem (#31465))
         }
     }
 

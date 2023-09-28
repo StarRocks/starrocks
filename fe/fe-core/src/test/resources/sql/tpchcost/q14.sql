@@ -43,10 +43,6 @@ UNPARTITIONED
 5:Project
 |  <slot 28> : if(22: P_TYPE LIKE 'PROMO%', 34: multiply, 0.0)
 |  <slot 29> : 34: multiply
-<<<<<<< HEAD
-=======
-|  <slot 34> : clone(34: multiply)
->>>>>>> de6890529d ([BugFix] Solve column reuse problem (#31465))
 |  common expressions:
 |  <slot 33> : 1.0 - 7: L_DISCOUNT
 |  <slot 34> : 6: L_EXTENDEDPRICE * 33: subtract

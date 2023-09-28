@@ -51,14 +51,8 @@ OutPut Exchange Id: 08
 |
 6:Project
 |  output columns:
-<<<<<<< HEAD
 |  26 <-> if[(21: p_type LIKE 'PROMO%', [37: multiply, DECIMAL128(33,4), true], 0); args: BOOLEAN,DECIMAL128,DECIMAL128; result: DECIMAL128(33,4); args nullable: true; result nullable: true]
 |  27 <-> [37: multiply, DECIMAL128(33,4), true]
-=======
-|  21 <-> [21: p_type, VARCHAR, true]
-|  27 <-> [35: multiply, DECIMAL128(33,4), true]
-|  35 <-> clone([35: multiply, DECIMAL128(33,4), true])
->>>>>>> de6890529d ([BugFix] Solve column reuse problem (#31465))
 |  common expressions:
 |  33 <-> cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2))
 |  34 <-> [7: l_discount, DECIMAL64(15,2), true]
