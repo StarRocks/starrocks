@@ -188,6 +188,8 @@ public class ExplainAnalyzer {
         String queryState = summaryProfile.getInfoString("Query State");
         if (Objects.equals(queryState, "Running")) {
             isRuntimeProfile = true;
+        } else {
+            checkIdentical();
         }
 
         for (int i = 0; i < executionProfile.getChildList().size(); i++) {
@@ -288,6 +290,23 @@ public class ExplainAnalyzer {
         cumulativeScanTime = executionProfile.getCounter("QueryCumulativeScanTime");
         cumulativeNetworkTime = executionProfile.getCounter("QueryCumulativeNetworkTime");
         scheduleTime = executionProfile.getCounter("QueryPeakScheduleTime");
+    }
+
+    private void checkIdentical() {
+        Queue<RuntimeProfile> queue = Lists.newLinkedList();
+        queue.offer(executionProfile);
+        while (!queue.isEmpty()) {
+            int size = queue.size();
+            for (int i = 0; i < size; i++) {
+                RuntimeProfile top = queue.poll();
+                Preconditions.checkState(top != null);
+                Preconditions.checkState(!top.containsInfoString("NotIdentical"), "Profile is not identical");
+
+                for (RuntimeProfile child : top.getChildMap().values()) {
+                    queue.offer(child);
+                }
+            }
+        }
     }
 
     private void appendSummaryInfo() {
