@@ -1551,7 +1551,12 @@ public class SchemaChangeHandler extends AlterHandler {
         if (lightSchemaChange) {
             long jobId = GlobalStateMgr.getCurrentState().getNextId();
             //for schema change add/drop value column optimize, direct modify table meta.
+            // Add a completed job to ensure consistency of user behavior.
+            AlterJobV2 job = createJob(db.getId(), olapTable, indexSchemaMap, propertyMap, newIndexes);
             modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, newIndexes, jobId, false);
+            job.setFinishedTimeMs(System.currentTimeMillis());
+            job.setJobState(AlterJobV2.JobState.FINISHED);
+            addAlterJobV2(job);
             return null;
         } else {
             return createJob(db.getId(), olapTable, indexSchemaMap, propertyMap, newIndexes);
@@ -2236,7 +2241,8 @@ public class SchemaChangeHandler extends AlterHandler {
 
             // for now table's state can only be NORMAL
             Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
-
+            SchemaChangeJobV2 schemaChangeJob = new SchemaChangeJobV2(jobId, db.getId(), olapTable.getId(),
+                                                                      olapTable.getName(), 1000);
             // for bitmapIndex
             boolean hasIndexChange = false;
             Set<Index> newSet = new HashSet<>(indexes);
@@ -2331,14 +2337,17 @@ public class SchemaChangeHandler extends AlterHandler {
             List<Long> indexIds = new ArrayList<Long>();
             indexIds.add(baseIndexId);
             indexIds.addAll(olapTable.getIndexIdListExceptBaseIndex());
-            for (int i = 0; i < indexIds.size(); i++) {
-                List<Column> indexSchema = indexSchemaMap.get(indexIds.get(i));
-                MaterializedIndexMeta currentIndexMeta = olapTable.getIndexMetaByIndexId(indexIds.get(i));
+            for (long idx : indexIds) {
+                List<Column> indexSchema = indexSchemaMap.get(idx);
+                MaterializedIndexMeta currentIndexMeta = olapTable.getIndexMetaByIndexId(idx);
                 currentIndexMeta.setSchema(indexSchema);
 
                 int currentSchemaVersion = currentIndexMeta.getSchemaVersion();
                 int newSchemaVersion = currentSchemaVersion + 1;
                 currentIndexMeta.setSchemaVersion(newSchemaVersion);
+                schemaChangeJob.addIndexSchema(idx, idx, olapTable.getIndexNameById(idx), newSchemaVersion,
+                                               currentIndexMeta.getSchemaHash(), currentIndexMeta.getShortKeyColumnCount(),
+                                               indexSchema);
             }
             olapTable.setIndexes(indexes);
             olapTable.rebuildFullSchema();
@@ -2358,9 +2367,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 LOG.debug("logModifyTableAddOrDropColumns info:{}", info);
                 GlobalStateMgr.getCurrentState().getEditLog().logModifyTableAddOrDropColumns(info);
             }
-
-            SchemaChangeJobV2 schemaChangeJob = new SchemaChangeJobV2(jobId, db.getId(), olapTable.getId(),
-                    olapTable.getName(), 1000);
             schemaChangeJob.setJobState(AlterJobV2.JobState.FINISHED);
             schemaChangeJob.setFinishedTimeMs(System.currentTimeMillis());
             this.addAlterJobV2(schemaChangeJob);

@@ -576,7 +576,7 @@ public class PropertyAnalyzer {
             return false;
         }
         String value = properties.get(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
-        // set light schema change false by default
+        // set light schema change true by default
         if (Config.allow_default_light_schema_change) {
             properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
             return true;
