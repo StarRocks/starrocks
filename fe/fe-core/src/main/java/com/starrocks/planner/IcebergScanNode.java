@@ -75,11 +75,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -284,12 +282,8 @@ public class IcebergScanNode extends ScanNode {
                     srIcebergTable.getNativeTable().spec());
 
             int transformedBucketId = 0;
-            if (!sourceIdToBucketNums.isEmpty()) {
-                Map<Integer, Integer> posToBucketNum = new HashMap<>();
-                for (int i = 0; i < sourceIdToBucketNums.size(); i++) {
-                    posToBucketNum.put(i, sourceIdToBucketNums.get(i).second);
-                }
-
+            if (srIcebergTable.hasBucketProperties()) {
+                ImmutableList.Builder<Integer> bucketIds = ImmutableList.builder();
                 for (int i = 0; i < partitionData.size(); i++) {
                     Types.NestedField nestedField;
                     try {
@@ -303,18 +297,14 @@ public class IcebergScanNode extends ScanNode {
                         continue;
                     }
 
-                    int partitionValue = (int) partitionData.get(i);
-
-                    int tmpRes = partitionValue;
-                    if (i != partitionData.size() - 1) {
-                        for (int j = i + 1; j <= partitionData.size() - 1; j++) {
-                            tmpRes = tmpRes * posToBucketNum.get(j);
-                        }
+                    int fieldId = nestedField.fieldId();
+                    if (srIcebergTable.isBucketColumn(fieldId)) {
+                        int bucketId = (int) partitionData.get(i);
+                        bucketIds.add(bucketId);
                     }
-                    transformedBucketId += tmpRes;
                 }
+                transformedBucketId = srIcebergTable.getTransformedBucketId(bucketIds.build());
             }
-
 
             partitionKeyToId.putIfAbsent(partitionData, nextPartitionId());
 

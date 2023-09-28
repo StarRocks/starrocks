@@ -292,10 +292,6 @@ public class IcebergApiConverter {
         return tableProperties.build();
     }
 
-    public static <T> T get(int pos, PartitionData partitionData, Class<?> clazz) {
-        return (T) partitionData.get(pos, clazz);
-    }
-
     public static List<Pair<Integer, Integer>> getBucketSourceIdWithBucketNum(PartitionSpec spec) {
         return PartitionSpecVisitor.visit(spec, new BucketPartitionSpecVisitor()).stream()
                 .filter(Objects::nonNull)
