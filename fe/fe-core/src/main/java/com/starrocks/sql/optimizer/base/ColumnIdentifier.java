@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.base;
+
+import com.starrocks.catalog.Table;
+import com.starrocks.connector.ConnectorTableId;
 
 import java.util.Objects;
 
@@ -22,36 +24,45 @@ import java.util.Objects;
  * so we use table id + column name to identify one column
  */
 public final class ColumnIdentifier {
-    private final long tableId;
+    public final String catalogName;
+    public final String dbName;
+    public final String tableName;
     private final String columnName;
+    private long tableId;
 
-    private long dbId = -1;
-
-    public ColumnIdentifier(long tableId, String columnName) {
-        this.tableId = tableId;
+    public ColumnIdentifier(Table t, String columnName) {
+        this.catalogName = t.catalogName;
+        this.dbName = t.dbName;
+        this.tableName = t.getName();
         this.columnName = columnName;
+        tableId = t.getId();
+        if (tableId >= ConnectorTableId.CONNECTOR_TABLE_ID_OFFSET) {
+            tableId = -1;
+        }
     }
 
-    public ColumnIdentifier(long dbId, long tableId, String columnName) {
-        this.dbId = dbId;
-        this.tableId = tableId;
-        this.columnName = columnName;
+    public String getCatalogName() {
+        return catalogName;
     }
 
-    public long getTableId() {
-        return tableId;
+    public String getDbName() {
+        return dbName;
+    }
+
+    public String getTableName() {
+        return tableName;
     }
 
     public String getColumnName() {
         return columnName;
     }
 
-    public long getDbId() {
-        return dbId;
+    public String getFullTableName() {
+        return catalogName + "." + dbName + "." + tableName;
     }
 
-    public void setDbId(long dbId) {
-        this.dbId = dbId;
+    public long getTableId() {
+        return tableId;
     }
 
     @Override
@@ -64,11 +75,20 @@ public final class ColumnIdentifier {
         if (this == columnIdentifier) {
             return true;
         }
-        return tableId == columnIdentifier.tableId && columnName.equalsIgnoreCase(columnIdentifier.columnName);
+
+        if (this.tableId == -1 && columnIdentifier.tableId == -1) {
+            // Both tables in catalog, needs to compare names.
+            return catalogName.equals(columnIdentifier.catalogName) &&
+                    dbName.equals(columnIdentifier.dbName) && tableName.equals(columnIdentifier.tableName) &&
+                    columnName.equalsIgnoreCase(columnIdentifier.columnName);
+        } else {
+            // internal table can be compared via tableId.
+            return this.tableId == columnIdentifier.tableId && columnName.equalsIgnoreCase(columnIdentifier.columnName);
+        }
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(tableId, columnName);
+        return Objects.hash(catalogName, dbName, tableName, columnName, tableId);
     }
 }

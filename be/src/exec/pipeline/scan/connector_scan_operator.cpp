@@ -517,7 +517,7 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state) {
 }
 
 Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    ConnectorScanOperator* op = down_cast<ConnectorScanOperator*>(_scan_op);
+    auto* op = down_cast<ConnectorScanOperator*>(_scan_op);
     ConnectorScanOperatorAdaptiveProcessor& P = *(op->_adaptive_processor);
 
     DeferOp defer_op([&]() { P.last_chunk_souce_finish_timestamp = GetCurrentTimeMicros(); });

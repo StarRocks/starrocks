@@ -19,6 +19,7 @@
 #include <unordered_map>
 
 #include "gen_cpp/PlanNodes_types.h"
+#include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
@@ -81,7 +82,7 @@ protected:
     const RuntimeFilterProbeCollector* _runtime_filters = nullptr;
     RuntimeProfile* _runtime_profile = nullptr;
     const TupleDescriptor* _tuple_desc = nullptr;
-    void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
+    void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(_tuple_desc->slots(), n); }
 };
 
 class StreamDataSource : public DataSource {
