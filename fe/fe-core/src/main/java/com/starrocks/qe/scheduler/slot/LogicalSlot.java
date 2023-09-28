@@ -163,7 +163,7 @@ public class LogicalSlot {
     }
 
     public boolean isAdaptiveDop() {
-        return pipelineDop > 0;
+        return pipelineDop == 0;
     }
 
     public int getPipelineDop() {
