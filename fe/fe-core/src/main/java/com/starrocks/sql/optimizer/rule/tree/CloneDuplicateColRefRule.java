@@ -29,12 +29,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-// After tables pruned by {Cbo,Rbo}TablePruneRule, ProjectOperators may have several ColumnRefs
-// remapped to the same ColumnRef, for an example:
+// ProjectOperator or Projection of Operator may have several ColumnRefs remapped to the same ColumnRef, for an example:
 // 1.ColumnRef(1)->ColumnRef(1);
 // 2.ColumnRef(2)->ColumnRef(1);
 // This would lead to that column shared by multiple SlotRefs in a Chunk during the plan executed in BE,
-// when some conjuncts apply to such chunks, the shared column may be write twice unexpectedly; at present,
+// when some conjuncts apply to such chunks, the shared column may be written twice unexpectedly; at present,
 // BE does not support COW; so we substitute duplicate ColumnRef with CloneOperator to avoid this.
 // After this Rule applied, the ColumnRef remapping will convert to:
 // 1.ColumnRef(1)->ColumnRef(1);
@@ -56,7 +55,7 @@ public class CloneDuplicateColRefRule implements TreeRewriteRule {
 
             List<Map.Entry<ColumnRefOperator, ScalarOperator>> entries =
                     colRefMap.entrySet().stream()
-                            .sorted(Comparator.comparing(e -> !e.getKey().equals(e.getValue())))
+                            .sorted(Comparator.comparing(entry -> entry.getKey().getId()))
                             .collect(Collectors.toList());
 
             ColumnRefSet duplicateColRefs = new ColumnRefSet();

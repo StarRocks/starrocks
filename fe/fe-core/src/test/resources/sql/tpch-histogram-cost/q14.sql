@@ -44,7 +44,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 07
 
 6:AGGREGATE (update serialize)
-|  aggregate: sum[(if[(22: P_TYPE LIKE 'PROMO%', [34: multiply, DOUBLE, false], 0.0); args: BOOLEAN,DOUBLE,DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([29: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
+|  aggregate: sum[(if[(22: P_TYPE LIKE 'PROMO%', [34: multiply, DOUBLE, true], 0.0); args: BOOLEAN,DOUBLE,DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([29: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[-Infinity, Infinity, 0.0, 8.0, 1.0] ESTIMATE
@@ -54,7 +54,7 @@ OutPut Exchange Id: 07
 |  output columns:
 |  22 <-> [22: P_TYPE, VARCHAR, false]
 |  29 <-> [34: multiply, DOUBLE, false]
-|  34 <-> [34: multiply, DOUBLE, false]
+|  34 <-> clone([34: multiply, DOUBLE, false])
 |  common expressions:
 |  33 <-> 1.0 - [7: L_DISCOUNT, DOUBLE, false]
 |  34 <-> [6: L_EXTENDEDPRICE, DOUBLE, false] * [33: subtract, DOUBLE, false]
