@@ -953,6 +953,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 Expr partitionPredicates = generatePartitionPredicate(tablePartitionNames, queryStatement,
                         materializedView.getPartitionInfo());
                 if (partitionPredicates != null) {
+                    LOG.info("Generate ref base table {} partition predicate {}", tableRelation.getName(),
+                            partitionPredicates);
                     List<SlotRef> slots = Lists.newArrayList();
                     partitionPredicates.collect(SlotRef.class, slots);
 
@@ -1030,6 +1032,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             return null;
         }
 
+        Expr mvPartitionExpr = null;
+        if (!(mvPartitionExpr instanceof SlotRef)) {
+            mvPartitionExpr = MaterializedView.getPartitionExpr(materializedView);
+        } else {
+            mvPartitionExpr = outputPartitionSlot;
+        }
         if (mvPartitionInfo.isRangePartition()) {
             List<Range<PartitionKey>> sourceTablePartitionRange = Lists.newArrayList();
             Map<String, Range<PartitionKey>> refBaseTableRangePartitionMap = mvContext.getRefBaseTableRangePartitionMap();
@@ -1038,12 +1046,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
             sourceTablePartitionRange = MvUtils.mergeRanges(sourceTablePartitionRange);
             List<Expr> partitionPredicates =
-                    MvUtils.convertRange(outputPartitionSlot, sourceTablePartitionRange);
+                    MvUtils.convertRange(mvPartitionExpr, sourceTablePartitionRange);
             // range contains the min value could be null value
             Optional<Range<PartitionKey>> nullRange = sourceTablePartitionRange.stream().
                     filter(range -> range.lowerEndpoint().isMinValue()).findAny();
             if (nullRange.isPresent()) {
-                Expr isNullPredicate = new IsNullPredicate(outputPartitionSlot, false);
+                Expr isNullPredicate = new IsNullPredicate(mvPartitionExpr, false);
                 partitionPredicates.add(isNullPredicate);
             }
 

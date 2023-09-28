@@ -285,6 +285,7 @@ public class SyncPartitionUtils {
         Collections.sort(dstRanges, PartitionRange::compareTo);
 
         for (PartitionRange srcRange : srcRanges) {
+            // TODO: handle srcRange with unbound range.
             int mid = Collections.binarySearch(dstRanges, srcRange);
             if (mid < 0) {
                 continue;
