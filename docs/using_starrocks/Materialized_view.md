@@ -31,7 +31,11 @@ The following table compares the asynchronous materialized views (ASYNC MV) and 
 
   Base tables are the driving tables of a materialized view.
 
+<<<<<<< HEAD
   For StarRocks' asynchronous materialized views, base tables can be StarRocks native tables in the [default catalog](../data_source/catalog/default_catalog.md), tables in external catalogs (supported from v2.5), or even existing asynchronous materialized views (supported from v2.5). StarRocks supports creating asynchronous materialized views on all [types of StarRocks tables](../table_design/Data_model.md).
+=======
+  For StarRocks' asynchronous materialized views, base tables can be StarRocks native tables in the [default catalog](../data_source/catalog/default_catalog.md), tables in external catalogs (supported from v2.5), or even existing asynchronous materialized views (supported from v2.5) and views (supported from v3.1). StarRocks supports creating asynchronous materialized views on all [types of StarRocks tables](../table_design/table_types/table_types.md).
+>>>>>>> e875d33a6e ([Doc] fix doc links (#31965))
 
 - **Refresh**
 
