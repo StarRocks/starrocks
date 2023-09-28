@@ -343,6 +343,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return isOlapTable() || isCloudNativeTable();
     }
 
+    public boolean isJDBCTable() {
+        return type == TableType.JDBC;
+    }
+
     public boolean isExprPartitionTable() {
         if (this instanceof OlapTable) {
             OlapTable olapTable = (OlapTable) this;

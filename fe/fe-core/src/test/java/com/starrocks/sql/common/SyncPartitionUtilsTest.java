@@ -214,7 +214,7 @@ public class SyncPartitionUtilsTest {
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
         mvRange.put("p202001", createRange("2020-01-01", "2020-02-01"));
 
-        PartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfSlotRef(baseRange, mvRange);
+        RangePartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfSlotRef(baseRange, mvRange);
 
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
         Assert.assertEquals(3, adds.size());
@@ -437,7 +437,7 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p2", createRange("2020-05-04", "2020-11-12"));
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
-        PartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
+        RangePartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
                 "month", PrimitiveType.DATETIME);
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
         Map<String, Range<PartitionKey>> deletes = diff.getDeletes();
@@ -483,7 +483,7 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p2", createRange("2020-10-12", "2020-11-12"));
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
-        PartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
+        RangePartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
                 granularity, PrimitiveType.DATETIME);
 
         Map<String, Range<PartitionKey>> adds = diff.getAdds();

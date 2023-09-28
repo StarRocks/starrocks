@@ -43,6 +43,7 @@ import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -294,6 +295,12 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
                 key.pushColumn(dateLiteral, type);
                 return key;
             }
+            case CHAR:
+            case VARCHAR: {
+                StringLiteral stringLiteral = (StringLiteral) literal;
+                key.pushColumn(new StringLiteral(stringLiteral.getStringValue()), type);
+                return key;
+            }
             default:
                 Preconditions.checkArgument(false, "Never reach here");
                 return null;
@@ -357,6 +364,12 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
                     dateLiteral = new DateLiteral(year, mon, day, hour, min, sec, 0);
                 }
                 key.pushColumn(dateLiteral, type);
+                return key;
+            }
+            case CHAR:
+            case VARCHAR: {
+                StringLiteral stringLiteral = (StringLiteral) literal;
+                key.pushColumn(new StringLiteral(stringLiteral.getStringValue()), type);
                 return key;
             }
             default:
@@ -491,6 +504,10 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
                     case DATE:
                     case DATETIME:
                         literal = DateLiteral.read(in);
+                        break;
+                    case CHAR:
+                    case VARCHAR:
+                        literal =  StringLiteral.read(in);
                         break;
                     default:
                         throw new IOException("type[" + type.name() + "] not supported: ");
