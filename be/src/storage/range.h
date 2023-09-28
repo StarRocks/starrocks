@@ -305,10 +305,27 @@ inline std::string SparseRange<T>::to_string() const {
 template <typename T>
 inline SparseRange<T> SparseRange<T>::intersection(const SparseRange<T>& rhs) const {
     SparseRange result;
-    for (const auto& r1 : _ranges) {
-        for (const auto& r2 : rhs._ranges) {
-            if (r1.has_intersection(r2)) {
-                result._add_uncheck(r1.intersection(r2));
+
+    std::vector<Range<T>> sorted_lhs(_ranges.begin(), _ranges.end());
+    std::vector<Range<T>> sorted_rhs(rhs._ranges.begin(), rhs._ranges.end());
+
+    auto it1 = sorted_lhs.begin();
+    auto it2 = sorted_rhs.begin();
+
+    while (it1 != sorted_lhs.end() && it2 != sorted_rhs.end()) {
+        const Range r1 = *it1;
+        const Range r2 = *it2;
+
+        if (r1.end() < r2.begin()) {
+            ++it1;
+        } else if (r2.end() < r1.begin()) {
+            ++it2;
+        } else {
+            result._add_uncheck(r1.intersection(r2));
+            if (r1.end() < r2.end()) {
+                ++it1;
+            } else {
+                ++it2;
             }
         }
     }
