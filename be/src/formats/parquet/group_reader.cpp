@@ -232,9 +232,6 @@ void GroupReader::_process_columns_and_conjunct_ctxs(RuntimeState* runtime_state
             iter != runtime_state->get_query_global_dict_map().end()) {
             bool has_conjuncts = false;
             if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
-                for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
-                    _left_conjunct_ctxs.emplace_back(ctx);
-                }
                 has_conjuncts = true;
             }
 
@@ -242,6 +239,9 @@ void GroupReader::_process_columns_and_conjunct_ctxs(RuntimeState* runtime_state
                 if (!has_conjuncts) {
                     _lazy_column_indices.emplace_back(read_col_idx);
                 } else {
+                    for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
+                        _left_conjunct_ctxs.emplace_back(ctx);
+                    }
                     _active_column_indices.emplace_back(read_col_idx);
                 }
             } else {
