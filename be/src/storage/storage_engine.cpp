@@ -181,7 +181,6 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
 }
 
 Status StorageEngine::_open(const EngineOptions& options) {
-
     _as_cn = options.as_cn;
     _effective_cluster_id = config::cluster_id;
 
