@@ -30,6 +30,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakePartitionKey;
 import com.starrocks.catalog.FunctionSet;
@@ -469,20 +470,44 @@ public class PartitionUtil {
 
         Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
         for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
-            if (index == 0) {
+            if (entry.getValue().getKeys().get(0) instanceof StringLiteral) {
+                if (index == 0) {
+                    lastPartitionKey = entry.getValue();
+                    PartitionKey startPartitionKey = new PartitionKey();
+                    startPartitionKey.pushColumn(StringLiteral.create(FeConstants.PARTITION_USE_STR2DATE_MINVALUE,
+                            partitionColumn.getType()),
+                            partitionColumn.getPrimitiveType());
+                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(startPartitionKey, entry.getValue()));
+                    ++index;
+                    continue;
+                }
+                Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
+                if (entry.getValue().getKeys().get(0).getStringValue().equals(FeConstants.MYSQL_PARTITION_MAXVALUE)) {
+                    PartitionKey endKey = new PartitionKey();
+                    endKey.pushColumn(StringLiteral.create(FeConstants.PARTITION_USE_STR2DATE_MAXVALUE,
+                            partitionColumn.getType()),
+                            partitionColumn.getPrimitiveType());
+                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(lastPartitionKey, endKey));
+                } else {
+                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(lastPartitionKey, entry.getValue()));
+                }
+                lastPartitionKey = entry.getValue();
+            } else {
+                if (index == 0) {
+                    lastPartitionName = entry.getKey();
+                    lastPartitionKey = entry.getValue();
+                    if (lastPartitionKey.getKeys().get(0).isNullable()) {
+                        // If partition key is NULL literal, rewrite it to min value.
+                        lastPartitionKey = PartitionKey.createInfinityPartitionKey(ImmutableList.of(partitionColumn), false);
+                    }
+                    ++index;
+                    continue;
+                }
+                Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
+                mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, entry.getValue()));
                 lastPartitionName = entry.getKey();
                 lastPartitionKey = entry.getValue();
-                if (lastPartitionKey.getKeys().get(0).isNullable()) {
-                    // If partition key is NULL literal, rewrite it to min value.
-                    lastPartitionKey = PartitionKey.createInfinityPartitionKey(ImmutableList.of(partitionColumn), false);
-                }
-                ++index;
-                continue;
             }
-            Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
-            mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, entry.getValue()));
-            lastPartitionName = entry.getKey();
-            lastPartitionKey = entry.getValue();
         }
         if (lastPartitionName != null) {
             PartitionKey endKey = new PartitionKey();
