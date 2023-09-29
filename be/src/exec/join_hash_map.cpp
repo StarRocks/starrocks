@@ -431,6 +431,17 @@ Status JoinHashTable::build(RuntimeState* state) {
         _table_items->build_chunk = sorted_chunk;
     }
 
+    for (size_t idx = 0; idx < _table_items->sub_table_size; ++idx) {
+        size_t join_key_count = _table_items->join_keys.size();
+        auto table_item = _table_items->sub_items[idx];
+        for (size_t i = 0; i < join_key_count; i++) {
+            if (table_item->join_keys[i].col_ref != nullptr) {
+                SlotId slot_id = table_item->join_keys[i].col_ref->slot_id();
+                table_item->key_columns[i] = table_item->build_chunk->get_column_by_slot_id(slot_id);
+            }
+        }
+    }
+
     // If the join key is column ref of build chunk, fetch from build chunk directly
     size_t join_key_count = _table_items->join_keys.size();
     for (size_t i = 0; i < join_key_count; i++) {
@@ -643,9 +654,14 @@ Status JoinHashTable::_upgrade_key_columns_if_overflow() {
 }
 
 JoinHashMapType JoinHashTable::_choose_join_hash_map() {
-    if (_table_items->row_count == 0) {
-        return JoinHashMapType::empty;
+    // if (_table_items->row_count == 0) {
+    //     return JoinHashMapType::empty;
+    // }
+    if (_table_items->sub_table_size > 0) {
+        return JoinHashMapType::two_level_slice;
     }
+
+    return JoinHashMapType::slice;
 
     size_t size = _table_items->join_keys.size();
     DCHECK_GT(size, 0);

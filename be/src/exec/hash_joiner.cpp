@@ -23,10 +23,12 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/hash_join_components.h"
+#include "exec/pipeline/exchange/shuffler.h"
 #include "exec/spill/spiller.hpp"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/runtime_filter_bank.h"
+#include "gen_cpp/Partitions_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
@@ -35,6 +37,7 @@
 #include "util/runtime_profile.h"
 
 namespace starrocks {
+static const uint32_t MURMUR_SEED = 0xadc83b19ULL;
 
 void HashJoinProbeMetrics::prepare(RuntimeProfile* runtime_profile) {
     search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTime");
@@ -108,6 +111,13 @@ Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_
     _init_hash_table_param(&_hash_table_param);
     _hash_join_builder->create(hash_table_param());
     auto& ht = _hash_join_builder->hash_table();
+    // TODO:
+    for (size_t i = 0; i < config::partition_nums; ++i) {
+        auto builder = _pool->add(new HashJoinBuilder(*this));
+        builder->create(hash_table_param());
+        _sub_builders.push_back(builder);
+        _hash_join_builder->hash_table().add_subtable(builder->hash_table());
+    }
 
     _probe_column_count = ht.get_probe_column_count();
     _build_column_count = ht.get_build_column_count();
@@ -179,9 +189,59 @@ Status HashJoiner::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk
     if (!chunk || chunk->is_empty()) {
         return Status::OK();
     }
-
     update_build_rows(chunk->num_rows());
-    RETURN_IF_ERROR(_hash_join_builder->append_chunk(state, chunk));
+
+    std::vector<uint32_t> selection;
+    selection.resize(chunk->num_rows());
+    std::vector<int32_t> channel_row_idx_start_points;
+    // shuffle
+    {
+        // prepare shuffle keys
+        Columns key_columns;
+        prepare_build_key_columns(&key_columns, chunk);
+        // shuffle
+        size_t num_rows = chunk->num_rows();
+        std::vector<uint32_t> hash_values;
+        hash_values.assign(num_rows, MURMUR_SEED);
+        for (const ColumnPtr& column : key_columns) {
+            column->fnv_hash(&hash_values[0], 0, num_rows);
+        }
+        std::vector<uint32_t> shuffle_channel_id;
+        std::vector<uint32_t> row_indexes;
+
+        shuffle_channel_id.resize(num_rows);
+        row_indexes.resize(num_rows);
+        pipeline::Shuffler shuffler(false, false, TPartitionType::HASH_PARTITIONED, config::partition_nums, -1);
+        shuffler.local_exchange_shuffle(shuffle_channel_id, hash_values, num_rows);
+        std::vector<uint32_t> channel_row_idx_start_points;
+        channel_row_idx_start_points.resize(config::partition_nums + 1);
+
+        for (size_t i = 0; i < num_rows; ++i) {
+            channel_row_idx_start_points[shuffle_channel_id[i]]++;
+        }
+        // NOTE:
+        // we make the last item equal with number of rows of this chunk
+        for (int32_t i = 1; i <= config::partition_nums; ++i) {
+            channel_row_idx_start_points[i] += channel_row_idx_start_points[i - 1];
+        }
+
+        for (int32_t i = num_rows - 1; i >= 0; --i) {
+            row_indexes[channel_row_idx_start_points[shuffle_channel_id[i]] - 1] = i;
+            channel_row_idx_start_points[shuffle_channel_id[i]]--;
+        }
+
+        for (int32_t i = 0; i < config::partition_nums; ++i) {
+            size_t from = channel_row_idx_start_points[i];
+            size_t size = channel_row_idx_start_points[i + 1] - from;
+            if (size == 0) {
+                // no data for this channel continue;
+                continue;
+            }
+            auto sub_chunk = chunk->clone_empty();
+            sub_chunk->append_selective(*chunk, row_indexes.data(), from, size);
+            _sub_builders[i]->append_chunk(state, chunk);
+        }
+    }
 
     return Status::OK();
 }
@@ -213,6 +273,9 @@ Status HashJoiner::append_spill_task(RuntimeState* state, std::function<StatusOr
 
 Status HashJoiner::build_ht(RuntimeState* state) {
     if (_phase == HashJoinPhase::BUILD) {
+        // for (auto sub_builder : _sub_builders) {
+        //     RETURN_IF_ERROR(sub_builder->build(state));
+        // }
         RETURN_IF_ERROR(_hash_join_builder->build(state));
         size_t bucket_size = _hash_join_builder->hash_table().get_bucket_size();
         COUNTER_SET(build_metrics().build_buckets_counter, static_cast<int64_t>(bucket_size));

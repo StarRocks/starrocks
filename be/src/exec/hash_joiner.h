@@ -435,6 +435,7 @@ private:
 
     HashJoinProber* _hash_join_prober;
     HashJoinBuilder* _hash_join_builder;
+    std::vector<HashJoinBuilder*> _sub_builders;
 
     HashTableParam _hash_table_param;
 
