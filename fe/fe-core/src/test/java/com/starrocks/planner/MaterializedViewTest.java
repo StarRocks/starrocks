@@ -1774,9 +1774,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " LEFT OUTER JOIN `supplier` AS `s` ON `s`.`S_SUPPKEY` = `l`.`LO_SUPPKEY`" +
                     " LEFT OUTER JOIN `part` AS `p` ON `p`.`P_PARTKEY` = `l`.`LO_PARTKEY`;";
 
-            String query = "SELECT `lineorder`.`lo_orderkey`, `lineorder`.`lo_orderdate`, `lineorder`.`lo_custkey` AS `cd`\n" +
-                    "FROM `lineorder` LEFT OUTER JOIN `customer` ON `lineorder`.`lo_custkey` = `customer`.`c_custkey`\n" +
-                    "WHERE `lineorder`.`lo_orderkey` = 100;";
+            String query =
+                    "SELECT `lineorder`.`lo_orderkey`, `lineorder`.`lo_orderdate`, `lineorder`.`lo_custkey` AS `cd`\n" +
+                            "FROM `lineorder` LEFT OUTER JOIN `customer` ON `lineorder`.`lo_custkey` = `customer`.`c_custkey`\n" +
+                            "WHERE `lineorder`.`lo_orderkey` = 100;";
 
             testRewriteOK(mv, query);
         }
@@ -1796,9 +1797,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " LEFT OUTER JOIN `supplier` AS `s` ON `s`.`S_SUPPKEY` = `l`.`LO_SUPPKEY`" +
                     " LEFT OUTER JOIN `part` AS `p` ON `p`.`P_PARTKEY` = `l`.`LO_PARTKEY`;";
 
-            String query2 = "SELECT `lineorder_null`.`lo_orderkey`, `lineorder_null`.`lo_orderdate`, `lineorder_null`.`lo_custkey` AS `cd`\n" +
-                    "FROM `lineorder_null` LEFT OUTER JOIN `customer` ON `lineorder_null`.`lo_custkey` = `customer`.`c_custkey`\n" +
-                    "WHERE `lineorder_null`.`lo_orderkey` = 100;";
+            String query2 =
+                    "SELECT `lineorder_null`.`lo_orderkey`, `lineorder_null`.`lo_orderdate`, `lineorder_null`.`lo_custkey` AS `cd`\n" +
+                            "FROM `lineorder_null` LEFT OUTER JOIN `customer` ON `lineorder_null`.`lo_custkey` = `customer`.`c_custkey`\n" +
+                            "WHERE `lineorder_null`.`lo_orderkey` = 100;";
 
             testRewriteOK(mv2, query2);
         }
@@ -2952,6 +2954,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "bitmap_count(bitmap_and(bitmap_union(bitmap1), bitmap_union(bitmap2))) as cd2 " +
                 "from test_bitmap_rewrite_agg_tbl group by ds) t");
     }
+
     @Test
     public void testUnionRewrite() {
         {
@@ -3127,7 +3130,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     }
 
-   @Test
+    @Test
     public void testJoinDeriveRewrite() {
         // left outer join
         {
@@ -3268,7 +3271,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey";
 
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue" +
                     " from lineorder left anti join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3586,10 +3589,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
         {
             String mv = "select empid, deptno, locationid, count(distinct name) as s\n"
-                + "from emps group by empid, deptno, locationid";
+                    + "from emps group by empid, deptno, locationid";
             String query = "select empid, count(distinct name) as s\n"
-                + "from emps where deptno=1 \n"
-                + "group by empid ";
+                    + "from emps where deptno=1 \n"
+                    + "group by empid ";
             testRewriteFail(mv, query);
         }
 
@@ -4094,27 +4097,31 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
 
         {
-            String mv = "select * from lineorder where (lo_orderkey > 10000 and lo_linenumber > 5000) or (lo_orderkey < 1000 and lo_linenumber < 2000)";
+            String mv =
+                    "select * from lineorder where (lo_orderkey > 10000 and lo_linenumber > 5000) or (lo_orderkey < 1000 and lo_linenumber < 2000)";
             String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber > 6000";
             testRewriteOK(mv, query);
         }
 
         {
-            String mv = "select * from lineorder where (lo_orderkey > 10000 and lo_linenumber > 5000) or (lo_orderkey < 1000 and lo_linenumber < 2000)";
+            String mv =
+                    "select * from lineorder where (lo_orderkey > 10000 and lo_linenumber > 5000) or (lo_orderkey < 1000 and lo_linenumber < 2000)";
             String query = "select * from lineorder where lo_orderkey < 1000 and lo_linenumber < 2000";
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("PREDICATES: 18: lo_orderkey < 1000, 19: lo_linenumber < 2000");
         }
 
         {
-            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000) and (lo_orderkey < 1000 or lo_linenumber < 2000)";
+            String mv =
+                    "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000) and (lo_orderkey < 1000 or lo_linenumber < 2000)";
             String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber < 1000";
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("PREDICATES: 18: lo_orderkey > 15000, 19: lo_linenumber < 1000");
         }
 
         {
-            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_orderkey < 5000) and (lo_linenumber > 10000 or lo_linenumber < 2000)";
+            String mv =
+                    "select * from lineorder where (lo_orderkey > 10000 or lo_orderkey < 5000) and (lo_linenumber > 10000 or lo_linenumber < 2000)";
             String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber < 1000";
             testRewriteOK(mv, query);
         }
@@ -4166,7 +4173,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
                     "WHERE t1.fdate = 20230705\n" +
                     "GROUP BY fplat_form_itg2_name;";
-                    testRewriteOK(mv, query);
+            testRewriteOK(mv, query);
         }
     }
 
@@ -4434,66 +4441,74 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     ");\n" +
                     "\n");
             {
-                String mv = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                        "FROM test_sr_table_join t1\n" +
-                        "LEFT JOIN dim_test_sr_table t2\n" +
-                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
-                        "WHERE t1.fdate >= 20230702 and t1.fdate <= 20230705\n" +
-                        "GROUP BY fdate, fplat_form_itg2_name";
-                String query = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                        "FROM test_sr_table_join t1\n" +
-                        "LEFT JOIN dim_test_sr_table t2\n" +
-                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
-                        "WHERE t1.fdate >= 20230703 and t1.fdate <= 20230705\n" +
-                        "GROUP BY fdate, fplat_form_itg2_name";
+                String mv =
+                        "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                                "FROM test_sr_table_join t1\n" +
+                                "LEFT JOIN dim_test_sr_table t2\n" +
+                                "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                                "WHERE t1.fdate >= 20230702 and t1.fdate <= 20230705\n" +
+                                "GROUP BY fdate, fplat_form_itg2_name";
+                String query =
+                        "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                                "FROM test_sr_table_join t1\n" +
+                                "LEFT JOIN dim_test_sr_table t2\n" +
+                                "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                                "WHERE t1.fdate >= 20230703 and t1.fdate <= 20230705\n" +
+                                "GROUP BY fdate, fplat_form_itg2_name";
                 testRewriteOK(mv, query);
             }
 
             {
-                String mv = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                        "FROM test_sr_table_join t1\n" +
-                        "LEFT JOIN dim_test_sr_table t2\n" +
-                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
-                        "WHERE t1.fdate >= 20230702 and t1.fdate < 20230706\n" +
-                        "GROUP BY fdate, fplat_form_itg2_name";
-                String query = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                        "FROM test_sr_table_join t1\n" +
-                        "LEFT JOIN dim_test_sr_table t2\n" +
-                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
-                        "WHERE t1.fdate >= 20230703 and t1.fdate <= 20230705\n" +
-                        "GROUP BY fdate, fplat_form_itg2_name";
+                String mv =
+                        "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                                "FROM test_sr_table_join t1\n" +
+                                "LEFT JOIN dim_test_sr_table t2\n" +
+                                "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                                "WHERE t1.fdate >= 20230702 and t1.fdate < 20230706\n" +
+                                "GROUP BY fdate, fplat_form_itg2_name";
+                String query =
+                        "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                                "FROM test_sr_table_join t1\n" +
+                                "LEFT JOIN dim_test_sr_table t2\n" +
+                                "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                                "WHERE t1.fdate >= 20230703 and t1.fdate <= 20230705\n" +
+                                "GROUP BY fdate, fplat_form_itg2_name";
                 testRewriteOK(mv, query);
             }
 
             {
-                String mv = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                        "FROM test_sr_table_join t1\n" +
-                        "LEFT JOIN dim_test_sr_table t2\n" +
-                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
-                        "WHERE t1.fdate >= 20230702 and t1.fdate < 20230706\n" +
-                        "GROUP BY fdate, fplat_form_itg2_name";
-                String query = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                        "FROM test_sr_table_join t1\n" +
-                        "LEFT JOIN dim_test_sr_table t2\n" +
-                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
-                        "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
-                        "GROUP BY fdate, fplat_form_itg2_name";
+                String mv =
+                        "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                                "FROM test_sr_table_join t1\n" +
+                                "LEFT JOIN dim_test_sr_table t2\n" +
+                                "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                                "WHERE t1.fdate >= 20230702 and t1.fdate < 20230706\n" +
+                                "GROUP BY fdate, fplat_form_itg2_name";
+                String query =
+                        "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                                "FROM test_sr_table_join t1\n" +
+                                "LEFT JOIN dim_test_sr_table t2\n" +
+                                "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                                "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
+                                "GROUP BY fdate, fplat_form_itg2_name";
                 testRewriteOK(mv, query);
             }
 
             {
-                String mv = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                        "FROM test_sr_table_join t1\n" +
-                        "LEFT JOIN dim_test_sr_table t2\n" +
-                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
-                        "WHERE t1.fdate >= 20230702 and t1.fdate <= 20230705\n" +
-                        "GROUP BY fdate, fplat_form_itg2_name";
-                String query = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                        "FROM test_sr_table_join t1\n" +
-                        "LEFT JOIN dim_test_sr_table t2\n" +
-                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
-                        "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
-                        "GROUP BY fdate, fplat_form_itg2_name";
+                String mv =
+                        "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                                "FROM test_sr_table_join t1\n" +
+                                "LEFT JOIN dim_test_sr_table t2\n" +
+                                "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                                "WHERE t1.fdate >= 20230702 and t1.fdate <= 20230705\n" +
+                                "GROUP BY fdate, fplat_form_itg2_name";
+                String query =
+                        "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                                "FROM test_sr_table_join t1\n" +
+                                "LEFT JOIN dim_test_sr_table t2\n" +
+                                "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                                "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
+                                "GROUP BY fdate, fplat_form_itg2_name";
                 testRewriteOK(mv, query);
             }
             starRocksAssert.dropTable("dim_test_sr_table");
@@ -4531,66 +4546,74 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     ");\n" +
                     "\n");
             {
-                String mv = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                        "FROM test_sr_table_join t1\n" +
-                        "LEFT JOIN dim_test_sr_table t2\n" +
-                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
-                        "WHERE t1.fdate >= 20230702 and t1.fdate <= 20230705\n" +
-                        "GROUP BY fdate, fplat_form_itg2_name";
-                String query = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                        "FROM test_sr_table_join t1\n" +
-                        "LEFT JOIN dim_test_sr_table t2\n" +
-                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
-                        "WHERE t1.fdate >= 20230703 and t1.fdate <= 20230705\n" +
-                        "GROUP BY fdate, fplat_form_itg2_name";
+                String mv =
+                        "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                                "FROM test_sr_table_join t1\n" +
+                                "LEFT JOIN dim_test_sr_table t2\n" +
+                                "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                                "WHERE t1.fdate >= 20230702 and t1.fdate <= 20230705\n" +
+                                "GROUP BY fdate, fplat_form_itg2_name";
+                String query =
+                        "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                                "FROM test_sr_table_join t1\n" +
+                                "LEFT JOIN dim_test_sr_table t2\n" +
+                                "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                                "WHERE t1.fdate >= 20230703 and t1.fdate <= 20230705\n" +
+                                "GROUP BY fdate, fplat_form_itg2_name";
                 testRewriteOK(mv, query);
             }
 
             {
-                String mv = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                        "FROM test_sr_table_join t1\n" +
-                        "LEFT JOIN dim_test_sr_table t2\n" +
-                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
-                        "WHERE t1.fdate >= 20230702 and t1.fdate < 20230706\n" +
-                        "GROUP BY fdate, fplat_form_itg2_name";
-                String query = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                        "FROM test_sr_table_join t1\n" +
-                        "LEFT JOIN dim_test_sr_table t2\n" +
-                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
-                        "WHERE t1.fdate >= 20230703 and t1.fdate <= 20230705\n" +
-                        "GROUP BY fdate, fplat_form_itg2_name";
+                String mv =
+                        "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                                "FROM test_sr_table_join t1\n" +
+                                "LEFT JOIN dim_test_sr_table t2\n" +
+                                "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                                "WHERE t1.fdate >= 20230702 and t1.fdate < 20230706\n" +
+                                "GROUP BY fdate, fplat_form_itg2_name";
+                String query =
+                        "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                                "FROM test_sr_table_join t1\n" +
+                                "LEFT JOIN dim_test_sr_table t2\n" +
+                                "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                                "WHERE t1.fdate >= 20230703 and t1.fdate <= 20230705\n" +
+                                "GROUP BY fdate, fplat_form_itg2_name";
                 testRewriteOK(mv, query);
             }
 
             {
-                String mv = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                        "FROM test_sr_table_join t1\n" +
-                        "LEFT JOIN dim_test_sr_table t2\n" +
-                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
-                        "WHERE t1.fdate >= 20230702 and t1.fdate < 20230706\n" +
-                        "GROUP BY fdate, fplat_form_itg2_name";
-                String query = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                        "FROM test_sr_table_join t1\n" +
-                        "LEFT JOIN dim_test_sr_table t2\n" +
-                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
-                        "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
-                        "GROUP BY fdate, fplat_form_itg2_name";
+                String mv =
+                        "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                                "FROM test_sr_table_join t1\n" +
+                                "LEFT JOIN dim_test_sr_table t2\n" +
+                                "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                                "WHERE t1.fdate >= 20230702 and t1.fdate < 20230706\n" +
+                                "GROUP BY fdate, fplat_form_itg2_name";
+                String query =
+                        "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                                "FROM test_sr_table_join t1\n" +
+                                "LEFT JOIN dim_test_sr_table t2\n" +
+                                "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                                "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
+                                "GROUP BY fdate, fplat_form_itg2_name";
                 testRewriteOK(mv, query);
             }
 
             {
-                String mv = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                        "FROM test_sr_table_join t1\n" +
-                        "LEFT JOIN dim_test_sr_table t2\n" +
-                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
-                        "WHERE t1.fdate >= 20230702 and t1.fdate <= 20230705\n" +
-                        "GROUP BY fdate, fplat_form_itg2_name";
-                String query = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                        "FROM test_sr_table_join t1\n" +
-                        "LEFT JOIN dim_test_sr_table t2\n" +
-                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
-                        "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
-                        "GROUP BY fdate, fplat_form_itg2_name";
+                String mv =
+                        "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                                "FROM test_sr_table_join t1\n" +
+                                "LEFT JOIN dim_test_sr_table t2\n" +
+                                "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                                "WHERE t1.fdate >= 20230702 and t1.fdate <= 20230705\n" +
+                                "GROUP BY fdate, fplat_form_itg2_name";
+                String query =
+                        "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                                "FROM test_sr_table_join t1\n" +
+                                "LEFT JOIN dim_test_sr_table t2\n" +
+                                "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                                "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
+                                "GROUP BY fdate, fplat_form_itg2_name";
                 testRewriteOK(mv, query);
             }
             starRocksAssert.dropTable("dim_test_sr_table");

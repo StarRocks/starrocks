@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
@@ -30,6 +29,9 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryState;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
@@ -37,6 +39,7 @@ import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -64,6 +67,7 @@ public class MaterializedViewTest {
 
     @Before
     public void setUp() {
+        UtFrameUtils.createMinStarRocksCluster();
         columns = new LinkedList<Column>();
         columns.add(new Column("k1", ScalarType.createType(PrimitiveType.TINYINT), true, null, "", ""));
         columns.add(new Column("k2", ScalarType.createType(PrimitiveType.SMALLINT), true, null, "", ""));
@@ -329,7 +333,8 @@ public class MaterializedViewTest {
                 new FunctionCallExpr("date_trunc", Arrays.asList(quarterStringLiteral, slotRef1));
         exprs.add(quarterFunctionCallExpr);
 
-        RangePartitionInfo partitionInfo = new ExpressionRangePartitionInfo(exprs, partitionColumns, PartitionType.RANGE);
+        RangePartitionInfo partitionInfo =
+                new ExpressionRangePartitionInfo(exprs, partitionColumns, PartitionType.RANGE);
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
@@ -601,11 +606,13 @@ public class MaterializedViewTest {
                         "DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 24\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\");");
-        String createMvSql = "create materialized view mv1 as select p_partkey, p_name, length(p_brand) from part_with_mv;";
+        String createMvSql =
+                "create materialized view mv1 as select p_partkey, p_name, length(p_brand) from part_with_mv;";
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, createMvSql);
         stmtExecutor.execute();
-        Assert.assertEquals("Materialized view does not support this function:length(`test`.`part_with_mv`.`p_brand`)," +
-                " supported functions are: [min, max, hll_union, percentile_union, count, sum, bitmap_union]",
+        Assert.assertEquals(
+                "Materialized view does not support this function:length(`test`.`part_with_mv`.`p_brand`)," +
+                        " supported functions are: [min, max, hll_union, percentile_union, count, sum, bitmap_union]",
                 connectContext.getState().getErrorMessage());
     }
 
@@ -744,5 +751,45 @@ public class MaterializedViewTest {
         mv.setTableProperty(new TableProperty(Maps.newConcurrentMap()));
         shouldRefresh = mv.shouldTriggeredRefreshBy(null, null);
         Assert.assertTrue(shouldRefresh);
+    }
+
+    @Test
+    public void testAlterMVWithIndex() throws Exception {
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl_mv_contain_index\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withMaterializedView("create materialized view index_mv_to_check\n" +
+                        "distributed by hash(k2) buckets 3\n" +
+                        "as select k2, sum(v1) as total from tbl_mv_contain_index group by k2;");
+        String sql = "CREATE INDEX index1 ON test.index_mv_to_check (k2) USING BITMAP COMMENT 'balabala'";
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, sql);
+        stmtExecutor.execute();
+        Assert.assertEquals(connectContext.getState().getStateType(), QueryState.MysqlStateType.OK);
+    }
+
+    @Test
+    public void testShowMVWithIndex() throws Exception {
+        testAlterMVWithIndex();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        String showCreateSql = "show create materialized view test.index_mv_to_check;";
+        ShowCreateTableStmt showCreateTableStmt =
+                (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateSql, connectContext);
+        ShowExecutor showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
+        ShowResultSet showResultSet = showExecutor.execute();
+        System.out.println(showResultSet.getMetaData().toString());
+        System.out.println(showResultSet.getResultRows());
     }
 }
