@@ -3964,8 +3964,7 @@ StatusOr<ColumnPtr> StringFunctions::parse_url(FunctionContext* context, const s
 }
 
 StatusOr<ColumnPtr> StringFunctions::url_extract_host(FunctionContext* context, const starrocks::Columns& columns) {
-    UrlParser::UrlPart url_part_host = UrlParser::HOST;
-    UrlParser::UrlPart* url_part = &url_part_host;
+    UrlParser::UrlPart* url_part = UrlParser::HOST;
     return parse_url_const(url_part, context, columns);
 }
 
