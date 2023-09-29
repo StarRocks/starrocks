@@ -423,6 +423,8 @@ public:
 
     DEFINE_VECTORIZED_FN(url_extract_parameter);
 
+    DEFINE_VECTORIZED_FN(url_extract_host);
+
     /**
      * @param: [BigIntColumn]
      * @return: StringColumn
