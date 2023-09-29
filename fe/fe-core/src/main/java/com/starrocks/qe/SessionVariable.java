@@ -103,7 +103,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String QUERY_TIMEOUT = "query_timeout";
 
-    /* 
+    /*
      * When FE does not set the pagecache parameter, we expect a query to follow the pagecache policy of BE.
      * If pagecache is set by FE, a query whether to use pagecache follows the policy specified by FE.
      */
@@ -283,6 +283,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_REPLICATED_JOIN = "cbo_enable_replicated_join";
     public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
     public static final String CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE = "cbo_enable_low_cardinality_optimize";
+
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
@@ -398,6 +399,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
 
+    public static final String FORCE_ICEBERG_LOW_CARDINALITY_OPTIMIZE = "force_iceberg_low_cardinality_optimize";
+
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
         DEFAULT,            // default, choose the materialized view or not by cost optimizer
@@ -416,6 +419,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             return EnumUtils.getEnumIgnoreCase(MaterializedViewRewriteMode.class, str);
         }
     }
+
     public static final String MATERIALIZED_VIEW_REWRITE_MODE = "materialized_view_rewrite_mode";
 
     public static final String ENABLE_SYNC_MATERIALIZED_VIEW_REWRITE = "enable_sync_materialized_view_rewrite";
@@ -942,7 +946,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if transmission_encode_level & 4, binary columns are compressed by lz4
     // if transmission_encode_level & 1, enable adaptive encoding.
     // e.g.
-    // if transmission_encode_level = 7, SR will adaptively encode numbers and string columns according to the proper encoding ratio(< 0.9);
+    // if transmission_encode_level = 7, SR will adaptively encode numbers and string columns according to the proper encoding
+    // ratio(< 0.9);
     // if transmission_encode_level = 6, SR will force encoding numbers and string columns.
     // in short,
     // for transmission_encode_level,
@@ -1301,7 +1306,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
 
-
     @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
     private boolean cboDeriveRangeJoinPredicate = false;
 
@@ -1315,6 +1319,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
     private boolean enableIcebergIdentityColumnOptimize = true;
+
+    @VarAttr(name = FORCE_ICEBERG_LOW_CARDINALITY_OPTIMIZE)
+    private boolean forceIcebergLowCardinalityOptimize = false;
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -2004,8 +2011,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isEnableMaterializedViewForceRewrite() {
-        return materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_FORCE)  ||
-                        materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_FORCE_OR_ERROR);
+        return materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_FORCE) ||
+                materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_FORCE_OR_ERROR);
     }
 
     public boolean isEnableMaterializedViewRewriteOrError() {
@@ -2533,6 +2540,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableIcebergIdentityColumnOptimize() {
         return enableIcebergIdentityColumnOptimize;
+    }
+
+    public boolean getForceIcebergLowCardinalityOptimize() {
+        return forceIcebergLowCardinalityOptimize;
     }
 
     // Serialize to thrift object
