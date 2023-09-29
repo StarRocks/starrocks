@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/math_functions.h"
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
 
 #include <runtime/decimalv3.h>
 #include <types/logical_type.h>
@@ -23,6 +25,7 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "exprs/expr.h"
+#include "exprs/math_functions.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -747,6 +750,17 @@ StatusOr<ColumnPtr> MathFunctions::rand_seed(FunctionContext* context, const Col
     return rand(context, columns);
 }
 
+#ifdef __AVX2__
+static float sum_m256(__m256 v) {
+    __m256 hadd = _mm256_hadd_ps(v, v);
+    __m256 hadd2 = _mm256_hadd_ps(hadd, hadd);
+    __m128 vlow = _mm256_castps256_ps128(hadd2);
+    __m128 vhigh = _mm256_extractf128_ps(hadd2, 1);
+    __m128 result = _mm_add_ss(vlow, vhigh);
+    return _mm_cvtss_f32(result);
+}
+#endif
+
 template <LogicalType TYPE, bool isNorm>
 StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
@@ -827,13 +841,41 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
         CppType target_sum = 0;
         size_t dim_size = target_offset[i + 1] - target_offset[i];
         CppType result_value = 0;
-        for (size_t j = 0; j < dim_size; j++) {
+        size_t j = 0;
+#ifdef __AVX2__
+        if (std::is_same_v<CppType, float>) {
+            __m256 sum_vec = _mm256_setzero_ps();
+            __m256 base_sum_vec = _mm256_setzero_ps();
+            __m256 target_sum_vec = _mm256_setzero_ps();
+            for (; j + 7 < dim_size; j += 8) {
+                __m256 base_data_vec = _mm256_loadu_ps(base_data + j);
+                __m256 target_data_vec = _mm256_loadu_ps(target_data + j);
+
+                __m256 mul_vec = _mm256_mul_ps(base_data_vec, target_data_vec);
+                sum_vec = _mm256_add_ps(sum_vec, mul_vec);
+
+                if constexpr (!isNorm) {
+                    __m256 base_mul_vec = _mm256_mul_ps(base_data_vec, base_data_vec);
+                    base_sum_vec = _mm256_add_ps(base_sum_vec, base_mul_vec);
+                    __m256 target_mul_vec = _mm256_mul_ps(target_data_vec, target_data_vec);
+                    target_sum_vec = _mm256_add_ps(target_sum_vec, target_mul_vec);
+                }
+            }
+            sum += sum_m256(sum_vec);
+            if constexpr (!isNorm) {
+                base_sum += sum_m256(base_sum_vec);
+                target_sum += sum_m256(target_sum_vec);
+            }
+        }
+#endif
+        for (; j < dim_size; j++) {
             sum += base_data[j] * target_data[j];
             if constexpr (!isNorm) {
                 base_sum += base_data[j] * base_data[j];
                 target_sum += target_data[j] * target_data[j];
             }
         }
+
         if constexpr (!isNorm) {
             result_value = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
         } else {
