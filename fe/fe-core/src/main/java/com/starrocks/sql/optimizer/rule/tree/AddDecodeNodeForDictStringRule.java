@@ -71,6 +71,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import org.apache.iceberg.Snapshot;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -366,13 +367,13 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             return visitProjectionAfter(optExpression, context);
         }
 
-        class AdjustScanOperatorContext {
+        class ScanOperatorRewriter {
             Set<Integer> dictApplyColumnSet = new HashSet<>();
             Map<Integer, ColumnRefOperator> dictMapping = new HashMap<>();
             ColumnRefSet dictApplyColumnRefSet = new ColumnRefSet();
             final DecodeContext context;
 
-            AdjustScanOperatorContext(DecodeContext context) {
+            ScanOperatorRewriter(DecodeContext context) {
                 this.context = context;
             }
 
@@ -466,18 +467,18 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             PhysicalOlapScanOperator scanOperator = (PhysicalOlapScanOperator) optExpression.getOp();
             if (context.tableIdToStringColumnIds.containsKey(scanOperator.getTable().getId())) {
                 List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
-                AdjustScanOperatorContext adjustScanOperatorContext = new AdjustScanOperatorContext(context);
+                ScanOperatorRewriter scanOperatorRewriter = new ScanOperatorRewriter(context);
                 // analyze which columns can be used as dict columns.
-                adjustScanOperatorContext.findDictApplyColumnSet(scanOperator, predicates);
+                scanOperatorRewriter.findDictApplyColumnSet(scanOperator, predicates);
 
                 if (context.hasEncoded) {
                     Map<ColumnRefOperator, Column> newColRefToColumnMetaMap =
                             Maps.newHashMap(scanOperator.getColRefToColumnMetaMap());
                     List<ColumnRefOperator> newOutputColumns = Lists.newArrayList(scanOperator.getOutputColumns());
 
-                    adjustScanOperatorContext.rewriteColRefToColumnMetaMap(newColRefToColumnMetaMap);
-                    adjustScanOperatorContext.rewriteOutputColumns(newOutputColumns);
-                    adjustScanOperatorContext.rewritePredicates(predicates);
+                    scanOperatorRewriter.rewriteColRefToColumnMetaMap(newColRefToColumnMetaMap);
+                    scanOperatorRewriter.rewriteOutputColumns(newOutputColumns);
+                    scanOperatorRewriter.rewritePredicates(predicates);
 
                     ScalarOperator newPredicate = Utils.compoundAnd(predicates);
 
@@ -518,7 +519,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             PhysicalIcebergScanOperator scanOperator = (PhysicalIcebergScanOperator) optExpression.getOp();
             if (context.tableIdToStringColumnIds.containsKey(scanOperator.getTable().getId())) {
 
-                AdjustScanOperatorContext adjustScanOperatorContext = new AdjustScanOperatorContext(context);
+                ScanOperatorRewriter scanOperatorRewriter = new ScanOperatorRewriter(context);
 
                 // analyze which columns can be used as dict columns.
                 {
@@ -527,7 +528,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     predicates.addAll(scanOperator.getScanOperatorPredicates().getNoEvalPartitionConjuncts());
                     predicates.addAll(scanOperator.getScanOperatorPredicates().getPartitionConjuncts());
                     predicates.addAll(scanOperator.getScanOperatorPredicates().getNonPartitionConjuncts());
-                    adjustScanOperatorContext.findDictApplyColumnSet(scanOperator, predicates);
+                    scanOperatorRewriter.findDictApplyColumnSet(scanOperator, predicates);
                 }
 
                 if (context.hasEncoded) {
@@ -537,21 +538,21 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
                     // rewrite predicates.
                     List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
-                    adjustScanOperatorContext.rewritePredicates(predicates);
+                    scanOperatorRewriter.rewritePredicates(predicates);
                     ScalarOperator newPredicate = Utils.compoundAnd(predicates);
 
                     // rewrite other predicates.
                     ScanOperatorPredicates newScanOperatorPredicates = scanOperator.getScanOperatorPredicates().clone();
                     {
-                        adjustScanOperatorContext.rewritePredicates(newScanOperatorPredicates.getMinMaxConjuncts());
-                        adjustScanOperatorContext.rewriteColRefToColumnMetaMap(newScanOperatorPredicates.getMinMaxColumnRefMap());
-                        adjustScanOperatorContext.rewritePredicates(newScanOperatorPredicates.getNoEvalPartitionConjuncts());
-                        adjustScanOperatorContext.rewritePredicates(newScanOperatorPredicates.getPartitionConjuncts());
-                        adjustScanOperatorContext.rewritePredicates(newScanOperatorPredicates.getNonPartitionConjuncts());
+                        scanOperatorRewriter.rewritePredicates(newScanOperatorPredicates.getMinMaxConjuncts());
+                        scanOperatorRewriter.rewriteColRefToColumnMetaMap(newScanOperatorPredicates.getMinMaxColumnRefMap());
+                        scanOperatorRewriter.rewritePredicates(newScanOperatorPredicates.getNoEvalPartitionConjuncts());
+                        scanOperatorRewriter.rewritePredicates(newScanOperatorPredicates.getPartitionConjuncts());
+                        scanOperatorRewriter.rewritePredicates(newScanOperatorPredicates.getNonPartitionConjuncts());
                     }
 
-                    adjustScanOperatorContext.rewriteColRefToColumnMetaMap(newColRefToColumnMetaMap);
-                    adjustScanOperatorContext.rewriteOutputColumns(newOutputColumns);
+                    scanOperatorRewriter.rewriteColRefToColumnMetaMap(newColRefToColumnMetaMap);
+                    scanOperatorRewriter.rewriteOutputColumns(newOutputColumns);
 
                     // TODO: maybe have to implement a clone method to create a physical node.
                     PhysicalIcebergScanOperator newOlapScan =
@@ -1034,22 +1035,37 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
         for (PhysicalIcebergScanOperator externalScanOperator : externalScanOperators) {
             IcebergTable table = (IcebergTable) externalScanOperator.getTable();
-            long snapshotId = table.getNativeTable().currentSnapshot().snapshotId();
             for (ColumnRefOperator column : externalScanOperator.getColRefToColumnMetaMap().keySet()) {
+                Optional<Snapshot> snapshot = table.getSnapshot();
+                if (!snapshot.isPresent()) {
+                    continue;
+                }
+                long snapshotId = snapshot.get().snapshotId();
+
                 // Condition 1:
                 if (!column.getType().isVarchar()) {
                     continue;
                 }
 
-                //                ColumnStatistic columnStatistic =
-                //                        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(table, column.getName());
-                //                // Condition 2: the varchar column is low cardinality string column
-                //                if (!FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
-                //                        columnStatistic.getDistinctValuesCount() > CacheDictManager
-                //                                .LOW_CARDINALITY_THRESHOLD)) {
-                //                    LOG.debug("{} isn't low cardinality string column", column.getName());
-                //                    continue;
-                //                }
+                ColumnStatistic columnStatistic =
+                        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(table, column.getName());
+                // Condition 2: the varchar column is low cardinality string column
+                if (!ConnectContext.get().getSessionVariable().getForceIcebergLowCardinalityOptimize()) {
+                    if (!FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
+                            columnStatistic.getDistinctValuesCount() > CacheDictManager
+                                    .LOW_CARDINALITY_THRESHOLD)) {
+                        LOG.debug("{} isn't low cardinality string column", column.getName());
+                        continue;
+                    }
+                }
+
+                // Condition2.a: this scan operator should only scan parquet files.
+                // right now we only supports low card optimization on parquet files.
+                // This limitation could be temporary and can be removed in near future.
+                if (!externalScanOperator.hasOnlyScanParquetFiles()) {
+                    LOG.debug("{} has non-parquet files", table.getName());
+                    continue;
+                }
 
                 // Condition 3: the varchar column has collected global dict
                 if (IDictManager.getInstance().hasGlobalDict(table, column.getName(), snapshotId)) {

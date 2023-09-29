@@ -164,7 +164,7 @@ public class StatisticExecutor {
         String sql;
         if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
-            long version = icebergTable.getNativeTable().currentSnapshot().snapshotId();
+            long version = icebergTable.getSnapshot().get().snapshotId();
             sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                     "cast(" + version + " as bigint), " +
                     "dict_merge(array<string>[" + StatisticUtils.quoting(column) + "]) as _dict_merge_" + column +

@@ -16,8 +16,12 @@ package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -29,9 +33,14 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.Snapshot;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
@@ -95,4 +104,28 @@ public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
         this.globalDicts = globalDicts;
     }
 
+    public boolean hasOnlyScanParquetFiles() {
+        IcebergTable icebergTable = (IcebergTable) table;
+        Optional<Snapshot> snapshot = icebergTable.getSnapshot();
+        if (!snapshot.isPresent()) {
+            return false;
+        }
+        long snapshotId = snapshot.get().snapshotId();
+        List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
+                icebergTable.getCatalogName(), icebergTable, null, snapshotId, predicate, null);
+        if (splits.isEmpty()) {
+            return false;
+        }
+        RemoteFileDesc remoteFileDesc = splits.get(0).getFiles().get(0);
+        if (remoteFileDesc == null) {
+            return false;
+        }
+        for (FileScanTask task : remoteFileDesc.getIcebergScanTasks()) {
+            DataFile file = task.file();
+            if (file.format() != FileFormat.PARQUET) {
+                return false;
+            }
+        }
+        return true;
+    }
 }
