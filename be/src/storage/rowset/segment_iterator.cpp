@@ -1420,15 +1420,15 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
         ColumnId cid = pair.first;
         if (_bitmap_index_iterators[cid] == nullptr) {
             IndexReadOptions options;
-            options.fs = segment_ptr->file_system();
-            options.file_name = segment_ptr->file_name();
+            options.fs = _segment->file_system();
+            options.file_name = _segment->file_name();
             options.use_page_cache =
                     config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache;
             options.kept_in_memory = config::enable_bitmap_index_memory_page_cache;
             options.skip_fill_local_cache = _skip_fill_data_cache();
             options.stats = _opts.stats;
 
-            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(col_index, options, &_bitmap_index_iterators[cid]));
+            RETURN_IF_ERROR(_segment->new_bitmap_index_iterator(cid, options, &_bitmap_index_iterators[cid]));
             _has_bitmap_index |= (_bitmap_index_iterators[cid] != nullptr);
         }
     }
