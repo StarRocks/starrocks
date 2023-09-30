@@ -35,8 +35,8 @@ import java.util.Set;
 // 'select min(c1),max(c2),count(c3) from table',
 // we add a label on scan node to indicates that pattern for further optimization
 
-public class LabelMinMaxCountOnScanRule extends TransformationRule {
-    public LabelMinMaxCountOnScanRule() {
+public class MinMaxCountOptOnScanRule extends TransformationRule {
+    public MinMaxCountOptOnScanRule() {
         // agg -> project -> scan[checked in `check`]
         super(RuleType.TF_REWRITE_MIN_MAX_COUNT_AGG,
                 Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT)));
@@ -65,7 +65,7 @@ public class LabelMinMaxCountOnScanRule extends TransformationRule {
         }
 
         // no materialized column in predicate of scan
-        if (isMaterializedColumnInPredicate(scanOperator, scanOperator.getPredicate())) {
+        if (hasMaterializedColumnInPredicate(scanOperator, scanOperator.getPredicate())) {
             return false;
         }
 
@@ -75,7 +75,7 @@ public class LabelMinMaxCountOnScanRule extends TransformationRule {
         }
 
         // no materialized column in predicate of aggregation
-        if (isMaterializedColumnInPredicate(scanOperator, aggregationOperator.getPredicate())) {
+        if (hasMaterializedColumnInPredicate(scanOperator, aggregationOperator.getPredicate())) {
             return false;
         }
 
@@ -109,7 +109,7 @@ public class LabelMinMaxCountOnScanRule extends TransformationRule {
         return allValid;
     }
 
-    private static boolean isMaterializedColumnInPredicate(LogicalScanOperator scanOperator, ScalarOperator predicate) {
+    private static boolean hasMaterializedColumnInPredicate(LogicalScanOperator scanOperator, ScalarOperator predicate) {
         if (predicate == null) {
             return false;
         }
@@ -126,7 +126,7 @@ public class LabelMinMaxCountOnScanRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalScanOperator scanOperator = (LogicalScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
-        scanOperator.setCanUseMinMaxCountOpt(true);
+        scanOperator.getScanOptimzeOption().setCanUseMinMaxCountOpt(true);
         return Collections.emptyList();
     }
 }
