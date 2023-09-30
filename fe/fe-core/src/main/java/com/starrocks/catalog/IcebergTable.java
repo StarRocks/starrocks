@@ -82,6 +82,8 @@ public class IcebergTable extends Table {
 
     private Optional<Snapshot> snapshot = Optional.empty();
 
+    // used for recording the last snapshot time when refresh mv based on mv.
+    private long refreshSnapshotTime = -1L;
     public IcebergTable() {
         super(TableType.ICEBERG);
     }
@@ -201,6 +203,14 @@ public class IcebergTable extends Table {
             nativeTable = resourceMappingTable.getNativeTable();
         }
         return nativeTable;
+    }
+
+    public long getRefreshSnapshotTime() {
+        return refreshSnapshotTime;
+    }
+
+    public void setRefreshSnapshotTime(long refreshSnapshotTime) {
+        this.refreshSnapshotTime = refreshSnapshotTime;
     }
 
     @Override
