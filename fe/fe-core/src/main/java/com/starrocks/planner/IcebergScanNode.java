@@ -23,6 +23,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -54,6 +55,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -220,7 +222,8 @@ public class IcebergScanNode extends ScanNode {
         return result;
     }
 
-    public static BiMap<Integer, PartitionField> getIdentityPartitions(PartitionSpec partitionSpec) {
+    public static BiMap<Integer, PartitionField> getIdentityPartitions(PartitionSpec partitionSpec)
+    {
 
         // TODO: expose transform information in Iceberg library
         BiMap<Integer, PartitionField> columns = HashBiMap.create();
@@ -462,9 +465,25 @@ public class IcebergScanNode extends ScanNode {
         String sqlPredicates = getExplainString(conjuncts);
         msg.hdfs_scan_node.setSql_predicates(sqlPredicates);
 
-        HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
-        HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
-        HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
+        List<Expr> minMaxConjuncts = scanNodePredicates.getMinMaxConjuncts();
+        if (!minMaxConjuncts.isEmpty()) {
+            String minMaxSqlPredicate = getExplainString(minMaxConjuncts);
+            for (Expr expr : minMaxConjuncts) {
+                msg.hdfs_scan_node.addToMin_max_conjuncts(expr.treeToThrift());
+            }
+            msg.hdfs_scan_node.setMin_max_tuple_id(scanNodePredicates.getMinMaxTuple().getId().asInt());
+            msg.hdfs_scan_node.setMin_max_sql_predicates(minMaxSqlPredicate);
+        }
+
+        msg.hdfs_scan_node.setTable_name(srIcebergTable.getRemoteTableName());
+
+       if (cloudConfiguration != null) {
+            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+            cloudConfiguration.toThrift(tCloudConfiguration);
+            msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
+        }
+        msg.hdfs_scan_node.setCan_use_any_column(canUseAnyColumn);
+        msg.hdfs_scan_node.setCan_use_min_max_count_opt(canUseMinMaxCountOpt);
     }
 
     @Override

@@ -73,7 +73,7 @@ public class PruneScanColumnRule extends TransformationRule {
         }
 
         if (scanOperator.getColRefToColumnMetaMap().keySet().equals(outputColumns)) {
-            scanOperator.getScanOptimzeOption().setCanUseMinMaxCountOpt(canUseAnyColumn);
+            scanOperator.setCanUseAnyColumn(canUseAnyColumn);
             return Collections.emptyList();
         } else {
             Map<ColumnRefOperator, Column> newColumnRefMap = outputColumns.stream()
@@ -84,10 +84,11 @@ public class PruneScanColumnRule extends TransformationRule {
                 LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
                 LogicalOlapScanOperator newScanOperator = builder.withOperator(olapScanOperator)
                         .setColRefToColumnMetaMap(newColumnRefMap).build();
-                newScanOperator.getScanOptimzeOption().setCanUseAnyColumn(canUseAnyColumn);
+                newScanOperator.setCanUseAnyColumn(canUseAnyColumn);
                 return Lists.newArrayList(new OptExpression(newScanOperator));
             } else {
                 LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scanOperator);
+                scanOperator.setCanUseAnyColumn(canUseAnyColumn);
                 Operator newScanOperator =
                         builder.withOperator(scanOperator).setColRefToColumnMetaMap(newColumnRefMap).build();
                 return Lists.newArrayList(new OptExpression(newScanOperator));

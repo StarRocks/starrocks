@@ -489,7 +489,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                     scanOperator.getSelectedIndexId(), scanOperator.getSelectedPartitionId(),
                                     scanOperator.getSelectedTabletId(), scanOperator.getPrunedPartitionPredicates(),
                                     scanOperator.getProjection(), scanOperator.isUsePkIndex());
-                    newOlapScan.setScanOptimzeOption(scanOperator.getScanOptimzeOption());
+                    newOlapScan.setCanUseAnyColumn(scanOperator.getCanUseAnyColumn());
+                    newOlapScan.setCanUseMinMaxCountOpt(scanOperator.getCanUseMinMaxCountOpt());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
                     newOlapScan.setGlobalDicts(context.globalDicts);
                     // set output columns because of the projection is not encoded but the colRefToColumnMetaMap has encoded.
@@ -558,7 +559,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                             new PhysicalIcebergScanOperator(scanOperator.getTable(), newColRefToColumnMetaMap,
                                     scanOperator.getLimit(), newPredicate,
                                     scanOperator.getProjection(), newScanOperatorPredicates);
-                    newOlapScan.setScanOptimzeOption(scanOperator.getScanOptimzeOption());
+                    newOlapScan.setCanUseAnyColumn(scanOperator.getCanUseAnyColumn());
+                    newOlapScan.setCanUseMinMaxCountOpt(scanOperator.getCanUseMinMaxCountOpt());
                     newOlapScan.setGlobalDicts(context.globalDicts);
                     newOlapScan.setOutputColumns(newOutputColumns);
                     OptExpression result = new OptExpression(newOlapScan);
