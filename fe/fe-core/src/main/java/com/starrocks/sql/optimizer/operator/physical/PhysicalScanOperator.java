@@ -22,7 +22,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.RowOutputInfo;
-import com.starrocks.sql.optimizer.ScanOptimzeOption;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -46,7 +45,8 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
      */
     protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
-    protected ScanOptimzeOption scanOptimzeOption;
+    protected boolean canUseAnyColumn;
+    protected boolean canUseMinMaxCountOpt;
 
     public PhysicalScanOperator(OperatorType type, Table table,
                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -60,7 +60,6 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         this.predicate = predicate;
         this.projection = projection;
         this.columnAccessPaths = ImmutableList.of();
-        this.scanOptimzeOption = new ScanOptimzeOption();
 
         if (this.projection != null) {
             ColumnRefSet usedColumns = new ColumnRefSet();
@@ -86,7 +85,8 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
     public PhysicalScanOperator(OperatorType type, LogicalScanOperator scanOperator) {
         this(type, scanOperator.getTable(), scanOperator.getColRefToColumnMetaMap(), scanOperator.getLimit(),
                 scanOperator.getPredicate(), scanOperator.getProjection());
-        this.scanOptimzeOption = scanOperator.getScanOptimzeOption().copy();
+        this.canUseAnyColumn = scanOperator.getCanUseAnyColumn();
+        this.canUseMinMaxCountOpt = scanOperator.getCanUseMinMaxCountOpt();
     }
 
     public List<ColumnRefOperator> getOutputColumns() {
@@ -105,12 +105,20 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         return colRefToColumnMetaMap;
     }
 
-    public ScanOptimzeOption getScanOptimzeOption() {
-        return scanOptimzeOption;
+    public boolean getCanUseAnyColumn() {
+        return canUseAnyColumn;
     }
 
-    public void setScanOptimzeOption(ScanOptimzeOption opt) {
-        this.scanOptimzeOption = opt.copy();
+    public void setCanUseAnyColumn(boolean canUseAnyColumn) {
+        this.canUseAnyColumn = canUseAnyColumn;
+    }
+
+    public boolean getCanUseMinMaxCountOpt() {
+        return canUseMinMaxCountOpt;
+    }
+
+    public void setCanUseMinMaxCountOpt(boolean canUseMinMaxCountOpt) {
+        this.canUseMinMaxCountOpt = canUseMinMaxCountOpt;
     }
 
     public Table getTable() {

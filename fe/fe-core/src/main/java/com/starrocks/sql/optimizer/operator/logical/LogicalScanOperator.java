@@ -26,7 +26,6 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
-import com.starrocks.sql.optimizer.ScanOptimzeOption;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
@@ -58,7 +57,8 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected ImmutableMap<String, PartitionColumnFilter> columnFilters;
     protected Set<String> partitionColumns = Sets.newHashSet();
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
-    protected ScanOptimzeOption scanOptimzeOption;
+    protected boolean canUseAnyColumn;
+    protected boolean canUseMinMaxCountOpt;
 
     public LogicalScanOperator(
             OperatorType type,
@@ -73,7 +73,6 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
         this.columnMetaToColRefMap = ImmutableMap.copyOf(columnMetaToColRefMap);
         this.columnAccessPaths = ImmutableList.of();
-        this.scanOptimzeOption = new ScanOptimzeOption();
         buildColumnFilters(predicate);
     }
 
@@ -82,7 +81,6 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.colRefToColumnMetaMap = ImmutableMap.of();
         this.columnMetaToColRefMap = ImmutableMap.of();
         this.columnAccessPaths = ImmutableList.of();
-        this.scanOptimzeOption = new ScanOptimzeOption();
     }
 
     public Table getTable() {
@@ -114,8 +112,20 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         return columnRefOperatorMap;
     }
 
-    public ScanOptimzeOption getScanOptimzeOption() {
-        return scanOptimzeOption;
+    public void setCanUseAnyColumn(boolean canUseAnyColumn) {
+        this.canUseAnyColumn = canUseAnyColumn;
+    }
+
+    public boolean getCanUseAnyColumn() {
+        return canUseAnyColumn;
+    }
+
+    public void setCanUseMinMaxCountOpt(boolean canUseMinMaxCountOpt) {
+        this.canUseMinMaxCountOpt = canUseMinMaxCountOpt;
+    }
+
+    public boolean getCanUseMinMaxCountOpt() {
+        return canUseMinMaxCountOpt;
     }
 
     @Override
@@ -207,8 +217,8 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             builder.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
             builder.columnFilters = scanOperator.columnFilters;
             builder.columnAccessPaths = scanOperator.columnAccessPaths;
-            builder.scanOptimzeOption = scanOperator.scanOptimzeOption;
-            builder.partitionColumns = scanOperator.partitionColumns;
+            builder.canUseAnyColumn = scanOperator.canUseAnyColumn;
+            builder.canUseMinMaxCountOpt = scanOperator.canUseMinMaxCountOpt;
             return (B) this;
         }
 

@@ -24,28 +24,26 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-// optimization for select min/max/count distinct dt from table where predicates
-// and predicates only has partition columns.
+// for a simple min/max/count aggregation query like
+// 'select min(c1),max(c2),count(c3) from table',
+// we add a label on scan node to indicates that pattern for further optimization
 
-public class PartitionColumnValueOnlyOnScanRule extends TransformationRule {
-    public PartitionColumnValueOnlyOnScanRule() {
+public class LabelMinMaxCountOnScanRule extends TransformationRule {
+    public LabelMinMaxCountOnScanRule() {
         // agg -> project -> scan[checked in `check`]
-        super(RuleType.TF_REWRITE_PARTITION_COLUMN_ONLY_AGG,
+        super(RuleType.TF_REWRITE_MIN_MAX_COUNT_AGG,
                 Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT)));
     }
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
-        if (!context.getSessionVariable().isEnablePartitionColumnValueOnlyOptimization()) {
-            return false;
-        }
-
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
         Operator operator = input.getInputs().get(0).getInputs().get(0).getOp();
         if (!(operator instanceof LogicalScanOperator)) {
@@ -54,9 +52,30 @@ public class PartitionColumnValueOnlyOnScanRule extends TransformationRule {
         LogicalScanOperator scanOperator = (LogicalScanOperator) operator;
 
         // we can only apply this rule to the queries met all the following conditions:
-        // 1. only contain MIN/MAX/COUNT DISTINCT agg functions
-        // 2. scan operator only output partition columns.(right now we only support 1 column)
-        if (!allPartitionColumnInScanOperator(scanOperator)) {
+        // 1. no group by key
+        // 2. no `having` condition or other filters
+        // 3. no limit(???)
+        // 4. only contain MIN/MAX/COUNT agg functions, no distinct
+        // 5. all arguments to agg functions are primitive columns
+        // 6. no expr in arguments to agg functions
+
+        // no limit
+        if (scanOperator.getLimit() != -1) {
+            return false;
+        }
+
+        // no materialized column in predicate of scan
+        if (isMaterializedColumnInPredicate(scanOperator, scanOperator.getPredicate())) {
+            return false;
+        }
+
+        List<ColumnRefOperator> groupingKeys = aggregationOperator.getGroupingKeys();
+        if (groupingKeys != null && !groupingKeys.isEmpty()) {
+            return false;
+        }
+
+        // no materialized column in predicate of aggregation
+        if (isMaterializedColumnInPredicate(scanOperator, aggregationOperator.getPredicate())) {
             return false;
         }
 
@@ -64,37 +83,50 @@ public class PartitionColumnValueOnlyOnScanRule extends TransformationRule {
             AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
             String functionName = aggregateFunction.functionName();
 
-            // min/max/count distinct(a)
+            // min/max/count(a)
             if (!(functionName.equals(FunctionSet.MAX) || functionName.equals(FunctionSet.MIN) ||
-                    (functionName.equals(FunctionSet.COUNT) && aggregator.isDistinct()))) {
+                    (functionName.equals(FunctionSet.COUNT) && !aggregator.isDistinct()))) {
                 return false;
             }
 
+            // check arguments
+            // 1. simple type
+            // 2. no expr
+            List<ScalarOperator> arguments = aggregator.getArguments();
+            if (arguments == null || arguments.size() != 1) {
+                return false;
+            }
+            ScalarOperator arg = arguments.get(0);
+            if (!arg.isColumnRef()) {
+                return false;
+            }
+            ColumnRefOperator columnRefOperator = (ColumnRefOperator) arg;
+            if (columnRefOperator.getType().isComplexType()) {
+                return false;
+            }
             return true;
         });
         return allValid;
     }
 
-    private static boolean allPartitionColumnInScanOperator(LogicalScanOperator scanOperator) {
-        int pc = 0;
+    private static boolean isMaterializedColumnInPredicate(LogicalScanOperator scanOperator, ScalarOperator predicate) {
+        if (predicate == null) {
+            return false;
+        }
+        List<ColumnRefOperator> columnRefOperators = predicate.getColumnRefs();
         Set<String> partitionColumns = scanOperator.getPartitionColumns();
-        for (ColumnRefOperator c : scanOperator.getOutputColumns()) {
+        for (ColumnRefOperator c : columnRefOperators) {
             if (!partitionColumns.contains(c.getName())) {
-                // materialized column could be taken durding prune stage.
-                if (!scanOperator.getScanOptimzeOption().getCanUseAnyColumn()) {
-                    return false;
-                }
-            } else {
-                pc += 1;
+                return true;
             }
         }
-        return pc > 0;
+        return false;
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalScanOperator scanOperator = (LogicalScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
-        scanOperator.getScanOptimzeOption().setUsePartitionColumnValueOnly(true);
+        scanOperator.setCanUseMinMaxCountOpt(true);
         return Collections.emptyList();
     }
 }
