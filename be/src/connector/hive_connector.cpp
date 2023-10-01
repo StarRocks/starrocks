@@ -265,8 +265,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
             if (!_can_use_any_column) {
                 return false;
             }
-            size_t slot_size = slots.size();
-            if ((_partition_slots.size() + 1) != slot_size) {
+            if ((_partition_slots.size() + 1) != slots.size()) {
                 return false;
             }
             if (_materialize_slots.size() != 1) {
