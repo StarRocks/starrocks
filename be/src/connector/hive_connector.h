@@ -139,6 +139,7 @@ private:
     const HiveTableDescriptor* _hive_table = nullptr;
 
     bool _has_scan_range_indicate_const_column = false;
+    bool _use_partition_column_value_only = false;
 
     // ======================================
     // The following are profile metrics
