@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class LogicalIcebergScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
@@ -42,6 +43,8 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
                 predicate, null);
 
         Preconditions.checkState(table instanceof IcebergTable);
+        IcebergTable icebergTable = (IcebergTable) table;
+        partitionColumns.addAll(icebergTable.getPartitionColumns().stream().map(x -> x.getName()).collect(Collectors.toList()));
     }
 
     private LogicalIcebergScanOperator() {
