@@ -401,6 +401,7 @@ You can only set the static parameters of a BE by changing them in the correspon
 
 BE static parameters are as follows.
 
+<<<<<<< HEAD
 | Configuration item | Default | Unit | Description |
 | -------------------------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
 | be_port | 9060 | N/A | The BE thrift server port, which is used to receive requests from FEs. |
@@ -474,6 +475,464 @@ BE static parameters are as follows.
 | query_cache_capacity  | 536870912 | The size of the query cache in the BE. Unit: bytes. The default size is 512 MB. The size cannot be less than 4 MB. If the memory capacity of the BE is insufficient to provision your expected query cache size, you can increase the memory capacity of the BE. |
 | enable_event_based_compaction_framework  | TRUE | Whether to enable Event-based Compaction Framework.<ul><li>`true`: Event-based Compaction Framework is enabled.</li><li>`false`: Event-based Compaction Framework is disabled. </li></ul> Enabling Event-based Compaction Framework can greatly reduce the overhead of compaction in scenarios where there are many tablets or a single tablet has a large amount of data. |
 | enable_size_tiered_compaction_strategy  | TRUE |  Whether to enable the Size-tiered Compaction strategy.<ul><li>`true`: The size-tiered Compaction strategy is enabled.</li><li>`false`: The size-tiered Compaction strategy is disabled. </li></ul> |
+=======
+#### hdfs_client_enable_hedged_read
+
+- **Default**: false
+- **Unit**: N/A
+- **Description**: Specifies whether to enable the hedged read feature. This parameter is supported from v3.0 onwards.
+
+#### hdfs_client_hedged_read_threadpool_size
+
+- **Default**: 128
+- **Unit**: N/A
+- **Description**: Specifies the size of the Hedged Read thread pool on your HDFS client. The thread pool size limits the number of threads to dedicate to the running of hedged reads in your HDFS client. This parameter is supported from v3.0 onwards. It is equivalent to the dfs.client.hedged.read.threadpool.size parameter in the hdfs-site.xml file of your HDFS cluster.
+
+#### hdfs_client_hedged_read_threshold_millis
+
+- **Default**: 2500
+- **Unit**: Millisecond
+- **Description**: Specifies the number of milliseconds to wait before starting up a hedged read. For example, you have set this parameter to 30. In this situation, if a read from a block has not returned within 30 milliseconds, your HDFS client immediately starts up a new read against a different block replica. This parameter is supported from v3.0 onwards. It is equivalent to the dfs.client.hedged.read.threshold.millis parameter in the hdfs-site.xml file of your HDFS cluster.
+
+#### be_port
+
+- **Default**: 9060
+- **Unit**: N/A
+- **Description**: The BE thrift server port, which is used to receive requests from FEs.
+
+#### brpc_port
+
+- **Default**: 8060
+- **Unit**: N/A
+- **Description**: The BE BRPC port, which is used to view the network statistics of BRPCs.
+
+#### brpc_num_threads
+
+- **Default**: -1
+- **Unit**: N/A
+- **Description**: The number of bthreads of a BRPC. The value -1 indicates the same number with the CPU threads.
+
+#### priority_networks
+
+- **Default**: Empty string
+- **Unit**: N/A
+- **Description**: The CIDR-formatted IP address that is used to specify the priority IP address of a BE node if the machine that hosts the BE node has multiple IP addresses.
+
+#### heartbeat_service_port
+
+- **Default**: 9050
+- **Unit**: N/A
+- **Description**: The BE heartbeat service port, which is used to receive heartbeats from FEs.
+
+#### starlet_port
+
+- **Default**: 9070
+- **Unit**: N/A
+- **Description**: The BE heartbeat service port for the StarRocks shared-data cluster.
+
+#### heartbeat_service_thread_count
+
+- **Default**: 1
+- **Unit**: N/A
+- **Description**: The thread count of the BE heartbeat service.
+
+#### create_tablet_worker_count
+
+- **Default**: 3
+- **Unit**: N/A
+- **Description**: The number of threads used to create a tablet.
+
+#### drop_tablet_worker_count
+
+- **Default**: 3
+- **Unit**: N/A
+- **Description**: The number of threads used to drop a tablet.
+
+#### push_worker_count_normal_priority
+
+- **Default**: 3
+- **Unit**: N/A
+- **Description**: The number of threads used to handle a load task with NORMAL priority.
+
+#### push_worker_count_high_priority
+
+- **Default**: 3
+- **Unit**: N/A
+- **Description**: The number of threads used to handle a load task with HIGH priority.
+
+#### transaction_publish_version_worker_count
+
+- **Default**: 0
+- **Unit**: N/A
+- **Description**: The maximum number of threads used to publish a version. When this value is set to less than or equal to 0, the system uses half of the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from 8 to 0.
+
+#### clear_transaction_task_worker_count
+
+- **Default**: 1
+- **Unit**: N/A
+- **Description**: The number of threads used for clearing transaction.
+
+#### alter_tablet_worker_count
+
+- **Default**: 3
+- **Unit**: N/A
+- **Description**: The number of threads used for schema change.
+
+#### clone_worker_count
+
+- **Default**: 3
+- **Unit**: N/A
+- **Description**: The number of threads used for clone.
+
+#### storage_medium_migrate_count
+
+- **Default**: 1
+- **Unit**: N/A
+- **Description**: The number of threads used for storage medium migration (from SATA to SSD).
+
+#### check_consistency_worker_count
+
+- **Default**: 1
+- **Unit**: N/A
+- **Description**: The number of threads used for checking the consistency of tablets.
+
+#### sys_log_dir
+
+- **Default**: `${STARROCKS_HOME}/log`
+- **Unit**: N/A
+- **Description**: The directory that stores system logs (including INFO, WARNING, ERROR, and FATAL).
+
+#### user_function_dir
+
+- **Default**: `${STARROCKS_HOME}/lib/udfi`
+- **Unit**: N/A
+- **Description**: The directory used to store User-defined Functions (UDFs).
+
+#### small_file_dir
+
+- **Default**: `${STARROCKS_HOME}/lib/small_file`
+- **Unit**: N/A
+- **Description**: The directory used to store the files downloaded by the file manager.
+
+#### sys_log_level
+
+- **Default**: INFO
+- **Unit**: N/A
+- **Description**: The severity levels into which system log entries are classified. Valid values: INFO, WARN, ERROR, and FATAL.
+
+#### sys_log_roll_mode
+
+- **Default**: SIZE-MB-1024
+- **Unit**: N/A
+- **Description**: The mode in which system logs are segmented into log rolls. Valid values include `TIME-DAY`, `TIME-HOUR`, and `SIZE-MB-`size. The default value indicates that logs are segmented into rolls, each of which is 1 GB.
+
+#### sys_log_roll_num
+
+- **Default**: 10
+- **Unit**: N/A
+- **Description**: The number of log rolls to reserve.
+
+#### sys_log_verbose_modules
+
+- **Default**: Empty string
+- **Unit**: N/A
+- **Description**: The module of the logs to be printed. For example, if you set this configuration item to OLAP, StarRocks only prints the logs of the OLAP module. Valid values are namespaces in BE, including starrocks, starrocks::debug, starrocks::fs, starrocks::io, starrocks::lake, starrocks::pipeline, starrocks::query_cache, starrocks::stream, and starrocks::workgroup.
+
+#### sys_log_verbose_level
+
+- **Default**: 10
+- **Unit**: N/A
+- **Description**: The level of the logs to be printed. This configuration item is used to control the output of logs initiated with VLOG in codes.
+
+#### log_buffer_level
+
+- **Default**: Empty string
+- **Unit**: N/A
+- **Description**: The strategy for flushing logs. The default value indicates that logs are buffered in memory. Valid values are -1 and 0. -1 indicates that logs are not buffered in memory.
+
+#### num_threads_per_core
+
+- **Default**: 3
+- **Unit**: N/A
+- **Description**: The number of threads started on each CPU core.
+
+#### compress_rowbatches
+
+- **Default**: TRUE
+- **Unit**: N/A
+- **Description**: A boolean value to control whether to compress the row batches in RPCs between BEs. TRUE indicates compressing the row batches, and FALSE indicates not compressing them.
+
+#### serialize_batch
+
+- **Default**: FALSE
+- **Unit**: N/A
+- **Description**: A boolean value to control whether to serialize the row batches in RPCs between BEs. TRUE indicates serializing the row batches, and FALSE indicates not serializing them.
+
+#### storage_root_path
+
+- **Default**: `${STARROCKS_HOME}/storage`
+- **Unit**: N/A
+- **Description**: The directory and medium of the storage volume.
+  - Multiple volumes are separated by semicolons (`;`).
+  - If the storage medium is SSD, add `medium:ssd` at the end of the directory.
+  - If the storage medium is HDD, add ,medium:hdd at the end of the directory.
+
+#### max_length_for_bitmap_function
+
+- **Default**: 1000000
+- **Unit**: Byte
+- **Description**: The maximum length of input values for bitmap functions.
+
+#### max_length_for_to_base64
+
+- **Default**: 200000
+- **Unit**: Byte
+- **Description**: The maximum length of input values for the to_base64() function.
+
+#### max_tablet_num_per_shard
+
+- **Default**: 1024
+- **Unit**: N/A
+- **Description**: The maximum number of tablets in each shard. This configuration item is used to restrict the number of tablet child directories under each storage directory.
+
+#### max_garbage_sweep_interval
+
+- **Default**: 3600
+- **Unit**: Second
+- **Description**: The maximum time interval for garbage collection on storage volumes.
+
+#### min_garbage_sweep_interval
+
+- **Default**: 180
+- **Unit**: Second
+- **Description**: The minimum time interval for garbage collection on storage volumes.
+
+#### file_descriptor_cache_capacity
+
+- **Default**: 16384
+- **Unit**: N/A
+- **Description**: The number of file descriptors that can be cached.
+
+#### min_file_descriptor_number
+
+- **Default**: 60000
+- **Unit**: N/A
+- **Description**: The minimum number of file descriptors in the BE process.
+
+#### index_stream_cache_capacity
+
+- **Default**: 10737418240
+- **Unit**: Byte
+- **Description**: The cache capacity for the statistical information of BloomFilter, Min, and Max.
+
+#### disable_storage_page_cache
+
+- **Default**: FALSE
+- **Unit**: N/A
+- **Description**: A boolean value to control whether to disable PageCache.
+  - When PageCache is enabled, StarRocks caches the recently scanned data.
+  - PageCache can significantly improve the query performance when similar queries are repeated frequently.
+  - TRUE indicates disabling PageCache.
+  - The default value of this item has been changed from TRUE to FALSE since StarRocks v2.4.
+
+#### base_compaction_num_threads_per_disk
+
+- **Default**: 1
+- **Unit**: N/A
+- **Description**: The number of threads used for Base Compaction on each storage volume.
+
+#### base_cumulative_delta_ratio
+
+- **Default**: 0.3
+- **Unit**: N/A
+- **Description**: The ratio of cumulative file size to base file size. The ratio reaching this value is one of the conditions that trigger the Base Compaction.
+
+#### compaction_trace_threshold
+
+- **Default**: 60
+- **Unit**: Second
+- **Description**: The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace.
+
+#### be_http_port
+
+- **Default**: 8040
+- **Unit**: N/A
+- **Description**: The HTTP server port.
+
+#### be_http_num_workers
+
+- **Default**: 48
+- **Unit**: N/A
+- **Description**: The number of threads used by the HTTP server.
+
+#### load_data_reserve_hours
+
+- **Default**: 4
+- **Unit**: Hour
+- **Description**: The reservation time for the files produced by small-scale loadings.
+
+#### number_tablet_writer_threads
+
+- **Default**: 16
+- **Unit**: N/A
+- **Description**: The number of threads used for Stream Load.
+
+#### streaming_load_rpc_max_alive_time_sec
+
+- **Default**: 1200
+- **Unit**: Second
+- **Description**: The RPC timeout for Stream Load.
+
+#### fragment_pool_thread_num_min
+
+- **Default**: 64
+- **Unit**: N/A
+- **Description**: The minimum number of threads used for query.
+
+#### fragment_pool_thread_num_max
+
+- **Default**: 4096
+- **Unit**: N/A
+- **Description**: The maximum number of threads used for query.
+
+#### fragment_pool_queue_size
+
+- **Default**: 2048
+- **Unit**: N/A
+- **Description**: The upper limit of the query number that can be processed on each BE node.
+
+#### enable_token_check
+
+- **Default**: TRUE
+- **Unit**: N/A
+- **Description**: A boolean value to control whether to enable the token check. TRUE indicates enabling the token check, and FALSE indicates disabling it.
+
+#### enable_prefetch
+
+- **Default**: TRUE
+- **Unit**: N/A
+- **Description**: A boolean value to control whether to enable the pre-fetch of the query. TRUE indicates enabling pre-fetch, and FALSE indicates disabling it.
+
+#### load_process_max_memory_limit_bytes
+
+- **Default**: 107374182400
+- **Unit**: Byte
+- **Description**: The maximum size limit of memory resources that can be taken up by all load processes on a BE node.
+
+#### load_process_max_memory_limit_percent
+
+- **Default**: 30
+- **Unit**: %
+- **Description**: The maximum percentage limit of memory resources that can be taken up by all load processes on a BE node.
+
+#### sync_tablet_meta
+
+- **Default**: FALSE
+- **Unit**: N/A
+- **Description**: A boolean value to control whether to enable the synchronization of the tablet metadata. TRUE indicates enabling synchronization, and FALSE indicates disabling it.
+
+#### routine_load_thread_pool_size
+
+- **Default**: 10
+- **Unit**: N/A
+- **Description**: The thread pool size for Routine Load on each BE. Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now controlled by the FE dynamic parameter max_routine_load_task_num_per_be.
+
+#### brpc_max_body_size
+
+- **Default**: 2147483648
+- **Unit**: Byte
+- **Description**: The maximum body size of a BRPC.
+
+#### tablet_map_shard_size
+
+- **Default**: 32
+- **Unit**: N/A
+- **Description**: The tablet map shard size. The value must be a power of two.
+
+#### enable_bitmap_union_disk_format_with_set
+
+- **Default**: FALSE
+- **Unit**: N/A
+- **Description**: A boolean value to control whether to enable the new storage format of the BITMAP type, which can improve the performance of bitmap_union. TRUE indicates enabling the new storage format, and FALSE indicates disabling it.
+
+#### mem_limit
+
+- **Default**: 90%
+- **Unit**: N/A
+- **Description**: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100GB").
+
+#### flush_thread_num_per_store
+
+- **Default**: 2
+- **Unit**: N/A
+- **Description**: Number of threads that are used for flushing MemTable in each store.
+
+#### block_cache_enable
+
+- **Default**: false
+- **Unit**: N/A
+- **Description**: Whether to enable Data Cache. TRUE indicates Data Cache is enabled, and FALSE indicates Data Cache is disabled.
+
+#### block_cache_disk_path
+
+- **Default**: N/A
+- **Unit**: N/A
+- **Description**: The paths of disks. We recommend that the number of paths you configure for this parameter is the same as the number of disks on your BE machine. Multiple paths need to be separated with semicolons (;). After you add this parameter, StarRocks automatically creates a file named cachelib_data to cache blocks.
+
+#### block_cache_meta_path
+
+- **Default**: N/A
+- **Unit**: N/A
+- **Description**: The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the $STARROCKS_HOME path.
+
+#### block_cache_mem_size
+
+- **Default**: 2147483648
+- **Unit**: Bytes
+- **Description**: The maximum amount of data that can be cached in memory. Unit: bytes. The default value is 2147483648, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after Data Cache is enabled, consider increasing the value.
+
+#### block_cache_disk_size
+
+- **Default**: 0
+- **Unit**: Bytes
+- **Description**: The maximum amount of data that can be cached on a single disk. For example, if you configure two disk paths for the block_cache_disk_path parameter and set the value of the block_cache_disk_size parameter as 21474836480 (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is 0, which indicates that only memory is used to cache data. Unit: bytes.
+
+#### jdbc_connection_pool_size
+
+- **Default**: 8
+- **Unit**: N/A
+- **Description**: The JDBC connection pool size. On each BE node, queries that access the external table with the same jdbc_url share the same connection pool.
+
+#### jdbc_minimum_idle_connections
+
+- **Default**: 1
+- **Unit**: N/A
+- **Description**: The minimum number of idle connections in the JDBC connection pool.
+
+#### jdbc_connection_idle_timeout_ms
+
+- **Default**: 600000
+- **Unit**: N/A
+- **Description**: The length of time after which an idle connection in the JDBC connection pool expires. If the connection idle time in the JDBC connection pool exceeds this value, the connection pool closes idle connections beyond the number specified in the configuration item jdbc_minimum_idle_connections.
+
+#### query_cache_capacity
+
+- **Default**: 536870912
+- **Unit**: N/A
+- **Description**: The size of the query cache in the BE. Unit: bytes. The default size is 512 MB. The size cannot be less than 4 MB. If the memory capacity of the BE is insufficient to provision your expected query cache size, you can increase the memory capacity of the BE.
+
+#### enable_event_based_compaction_framework
+
+- **Default**: TRUE
+- **Unit**: N/A
+- **Description**: Whether to enable the Event-based Compaction Framework. TRUE indicates Event-based Compaction Framework is enabled, and FALSE indicates it is disabled. Enabling Event-based Compaction Framework can greatly reduce the overhead of compaction in scenarios where there are many tablets or a single tablet has a large amount of data.
+
+#### enable_size_tiered_compaction_strategy
+
+- **Default**: TRUE
+- **Unit**: N/A
+- **Description**: Whether to enable the Size-tiered Compaction strategy. TRUE indicates the Size-tiered Compaction strategy is enabled, and FALSE indicates it is disabled.
+>>>>>>> 7beebf08d1 ([Doc] MDX 2 compatibility (#32008))
 
 <!--| aws_sdk_logging_trace_enabled | 0 | N/A | |
 | be_exit_after_disk_write_hang_second | 60 | N/A | |

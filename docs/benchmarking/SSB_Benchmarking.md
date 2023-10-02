@@ -17,7 +17,7 @@ This test compares the performance of StarRocks, Apache Druid, and ClickHouse ag
 
 | Machine           | 3 cloud hosts                                                |
 | ----------------- | ------------------------------------------------------------ |
-| CPU               | 16-Core Intel (R) Xeon (R) Platinum 8269CY CPU @2.50GHz <br>Cache size: 36608 KB |
+| CPU               | 16-Core Intel (R) Xeon (R) Platinum 8269CY CPU @2.50GHz <br />Cache size: 36608 KB |
 | Memory            | 64 GB                                                        |
 | Network bandwidth | 5 Gbit/s                                                     |
 | Disk              | ESSD                                                         |
