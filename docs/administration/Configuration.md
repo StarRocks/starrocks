@@ -1746,19 +1746,19 @@ BE static parameters are as follows.
 
 #### sys_log_dir
 
-- **Default**: ${STARROCKS_HOME}/log
+- **Default**: `${STARROCKS_HOME}/log`
 - **Unit**: N/A
 - **Description**: The directory that stores system logs (including INFO, WARNING, ERROR, and FATAL).
 
 #### user_function_dir
 
-- **Default**: ${STARROCKS_HOME}/lib/udf
+- **Default**: `${STARROCKS_HOME}/lib/udfi`
 - **Unit**: N/A
 - **Description**: The directory used to store User-defined Functions (UDFs).
 
 #### small_file_dir
 
-- **Default**: ${STARROCKS_HOME}/lib/small_file
+- **Default**: `${STARROCKS_HOME}/lib/small_file`
 - **Unit**: N/A
 - **Description**: The directory used to store the files downloaded by the file manager.
 

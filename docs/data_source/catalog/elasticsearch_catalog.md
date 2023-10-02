@@ -70,14 +70,14 @@ StarRocks supports pushing the predicates specified in queries against Elasticse
 
 | SQL syntax   | Elasticsearch syntax  |
 | ------------ | --------------------- |
-| =            | term query            |
-| in           | terms query           |
-| >=, <=, >, < | range                 |
-| and          | bool.filter           |
-| or           | bool.should           |
-| not          | bool.must_not         |
-| not in       | bool.must_not + terms |
-| esquery      | ES Query DSL          |
+| `=`            | term query            |
+| `in`           | terms query           |
+| `>=, <=, >, <` | range                 |
+| `and`          | bool.filter           |
+| `or`           | bool.should           |
+| `not`          | bool.must_not         |
+| `not in`       | bool.must_not + terms |
+| `esquery`      | ES Query DSL          |
 
 ## Query examples
 
