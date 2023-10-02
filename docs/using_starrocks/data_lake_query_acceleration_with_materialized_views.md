@@ -61,7 +61,7 @@ Materialized views, Data Cache, and native tables in StarRocks are all effective
   </tbody>
 </table>
 
-<br>
+<br />
 
 Compared to directly querying lake data or loading data into native tables, materialized views offer several unique advantages:
 
@@ -69,7 +69,7 @@ Compared to directly querying lake data or loading data into native tables, mate
 - **Zero maintenance for loading tasks**: Materialized views update data transparently via automatic refresh tasks. There's no need to maintain loading tasks to perform scheduled data updates. Additionally, Hive catalog-based materialized views can detect data changes and perform incremental refreshes at the partition level.
 - **Intelligent  query  rewrite**: Queries can be transparently rewritten to use materialized views. You can benefit from acceleration instantly without the need to modify the query statements your application uses.
 
-<br>
+<br />
 
 Therefore, we recommend using materialized views in the following scenarios:
 
@@ -77,7 +77,7 @@ Therefore, we recommend using materialized views in the following scenarios:
 - Queries involve reusable components, such as fixed aggregation functions or join patterns.
 - Data is organized in partitions, while queries involve aggregation on a relatively high level (e.g., aggregating by day).
 
-<br>
+<br />
 
 In the following scenarios, we recommend prioritizing acceleration through Data Cache:
 
