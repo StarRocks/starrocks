@@ -91,11 +91,7 @@ You need to configure the following parameter in the BE configuration file **be.
 
 | **Parameter**        | **Required** | **Description**                                              |
 | -------------------- | ------------ | ------------------------------------------------------------ |
-<<<<<<< HEAD
-| query_cache_capacity | No           | Specifies the size of the query cache. Unit: bytes. The default size is 512 MB.<br>Each BE actually has its own local query cache in memory and it populates and probes only its own query cache.<br>Note that the query cache size cannot be less than 4 MB. If the memory capacity of the BE is insufficient to provision your expected query cache size, you can increase the memory capacity of the BE. |
-=======
 | query_cache_capacity | No           | Specifies the size of the query cache. Unit: bytes. The default size is 512 MB.<br />Each BE has its own local query cache in memory, and it populates and probes only its own query cache.<br />Note that the query cache size cannot be less than 4 MB. If the memory capacity of the BE is insufficient to provision your expected query cache size, you can increase the memory capacity of the BE. |
->>>>>>> 7beebf08d1 ([Doc] MDX 2 compatibility (#32008))
 
 ## Engineered for maximum cache hit rate in all scenarios
 
