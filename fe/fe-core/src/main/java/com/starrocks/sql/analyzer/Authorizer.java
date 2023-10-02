@@ -32,9 +32,11 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessControl;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 
+import java.util.Optional;
 import java.util.Set;
 
 public class Authorizer {
@@ -82,23 +84,38 @@ public class Authorizer {
         getInstance().getAccessControlOrDefault(catalogName).checkAnyActionOnDb(currentUser, roleIds, catalogName, db);
     }
 
-    public static void checkTableAction(UserIdentity userIdentity, Set<Long> roleIds, String db, String table,
+    public static void checkTableAction(UserIdentity userIdentity, Set<Long> roleIds, String db, String tblName,
                                         PrivilegeType privilegeType) {
+        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new TableName(db, tblName));
+        if (table.isPresent() && !table.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
+            return;
+        }
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkTableAction(userIdentity, roleIds,
-                        new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db, table), privilegeType);
+                        new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db, tblName), privilegeType);
     }
 
     public static void checkTableAction(UserIdentity userIdentity, Set<Long> roleIds, String catalog, String db,
-                                        String table, PrivilegeType privilegeType) {
+                                        String tblName, PrivilegeType privilegeType) {
+        Optional<Table> table =
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new TableName(catalog, db, tblName));
+        if (table.isPresent() && !table.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
+            return;
+        }
         getInstance().getAccessControlOrDefault(catalog).checkTableAction(userIdentity, roleIds,
-                new TableName(catalog, db, table), privilegeType);
+                new TableName(catalog, db, tblName), privilegeType);
+
     }
 
     public static void checkTableAction(UserIdentity userIdentity, Set<Long> roleIds, TableName tableName,
                                         PrivilegeType privilegeType) {
+        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        if (table.isPresent() && !table.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
+            return;
+        }
         String catalog = tableName.getCatalog();
-        getInstance().getAccessControlOrDefault(catalog).checkTableAction(userIdentity, roleIds, tableName, privilegeType);
+        getInstance().getAccessControlOrDefault(catalog)
+                .checkTableAction(userIdentity, roleIds, tableName, privilegeType);
     }
 
     public static void checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, TableName tableName) {
@@ -129,8 +146,19 @@ public class Authorizer {
                 .checkAnyActionOnMaterializedView(currentUser, roleIds, tableName);
     }
 
+    public static void checkActionOnTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+                                                    PrivilegeType privilegeType) {
+        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        table.ifPresent(value -> doCheckTableLikeObject(currentUser, roleIds, tableName.getDb(), value, privilegeType));
+    }
+
     public static void checkAnyActionOnTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
                                                        Table tbl) {
+        doCheckTableLikeObject(currentUser, roleIds, dbName, tbl, null);
+    }
+
+    private static void doCheckTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
+                                               Table tbl, PrivilegeType privilegeType) {
         Table.TableType type = tbl.getType();
         switch (type) {
             case OLAP:
@@ -145,19 +173,36 @@ public class Authorizer {
             case FILE:
             case SCHEMA:
             case PAIMON:
-                checkAnyActionOnTable(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+                // `privilegeType == null` meaning we don't check specified action, just any action
+                if (privilegeType == null) {
+                    checkAnyActionOnTable(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+                } else {
+                    checkTableAction(currentUser, roleIds, dbName, tbl.getName(), privilegeType);
+                }
                 break;
             case MATERIALIZED_VIEW:
             case CLOUD_NATIVE_MATERIALIZED_VIEW:
-                checkAnyActionOnMaterializedView(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+                // `privilegeType == null` meaning we don't check specified action, just any action
+                if (privilegeType == null) {
+                    checkAnyActionOnMaterializedView(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+                } else {
+                    checkMaterializedViewAction(currentUser, roleIds, new TableName(dbName, tbl.getName()),
+                            privilegeType);
+                }
                 break;
             case VIEW:
-                checkAnyActionOnView(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+                // `privilegeType == null` meaning we don't check specified action, just any action
+                if (privilegeType == null) {
+                    checkAnyActionOnView(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+                } else {
+                    checkViewAction(currentUser, roleIds, new TableName(dbName, tbl.getName()), privilegeType);
+                }
                 break;
             default:
+                String privTypeName = privilegeType == null ? "ANY" : privilegeType.name();
                 throw new AccessDeniedException(
                         ErrorReport.reportCommon(null, ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                                "ANY ON TABLE/VIEW/MV OBJECT"));
+                                privTypeName + " ON TABLE/VIEW/MV OBJECT"));
         }
     }
 
@@ -230,6 +275,17 @@ public class Authorizer {
     public static void checkAnyActionOnOrInCatalog(UserIdentity userIdentity, Set<Long> roleIds, String catalogName) {
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
             getInstance().getAccessControlOrDefault(catalogName).checkAnyActionOnCatalog(userIdentity, roleIds, catalogName);
+        }
+    }
+
+    public static void checkActionForAnalyzeStatement(UserIdentity userIdentity, Set<Long> currentRoleIds,
+                                                       TableName tableName) {
+        Authorizer.checkActionOnTableLikeObject(userIdentity, currentRoleIds,
+                tableName, PrivilegeType.SELECT);
+        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        if (table.isPresent() && table.get().isTable()) {
+            Authorizer.checkActionOnTableLikeObject(userIdentity, currentRoleIds,
+                    tableName, PrivilegeType.INSERT);
         }
     }
 

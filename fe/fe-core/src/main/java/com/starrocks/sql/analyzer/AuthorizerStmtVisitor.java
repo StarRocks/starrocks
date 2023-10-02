@@ -641,10 +641,8 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext context) {
-        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                statement.getTableName(), PrivilegeType.SELECT);
-        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                statement.getTableName(), PrivilegeType.INSERT);
+        Authorizer.checkActionForAnalyzeStatement(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), statement.getTableName());
         return null;
     }
 
@@ -652,29 +650,23 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext context) {
         Set<TableName> tableNames = AnalyzerUtils.getAllTableNamesForAnalyzeJobStmt(statement.getDbId(), statement.getTableId());
         tableNames.forEach(tableName -> {
-            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    tableName, PrivilegeType.SELECT);
-            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    tableName, PrivilegeType.INSERT);
+            Authorizer.checkActionForAnalyzeStatement(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), tableName);
         });
         return null;
     }
 
     @Override
     public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext context) {
-        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                statement.getTableName(), PrivilegeType.SELECT);
-        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                statement.getTableName(), PrivilegeType.INSERT);
+        Authorizer.checkActionForAnalyzeStatement(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), statement.getTableName());
         return null;
     }
 
     @Override
     public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext context) {
-        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                statement.getTableName(), PrivilegeType.SELECT);
-        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                statement.getTableName(), PrivilegeType.INSERT);
+        Authorizer.checkActionForAnalyzeStatement(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), statement.getTableName());
         return null;
     }
 
@@ -709,7 +701,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitKillAnalyzeStatement(KillAnalyzeStmt statement, ConnectContext context) {
         // `kill analyze {id}` can only kill analyze job that user has privileges(SELECT + INSERT) on,
-        // we will check it in the execution logic, not here, see `ShowExecutor#handleKillAnalyzeStmt()`
+        // we will check it in the execution logic, not here, see `ShowExecutor#checkPrivilegeForKillAnalyzeStmt()`
         // for details.
         return null;
     }
