@@ -18,16 +18,6 @@ Note:
 3. When user_identity is not specified, the permissions of the current user will be showed. 
 ```
 
-<<<<<<< HEAD
-=======
-| **Field**    | **Description**                                              |
-| ------------ | ------------------------------------------------------------ |
-| UserIdentity | The user identity, which is displayed when you query the privileges of a user. |
-| RoleName     | The role name, which is displayed when you query the privileges of a role. |
-| Catalog      | The catalog name.<br />`default` is returned if the GRANT operation is performed on the StarRocks internal catalog.<br />The name of the external catalog is returned if the GRANT operation is performed on an external catalog.<br />`NULL` is returned if the operation shown in the `Grants` column is assigning roles. |
-| Grants       | The specific GRANT operation.                                |
-
->>>>>>> 7beebf08d1 ([Doc] MDX 2 compatibility (#32008))
 ## Examples
 
 1. View all users' permissions.

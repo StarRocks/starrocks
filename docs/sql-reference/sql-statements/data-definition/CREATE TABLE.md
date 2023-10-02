@@ -349,7 +349,6 @@ PROPERTIES (
 )
 ```
 
-<<<<<<< HEAD
 **storage_medium**: the initial storage medium, which can be set to SSD or HDD.
 
 > **NOTE**
@@ -358,13 +357,6 @@ PROPERTIES (
 > - If the FE configuration item `enable_strict_storage_medium_check` is set to `true`, the system strictly checks BE disk type when you create a table. If the storage medium you specified in CREATE TABLE is inconsistent with BE disk type, an error "Failed to find enough host in all backends with storage medium is SSD|HDD." is returned and table creation fails. If `enable_strict_storage_medium_check` is set to `false`, the system ignores this error and forcibly creates the table. However, cluster disk space may be unevenly distributed after data is loaded.
 
 **storage_cooldown_time**: the storage cooldown time for a partition. If the storage medium is SSD, SSD is switched to HDD after the time specified by this parameter. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this parameter is not explicitly specified, storage cooldown is not performed by default.
-=======
-- `storage_medium`: the initial storage medium, which can be set to `SSD` or `HDD`. Make sure that the type of storage medium you explicitly specified is consistent with the BE disk types for your StarRocks cluster specified in the BE static parameter `storage_root_path`.<br />
-
-    If the FE configuration item `enable_strict_storage_medium_check` is set to `true`, the system strictly checks BE disk type when you create a table. If the storage medium you specified in CREATE TABLE is inconsistent with BE disk type, an error "Failed to find enough host in all backends with storage medium is SSD|HDD." is returned and table creation fails. If `enable_strict_storage_medium_check` is set to `false`, the system ignores this error and forcibly creates the table. However, cluster disk space may be unevenly distributed after data is loaded.<br />
-
-    From v2.3.6, v2.4.2, v2.5.1, and v3.0 onwards, the system automatically infers storage medium based on BE disk type if `storage_medium` is not explicitly specified.<br />
->>>>>>> 7beebf08d1 ([Doc] MDX 2 compatibility (#32008))
 
 **replication_num**: number of replicas in the specified partition. Default number: 3.
 
