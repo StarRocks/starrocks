@@ -82,7 +82,7 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 **DEFAULT "default_value"**: the default value of a column. When you load data into StarRocks, if the source field mapped onto the column is empty, StarRocks automatically fills the default value in the column. You can specify a default value in one of the following ways:
 
 - **DEFAULT current_timestamp**: Use the current time as the default value. For more information, see [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md).
-- **DEFAULT <default_value>**: Use a given value of the column data type as the default value. For example, if the data type of the column is VARCHAR, you can specify a VARCHAR string, such as beijing, as the default value, as presented in `DEFAULT "beijing"`. Note that default values cannot be any of the following types: ARRAY, BITMAP, JSON, HLL, and BOOLEAN.
+- **DEFAULT `<default_value>`**: Use a given value of the column data type as the default value. For example, if the data type of the column is VARCHAR, you can specify a VARCHAR string, such as beijing, as the default value, as presented in `DEFAULT "beijing"`. Note that default values cannot be any of the following types: ARRAY, BITMAP, JSON, HLL, and BOOLEAN.
 - **DEFAULT (\<expr\>)**: Use the result returned by a given function as the default value. Only the [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
 
 **AUTO_INCREMENT**: specifies an `AUTO_INCREMENT` column. The data types of `AUTO_INCREMENT` columns must be BIGINT. Auto-incremented IDs start from 1 and increase at a step of 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](../../sql-statements/auto_increment.md). Since v3.0, StarRocks supports `AUTO_INCREMENT` columns.
@@ -392,11 +392,11 @@ PROPERTIES (
 )
 ```
 
-- `storage_medium`: the initial storage medium, which can be set to `SSD` or `HDD`. Make sure that the type of storage medium you explicitly specified is consistent with the BE disk types for your StarRocks cluster specified in the BE static parameter `storage_root_path`.<br>
+- `storage_medium`: the initial storage medium, which can be set to `SSD` or `HDD`. Make sure that the type of storage medium you explicitly specified is consistent with the BE disk types for your StarRocks cluster specified in the BE static parameter `storage_root_path`.<br />
 
-    If the FE configuration item `enable_strict_storage_medium_check` is set to `true`, the system strictly checks BE disk type when you create a table. If the storage medium you specified in CREATE TABLE is inconsistent with BE disk type, an error "Failed to find enough host in all backends with storage medium is SSD|HDD." is returned and table creation fails. If `enable_strict_storage_medium_check` is set to `false`, the system ignores this error and forcibly creates the table. However, cluster disk space may be unevenly distributed after data is loaded.<br>
+    If the FE configuration item `enable_strict_storage_medium_check` is set to `true`, the system strictly checks BE disk type when you create a table. If the storage medium you specified in CREATE TABLE is inconsistent with BE disk type, an error "Failed to find enough host in all backends with storage medium is SSD|HDD." is returned and table creation fails. If `enable_strict_storage_medium_check` is set to `false`, the system ignores this error and forcibly creates the table. However, cluster disk space may be unevenly distributed after data is loaded.<br />
 
-    From v2.3.6, v2.4.2, v2.5.1, and v3.0 onwards, the system automatically infers storage medium based on BE disk type if `storage_medium` is not explicitly specified.<br>
+    From v2.3.6, v2.4.2, v2.5.1, and v3.0 onwards, the system automatically infers storage medium based on BE disk type if `storage_medium` is not explicitly specified.<br />
 
   - The system automatically sets this parameter to SSD in the following scenarios:
 
