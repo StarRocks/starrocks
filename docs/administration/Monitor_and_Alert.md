@@ -254,7 +254,7 @@ This command runs Prometheus in the background and specifies its web port as 909
 
 **4.** Accessing Prometheus
 
-Prometheus can be accessed via BUI. You simply need to open port 9090 in your browser. Go to`Status -> Targets` to see the monitored host nodes for all grouped jobs. Under normal circumstances, all nodes should be `UP`. If the node status is not `UP`, you can visit the StarRocks metrics (<http://fe_host:fe_http_port/metrics> or <http://be_host:be_http_port/metrics>) interface first to check if it is accessible, or check the Prometheus documentation for troubleshooting.
+Prometheus can be accessed via BUI. You simply need to open port 9090 in your browser. Go to`Status -> Targets` to see the monitored host nodes for all grouped jobs. Under normal circumstances, all nodes should be `UP`. If the node status is not `UP`, you can visit the StarRocks metrics (`http://fe_host:fe_http_port/metrics` or `http://be_host:be_http_port/metrics`) interface first to check if it is accessible, or check the Prometheus documentation for troubleshooting.
 
 ![8.10.2-6](../assets/8.10.2-6.png)
 
@@ -294,7 +294,7 @@ nohup ./bin/grafana-server \
 
 #### DashBoard Configuration
 
-Log in to Grafana through the address configured in the previous step <http://grafana_host:8000> with the default username/password (i.e. admin/admin).
+Log in to Grafana through the address configured in the previous step `http://grafana_host:8000` with the default username,password (i.e. admin,admin).
 
 **1.** Add a data source.
 
@@ -305,7 +305,7 @@ Data Source Configuration Introduction
 ![8.10.2-2](../assets/8.10.2-2.png)
 
 * Name: Name of the data source. Can be customized, e.g. starrocks_monitor
-* URL: The web address of Prometheus, e.g. <http://prometheus_host:9090>
+* URL: The web address of Prometheus, e.g. `http://prometheus_host:9090`
 * Access: Select the Server method, i.e., the server where Grafana is located for Prometheus to access.
 The rest of the options are default.
 

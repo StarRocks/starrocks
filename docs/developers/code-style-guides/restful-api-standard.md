@@ -2,10 +2,10 @@
 
 ## API Format
 
-1. The API format follows the pattern: /api/{version}/{target-object-access-path}/{action}. 
-2. {version} is denoted as v{number}, such as v1, v2, v3, v4, etc. 
-3. {target-object-access-path} is organized in a hierarchical manner, which will be explained in detail later. 
-4. {action} is optional, API implementors should utilize the HTTP METHOD to convey the operation's meaning as much as possible. Only when the HTTP methods' semantics cannot be fulfilled should the action be used. For example, if there is no HTTP method available to rename an object.
+1. The API format follows the pattern: `/api/{version}/{target-object-access-path}/{action}`. 
+2. `{version}` is denoted as `v{number}`, such as v1, v2, v3, v4, etc. 
+3. `{target-object-access-path}` is organized in a hierarchical manner, which will be explained in detail later. 
+4. `{action}` is optional, API implementors should utilize the HTTP METHOD to convey the operation's meaning as much as possible. Only when the HTTP methods' semantics cannot be fulfilled should the action be used. For example, if there is no HTTP method available to rename an object.
 
 ## Definition of Target Object Access Path
 
@@ -121,4 +121,4 @@ PATCH /api/v2/databases/ssb_100g/tables/customer -d '{"unique_key_constraints": 
 
 4. Query parameters: Using query parameters and request body parameters at the same time is not allowed. For the same API, choose either one. If the number of parameters excluding header parameters and path parameters is not more than 2, query parameters can be used; otherwise, use the request body to pass parameters.
 
-5. HEADER parameters: Headers should be used to pass HTTP standard parameters such as Content-type and Accept are placed in the header, implementors should not abuse http headers to pass customized parameters. When using headers to pass parameters for user extensions, the header name should be in the format "x-starrocks-{name}", where the name can contain multiple English words, and each word is in lowercase and concatenated by hyphens (-).
+5. HEADER parameters: Headers should be used to pass HTTP standard parameters such as Content-type and Accept are placed in the header, implementors should not abuse http headers to pass customized parameters. When using headers to pass parameters for user extensions, the header name should be in the format `x-starrocks-{name}`, where the name can contain multiple English words, and each word is in lowercase and concatenated by hyphens (-).
