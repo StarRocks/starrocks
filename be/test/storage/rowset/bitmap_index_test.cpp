@@ -74,7 +74,8 @@ protected:
         *reader = new BitmapIndexReader();
         ASSIGN_OR_ABORT(auto r, (*reader)->load(_opts, meta.bitmap_index()));
         ASSERT_TRUE(r);
-        ASSERT_OK((*reader)->new_iterator(iter));
+        IndexReadOptions options;
+        ASSERT_OK((*reader)->new_iterator(iter, options));
     }
 
     template <LogicalType type>
@@ -283,7 +284,8 @@ TEST_F(BitmapIndexTest, test_concurrent_load) {
     ASSERT_EQ(1, loads.load());
 
     BitmapIndexIterator* iter = nullptr;
-    ASSERT_OK(reader->new_iterator(&iter));
+    IndexReadOptions options;
+    ASSERT_OK(reader->new_iterator(&iter, options));
 
     Roaring bitmap;
     iter->read_null_bitmap(&bitmap);
