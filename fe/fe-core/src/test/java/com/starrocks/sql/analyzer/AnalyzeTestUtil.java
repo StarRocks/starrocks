@@ -317,12 +317,12 @@ public class AnalyzeTestUtil {
             Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
         } catch (ParsingException | SemanticException | UnsupportedException e) {
-            e.printStackTrace();
+            // e.printStackTrace();
             if (!exceptMessage.equals("")) {
                 Assert.assertTrue(e.getMessage().contains(exceptMessage));
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            // e.printStackTrace();
             Assert.fail("analyze exception");
         }
     }
