@@ -237,8 +237,9 @@ Drop column `newcol1` from the table `test_tbl3`
 ALTER TABLE test_tbl3 DROP COLUMN newcol1;
 ```
 
-**NOTICE**:<br>
-If a generated colum references a regular column in the expression, you cannot directly drop or modify that regular column. Instead, you need to first drop the generated column and then drop or modify the regular column.
+> **NOTICE**:
+>
+> If a generated colum references a regular column in the expression, you cannot directly drop or modify that regular column. Instead, you need to first drop the generated column and then drop or modify the regular column.
 
 ### Query rewrites
 

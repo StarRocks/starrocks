@@ -99,7 +99,7 @@ GRANT
 ```
 
 * You must first run SET CATALOG before you run this command.
-* You can also use <db_name>.<table_name> to represent a table.
+* You can also use `<db_name>.<table_name>` to represent a table.
 
   ```SQL
   GRANT <priv> ON TABLE <db_name>.<table_name> TO {ROLE <role_name> | USER <user_name>}
@@ -117,7 +117,7 @@ GRANT
 ```
 
 * You must first run SET CATALOG before you run this command.
-* You can also use <db_name>.<view_name> to represent a view.
+* You can also use `<db_name>.<view_name>` to represent a view.
 
   ```SQL
   GRANT <priv> ON VIEW <db_name>.<view_name> TO {ROLE <role_name> | USER <user_name>}
@@ -135,7 +135,7 @@ GRANT
 ```
 
 * You must first run SET CATALOG before you run this command.
-* You can also use <db_name>.<mv_name> to represent an mv.
+* You can also use `<db_name>.<mv_name>` to represent an mv.
 
   ```SQL
   GRANT <priv> ON MATERIALIZED_VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USER <user_name>}
@@ -153,7 +153,7 @@ GRANT
 ```
 
 * You must first run SET CATALOG before you run this command.
-* You can also use <db_name>.<function_name> to represent a function.
+* You can also use `<db_name>.<function_name>` to represent a function.
 
   ```SQL
   GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <user_name>}

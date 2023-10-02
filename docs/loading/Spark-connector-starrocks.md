@@ -127,7 +127,7 @@ Directly download the corresponding version of the Spark connector JAR from the 
   | StringType      | STRING                                                       |
   | DateType        | DATE                                                         |
   | TimestampType   | DATETIME                                                     |
-  | ArrayType       | ARRAY <br> **NOTE:** <br> **Supported since version 1.1.1**. For detailed steps, see [Load data into columns of ARRAY type](#load-data-into-columns-of-array-type). |
+  | ArrayType       | ARRAY <br /> **NOTE:** <br /> **Supported since version 1.1.1**. For detailed steps, see [Load data into columns of ARRAY type](#load-data-into-columns-of-array-type). |
 
 - You can also customize the data type mapping.
 
