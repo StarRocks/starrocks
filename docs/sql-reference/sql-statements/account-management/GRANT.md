@@ -66,7 +66,12 @@ The database and table. This parameter supports the following three formats:
 
 > Note: When you use the `db.*` or `db.tbl` format, you can specify a database or a table that does not exist.
 
+<<<<<<< HEAD
 ### resource_name
+=======
+* You must first run SET CATALOG before you run this command.
+* You can also use `<db_name>.<table_name>` to represent a table.
+>>>>>>> 7beebf08d1 ([Doc] MDX 2 compatibility (#32008))
 
 The resource name. This parameter supports the following two formats:
 
@@ -75,13 +80,83 @@ The resource name. This parameter supports the following two formats:
 
 > Note: When you use the `resource` format, you can specify a resource that does not exist.
 
+<<<<<<< HEAD
 ### user_identity
+=======
+* You must first run SET CATALOG before you run this command.
+* You can also use `<db_name>.<view_name>` to represent a view.
+>>>>>>> 7beebf08d1 ([Doc] MDX 2 compatibility (#32008))
 
 This parameter contains two parts: `user_name` and `host`. `user_name` indicates the user name. `host` indicates the IP address of the user. You can leave `host` unspecified or you can specify a domain for `host`. If you leave `host` unspecified, `host` defaults to `%`, which means you can access StarRocks from any host. If you specify a domain for `host`, it may take one minute for the privilege to take effect. The `user_identity` parameter must be created by the CREATE USER statement.
 
 ### role_name
 
+<<<<<<< HEAD
 The role name.
+=======
+```SQL
+GRANT
+    { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
+    ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
+       ｜ ALL MATERIALIZED VIEWS} IN 
+           { DATABASE <db_name> | ALL DATABASES }
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+```
+
+* You must first run SET CATALOG before you run this command.
+* You can also use `<db_name>.<mv_name>` to represent an mv.
+
+  ```SQL
+  GRANT <priv> ON MATERIALIZED_VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USER <user_name>}
+  ```
+
+#### Function
+
+```SQL
+GRANT
+    { USAGE | DROP | ALL [PRIVILEGES]} 
+    ON { FUNCTION <function_name> [, < function_name >,...]
+       ｜ ALL FUNCTIONS} IN 
+           {  DATABASE <db_name>  | ALL DATABASES }
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+```
+
+* You must first run SET CATALOG before you run this command.
+* You can also use `<db_name>.<function_name>` to represent a function.
+
+  ```SQL
+  GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <user_name>}
+  ```
+
+#### User
+
+```SQL
+GRANT IMPERSONATE
+ON USER <user_identity>
+TO USER <user_identity> [ WITH GRANT OPTION ]
+```
+
+#### Storage volume
+
+```SQL
+GRANT
+    CREATE STORAGE VOLUME
+    ON SYSTEM
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+
+GRANT  
+    { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
+    ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUME} 
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+```
+
+### Grant roles to roles or users
+
+```SQL
+GRANT <role_name> [,<role_name>, ...] TO ROLE <role_name>
+GRANT <role_name> [,<role_name>, ...] TO USER <user_identity>
+```
+>>>>>>> 7beebf08d1 ([Doc] MDX 2 compatibility (#32008))
 
 ## Examples
 
