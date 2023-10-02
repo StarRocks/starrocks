@@ -2199,6 +2199,7 @@ public class PrivilegeCheckerTest {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, db1.tbl1.k2 from db1.tbl1;";
+        starRocksAssert.withMaterializedView(createSql);
 
         String expectError = "Access denied; you need (at least one of) the CREATE MATERIALIZED VIEW privilege(s) " +
                 "on DATABASE db1 for this operation";
@@ -2207,6 +2208,16 @@ public class PrivilegeCheckerTest {
                 "grant create materialized view on DATABASE db1 to test",
                 "revoke create materialized view on DATABASE db1 from test",
                 expectError);
+
+        // test analyze on async mv
+        verifyGrantRevoke(
+                "ANALYZE SAMPLE TABLE db1.mv1 WITH ASYNC MODE;",
+                "grant SELECT on materialized view db1.mv1 to test",
+                "revoke SELECT on materialized view db1.mv1 from test",
+                "Access denied; you need (at least one of) the SELECT privilege(s)" +
+                        " on MATERIALIZED VIEW mv1 for this operation");
+        grantRevokeSqlAsRoot("grant DROP on materialized view db1.mv1 to test");
+        starRocksAssert.dropMaterializedView("db1.mv1");
     }
 
     @Test
