@@ -8,7 +8,7 @@ Broker Load does not support re-running load jobs that have been run successfull
 
 Both the destination StarRocks table and the Broker Load job are compiled at creation to use a China Standard Time (CST) time zone (specified by using the `timezone` parameter). However, the server is set to run based on a Coordinated Universal Time (UTC) time zone. As a result, 8 extra hours are added to the date and time values from the source data file during data loading. To prevent this issue, do not specify the `timezone` parameter when you create the destination StarRocks table.
 
-## 3. When I load ORC-formatted data by using Broker Load, what do I do if the "ErrorMsg: type:ETL_RUN_FAIL; msg:Cannot cast '<slot 6>' from VARCHAR to ARRAY<VARCHAR(30)>" error occurs?
+## 3. When I load ORC-formatted data by using Broker Load, what do I do if the `ErrorMsg: type:ETL_RUN_FAIL; msg:Cannot cast '<slot 6>' from VARCHAR to ARRAY<VARCHAR(30)>` error occurs?
 
 The source data file has different column names than the destination StarRocks table. In this situation, you must use the `SET` clause in the load statement to specify the column mapping between the file and the table. When executing the `SET` clause, StarRocks needs to perform a type inference, but it fails in invoking the [cast](../../sql-reference/sql-functions/cast.md) function to transform the source data to the destination data types. To resolve this issue, make sure that the source data file has the same column names as the destination StarRocks table. As such, the `SET` clause is not needed and therefore StarRocks does not need to invoke the cast function to perform data type conversions. Then the Broker Load job can be run successfully.
 
