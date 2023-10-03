@@ -47,7 +47,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: ms
 - Default: 5000
 - Description: The threshold used to determine whether a query is a slow query. If the response time of a query exceeds this threshold, it is recorded as a slow query in `fe.audit.log`.
+
 ---
+
 #### Metadata and cluster management
 
 ##### catalog_try_lock_timeout_ms
@@ -115,7 +117,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Unit**: s
 - **Default**: 86400
 - **Description**: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. This parameter is supported from v2.5.5 onwards.
+
 ---
+
 #### Query engine
 
 ##### max_allowed_in_element_num_of_delete
@@ -308,6 +312,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable UDF.
 
 ---
+
 #### Loading and unloading
 
 ##### max_broker_load_job_concurrency
@@ -505,6 +510,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Description**: The timeout duration for committing (publishing) a write transaction to a StarRocks external table. The default value `10000` indicates a 10-second timeout duration.
 
 ---
+
 #### Storage
 
 ##### enable_strict_storage_medium_check
@@ -636,6 +642,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Description**: When the tablet clone tasks are being scheduled, if a tablet has not been scheduled for the specified time in this parameter, StarRocks gives it a higher priority to schedule it as soon as possible.
 
 ---
+
 #### Other FE dynamic parameters
 
 ##### plugin_enable
@@ -729,6 +736,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Description**: In each RESTORE operation, the maximum number of download tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number. This item is supported from v3.0.2 onwards.
 
 ---
+
 ### Configure FE static parameters
 
 This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE for the changes to take effect.
@@ -827,6 +835,7 @@ This section provides an overview of the static parameters that you can configur
 - **Description:** The retention period of dump log files. The default value `7d` specifies that each dump log file can be retained for 7 days. StarRocks checks each dump log file and deletes those that were generated 7 days ago.
 
 ---
+
 #### Server
 
 ##### frontend_address
@@ -933,6 +942,7 @@ This section provides an overview of the static parameters that you can configur
 - **Description:** Specifies whether to check version compatibility between the executed and compiled Java programs. If the versions are incompatible, StarRocks reports errors and aborts the startup of Java programs.
 
 ---
+
 #### Metadata and cluster management
 
 ##### meta_dir
@@ -996,7 +1006,7 @@ This section provides an overview of the static parameters that you can configur
 - **Description:** The policy based on which the leader FE flushes logs to disk. This parameter is valid only when the current FE is a leader FE. Valid values:
   - `SYNC`: When a transaction is committed, a log entry is generated and flushed to disk simultaneously.
   - `NO_SYNC`: The generation and flushing of a log entry do not occur at the same time when a transaction is committed.
-  - `WRITE_NO_SYNC`: When a transaction is commited, a log entry is generated simultaneously but is not flushed to disk. 
+  - `WRITE_NO_SYNC`: When a transaction is commited, a log entry is generated simultaneously but is not flushed to disk.
 
   If you have deployed only one follower FE, we recommend that you set this parameter to `SYNC`. If you have deployed three or more follower FEs, we recommend that you set this parameter and the `replica_sync_policy` both to `WRITE_NO_SYNC`.
 
@@ -1019,6 +1029,7 @@ This section provides an overview of the static parameters that you can configur
 - **Description:** The ID of the StarRocks cluster to which the FE belongs. FEs or BEs that have the same cluster ID belong to the same StarRocks cluster. Valid values: any positive integer. The default value `-1` specifies that StarRocks will generate a random cluster ID for the StarRocks cluster at the time when the leader FE of the cluster is started for the first time.
 
 ---
+
 #### Query engine
 
 ##### publish_version_interval_ms
@@ -1037,6 +1048,7 @@ This section provides an overview of the static parameters that you can configur
 - **Description:** The size of the thread-pool which will be used to refresh statistic caches.
 
 ---
+
 #### Loading and unloading
 
 ##### load_checker_interval_second
@@ -1090,6 +1102,7 @@ This section provides an overview of the static parameters that you can configur
 - **Description:** The size of the unload task thread pool.
 
 ---
+
 #### Storage
 
 ##### default_storage_medium
@@ -1113,6 +1126,7 @@ This section provides an overview of the static parameters that you can configur
 - **Description:** The time interval at which the FE retrieves tablet statistics from each BE. Unit: second.
 
 ---
+
 #### StarRocks shared-data cluster
 
 ##### run_mode
@@ -1186,6 +1200,7 @@ DO NOT change run_mode after the cluster is deployed. Otherwise, the cluster fai
 - **Description**: The external ID of the AWS account that is used for cross-account access to your S3 bucket.
 
 ---
+
 #### Other FE static parameters
 
 ##### plugin_dir
