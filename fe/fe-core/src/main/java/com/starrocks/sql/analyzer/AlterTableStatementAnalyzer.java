@@ -44,6 +44,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
@@ -54,24 +55,29 @@ import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.MetaUtils;
+import org.apache.commons.collections.MapUtils;
 
 import java.util.List;
 import java.util.Map;
+
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_BF_COLUMNS;
 
 public class AlterTableStatementAnalyzer {
     public static void analyze(AlterTableStmt statement, ConnectContext context) {
         TableName tbl = statement.getTbl();
         MetaUtils.normalizationTableName(context, tbl);
-        Table table = MetaUtils.getTable(context, tbl);
-        if (table instanceof MaterializedView) {
-            throw new SemanticException(
-                    "The '%s' cannot be alter by 'ALTER TABLE', because '%s' is a materialized view," +
-                            "you can use 'ALTER MATERIALIZED VIEW' to alter it.",
-                    tbl.getTbl(), tbl.getTbl());
-        }
         List<AlterClause> alterClauseList = statement.getOps();
         if (alterClauseList == null || alterClauseList.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
+        }
+
+        Table table = MetaUtils.getTable(context, tbl);
+        if (table instanceof MaterializedView) {
+            if (!isIndexClause(alterClauseList.get(0))) {
+                String msg = String.format("The '%s' cannot be alter by 'ALTER TABLE', because it is a materialized view," +
+                        "you can use 'ALTER MATERIALIZED VIEW' to alter it.", tbl.getTbl());
+                throw new SemanticException(msg);
+            }
         }
         AlterTableClauseAnalyzerVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseAnalyzerVisitor();
         for (AlterClause alterClause : alterClauseList) {
@@ -112,20 +118,25 @@ public class AlterTableStatementAnalyzer {
             }
 
             if (properties.size() != 1
-                    && !(TableProperty.isSamePrefixProperties(properties, TableProperty.DYNAMIC_PARTITION_PROPERTY_PREFIX)
-                    || TableProperty.isSamePrefixProperties(properties, TableProperty.BINLOG_PROPERTY_PREFIX))) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can only set one table property at a time");
+                    &&
+                    !(TableProperty.isSamePrefixProperties(properties, TableProperty.DYNAMIC_PARTITION_PROPERTY_PREFIX)
+                            ||
+                            TableProperty.isSamePrefixProperties(properties, TableProperty.BINLOG_PROPERTY_PREFIX))) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Can only set one table property at a time");
             }
 
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
                 clause.setNeedTableStable(false);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)) {
                 if (!properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE).equalsIgnoreCase("column")) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can only change storage type to COLUMN");
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Can only change storage type to COLUMN");
                 }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE)) {
                 if (!properties.get(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE).equalsIgnoreCase("hash")) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can only change distribution type to HASH");
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Can only change distribution type to HASH");
                 }
                 clause.setNeedTableStable(false);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_SEND_CLEAR_ALTER_TASK)) {
@@ -143,7 +154,8 @@ public class AlterTableStatementAnalyzer {
                             "Property " + PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT + " should be v2");
                 }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
-                if (WriteQuorum.findTWriteQuorumByName(properties.get(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) == null) {
+                if (WriteQuorum.findTWriteQuorumByName(properties.get(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) ==
+                        null) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Property " + PropertyAnalyzer.PROPERTIES_WRITE_QUORUM + " not valid");
                 }
@@ -187,7 +199,8 @@ public class AlterTableStatementAnalyzer {
                 clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 if (!properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX).equalsIgnoreCase("true") &&
-                        !properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX).equalsIgnoreCase("false")) {
+                        !properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+                                .equalsIgnoreCase("false")) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX +
                                     " must be bool type(false/true)");
@@ -242,7 +255,8 @@ public class AlterTableStatementAnalyzer {
                 clause.setNeedTableStable(false);
                 clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
             } else {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown table property: " + properties.keySet());
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Unknown table property: " + properties.keySet());
             }
             return null;
         }
@@ -498,5 +512,14 @@ public class AlterTableStatementAnalyzer {
             }
             return null;
         }
+    }
+
+    public static boolean isIndexClause(AlterClause alterClause) {
+        if (alterClause instanceof CreateIndexClause || alterClause instanceof DropIndexClause) {
+            return true;
+        }
+
+        return MapUtils.isNotEmpty(alterClause.getProperties()) &&
+                alterClause.getProperties().containsKey(PROPERTIES_BF_COLUMNS);
     }
 }

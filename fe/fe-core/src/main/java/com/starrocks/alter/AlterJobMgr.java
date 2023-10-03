@@ -98,6 +98,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AlterTableStatementAnalyzer;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
@@ -761,8 +762,10 @@ public class AlterJobMgr {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
 
-            if (!table.isOlapOrCloudNativeTable()) {
-                throw new DdlException("Do not support alter non-native table[" + tableName + "]");
+            boolean isIndexOnMv = table.isMaterializedView() &&
+                    AlterTableStatementAnalyzer.isIndexClause(alterClauses.get(0));
+            if (!(table.isOlapOrCloudNativeTable() || isIndexOnMv)) {
+                throw new DdlException("Do not support alter non-native table/materialized-view[" + tableName + "]");
             }
             olapTable = (OlapTable) table;
 
