@@ -22,7 +22,7 @@
 
       > **NOTE**
       >
-      > You can also add the [Helm Chart Repo from Artifact Hub](). For detailed information, see https://artifacthub.io/packages/helm/fslstarrocks/kube-starrocks
+      > You can also add the [Helm Chart Repo from Artifact Hub](https://artifacthub.io/packages/helm/fslstarrocks/kube-starrocks).
 
    2. Update the Helm Chart Repo to the latest version.
 
