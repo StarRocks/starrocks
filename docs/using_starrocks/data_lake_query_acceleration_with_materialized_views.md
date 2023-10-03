@@ -50,7 +50,7 @@ Materialized views, Data Cache, and native tables in StarRocks are all effective
     </tr>
     <tr>
       <td><b>Query performance</b></td>
-      <td colspan="3" style="text-align: center;">Data Cache &le; Materialized view = Native table</td>
+      <td colspan="3" style={{textAlign: 'center'}} >Data Cache &le; Materialized view = Native table</td>
     </tr>
     <tr>
       <td><b>Query statement</b></td>
