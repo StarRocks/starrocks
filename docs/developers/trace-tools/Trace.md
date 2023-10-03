@@ -49,7 +49,7 @@ Steps to enable tracing in SR:
     # jaeger_endpoint = localhost:6831
 ```
 
-3.  Open jaeger web UI, usually in <http://localhost:16686/search>
+3.  Open jaeger web UI, usually in `http://localhost:16686/search`
 4.  Do some data ingestion (streamload/insert into) and search TXN traces on web UI
 
 ![trace_pic2.png](../../assets/trace_pic2.png)(trace_pic2.png) 
