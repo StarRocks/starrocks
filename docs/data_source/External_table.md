@@ -257,16 +257,16 @@ However, if you have set `enable_keyword_sniff` to `true`, StarRocks will conver
 
 StarRocks supports predicate pushdown. Filters can be pushed down to Elasticsearch for execution, which improves query performance. The following table lists the operators that support predicate pushdown.
 
-|   SQL syntax  |   ES syntax  |
-| :---: | :---: |
-|  =   |  term query   |
-|  in   |  terms query   |
-|  \>=,  <=, >, <   |  range   |
-|  and   |  bool.filter   |
-|  or   |  bool.should   |
-|  not   |  bool.must_not   |
-|  not in   |  bool.must_not + terms   |
-|  esquery   |  ES Query DSL  |
+|   SQL syntax            |   ES syntax            |
+| :---------------------: | :--------------------: |
+|  `=`                    |  term query            |
+|  `in`                   |  terms query           |
+|  `\>=`,  `<=`, `>`, `<` |  range                 |
+|  `and`                  |  bool.filter           |
+|  `or`                   |  bool.should           |
+|  `not`                  |  bool.must_not         |
+|  `not in`               |  bool.must_not + terms |
+|  `esquery`              |  ES Query DSL          |
 
 ### Example
 
