@@ -33,7 +33,7 @@ PROPERTIES ("key"="value", ...);
 
 ### Parameters
 
-- `catalog_name`: the name of the Iceberg catalog. This parameter is required.<br>The naming conventions are as follows:
+- `catalog_name`: the name of the Iceberg catalog. This parameter is required.<br/>The naming conventions are as follows:
   - The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
   - The name cannot exceed 64 characters in length.
 
