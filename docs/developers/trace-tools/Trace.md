@@ -58,6 +58,6 @@ Steps to enable tracing in SR:
 ### Adding traces
 
 *   To add trace, first get familiar with basic concepts like tracer, span, trace propagation
-    <https://opentelemetry.io/docs/concepts/observability-primer/>
+    [OpenTelemetry](https://opentelemetry.io/docs/concepts/observability-primer/)
 *   Read utility class and it's usages in SR: TraceManager.java(java) common/tracer.h/cpp (cpp), it's current usage(like write txn(load/insert/update/delete) trace, and its propagation to BE).
 *   Add your own trace
