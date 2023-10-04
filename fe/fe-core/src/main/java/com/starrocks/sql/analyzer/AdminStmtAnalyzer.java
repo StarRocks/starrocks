@@ -242,6 +242,7 @@ public class AdminStmtAnalyzer {
                 return false;
             }
 
+<<<<<<< HEAD
             try {
                 statusFilter = Replica.ReplicaStatus.valueOf(((StringLiteral) rightChild).getStringValue().toUpperCase());
                 adminShowReplicaStatusStmt.setStatusFilter(statusFilter);
@@ -250,6 +251,10 @@ public class AdminStmtAnalyzer {
             }
 
             return true;
+=======
+            adminShowReplicaStatusStmt.setStatusFilter(statusFilter);
+            return statusFilter != null;
+>>>>>>> de47ffb3cb ([BugFix] Fix ignorance of where in AdminShowReplicaStatus (#32028))
         }
     }
 }
