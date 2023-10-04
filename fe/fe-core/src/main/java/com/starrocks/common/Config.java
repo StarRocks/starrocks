@@ -1317,6 +1317,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long tablet_sched_consecutive_full_clone_delay_sec = 180; // 3min
 
+    @ConfField(mutable = true, comment = "How much time we should wait before dropping the tablet from BE on tablet report")
+    public static long tablet_report_drop_tablet_delay_sec = 120;
+
     /**
      * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
      * so that other threads can get the lock.
