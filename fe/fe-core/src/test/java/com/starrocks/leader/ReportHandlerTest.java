@@ -395,4 +395,22 @@ public class ReportHandlerTest {
         ReportHandler.handleMigration(tabletMetaMigrationMap, backendId);
         Assert.assertEquals(30, AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false));
     }
+
+    @Test
+    public void testTabletDropDelay() throws InterruptedException {
+        long tabletId = 100001;
+        long backendId = 100002;
+        Config.tablet_report_drop_tablet_delay_sec = 3;
+
+        boolean ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
+        Assert.assertFalse(ready);
+
+        Thread.sleep(1000);
+        ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
+        Assert.assertFalse(ready);
+
+        Thread.sleep(2000);
+        ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
+        Assert.assertTrue(ready);
+    }
 }
