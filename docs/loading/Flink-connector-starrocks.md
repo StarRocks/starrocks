@@ -195,6 +195,7 @@ The Flink connector will buffer the data in memory, and flush them in batch to S
 is triggered is different between at-least-once and exactly-once.
 
 For at-least-once, the flush will be triggered when any of the following conditions are met:
+
 - the bytes of buffered rows reaches the limit `sink.buffer-flush.max-bytes`
 - the number of buffered rows reaches the limit `sink.buffer-flush.max-rows`. (Only valid for sink version V1)
 - the elapsed time since the last flush reaches the limit `sink.buffer-flush.interval-ms`
