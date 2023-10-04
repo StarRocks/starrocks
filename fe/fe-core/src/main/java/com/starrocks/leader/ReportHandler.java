@@ -899,7 +899,12 @@ public class ReportHandler extends Daemon {
             TABLET_TO_DROP_TIME.put(tabletId, backendId,
                     currentTimeMs + Config.tablet_report_drop_tablet_delay_sec * 1000);
         } else {
-            return currentTimeMs > time;
+            boolean ready = currentTimeMs > time;
+            if (ready) {
+                // clean the map
+                TABLET_TO_DROP_TIME.remove(tabletId, backendId);
+                return true;
+            }
         }
 
         return false;

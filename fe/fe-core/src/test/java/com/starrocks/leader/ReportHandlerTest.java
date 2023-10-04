@@ -409,7 +409,15 @@ public class ReportHandlerTest {
         ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
         Assert.assertFalse(ready);
 
-        Thread.sleep(2000);
+        Thread.sleep(3000);
+        ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
+        Assert.assertTrue(ready);
+
+        // check map is cleaned
+        ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
+        Assert.assertFalse(ready);
+
+        Thread.sleep(4000);
         ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
         Assert.assertTrue(ready);
     }
