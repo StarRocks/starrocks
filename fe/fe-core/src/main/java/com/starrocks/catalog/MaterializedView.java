@@ -711,27 +711,40 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     private Set<String> getUpdatedPartitionNameOfIcebergTable(IcebergTable baseTable) {
+        Set<String> result = Sets.newHashSet();
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
                 continue;
             }
+            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName());
             long currentVersion = baseTable.getNativeTable().currentSnapshot().timestampMillis();
 
             Map<String, BasePartitionInfo> baseTableInfoVisibleVersionMap = getBaseTableRefreshInfo(baseTableInfo);
             BasePartitionInfo basePartitionInfo = baseTableInfoVisibleVersionMap.get("ALL");
             if (basePartitionInfo == null) {
                 baseTable.setRefreshSnapshotTime(currentVersion);
-                return new HashSet<>(GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                        baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName()));
+                return new HashSet<>(partitionNames);
+            }
+            // check if there are new partitions which are not in baseTableInfoVisibleVersionMap
+            for (String partitionName : partitionNames) {
+                if (!baseTableInfoVisibleVersionMap.containsKey(partitionName)) {
+                    result.add(partitionName);
+                }
+            }
+
+            if (!result.isEmpty()) {
+                baseTable.setRefreshSnapshotTime(currentVersion);
             }
 
             long basePartitionVersion = basePartitionInfo.version;
             if (basePartitionVersion < currentVersion) {
                 baseTable.setRefreshSnapshotTime(currentVersion);
-                return IcebergPartitionUtils.getChangedPartitionNames(baseTable.getNativeTable(), basePartitionVersion);
+                result.addAll(IcebergPartitionUtils.getChangedPartitionNames(baseTable.getNativeTable(),
+                        basePartitionVersion));
             }
         }
-        return Sets.newHashSet();
+        return result;
     }
 
     private Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable, boolean isQueryRewrite) {
