@@ -144,6 +144,12 @@ public class ReportHandler extends Daemon {
      * Record the mapping of <tablet id, backend id> to the to be dropped time of tablet.
      * We will delay the drop of tablet based on configuration `tablet_report_drop_tablet_delay_sec`
      * if we don't find the meta of the tablet in FE.
+     * <p>
+     * There's no concurrency here since it will only be used by a single thread of ReportHandler, so
+     * we don't need lock protection.
+     * <p>
+     * And because the tablet drop only relies on some runtime state, if the map is lost after restart,
+     * the drop can retry. So we don't need to persist this map either.
      */
     private static final Table<Long, Long, Long> TABLET_TO_DROP_TIME = HashBasedTable.create();
 
