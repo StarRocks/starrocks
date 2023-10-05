@@ -2,6 +2,7 @@
 
 import SharedDataIntro from '../../assets/commonMarkdown/sharedDataIntro.md'
 import SharedDataCNconf from '../../assets/commonMarkdown/sharedDataCNconf.md'
+import SharedDataUseIntro from '../../assets/commonMarkdown/sharedDataUseIntro.md'
 import SharedDataUse from '../../assets/commonMarkdown/sharedDataUse.md'
 
 <SharedDataIntro />
