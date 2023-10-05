@@ -589,7 +589,7 @@ PROPERTIES (
 
 #### Create cloud-native tables for StarRocks Shared-data cluster
 
-To [use your StarRocks Shared-data cluster](../../../deployment/deploy_shared_data.md#use-your-shared-data-starrocks-cluster), you must create cloud-native tables with the following properties:
+To [use your StarRocks Shared-data cluster](../../../deployment/shared_data/s3.md#use-your-shared-data-starrocks-cluster), you must create cloud-native tables with the following properties:
 
 ```SQL
 PROPERTIES (
