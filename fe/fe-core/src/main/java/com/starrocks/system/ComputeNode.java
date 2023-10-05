@@ -22,6 +22,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.NetworkUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
@@ -202,20 +203,16 @@ public class ComputeNode implements IComputable, Writable {
         return brpcPort;
     }
 
-    public TNetworkAddress getAddress() {
-        return new TNetworkAddress(host, bePort);
+    public TNetworkAddress getAddress() throws RuntimeException {
+        return new TNetworkAddress(NetworkUtils.resolveFQDNIfNecessary(host), bePort);
     }
 
     public TNetworkAddress getBrpcAddress() {
-        return new TNetworkAddress(host, brpcPort);
-    }
-
-    public TNetworkAddress getBeRpcAddress() {
-        return new TNetworkAddress(host, beRpcPort);
+        return new TNetworkAddress(NetworkUtils.resolveFQDNIfNecessary(host), brpcPort);
     }
 
     public TNetworkAddress getHttpAddress() {
-        return new TNetworkAddress(host, httpPort);
+        return new TNetworkAddress(NetworkUtils.resolveFQDNIfNecessary(host), httpPort);
     }
 
     public String getHeartbeatErrMsg() {

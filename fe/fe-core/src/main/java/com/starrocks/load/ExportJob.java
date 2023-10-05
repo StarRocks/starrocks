@@ -112,11 +112,12 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+
+import static com.starrocks.common.util.NetworkUtils.NetworkAddress;
 
 // NOTE: we must be carefully if we send next request
 //       as soon as receiving one instance's report from one BE,
@@ -1159,55 +1160,6 @@ public class ExportJob implements Writable, GsonPostProcessable {
                             -> Pair.create(new TNetworkAddress(snapshotPath.first.hostname, snapshotPath.first.port),
                             snapshotPath.second))
                     .collect(Collectors.toList());
-        }
-    }
-
-    public static class NetworkAddress {
-        @SerializedName("h")
-        String hostname;
-        @SerializedName("p")
-        int port;
-
-        public NetworkAddress() {
-
-        }
-
-        public NetworkAddress(String hostname, int port) {
-            this.hostname = hostname;
-            this.port = port;
-        }
-
-        public String getHostname() {
-            return hostname;
-        }
-
-        public void setHostname(String hostname) {
-            this.hostname = hostname;
-        }
-
-        public int getPort() {
-            return port;
-        }
-
-        public void setPort(int port) {
-            this.port = port;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            return obj instanceof NetworkAddress
-                    && this.hostname.equals(((NetworkAddress) obj).hostname)
-                    && this.port == ((NetworkAddress) obj).port;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(hostname, port);
-        }
-
-        @Override
-        public String toString() {
-            return hostname + ":" + port;
         }
     }
 }

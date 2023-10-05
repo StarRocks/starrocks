@@ -2550,4 +2550,8 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean replan_on_insert = false;
+
+    @ConfField(mutable = true, comment = "Whether or not resolve the fqdn of compute node/backend" +
+            "to ip when scheduling query")
+    public static boolean query_coordinator_enable_fqdn_resolve = false;
 }

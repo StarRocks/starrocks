@@ -22,6 +22,8 @@ import org.junit.Test;
 
 import java.util.List;
 
+import static com.starrocks.common.util.NetworkUtils.NetworkAddress;
+
 public class ExportJobTest {
 
     @Test
@@ -30,8 +32,8 @@ public class ExportJobTest {
 
         List<Pair<TNetworkAddress, String>> tList = Lists.newArrayList(
                 Pair.create(new TNetworkAddress("host1", 1000), "path1"));
-        List<Pair<ExportJob.NetworkAddress, String>> sList = Lists.newArrayList(
-                Pair.create(new ExportJob.NetworkAddress("host1", 1000), "path1")
+        List<Pair<NetworkAddress, String>> sList = Lists.newArrayList(
+                Pair.create(new NetworkAddress("host1", 1000), "path1")
         );
 
         Assert.assertEquals(sList, updateInfo.serialize(tList));
