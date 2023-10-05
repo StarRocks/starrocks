@@ -25,7 +25,11 @@
         + [Deploy StarRocks with Operator](./deployment/sr_operator.md)
         + [Deploy StarRocks with Helm](./deployment/helm.md)
       + [Deploy StarRocks on AWS](./deployment/starrocks_on_aws.md)
-    + [Deploy and use shared-data StarRocks](./deployment/deploy_shared_data.md)
+    + Deploy shared-data StarRocks
+      + [shared-data StarRocks with S3](./deployment/shared_data/s3.md)
+      + [shared-data StarRocks with GCS](./deployment/shared_data/gcs.md)
+      + [shared-data StarRocks with MinIO](./deployment/shared_data/minio.md)
+      + [shared-data StarRocks with Azure Blob Storage](./deployment/shared_data/azure.md)
   + Manage
     + [Post-deployment setup](./deployment/post_deployment_setup.md)
     + [Upgrade StarRocks](./deployment/upgrade.md)
