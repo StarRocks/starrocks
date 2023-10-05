@@ -17,6 +17,7 @@ package com.starrocks.qe.scheduler.dag;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.util.DnsCache;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DataStreamSink;
@@ -37,6 +38,7 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -388,6 +390,16 @@ public class ExecutionDAG {
         return false;
     }
 
+    // Because there is no DNS cache when compute node is in container.
+    // Try to avoid flooding the DNS server, we translate the hostname to IP here.
+    private TNetworkAddress toIpAddress(TNetworkAddress address) throws SchedulerException {
+        try {
+            return DnsCache.lookup(address);
+        } catch (UnknownHostException e) {
+            throw new SchedulerException("Unknown hostname:" +  address.hostname);
+        }
+    }
+
     private void connectMultiCastFragmentToDestFragments(ExecutionFragment execFragment, MultiCastPlanFragment fragment)
             throws SchedulerException {
         Preconditions.checkState(fragment.getSink() instanceof MultiCastDataSink);
@@ -426,7 +438,7 @@ public class ExecutionDAG {
                     ComputeNode worker = destInstance.getWorker();
                     // NOTE(zc): can be removed in version 4.0
                     dest.setDeprecated_server(worker.getAddress());
-                    dest.setBrpc_server(worker.getBrpcAddress());
+                    dest.setBrpc_server(toIpAddress(worker.getBrpcAddress()));
 
                     multiSink.getDestinations().get(i).add(dest);
                 }
@@ -434,7 +446,7 @@ public class ExecutionDAG {
         }
     }
 
-    private void connectNormalFragmentToDestFragments(ExecutionFragment execFragment) {
+    private void connectNormalFragmentToDestFragments(ExecutionFragment execFragment) throws SchedulerException {
         PlanFragment fragment = execFragment.getPlanFragment();
         PlanFragment destFragment = fragment.getDestFragment();
 
@@ -491,7 +503,7 @@ public class ExecutionDAG {
                     ComputeNode worker = destInstance.getWorker();
                     // NOTE(zc): can be removed in version 4.0
                     dest.setDeprecated_server(worker.getAddress());
-                    dest.setBrpc_server(worker.getBrpcAddress());
+                    dest.setBrpc_server(toIpAddress(worker.getBrpcAddress()));
 
                     int driverSeq = destInstance.getDriverSeqOfBucketSeq(bucketSeq);
                     if (driverSeq != FragmentInstance.ABSENT_DRIVER_SEQUENCE) {
@@ -509,7 +521,7 @@ public class ExecutionDAG {
                 ComputeNode worker = destInstance.getWorker();
                 // NOTE(zc): can be removed in version 4.0
                 dest.setDeprecated_server(worker.getAddress());
-                dest.setBrpc_server(worker.getBrpcAddress());
+                dest.setBrpc_server(toIpAddress(worker.getBrpcAddress()));
 
                 execFragment.addDestination(dest);
             }
