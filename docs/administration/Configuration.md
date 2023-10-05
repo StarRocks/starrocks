@@ -1752,7 +1752,7 @@ BE static parameters are as follows.
 
 #### user_function_dir
 
-- **Default**: `${STARROCKS_HOME}/lib/udfi`
+- **Default**: `${STARROCKS_HOME}/lib/udf`
 - **Unit**: N/A
 - **Description**: The directory used to store User-defined Functions (UDFs).
 
