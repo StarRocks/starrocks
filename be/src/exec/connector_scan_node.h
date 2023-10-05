@@ -50,6 +50,10 @@ public:
     bool always_shared_scan() const override;
     std::atomic<int32_t>* get_lazy_column_coalesce_counter() { return &_lazy_column_coalesce_counter; }
 
+#ifdef BE_TEST
+    bool use_stream_load_thread_pool() { return _use_stream_load_thread_pool; };
+#endif
+
 private:
     RuntimeState* _runtime_state = nullptr;
     connector::DataSourceProviderPtr _data_source_provider = nullptr;
@@ -130,5 +134,9 @@ private:
     int64_t _mem_limit = 0;
     size_t _estimated_scan_row_bytes = 0;
     size_t _estimated_mem_usage_per_chunk_source = 0;
+
+#ifdef BE_TEST
+    std::atomic_bool _use_stream_load_thread_pool = false;
+#endif
 };
 } // namespace starrocks

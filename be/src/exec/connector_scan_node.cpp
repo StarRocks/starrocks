@@ -393,6 +393,9 @@ bool ConnectorScanNode::_submit_scanner(ConnectorScanner* scanner, bool blockabl
 }
 
 bool ConnectorScanNode::_submit_streaming_load_scanner(ConnectorScanner* scanner, bool blockable) {
+#ifdef BE_TEST
+    _use_stream_load_thread_pool = true;
+#endif
     ThreadPool* thread_pool = _runtime_state->exec_env()->streaming_load_thread_pool();
     _running_threads.fetch_add(1, std::memory_order_release);
     // Assume the thread pool is large enough, so there is no need to set the priority
