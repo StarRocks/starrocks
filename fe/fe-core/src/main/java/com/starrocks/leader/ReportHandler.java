@@ -30,11 +30,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
-<<<<<<< HEAD
-=======
 import com.google.common.collect.Table;
-import com.starrocks.binlog.BinlogConfig;
->>>>>>> 9cf7d800f1 ([Enhancement] Support delay some time before drop tablet on tablet report (#32033))
+
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
