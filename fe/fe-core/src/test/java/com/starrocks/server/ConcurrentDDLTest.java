@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class ConcurrentDDLTest {
@@ -168,7 +169,6 @@ public class ConcurrentDDLTest {
                                         "show tables from concurrent_test_db", connectContext);
                         ShowExecutor showExecutor = new ShowExecutor(connectContext, showTableStmt);
                         System.out.println("show tables result: " + showExecutor.execute().getResultRows());
-                        System.out.println("concurrent creation operations: " + db.getRunningMetaOps());
                         starRocksAssert.dropDatabase("concurrent_test_db");
                         System.out.println("concurrent_test_db dropped");
                     } catch (Exception e) {
@@ -216,7 +216,7 @@ public class ConcurrentDDLTest {
                                 starRocksAssert.withMaterializedView(sql);
                             }
                         } catch (Exception e) {
-                            // System.out.println(sql + " failed, msg: " + e.getMessage());
+                             // System.out.println(sql + " failed, msg: " + e.getMessage());
                         }
                     }
                 });
@@ -233,5 +233,54 @@ public class ConcurrentDDLTest {
             // finally replay all the operations to check whether replay is ok
             UtFrameUtils.PseudoJournalReplayer.replayJournalToEnd();
         } // end round
+    }
+
+    @Test
+    public void testConcurrentCreateSameTable() throws InterruptedException {
+        // Create a CountDownLatch to synchronize the start of all threads
+        CountDownLatch startLatch = new CountDownLatch(1);
+
+        // Create and start multiple threads
+        int numThreads = 5;
+        Thread[] threads = new Thread[numThreads];
+        AtomicInteger errorCount = new AtomicInteger(0);
+
+        for (int i = 0; i < numThreads; i++) {
+            threads[i] = new Thread(() -> {
+                try {
+                    startLatch.await(); // Wait until all threads are ready to start
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+
+                try {
+                    System.out.println("start to create table same_tbl");
+                    try {
+                        starRocksAssert.withTable("create table test.same_tbl " +
+                                " (id int) duplicate key (id)" +
+                                " distributed by hash(id) buckets 5183 " +
+                                "properties(\"replication_num\"=\"1\", \"colocate_with\"=\"test_cg_001\");");
+                    } catch (Exception e) {
+                        System.out.println(e.getMessage());
+                        errorCount.incrementAndGet();
+                    }
+                    System.out.println("end to create table same_tbl");
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            threads[i].start();
+        }
+
+        // Start all threads concurrently
+        startLatch.countDown();
+
+        // Wait for all threads to finish, table creation finish
+        for (Thread thread : threads) {
+            thread.join();
+        }
+
+        Assert.assertEquals(4, errorCount.get());
     }
 }

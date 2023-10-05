@@ -476,26 +476,13 @@ public class LocalMetastore implements ConnectorMetadata {
             unlock();
         }
 
-        // optimization: wait out of db lock
-        try {
-            db.waitRunningMetaOpsFinish();
-        } catch (InterruptedException e) {
-            throw new DdlException("Waiting for running operation(s) on database " +
-                    db.getFullName() + "(" + db.getId() + ") finish failed", e);
-        }
-
         List<Runnable> runnableList;
         // 2. drop tables in db
         db.writeLock();
         try {
             if (!db.isExist()) {
-                throw new MetaNotFoundException("Database not found");
+                throw new MetaNotFoundException("Database '" + dbName + "' not found");
             }
-            // must wait again, otherwise may cause the disorder of `drop db` and
-            // `create table`, hence edit log replay failure eventually.
-            // Here we also need to wait with timeout, otherwise deadlock may happen.
-            // Slightly sacrifice the performance of `drop database`.
-            db.waitRunningMetaOpsFinish(Config.catalog_try_lock_timeout_ms, TimeUnit.MILLISECONDS);
             if (!isForceDrop && stateMgr.getGlobalTransactionMgr().existCommittedTxns(db.getId(), null, null)) {
                 throw new DdlException(
                         "There are still some transactions in the COMMITTED state waiting to be completed. " +
@@ -532,9 +519,6 @@ public class LocalMetastore implements ConnectorMetadata {
             pipeManager.dropPipesOfDb(dbName, db.getId());
 
             LOG.info("finish drop database[{}], id: {}, is force : {}", dbName, db.getId(), isForceDrop);
-        } catch (InterruptedException e) {
-            throw new DdlException("Waiting for running operation(s) on database " +
-                    db.getFullName() + "(" + db.getId() + ") finish failed", e);
         } finally {
             db.writeUnlock();
         }
@@ -2215,55 +2199,49 @@ public class LocalMetastore implements ConnectorMetadata {
              * for quite a long time and make the other operation waiting for the global lock fail.
              *
              * So here after the confirmation of existence of modifying database, we release the global lock
-             * right away but mark the database as "under operation". So that when dropping database, we will
-             * check the number of concurrent operations modifying the metadata and wait for those operations done
+             * When dropping database, we will set the `exist` field of db object to false. And in the following
+             * creation process, we will double-check the `exist` field.
              */
             if (getDb(db.getId()) == null) {
                 throw new DdlException("Database has been dropped when creating table/mv/view");
-            } else {
-                db.incrRunningMetaOps();
             }
         } finally {
             unlock();
         }
 
+        if (db.isSystemDatabase()) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
+                    "cannot create table in system database");
+        }
+
+        db.writeLock();
         try {
-            if (db.isSystemDatabase()) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
-                        "cannot create table in system database");
+            if (!db.isExist()) {
+                throw new DdlException("Database has been dropped when creating table/mv/view");
             }
-
-            db.writeLock();
-            try {
-                if (!db.isExist()) {
-                    throw new DdlException("Database has been dropped when creating table/mv/view");
-                }
-                if (!db.registerTableUnlocked(table)) {
-                    if (!isSetIfNotExists) {
-                        if (table instanceof OlapTable) {
-                            OlapTable olapTable = (OlapTable) table;
-                            olapTable.onErase(false);
-                        }
-                        ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
-                                "table already exists");
-                    } else {
-                        LOG.info("Create table[{}] which already exists", table.getName());
-                        return;
+            if (!db.registerTableUnlocked(table)) {
+                if (!isSetIfNotExists) {
+                    if (table instanceof OlapTable) {
+                        OlapTable olapTable = (OlapTable) table;
+                        olapTable.onErase(false);
                     }
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
+                            "table already exists");
+                } else {
+                    LOG.info("Create table[{}] which already exists", table.getName());
+                    return;
                 }
-
-                // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
-                LOG.info("Successfully create table: {}-{}, in database: {}-{}",
-                        table.getName(), table.getId(), db.getFullName(), db.getId());
-
-                CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
-                GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo);
-                table.onCreate(db);
-            } finally {
-                db.writeUnlock();
             }
+
+            // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
+            LOG.info("Successfully create table: {}-{}, in database: {}-{}",
+                    table.getName(), table.getId(), db.getFullName(), db.getId());
+
+            CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo);
+            table.onCreate(db);
         } finally {
-            db.decrRunningMetaOps();
+            db.writeUnlock();
         }
     }
 

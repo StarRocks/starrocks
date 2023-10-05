@@ -26,10 +26,6 @@ import java.util.concurrent.locks.ReentrantLock;
 public class QueryableReentrantLock extends ReentrantLock {
     private static final long serialVersionUID = 1L;
 
-    public QueryableReentrantLock() {
-        super();
-    }
-
     public QueryableReentrantLock(boolean fair) {
         super(fair);
     }

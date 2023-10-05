@@ -939,6 +939,7 @@ public class UtFrameUtils {
         }
 
         public static synchronized void replayJournalToEnd() throws InterruptedException, IOException {
+            int count = followerJournalQueue.size();
             while (!followerJournalQueue.isEmpty()) {
                 DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
                 JournalEntity je = new JournalEntity();
@@ -953,6 +954,7 @@ public class UtFrameUtils {
                     Assert.fail();
                 }
             }
+            System.out.println("replayed " + count + " journal(s) from begin to end");
         }
 
         protected static synchronized void tearDown() {

@@ -54,7 +54,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.Util;
-import com.starrocks.common.util.concurrent.CountingLatch;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
@@ -77,7 +76,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
 /**
@@ -129,13 +127,6 @@ public class Database extends MetaObject implements Writable {
 
     // For external database location like hdfs://name_node:9000/user/hive/warehouse/test.db/
     private String location;
-
-    /**
-     * The number of operations that is modifying metadata of the database concurrently,
-     * like creating table or mv. When it's greater than 0, the database cannot be dropped.
-     * This is a runtime state and doesn't need to persist.
-     */
-    private CountingLatch runningMetaOps = new CountingLatch(0);
 
     public Database() {
         this(0, null);
@@ -926,29 +917,5 @@ public class Database extends MetaObject implements Writable {
     // the invoker should hold db's writeLock
     public void setExist(boolean exist) {
         this.exist = exist;
-    }
-
-    public List<Table> getHiveTables() {
-        return idToTable.values().stream().filter(Table::isHiveTable).collect(Collectors.toList());
-    }
-
-    public void waitRunningMetaOpsFinish() throws InterruptedException {
-        runningMetaOps.awaitZero();
-    }
-
-    public void waitRunningMetaOpsFinish(long timeout, TimeUnit unit) throws InterruptedException {
-        runningMetaOps.awaitZero(timeout, unit);
-    }
-
-    public void incrRunningMetaOps() {
-        runningMetaOps.increment();
-    }
-
-    public void decrRunningMetaOps() {
-        runningMetaOps.decrement();
-    }
-
-    public int getRunningMetaOps() {
-        return runningMetaOps.getCount();
     }
 }
