@@ -441,19 +441,18 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
             // already created for the tablet, usually in incremental open case
             continue;
         }
-        std::unique_ptr<AsyncDeltaWriter> writer;
-        if (params.miss_auto_increment_column()) {
-            writer = AsyncDeltaWriter::create(_tablet_manager, tablet.tablet_id(), _txn_id, tablet.partition_id(),
-                                              slots, params.merge_condition(), true, params.table_id(),
-                                              params.min_immutable_tablet_size(), _mem_tracker);
-        } else if (!params.merge_condition().empty()) {
-            writer = AsyncDeltaWriter::create(_tablet_manager, tablet.tablet_id(), _txn_id, tablet.partition_id(),
-                                              slots, params.merge_condition(), params.min_immutable_tablet_size(),
-                                              _mem_tracker);
-        } else {
-            writer = AsyncDeltaWriter::create(_tablet_manager, tablet.tablet_id(), _txn_id, tablet.partition_id(),
-                                              slots, params.min_immutable_tablet_size(), _mem_tracker);
-        }
+        ASSIGN_OR_RETURN(auto writer, lake::AsyncDeltaWriterBuilder()
+                                              .set_tablet_manager(_tablet_manager)
+                                              .set_tablet_id(tablet.tablet_id())
+                                              .set_txn_id(_txn_id)
+                                              .set_partition_id(tablet.partition_id())
+                                              .set_slot_descriptors(slots)
+                                              .set_merge_condition(params.merge_condition())
+                                              .set_miss_auto_increment_column(params.miss_auto_increment_column())
+                                              .set_table_id(params.table_id())
+                                              .set_immutable_tablet_size(params.min_immutable_tablet_size())
+                                              .set_mem_tracker(_mem_tracker)
+                                              .build());
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
     }

@@ -85,6 +85,7 @@ import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpResultSender;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.load.ExportJob;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.loadv2.LoadJob;
@@ -148,6 +149,7 @@ import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
@@ -1522,6 +1524,50 @@ public class StmtExecutor {
         ExportStmt exportStmt = (ExportStmt) parsedStmt;
         exportStmt.setExportStartTime(context.getStartTime());
         context.getGlobalStateMgr().getExportMgr().addExportJob(queryId, exportStmt);
+
+        if (!exportStmt.getSync()) {
+            return;
+        }
+        // poll and check export job state
+        int timeoutSeconds = Config.export_task_default_timeout_second + Config.export_checker_interval_second;
+        long start = System.currentTimeMillis();
+        while (System.currentTimeMillis() < (start + timeoutSeconds * 1000L)) {
+            ExportJob exportJob = context.getGlobalStateMgr().getExportMgr().getExportByQueryId(queryId);
+            if (exportJob != null) {
+                timeoutSeconds = exportJob.getTimeoutSecond() + Config.export_checker_interval_second;
+            }
+            if (exportJob == null ||
+                    (exportJob.getState() != ExportJob.JobState.FINISHED
+                            && exportJob.getState() != ExportJob.JobState.CANCELLED)) {
+                try {
+                    Thread.sleep(Config.export_checker_interval_second * 1000L);
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                }
+                continue;
+            }
+            break;
+        }
+
+        // proxy send show export result
+        String db = exportStmt.getTblName().getDb();
+        String showStmt = String.format("SHOW EXPORT FROM %s WHERE QueryId = \"%s\";", db, queryId);
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(showStmt, context.getSessionVariable()).get(0);
+        ShowExportStmt showExportStmt = (ShowExportStmt) statementBase;
+        showExportStmt.setQueryId(queryId);
+        ShowExecutor executor = new ShowExecutor(context, showExportStmt);
+        ShowResultSet resultSet = executor.execute();
+        if (resultSet == null) {
+            // state changed in execute
+            return;
+        }
+        if (isProxy) {
+            proxyResultSet = resultSet;
+            context.getState().setEof();
+            return;
+        }
+
+        sendShowResult(resultSet);
     }
 
     private void handleUpdateFailPointStatusStmt() throws Exception {

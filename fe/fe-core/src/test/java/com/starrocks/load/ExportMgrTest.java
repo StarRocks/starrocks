@@ -75,6 +75,15 @@ public class ExportMgrTest {
         mgr.replayUpdateJobState(job3.getId(), ExportJob.JobState.FINISHED);
         Assert.assertEquals(2, mgr.getIdToJob().size());
 
+        // 6. get job by queryId
+        ExportJob jobResult = mgr.getExportByQueryId(job3.getQueryId());
+        Assert.assertNotNull(jobResult);
+        Assert.assertEquals(3, jobResult.getId());
+        ExportJob jobResultNull = mgr.getExportByQueryId(null);
+        Assert.assertNull(jobResultNull);
+        ExportJob jobResultNotExist = mgr.getExportByQueryId(new UUID(4, 4));
+        Assert.assertNull(jobResultNotExist);
+
         // 5. save image
         File tempFile = File.createTempFile("GlobalTransactionMgrTest", ".image");
         System.err.println("write image " + tempFile.getAbsolutePath());
