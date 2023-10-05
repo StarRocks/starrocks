@@ -1,37 +1,5 @@
 
-The usage of shared-data StarRocks clusters is also similar to that of a classic StarRocks cluster, except that the shared-data cluster uses storage volumes and cloud-native tables to store data in object storage.
-
-### Create default storage volume
-
-You can use the built-in storage volumes that StarRocks automatically creates, or you can manually create and set the default storage volume. This section describes how to manually create and set the default storage volume.
-
-> **NOTE**
->
-> If your shared-data StarRocks cluster is upgraded from v3.0, you do not need to define a default storage volume because StarRocks created one with the object storage-related properties you specified in the FE configuration file **fe.conf**. You can still create new storage volumes with other object storage resources and set the default storage volume differently.
-
-To give your shared-data StarRocks cluster permission to store data in your object storage, you must reference a storage volume when you create databases or cloud-native tables. A storage volume consists of the properties and credential information of the remote data storage. If you have deployed a new shared-data StarRocks cluster and disallow StarRocks to create a built-in storage volume (by specifying `enable_load_volume_from_conf` as `false`), you must define a default storage volume before you can create databases and tables in the cluster.
-
-The following example creates a storage volume `def_volume` for an AWS S3 bucket `defaultbucket` with the IAM user-based credential (Access Key and Secret Key), enables the storage volume, and sets it as the default storage volume:
-
-```SQL
-CREATE STORAGE VOLUME def_volume
-TYPE = S3
-LOCATIONS = ("s3://defaultbucket/test/")
-PROPERTIES
-(
-    "enabled" = "true",
-    "aws.s3.region" = "us-west-2",
-    "aws.s3.endpoint" = "https://s3.us-west-2.amazonaws.com",
-    "aws.s3.use_aws_sdk_default_behavior" = "false",
-    "aws.s3.use_instance_profile" = "false",
-    "aws.s3.access_key" = "xxxxxxxxxx",
-    "aws.s3.secret_key" = "yyyyyyyyyy"
-);
-
-SET def_volume AS DEFAULT STORAGE VOLUME;
-```
-
-For more information on how to create a storage volume for other object storages and set the default storage volume, see [CREATE STORAGE VOLUME](../sql-reference/sql-statements/Administration/CREATE%20STORAGE%20VOLUME.md) and [SET DEFAULT STORAGE VOLUME](../sql-reference/sql-statements/Administration/SET%20DEFAULT%20STORAGE%20VOLUME.md).
+For more information on how to create a storage volume for other object storages and set the default storage volume, see [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/Administration/CREATE%20STORAGE%20VOLUME.md) and [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/Administration/SET%20DEFAULT%20STORAGE%20VOLUME.md).
 
 ### Create a database and a cloud-native table
 
@@ -106,7 +74,7 @@ Whether to allow data to be written into object storage asynchronously. Default:
 
 ### View table information
 
-You can view the information of tables in a specific database using `SHOW PROC "/dbs/<db_id>"`. See [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW%20PROC.md) for more information.
+You can view the information of tables in a specific database using `SHOW PROC "/dbs/<db_id>"`. See [SHOW PROC](../../sql-reference/sql-statements/Administration/SHOW%20PROC.md) for more information.
 
 Example:
 
@@ -123,8 +91,8 @@ The `Type` of a table in shared-data StarRocks cluster is `CLOUD_NATIVE`. In the
 
 ### Load data into a shared-data StarRocks cluster
 
-Shared-data StarRocks clusters support all loading methods provided by StarRocks. See [Overview of data loading](../loading/Loading_intro.md) for more information.
+Shared-data StarRocks clusters support all loading methods provided by StarRocks. See [Overview of data loading](../../loading/Loading_intro.md) for more information.
 
 ### Query in a shared-data StarRocks cluster
 
-Tables in a shared-data StarRocks cluster support all types of queries provided by StarRocks. See StarRocks [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) for more information.
+Tables in a shared-data StarRocks cluster support all types of queries provided by StarRocks. See StarRocks [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) for more information.

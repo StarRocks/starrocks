@@ -147,4 +147,24 @@ enable_load_volume_from_conf = false
 
 ## Use your shared-data StarRocks cluster
 
+<SharedDataUseIntro />
+
+The following example creates a storage volume `def_volume` for a MinIO bucket `defaultbucket` with Access Key and Secret Key credentials, enables the storage volume, and sets it as the default storage volume:
+
+```SQL
+CREATE STORAGE VOLUME def_volume
+TYPE = S3
+LOCATIONS = ("s3://defaultbucket/test/")
+PROPERTIES
+(
+    "enabled" = "true",
+    "aws.s3.region" = "us-west-2",
+    "aws.s3.endpoint" = "https://hostname.domainname.com:portnumber",
+    "aws.s3.access_key" = "xxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyy"
+);
+
+SET def_volume AS DEFAULT STORAGE VOLUME;
+```
+
 <SharedDataUse />

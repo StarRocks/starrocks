@@ -2,6 +2,7 @@
 
 import SharedDataIntro from '../../assets/commonMarkdown/sharedDataIntro.md'
 import SharedDataCNconf from '../../assets/commonMarkdown/sharedDataCNconf.md'
+import SharedDataUseIntro from '../../assets/commonMarkdown/sharedDataUseIntro.md'
 import SharedDataUse from '../../assets/commonMarkdown/sharedDataUse.md'
 
 <SharedDataIntro />
@@ -12,7 +13,7 @@ import SharedDataUse from '../../assets/commonMarkdown/sharedDataUse.md'
 
 ## Deploy a shared-data StarRocks cluster
 
-The deployment of a shared-data StarRocks cluster is similar to that of a shared-nothing StarRocks cluster. The only difference is that you need to deploy CNs instead of BEs in a shared-data cluster. This section only lists the extra FE and CN configuration items you need to add in the configuration files of FE and CN **fe.conf** and **cn.conf** when you deploy a shared-data StarRocks cluster. For detailed instructions on deploying a StarRocks cluster, see [Deploy StarRocks](../deployment/deploy_manually.md).
+The deployment of a shared-data StarRocks cluster is similar to that of a shared-nothing StarRocks cluster. The only difference is that you need to deploy CNs instead of BEs in a shared-data cluster. This section only lists the extra FE and CN configuration items you need to add in the configuration files of FE and CN **fe.conf** and **cn.conf** when you deploy a shared-data StarRocks cluster. For detailed instructions on deploying a StarRocks cluster, see [Deploy StarRocks](../../deployment/deploy_manually.md).
 
 > **Note**
 >
@@ -142,5 +143,23 @@ enable_load_volume_from_conf = false
 <SharedDataCNconf />
 
 ## Use your shared-data StarRocks cluster
+
+<SharedDataUseIntro />
+
+The following example creates a storage volume `def_volume` for an Azure Blob Storage bucket `defaultbucket` with shared key access, enables the storage volume, and sets it as the default storage volume:
+
+```SQL
+CREATE STORAGE VOLUME def_volume
+TYPE = AZBLOB
+LOCATIONS = ("azblob://defaultbucket/test/")
+PROPERTIES
+(
+    "enabled" = "true",
+    "azure.blob.endpoint" = "<endpoint_url>",
+    "azure.blob.shared_key" = "<shared_key>"
+);
+
+SET def_volume AS DEFAULT STORAGE VOLUME;
+```
 
 <SharedDataUse />

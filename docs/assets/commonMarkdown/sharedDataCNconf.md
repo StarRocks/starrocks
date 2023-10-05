@@ -14,8 +14,7 @@ The CN heartbeat service port for the StarRocks shared-data cluster. Default val
 
 The storage volume directory that the local cached data depends on and the medium type of the storage. Multiple volumes are separated by semicolon (;). If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`.
 
-The default value for `storage_root_path` is undefined for version 3.0, and a value must be provided.
-In version 3.1 the default value is `${STARROCKS_HOME}/storage`.
+The default value for `storage_root_path` is `${STARROCKS_HOME}/storage`.
 
 Local cache is effective when queries are frequent and the data being queried is recent, but there are cases that you may wish to turn off the local cache completely.
 

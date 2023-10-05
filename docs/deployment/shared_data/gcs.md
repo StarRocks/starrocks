@@ -147,5 +147,25 @@ enable_load_volume_from_conf = false
 <SharedDataCNconf />
 
 ## Use your shared-data StarRocks cluster
-<SharedDataUse />
 
+<SharedDataUseIntro />
+
+The following example creates a storage volume `def_volume` for a GCS bucket `defaultbucket` with an HMAC Access Key and Secret Key, enables the storage volume, and sets it as the default storage volume:
+
+```SQL
+CREATE STORAGE VOLUME def_volume
+TYPE = S3
+LOCATIONS = ("s3://defaultbucket/test/")
+PROPERTIES
+(
+    "enabled" = "true",
+    "aws.s3.region" = "us-east1",
+    "aws.s3.endpoint" = "https://storage.googleapis.com",
+    "aws.s3.access_key" = "<HMAC access key>",
+    "aws.s3.secret_key" = "<HMAC secret key>"
+);
+
+SET def_volume AS DEFAULT STORAGE VOLUME;
+```
+
+<SharedDataUse />
