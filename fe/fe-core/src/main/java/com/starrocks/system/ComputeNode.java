@@ -216,10 +216,6 @@ public class ComputeNode implements IComputable, Writable {
         return new TNetworkAddress(host, brpcPort);
     }
 
-    public TNetworkAddress getBeRpcAddress() {
-        return new TNetworkAddress(host, beRpcPort);
-    }
-
     public TNetworkAddress getHttpAddress() {
         return new TNetworkAddress(host, httpPort);
     }
