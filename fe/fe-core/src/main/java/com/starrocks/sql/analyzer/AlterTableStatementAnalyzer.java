@@ -58,9 +58,7 @@ public class AlterTableStatementAnalyzer {
     }
 
     public static boolean indexCluase(AlterClause alterClause) {
-        if (alterClause instanceof CreateIndexClause) {
-            return true;
-        } else if (alterClause instanceof DropIndexClause) {
+        if (alterClause instanceof CreateIndexClause || alterClause instanceof DropIndexClause) {
             return true;
         } else if (alterClause.getProperties() != null && alterClause.getProperties().containsKey(PROPERTIES_BF_COLUMNS)) {
             return true;
