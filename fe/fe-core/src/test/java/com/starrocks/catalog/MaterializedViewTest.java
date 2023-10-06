@@ -803,7 +803,7 @@ public class MaterializedViewTest {
         String sql = "CREATE INDEX index1 ON test.index_mv_to_check (k2) USING BITMAP COMMENT 'balabala'";
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, sql);
         stmtExecutor.execute();
-        Assert.assertEquals(connectContext.getState().getStateType(), QueryState.MysqlStateType.OK);
+        Assert.assertEquals(QueryState.MysqlStateType.OK, connectContext.getState().getStateType());
     }
 
     @Test
