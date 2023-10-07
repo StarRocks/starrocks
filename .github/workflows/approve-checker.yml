@@ -1,9 +1,6 @@
-name: APPROVE CHECKER
+name: REVIEW CHECKER
 
 on:
-  pull_request_target:
-    types:
-      - review_requested
 
   pull_request_review:
     types:
@@ -61,30 +58,36 @@ jobs:
 
   meta-review:
     needs: info
-    runs-on: ubuntu-latest
-    if: contains(needs.info.outputs.LABELS, 'META-REVIEW')
+    runs-on: [ self-hosted, normal ]
+    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'META-REVIEW')
+    name: META-REVIEW
+
     env:
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
       REPO: ${{ github.repository }}
-      GH_TOKEN: ${{ secrets.PAT }}
+      TEAM: meta-committer
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: META-REVIEW
-        env:
-          META_TEAM: meta-committer
         run: |
-          members=($(gh api \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            /orgs/${REPO%%/*}/teams/${META_TEAM}/members -q '.[].login'))
-          reviewers=($(gh pr view ${PR_NUMBER} -R ${REPO} --json reviews -q '.reviews.[] | select(.state == "APPROVED") | .author.login'))
-          for each_reviewer in ${reviewers[@]}; do
-            for each_member in ${members[@]}; do
-              if [[ "${each_reviewer}" =~ "${each_member}" ]]; then
-                exit 0
-              fi
-            done
-          done
-          
-          echo "Lack of META-TEAM members' approval!"
-          exit 1
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          ./scripts/check-approve.sh
+
+  proto-review:
+    needs: info
+    runs-on: [ self-hosted, normal ]
+    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'PROTO-REVIEW')
+    name: PROTO-REVIEW
+
+    env:
+      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
+      REPO: ${{ github.repository }}
+      TEAM: proto-team
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: PROTO-REVIEW
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          ./scripts/check-approve.sh

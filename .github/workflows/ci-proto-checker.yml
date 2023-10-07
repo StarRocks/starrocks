@@ -1,0 +1,56 @@
+name: CI PROTO Checker
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+    branches:
+      - main
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  proto-checker:
+    runs-on: ubuntu-latest
+    name: PROTO FILTER
+    if: >
+      !contains(github.event.pull_request.title, '(sync #') &&
+      !contains(github.event.pull_request.labels.*.name, 'sync') &&
+      (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
+    outputs:
+      output1: ${{ steps.proto-check-info.outputs.proto }}
+    steps:
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            proto:
+            - 'gensrc/proto/**'
+            - 'gensrc/thrift/**'
+
+      - name: PROTO CHECK INFO
+        id: proto-check-info
+        run: |
+          echo "proto=${{ steps.changes.outputs.proto }}" >> $GITHUB_OUTPUT
+
+  add-proto-review-label:
+    needs: proto-checker
+    runs-on: ubuntu-latest
+    name: ADD PROTO REVIEW LABEL
+    steps:
+      - name: add label
+        uses: actions-ecosystem/action-add-labels@v1
+        if: needs.proto-checker.outputs.output1 == 'true'
+        with:
+          github_token: ${{ secrets.PAT }}
+          labels: PROTO-REVIEW
+
+      - name: remove label
+        uses: actions-ecosystem/action-remove-labels@v1
+        if: needs.proto-checker.outputs.output1 != 'true'
+        with:
+          github_token: ${{ secrets.PAT }}
+          labels: PROTO-REVIEW
