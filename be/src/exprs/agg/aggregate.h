@@ -15,9 +15,12 @@
 #pragma once
 
 #include <new>
+#include <numeric>
 #include <type_traits>
+#include <vector>
 
 #include "column/column.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 class FunctionContext;
@@ -65,6 +68,11 @@ public:
     virtual void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                         size_t row_num) const = 0;
 
+    virtual bool support_update_with_rows() const { return false; }
+    // Update the aggregation state with many rows
+    virtual void update_with_rows(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                                  std::vector<int>& rows) const {}
+
     // Update/Merge the aggregation state with null
     virtual void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const {}
 
@@ -74,6 +82,11 @@ public:
     // row_num is number of row which should be merged.
     virtual void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
                        size_t row_num) const = 0;
+
+    virtual bool support_merge_with_rows() const { return false; }
+    // Merge the aggregation state with many rows
+    virtual void merge_with_rows(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
+                                 std::vector<int>& rows) const {}
 
     // When transmit data over network, we need to serialize agg data.
     // We serialize the agg data to |to| column
@@ -307,6 +320,7 @@ public:
 template <typename State, typename Derived>
 class AggregateFunctionBatchHelper : public AggregateFunctionStateHelper<State> {
 public:
+    using StateRowHashMap = phmap::flat_hash_map<AggDataPtr, std::vector<int>>;
     void batch_create_with_selection(FunctionContext* ctx, size_t chunk_size, Buffer<AggDataPtr>& states,
                                      size_t state_offset, const std::vector<uint8_t>& selection) const override {
         for (size_t i = 0; i < chunk_size; i++) {
@@ -351,49 +365,101 @@ public:
 
     void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
-        for (size_t i = 0; i < chunk_size; ++i) {
-            static_cast<const Derived*>(this)->update(ctx, columns, states[i] + state_offset, i);
+        if (static_cast<const Derived*>(this)->support_update_with_rows()) {
+            StateRowHashMap state_rows;
+            group_rows_by_state(state_rows, chunk_size, state_offset, states);
+            auto iter = state_rows.begin();
+            while (iter != state_rows.end()) {
+                static_cast<const Derived*>(this)->update_with_rows(ctx, columns, iter->first, iter->second);
+                iter++;
+            }
+        } else {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                static_cast<const Derived*>(this)->update(ctx, columns, states[i] + state_offset, i);
+            }
         }
     }
 
     void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                                   AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
-        for (size_t i = 0; i < chunk_size; i++) {
-            // TODO: optimize with simd ?
-            if (filter[i] == 0) {
-                static_cast<const Derived*>(this)->update(ctx, columns, states[i] + state_offset, i);
+        if (static_cast<const Derived*>(this)->support_update_with_rows()) {
+            StateRowHashMap state_rows;
+            group_rows_by_state(state_rows, chunk_size, state_offset, states, filter);
+            auto iter = state_rows.begin();
+            while (iter != state_rows.end()) {
+                static_cast<const Derived*>(this)->update_with_rows(ctx, columns, iter->first, iter->second);
+                iter++;
+            }
+        } else {
+            for (size_t i = 0; i < chunk_size; i++) {
+                // TODO: optimize with simd ?
+                if (filter[i] == 0) {
+                    static_cast<const Derived*>(this)->update(ctx, columns, states[i] + state_offset, i);
+                }
             }
         }
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        for (size_t i = 0; i < chunk_size; ++i) {
-            static_cast<const Derived*>(this)->update(ctx, columns, state, i);
+        if (static_cast<const Derived*>(this)->support_update_with_rows()) {
+            std::vector<int> rows(chunk_size);
+            std::iota(std::begin(rows), std::end(rows), 0);
+            static_cast<const Derived*>(this)->update_with_rows(ctx, columns, state, rows);
+        } else {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                static_cast<const Derived*>(this)->update(ctx, columns, state, i);
+            }
         }
     }
 
     void merge_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                      AggDataPtr* states) const override {
-        for (size_t i = 0; i < chunk_size; ++i) {
-            static_cast<const Derived*>(this)->merge(ctx, column, states[i] + state_offset, i);
+        if (static_cast<const Derived*>(this)->support_merge_with_rows()) {
+            StateRowHashMap state_rows;
+            group_rows_by_state(state_rows, chunk_size, state_offset, states);
+            auto iter = state_rows.begin();
+            while (iter != state_rows.end()) {
+                static_cast<const Derived*>(this)->merge_with_rows(ctx, column, iter->first, iter->second);
+                iter++;
+            }
+        } else {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                static_cast<const Derived*>(this)->merge(ctx, column, states[i] + state_offset, i);
+            }
         }
     }
 
     void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
-        for (size_t i = 0; i < chunk_size; i++) {
-            // TODO: optimize with simd ?
-            if (filter[i] == 0) {
-                static_cast<const Derived*>(this)->merge(ctx, column, states[i] + state_offset, i);
+        if (static_cast<const Derived*>(this)->support_merge_with_rows()) {
+            StateRowHashMap state_rows;
+            group_rows_by_state(state_rows, chunk_size, state_offset, states, filter);
+            auto iter = state_rows.begin();
+            while (iter != state_rows.end()) {
+                static_cast<const Derived*>(this)->merge_with_rows(ctx, column, iter->first, iter->second);
+                iter++;
+            }
+        } else {
+            for (size_t i = 0; i < chunk_size; i++) {
+                // TODO: optimize with simd ?
+                if (filter[i] == 0) {
+                    static_cast<const Derived*>(this)->merge(ctx, column, states[i] + state_offset, i);
+                }
             }
         }
     }
 
     void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* input, size_t start,
                                   size_t size) const override {
-        for (size_t i = start; i < start + size; ++i) {
-            static_cast<const Derived*>(this)->merge(ctx, input, state, i);
+        if (static_cast<const Derived*>(this)->support_merge_with_rows()) {
+            std::vector<int> rows(size);
+            std::iota(std::begin(rows), std::end(rows), 0);
+            static_cast<const Derived*>(this)->merge_with_rows(ctx, input, state, rows);
+        } else {
+            for (size_t i = start; i < start + size; ++i) {
+                static_cast<const Derived*>(this)->merge(ctx, input, state, i);
+            }
         }
     }
 
@@ -408,6 +474,36 @@ public:
                         size_t state_offset, Column* to) const override {
         for (size_t i = 0; i < chunk_size; i++) {
             static_cast<const Derived*>(this)->finalize_to_column(ctx, agg_states[i] + state_offset, to);
+        }
+    }
+
+    void group_rows_by_state(StateRowHashMap& state_rows, size_t chunk_size, size_t state_offset,
+                             AggDataPtr* states) const {
+        for (int i = 0; i < chunk_size; ++i) {
+            auto iter = state_rows.find(states[i] + state_offset);
+            if (iter == state_rows.end()) {
+                std::vector<int> rows;
+                rows.push_back(i);
+                state_rows.emplace(states[i] + state_offset, rows);
+            } else {
+                iter->second.push_back(i);
+            }
+        }
+    }
+
+    void group_rows_by_state(StateRowHashMap& state_rows, size_t chunk_size, size_t state_offset, AggDataPtr* states,
+                             const std::vector<uint8_t>& filter) const {
+        for (int i = 0; i < chunk_size; ++i) {
+            if (filter[i] == 0) {
+                auto iter = state_rows.find(states[i] + state_offset);
+                if (iter == state_rows.end()) {
+                    std::vector<int> rows;
+                    rows.push_back(i);
+                    state_rows.emplace(states[i] + state_offset, rows);
+                } else {
+                    iter->second.push_back(i);
+                }
+            }
         }
     }
 };

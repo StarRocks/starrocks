@@ -1276,6 +1276,47 @@ TEST_F(AggregateTest, test_bitmap_nullable) {
     ASSERT_EQ(50, result_data.get_data()[0]);
 }
 
+TEST_F(AggregateTest, test_bitmap_union_int_with_fast_union) {
+    const AggregateFunction* func = get_aggregate_function("bitmap_union_int", TYPE_SMALLINT, TYPE_BIGINT, false);
+
+    ASSERT_EQ(true, func->support_update_with_rows());
+    ASSERT_EQ(true, func->support_merge_with_rows());
+
+    auto column = Int32Column::create();
+    std::vector<int> rows;
+    for (int i = 0; i < 100; i++) {
+        column->append(i);
+        rows.push_back(i);
+    }
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(1);
+    raw_columns[0] = column.get();
+
+    // update input column 1
+    auto state = ManagedAggrState::create(ctx, func);
+    func->update_with_rows(ctx, raw_columns.data(), state->state(), rows);
+    auto result_column = Int64Column::create();
+    func->finalize_to_column(ctx, state->state(), result_column.get());
+    ASSERT_EQ(1, result_column.get()->get_data().size());
+
+    // update input column 2
+    auto state2 = ManagedAggrState::create(ctx, func);
+    func->update_with_rows(ctx, raw_columns.data(), state2->state(), rows);
+    auto result_column2 = Int64Column::create();
+    func->finalize_to_column(ctx, state2->state(), result_column2.get());
+    ASSERT_EQ(1, result_column2.get()->get_data().size());
+
+    // merge column 1 and column 2
+    ColumnPtr serde_column = BitmapColumn::create();
+
+    std::vector<int> result_rows = {0};
+    auto merge_result_column = Int64Column::create();
+    func->serialize_to_column(ctx, state->state(), serde_column.get());
+    func->merge_with_rows(ctx, serde_column.get(), state2->state(), result_rows);
+    func->finalize_to_column(ctx, state2->state(), merge_result_column.get());
+    ASSERT_EQ(1, merge_result_column->get_data().size());
+}
+
 TEST_F(AggregateTest, test_group_concat) {
     const AggregateFunction* group_concat_function =
             get_aggregate_function("group_concat", TYPE_VARCHAR, TYPE_VARCHAR, false);

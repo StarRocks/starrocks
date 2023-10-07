@@ -260,6 +260,7 @@ template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc
 class NullableAggregateFunctionUnary final
         : public NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull> {
 public:
+    using StateRowHashMap = phmap::flat_hash_map<AggDataPtr, std::vector<int>>;
     explicit NullableAggregateFunctionUnary(const NestedAggregateFunctionPtr& nested_function)
             : NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull>(
                       nested_function) {}
@@ -670,10 +671,20 @@ public:
     void merge_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                      AggDataPtr* states) const override {
         auto fast_call_path = [&](const Column* data_column) {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                auto& state_data = this->data(states[i] + state_offset);
-                state_data.is_null = false;
-                this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
+            if (this->nested_function->support_update_with_rows()) {
+                StateRowHashMap state_rows;
+                group_rows_by_state(state_rows, chunk_size, state_offset, states);
+                auto iter = state_rows.begin();
+                while (iter != state_rows.end()) {
+                    this->nested_function->merge_with_rows(ctx, data_column, iter->first, iter->second);
+                    iter++;
+                }
+            } else {
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    auto& state_data = this->data(states[i] + state_offset);
+                    state_data.is_null = false;
+                    this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
+                }
             }
         };
         auto slow_call_path = [&](const NullData& null_data, const Column* data_column) {
@@ -694,11 +705,21 @@ public:
     void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
         auto fast_call_path = [&](const Column* data_column) {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                if (filter[i] == 0) {
-                    auto& state_data = this->data(states[i] + state_offset);
-                    state_data.is_null = false;
-                    this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
+            if (this->nested_function->support_update_with_rows()) {
+                StateRowHashMap state_rows;
+                group_rows_by_state(state_rows, chunk_size, state_offset, states, filter);
+                auto iter = state_rows.begin();
+                while (iter != state_rows.end()) {
+                    this->nested_function->merge_with_rows(ctx, data_column, iter->first, iter->second);
+                    iter++;
+                }
+            } else {
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    if (filter[i] == 0) {
+                        auto& state_data = this->data(states[i] + state_offset);
+                        state_data.is_null = false;
+                        this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
+                    }
                 }
             }
         };
@@ -724,10 +745,18 @@ public:
     void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* column, size_t start,
                                   size_t size) const override {
         auto fast_call_path = [&](const Column* data_column) {
-            for (size_t i = start; i < start + size; ++i) {
+            if (this->nested_function->support_update_with_rows()) {
                 auto& state_data = this->data(state);
                 state_data.is_null = false;
-                this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
+                std::vector<int> rows(size);
+                std::iota(std::begin(rows), std::end(rows), 0);
+                this->nested_function->merge_with_rows(ctx, data_column, state_data.mutable_nest_state(), rows);
+            } else {
+                for (size_t i = start; i < start + size; ++i) {
+                    auto& state_data = this->data(state);
+                    state_data.is_null = false;
+                    this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
+                }
             }
         };
         auto slow_call_path = [&](const NullData& null_data, const Column* data_column) {
@@ -743,6 +772,40 @@ public:
             }
         };
         ColumnHelper::call_nullable_func(column, std::move(fast_call_path), std::move(slow_call_path));
+    }
+
+    void group_rows_by_state(StateRowHashMap& state_rows, size_t chunk_size, size_t state_offset,
+                             AggDataPtr* states) const {
+        for (int i = 0; i < chunk_size; ++i) {
+            auto& state_data = this->data(states[i] + state_offset);
+            state_data.is_null = false;
+            auto iter = state_rows.find(state_data.mutable_nest_state());
+            if (iter == state_rows.end()) {
+                std::vector<int> rows;
+                rows.push_back(i);
+                state_rows.emplace(state_data.mutable_nest_state(), rows);
+            } else {
+                iter->second.push_back(i);
+            }
+        }
+    }
+
+    void group_rows_by_state(StateRowHashMap& state_rows, size_t chunk_size, size_t state_offset, AggDataPtr* states,
+                             const std::vector<uint8_t>& filter) const {
+        for (int i = 0; i < chunk_size; ++i) {
+            if (filter[i] == 0) {
+                auto& state_data = this->data(states[i] + state_offset);
+                state_data.is_null = false;
+                auto iter = state_rows.find(state_data.mutable_nest_state());
+                if (iter == state_rows.end()) {
+                    std::vector<int> rows;
+                    rows.push_back(i);
+                    state_rows.emplace(state_data.mutable_nest_state(), rows);
+                } else {
+                    iter->second.push_back(i);
+                }
+            }
+        }
     }
 };
 

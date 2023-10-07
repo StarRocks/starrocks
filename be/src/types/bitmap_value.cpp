@@ -1122,4 +1122,78 @@ void BitmapValue::add(uint64_t value) {
         }
     }
 }
+
+void BitmapValue::to_bitmap() {
+    if (_type != BITMAP) _bitmap = std::make_shared<detail::Roaring64Map>();
+
+    switch (_type) {
+    case SINGLE:
+        _bitmap->add(_sv);
+        break;
+    case SET:
+        for (auto x : *_set) {
+            _bitmap->add(x);
+        }
+        _set.reset();
+        break;
+    default:
+        break;
+    }
+    _type = BITMAP;
+}
+
+BitmapValue& BitmapValue::fast_union(const std::vector<const BitmapValue*>& values) {
+    std::vector<const detail::Roaring64Map*> bitmaps;
+
+    auto single_values = std::vector<uint64_t>();
+    for (auto* value : values) {
+        switch (value->_type) {
+        case EMPTY:
+            break;
+        case SINGLE:
+            single_values.push_back(value->_sv);
+            break;
+        case BITMAP:
+            bitmaps.push_back(value->_bitmap.get());
+            break;
+        case SET:
+            for (auto x : *value->_set) {
+                single_values.push_back(x);
+            }
+            break;
+        }
+    }
+
+    if (!bitmaps.empty()) {
+        switch (_type) {
+        case EMPTY:
+            _bitmap = std::make_shared<detail::Roaring64Map>(
+                    detail::Roaring64Map::fastunion(bitmaps.size(), bitmaps.data()));
+            _type = BITMAP;
+            break;
+        case SINGLE:
+            _bitmap = std::make_shared<detail::Roaring64Map>(
+                    detail::Roaring64Map::fastunion(bitmaps.size(), bitmaps.data()));
+            _bitmap->add(_sv);
+            _type = BITMAP;
+            break;
+        case BITMAP:
+            *_bitmap |= detail::Roaring64Map::fastunion(bitmaps.size(), bitmaps.data());
+            break;
+        case SET:
+            _from_set_to_bitmap();
+            *_bitmap |= detail::Roaring64Map::fastunion(bitmaps.size(), bitmaps.data());
+            break;
+        }
+    }
+
+    if (!single_values.empty()) {
+        if (_type != BITMAP) {
+            this->to_bitmap();
+        }
+        _bitmap->addMany(single_values.size(), single_values.data());
+    }
+
+    return *this;
+}
 } // namespace starrocks

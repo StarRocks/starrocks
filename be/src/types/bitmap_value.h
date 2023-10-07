@@ -90,6 +90,8 @@ public:
 
     void add_many(size_t n_args, const uint32_t* vals);
 
+    void to_bitmap();
+
     // Note: rhs BitmapValue is only readable after this method
     // Compute the union between the current bitmap and the provided bitmap.
     // Possible type transitions are:
@@ -157,6 +159,8 @@ public:
 
     int64_t bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
                                             BitmapValue* ret_bitmap);
+
+    BitmapValue& fast_union(const std::vector<const BitmapValue*>& values);
 
 private:
     void _convert_to_smaller_type();
