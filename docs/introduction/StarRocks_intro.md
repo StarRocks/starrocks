@@ -12,7 +12,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [Introduction](../introduction/what_is_starrocks)
 - [Architecture](../introduction/Architecture)
-- [Shared-data cluster](../deployment/deploy_shared_data)
+- [Shared-data cluster](../deployment/shared_data/s3)
 - [Features](../introduction/Features)
 
 </NavBoxPartItem>
