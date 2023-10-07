@@ -110,6 +110,36 @@ under the License.
                 </pluginRepository>
             </pluginRepositories>
         </profile>
+
+        <profile>
+            <id>thrift-env</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+                <property>
+                    <name>env.THRIFT</name>
+                </property>
+            </activation>
+            <properties>
+                <starrocks.thrift>${env.THRIFT}</starrocks.thrift>
+            </properties>
+        </profile>
+        <profile>
+            <id>thirft-thirdparty</id>
+            <activation>
+                <file>
+                    <exists>${env.STARROCKS_THIRDPARTY}/installed/bin/thrift</exists>
+                </file>
+            </activation>
+            <properties>
+                <starrocks.thrift>${env.STARROCKS_THIRDPARTY}/installed/bin/thrift</starrocks.thrift>
+            </properties>
+        </profile>
+        <profile>
+            <id>thrift-windows</id>
+            <properties>
+                <starrocks.thrift>thrift.exe</starrocks.thrift>
+            </properties>
+        </profile>
     </profiles>
 
     <dependencies>
@@ -398,7 +428,7 @@ under the License.
                 <artifactId>maven-thrift-plugin</artifactId>
                 <version>0.1.11</version>
                 <configuration>
-                    <thriftExecutable>${env.STARROCKS_THIRDPARTY}/installed/bin/thrift</thriftExecutable>
+                    <thriftExecutable>${starrocks.thrift}</thriftExecutable>
                     <thriftSourceRoot>${basedir}/src/main/resources/thrift/</thriftSourceRoot>
                     <outputDirectory>${basedir}/src/main/thrift/</outputDirectory>
                     <generator>java</generator>
