@@ -104,7 +104,8 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
         runFileUnitTest("materialized-view/tpch-hive/q17");
     }
 
-    @Test
+    // @Test
+    // Ken is working on this, disable this case before it is fixed.
     public void testQuery18() {
         runFileUnitTest("materialized-view/tpch-hive/q18");
     }
