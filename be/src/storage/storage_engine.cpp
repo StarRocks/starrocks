@@ -1497,15 +1497,15 @@ Status StorageEngine::get_delta_column_group(KVStore* meta, int64_t tablet_id, R
     return Status::OK();
 }
 
-Status StorageEngine::_clear_persistent_index(DataDir* data_dir, int64_t tablet_id, std::string dir) {
+Status StorageEngine::_clear_persistent_index(DataDir* data_dir, int64_t tablet_id, const std::string& dir) {
     // remove meta in RocksDB
     WriteBatch wb;
     auto status = TabletMetaManager::clear_persistent_index(data_dir, &wb, tablet_id);
     if (status.ok()) {
         status = data_dir->get_meta()->write_batch(&wb);
         if (!status.ok()) {
-            LOG(WARNING) << "fail to remove persistent index meta, tablet_id=[" + tablet_id << "] error["
-                         << status.to_string() << "]";
+            LOG(WARNING) << "fail to remove persistent index meta, tablet_id=[" + std::to_string(tablet_id)
+                         << "] error[" << status.to_string() << "]";
         } else {
             // remove tablet persistent_index dir
             status = fs::remove_all(dir);

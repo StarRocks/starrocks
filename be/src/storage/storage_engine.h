@@ -313,7 +313,7 @@ private:
     void _clean_unused_rowset_metas();
 
     // remove pk index meta first, and if success then remove dir.
-    Status _clear_persistent_index(DataDir* data_dir, int64_t tablet_id, std::string dir);
+    Status _clear_persistent_index(DataDir* data_dir, int64_t tablet_id, const std::string& dir);
 
     Status _do_sweep(const std::string& scan_root, const time_t& local_tm_now, const int32_t expire);
 
