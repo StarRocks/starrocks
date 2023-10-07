@@ -17,10 +17,13 @@
 #include <fmt/format.h>
 
 #include "gutil/strings/join.h"
+#include "storage/lake/lake_primary_index.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/update_manager.h"
+#include "util/dynamic_cache.h"
 #include "util/phmap/phmap_fwd_decl.h"
 #include "util/trace.h"
 
@@ -121,7 +124,7 @@ private:
             ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(*_metadata, &_tablet, &_builder,
                                                                                        _base_version, _new_version));
         }
-        return _tablet.update_mgr()->publish_primary_compaction(op_compaction, *_metadata, &_tablet, _index_entry,
+        return _tablet.update_mgr()->publish_primary_compaction(op_compaction, *_metadata, _tablet, _index_entry,
                                                                 &_builder, _base_version);
     }
 

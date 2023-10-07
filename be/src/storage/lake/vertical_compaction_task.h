@@ -33,9 +33,10 @@ class TabletWriter;
 
 class VerticalCompactionTask : public CompactionTask {
 public:
-    explicit VerticalCompactionTask(int64_t txn_id, int64_t version, std::shared_ptr<Tablet> tablet,
+    explicit VerticalCompactionTask(int64_t txn_id, int64_t version, Tablet tablet,
                                     std::vector<std::shared_ptr<Rowset>> input_rowsets)
             : CompactionTask(txn_id, version, std::move(tablet), std::move(input_rowsets)) {}
+
     ~VerticalCompactionTask() override = default;
 
     Status execute(Progress* progress, CancelFunc cancel_func) override;

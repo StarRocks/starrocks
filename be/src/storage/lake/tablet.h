@@ -21,11 +21,9 @@
 #include "common/statusor.h"
 #include "gen_cpp/types.pb.h"
 #include "storage/lake/metadata_iterator.h"
-#include "storage/lake/rowset.h"
-#include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
+#include "storage/lake/types_fwd.h"
 
 namespace starrocks {
 class TabletSchema;
