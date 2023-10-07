@@ -3930,7 +3930,7 @@ StatusOr<ColumnPtr> StringFunctions::parse_url_general(FunctionContext* context,
 }
 
 StatusOr<ColumnPtr> StringFunctions::parse_const_urlpart(UrlParser::UrlPart* url_part, FunctionContext* context,
-                                                     const starrocks::Columns& columns) {
+                                                         const starrocks::Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
     auto size = columns[0]->size();
