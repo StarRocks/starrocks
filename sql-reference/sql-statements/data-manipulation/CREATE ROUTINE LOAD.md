@@ -119,7 +119,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 | enclose                   | 否           | 根据 [RFC4180](https://www.rfc-editor.org/rfc/rfc4180)，用于指定把 CSV 文件中的字段括起来的字符。取值类型：单字节字符。默认值：`NONE`。最常用 `enclose` 字符为单引号 (`'`) 或双引号 (`"`)。<br />被 `enclose` 指定字符括起来的字段内的所有特殊字符（包括行分隔符、列分隔符等）均看做是普通符号。比 RFC4180 标准更进一步的是，StarRocks 提供的 `enclose` 属性支持设置任意单个字节的字符。<br />如果一个字段内包含了 `enclose` 指定字符，则可以使用同样的字符对 `enclose` 指定字符进行转义。例如，在设置了`enclose` 为双引号 (`"`) 时，字段值 `a "quoted" c` 在 CSV 文件中应该写作 `"a ""quoted"" c"`。 |
 | escape                    | 否           | 指定用于转义的字符。用来转义各种特殊字符，比如行分隔符、列分隔符、转义符、`enclose` 指定字符等，使 StarRocks 把这些特殊字符当做普通字符而解析成字段值的一部分。取值类型：单字节字符。默认值：`NONE`。最常用的 `escape` 字符为斜杠 (`\`)，在 SQL 语句中应该写作双斜杠 (`\\`)。<br />`escape` 指定字符同时作用于 `enclose` 指定字符的内部和外部。<br />以下为两个示例：<br /><ul><li>当设置 `enclose` 为双引号 (`"`) 、`escape` 为斜杠 (`\`) 时，StarRocks 会把 `"say \"Hello world\""` 解析成一个字段值 `say "Hello world"`。</li><li>假设列分隔符为逗号 (`,`) ，当设置 `escape` 为斜杠 (`\`) ，StarRocks 会把 `a, b\, c` 解析成 `a` 和 `b, c` 两个字段值。</li></ul> |
 | strip_outer_array         | 否           | 是否裁剪 JSON 数据最外层的数组结构。取值范围：`TRUE` 或者 `FALSE`。默认值：`FALSE`。真实业务场景中，待导入的 JSON 数据可能在最外层有一对表示数组结构的中括号 `[]`。这种情况下，一般建议您指定该参数取值为 `true`，这样 StarRocks 会剪裁掉外层的中括号 `[]`，并把中括号 `[]` 里的每个内层数组都作为一行单独的数据导入。如果您指定该参数取值为 `false`，则 StarRocks 会把整个 JSON 数据解析成一个数组，并作为一行数据导入。例如，待导入的 JSON 数据为 `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`，如果指定该参数取值为 `true`，则 StarRocks 会把 `{"category" : 1, "author" : 2}` 和 `{"category" : 3, "author" : 4}` 解析成两行数据，并导入到目标表中对应的数据行。 |
-| jsonpaths                 | 否           | 用于指定待导入的字段的名称。仅在使用匹配模式导入 JSON 数据时需要指定该参数。参数取值为 JSON 格式。参见[目标表存在基于 JSON 数据进行计算生成的衍生列](#目标表存在基于-json-数据进行计算生成的衍生列)。|
+| jsonpaths                 | 否           | 用于指定待导入的字段的名称。仅在使用匹配模式导入 JSON 数据时需要指定该参数。参数取值为 JSON 格式。参见[目标表存在衍生列，其列值通过表达式计算生成](#目标表存在衍生列其列值通过表达式计算生成)。|
 | json_root                 | 否           | 如果不需要导入整个 JSON 数据，则指定实际待导入 JSON 数据的根节点。参数取值为合法的 JsonPath。默认值为空，表示会导入整个 JSON 数据。具体请参见本文提供的示例[指定实际待导入 JSON 数据的根节点](#指定实际待导入-json-数据的根节点)。 |
 | task_consume_second                 | 否           |单个 Routine Load 导入作业中每个 Routine Load 导入任务消费数据的最大时长，单位为秒。相较于[FE 动态参数](../../../administration/Configuration.md) `routine_load_task_consume_second`（作用于集群内部所有 Routine Load 导入作业），该参数仅针对单个 Routine Load 导入作业，更加灵活。该参数自 v3.1.0 起新增。 <ul><li>当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 则使用 FE 动态参数 `routine_load_task_consume_second` 和`routine_load_task_timeout_second` 来控制导入行为。</li><li>当只配置 `task_consume_second` 时，默认 `task_timeout_second` = `task_consume_second` * 4。</li><li>当只配置 `task_timeout_second` 时，默认 `task_consume_second` = `task_timeout_second` /4。</li></ul>|
 | task_timeout_second                 | 否           | Routine Load 导入作业中每个 Routine Load 导入任务超时时间，单位为秒。相较于[FE 动态参数](../../../administration/Configuration.md) `routine_load_task_timeout_second`（作用于集群内部所有 Routine Load 导入作业），该参数仅针对单个 Routine Load 导入作业，更加灵活。该参数自 v3.1.0 起新增。<ul><li>当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 则使用 FE 动态参数 `routine_load_task_consume_second` 和 `routine_load_task_timeout_second` 来控制导入行为。</li><li>当只配置 `task_timeout_second` 时，默认 `task_consume_second` = `task_timeout_second` /4。</li><li>当只配置 `task_consume_second` 时，默认 `task_timeout_second` = `task_consume_second` * 4。</li></ul>|
@@ -236,7 +236,7 @@ Routine Load 相关配置项，请参见[配置参数](../../../administration/C
   - 与 `jsonpaths`中指定的 Key 按顺序保持一一对应。
   - 与目标表中的列按名称保持一一对应。
 
-详细示例，请参见[目标表存在基于 JSON 数据进行计算生成的衍生列](#目标表存在基于-json-数据进行计算生成的衍生列)。
+详细示例，请参见[目标表存在衍生列，其列值通过表达式计算生成](#目标表存在衍生列其列值通过表达式计算生成)。
 
 > **说明**
 >
@@ -530,7 +530,7 @@ FROM KAFKA
 > - 如果 JSON 数据最外层是数组结构，则需要在`PROPERTIES`设置`"strip_outer_array"="true"`，表示裁剪最外层的数组结构。并且需要注意在设置 `jsonpaths` 时，整个 JSON 数据的根节点是裁剪最外层的数组结构后**展平的 JSON 对象**。
 > - 如果不需要导入整个 JSON 数据，则需要使用 `json_root` 指定实际所需导入的 JSON 数据根节点。
 
-#### 目标表的列值通过计算生成
+#### 目标表存在衍生列，其列值通过表达式计算生成
 
 需要使用匹配模式导入数据，即需要使用 `jsonpaths` 和 `COLUMNS` 参数，`jsonpaths`指定待导入 JSON 数据的 Key，`COLUMNS` 参数指定待导入 JSON 数据的 Key 与目标表的列的映射关系和数据转换关系。
 
@@ -584,7 +584,7 @@ FROM KAFKA
 > - 如果 JSON 数据最外层是数组结构，则需要在`PROPERTIES`设置`"strip_outer_array"="true"`，表示裁剪最外层的数组结构。并且需要注意在设置 `jsonpaths` 时，整个 JSON 数据的根节点是裁剪最外层的数组结构后**展平的 JSON 对象**。
 > - 如果不需要导入整个 JSON 数据，则需要使用 `json_root` 指定实际所需导入的 JSON 数据根节点。
 
-#### 目标表的列值通过 CASE 表达式计算生成
+#### 目标表存在衍生列，其列值通过 CASE 表达式计算生成
 
 **数据集**
 
