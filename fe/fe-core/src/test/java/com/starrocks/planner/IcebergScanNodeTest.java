@@ -253,7 +253,7 @@ public class IcebergScanNodeTest {
             }
         };
 
-        scanNode.setupScanRangeLocations(descTable);
+        scanNode.setupScanRangeLocations();
 
         List<TScanRangeLocations> result = scanNode.getScanRangeLocations(1);
         Assert.assertTrue(result.size() > 0);
