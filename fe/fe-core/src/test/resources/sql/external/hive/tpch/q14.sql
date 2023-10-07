@@ -54,7 +54,7 @@ OutPut Exchange Id: 08
 |  output columns:
 |  21 <-> [21: p_type, VARCHAR, true]
 |  27 <-> [37: multiply, DECIMAL128(33,4), true]
-|  37 <-> [37: multiply, DECIMAL128(33,4), true]
+|  37 <-> clone([37: multiply, DECIMAL128(33,4), true])
 |  common expressions:
 |  33 <-> cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2))
 |  34 <-> [7: l_discount, DECIMAL64(15,2), true]
