@@ -308,7 +308,7 @@ public class InsertStmt extends DmlStmt {
 
         if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionType)) {
             throw new SemanticException("compression type " + compressionType + " is not supported. " +
-                    "Use any of (uncompressed, gzip, brotli, zstd, lz4, lzo, bz2).");
+                    "Use any of (uncompressed, gzip, brotli, zstd, lz4, bz2).");
         }
 
         if (writeSingleFile && partitionBy != null) {
