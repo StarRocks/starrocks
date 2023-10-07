@@ -3962,6 +3962,13 @@ StatusOr<ColumnPtr> StringFunctions::parse_url(FunctionContext* context, const s
 
     return parse_url_general(context, columns);
 }
+
+StatusOr<ColumnPtr> StringFunctions::url_extract_host(FunctionContext* context, const starrocks::Columns& columns) {
+    UrlParser::UrlPart url_part_enum = UrlParser::HOST;
+    UrlParser::UrlPart* url_part = &url_part_enum;
+    return parse_url_const(url_part, context, columns);
+}
+
 static bool seek_param_key_in_query_params(const StringValue& query_params, const StringValue& param_key,
                                            std::string* param_value) {
     const StringSearch param_search(&param_key);
