@@ -273,7 +273,6 @@ starrocks.com
 starrocks.快速.com
 -- !result
 
-
 -- name: test_url_encode
 select url_encode('https://docs.starrocks.io/en-us/latest/quick_start/Deploy');
 -- result:
