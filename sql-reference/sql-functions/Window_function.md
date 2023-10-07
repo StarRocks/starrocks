@@ -923,12 +923,12 @@ VARIANCE() 窗口函数用于统计表达式的总体方差。VAR_POP 和 VARIAN
 **语法：**
 
 ```SQL
-VARIANCE(expr) [OVER (partition_by_clause)]
+VARIANCE(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 > 注意
 >
-> `VARIANCE()` 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+> 从 2.5.13 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
 
 **参数说明：**
 
@@ -964,6 +964,21 @@ mysql> select variance(k) over (partition by no) FROM agg;
 |                             54.6875 |
 |                             54.6875 |
 +-------------------------------------+
+
+mysql> select variance(k) over(
+    partition by no
+    order by k
+    rows between unbounded preceding and 1 following) AS window_test
+FROM agg order by no,k;
++-------------------+
+| window_test       |
++-------------------+
+|                 0 |
+|                25 |
+| 38.88888888888889 |
+|           54.6875 |
+|           54.6875 |
++-------------------+
 ```
 
 ## 使用 VAR_SAMP, VARIANCE_SAMP 窗口函数
@@ -973,12 +988,12 @@ VAR_SAMP() 窗口函数用于统计表达式的样本方差。
 **语法：**
 
 ```sql
-VAR_SAMP(expr) [OVER (partition_by_clause)]
+VAR_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 > 注意
 >
-> VAR_SAMP() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+> 从 2.5.13 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
 
 **参数说明：**
 
@@ -1014,6 +1029,21 @@ mysql> select VAR_SAMP(k) over (partition by no) FROM agg;
 |                   72.91666666666667 |
 |                   72.91666666666667 |
 +-------------------------------------+
+
+mysql> select VAR_SAMP(k) over(
+    partition by no
+    order by k
+    rows between unbounded preceding and 1 following) AS window_test
+FROM agg order by no,k;
++--------------------+
+| window_test        |
++--------------------+
+|                  0 |
+|                 50 |
+| 58.333333333333336 |
+|  72.91666666666667 |
+|  72.91666666666667 |
++--------------------+
 ```
 
 ## 使用 STD, STDDEV, STDDEV_POP 窗口函数
@@ -1023,12 +1053,12 @@ STD() 窗口函数用于统计表达式的总体标准差。
 **语法：**
 
 ```sql
-STD(expr) [OVER (partition_by_clause)]
+STD(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 > 注意
 >
-> STD() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+> 从 2.5.13 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
 
 **参数说明：**
 
@@ -1064,6 +1094,21 @@ mysql> select STD(k) over (partition by no) FROM agg;
 |               7.39509972887452 |
 |               7.39509972887452 |
 +--------------------------------+
+
+mysql> select std(k) over (
+    partition by no
+    order by k
+    rows between unbounded preceding and 1 following) AS window_test
+FROM agg order by no,k;
++-------------------+
+| window_test       |
++-------------------+
+|                 0 |
+|                 5 |
+| 6.236095644623236 |
+|  7.39509972887452 |
+|  7.39509972887452 |
++-------------------+
 ```
 
 ## 使用 STDDEV_SAMP 窗口函数
@@ -1073,12 +1118,12 @@ STDDEV_SAMP() 窗口函数用于统计表达式的样本标准差。
 **语法：**
 
 ```sql
-STDDEV_SAMP(expr) [OVER (partition_by_clause)]
+STDDEV_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 > 注意
 >
-> STDDEV_SAMP() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+> 从 2.5.13 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
 
 **参数说明：**
 
@@ -1114,6 +1159,21 @@ mysql> select STDDEV_SAMP(k) over (partition by no) FROM agg;
 |                      8.539125638299666 |
 |                      8.539125638299666 |
 +----------------------------------------+
+
+mysql> select STDDEV_SAMP(k) over (
+    partition by no
+    order by k
+    rows between unbounded preceding and 1 following) AS window_test
+FROM agg order by no,k;
++--------------------+
+| window_test        |
++--------------------+
+|                  0 |
+| 7.0710678118654755 |
+|  7.637626158259733 |
+|  8.539125638299666 |
+|  8.539125638299666 |
++--------------------+
 ```
 
 ## 使用 COVAR_SAMP 窗口函数
@@ -1123,12 +1183,12 @@ COVAR_SAMP() 窗口函数用于统计表达式的样本协方差。
 **语法：**
 
 ```sql
-COVAR_SAMP(expr1, expr2) [OVER (partition_by_clause)]
+COVAR_SAMP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 > 注意
 >
-> COVAR_SAMP() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+> 从 2.5.13 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
 
 **参数说明：**
 
@@ -1164,6 +1224,21 @@ mysql> select COVAR_SAMP(k, v) over (partition by no) FROM agg;
 |                       119.99999999999999 |
 |                       119.99999999999999 |
 +------------------------------------------+
+
+mysql> select COVAR_SAMP(k,v) over (
+    partition by no
+    order by k
+    rows between unbounded preceding and 1 following) AS window_test
+FROM agg order by no,k;
++--------------------+
+| window_test        |
++--------------------+
+|               NULL |
+|                 55 |
+|                 55 |
+| 119.99999999999999 |
+| 119.99999999999999 |
++--------------------+
 ```
 
 ## 使用 COVAR_POP 窗口函数
@@ -1173,12 +1248,12 @@ COVAR_POP() 窗口函数用于统计表达式的总体协方差。
 **语法：**
 
 ```sql
-COVAR_POP(expr1, expr2) [OVER (partition_by_clause)]
+COVAR_POP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 > 注意
 >
-> COVAR_POP() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+> 从 2.5.13 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
 
 **参数说明：**
 
@@ -1214,6 +1289,21 @@ mysql> select COVAR_POP(k, v) over (partition by no) FROM agg;
 |                       79.99999999999999 |
 |                       79.99999999999999 |
 +-----------------------------------------+
+
+mysql> select COVAR_POP(k,v) over (
+    partition by no
+    order by k
+    rows between unbounded preceding and 1 following) AS window_test
+FROM agg order by no,k;
++-------------------+
+| window_test       |
++-------------------+
+|              NULL |
+|              27.5 |
+|              27.5 |
+| 79.99999999999999 |
+| 79.99999999999999 |
++-------------------+
 ```
 
 ## 使用 CORR 窗口函数
@@ -1223,12 +1313,12 @@ CORR() 窗口函数用于统计表达式的相关系数。
 **语法：**
 
 ```sql
-CORR(expr1, expr2) [OVER (partition_by_clause)]
+CORR(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 > 注意
 >
-> CORR() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+> 从 2.5.13 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
 
 **参数说明：**
 
@@ -1264,4 +1354,19 @@ mysql> select CORR(k, v) over (partition by no) FROM agg;
 |                 0.9988445981121532 |
 |                 0.9988445981121532 |
 +------------------------------------+
+
+mysql> select CORR(k,v) over (
+    partition by no
+    order by k
+    rows between unbounded preceding and 1 following) AS window_test
+FROM agg order by no,k;
++--------------------+
+| window_test        |
++--------------------+
+|               NULL |
+|                  1 |
+|                  1 |
+| 0.9988445981121532 |
+| 0.9988445981121532 |
++--------------------+
 ```
