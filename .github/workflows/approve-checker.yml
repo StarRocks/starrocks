@@ -59,10 +59,28 @@ jobs:
           
           cat $GITHUB_OUTPUT
 
-  meta-review:
+  meta-review-request:
     needs: info
     runs-on: [self-hosted, normal]
-    if: contains(needs.info.outputs.LABELS, 'META-REVIEW')
+    if: github.event_name == 'pull_request_target' && contains(needs.info.outputs.LABELS, 'META-REVIEW')
+    name: META-REVIEW
+
+    env:
+      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
+      REPO: ${{ github.repository }}
+      META_TEAM: test-team
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: META-REVIEW
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          ./scripts/check-approve.sh
+
+  meta-review-submit:
+    needs: info
+    runs-on: [ self-hosted, normal ]
+    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'META-REVIEW')
     name: META-REVIEW
 
     env:
