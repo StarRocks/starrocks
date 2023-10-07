@@ -187,8 +187,8 @@ private:
     // build the map from rssid to <RowsetId, segment id>
     Status _init_rowset_seg_id(Tablet* tablet);
 
-    Status _read_chunk_from_update(const RowidsToUpdateRowids& rowid_to_update_rowid,
-                                   std::vector<ChunkIteratorPtr>& update_iterators, std::vector<uint32_t>& rowids,
+    Status _read_chunk_from_update(const RowidsToUpdateRowids& rowid_to_update_rowid, const Schema& partial_schema,
+                                   Rowset* rowset, OlapReaderStatistics* stats, std::vector<uint32_t>& rowids,
                                    Chunk* result_chunk);
 
     StatusOr<std::unique_ptr<SegmentWriter>> _prepare_segment_writer(Rowset* rowset,
