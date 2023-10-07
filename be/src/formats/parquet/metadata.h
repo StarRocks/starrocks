@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <parquet/types.h>
-
 #include "common/status.h"
 #include "formats/parquet/schema.h"
 #include "gen_cpp/parquet_types.h"

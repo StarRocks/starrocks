@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <parquet/types.h>
-
 #include <cstdint>
 #include <memory>
 
