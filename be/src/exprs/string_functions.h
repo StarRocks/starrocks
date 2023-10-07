@@ -463,15 +463,6 @@ public:
     DEFINE_VECTORIZED_FN(strcmp);
 
     /**
-     * params are one strings. Returns string for url host string,
-     *
-     * @param: [string_value]
-     * @paramType: [StringColumn]
-     * @return: StringColumn
-     */
-    DEFINE_VECTORIZED_FN(url_extract_host);
-
-    /**
      * params are one strings. Returns string for url encode string,
      *
      * @param: [string_value]
@@ -532,7 +523,7 @@ private:
     };
 
     static StatusOr<ColumnPtr> parse_url_general(FunctionContext* context, const starrocks::Columns& columns);
-    static StatusOr<ColumnPtr> parse_const_urlpart(UrlParser::UrlPart* url_part, FunctionContext* context,
+    static StatusOr<ColumnPtr> parse_url_const(UrlParser::UrlPart* url_part, FunctionContext* context,
                                                    const starrocks::Columns& columns);
 
     template <LogicalType Type, bool scale_up, bool check_overflow>

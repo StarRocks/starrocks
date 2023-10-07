@@ -2517,12 +2517,6 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(url_encodeImpl, str) {
     return StringFunctions::url_encode_func(str.to_string());
 }
 
-StatusOr<ColumnPtr> StringFunctions::url_extract_host(FunctionContext* context, const starrocks::Columns& columns) {
-    UrlParser::UrlPart url_part_enum = UrlParser::HOST;
-    UrlParser::UrlPart* url_part = &url_part_enum;
-    return parse_const_urlpart(url_part, context, columns);
-}
-
 std::string StringFunctions::url_encode_func(const std::string& value) {
     std::string escaped;
     raw::stl_string_resize_uninitialized(&escaped, value.size() * 3);
@@ -3929,7 +3923,7 @@ StatusOr<ColumnPtr> StringFunctions::parse_url_general(FunctionContext* context,
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> StringFunctions::parse_const_urlpart(UrlParser::UrlPart* url_part, FunctionContext* context,
+StatusOr<ColumnPtr> StringFunctions::parse_url_const(UrlParser::UrlPart* url_part, FunctionContext* context,
                                                          const starrocks::Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
@@ -3963,7 +3957,7 @@ StatusOr<ColumnPtr> StringFunctions::parse_url(FunctionContext* context, const s
 
     if (state->const_pattern) {
         UrlParser::UrlPart* url_part = state->url_part.get();
-        return parse_const_urlpart(url_part, context, columns);
+        return parse_url_const(url_part, context, columns);
     }
 
     return parse_url_general(context, columns);
