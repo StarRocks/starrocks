@@ -456,7 +456,7 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
     // get rowset schema
-    if (!op_write.has_txn_meta() || op_write.rewrite_segments_size() == 0 || rowset_meta->segments_size() == 0 ||
+    if (!op_write.has_txn_meta() || op_write.rewrite_segments_size() == 0 || rowset_meta->num_rows() == 0 ||
         op_write.txn_meta().has_merge_condition()) {
         return Status::OK();
     }

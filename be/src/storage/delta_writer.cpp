@@ -463,7 +463,6 @@ void DeltaWriter::_reset_mem_table() {
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
     _mem_table->set_write_buffer_row(_memtable_buffer_row);
-    _mem_table->set_partial_schema_with_sort_key(_partial_schema_with_sort_key);
 }
 
 Status DeltaWriter::commit() {
