@@ -40,6 +40,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
@@ -63,6 +64,8 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+
+import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 
 public class MaterializedViewTest {
 
@@ -383,7 +386,7 @@ public class MaterializedViewTest {
         mv.setBaseIndexId(1);
         mv.setIndexMeta(1L, "mv_name", columns, 0,
                 111, (short) 2, TStorageType.COLUMN, KeysType.AGG_KEYS, null);
-        MaterializedIndex index = new MaterializedIndex(3, MaterializedIndex.IndexState.NORMAL);
+        MaterializedIndex index = new MaterializedIndex(3, IndexState.NORMAL);
         Partition partition = new Partition(2, "mv_name", index, hashDistributionInfo);
         mv.addPartition(partition);
 
@@ -784,7 +787,7 @@ public class MaterializedViewTest {
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable("CREATE TABLE test.tbl_mv_contain_index\n" +
+                .withTable("CREATE TABLE test.table1\n" +
                         "(\n" +
                         "    k1 date,\n" +
                         "    k2 int,\n" +
@@ -799,10 +802,18 @@ public class MaterializedViewTest {
                         "PROPERTIES('replication_num' = '1');")
                 .withMaterializedView("create materialized view index_mv_to_check\n" +
                         "distributed by hash(k2) buckets 3\n" +
-                        "as select k2, sum(v1) as total from tbl_mv_contain_index group by k2;");
-        String sql = "CREATE INDEX index1 ON test.index_mv_to_check (k2) USING BITMAP COMMENT 'balabala'";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, sql);
-        stmtExecutor.execute();
+                        "as select k2, sum(v1) as total from table1 group by k2;");
+        String bitmapSql = "create index index1 ON test.index_mv_to_check (k2) USING BITMAP COMMENT 'balabala'";
+        String bloomfilterSql = "alter table test.index_mv_to_check set (\"bloom_filter_columns\"=\"k2\")";
+
+        AlterTableStmt alterMVStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(bitmapSql, connectContext);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterMVStmt);
+        waitForSchemaChangeAlterJobFinish();
+
+        alterMVStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(bloomfilterSql, connectContext);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterMVStmt);
+        waitForSchemaChangeAlterJobFinish();
+
         Assert.assertEquals(QueryState.MysqlStateType.OK, connectContext.getState().getStateType());
     }
 
@@ -817,5 +828,32 @@ public class MaterializedViewTest {
         ShowResultSet showResultSet = showExecutor.execute();
         System.out.println(showResultSet.getMetaData().toString());
         System.out.println(showResultSet.getResultRows());
+    }
+
+    @Test
+    public void testAlterViewWithIndex() throws Exception {
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.table1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withView("create view index_view_to_check\n" +
+                        "as select k2, sum(v1) as total from table1 group by k2;");
+        String bitmapSql = "create index index1 ON test.index_view_to_check (k2) USING BITMAP COMMENT 'balabala'";
+        AlterTableStmt alterViewStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(bitmapSql, connectContext);
+        Assert.assertThrows("Do not support alter non-native table/materialized-view[index_view_to_check]",
+                DdlException.class,
+                () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterViewStmt));
     }
 }
