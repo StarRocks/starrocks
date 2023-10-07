@@ -14,7 +14,7 @@
 
 |配置项|描述|默认值|
 |---|---|---|
-|meta_dir|FE 节点存储元数据的路径，您需要提前创建相应路径。|${STARROCKS_HOME}/meta|
+|meta_dir|FE 节点存储元数据的路径，您需要提前创建相应路径。|`${STARROCKS_HOME}/meta`|
 |http_port|FE 节点的 HTTP Server 端口。|8030|
 |rpc_port|FE 节点的 Thrift Server 端口。|9020|
 |query_port|FE 节点的 MySQL Server 端口。|9030|
@@ -56,7 +56,7 @@ sh bin/start_fe.sh --helper <Leader_FE_IP>:<edit_log_port> --daemon
 
 |配置项|描述|默认值|
 |---|---|---|
-|storage_root_path|BE 节点存储数据路径，您需要提前创建相应路径。建议您为每个磁盘创建一个路径。|${STARROCKS_HOME}/storage|
+|storage_root_path|BE 节点存储数据路径，您需要提前创建相应路径。建议您为每个磁盘创建一个路径。|`${STARROCKS_HOME}/storage`|
 |be_port|BE 上 Thrift Server 的端口，用于接收来自 FE 的请求。|9060|
 |be_http_port|BE 上的 HTTP Server 的端口。|8040|
 |heartbeat_service_port|BE 上 Thrift server 端口，用于接收来自 FE 的心跳。|9050|

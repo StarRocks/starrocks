@@ -373,7 +373,7 @@ storage_root_path = <storage_root_path>
 
 > **说明**
 >
-> 本地缓存数据将存储在 **<storage_root_path\>/starlet_cache** 路径下。
+> 本地缓存数据将存储在 **`<storage_root_path>/starlet_cache`** 路径下。
 
 ## 使用 StarRocks 存算分离集群
 

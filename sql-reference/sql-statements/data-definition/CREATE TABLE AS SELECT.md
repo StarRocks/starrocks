@@ -40,7 +40,7 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 | **参数**          | **必填** | **描述**                                                     |
 | ----------------- | -------- | ------------------------------------------------------------ |
 | column_name       | 是       | 新表的列名。您无需指定列类型。StarRocks 会自动选择合适的列类型，并将 FLOAT 和 DOUBLE 转换为 DECIMAL(38,9)；将 CHAR、VARCHAR 和 STRING 转换为 VARCHAR(65533)。 |
-| key_desc          | 否       | 语法是 `key_type (<col_name1> [, <col_name2>, ...])`。<br>**参数**：<ul><li>`key_type`：新表的 Key 类型。有效值：`DUPLICATE KEY` 和 `PRIMARY KEY`。默认值：`DUPLICATE KEY`。</li><li> `col_name`：组成 Key 的列。</li></ul>|
+| key_desc          | 否       | 语法是 `key_type (<col_name1> [, <col_name2>, ...])`。<br />**参数**：<ul><li>`key_type`：新表的 Key 类型。有效值：`DUPLICATE KEY` 和 `PRIMARY KEY`。默认值：`DUPLICATE KEY`。</li><li> `col_name`：组成 Key 的列。</li></ul>|
 | COMMENT           | 否       | 新表注释。                                                   |
 | partition_desc    | 否       | 新表的分区方式。如不指定该参数，则默认新表为无分区。更多有关分区的设置，参见 CREATE TABLE。 |
 | distribution_desc | 否       | 新表的分桶方式。如不指定该参数，则默认新表的分桶列为使用 CBO 优化器采集的统计信息中基数最高的列，且分桶数量默认为 10。如果 CBO 优化器没有采集基数信息，则默认新表的第一列为分桶列。更多有关分桶的设置，参见 CREATE TABLE。 |

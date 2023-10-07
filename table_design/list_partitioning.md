@@ -21,7 +21,7 @@ List 分区适用于存储具有少量枚举值列的数据、并且经常按列
 | 分区方式                                     | **List 分区**                                                | **表达式分区**                                               |
 | -------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | 语法                                         | `PARTITION BY LIST (partition_columns)（    PARTITION <partition_name> VALUES IN (value_list)    [, ...] )` | `PARTITION BY <partition_columns>`                           |
-| 一个分区中包含各分区列的多值                 | 支持。一个分区中可以包含各分区列的多值。如下所示，如果导入数据的 `city` 列值为 `Los Angeles`、`San Francisco` 或 `San Diego`，则都被划分在一个分区 `pCalifornia` 中。<br>`PARTITION BY LIST (city) (    PARTITION pCalifornia VALUES IN ("Los Angeles","San Francisco","San Diego")    [, ...] )` | 不支持。一个分区中只包含在各分区列上应用表达式来计算出一个值。例如使用表达式分区 `PARTITION BY (city)` ，并且所导入多行数据的 `city` 列值包含 `Los Angeles`、`San Francisco` 或 `San Diego`，则会自动创建三个分区 `pLosAngeles` 、`pSanFrancisco` 和 `pSanDiego` ，分别包含 `city` 列值为`Los Angeles`、`San Francisco` 和 `San Diego` 的数据。 |
+| 一个分区中包含各分区列的多值                 | 支持。一个分区中可以包含各分区列的多值。如下所示，如果导入数据的 `city` 列值为 `Los Angeles`、`San Francisco` 或 `San Diego`，则都被划分在一个分区 `pCalifornia` 中。<br />`PARTITION BY LIST (city) (    PARTITION pCalifornia VALUES IN ("Los Angeles","San Francisco","San Diego")    [, ...] )` | 不支持。一个分区中只包含在各分区列上应用表达式来计算出一个值。例如使用表达式分区 `PARTITION BY (city)` ，并且所导入多行数据的 `city` 列值包含 `Los Angeles`、`San Francisco` 或 `San Diego`，则会自动创建三个分区 `pLosAngeles` 、`pSanFrancisco` 和 `pSanDiego` ，分别包含 `city` 列值为`Los Angeles`、`San Francisco` 和 `San Diego` 的数据。 |
 | 导入数据前需要提前建分区                     | 必须，并且是在建表时就创建分区。                             | 不需要，导入数据时自动创建分区。                             |
 | 导入数据时自动建分区                         | 不支持。导入数据时，如果表中不存在数据对应的分区，StarRocks 不会自动创建分区，并且会报错。 | 支持。导入数据时，如果表中不存在数据对应的分区，则 StarRocks 自动创建分区并将导入数据，并且一个分区只包含各分区列的一个值。 |
 | SHOW CERATE TABLE                            | 返回建表语句定义的分区。                                     | 导入数据后，执行该命令，返回结果会包含建表时分区子句，即 `PARTITION BY (partition_columns)`，但是不会返回自动创建的分区。如果您需要查看自动创建的分区，请执行 `SHOW PARTITIONS FROM table_name;` 。 |
@@ -50,7 +50,7 @@ value_item ::=
 
 | 参数                | 是否必填 | 参数                                                         |
 | ------------------- | -------- | ------------------------------------------------------------ |
-| `partition_columns` | 是       | 分区列。<br>分区列的值支持为字符串（除 BINARY）、日期（DATE 和 DATETIME）、整数和布尔值。分区列的值不支持为 `NULL`。 |
+| `partition_columns` | 是       | 分区列。<br />分区列的值支持为字符串（除 BINARY）、日期（DATE 和 DATETIME）、整数和布尔值。分区列的值不支持为 `NULL`。 |
 | `partition_name`    | 是       | 分区名称。建议您按照业务场景设置合理的分区名称，便于区别不同分区包含的数据分类。 |
 | `value_list`        |          | 分区中分区列的枚举值列表。                                   |
 

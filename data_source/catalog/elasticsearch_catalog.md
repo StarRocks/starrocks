@@ -69,16 +69,16 @@ PROPERTIES
 
 StarRocks 支持对 Elasticsearch 表进行谓词下推，把过滤条件推给 Elasticsearch 进行执行，让执行尽量靠近存储，提高查询性能。目前支持下推的算子见下表：
 
-| SQL syntax   | Elasticsearch syntax  |
-| ------------ | --------------------- |
-| =            | term query            |
-| in           | terms query           |
-| >=, <=, >, < | range                 |
-| and          | bool.filter           |
-| or           | bool.should           |
-| not          | bool.must_not         |
-| not in       | bool.must_not + terms |
-| esquery      | ES Query DSL          |
+| SQL syntax           | Elasticsearch syntax  |
+| -------------------- | --------------------- |
+| `=`                  | term query            |
+| `in`                 | terms query           |
+| `>=`, `<=`, `>`, `<` | range                 |
+| `and`                | bool.filter           |
+| `or`                 | bool.should           |
+| `not`                | bool.must_not         |
+| `not in`             | bool.must_not + terms |
+| `esquery`            | ES Query DSL          |
 
 ## 查询示例
 

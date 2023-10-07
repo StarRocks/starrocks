@@ -140,7 +140,7 @@ Schema Change 遵循以下原则：
 
 由于 Inactive 状态的物化视图其数据一致性无法保证，您可以使用以下方法修复：
 
-- **手动修复**：您可以通过执行 ALTER MATERIALIZED VIEW <mv_name\> ACTIVE 手动修复 Inactive 状态的物化视图。此语句将根据物化视图原始 SQL 定义尝试重建。需要注意的是，重建时需保证在底层 Schema Change 之后， SQL 定义仍然有效，否则操作将失败。
+- **手动修复**：您可以通过执行 ALTER MATERIALIZED VIEW `<mv_name>` ACTIVE 手动修复 Inactive 状态的物化视图。此语句将根据物化视图原始 SQL 定义尝试重建。需要注意的是，重建时需保证在底层 Schema Change 之后， SQL 定义仍然有效，否则操作将失败。
 - **自动修复**：StarRocks 将尝试自动激活 Inactive 状态的物化视图，但时效性无法保证。
 
 ## 分区建模

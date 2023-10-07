@@ -26,7 +26,7 @@ StarRocks 1.18 版本开始起，Decimal 类型支持更高精度的 Fast Decima
 
 主要优化有：
 
-1. 内部采用多种宽度的整数来表示 Decimal。比如使用 64-bit 整数来表示 P <= 18 的 Decimal 数值。相比于 Decimal V2 统一采用 128-bit 整数，算数运算和转换运算在 64-bit 的处理器上使用更少的指令，因此性能有大幅提升。
+1. 内部采用多种宽度的整数来表示 Decimal。比如使用 64-bit 整数来表示 P &le; 18 的 Decimal 数值。相比于 Decimal V2 统一采用 128-bit 整数，算数运算和转换运算在 64-bit 的处理器上使用更少的指令，因此性能有大幅提升。
 
 2. 和 Decimal V2 相比，Fast Decimal 的算法做了极致的优化，尤其是乘法运算，性能提升有 4 倍左右。
 

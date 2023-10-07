@@ -58,7 +58,7 @@
 
 | 对象                                             | 权限            | 用途                                       |
 | ------------------------------------------------ | --------------- | ------------------------------------------ |
-| CATALOG <br>（内部目录，默认名称为 default_catalog） | USAGE           | 使用 internal catalog。                    |
+| CATALOG <br />（内部目录，默认名称为 default_catalog） | USAGE           | 使用 internal catalog。                    |
 |                                                  | CREATE DATABASE | 在 internal catalog 里创建数据库。         |
 |                                                  | ALL             | 拥有对 internal catalog 的上述所有权限。   |
 | CATALOG （外部目录）                             | USAGE           | 使用 external catalog，查看里面的表。      |
@@ -139,7 +139,7 @@
 | 备份与恢复     | BACKUP，RESTORE                 | 拥有数据库的 `LOAD_PRIV` 权限即可对该数据库及其下的任意表进行备份恢复。 | 管理员需要重新对用户赋权，以保证用户可以执行`BACKUP`和`RESTORE`操作。 |
 | 删除后复原     | RECOVER 数据库或表            | 拥有对应数据库或表的 `ALTER_PRIV，CREATE_PRIV`，`DROP_PRIV` 权限即可对库或表进行复原。 | 您需要拥有 default_catalog 的 CREATE DATABASE 权限才可以恢复数据库；需要拥有对应数据库的 CREATE TABLE 和对应表的 DROP 权限。 |
 | 创建、更改用户 | CREATE USER，ALTER USER         | 拥有数据库的 `GRANT_PRIV` 权限即可创建和更改用户。           | 您需要拥有 `user_admin` 角色才可以执行`CREATE USER`和`ALTER USER`操作。 |
-| 授予和收回权限 | GRANT，REVOKE                   | 拥有各对象的 `GRANT_PRIV` 权限即可将对应对象的权限授予给其他用户或角色。 | 升级后，您仍旧可以将您在该对象上已经拥有的权限赋予给其他用户或角色。<br>在新的权限系统中：<ul><li>拥有 `user_admin` 角色的用户才可以将任意权限授予给任意用户和角色。</li><li>当您的授权语句包含`WITH GRANT OPTION`时，您可以将该语句涉及的权限授予给其他用户或角色。 </li></ul>|
+| 授予和收回权限 | GRANT，REVOKE                   | 拥有各对象的 `GRANT_PRIV` 权限即可将对应对象的权限授予给其他用户或角色。 | 升级后，您仍旧可以将您在该对象上已经拥有的权限赋予给其他用户或角色。<br />在新的权限系统中：<ul><li>拥有 `user_admin` 角色的用户才可以将任意权限授予给任意用户和角色。</li><li>当您的授权语句包含`WITH GRANT OPTION`时，您可以将该语句涉及的权限授予给其他用户或角色。 </li></ul>|
 
 在 2.x 版本中，StarRocks 的角色实现并不完全。当您将角色赋予给用户时，StarRocks 直接将角色所有的权限赋予给用户，而并不是将角色本身赋予给用户。从而在老版本中，StarRocks 的用户和角色并没有直接的从属关系。
 

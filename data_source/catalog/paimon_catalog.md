@@ -95,7 +95,7 @@ StarRocks 访问 Paimon 集群元数据的相关参数配置。
 | ------------------------ | -------- | ------------------------------------------------------------ |
 | paimon.catalog.type      | 是       | Paimon 使用的元数据类型。设置为 `filesystem` 或 `hive`。           |
 | paimon.catalog.warehouse | 是       | Paimon 数据所在的 Warehouse 存储路径。 |
-| hive.metastore.uris      | 否       | HMS 的 URI， 格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。仅在 `paimon.catalog.type` = `hive` 时设置。<br>如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
+| hive.metastore.uris      | 否       | HMS 的 URI， 格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。仅在 `paimon.catalog.type` = `hive` 时设置。<br />如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
 
 > **说明**
 >
@@ -181,8 +181,8 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
 
 | 参数                             | 是否必须   | 说明                                                  |
 | -------------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.enable_ssl                | Yes      | 是否开启 SSL 连接。<br>取值范围：`true` 和 `false`。默认值：`true`。 |
-| aws.s3.enable_path_style_access  | Yes      | 是否开启路径类型访问 (Path-Style Access)。<br>取值范围：`true` 和 `false`。默认值：`false`。对于 MinIO，必须设置为 `true`。<br>路径类型 URL 使用如下格式：`https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。例如，如果您在美国西部（俄勒冈）区域中创建一个名为 `DOC-EXAMPLE-BUCKET1` 的存储桶，并希望访问该存储桶中的 `alice.jpg` 对象，则可使用以下路径类型 URL：`https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。 |
+| aws.s3.enable_ssl                | Yes      | 是否开启 SSL 连接。<br />取值范围：`true` 和 `false`。默认值：`true`。 |
+| aws.s3.enable_path_style_access  | Yes      | 是否开启路径类型访问 (Path-Style Access)。<br />取值范围：`true` 和 `false`。默认值：`false`。对于 MinIO，必须设置为 `true`。<br />路径类型 URL 使用如下格式：`https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。例如，如果您在美国西部（俄勒冈）区域中创建一个名为 `DOC-EXAMPLE-BUCKET1` 的存储桶，并希望访问该存储桶中的 `alice.jpg` 对象，则可使用以下路径类型 URL：`https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。 |
 | aws.s3.endpoint                  | Yes      | 用于访问兼容 S3 协议的对象存储的 Endpoint。 |
 | aws.s3.access_key                | Yes      | IAM User 的 Access Key。 |
 | aws.s3.secret_key                | Yes      | IAM User 的 Secret Key。 |
