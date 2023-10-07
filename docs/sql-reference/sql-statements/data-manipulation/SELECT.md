@@ -779,11 +779,11 @@ Example:
 select c1 from t1 where month between 1 and 6;
 ```
 
-#### Comparison operator
+#### Comparison operators
 
-The comparison operator is used to determine whether columns and columns are equal or to sort them. =,!=, >= All data types are available.
+Comparison operators are used to compare two values. `=`, `!=`, `>=` apply to all data types.
 
-The `<>` and `!=` operators indicate that value `a` is not equal to value `b`.
+The `<>` and `!=` operators are equivalent, which indicate that two values are not equal.
 
 #### In Operator
 
