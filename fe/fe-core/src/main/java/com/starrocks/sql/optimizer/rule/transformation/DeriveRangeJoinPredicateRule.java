@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -165,19 +166,23 @@ public class DeriveRangeJoinPredicateRule extends TransformationRule {
                     // A > l > B
                     if (isLeft) {
                         // l > B -> l-lower > B
-                        rightPredicates.add(new BinaryPredicateOperator(BinaryType.LE, binary.getChild(1), upper));
+                        rightPredicates.add(new BinaryPredicateOperator(BinaryType.LE,
+                                replaceColRef(binary.getChild(1), rightOp), upper));
                     } else {
                         // A > l -> A > l-upper
-                        leftPredicates.add(new BinaryPredicateOperator(BinaryType.GE, binary.getChild(0), lower));
+                        leftPredicates.add(new BinaryPredicateOperator(BinaryType.GE,
+                                replaceColRef(binary.getChild(0), leftOp), lower));
                     }
                 } else if (BinaryType.LE.equals(type) || BinaryType.LT.equals(type)) {
                     // A < l < B
                     if (isLeft) {
                         // l < B -> l-lower < B
-                        rightPredicates.add(new BinaryPredicateOperator(BinaryType.GE, binary.getChild(1), lower));
+                        rightPredicates.add(new BinaryPredicateOperator(BinaryType.GE,
+                                replaceColRef(binary.getChild(1), rightOp), lower));
                     } else {
                         // A < l -> A < l-upper
-                        leftPredicates.add(new BinaryPredicateOperator(BinaryType.LE, binary.getChild(0), upper));
+                        leftPredicates.add(new BinaryPredicateOperator(BinaryType.LE,
+                                replaceColRef(binary.getChild(0), leftOp), upper));
                     }
                 }
             }
@@ -239,5 +244,19 @@ public class DeriveRangeJoinPredicateRule extends TransformationRule {
                 context.getTaskContext().getOptimizerContext());
         sc.estimatorStats();
         optExpression.setStatistics(ec.getStatistics());
+    }
+
+    private ScalarOperator replaceColRef(ScalarOperator scalarOperator, LogicalOperator op) {
+        if (op.getProjection() != null) {
+            ColumnRefSet outputCols = new ColumnRefSet(op.getProjection().getOutputColumns());
+            if (outputCols.isIntersect(scalarOperator.getUsedColumns())) {
+                // need use the original output cols from the operator to rewrite the scalarOperator
+                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(
+                        op.getProjection().getColumnRefMap(), false);
+                return rewriter.rewrite(scalarOperator);
+            }
+        }
+
+        return scalarOperator;
     }
 }
