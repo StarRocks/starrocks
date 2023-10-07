@@ -1345,14 +1345,8 @@ public class PartitionBasedMvRefreshProcessorTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
 
-        HashMap<String, String> taskRunProperties = new HashMap<>();
-        taskRunProperties.put(PARTITION_START, "20230801");
-        taskRunProperties.put(TaskRun.PARTITION_END, "20230805");
-        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
-        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
-        TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
-        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
-        taskRun.executeTaskRun();
+        starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " force with sync mode");
+
 
         List<String> partitions =
                 materializedView.getPartitions().stream().map(Partition::getName).sorted().collect(Collectors.toList());

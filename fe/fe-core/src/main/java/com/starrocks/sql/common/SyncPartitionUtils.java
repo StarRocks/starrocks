@@ -239,7 +239,7 @@ public class SyncPartitionUtils {
 
     private static Range<PartitionKey> convertToDatePartitionRange(Range<PartitionKey> range) {
         LiteralExpr lower = range.lowerEndpoint().getKeys().get(0);
-        LiteralExpr upper = range.lowerEndpoint().getKeys().get(0);
+        LiteralExpr upper = range.upperEndpoint().getKeys().get(0);
         if (lower instanceof DateLiteral) {
             return range;
         }
