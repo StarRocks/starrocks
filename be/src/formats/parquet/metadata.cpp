@@ -24,8 +24,13 @@ Status FileMetaData::init(const tparquet::FileMetaData& t_metadata, bool case_se
     // construct schema from thrift
     RETURN_IF_ERROR(_schema.from_thrift(t_metadata.schema, case_sensitive));
     _num_rows = t_metadata.num_rows;
-
     _t_metadata = t_metadata;
+
+    if (_t_metadata.__isset.created_by) {
+        _writer_version = ApplicationVersion(_t_metadata.created_by);
+    } else {
+        _writer_version = ApplicationVersion("unknown 0.0.0");
+    }
     return Status::OK();
 }
 
@@ -378,6 +383,47 @@ bool ApplicationVersion::VersionLt(const ApplicationVersion& other_version) cons
 bool ApplicationVersion::VersionEq(const ApplicationVersion& other_version) const {
     return application_ == other_version.application_ && version.major == other_version.version.major &&
            version.minor == other_version.version.minor && version.patch == other_version.version.patch;
+}
+
+bool ApplicationVersion::HasCorrectStatistics(const tparquet::ColumnMetaData& column_meta,
+                                              const SortOrder& sort_order) const {
+    // parquet-cpp version 1.3.0 and parquet-mr 1.10.0 onwards stats are computed
+    // correctly for all types
+    if (VersionLt(ApplicationVersion::PARQUET_MR_FIXED_STATS_VERSION()) ||
+        VersionLt(ApplicationVersion::PARQUET_CPP_FIXED_STATS_VERSION())) {
+        // Only SIGNED are valid unless max and min are the same
+        // (in which case the sort order does not matter)
+        auto min_equals_max = (column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.max_value &&
+                               column_meta.statistics.min_value == column_meta.statistics.max_value) ||
+                              (column_meta.statistics.__isset.min && column_meta.statistics.__isset.max &&
+                               column_meta.statistics.min == column_meta.statistics.max);
+        if (SortOrder::SIGNED != sort_order && !min_equals_max) {
+            return false;
+        }
+
+        auto col_type = column_meta.type;
+        // Statistics of other types are OK
+        if (col_type != ::tparquet::Type::FIXED_LEN_BYTE_ARRAY && col_type != ::tparquet::Type::BYTE_ARRAY) {
+            return true;
+        }
+    }
+
+    // created_by is not populated, which could have been caused by
+    // parquet-mr during the same time as PARQUET-251, see PARQUET-297
+    if (application_ == "unknown") {
+        return true;
+    }
+
+    if (SortOrder::UNKNOWN == sort_order) {
+        return false;
+    }
+
+    // PARQUET-251
+    if (VersionLt(ApplicationVersion::PARQUET_251_FIXED_VERSION())) {
+        return false;
+    }
+
+    return true;
 }
 
 } // namespace starrocks::parquet

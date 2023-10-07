@@ -102,7 +102,7 @@ private:
                                   const tparquet::ColumnOrder* column_order, ColumnPtr* min_column,
                                   ColumnPtr* max_column, bool* decode_ok) const;
 
-    bool _can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order) const;
+    bool _has_correct_min_max_stats(const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order) const;
 
     // get the data page start offset in parquet file
     static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group);

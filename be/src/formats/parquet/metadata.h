@@ -22,63 +22,11 @@
 
 namespace starrocks::parquet {
 
-// Class corresponding to FileMetaData in thrift
-class FileMetaData {
-public:
-    FileMetaData() = default;
-    ~FileMetaData() = default;
-
-    Status init(const tparquet::FileMetaData& t_metadata, bool case_sensitive);
-
-    uint64_t num_rows() const { return _num_rows; }
-
-    std::string debug_string() const;
-
-    const tparquet::FileMetaData& t_metadata() const { return _t_metadata; }
-
-    const SchemaDescriptor& schema() const { return _schema; }
-
-private:
-    tparquet::FileMetaData _t_metadata;
-    uint64_t _num_rows{0};
-    SchemaDescriptor _schema;
-};
-
 enum SortOrder {
     SIGNED,
     UNSIGNED,
     UNKNOWN,
 };
-
-// reference both be/src/formats/parquet/column_converter.cpp
-// and https://github.com/apache/parquet-format/blob/master/LogicalTypes.md
-SortOrder sort_order_of_logical_type(LogicalType type) {
-    switch (type) {
-    case TYPE_BOOLEAN:
-    case TYPE_TINYINT:
-    case TYPE_SMALLINT:
-    case TYPE_INT:
-    case TYPE_BIGINT:
-    case TYPE_FLOAT:
-    case TYPE_DOUBLE:
-    case TYPE_DECIMAL:
-    case TYPE_DECIMALV2:
-    case TYPE_DECIMAL32:
-    case TYPE_DECIMAL64:
-    case TYPE_DECIMAL128:
-    case TYPE_DATE:
-    case TYPE_DATETIME:
-    case TYPE_TIME:
-        return SortOrder::SIGNED;
-    case TYPE_CHAR:
-    case TYPE_VARCHAR:
-    case TYPE_BINARY:
-    case TYPE_VARBINARY:
-        return SortOrder::UNSIGNED;
-    default:
-        return SortOrder::UNKNOWN;
-    }
-}
 
 // port from https://github.com/apache/arrow/blob/da6dbd48607089d716505054176e345b704570c5/cpp/src/parquet/metadata.h#L54
 class ApplicationVersion {
@@ -118,6 +66,64 @@ public:
 
     // Returns true if version is strictly equal with other_version
     bool VersionEq(const ApplicationVersion& other_version) const;
+
+    // Checks if the Version has the correct statistics for a given column
+    bool HasCorrectStatistics(const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order) const;
 };
+
+// Class corresponding to FileMetaData in thrift
+class FileMetaData {
+public:
+    FileMetaData() = default;
+    ~FileMetaData() = default;
+
+    Status init(const tparquet::FileMetaData& t_metadata, bool case_sensitive);
+
+    uint64_t num_rows() const { return _num_rows; }
+
+    std::string debug_string() const;
+
+    const tparquet::FileMetaData& t_metadata() const { return _t_metadata; }
+
+    const SchemaDescriptor& schema() const { return _schema; }
+
+    const ApplicationVersion& writer_version() const { return _writer_version; }
+
+private:
+    tparquet::FileMetaData _t_metadata;
+    uint64_t _num_rows{0};
+    SchemaDescriptor _schema;
+    ApplicationVersion _writer_version;
+};
+
+// reference both be/src/formats/parquet/column_converter.cpp
+// and https://github.com/apache/parquet-format/blob/master/LogicalTypes.md
+SortOrder sort_order_of_logical_type(LogicalType type) {
+    switch (type) {
+    case TYPE_BOOLEAN:
+    case TYPE_TINYINT:
+    case TYPE_SMALLINT:
+    case TYPE_INT:
+    case TYPE_BIGINT:
+    case TYPE_FLOAT:
+    case TYPE_DOUBLE:
+    case TYPE_DECIMAL:
+    case TYPE_DECIMALV2:
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
+    case TYPE_DATE:
+    case TYPE_DATETIME:
+    case TYPE_TIME:
+        return SortOrder::SIGNED;
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+    case TYPE_BINARY:
+    case TYPE_VARBINARY:
+        return SortOrder::UNSIGNED;
+    default:
+        return SortOrder::UNKNOWN;
+    }
+}
 
 } // namespace starrocks::parquet
