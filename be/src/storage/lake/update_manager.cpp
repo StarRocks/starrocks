@@ -493,9 +493,8 @@ size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
 }
 
 Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction,
-                                                 const TabletMetadata& metadata, Tablet* tablet,
-                                                 IndexEntry* index_entry, MetaFileBuilder* builder,
-                                                 int64_t base_version) {
+                                                 const TabletMetadata& metadata, Tablet tablet, IndexEntry* index_entry,
+                                                 MetaFileBuilder* builder, int64_t base_version) {
     std::stringstream cost_str;
     MonotonicStopWatch watch;
     watch.start();
@@ -550,7 +549,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     VLOG(2) << strings::Substitute(
             "lake publish_primary_compaction: tablet_id:$0 input_rowset_size:$1 max_rowset_id:$2"
             " total_deletes:$3 total_rows:$4 base_ver:$5 new_ver:$6 cost:$7",
-            tablet->id(), op_compaction.input_rowsets_size(), max_rowset_id, total_deletes, total_rows, base_version,
+            tablet.id(), op_compaction.input_rowsets_size(), max_rowset_id, total_deletes, total_rows, base_version,
             metadata.version(), cost_str.str());
     _print_memory_stats();
 

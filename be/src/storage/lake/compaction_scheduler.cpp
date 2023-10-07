@@ -23,12 +23,11 @@
 #include <thread>
 
 #include "common/status.h"
-#include "gutil/macros.h"
+#include "fs/fs.h"
 #include "gutil/stl_util.h"
 #include "runtime/exec_env.h"
 #include "service/service_be/lake_service.h"
 #include "storage/lake/compaction_task.h"
-#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "testutil/sync_point.h"
 #include "util/threadpool.h"
