@@ -43,12 +43,16 @@ import com.starrocks.common.Pair;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.thrift.TPulsarMessageId;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 public class RoutineLoadDataSourceProperties implements ParseNode {
+    private static final Logger LOG = LogManager.getLogger(RoutineLoadDataSourceProperties.class);
 
     private static final ImmutableSet<String> CONFIGURABLE_KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
             .add(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY)
@@ -58,7 +62,7 @@ public class RoutineLoadDataSourceProperties implements ParseNode {
 
     private static final ImmutableSet<String> CONFIGURABLE_PULSAR_PROPERTIES_SET = new ImmutableSet.Builder<String>()
             .add(CreateRoutineLoadStmt.PULSAR_PARTITIONS_PROPERTY)
-            .add(CreateRoutineLoadStmt.PULSAR_INITIAL_POSITIONS_PROPERTY)
+            .add(CreateRoutineLoadStmt.PULSAR_POSITIONS_PROPERTY)
             .build();
 
     @SerializedName(value = "type")
@@ -73,6 +77,8 @@ public class RoutineLoadDataSourceProperties implements ParseNode {
 
     @SerializedName(value = "pulsarPartitionInitialPositions")
     private List<Pair<String, Long>> pulsarPartitionInitialPositions = Lists.newArrayList();
+    @SerializedName(value = "pulsarPartitionPositions")
+    private List<Pair<String, TPulsarMessageId>> pulsarPartitionPositions = Lists.newArrayList();
     @SerializedName(value = "customPulsarProperties")
     private Map<String, String> customPulsarProperties = Maps.newHashMap();
     @SerializedName(value = "confluentSchemaRegistryUrl")
@@ -103,7 +109,7 @@ public class RoutineLoadDataSourceProperties implements ParseNode {
         if (type.equals("KAFKA")) {
             return !kafkaPartitionOffsets.isEmpty() || !customKafkaProperties.isEmpty();
         } else if (type.equals("PULSAR")) {
-            return !pulsarPartitionInitialPositions.isEmpty() || !customPulsarProperties.isEmpty();
+            return !pulsarPartitionPositions.isEmpty() || !customPulsarProperties.isEmpty();
         } else {
             return false;
         }
@@ -125,8 +131,8 @@ public class RoutineLoadDataSourceProperties implements ParseNode {
         return customKafkaProperties;
     }
 
-    public List<Pair<String, Long>> getPulsarPartitionInitialPositions() {
-        return pulsarPartitionInitialPositions;
+    public List<Pair<String, TPulsarMessageId>> getPulsarPartitionPositions() {
+        return pulsarPartitionPositions;
     }
 
     public Map<String, String> getCustomPulsarProperties() {
@@ -204,23 +210,23 @@ public class RoutineLoadDataSourceProperties implements ParseNode {
         List<String> pulsarPartitions = Lists.newArrayList();
         final String pulsarPartitionsString = properties.get(CreateRoutineLoadStmt.PULSAR_PARTITIONS_PROPERTY);
         if (pulsarPartitionsString != null) {
-            if (!properties.containsKey(CreateRoutineLoadStmt.PULSAR_INITIAL_POSITIONS_PROPERTY) &&
-                    !customPulsarProperties.containsKey(CreateRoutineLoadStmt.PULSAR_DEFAULT_INITIAL_POSITION)) {
+            if (!properties.containsKey(CreateRoutineLoadStmt.PULSAR_POSITIONS_PROPERTY) &&
+                    !customPulsarProperties.containsKey(CreateRoutineLoadStmt.PULSAR_DEFAULT_POSITION)) {
                 throw new AnalysisException("Partition and [default]position must be specified at the same time");
             }
             CreateRoutineLoadStmt.analyzePulsarPartitionProperty(pulsarPartitionsString,
-                    customPulsarProperties, pulsarPartitions, pulsarPartitionInitialPositions);
+                    customPulsarProperties, pulsarPartitions, pulsarPartitionPositions);
         } else {
-            if (properties.containsKey(CreateRoutineLoadStmt.PULSAR_INITIAL_POSITIONS_PROPERTY)) {
+            if (properties.containsKey(CreateRoutineLoadStmt.PULSAR_POSITIONS_PROPERTY)) {
                 throw new AnalysisException("Missing pulsar partition info");
             }
         }
 
         // check position
-        String pulsarPositionsString = properties.get(CreateRoutineLoadStmt.PULSAR_INITIAL_POSITIONS_PROPERTY);
+        String pulsarPositionsString = properties.get(CreateRoutineLoadStmt.PULSAR_POSITIONS_PROPERTY);
         if (pulsarPositionsString != null) {
             CreateRoutineLoadStmt.analyzePulsarPositionProperty(pulsarPositionsString,
-                    pulsarPartitions, pulsarPartitionInitialPositions);
+                    pulsarPartitions, pulsarPartitionPositions);
         }
     }
 
@@ -236,8 +242,8 @@ public class RoutineLoadDataSourceProperties implements ParseNode {
             sb.append(", kafka partition offsets: ").append(kafkaPartitionOffsets);
             sb.append(", custom properties: ").append(customKafkaProperties);
         } else if (type.equals("PULSAR")) {
-            if (!pulsarPartitionInitialPositions.isEmpty()) {
-                sb.append(", pulsar partition initial positions: ").append(pulsarPartitionInitialPositions);
+            if (!pulsarPartitionPositions.isEmpty()) {
+                sb.append(", pulsar partition initial positions: ").append(pulsarPartitionPositions);
             }
             sb.append(", custom properties: ").append(customPulsarProperties);
         }

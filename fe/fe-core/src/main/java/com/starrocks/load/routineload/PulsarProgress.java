@@ -12,16 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.load.routineload;
 
 import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
-import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksFEMetaVersion;
+import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.PulsarUtil;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TPulsarMessageId;
 import com.starrocks.thrift.TPulsarRLTaskProgress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -29,7 +35,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,11 +47,14 @@ import java.util.Map;
 public class PulsarProgress extends RoutineLoadProgress {
     private static final Logger LOG = LogManager.getLogger(PulsarProgress.class);
 
-    // (partition, backlog num)
-    @SerializedName("pbl")
-    private Map<String, Long> partitionToBacklogNum = Maps.newConcurrentMap();
-    // Initial positions will only be used at first schedule
-    private Map<String, Long> partitionToInitialPosition = Maps.newConcurrentMap();
+    // https://github.com/apache/pulsar/blob/master/pulsar-client-api/src/main/java/org/apache/pulsar/client/api/MessageId.java#L86
+    public static TPulsarMessageId messageIdEarliest = new TPulsarMessageId(-1, -1L, -1, -1);
+    public static TPulsarMessageId messageIdLatest = new TPulsarMessageId(9223372036854775807L, 9223372036854775807L, -1, -1);
+    public static final String POSITION_EARLIEST = "POSITION_EARLIEST";
+    public static final String POSITION_LATEST = "POSITION_LATEST";
+
+    // (partition id -> begin position)
+    private Map<String, TPulsarMessageId> partitionToPosition = Maps.newConcurrentMap();
 
     public PulsarProgress() {
         super(LoadDataSourceType.PULSAR);
@@ -54,12 +62,12 @@ public class PulsarProgress extends RoutineLoadProgress {
 
     public PulsarProgress(TPulsarRLTaskProgress tPulsarRLTaskProgress) {
         super(LoadDataSourceType.PULSAR);
-        this.partitionToBacklogNum = tPulsarRLTaskProgress.getPartitionBacklogNum();
+        this.partitionToPosition = tPulsarRLTaskProgress.getPartitionCmtPosition();
     }
 
-    public Map<String, Long> getPartitionToInitialPosition(List<String> partitions) {
-        Map<String, Long> result = Maps.newHashMap();
-        for (Map.Entry<String, Long> entry : partitionToInitialPosition.entrySet()) {
+    public Map<String, TPulsarMessageId> getPartitionToPosition(List<String> partitions) {
+        Map<String, TPulsarMessageId> result = Maps.newHashMap();
+        for (Map.Entry<String, TPulsarMessageId> entry : partitionToPosition.entrySet()) {
             for (String partition : partitions) {
                 if (entry.getKey().equals(partition)) {
                     result.put(partition, entry.getValue());
@@ -69,72 +77,84 @@ public class PulsarProgress extends RoutineLoadProgress {
         return result;
     }
 
-    public List<Long> getBacklogNums() {
-        return new ArrayList<Long>(partitionToBacklogNum.values());
-    }
-
-    public Long getInitialPosition(String partition) {
-        if (partitionToInitialPosition.containsKey(partition)) {
-            return partitionToInitialPosition.get(partition);
+    public TPulsarMessageId getPositionByPartition(String partition) {
+        if (partitionToPosition.containsKey(partition)) {
+            return partitionToPosition.get(partition);
         } else {
-            return -1L;
+            return messageIdLatest;
         }
     }
 
-    public void addPartitionToInitialPosition(Pair<String, Long> partitionToInitialPosition) {
-        this.partitionToInitialPosition.put(partitionToInitialPosition.first, partitionToInitialPosition.second);
+    public void addPartitionToPosition(Pair<String, TPulsarMessageId> partitionToPosition) {
+        this.partitionToPosition.put(partitionToPosition.first, partitionToPosition.second);
     }
 
-    public void modifyInitialPositions(List<Pair<String, Long>> partitionInitialPositions) {
-        for (Pair<String, Long> pair : partitionInitialPositions) {
-            this.partitionToInitialPosition.put(pair.first, pair.second);
+    public void modifyPosition(List<Pair<String, TPulsarMessageId>> partitionToPositions) {
+        for (Pair<String, TPulsarMessageId> pair : partitionToPositions) {
+            this.partitionToPosition.put(pair.first, pair.second);
         }
     }
 
-    public void unprotectUpdate(List<String> currentPartitions, Long defaultInitialPosition) {
-        partitionToInitialPosition.keySet().stream()
-                .filter(entry -> !currentPartitions.contains(entry))
-                .forEach(entry -> partitionToInitialPosition.remove(entry));
+    // convert position of POSITION_LATEST to latest message id
+    public void convertPosition(String serviceUrl, String topic, String subscription,
+                                Map<String, String> properties) throws UserException {
+        List<String> latestPartitions = Lists.newArrayList();
+        for (Map.Entry<String, TPulsarMessageId> entry : partitionToPosition.entrySet()) {
+            String partition = entry.getKey();
+            TPulsarMessageId position = entry.getValue();
+            if (PulsarUtil.messageIdEq(position, messageIdLatest)) {
+                latestPartitions.add(partition);
+            }
+        }
 
-        if (defaultInitialPosition != null) {
-            currentPartitions.stream()
-                    .filter(entry -> !partitionToInitialPosition.containsKey(entry))
-                    .forEach(entry -> partitionToInitialPosition.put(entry, defaultInitialPosition));
+        if (!latestPartitions.isEmpty()) {
+            Map<String, TPulsarMessageId> partitionPositions = PulsarUtil.getLatestMessageIds(
+                    serviceUrl, topic, subscription, ImmutableMap.copyOf(properties), latestPartitions);
+            partitionToPosition.putAll(partitionPositions);
         }
     }
 
-    private void getReadableProgress(Map<String, String> showPartitionIdToPosition) {
-        for (Map.Entry<String, Long> entry : partitionToBacklogNum.entrySet()) {
-            showPartitionIdToPosition.put(entry.getKey() + "(BacklogNum)", String.valueOf(entry.getValue()));
+    public boolean containsPartition(String pulsarPartition) {
+        return partitionToPosition.containsKey(pulsarPartition);
+    }
+
+    private void getReadableProgress(Map<String, String> showPartitionToPosition) {
+        for (Map.Entry<String, TPulsarMessageId> entry : partitionToPosition.entrySet()) {
+            TPulsarMessageId messageId = entry.getValue();
+            if (entry.getValue() == messageIdEarliest) {
+                showPartitionToPosition.put(entry.getKey(), POSITION_EARLIEST);
+            } else if (entry.getValue() == messageIdLatest) {
+                showPartitionToPosition.put(entry.getKey(), POSITION_LATEST);
+            } else {
+                showPartitionToPosition.put(entry.getKey(), PulsarUtil.formatMessageId(messageId));
+            }
         }
     }
 
     @Override
     public String toString() {
-        Map<String, String> showPartitionToBacklogNum = Maps.newHashMap();
-        getReadableProgress(showPartitionToBacklogNum);
-        return "PulsarProgress [partitionToBacklogNum="
-                + Joiner.on("|").withKeyValueSeparator("_").join(showPartitionToBacklogNum) + "]";
+        Map<String, String> showPartitionPosition = Maps.newHashMap();
+        getReadableProgress(showPartitionPosition);
+        return "PulsarProgress [partitionToPosition="
+                + Joiner.on("|").withKeyValueSeparator("_").join(showPartitionPosition) + "]";
     }
 
     @Override
     public String toJsonString() {
-        Map<String, String> showPartitionToBacklogNum = Maps.newHashMap();
-        getReadableProgress(showPartitionToBacklogNum);
+        Map<String, String> showPartitionPosition = Maps.newHashMap();
+        getReadableProgress(showPartitionPosition);
         Gson gson = new Gson();
-        return gson.toJson(showPartitionToBacklogNum);
+        return gson.toJson(showPartitionPosition);
     }
 
     @Override
     public void update(RLTaskTxnCommitAttachment attachment) {
         PulsarProgress newProgress = (PulsarProgress) attachment.getProgress();
-        for (Map.Entry<String, Long> entry : newProgress.partitionToBacklogNum.entrySet()) {
+        for (Map.Entry<String, TPulsarMessageId> entry : newProgress.partitionToPosition.entrySet()) {
             String partition = entry.getKey();
-            Long backlogNum = entry.getValue();
+            TPulsarMessageId messageId = entry.getValue();
             // Update progress
-            this.partitionToBacklogNum.put(partition, backlogNum);
-            // Remove initial position if exists
-            partitionToInitialPosition.remove(partition);
+            partitionToPosition.put(partition, messageId);
         }
         LOG.debug("update pulsar progress: {}, task: {}, job: {}",
                 newProgress.toJsonString(), DebugUtil.printId(attachment.getTaskId()), attachment.getJobId());
@@ -143,19 +163,36 @@ public class PulsarProgress extends RoutineLoadProgress {
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
-        out.writeInt(partitionToBacklogNum.size());
-        for (Map.Entry<String, Long> entry : partitionToBacklogNum.entrySet()) {
+        out.writeInt(partitionToPosition.size());
+        for (Map.Entry<String, TPulsarMessageId> entry : partitionToPosition.entrySet()) {
             Text.writeString(out, entry.getKey());
-            out.writeLong((Long) entry.getValue());
+            TPulsarMessageId messageId = entry.getValue();
+            out.writeInt(messageId.getPartition());
+            out.writeLong(messageId.getLedgerId());
+            out.writeLong(messageId.getEntryId());
+            out.writeInt(messageId.getBatchIndex());
         }
     }
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         int size = in.readInt();
-        partitionToBacklogNum = new HashMap<>();
+        partitionToPosition = new HashMap<String, TPulsarMessageId>();
         for (int i = 0; i < size; i++) {
-            partitionToBacklogNum.put(Text.readString(in), in.readLong());
+            if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() <= StarRocksFEMetaVersion.VERSION_5) {
+                String partition = Text.readString(in);
+                in.readLong();
+                TPulsarMessageId messageId = messageIdLatest;
+                partitionToPosition.put(partition, messageId);
+            } else {
+                String topicPartition = Text.readString(in);
+                TPulsarMessageId messageId = new TPulsarMessageId();
+                messageId.partition = in.readInt();
+                messageId.ledgerId = in.readLong();
+                messageId.entryId = in.readLong();
+                messageId.batchIndex = in.readInt();
+                partitionToPosition.put(topicPartition, messageId);
+            }
         }
     }
 }

@@ -221,7 +221,7 @@ std::string StreamLoadContext::brief(bool detail) const {
                     ss << partition << ",";
                 }
                 ss << "], initial positions: [";
-                for (const auto& [key, value] : pulsar_info->initial_positions) {
+                for (const auto& [key, value] : pulsar_info->begin_positions) {
                     ss << key << ":" << value << ",";
                 }
                 ss << "], properties: [";

@@ -724,33 +724,33 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyReques
         st.to_protobuf(response->mutable_status());
         return;
     }
-    if (request->has_pulsar_backlog_request()) {
-        std::vector<int64_t> backlog_nums;
-        Status st = _exec_env->routine_load_task_executor()->get_pulsar_partition_backlog(
-                request->pulsar_backlog_request(), &backlog_nums);
+    if (request->has_pulsar_message_id_request()) {
+        std::vector<PPulsarMessageId> message_ids;
+        Status st = _exec_env->routine_load_task_executor()->get_pulsar_partition_message_id(
+                request->pulsar_message_id_request(), &message_ids);
         if (st.ok()) {
-            auto result = response->mutable_pulsar_backlog_result();
-            for (int i = 0; i < backlog_nums.size(); i++) {
-                result->add_partitions(request->pulsar_backlog_request().partitions(i));
-                result->add_backlog_nums(backlog_nums[i]);
+            auto result = response->mutable_pulsar_message_id_result();
+            for (int i = 0; i < message_ids.size(); i++) {
+                result->add_partitions(request->pulsar_message_id_request().partitions(i));
+                *result->add_message_ids() = message_ids[i];
             }
         }
         st.to_protobuf(response->mutable_status());
         return;
     }
-    if (request->has_pulsar_backlog_batch_request()) {
-        for (const auto& backlog_req : request->pulsar_backlog_batch_request().requests()) {
-            std::vector<int64_t> backlog_nums;
+    if (request->has_pulsar_message_id_batch_request()) {
+        for (const auto& message_id_req : request->pulsar_message_id_batch_request().requests()) {
+            std::vector<PPulsarMessageId> message_ids;
             Status st =
-                    _exec_env->routine_load_task_executor()->get_pulsar_partition_backlog(backlog_req, &backlog_nums);
-            auto backlog_result = response->mutable_pulsar_backlog_batch_result()->add_results();
+                    _exec_env->routine_load_task_executor()->get_pulsar_partition_message_id(message_id_req, &message_ids);
+            auto message_id_result = response->mutable_pulsar_message_id_batch_result()->add_results();
             if (st.ok()) {
-                for (int i = 0; i < backlog_nums.size(); i++) {
-                    backlog_result->add_partitions(backlog_req.partitions(i));
-                    backlog_result->add_backlog_nums(backlog_nums[i]);
+                for (int i = 0; i < message_ids.size(); i++) {
+                    message_id_result->add_partitions(message_id_req.partitions(i));
+                    *message_id_result->add_message_ids() = message_ids[i];
                 }
             } else {
-                response->clear_pulsar_backlog_batch_result();
+                response->clear_pulsar_message_id_batch_result();
                 st.to_protobuf(response->mutable_status());
                 return;
             }

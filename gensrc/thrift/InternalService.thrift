@@ -474,3 +474,11 @@ struct TGetFileSchemaRequest {
   1: required PlanNodes.TScanRange scan_range
   2: optional i32 volume_id = -1
 }
+
+// https://pulsar.apache.org/api/python/3.0.x/pulsar.MessageId.html
+struct TPulsarMessageId {
+    1: required i64 ledgerId
+    2: required i64 entryId
+    3: required i32 batchIndex
+    4: required i32 partition
+}
