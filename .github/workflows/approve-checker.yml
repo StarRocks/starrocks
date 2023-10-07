@@ -65,11 +65,29 @@ jobs:
     env:
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
       REPO: ${{ github.repository }}
-      META_TEAM: test-team
+      TEAM: test-team
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: META-REVIEW
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          ./scripts/check-approve.sh
+
+  proto-review:
+    needs: info
+    runs-on: [ self-hosted, normal ]
+    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'PROTO-REVIEW')
+    name: PROTO-REVIEW
+
+    env:
+      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
+      REPO: ${{ github.repository }}
+      TEAM: proto-team
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: PROTO-REVIEW
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-approve.sh
