@@ -149,12 +149,10 @@ TEST(ApplicationVersion, Basics) {
     statistics.__set_min(std::string(reinterpret_cast<const char*>(&int_min), 4));
     statistics.__set_max(std::string(reinterpret_cast<const char*>(&int_max), 4));
     column_metadata.__set_statistics(statistics);
-    ASSERT_FALSE(
-            version1.HasCorrectStatistics(column_metadata, SortOrder::UNSIGNED));
+    ASSERT_FALSE(version1.HasCorrectStatistics(column_metadata, SortOrder::UNSIGNED));
     statistics.__set_max(std::string(reinterpret_cast<const char*>(&int_min), 4));
     column_metadata.__set_statistics(statistics);
-    ASSERT_TRUE(
-            version1.HasCorrectStatistics(column_metadata, SortOrder::UNSIGNED));
+    ASSERT_TRUE(version1.HasCorrectStatistics(column_metadata, SortOrder::UNSIGNED));
 }
 
 TEST(ApplicationVersion, Empty) {
@@ -353,8 +351,7 @@ TEST(ApplicationVersion, VersionNoUnknownBuildInfoPreRelease) {
 }
 
 TEST(ApplicationVersion, FullWithSpaces) {
-    ApplicationVersion version(
-            " parquet-mr \t version \v 1.5.3ab-cdh5.5.0+cd \r (build \n abcd \f) ");
+    ApplicationVersion version(" parquet-mr \t version \v 1.5.3ab-cdh5.5.0+cd \r (build \n abcd \f) ");
 
     ASSERT_EQ("parquet-mr", version.application_);
     ASSERT_EQ("abcd", version.build_);
