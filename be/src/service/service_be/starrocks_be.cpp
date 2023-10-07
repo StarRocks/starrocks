@@ -60,24 +60,18 @@ void start_be() {
     if (starrocks::config::brpc_num_threads != -1) {
         options.num_threads = starrocks::config::brpc_num_threads;
     }
-<<<<<<< HEAD
-    if (brpc_server.Start(starrocks::config::brpc_port, &options) != 0) {
-        LOG(ERROR) << "BRPC service did not start correctly, exiting";
-        starrocks::shutdown_logging();
-=======
-    const auto lake_service_max_concurrency = config::lake_service_max_concurrency;
+    const auto lake_service_max_concurrency = starrocks::config::lake_service_max_concurrency;
     const auto service_name = "starrocks.lake.LakeService";
     const auto methods = {"abort_txn",           "abort_compaction", "compact",          "drop_table",
                           "delete_data",         "delete_tablet",    "get_tablet_stats", "publish_version",
                           "publish_log_version", "vacuum",           "vacuum_full"};
     for (auto method : methods) {
-        brpc_server->MaxConcurrencyOf(service_name, method) = lake_service_max_concurrency;
+        brpc_server.MaxConcurrencyOf(service_name, method) = lake_service_max_concurrency;
     }
 
-    if (auto ret = brpc_server->Start(config::brpc_port, &options); ret != 0) {
+    if (auto ret = brpc_server.Start(starrocks::config::brpc_port, &options); ret != 0) {
         LOG(ERROR) << "BRPC service did not start correctly, exiting errcoe: " << ret;
-        shutdown_logging();
->>>>>>> 6578f0477b ([Enhancement] Limit RPC max concurrency of lake service (#31910))
+        starrocks::shutdown_logging();
         exit(1);
     }
 
