@@ -25,12 +25,12 @@ Status FileMetaData::init(const tparquet::FileMetaData& t_metadata, bool case_se
     RETURN_IF_ERROR(_schema.from_thrift(t_metadata.schema, case_sensitive));
     _num_rows = t_metadata.num_rows;
     _t_metadata = t_metadata;
-
     if (_t_metadata.__isset.created_by) {
         _writer_version = ApplicationVersion(_t_metadata.created_by);
     } else {
         _writer_version = ApplicationVersion("unknown 0.0.0");
     }
+
     return Status::OK();
 }
 
@@ -424,6 +424,36 @@ bool ApplicationVersion::HasCorrectStatistics(const tparquet::ColumnMetaData& co
     }
 
     return true;
+}
+
+// reference both be/src/formats/parquet/column_converter.cpp
+// and https://github.com/apache/parquet-format/blob/master/LogicalTypes.md
+SortOrder sort_order_of_logical_type(LogicalType type) {
+    switch (type) {
+    case TYPE_BOOLEAN:
+    case TYPE_TINYINT:
+    case TYPE_SMALLINT:
+    case TYPE_INT:
+    case TYPE_BIGINT:
+    case TYPE_FLOAT:
+    case TYPE_DOUBLE:
+    case TYPE_DECIMAL:
+    case TYPE_DECIMALV2:
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
+    case TYPE_DATE:
+    case TYPE_DATETIME:
+    case TYPE_TIME:
+        return SortOrder::SIGNED;
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+    case TYPE_BINARY:
+    case TYPE_VARBINARY:
+        return SortOrder::UNSIGNED;
+    default:
+        return SortOrder::UNKNOWN;
+    }
 }
 
 } // namespace starrocks::parquet

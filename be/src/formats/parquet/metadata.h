@@ -94,34 +94,6 @@ private:
     ApplicationVersion _writer_version;
 };
 
-// reference both be/src/formats/parquet/column_converter.cpp
-// and https://github.com/apache/parquet-format/blob/master/LogicalTypes.md
-SortOrder sort_order_of_logical_type(LogicalType type) {
-    switch (type) {
-    case TYPE_BOOLEAN:
-    case TYPE_TINYINT:
-    case TYPE_SMALLINT:
-    case TYPE_INT:
-    case TYPE_BIGINT:
-    case TYPE_FLOAT:
-    case TYPE_DOUBLE:
-    case TYPE_DECIMAL:
-    case TYPE_DECIMALV2:
-    case TYPE_DECIMAL32:
-    case TYPE_DECIMAL64:
-    case TYPE_DECIMAL128:
-    case TYPE_DATE:
-    case TYPE_DATETIME:
-    case TYPE_TIME:
-        return SortOrder::SIGNED;
-    case TYPE_CHAR:
-    case TYPE_VARCHAR:
-    case TYPE_BINARY:
-    case TYPE_VARBINARY:
-        return SortOrder::UNSIGNED;
-    default:
-        return SortOrder::UNKNOWN;
-    }
-}
+SortOrder sort_order_of_logical_type(LogicalType type);
 
 } // namespace starrocks::parquet
