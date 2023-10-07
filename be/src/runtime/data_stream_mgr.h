@@ -129,7 +129,7 @@ private:
     std::shared_ptr<DataStreamRecvr> find_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
 
     // Remove receiver block for fragment_instance_id/node_id from the map.
-    Status deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
+    void deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
 
     inline uint32_t get_bucket(const TUniqueId& fragment_instance_id);
 

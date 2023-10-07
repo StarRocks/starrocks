@@ -72,8 +72,8 @@ public:
     // Channel will sent input request directly without batch it.
     // This function is only used when broadcast, because request can be reused
     // by all the channels.
-    Status send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
-                              const butil::IOBuf& attachment, int64_t attachment_physical_bytes);
+    [[nodiscard]] Status send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
+                                            const butil::IOBuf& attachment, int64_t attachment_physical_bytes);
 
     // Used when doing shuffle.
     // This function will copy selective rows in chunks to batch.
@@ -270,9 +270,10 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
-                                                         const butil::IOBuf& attachment,
-                                                         int64_t attachment_physical_bytes) {
+[[nodiscard]] Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state,
+                                                                       PTransmitChunkParamsPtr chunk_request,
+                                                                       const butil::IOBuf& attachment,
+                                                                       int64_t attachment_physical_bytes) {
     if (_ignore_local_data) {
         return Status::OK();
     }
@@ -641,7 +642,7 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
         int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
         for (const auto& [_, channel] : _instance_id2channel) {
             PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-            channel->send_chunk_request(state, copy, attachment, attachment_physical_bytes);
+            RETURN_IF_ERROR(channel->send_chunk_request(state, copy, attachment, attachment_physical_bytes));
         }
         _current_request_bytes = 0;
         _chunk_request.reset();

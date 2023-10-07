@@ -140,7 +140,7 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     return Status::OK();
 }
 
-Status DataStreamMgr::deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id) {
+void DataStreamMgr::deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id) {
     std::shared_ptr<DataStreamRecvr> target_recvr;
     VLOG_QUERY << "deregister_recvr(): fragment_instance_id=" << fragment_instance_id << ", node=" << node_id;
     uint32_t bucket = get_bucket(fragment_instance_id);
@@ -166,12 +166,10 @@ Status DataStreamMgr::deregister_recvr(const TUniqueId& fragment_instance_id, Pl
     // cancel_stream maybe take a long time, so we handle it out of lock.
     if (target_recvr) {
         target_recvr->cancel_stream();
-        return Status::OK();
     } else {
         std::stringstream err;
         err << "unknown row receiver id: fragment_instance_id=" << fragment_instance_id << " node_id=" << node_id;
         LOG(ERROR) << err.str();
-        return Status::InternalError(err.str());
     }
 }
 
