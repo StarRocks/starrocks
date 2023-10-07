@@ -2518,7 +2518,9 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(url_encodeImpl, str) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::url_extract_host(FunctionContext* context, const starrocks::Columns& columns) {
-    return parse_url_const(&UrlParser::HOST, context, columns);
+    UrlParser::UrlPart url_part_enum = UrlParser::HOST;
+    UrlParser::UrlPart* url_part = &url_part_enum;
+    return parse_url_const(url_part, context, columns);
 }
 
 std::string StringFunctions::url_encode_func(const std::string& value) {
