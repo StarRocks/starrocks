@@ -62,6 +62,7 @@
 #include "storage/options.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/tablet.h"
+#include "testutil/sync_point.h"
 
 namespace bthread {
 class Executor;

@@ -1387,7 +1387,6 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
         return Status::OK();
     }
     DCHECK_EQ(num_row, ids.size());
-
     std::shared_ptr<AutoIncrementMeta> meta;
 
     {
@@ -1418,7 +1417,13 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
         alloc_params.__set_table_id(tableid);
         alloc_params.__set_rows(alloc_rows);
 
+#ifndef BE_TEST
         auto st = _get_remote_next_increment_id_interval(alloc_params, &alloc_result);
+#else
+        auto st = Status::OK();
+        alloc_result.status.status_code = TStatusCode::OK;
+        TEST_SYNC_POINT_CALLBACK("StorageEngine::get_next_increment_id_interval.1", &alloc_result);
+#endif
 
         if (!st.ok() || alloc_result.status.status_code != TStatusCode::OK) {
             std::stringstream err_msg;
