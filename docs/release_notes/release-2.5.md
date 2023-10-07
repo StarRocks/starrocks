@@ -23,7 +23,7 @@ Fixed the following issues:
 - An error "get TableMeta failed from TNetworkAddress" occurs when users load data into a partitioned StarRocks external table. [#30124](https://github.com/StarRocks/starrocks/pull/30124)
 - In certain scenarios, an error occurs when users load data via CloudCanal. [#30799](https://github.com/StarRocks/starrocks/pull/30799)
 - An error "current running txns on db xxx is 200, larger than limit 200" occurs when users load data via the Flink Connector or perform DELETE and INSERT operations. [#18393](https://github.com/StarRocks/starrocks/pull/18393)
-- Asynchronous materialized views that use aggregate functions with HAVING clauses cannot rewrite queries properly. [#29976](https://github.com/StarRocks/starrocks/pull/29976)
+- Asynchronous materialized views that use HAVING clauses that include aggregate functions cannot rewrite queries properly. [#29976](https://github.com/StarRocks/starrocks/pull/29976)
 
 ## 2.5.12
 
