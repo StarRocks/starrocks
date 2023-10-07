@@ -91,7 +91,7 @@ public:
     size_t get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta);
 
     Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                      const TabletMetadata& metadata, Tablet* tablet, IndexEntry* index_entry,
+                                      const TabletMetadata& metadata, Tablet tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version);
 
     // remove primary index entry from cache, called when publish version error happens.
@@ -113,7 +113,8 @@ public:
 
     void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
     void preload_update_state(const TxnLog& op_write, Tablet* tablet);
-    void preload_compaction_state(const TxnLog& txnlog, Tablet* tablet, const TabletSchema& tablet_schema);
+    void preload_compaction_state(const TxnLog& txnlog, Tablet tablet,
+                                  const std::shared_ptr<const TabletSchema>& tablet_schema);
 
     // check if pk index's cache ref == ref_cnt
     bool TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint32_t ref_cnt);

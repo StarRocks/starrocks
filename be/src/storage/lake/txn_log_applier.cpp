@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include "gutil/strings/join.h"
+#include "storage/lake/lake_primary_index.h"
 #include "storage/lake/lake_primary_key_recover.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
@@ -174,7 +175,7 @@ private:
             DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
             return Status::OK();
         }
-        return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, *_metadata, &_tablet,
+        return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, *_metadata, _tablet,
                                                                 _index_entry, &_builder, _base_version);
     }
 

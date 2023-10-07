@@ -31,8 +31,8 @@ CompactionState::~CompactionState() {
     }
 }
 
-Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_manager, const TabletSchema& tablet_schema,
-                                      uint32_t segment_id) {
+Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_manager,
+                                      const std::shared_ptr<const TabletSchema>& tablet_schema, uint32_t segment_id) {
     TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_latency_us");
     std::lock_guard<std::mutex> lg(_state_lock);
     if (pk_cols.empty() && rowset->num_segments() > 0) {
@@ -53,13 +53,14 @@ Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_mana
     return _load_segments(rowset, tablet_schema, segment_id);
 }
 
-Status CompactionState::_load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id) {
+Status CompactionState::_load_segments(Rowset* rowset, const std::shared_ptr<const TabletSchema>& tablet_schema,
+                                       uint32_t segment_id) {
     vector<uint32_t> pk_columns;
-    for (size_t i = 0; i < tablet_schema.num_key_columns(); i++) {
+    for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back(static_cast<uint32_t>(i));
     }
 
-    Schema pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+    Schema pkey_schema = ChunkHelper::convert_schema(*tablet_schema, pk_columns);
 
     std::unique_ptr<Column> pk_column;
     CHECK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true).ok());

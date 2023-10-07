@@ -26,6 +26,7 @@
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"

@@ -16,6 +16,7 @@
 
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/tablet.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
 
@@ -26,9 +27,9 @@ static const int kInvalidRowsetIndex = -1;
 
 class Rowset {
 public:
-    explicit Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata, int index);
+    explicit Rowset(Tablet tablet, RowsetMetadataPtr rowset_metadata, int index);
 
-    explicit Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata);
+    explicit Rowset(Tablet tablet, RowsetMetadataPtr rowset_metadata);
 
     ~Rowset();
 
@@ -83,8 +84,7 @@ public:
     int64_t tablet_id() const;
 
 private:
-    // _tablet is owned by TabletReader
-    Tablet* _tablet;
+    Tablet _tablet;
     RowsetMetadataPtr _rowset_metadata;
     int _index{kInvalidRowsetIndex};
 };

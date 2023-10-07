@@ -21,6 +21,7 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/update_manager.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet_schema.h"
@@ -74,7 +75,7 @@ Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, const Table
                                    bool need_lock) {
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
     std::unique_ptr<Rowset> rowset_ptr =
-            std::make_unique<Rowset>(tablet, std::make_shared<RowsetMetadataPB>(op_write.rowset()));
+            std::make_unique<Rowset>(*tablet, std::make_shared<RowsetMetadataPB>(op_write.rowset()));
 
     RETURN_IF_ERROR(_do_load_upserts_deletes(op_write, *tablet_schema, tablet, rowset_ptr.get()));
 

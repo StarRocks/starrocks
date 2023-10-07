@@ -15,9 +15,9 @@
 #include "storage/lake/rowset.h"
 
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/update_manager.h"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
@@ -27,11 +27,11 @@
 
 namespace starrocks::lake {
 
-Rowset::Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata, int index)
-        : _tablet(tablet), _rowset_metadata(std::move(rowset_metadata)), _index(index) {}
+Rowset::Rowset(Tablet tablet, RowsetMetadataPtr rowset_metadata, int index)
+        : _tablet(std::move(tablet)), _rowset_metadata(std::move(rowset_metadata)), _index(index) {}
 
-Rowset::Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata)
-        : _tablet(tablet), _rowset_metadata(std::move(rowset_metadata)) {}
+Rowset::Rowset(Tablet tablet, RowsetMetadataPtr rowset_metadata)
+        : _tablet(std::move(tablet)), _rowset_metadata(std::move(rowset_metadata)) {}
 
 Rowset::~Rowset() = default;
 
@@ -39,7 +39,7 @@ Rowset::~Rowset() = default;
 //  1. rowid range and short key range
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options) {
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->root_location()));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet.root_location()));
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
     seg_options.predicates = options.predicates;
@@ -54,9 +54,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.fill_data_cache = options.fill_data_cache;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
-        seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet->update_mgr(), nullptr);
+        seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet.update_mgr(), nullptr);
         seg_options.version = options.version;
-        seg_options.tablet_id = _tablet->id();
+        seg_options.tablet_id = _tablet.id();
         seg_options.rowset_id = _rowset_metadata->id();
     }
     if (options.delete_predicates != nullptr) {
@@ -94,13 +94,6 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
-
-        //        if (options.rowid_range_option != nullptr) {
-        //            seg_options.rowid_range_option = options.rowid_range_option->get_segment_rowid_range(this, seg_ptr.get());
-        //            if (seg_options.rowid_range_option == nullptr) {
-        //                continue;
-        //            }
-        //        }
 
         auto res = seg_ptr->new_iterator(*segment_schema, seg_options);
         if (res.status().is_end_of_file()) {
@@ -150,7 +143,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(segments.size());
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->root_location()));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet.root_location()));
     seg_options.stats = stats;
     for (auto& seg_ptr : segments) {
         auto res = seg_ptr->new_iterator(schema, seg_options);
@@ -174,12 +167,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(segments.size());
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->root_location()));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet.root_location()));
     seg_options.stats = stats;
     seg_options.is_primary_keys = true;
-    seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet->update_mgr(), builder);
+    seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet.update_mgr(), builder);
     seg_options.version = version;
-    seg_options.tablet_id = _tablet->id();
+    seg_options.tablet_id = _tablet.id();
     seg_options.rowset_id = _rowset_metadata->id();
     for (auto& seg_ptr : segments) {
         auto res = seg_ptr->new_iterator(schema, seg_options);
@@ -223,7 +216,7 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_data_c
     auto segment_file_size = _rowset_metadata->segments_size();
     bool has_segment_size = segment_size_size == segment_file_size;
     LOG_IF(ERROR, segment_size_size > 0 && segment_size_size != segment_file_size)
-            << "segment_size size != segment file size, tablet: " << _tablet->id()
+            << "segment_size size != segment file size, tablet: " << _tablet.id()
             << ", rowset: " << _rowset_metadata->id() << ", segment file size: " << segment_file_size
             << ", segment_size size: " << segment_size_size;
 
@@ -238,7 +231,7 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_data_c
         index++;
 
         auto segment_or =
-                _tablet->load_segment(segment_info, seg_id++, &footer_size_hint, fill_data_cache, fill_metadata_cache);
+                _tablet.load_segment(segment_info, seg_id++, &footer_size_hint, fill_data_cache, fill_metadata_cache);
         if (segment_or.ok()) {
             segments->emplace_back(std::move(segment_or.value()));
         } else if (segment_or.status().is_not_found() && ignore_lost_segment) {
@@ -252,7 +245,7 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_data_c
 }
 
 int64_t Rowset::tablet_id() const {
-    return _tablet->id();
+    return _tablet.id();
 }
 
 } // namespace starrocks::lake

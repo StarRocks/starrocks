@@ -144,7 +144,7 @@ StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(const TabletMetadata& metad
     rowsets.reserve(metadata.rowsets_size());
     for (int i = 0, size = metadata.rowsets_size(); i < size; ++i) {
         const auto& rowset_metadata = metadata.rowsets(i);
-        auto rowset = std::make_shared<Rowset>(this, std::make_shared<const RowsetMetadata>(rowset_metadata), i);
+        auto rowset = std::make_shared<Rowset>(*this, std::make_shared<const RowsetMetadata>(rowset_metadata), i);
         rowsets.emplace_back(std::move(rowset));
     }
     return rowsets;

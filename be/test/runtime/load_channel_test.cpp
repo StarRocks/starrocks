@@ -34,6 +34,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
+#include "storage/lake/update_manager.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"

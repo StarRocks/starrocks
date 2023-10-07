@@ -540,15 +540,17 @@ size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
 }
 
 Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                                 const TabletMetadata& metadata, Tablet* tablet,
-                                                 IndexEntry* index_entry, MetaFileBuilder* builder,
-                                                 int64_t base_version) {
+                                                 const TabletMetadata& metadata, Tablet tablet, IndexEntry* index_entry,
+                                                 MetaFileBuilder* builder, int64_t base_version) {
+    std::stringstream cost_str;
+    MonotonicStopWatch watch;
+    watch.start();
     auto& index = index_entry->value();
     // 1. iterate output rowset, update primary index and generate delvec
-    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
+    std::shared_ptr<const TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
     RowsetPtr output_rowset =
             std::make_shared<Rowset>(tablet, std::make_shared<RowsetMetadata>(op_compaction.output_rowset()));
-    auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet->id(), txn_id));
+    auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txn_id));
     compaction_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     // only use state entry once, remove it when publish finish or fail
     DeferOp remove_state_entry([&] { _compaction_cache.remove(compaction_entry); });
@@ -570,7 +572,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     // 2. update primary index, and generate delete info.
     TRACE_COUNTER_INCREMENT("output_rowsets_size", output_rowset->num_segments());
     for (size_t i = 0; i < output_rowset->num_segments(); i++) {
-        RETURN_IF_ERROR(compaction_state.load_segments(output_rowset.get(), this, *tablet_schema, i));
+        RETURN_IF_ERROR(compaction_state.load_segments(output_rowset.get(), this, tablet_schema, i));
         TRACE_COUNTER_INCREMENT("state_bytes", compaction_state.memory_usage());
         auto& pk_col = compaction_state.pk_cols[i];
         total_rows += pk_col->size();
@@ -769,27 +771,27 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
     TEST_SYNC_POINT("UpdateManager::preload_update_state:return");
 }
 
-void UpdateManager::preload_compaction_state(const TxnLog& txnlog, Tablet* tablet, const TabletSchema& tablet_schema) {
+void UpdateManager::preload_compaction_state(const TxnLog& txnlog, Tablet tablet,
+                                             const std::shared_ptr<const TabletSchema>& tablet_schema) {
     // no need to preload if output rowset is empty.
     const int segments_size = txnlog.op_compaction().output_rowset().segments_size();
     if (segments_size <= 0) return;
-    RowsetPtr output_rowset =
-            std::make_shared<Rowset>(tablet, std::make_shared<RowsetMetadata>(txnlog.op_compaction().output_rowset()));
+    Rowset output_rowset(tablet, std::make_shared<RowsetMetadata>(txnlog.op_compaction().output_rowset()));
     // use tabletid-txnid as compaction state cache's key, so it can retry safe.
-    auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet->id(), txnlog.txn_id()));
+    auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txnlog.txn_id()));
     compaction_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& compaction_state = compaction_entry->value();
     // preload compaction state, only load first output segment, to avoid too much memory cost
     auto st = Status::OK();
     for (int i = 0; i < segments_size && !_compaction_state_mem_tracker->any_limit_exceeded(); i++) {
-        st = compaction_state.load_segments(output_rowset.get(), this, tablet_schema, i);
+        st = compaction_state.load_segments(&output_rowset, this, tablet_schema, i);
         if (!st.ok()) {
             break;
         }
     }
     if (!st.ok()) {
         _compaction_cache.remove(compaction_entry);
-        LOG(ERROR) << strings::Substitute("lake primary table preload_compaction_state id:$0 error:$1", tablet->id(),
+        LOG(ERROR) << strings::Substitute("lake primary table preload_compaction_state id:$0 error:$1", tablet.id(),
                                           st.to_string());
         // not return error even it fail, because we can load compaction state in publish again.
     } else {

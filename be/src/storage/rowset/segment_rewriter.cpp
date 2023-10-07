@@ -189,7 +189,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
     Schema src_schema = ChunkHelper::convert_schema(tschema, src_column_ids);
 
     std::unique_ptr<starrocks::lake::Rowset> rowset = std::make_unique<starrocks::lake::Rowset>(
-            tablet, std::make_shared<starrocks::lake::RowsetMetadataPB>(op_write.rowset()));
+            *tablet, std::make_shared<starrocks::lake::RowsetMetadataPB>(op_write.rowset()));
     std::vector<starrocks::lake::SegmentPtr> segments;
     RETURN_IF_ERROR(rowset->load_segments(&segments, false));
     uint32_t num_rows = segments[segment_id]->num_rows();
