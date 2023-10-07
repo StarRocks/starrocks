@@ -126,6 +126,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_open) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         delta_writer->close();
@@ -140,6 +141,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_open) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->open());
@@ -156,6 +158,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_open) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
                                                    .build());
         auto t1 = std::thread([&]() {
             for (int i = 0; i < 10000; i++) {
@@ -191,6 +194,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
+                                               .set_index_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
     // Call open() again
@@ -274,6 +278,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write_concurrently) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
+                                               .set_index_id(_tablet_schema->id())
                                                .build());
 
     ASSERT_OK(delta_writer->open());
@@ -375,6 +380,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write_after_close) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
+                                               .set_index_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
 
@@ -410,6 +416,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_finish_after_close) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
+                                               .set_index_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
 
@@ -435,6 +442,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_close) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
 
@@ -451,6 +459,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_close) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         auto t1 = std::thread([&]() {
@@ -477,6 +486,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_open_after_close) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
+                                               .set_index_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
     delta_writer->close();
@@ -507,6 +517,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_concurrent_write_and_close) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
+                                               .set_index_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
 
