@@ -63,6 +63,7 @@ jobs:
     needs: info
     runs-on: [self-hosted, normal]
     if: contains(needs.info.outputs.LABELS, 'META-REVIEW')
+    name: META-REVIEW
 
     env:
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
