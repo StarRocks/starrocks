@@ -35,10 +35,13 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.UserException;
-import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -118,5 +121,33 @@ public class LoadStmtTest {
                 "INTO TABLE t0 (`v1`, `v2`, `v3`)) WITH BROKER hdfs_broker " +
                 "(\"password\"  =  \"***\", \"username\"  =  \"sr\") PROPERTIES (\"strict_mode\" = \"true\")",
                 AstToStringBuilder.toString(stmt));
+    }
+
+    @Test
+    public void testAuditLog() throws Exception {
+        ConnectContext context = AnalyzeTestUtil.getConnectContext();
+
+        String createRgSQL = "create resource group load_rg\n" +
+                "to\n" +
+                "    (query_type in ('INSERT'))\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '30',\n" +
+                "    'mem_limit' = '50%',\n" +
+                "    'concurrency_limit' = '20'\n" +
+                ");";
+        AnalyzeTestUtil.getStarRocksAssert().executeResourceGroupDdlSql(createRgSQL);
+
+        String loadSQL = "LOAD LABEL test.t0 (" +
+                "   DATA INFILE('hdfs://test:8080/user/starrocks/data/input/example1.csv') " +
+                "   INTO TABLE t0" +
+                ") " +
+                "WITH BROKER (" +
+                "   'fs.oss.accessKeyId' = 'accessKeyId'," +
+                "   'fs.oss.accessKeySecret' = 'accessKeySecret'," +
+                "   'fs.oss.endpoint'= 'endpoint'" +
+                ")";
+        LoadStmt loadStmt = (LoadStmt) UtFrameUtils.parseStmtWithNewParser(loadSQL, context);
+        DDLStmtExecutor.execute(loadStmt, context);
+        Assert.assertEquals("load_rg", context.getAuditEventBuilder().build().resourceGroup);
     }
 }
