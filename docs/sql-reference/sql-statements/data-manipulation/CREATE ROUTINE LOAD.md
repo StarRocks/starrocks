@@ -2,7 +2,7 @@
 
 ## Description
 
-Routine Load 残 continuously consume messages from Apache Kafka® and loads data into StarRocks. Routine Load can consume CSV, JSON, and Avro (supported since v3.0.1) data from a Kafka cluster and access Kafka via SSL encryption, SASL authentication, or unsecured authentication.
+Routine Load can continuously consume messages from Apache Kafka® and load data into StarRocks. Routine Load can consume CSV, JSON, and Avro (supported since v3.0.1) data from a Kafka cluster and access Kafka via SSL encryption, SASL authentication, or unsecured authentication.
 
 This topic describes the syntax, parameters, and examples of the CREATE ROUTINE LOAD statement.
 
