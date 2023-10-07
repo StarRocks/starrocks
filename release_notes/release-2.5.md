@@ -1,5 +1,30 @@
 # StarRocks version 2.5
 
+## 2.5.13
+
+发布日期：2023 年 9 月 28 日
+
+### 功能优化
+
+- 窗口函数 COVAR_SAMP、COVAR_POP、CORR、VARIANCE、VAR_SAMP、STD、STDDEV_SAMP 支持 ORDER BY 子句和 Window 子句。 [#30786](https://github.com/StarRocks/starrocks/pull/30786)
+- DECIMAL 类型数据查询结果越界时，返回报错而不是 NULL。 [#30419](https://github.com/StarRocks/starrocks/pull/30419)
+- 执行带有不合法注释的 SQL 命令返回结果与 MySQL 保持一致。[#30210](https://github.com/StarRocks/starrocks/pull/30210)
+- 清理已经删除的 Tablet 对应的 Rowset，减少 BE 启动时加载所消耗的内存。 [#30625](https://github.com/StarRocks/starrocks/pull/30625)
+
+### 问题修复
+
+修复了如下问题：
+
+- 使用 Spark Connector 或 Flink Connector 读取 StarRocks 数据时报错："Set cancelled by MemoryScratchSinkOperator"。 [#30702](https://github.com/StarRocks/starrocks/pull/30702) [#30751](https://github.com/StarRocks/starrocks/pull/30751)
+- ORDER BY 子句中包含聚合函数时报错："java.lang.IllegalStateException: null"。 [#30108](https://github.com/StarRocks/starrocks/pull/30108)
+- 如果有 Inactive 的物化视图，FE 会重启失败。 [#30015](https://github.com/StarRocks/starrocks/pull/30015)
+- 有重复的分区时，INSERT OVERWRITE 会把元数据写坏，导致后续 FE 重启失败 。[#27545](https://github.com/StarRocks/starrocks/pull/27545)
+- 修改主键模型表中不存在的列会报错："java.lang.NullPointerException: null"。 [#30366](https://github.com/StarRocks/starrocks/pull/30366)
+- 向有分区的 StarRocks 外表写入数据时有报错："get TableMeta failed from TNetworkAddress"。 [#30124](https://github.com/StarRocks/starrocks/pull/30124)
+- 某些场景下，CloudCanal 导入数据会报错。 [#30799](https://github.com/StarRocks/starrocks/pull/30799)
+- 通过 Flink Connector 写入，或者执行 DELETE、INSERT 等操作时报错："current running txns on db xxx is 200, larger than limit 200"。 [#18393](https://github.com/StarRocks/starrocks/pull/18393)
+- 使用 HAVING 子句中包含聚合函数的查询创建的异步物化视图无法正确改写查询。 [#29976](https://github.com/StarRocks/starrocks/pull/29976)
+
 ## 2.5.12
 
 发布日期：2023 年 9 月 4 日
