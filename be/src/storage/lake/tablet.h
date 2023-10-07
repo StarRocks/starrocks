@@ -100,6 +100,8 @@ public:
     // NOTE: This method may update the version hint
     StatusOr<std::shared_ptr<const TabletSchema>> get_schema();
 
+    StatusOr<std::shared_ptr<const TabletSchema>> get_schema_by_index_id(int64_t index_id);
+
     StatusOr<std::vector<RowsetPtr>> get_rowsets(int64_t version);
 
     StatusOr<std::vector<RowsetPtr>> get_rowsets(const TabletMetadata& metadata);
