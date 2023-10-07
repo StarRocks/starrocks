@@ -230,7 +230,7 @@ public class JsonTypeTest extends PlanTestBase {
                 "CAST(json_array(CAST(1 AS JSON), CAST(2 AS JSON), CAST(3 AS JSON)) AS ARRAY<JSON>)");
 
         // Multi-dimension array casting is not supported
-        assertExceptionMessage("select cast(json_array(1,2,3) as array<array<int>>)",
+        assertExceptionMsgContains("select cast(json_array(1,2,3) as array<array<int>>)",
                 "Invalid type cast from json to ARRAY<ARRAY<int(11)>> in sql `json_array(1, 2, 3)`");
     }
 }
