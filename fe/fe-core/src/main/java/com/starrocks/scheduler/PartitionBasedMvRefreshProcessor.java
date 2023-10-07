@@ -18,7 +18,6 @@ package com.starrocks.scheduler;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -1523,8 +1522,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     continue;
                 }
                 BaseTableInfo baseTableInfo = baseTableInfoOptional.get();
-                Map<String, MaterializedView.BasePartitionInfo> partitionInfos =
-                        ImmutableMap.of("ALL", new MaterializedView.BasePartitionInfo(-1,
+                // first record the changed partition infos, it needs to use this these partition infos to check if
+                // the partition has been deal with. the task has PARTITION_START/PARTITION_END properties, could
+                // refresh partial partitions.
+                Map<String, MaterializedView.BasePartitionInfo> partitionInfos = entry.getValue().stream().collect(
+                        Collectors.toMap(partitionName -> partitionName,
+                                partitionName -> new MaterializedView.BasePartitionInfo(-1,
+                                icebergTable.getRefreshSnapshotTime(), icebergTable.getRefreshSnapshotTime())));
+                // add ALL partition info, use this partition info to check if the partition has been updated.
+                partitionInfos.put("ALL", new MaterializedView.BasePartitionInfo(-1,
                                 icebergTable.getRefreshSnapshotTime(), icebergTable.getRefreshSnapshotTime()));
                 changedOlapTablePartitionInfos.put(baseTableInfo, partitionInfos);
             }
