@@ -608,27 +608,14 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
             const auto& properties = shard_info.properties;
             auto index_id_iter = properties.find("indexId");
             if (index_id_iter != properties.end()) {
-                auto schema_id = std::atol(index_id_iter->second.data());
-                auto global_cache_key = global_schema_cache_key(schema_id);
-                auto schema = lookup_tablet_schema(global_cache_key);
-                if (schema != nullptr) {
-                    return schema;
-                }
-                // else: Cache miss, read the schema file
-                auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(schema_id));
-                auto schema_or = load_and_parse_schema_file(schema_file_path);
-                if (schema_or.ok()) {
-                    VLOG(3) << "Got tablet schema of id " << schema_id << " for tablet " << tablet_id;
-                    schema = std::move(schema_or).value();
-                    // Save the schema into the in-memory cache, use the schema id as the cache key
-                    auto cache_value = std::make_unique<CacheValue>(schema);
-                    fill_metacache(global_cache_key, cache_value.release(), 0);
-                    return std::move(schema);
-                } else if (schema_or.status().is_not_found()) {
-                    // version 3.0 will not generate the tablet schema file, ignore the not found error and
-                    // try to extract the tablet schema from the tablet metadata.
+                auto index_id = std::atol(index_id_iter->second.data());
+                auto res = get_tablet_schema_by_index_id(tablet_id, index_id);
+                if (res.ok()) {
+                    return res;
+                } else if (res.status().is_not_found()) {
+                    // version 3.0 does not have schema file, ignore this error.
                 } else {
-                    return schema_or.status();
+                    return res.status();
                 }
             } else {
                 // no "indexId" property, will extract the tablet schema from the tablet metadata.
@@ -668,6 +655,29 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
     auto cache_size = inserted ? (int)schema->mem_usage() : 0;
     fill_metacache(cache_key, cache_value.release(), cache_size);
     return schema;
+}
+
+StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_index_id(int64_t tablet_id, int64_t index_id) {
+    auto global_cache_key = global_schema_cache_key(index_id);
+    auto schema = lookup_tablet_schema(global_cache_key);
+    TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_index_id.1", &schema);
+    if (schema != nullptr) {
+        return schema;
+    }
+    // else: Cache miss, read the schema file
+    auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(index_id));
+    auto schema_or = load_and_parse_schema_file(schema_file_path);
+    TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_index_id.2", &schema_or);
+    if (schema_or.ok()) {
+        VLOG(3) << "Got tablet schema of id " << index_id << " for tablet " << tablet_id;
+        schema = std::move(schema_or).value();
+        // Save the schema into the in-memory cache, use the schema id as the cache key
+        auto cache_value = std::make_unique<CacheValue>(schema);
+        fill_metacache(global_cache_key, cache_value.release(), 0);
+        return std::move(schema);
+    } else {
+        return schema_or.status();
+    }
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
