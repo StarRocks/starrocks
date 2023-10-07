@@ -682,7 +682,6 @@
       + [upper](./sql-reference/sql-functions/string-functions/upper.md)
       + [url_decode](./sql-reference/sql-functions/string-functions/url_decode.md)
       + [url_encode](./sql-reference/sql-functions/string-functions/url_encode.md)
-
     + Pattern Matching Functions
       + [like](./sql-reference/sql-functions/like_predicate-functions/like.md)
       + [regexp](./sql-reference/sql-functions/like_predicate-functions/regexp.md)
