@@ -23,7 +23,7 @@ permissions:
 jobs:
   meta-review:
     name: META REVIEW
-    if: github.event.label.name == 'META-REVIEW' && github.event.action == 'labeled'
+    if: github.event.label.name == 'META-REVIEW'
     runs-on: ubuntu-latest
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -31,6 +31,7 @@ jobs:
 
     steps:
       - name: ADD REVIEWER
+        if: github.event.action == 'labeled'
         run: |
           curl -L \
             -X POST \
@@ -40,19 +41,30 @@ jobs:
             "https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER}/requested_reviewers" \
             -d "{\"team_reviewers\":[\"${META_TEAM}\"]}" 2>/dev/null
 
-  review-required-check:
-    name: REQUIRED LABEL CHECK
-    runs-on: ubuntu-latest
-    env:
-      PR_NUMBER: ${{ github.event.pull_request.number }}
-      REPO: ${{ github.repository }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    steps:
-      - name: check
+      - name: REMOVE REVIEWER
+        if: github.event.action == 'unlabeled'
         run: |
-          labels=$(gh pr view ${PR_NUMBER} -R ${REPO} --json labels -q '.labels[].name')
-          if [[ "${labels}" =~ "Review required" ]]; then
-            echo "::error::Review required."
-            exit 1
-          fi
+          curl -L \
+            -X DELETE \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.PAT }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER}/requested_reviewers" \
+            -d "{\"team_reviewers\":[\"${META_TEAM}\"]}" 2>/dev/null
+
+#  review-required-check:
+#    name: REQUIRED LABEL CHECK
+#    runs-on: ubuntu-latest
+#    env:
+#      PR_NUMBER: ${{ github.event.pull_request.number }}
+#      REPO: ${{ github.repository }}
+#      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#
+#    steps:
+#      - name: check
+#        run: |
+#          labels=$(gh pr view ${PR_NUMBER} -R ${REPO} --json labels -q '.labels[].name')
+#          if [[ "${labels}" =~ "Review required" ]]; then
+#            echo "::error::Review required."
+#            exit 1
+#          fi
