@@ -669,10 +669,12 @@ public class FunctionSet {
 
         // ifnull, nullif(DATE, DATETIME) should return datetime, not bigint
         // if(boolean, DATE, DATETIME) should return datetime
+        // coalesce(DATE, DATETIME) should return datetime
         int arg_index = 0;
         if (functionName.equalsIgnoreCase(IFNULL) ||
                 functionName.equalsIgnoreCase(NULLIF) ||
-                functionName.equalsIgnoreCase(IF)) {
+                functionName.equalsIgnoreCase(IF) ||
+                functionName.equalsIgnoreCase(COALESCE)) {
             if (functionName.equalsIgnoreCase(IF)) {
                 arg_index = 1;
             }
