@@ -83,7 +83,7 @@ The following figure shows an example of privilege inheritance.
 
 > Note: The maximum number of inheritance levels for a role is 16. The inheritance relationship cannot be bidirectional.
 
-![role inheritance](../assets/privilege-role-inheri.png)
+![role inheritance](../assets/privilege-role_inheri.png)
 
 As shown in the figure:
 
