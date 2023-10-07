@@ -714,6 +714,32 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_update_file_iterators(const 
     return seg_iterators;
 }
 
+StatusOr<ChunkIteratorPtr> Rowset::get_update_file_iterator(const Schema& schema, uint32_t update_file_id,
+                                                            OlapReaderStatistics* stats) {
+    SegmentReadOptions seg_options;
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
+    seg_options.stats = stats;
+    seg_options.tablet_id = rowset_meta()->tablet_id();
+    seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
+
+    // open update file
+    DCHECK(update_file_id < num_update_files());
+    std::string seg_path = segment_upt_file_path(_rowset_path, rowset_id(), update_file_id);
+    ASSIGN_OR_RETURN(auto seg_ptr, Segment::open(seg_options.fs, seg_path, update_file_id, _schema));
+    if (seg_ptr->num_rows() == 0) {
+        return new_empty_iterator(schema, config::vector_chunk_size);
+    }
+    // create iterator
+    auto res = seg_ptr->new_iterator(schema, seg_options);
+    if (res.status().is_end_of_file()) {
+        return new_empty_iterator(schema, config::vector_chunk_size);
+    }
+    if (!res.ok()) {
+        return res.status();
+    }
+    return std::move(res).value();
+}
+
 Status Rowset::get_segment_sk_index(std::vector<std::string>* sk_index_values) {
     RETURN_IF_ERROR(load());
     for (auto& segment : _segments) {
