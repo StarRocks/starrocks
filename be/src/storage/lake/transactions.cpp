@@ -16,6 +16,7 @@
 
 #include "fs/fs_util.h"
 #include "storage/lake/metacache.h"
+#include "gutil/strings/join.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
@@ -36,9 +37,9 @@ namespace starrocks::lake {
 // then txn3 is published successfully in BE and the txn_log of txn3 has been deleted, but FE do not get the response for some reason,
 // turn the mode of publish to batch,
 // txn3 ,txn4, txn5 will be published in one publish batch task, so txn3 should be skipped and should return 1, just apply txn_log of txn4 and txn5.
-Status get_base_tablet_metadata_index(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
-                                      int64_t new_version, std::span<const int64_t>& txn_ids, int& result_base_index) {
-    result_base_index = -1;
+StatusOr<int64_t> get_base_tablet_metadata_index(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
+                                                 int64_t new_version, std::span<const int64_t> txn_ids) {
+    int result_base_index = -1;
     for (int i = 0; i < txn_ids.size(); i++) {
         auto txn_id = txn_ids[i];
         auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
@@ -63,17 +64,7 @@ Status get_base_tablet_metadata_index(TabletManager* tablet_mgr, int64_t tablet_
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
                                             int64_t new_version, std::span<const int64_t> txn_ids,
                                             int64_t commit_time) {
-    auto print_txn_ids = [=]() -> std::string {
-        std::string result;
-        for (int i = 0; i < txn_ids.size(); i++) {
-            if (i != 0) {
-                result.append(", ");
-            }
-            result.append(std::to_string(txn_ids[i]));
-        }
-        return result;
-    };
-    VLOG(1) << "publish version tablet_id: " << tablet_id << ", txns: " << print_txn_ids()
+    VLOG(1) << "publish version tablet_id: " << tablet_id << ", txns: " << JoinInts(txn_ids, ",")
             << ", base_version: " << base_version << ", new_version: " << new_version;
 
     auto new_version_metadata_or_error = [=](Status error) -> StatusOr<TabletMetadataPtr> {
@@ -103,7 +94,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     }
 
     if (base_version_index == -1) {
-        LOG(WARNING) << "all txn_log missing, txn_ids: " << print_txn_ids();
+        LOG(WARNING) << "all txn_log missing, txn_ids: " << JoinInts(txn_ids, ",");
         return tablet_mgr->get_tablet_metadata(tablet_id, new_version);
     }
 
@@ -231,7 +222,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 }
 
 Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_ids,
-                           const int64* log_versions, int txns_size) {
+                           const int64_t* log_versions, int txns_size) {
     std::vector<std::string> files_to_delete;
     for (int i = 0; i < txns_size; i++) {
         auto txn_id = txn_ids[i];

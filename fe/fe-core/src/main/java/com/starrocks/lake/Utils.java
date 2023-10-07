@@ -21,7 +21,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.UserException;
-import com.starrocks.proto.PublishLogVersionRequest;
+import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
@@ -106,7 +106,7 @@ public class Utils {
 
     public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<Long> txnIds,
                                       long baseVersion, long newVersion, long commitTimeInSecond,
-                                           Map<Long, Double> compactionScores)
+                                      Map<Long, Double> compactionScores)
             throws NoAliveBackendException, RpcException {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (Tablet tablet : tablets) {
@@ -193,13 +193,13 @@ public class Utils {
                 throw new NoAliveBackendException("Backend or computeNode been dropped " +
                         "while building publish version request");
             }
-            PublishLogVersionRequest request = new PublishLogVersionRequest();
+            PublishLogVersionBatchRequest request = new PublishLogVersionBatchRequest();
             request.tabletIds = entry.getValue();
             request.txnIds = txnIds;
             request.versions = versions;
 
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
-            Future<PublishLogVersionResponse> future = lakeService.publishLogVersion(request);
+            Future<PublishLogVersionResponse> future = lakeService.publishLogVersionBatch(request);
             responseList.add(future);
             nodeList.add(node);
         }

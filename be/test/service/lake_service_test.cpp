@@ -793,17 +793,17 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         brpc::Controller cntl;
         _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
         ASSERT_TRUE(cntl.Failed());
-        ASSERT_EQ("missing txn_ids", cntl.ErrorText());
+        ASSERT_EQ("missing txn_id", cntl.ErrorText());
     }
     {
         lake::PublishLogVersionRequest request;
         lake::PublishLogVersionResponse response;
         request.add_tablet_ids(_tablet_id);
-        request.add_txn_ids(txn_id);
+        request.set_txn_id(txn_id);
         brpc::Controller cntl;
         _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
         ASSERT_TRUE(cntl.Failed());
-        ASSERT_EQ("missing versions", cntl.ErrorText());
+        ASSERT_EQ("missing version", cntl.ErrorText());
     }
     for (auto inject_error : {Status::InternalError("injected"), Status::NotFound("injected")}) {
         std::cerr << "Injected error: " << inject_error << '\n';
@@ -817,8 +817,8 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         lake::PublishLogVersionRequest request;
         lake::PublishLogVersionResponse response;
         request.add_tablet_ids(_tablet_id);
-        request.add_txn_ids(txn_id);
-        request.add_versions(10);
+        request.set_txn_id(txn_id);
+        request.set_version(10);
         brpc::Controller cntl;
         _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
@@ -833,8 +833,8 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         lake::PublishLogVersionRequest request;
         lake::PublishLogVersionResponse response;
         request.add_tablet_ids(_tablet_id);
-        request.add_txn_ids(txn_id);
-        request.add_versions(10);
+        request.set_txn_id(txn_id);
+        request.set_version(10);
         brpc::Controller cntl;
         _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
@@ -849,8 +849,8 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         lake::PublishLogVersionRequest request;
         lake::PublishLogVersionResponse response;
         request.add_tablet_ids(_tablet_id);
-        request.add_txn_ids(txn_id);
-        request.add_versions(10);
+        request.set_txn_id(txn_id);
+        request.set_version(10);
         brpc::Controller cntl;
         _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
@@ -885,34 +885,34 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         ASSERT_OK(_tablet_mgr->put_txn_log(txnlog2));
     }
     {
-        lake::PublishLogVersionRequest request;
+        lake::PublishLogVersionBatchRequest request;
         lake::PublishLogVersionResponse response;
         brpc::Controller cntl;
-        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
         ASSERT_TRUE(cntl.Failed());
         ASSERT_EQ("missing tablet_ids", cntl.ErrorText());
     }
     {
-        lake::PublishLogVersionRequest request;
+        lake::PublishLogVersionBatchRequest request;
         lake::PublishLogVersionResponse response;
         request.add_tablet_ids(_tablet_id);
         brpc::Controller cntl;
-        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
         ASSERT_TRUE(cntl.Failed());
         ASSERT_EQ("missing txn_ids", cntl.ErrorText());
     }
     {
-        lake::PublishLogVersionRequest request;
+        lake::PublishLogVersionBatchRequest request;
         lake::PublishLogVersionResponse response;
         request.add_tablet_ids(_tablet_id);
         request.add_txn_ids(1001);
         brpc::Controller cntl;
-        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
         ASSERT_TRUE(cntl.Failed());
         ASSERT_EQ("missing versions", cntl.ErrorText());
     }
     {
-        lake::PublishLogVersionRequest request;
+        lake::PublishLogVersionBatchRequest request;
         lake::PublishLogVersionResponse response;
         request.add_tablet_ids(_tablet_id);
         request.add_txn_ids(1001);
@@ -920,7 +920,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         request.add_versions(10);
         request.add_versions(11);
         brpc::Controller cntl;
-        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
 
@@ -940,7 +940,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
     }
     // duplicate request
     {
-        lake::PublishLogVersionRequest request;
+        lake::PublishLogVersionBatchRequest request;
         lake::PublishLogVersionResponse response;
         request.add_tablet_ids(_tablet_id);
         request.add_txn_ids(1001);
@@ -948,7 +948,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         request.add_versions(10);
         request.add_versions(11);
         brpc::Controller cntl;
-        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
 
@@ -970,12 +970,12 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
 
     // not existing txnId
     {
-        lake::PublishLogVersionRequest request;
+        lake::PublishLogVersionBatchRequest request;
         lake::PublishLogVersionResponse response;
         request.add_tablet_ids(_tablet_id);
         request.add_txn_ids(1111);
         brpc::Controller cntl;
-        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
         ASSERT_TRUE(cntl.Failed());
     }
 }
@@ -998,8 +998,8 @@ TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
         lake::PublishLogVersionRequest request;
         lake::PublishLogVersionResponse response;
         request.add_tablet_ids(_tablet_id);
-        request.add_txn_ids(1000);
-        request.add_versions(4);
+        request.set_txn_id(1000);
+        request.set_version(4);
         brpc::Controller cntl;
         _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
