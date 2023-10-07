@@ -2515,6 +2515,7 @@ StatusOr<ColumnPtr> StringFunctions::unhex(FunctionContext* context, const starr
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(url_encodeImpl, str) {
     return StringFunctions::url_encode_func(str.to_string());
+}
 
 StatusOr<ColumnPtr> StringFunctions::url_extract_host(FunctionContext* context, const starrocks::Columns& columns) {
     UrlParser::UrlPart url_part_enum = UrlParser::HOST;
