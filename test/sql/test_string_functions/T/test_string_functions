@@ -73,6 +73,23 @@ select split_part(c1, "##", -1) from t1;
 select split_part(c1, "##", -2) from t1;
 select split_part(c1, "##", -3) from t1;
 
+-- name: test_url_extract_host
+select url_extract_host('https://starrocks.com/test/api/v1');
+select url_extract_host('https://starrocks.快速.com/test/api/v1');
+select url_extract_host(NULL);
+select url_extract_host('https://starrocks.com/doc?k1=10&k2=3&k1=100');
+CREATE TABLE IF NOT EXISTS `test_url_extract_host` (
+  `id` varchar(10),
+  `url` varchar(100)
+)
+PROPERTIES(
+  "replication_num" = "1"
+);
+insert into test_url_extract_host(id,url)
+values ('1', 'https://starrocks.com/doc?k1=10&k2=3&k1=100'),
+       ('2', 'https://starrocks.快速.com/doc?k1=10&k2=3&k1=100');
+select url_extract_host(url) from test_url_extract_host;
+
 -- name: test_url_encode
 select url_encode('https://docs.starrocks.io/en-us/latest/quick_start/Deploy');
 select url_encode('https://docs.starrocks数据库.io/en-us/latest/quick_start/Deploy?name=快速');
