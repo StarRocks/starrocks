@@ -470,7 +470,6 @@ public:
      * @return: StringColumn
      */
     DEFINE_VECTORIZED_FN(url_extract_host);
-    static std::string url_extract_host_func(const std::string& value);
 
     /**
      * params are one strings. Returns string for url encode string,
