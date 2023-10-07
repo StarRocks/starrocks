@@ -136,6 +136,7 @@ public class ExplainAnalyzer {
     private final LinkedList<String> indents = Lists.newLinkedList();
     private final Map<Integer, NodeInfo> allNodeInfos = Maps.newHashMap();
     private boolean isRuntimeProfile;
+    private boolean isFinishedIdentical;
 
     private String color = ANSI_RESET;
 
@@ -293,6 +294,7 @@ public class ExplainAnalyzer {
     }
 
     private void checkIdentical() {
+        isFinishedIdentical = true;
         Queue<RuntimeProfile> queue = Lists.newLinkedList();
         queue.offer(executionProfile);
         while (!queue.isEmpty()) {
@@ -300,7 +302,10 @@ public class ExplainAnalyzer {
             for (int i = 0; i < size; i++) {
                 RuntimeProfile top = queue.poll();
                 Preconditions.checkState(top != null);
-                Preconditions.checkState(!top.containsInfoString("NotIdentical"), "Profile is not identical");
+                if (top.containsInfoString("NotIdentical")) {
+                    isFinishedIdentical = false;
+                    return;
+                }
 
                 for (RuntimeProfile child : top.getChildMap().values()) {
                     queue.offer(child);
@@ -319,6 +324,10 @@ public class ExplainAnalyzer {
             appendSummaryLine("Attention: ", ANSI_BOLD + ANSI_BLACK_ON_RED,
                     "The transaction of the statement will be aborted, and no data will be actually inserted!!!",
                     ANSI_RESET);
+        }
+        if (!isFinishedIdentical) {
+            appendSummaryLine("Attention: ", ANSI_BOLD + ANSI_BLACK_ON_RED,
+                    "Profile is not identical!!!", ANSI_RESET);
         }
         appendSummaryLine("QueryId: ", summaryProfile.getInfoString(ProfileManager.QUERY_ID));
         appendSummaryLine("Version: ", summaryProfile.getInfoString("StarRocks Version"));
