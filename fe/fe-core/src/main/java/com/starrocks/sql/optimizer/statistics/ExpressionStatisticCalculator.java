@@ -159,7 +159,7 @@ public class ExpressionStatisticCalculator {
                     .setMinValue(minValue)
                     .setMaxValue(maxValue)
                     .setNullsFraction(childStatistic.getNullsFraction())
-                    .setAverageRowSize(childStatistic.getAverageRowSize())
+                    .setAverageRowSize(cast.getType().getTypeSize())
                     .setDistinctValuesCount(childStatistic.getDistinctValuesCount())
                     .build();
         }
