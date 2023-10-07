@@ -232,6 +232,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -271,6 +272,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunks[i], indexes.data(), indexes.size()));
@@ -290,6 +292,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunks[i], indexes.data(), indexes.size()));
@@ -321,6 +324,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunks[i], indexes.data(), indexes.size()));
@@ -352,6 +356,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -390,6 +395,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -426,6 +432,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_resolve_conflict) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -449,6 +456,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_resolve_conflict) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -496,6 +504,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success_multiple_tablet) {
                                             .set_txn_id(txn_id)
                                             .set_partition_id(_partition_id)
                                             .set_mem_tracker(_mem_tracker.get())
+                                            .set_index_id(_tablet_schema->id())
                                             .build());
             ASSERT_OK(w->open());
             ASSERT_OK(w->write(*chunk_ptr, indexes, indexes_size));
@@ -532,6 +541,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_largedata) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));

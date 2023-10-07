@@ -96,11 +96,6 @@ public:
 
     Status check_immutable();
 
-    void TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
-                                 const std::vector<int32_t>& referenced_column_ids);
-
-    void TEST_set_miss_auto_increment_column();
-
 private:
     DeltaWriterImpl* _impl;
 };
@@ -169,6 +164,11 @@ public:
         return *this;
     }
 
+    DeltaWriterBuilder& set_index_id(int64_t index_id) {
+        _index_id = index_id;
+        return *this;
+    }
+
     StatusOr<DeltaWriterPtr> build();
 
 private:
@@ -176,6 +176,7 @@ private:
     int64_t _txn_id{0};
     int64_t _table_id{0};
     int64_t _partition_id{0};
+    int64_t _index_id{0};
     int64_t _tablet_id{0};
     const std::vector<SlotDescriptor*>* _slots{nullptr};
     std::string _merge_condition{};
