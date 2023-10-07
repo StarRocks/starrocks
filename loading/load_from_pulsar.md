@@ -16,7 +16,7 @@ Routine Load 目前支持从 Pulsar 集群中消费 CSV、JSON 格式的数据�
 
 **[Topic](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#topics)**
 
-Topic 负责存储和发布消息。Producer 往 Topic 中写消息，Consumer 从 Topic 中读消息。Pulsar 的 Topic 分为 Partitioned Topic 和 Non-Partitioned Topic 两类。<br>
+Topic 负责存储和发布消息。Producer 往 Topic 中写消息，Consumer 从 Topic 中读消息。Pulsar 的 Topic 分为 Partitioned Topic 和 Non-Partitioned Topic 两类。<br />
 
 - [Partitioned Topic](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#partitioned-topics)：通过多个 Broker 提供服务，可以支持更高的吞吐量。Pulsar 通过多个 Internal Topic 来实现 Partitioned Topic。
 - Non-Partitioned Topic：只会有单个 Broker 提供服务，限制了 Topic 的吞吐量。

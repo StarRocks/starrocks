@@ -124,7 +124,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 **DEFAULT "default_value"**：列数据的默认值。导入数据时，如果该列对应的源数据文件中的字段为空，则自动填充 `DEFAULT` 关键字中指定的默认值。支持以下三种指定方式：
 
 * **DEFAULT current_timestamp**：默认值为当前时间。参见 [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md) 。
-* **DEFAULT <默认值>**：默认值为指定类型的值。例如，列类型为 VARCHAR，即可指定默认值为 `DEFAULT "beijing"`。当前不支持指定 ARRAY、BITMAP、JSON、HLL 和 BOOLEAN 类型为默认值。
+* **DEFAULT `<默认值>`**：默认值为指定类型的值。例如，列类型为 VARCHAR，即可指定默认值为 `DEFAULT "beijing"`。当前不支持指定 ARRAY、BITMAP、JSON、HLL 和 BOOLEAN 类型为默认值。
 * **DEFAULT (<表达式>)**：默认值为指定函数返回的结果。目前仅支持 [uuid()](../../sql-functions/utility-functions/uuid.md) 和 [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) 表达式。
 
 * **AUTO_INCREMENT**：指定自增列。自增列的数据类型只支持 BIGINT，自增 ID 从 1 开始增加，自增步长为 1。有关自增列的详细说明，请参见 [AUTO_INCREMENT](../auto_increment.md)。
@@ -556,8 +556,8 @@ PROPERTIES (
 | 参数                          | 是否必填 | 说明                                                         |
 | ----------------------------- | -------- | ------------------------------------------------------------ |
 | `dynamic_partition.enable`    | 否       | 开启动态分区特性，取值为 `TRUE`（默认）或 `FALSE`。       |
-| `dynamic_partition.time_unit` | 是       | 动态分区的时间粒度，取值为 `DAY`、`WEEK` 或 `MONTH`。时间粒度会决定动态创建的分区名后缀格式。  <br>取值为 `DAY` 时，动态创建的分区名后缀格式为 yyyyMMdd，例如 `20200321`。<br>取值为 `WEEK` 时，动态创建的分区名后缀格式为 `yyyy_ww`，例如 `2020_13` 代表 2020 年第 13 周。<br>取值为 `MONTH` 时，动态创建的分区名后缀格式为 yyyyMM，例如 `202003`。 |
-| `dynamic_partition.start`：   | 否       | 保留的动态分区的起始偏移，取值范围为负整数。根据 `dynamic_partition.time_unit` 属性的不同，以当天（周/月）为基准，分区范围在此偏移之前的分区将会被删除。比如设置为`-3`，并且`dynamic_partition.time_unit`为`day`，则表示 3 天前的分区会被删掉。<br>如果不填写，则默认为 `Integer.MIN_VALUE`，即 `-2147483648`，表示不删除历史分区。 |
+| `dynamic_partition.time_unit` | 是       | 动态分区的时间粒度，取值为 `DAY`、`WEEK` 或 `MONTH`。时间粒度会决定动态创建的分区名后缀格式。  <br />取值为 `DAY` 时，动态创建的分区名后缀格式为 yyyyMMdd，例如 `20200321`。<br />取值为 `WEEK` 时，动态创建的分区名后缀格式为 `yyyy_ww`，例如 `2020_13` 代表 2020 年第 13 周。<br />取值为 `MONTH` 时，动态创建的分区名后缀格式为 yyyyMM，例如 `202003`。 |
+| `dynamic_partition.start`：   | 否       | 保留的动态分区的起始偏移，取值范围为负整数。根据 `dynamic_partition.time_unit` 属性的不同，以当天（周/月）为基准，分区范围在此偏移之前的分区将会被删除。比如设置为`-3`，并且`dynamic_partition.time_unit`为`day`，则表示 3 天前的分区会被删掉。<br />如果不填写，则默认为 `Integer.MIN_VALUE`，即 `-2147483648`，表示不删除历史分区。 |
 | `dynamic_partition.end`       | 是       | 提前创建的分区数量，取值范围为正整数。根据 `dynamic_partition.time_unit` 属性的不同，以当天（周/月）为基准，提前创建对应范围的分区。 |
 | `dynamic_partition.prefix`    | 否       | 动态分区的前缀名，默认值为 `p`。                             |
 | dynamic_partition.buckets     | 否       | 动态分区的分桶数量。默认与 BUCKETS 保留字指定的分桶数量、或者 StarRocks 自动设置的分桶数量保持一致。 |

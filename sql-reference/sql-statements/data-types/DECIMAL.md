@@ -36,6 +36,11 @@ DECIMAL(P [, S])
   
   2. Hive 直连外表中，ORC 和 Parquet 数据格式对 Decimal 暂未支持。
 
+### 使用限制
+
+读取外部 Hive 数据时，暂不支持读取 ORC 和 Parquet 文件中的 Decimal 数据，会有精度丢失。
+>>>>>>> 9bc54965 ([Doc] fix some markdown errors (backport #6724) (#6727))
+
 ## 示例
 
 创建表时指定字段类型为 DECIMAL。
