@@ -18,7 +18,7 @@ Fixed the following issues:
 - An error "Set cancelled by MemoryScratchSinkOperator" occurs when users read data from StarRocks using the Spark Connector or Flink Connector. [#30702](https://github.com/StarRocks/starrocks/pull/30702) [#30751](https://github.com/StarRocks/starrocks/pull/30751)
 - An error "java.lang.IllegalStateException: null" occurs during queries with an ORDER BY clause that includes aggregate functions. [#30108](https://github.com/StarRocks/starrocks/pull/30108)
 - FEs fail to restart when there are inactive materialized views. [#30015](https://github.com/StarRocks/starrocks/pull/30015)
-- Performing INSERT OVERWRITE operations on duplicate partitions corrupts the metadata, leading to FE restart failures. [#27521](https://github.com/StarRocks/starrocks/pull/27521)
+- Performing INSERT OVERWRITE operations on duplicate partitions corrupts the metadata, leading to FE restart failures. [#27545](https://github.com/StarRocks/starrocks/pull/27545)
 - An error "java.lang.NullPointerException: null" occurs when users modify columns that do not exist in a Primary Key table. [#30366](https://github.com/StarRocks/starrocks/pull/30366)
 - An error "get TableMeta failed from TNetworkAddress" occurs when users load data into a partitioned StarRocks external table. [#30124](https://github.com/StarRocks/starrocks/pull/30124)
 - In certain scenarios, an error occurs when users load data via CloudCanal. [#30799](https://github.com/StarRocks/starrocks/pull/30799)
