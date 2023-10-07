@@ -2514,10 +2514,6 @@ StatusOr<ColumnPtr> StringFunctions::unhex(FunctionContext* context, const starr
 }
 
 StatusOr<ColumnPtr> StringFunctions::url_extract_host(FunctionContext* context, const starrocks::Columns& columns) {
-    return VectorizedStringStrictUnaryFunction<url_extract_hostImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
-}
-
-DEFINE_STRING_UNARY_FN_WITH_IMPL(url_encodeImpl, str) {
     UrlParser::UrlPart url_part_enum = UrlParser::HOST;
     UrlParser::UrlPart* url_part = &url_part_enum;
     return parse_url_const(url_part, context, columns);
