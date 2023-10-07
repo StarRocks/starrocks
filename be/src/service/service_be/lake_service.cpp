@@ -178,7 +178,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             auto res = tablet_manager->publish_version(tablet_id, base_version, new_version, txns, txns_size);
             if (res.ok()) {
                 auto metadata = std::move(res).value();
-                auto score = compaction_score(*metadata);
+                auto score = compaction_score(metadata);
                 std::lock_guard l(response_mtx);
                 response->mutable_compaction_scores()->insert({tablet_id, score});
             } else {
