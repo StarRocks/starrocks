@@ -93,7 +93,7 @@ static Status _validate_options(const EngineOptions& options) {
 }
 
 Status StorageEngine::open(const EngineOptions& options, StorageEngine** engine_ptr) {
-    if (options.need_write_cluster_id) {
+    if (!options.as_cn) {
         RETURN_IF_ERROR(_validate_options(options));
     }
 
@@ -182,11 +182,12 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
 }
 
 Status StorageEngine::_open(const EngineOptions& options) {
+    _as_cn = options.as_cn;
+    _effective_cluster_id = config::cluster_id;
+
     // init store_map
     RETURN_IF_ERROR_WITH_WARN(_init_store_map(), "_init_store_map failed");
 
-    _effective_cluster_id = config::cluster_id;
-    _need_write_cluster_id = options.need_write_cluster_id;
     RETURN_IF_ERROR_WITH_WARN(_check_all_root_path_cluster_id(), "fail to check cluster id");
 
     _update_storage_medium_type_count();
@@ -200,7 +201,9 @@ Status StorageEngine::_open(const EngineOptions& options) {
     auto dirs = get_stores<false>();
 
     // `load_data_dirs` depend on |_update_manager|.
-    load_data_dirs(dirs);
+    if (!_as_cn) {
+        load_data_dirs(dirs);
+    }
 
     std::unique_ptr<ThreadPool> thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("delta_writer")
@@ -256,8 +259,11 @@ Status StorageEngine::_init_store_map() {
         ScopedCleanup store_release_guard([&]() { delete store; });
         tmp_stores.emplace_back(true, store);
         store_release_guard.cancel();
-        threads.emplace_back([store, &error_msg_lock, &error_msg]() {
-            auto st = store->init();
+        auto& as_cn = _as_cn;
+        threads.emplace_back([store, &error_msg_lock, &error_msg, as_cn]() {
+            // for debug
+            LOG(INFO) << "as_cn captured in _init_store_map is " << as_cn;
+            auto st = store->init(false, as_cn);
             if (!st.ok()) {
                 {
                     std::lock_guard<SpinLock> l(error_msg_lock);
@@ -446,8 +452,13 @@ Status StorageEngine::_check_all_root_path_cluster_id() {
     RETURN_IF_ERROR(_judge_and_update_effective_cluster_id(cluster_id));
 
     // write cluster id into cluster_id_path if get effective cluster id success
+<<<<<<< HEAD
     if (_effective_cluster_id != -1 && !_is_all_cluster_id_exist && _need_write_cluster_id) {
         set_cluster_id(_effective_cluster_id);
+=======
+    if (_effective_cluster_id != -1 && !_is_all_cluster_id_exist && !_as_cn) {
+        RETURN_IF_ERROR(set_cluster_id(_effective_cluster_id));
+>>>>>>> 6b577c1926 ([Enhancement] remove some useless operatitons when start as cn (#31947))
     }
 
     return Status::OK();
