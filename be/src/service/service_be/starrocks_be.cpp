@@ -183,6 +183,15 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     if (config::brpc_num_threads != -1) {
         options.num_threads = config::brpc_num_threads;
     }
+    const auto lake_service_max_concurrency = config::lake_service_max_concurrency;
+    const auto service_name = "starrocks.lake.LakeService";
+    const auto methods = {"abort_txn",           "abort_compaction", "compact",          "drop_table",
+                          "delete_data",         "delete_tablet",    "get_tablet_stats", "publish_version",
+                          "publish_log_version", "vacuum",           "vacuum_full"};
+    for (auto method : methods) {
+        brpc_server->MaxConcurrencyOf(service_name, method) = lake_service_max_concurrency;
+    }
+
     if (auto ret = brpc_server->Start(config::brpc_port, &options); ret != 0) {
         LOG(ERROR) << "BRPC service did not start correctly, exiting errcoe: " << ret;
         shutdown_logging();
