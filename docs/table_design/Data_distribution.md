@@ -529,28 +529,35 @@ Buckets reflect how data files are actually organized in StarRocks.
 
 - How to set the number of buckets at table creation
 
-  - Method 1: automatically set the number of buckets
+  - Method 1: automatically set the number of buckets(recommended)
+    - Table configured with hash bucketing
 
-    Since v2.5.7, StarRocks can automatically set the number of buckets based on machine resources and data volume for a partition.
+      Since v2.5.7, StarRocks can automatically set the number of buckets based on machine resources and data volume for a partition.
 
-    Example:
+      Example:
 
       ```SQL
-    CREATE TABLE site_access(
-        site_id INT DEFAULT '10',
-        city_code SMALLINT,
-        user_name VARCHAR(32) DEFAULT '',
-        pv BIGINT SUM DEFAULT '0'
-    )
-    AGGREGATE KEY(site_id, city_code, user_name)
-    DISTRIBUTED BY HASH(site_id,city_code); -- do not need to set the number of buckets
+      CREATE TABLE site_access(
+          site_id INT DEFAULT '10',
+          city_code SMALLINT,
+          user_name VARCHAR(32) DEFAULT '',
+          pv BIGINT SUM DEFAULT '0'
+      )
+      AGGREGATE KEY(site_id, city_code, user_name)
+      DISTRIBUTED BY HASH(site_id,city_code); -- do not need to set the number of buckets
       ```
 
-    To enable this feature, make sure that the FE dynamic parameter `enable_auto_tablet_distribution` is set to `TRUE`. After a table is created, you can execute [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20VIEW.md) to view the bucket number automatically set by StarRocks.
+      After a table is created, you can execute [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20VIEW.md) to view the bucket number automatically set by StarRocks.
 
-    > **NOTICE**
-    >
-    > If the raw data size of a partition exceeds 100 GB, we recommend that you manually configure the number of buckets using the Method 2.
+      > **NOTICE**
+      >
+      > If the raw data size of a partition exceeds 100 GB, we recommend that you manually configure the number of buckets using the Method 2.
+
+    - Table configured with random bucketing
+
+      Since v2.5.7, StarRocks can automatically set the number of buckets based on machine resources and data volume for a partition. Since v3.2.0, StarRocks optimizes the logic for automatically setting the number of buckets. After creating a table, StarRocks increases the number of buckets in a partitions **dynamically and accordingly**, based on cluster capacity and the volume of loaded data. so it not only provide more convenience for users, but also improves performance when data is loaded in a bulk or high-frequenct manner. <!--To further adjust the number of buckets, you can modify the system variable [`pipeline_dop`](../reference/System_variable#pipeline_dop) and the table property `max_mutable_partition_num` based on the logic???-->
+
+      After a table is created, you can execute [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20VIEW.md) to view each partition's bucket number for currently set by StarRocks.
 
   - Method 2: manually set the number of buckets
 
@@ -571,14 +578,22 @@ Buckets reflect how data files are actually organized in StarRocks.
     ```
 
 - How to set the number of buckets when adding a new partition
-  > **NOTICE**
-  >
-  > You cannot modify the number of buckets for an existing partition.
+
   - Method 1: automatically set the number of buckets (Recommended)
+    - Table configured with hash bucketing
 
-    Since v2.5.7, StarRocks supports automatically setting the number of buckets based on machine resources and data volume for a partition. To enable this feature, make sure that the FE dynamic parameter `enable_auto_tablet_distribution` retains the default value `TRUE`.
+      Since v2.5.7, StarRocks supports automatically setting the number of buckets based on machine resources and data volume for a partition.
 
-    To disable this feature, run the `ADMIN SET FRONTEND CONFIG ('enable_auto_tablet_distribution' = 'false');` statement. And when a new partition is added without specifying the number of buckets, the new partition inherits the the number of buckets set at the creation of the table. After a new partition is added successfully, you can execute SHOW PARTITIONS to view the number of buckets automatically set by StarRocks for the new partition.
+      After a new partition is added successfully, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) to view the number of buckets automatically set by StarRocks for the new partition.
+      <!--待定-->
+      And when a new partition is added without specifying the number of buckets, the new partition inherits the the number of buckets set at the creation of the table.
+      > **NOTICE**
+      >
+      > If the raw data size of a partition exceeds 100 GB, we recommend that you manually configure the number of buckets using the Method 2.
+    - Table configured with random bucketing
+      Since v2.5.7, StarRocks can automatically set the number of buckets based on machine resources and data volume for a partition. Since v3.2.0, StarRocks optimizes the logic for automatically setting the number of buckets. After adding a new partition, StarRocks increases the number of buckets in the partition **dynamically and accordingly**, based on cluster capacity and the volume of loaded data. So it not only provide more convenience for users, but also improves performance when data is loaded in a bulk or high-frequency manner. <!--To further adjust the number of buckets, you can modify the system variable [`pipeline_dop`](../reference/System_variable#pipeline_dop) and the table property `max_mutable_partition_num` based on the logic???-->
+
+      After a new partition is added successfully, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) to view the number of buckets automatically set by StarRocks for the new partition.
 
   - Method 2: manually set the number of buckets
 
