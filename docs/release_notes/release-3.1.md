@@ -177,6 +177,7 @@ Optimized the data cache in StarRocks shared-data clusters. The optimized data c
 - Optimized the collection of statistics for the CBO. This reduces the impact of statistics collection on data ingestion and increases statistics collection performance.
 - Optimized the merge algorithm to increase the overall performance by up to 2 times in permutation scenarios.
 - Optimized the query logic to reduce dependency on database locks.
+- Dynamic partitioning further supports the partitioning unit to be year. [#28386](https://github.com/StarRocks/starrocks/pull/28386)
 
 #### SQL reference
 
