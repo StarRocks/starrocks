@@ -6,48 +6,48 @@
 
 | HTTP 请求方法       | HTTP 请求路径                                                   | 描述                                                                                                                |
 |------------------| --------------------------------------------------------------  |-------------------------------------------------------------------------------------------------------------------- |
-| PUT              | /api/{db}/{table}/_stream_load                                  | Stream Load 操作，详见 [Stream Load](../loading/StreamLoad.md)。                               |
-| POST/PUT         | /api/transaction/{txn_op}                                       | Stream Load 事务接口，详见 [Stream Load 事务接口](../loading/Stream_Load_transaction_interface.md)     |
-| GET              | /api/{db}/_load_info
-| GET              | /api/_set_config?config_key1=config_value1                      | 更新 FE 配置。                                                                                                            |
-| GET              | /api/_get_ddl?db={}&tbl={}                                      | 查看表 DDL 语句。
-| GET              | /api/_migration?db={}&tbl={}                                    | 查看表 tablet 信息。                                                                                                    |
-| GET              | /api/_check_storagetype
-| POST             | /api/{db}/{label}/_cancel
-| GET              | /api/{db}/get_load_state
-| GET              | /api/health
-| GET              | /metrics?type={core/json}                                       | 查看当前 FE 的 metrics。                                                                                                |
-| GET              | /api/show_meta_info
-| GET              | /api/show_proc
-| GET              | /api/show_runtime_info
-| HEAD/GET         | /api/get_log_file
-| GET              | /api/get_small_file
-| GET              | /api/rowcount
-| GET              | /api/check_decommission
-| GET              | /api/_meta_replay_state
-| POST             | /api/colocate/bucketseq
-| GET              | /api/colocate
-| POST             | /api/colocate/group_stable
-| POST             | /api/colocate/group_unstable
-| POST             | /api/colocate/update_group
-| POST             | /api/global_dict/table/enable
-| GET              | /api/profile?query_id={}                                        | 获取指定 query ID 的 profile 信息。                                                                                       |
-| GET              | /api/query_detail
-| GET              | /api/connection
-| GET              | /api/show_data?db={}                                            | 查询指定数据库的大小。                                                                                                    |
-| POST             | /api/query_dump                                                 | 获取 query dump 信息，详见 [Query dump](../faq/Dump_query.md) 。                       |
-| GET              | /api/stop
-| GET              | /image
-| GET              | /info
-| GET              | /version
-| GET              | /put
-| GET              | /journal_id
-| GET              | /check
-| GET              | /dump
-| GET              | /role
-| GET              | /api/{db}/{table}/_count
-| GET              | /api/{db}/{table}/_schema                                      | 查看表结构。                                                                                                          |
-| GET/POST         | /api/{db}/{table}/_query_plan
+| PUT              | `/api/{db}/{table}/_stream_load`                                  | Stream Load 操作，详见 [Stream Load](../loading/StreamLoad.md)。                               |
+| POST/PUT         | `/api/transaction/{txn_op}`                                       | Stream Load 事务接口，详见 [Stream Load 事务接口](../loading/Stream_Load_transaction_interface.md)     |
+| GET              | `/api/{db}/_load_info`
+| GET              | `/api/_set_config?config_key1=config_value1`                      | 更新 FE 配置。                                                                                                            |
+| GET              | `/api/_get_ddl?db={}&tbl={}`                                      | 查看表 DDL 语句。
+| GET              | `/api/_migration?db={}&tbl={}`                                    | 查看表 tablet 信息。                                                                                                    |
+| GET              | `/api/_check_storagetype`
+| POST             | `/api/{db}/{label}/_cancel`
+| GET              | `/api/{db}/get_load_state`
+| GET              | `/api/health`
+| GET              | `/metrics?type={core/json}`                                       | 查看当前 FE 的 metrics。                                                                                                |
+| GET              | `/api/show_meta_info`
+| GET              | `/api/show_proc`
+| GET              | `/api/show_runtime_info`
+| HEAD/GET         | `/api/get_log_file`
+| GET              | `/api/get_small_file`
+| GET              | `/api/rowcount`
+| GET              | `/api/check_decommission`
+| GET              | `/api/_meta_replay_state`
+| POST             | `/api/colocate/bucketseq`
+| GET              | `/api/colocate`
+| POST             | `/api/colocate/group_stable`
+| POST             | `/api/colocate/group_unstable`
+| POST             | `/api/colocate/update_group`
+| POST             | `/api/global_dict/table/enable`
+| GET              | `/api/profile?query_id={}`                                        | 获取指定 query ID 的 profile 信息。                                                                                       |
+| GET              | `/api/query_detail`
+| GET              | `/api/connection`
+| GET              | `/api/show_data?db={}`                                            | 查询指定数据库的大小。                                                                                                    |
+| POST             | `/api/query_dump`                                                 | 获取 query dump 信息，详见 [Query dump](../faq/Dump_query.md) 。                       |
+| GET              | `/api/stop`
+| GET              | `/image`
+| GET              | `/info`
+| GET              | `/version`
+| GET              | `/put`
+| GET              | `/journal_id`
+| GET              | `/check`
+| GET              | `/dump`
+| GET              | `/role`
+| GET              | `/api/{db}/{table}/_count`
+| GET              | `/api/{db}/{table}/_schema`                                      | 查看表结构。                                                                                                          |
+| GET/POST         | `/api/{db}/{table}/_query_plan`
 
 ## BE
 

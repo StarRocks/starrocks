@@ -128,7 +128,7 @@ DISTRIBUTED BY HASH(id);
 
     返回结果显示，StarRocks 计算表达式自动得出生成列 `newcol1` 和 `newcol2` 的值。
 
-    **注意事项：**<br>导入数据时如果您指定生成列的值，则会返回如下报错：
+    **注意事项：**<br />导入数据时如果您指定生成列的值，则会返回如下报错：
 
       ```SQL
       MySQL [example_db]> INSERT INTO test_tbl1 (id, data_array, data_json, newcol1, newcol2) 
@@ -234,7 +234,7 @@ DISTRIBUTED BY HASH(id);
 ALTER TABLE test_tbl3 DROP COLUMN newcol1;
 ```
 
-**注意事项：**<br>如果生成列的表达式引用某个普通列，并且您需要删除或修改该普通列，您必须先删除该生成列，才能删除或修改该普通列。
+**注意事项：**<br />如果生成列的表达式引用某个普通列，并且您需要删除或修改该普通列，您必须先删除该生成列，才能删除或修改该普通列。
 
 ### 查询改写
 

@@ -82,7 +82,7 @@ FE 判定各个查询是否需要通过 Query Cache 进行加速，并对查询�
 | **变量**                    | **默认值** | **是否支持动态修改** | **说明**                                                     |
 | --------------------------- | ---------- | -------------------- | ------------------------------------------------------------ |
 | enable_query_cache          | false      | 是                   | 指定是否开启 Query Cache。取值范围：`true` 和 `false`。`true` 表示开启，`false` 表示关闭。开启该功能后，只有当查询满足本文“[应用场景](../using_starrocks/query_cache.md#应用场景)”小节所述之条件时，才会启用 Query Cache。 |
-| query_cache_entry_max_bytes | 4194304    | 是                   | 指定触发 Passthrough 模式的阈值。取值范围：`0` ~ `9223372036854775807`。当一个 Tablet 上产生的计算结果的字节数或者行数超过 `query_cache_entry_max_bytes` 或 `query_cache_entry_max_rows` 指定的阈值时，则查询采用 Passthrough 模式执行。<br>当 `query_cache_entry_max_bytes` 或 `query_cache_entry_max_rows` 取值为 `0` 时, 即便 Tablet 产生结果为空，也采用 Passthrough 模式。 |
+| query_cache_entry_max_bytes | 4194304    | 是                   | 指定触发 Passthrough 模式的阈值。取值范围：`0` ~ `9223372036854775807`。当一个 Tablet 上产生的计算结果的字节数或者行数超过 `query_cache_entry_max_bytes` 或 `query_cache_entry_max_rows` 指定的阈值时，则查询采用 Passthrough 模式执行。<br />当 `query_cache_entry_max_bytes` 或 `query_cache_entry_max_rows` 取值为 `0` 时, 即便 Tablet 产生结果为空，也采用 Passthrough 模式。 |
 | query_cache_entry_max_rows  | 409600     | 是                   | 同上。                                                           |
 
 ### BE 配置项
@@ -91,7 +91,7 @@ FE 判定各个查询是否需要通过 Query Cache 进行加速，并对查询�
 
 | **参数**             | **必填** | **描述**                                                     |
 | -------------------- | -------- | ------------------------------------------------------------ |
-| query_cache_capacity | 否       | 指定 Query Cache 的大小。单位：字节。默认为 512 MB。<br>每个 BE 都有自己的 Query Cache，并且只填充 (Populate) 和检查 (Probe) 自己的 Query Cache。Query Cache 占用的是所在 BE 的内存。<br>注意 Query Cache 大小不能不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。 |
+| query_cache_capacity | 否       | 指定 Query Cache 的大小。单位：字节。默认为 512 MB。<br />每个 BE 都有自己的 Query Cache，并且只填充 (Populate) 和检查 (Probe) 自己的 Query Cache。Query Cache 占用的是所在 BE 的内存。<br />注意 Query Cache 大小不能不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。 |
 
 ## 确保最大缓存命中率
 
@@ -412,7 +412,7 @@ PROPERTIES
 | **分区策略**              | **是否支持部分结果复用**        |
 | ------------------------- | ------------------------------- |
 | Unpartitioned             | 不支持                          |
-| Multi-Column Partitioned  | 不支持<br>**说明**<br>未来可能会支持。 |
+| Multi-Column Partitioned  | 不支持<br />**说明**<br />未来可能会支持。 |
 | Single-Column Partitioned | 支持                            |
 
 ### 仅涉及追加写入数据的查询

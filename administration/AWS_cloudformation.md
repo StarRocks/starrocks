@@ -20,7 +20,7 @@ AWS CloudFormation 是 AWS 提供的一项服务，支持简单且快速地对 A
 
 1. 登录 [AWS CloudFormation 控制台](https://console.aws.amazon.com/cloudformation/)。
 
-2. 选择**创建堆栈** > **使用新资源(标准)。** <br>
+2. 选择**创建堆栈** > **使用新资源(标准)。** <br />
    ![使用新资源](../assets/8.1.3-1.png)
 3. 按照如下步骤，指定模板。
    ![指定模板](../assets/8.1.3-2.png)

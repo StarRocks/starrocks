@@ -88,7 +88,7 @@ tar -xzvf starrockswriter.tar.gz
 
 | **参数**      | **说明**                                                     | **必选** | **默认值** |
 | ------------- | ------------------------------------------------------------ | -------- | ---------- |
-| username      | StarRocks 集群用户名。<br>导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。                                       | 是       | 无         |
+| username      | StarRocks 集群用户名。<br />导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。                                       | 是       | 无         |
 | password      | StarRocks 集群用户密码。                                     | 是       | 无         |
 | database      | StarRocks 目标数据库名称。                                   | 是       | 无         |
 | table         | StarRocks 目标表名称。                                       | 是       | 无         |

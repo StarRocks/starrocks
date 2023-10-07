@@ -17,7 +17,7 @@ Star Schema Benchmark（以下简称 SSB）是学术界和工业界广泛使用�
 
 | 机器     | 3台 阿里云主机                                               |
 | -------- | ------------------------------------------------------------ |
-| CPU      | 16core Intel(R) Xeon(R) Platinum 8269CY CPU @ 2.50GHz <br>Cache size: 36608 KB |
+| CPU      | 16core Intel(R) Xeon(R) Platinum 8269CY CPU @ 2.50GHz <br />Cache size: 36608 KB |
 | 内存     | 64GB                                                         |
 | 网络带宽 | 5 Gbits/s                                                    |
 | 磁盘     | ESSD 云盘                                                    |

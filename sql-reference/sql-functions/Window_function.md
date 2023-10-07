@@ -499,7 +499,7 @@ FROM test_tbl ORDER BY col_1;
 
 对于第 1 行数据 NULL，往后遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
 
-<br>
+<br />
 
 ## 使用 MAX() 窗口函数
 

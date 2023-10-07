@@ -74,8 +74,8 @@ Data Cache 默认关闭。如要启用，则需要在 FE 和 BE 中同时进行�
 | **参数**               | **说明**                                                     |**默认值** |
 | ---------------------- | ------------------------------------------------------------ |----------|
 | block_cache_enable     | 是否启用 Data Cache。<ul><li>`true`：启用。</li><li>`false`：不启用。</li></ul>| false |
-| block_cache_disk_path  | 磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。BE 进程启动时会自动创建配置的磁盘缓存目录（当父目录不存在时创建失败）。 | ${STARROCKS_HOME}/block_cache |
-| block_cache_meta_path  | Block 的元数据存储目录，一般无需配置。 | ${STARROCKS_HOME}/block_cache |
+| block_cache_disk_path  | 磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。BE 进程启动时会自动创建配置的磁盘缓存目录（当父目录不存在时创建失败）。 | `${STARROCKS_HOME}/block_cache` |
+| block_cache_meta_path  | Block 的元数据存储目录，一般无需配置。 | `${STARROCKS_HOME}/block_cache` |
 | block_cache_mem_size   | 内存缓存数据量的上限，单位：字节。推荐将该参数值最低设置成 20 GB。如在开启 Data Cache 期间，存在大量从磁盘读取数据的情况，可考虑调大该参数。 | 2147483648，即 2 GB |
 | block_cache_disk_size  | 单个磁盘缓存数据量的上限，单位：字节。举例：在 `block_cache_disk_path` 中配置了 2 个磁盘，并设置 `block_cache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。| 0 表示仅使用内存作为缓存介质，不使用磁盘。 |
 
