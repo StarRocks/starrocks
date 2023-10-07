@@ -1055,4 +1055,7 @@ CONF_mBool(dump_metrics_with_bvar, "true");
 
 CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 
+// 0 means no limit
+CONF_Int32(lake_service_max_concurrency, "0");
+
 } // namespace starrocks::config
