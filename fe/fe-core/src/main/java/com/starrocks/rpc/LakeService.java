@@ -87,7 +87,7 @@ public interface LakeService {
     @ProtobufRPC(serviceName = "LakeService", methodName = "abort_compaction", onceTalkTimeout = 5000)
     Future<AbortCompactionResponse> abortCompaction(AbortCompactionRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "vacuum", onceTalkTimeout = /*10m=*/600000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "vacuum", onceTalkTimeout = /*1h=*/3600000)
     Future<VacuumResponse> vacuum(VacuumRequest request);
 }
 
