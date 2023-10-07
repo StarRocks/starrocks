@@ -181,28 +181,18 @@ public class SyncPartitionUtils {
         return diff;
     }
 
+
     private static Map<String, Range<PartitionKey>> mappingRangeList(Map<String, Range<PartitionKey>> baseRangeMap) {
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
-        try {
             for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
-                LiteralExpr lowerExpr = rangeEntry.getValue().lowerEndpoint().getKeys().get(0);
-                LiteralExpr upperExpr = rangeEntry.getValue().upperEndpoint().getKeys().get(0);
+                Range<PartitionKey> dateRange = convertToDatePartitionRange(rangeEntry.getValue());
+                String lower = dateRange.lowerEndpoint().toString();
+                String upper = dateRange.upperEndpoint().toString();
+                String mvPartitionName = getMVPartitionName(lower, upper);
 
-                Preconditions.checkArgument(lowerExpr instanceof StringLiteral
-                        && upperExpr instanceof StringLiteral);
-
-                PartitionKey lowerPartitionKey = new PartitionKey();
-                PartitionKey upperPartitionKey = new PartitionKey();
-                LocalDateTime lowerDate = DateUtils.parseStrictDateTime(lowerExpr.getStringValue());
-                LocalDateTime upperDate = DateUtils.parseStrictDateTime(upperExpr.getStringValue());
-                lowerPartitionKey.pushColumn(new DateLiteral(lowerDate, Type.DATE), PrimitiveType.DATE);
-                upperPartitionKey.pushColumn(new DateLiteral(upperDate, Type.DATE), PrimitiveType.DATE);
-
-                result.put(rangeEntry.getKey(), Range.closedOpen(lowerPartitionKey, upperPartitionKey));
+                result.put(mvPartitionName, dateRange);
             }
-        } catch (AnalysisException e) {
-            throw new SemanticException("Convert to PartitionMapping failed:", e);
-        }
+
         return result;
     }
 
@@ -247,9 +237,30 @@ public class SyncPartitionUtils {
         return result;
     }
 
+    private static Range<PartitionKey> convertToDatePartitionRange(Range<PartitionKey> range) {
+        LiteralExpr lower = range.lowerEndpoint().getKeys().get(0);
+        LiteralExpr upper = range.lowerEndpoint().getKeys().get(0);
+        if (lower instanceof DateLiteral) {
+            return range;
+        }
+        Preconditions.checkArgument(lower instanceof StringLiteral, "must be string column type");
+        LocalDateTime lowerDate = DateUtils.parseStrictDateTime(lower.getStringValue());
+        LocalDateTime upperDate = DateUtils.parseStrictDateTime(upper.getStringValue());
+        try {
+            PartitionKey lowerPartitionKey = new PartitionKey();
+            PartitionKey upperPartitionKey = new PartitionKey();
+            lowerPartitionKey.pushColumn(new DateLiteral(lowerDate, Type.DATE), PrimitiveType.DATE);
+            upperPartitionKey.pushColumn(new DateLiteral(upperDate, Type.DATE), PrimitiveType.DATE);
+            return Range.closedOpen(lowerPartitionKey, upperPartitionKey);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Convert to DateLiteral failed:", e);
+        }
+    }
+
     public static PartitionMapping mappingRange(Range<PartitionKey> baseRange, String granularity)
             throws AnalysisException {
         // assume expr partition must be DateLiteral and only one partition
+        baseRange = convertToDatePartitionRange(baseRange);
         LiteralExpr lowerExpr = baseRange.lowerEndpoint().getKeys().get(0);
         LiteralExpr upperExpr = baseRange.upperEndpoint().getKeys().get(0);
         Preconditions.checkArgument(lowerExpr instanceof DateLiteral);
@@ -355,6 +366,9 @@ public class SyncPartitionUtils {
         }
     }
 
+    public static String getMVPartitionName(String lower, String upper) {
+        return DEFAULT_PREFIX + lower + upper;
+    }
     public static String getMVPartitionName(LocalDateTime lowerDateTime, LocalDateTime upperDateTime,
                                             String granularity) {
         switch (granularity) {

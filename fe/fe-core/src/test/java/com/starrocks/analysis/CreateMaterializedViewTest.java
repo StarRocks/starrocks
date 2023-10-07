@@ -898,7 +898,7 @@ public class CreateMaterializedViewTest {
 
         // slot
         {
-            String sql = "create materialized view mv1 " +
+            String sql = "create materialized view mv_str2date " +
                     "partition by p " +
                     "distributed by hash(a) buckets 10 " +
                     "REFRESH DEFERRED MANUAL " +
@@ -906,12 +906,12 @@ public class CreateMaterializedViewTest {
                     "\"replication_num\" = \"1\"\n" +
                     ") " +
                     "as select str2date(d,'%Y%m%d') as p,  a, b, c, d from jdbc0.partitioned_db0.tbl1;";
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            starRocksAssert.withMaterializedView(sql);
         }
 
         // rollup
         {
-            String sql = "create materialized view mv1 " +
+            String sql = "create materialized view mv_date_trunc_str2date " +
                     "partition by date_trunc('month', p) " +
                     "distributed by hash(a) buckets 10 " +
                     "REFRESH DEFERRED MANUAL " +
@@ -919,7 +919,7 @@ public class CreateMaterializedViewTest {
                     "\"replication_num\" = \"1\"\n" +
                     ") " +
                     "as select str2date(d,'%Y%m%d') as p,  a, b, c, d from jdbc0.partitioned_db0.tbl1;";
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            starRocksAssert.withMaterializedView(sql);
         }
     }
 
