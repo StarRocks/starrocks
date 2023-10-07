@@ -1,9 +1,6 @@
 name: REVIEW CHECKER
 
 on:
-  pull_request_target:
-    types:
-      - review_requested
 
   pull_request_review:
     types:
