@@ -286,7 +286,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     }
                 }
             }
-            if (modColumn.getAggregationType() != null) {
+            if (modColumn.getAggregationType() != null && modColumn.getAggregationType() != AggregateType.REPLACE) {
                 throw new DdlException("Can not assign aggregation method on column in Primary data model table: " +
                         modColumn.getName());
             }
@@ -384,7 +384,7 @@ public class SchemaChangeHandler extends AlterHandler {
         if (oriColumn.isAutoIncrement()) {
             throw new DdlException("Can't not modify a AUTO_INCREMENT column");
         }
-    
+
         // retain old column name
         modColumn.setName(oriColumn.getName());
 
@@ -523,11 +523,12 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void processReorderColumnOfPrimaryKey(ReorderColumnsClause alterClause, OlapTable olapTable,
-                            Map<Long, LinkedList<Column>> indexSchemaMap, List<Integer> sortKeyIdxes) throws DdlException {
+                                                  Map<Long, LinkedList<Column>> indexSchemaMap, List<Integer> sortKeyIdxes)
+            throws DdlException {
         LinkedList<Column> targetIndexSchema = indexSchemaMap.get(olapTable.getIndexIdByName(olapTable.getName()));
         // check sort key column list
         Set<String> colNameSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        
+
         for (String colName : alterClause.getColumnsByPos()) {
             Optional<Column> oneCol = targetIndexSchema.stream().filter(c -> c.getName().equalsIgnoreCase(colName)).findFirst();
             if (!oneCol.isPresent()) {
@@ -566,7 +567,7 @@ public class SchemaChangeHandler extends AlterHandler {
             if (newColumn.isKey()) {
                 throw new DdlException("Can not add key column: " + newColName + " for primary key table");
             }
-            if (newColumn.getAggregationType() != null) {
+            if (newColumn.getAggregationType() != null && newColumn.getAggregationType() != AggregateType.REPLACE) {
                 throw new DdlException(
                         "Can not assign aggregation method on column in Primary data model table: " + newColName);
             }
@@ -1045,7 +1046,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     List<Integer> originSortKeyIdxes = index.getSortKeyIdxes();
                     for (Integer colIdx : originSortKeyIdxes) {
                         String columnName = index.getSchema().get(colIdx).getName();
-                        Optional<Column> oneCol = 
+                        Optional<Column> oneCol =
                                 alterSchema.stream().filter(c -> c.getName().equalsIgnoreCase(columnName)).findFirst();
                         if (!oneCol.isPresent()) {
                             LOG.warn("Sort Key Column[" + columnName + "] not exists in new schema");
@@ -1057,20 +1058,20 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
             if (!sortKeyIdxes.isEmpty()) {
-                short newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema, 
-                                                                                indexIdToProperties.get(alterIndexId),
-                                                                                sortKeyIdxes);
+                short newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema,
+                        indexIdToProperties.get(alterIndexId),
+                        sortKeyIdxes);
                 LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyCount);
-                jobBuilder.withNewIndexShortKeyCount(alterIndexId, 
-                                                     newShortKeyCount).withNewIndexSchema(alterIndexId, alterSchema);
+                jobBuilder.withNewIndexShortKeyCount(alterIndexId,
+                        newShortKeyCount).withNewIndexSchema(alterIndexId, alterSchema);
                 jobBuilder.withSortKeyIdxes(sortKeyIdxes);
                 LOG.debug("schema change[{}-{}-{}] check pass.", dbId, tableId, alterIndexId);
             } else {
-                short newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema, 
-                                                                                indexIdToProperties.get(alterIndexId));
+                short newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema,
+                        indexIdToProperties.get(alterIndexId));
                 LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyCount);
-                jobBuilder.withNewIndexShortKeyCount(alterIndexId, 
-                                                     newShortKeyCount).withNewIndexSchema(alterIndexId, alterSchema);
+                jobBuilder.withNewIndexShortKeyCount(alterIndexId,
+                        newShortKeyCount).withNewIndexSchema(alterIndexId, alterSchema);
                 LOG.debug("schema change[{}-{}-{}] check pass.", dbId, tableId, alterIndexId);
             }
         } // end for indices
@@ -1079,7 +1080,8 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private AlterJobV2 createJobForProcessReorderColumnOfPrimaryKey(long dbId, OlapTable olapTable,
-                Map<Long, LinkedList<Column>> indexSchemaMap, List<Integer> sortKeyIdxes) throws UserException {
+                                                                    Map<Long, LinkedList<Column>> indexSchemaMap,
+                                                                    List<Integer> sortKeyIdxes) throws UserException {
         if (olapTable.getState() == OlapTableState.ROLLUP) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
         }
@@ -1451,7 +1453,7 @@ public class SchemaChangeHandler extends AlterHandler {
             LOG.info("table {} binlog config is same as the previous version, so nothing need to do", olapTable.getName());
             return true;
         }
-        
+
         db.writeLock();
         // check for concurrent modifications by version
         if (olapTable.getBinlogVersion() != newBinlogConfig.getVersion()) {
@@ -1468,7 +1470,7 @@ public class SchemaChangeHandler extends AlterHandler {
             GlobalStateMgr.getCurrentState().modifyBinlogMeta(db, olapTable, newBinlogConfig);
             if (oldBinlogConfig != null) {
                 LOG.info("update binlog config of table {} successfully, the binlog config after modified is : {}, " +
-                        "previous is {}",
+                                "previous is {}",
                         olapTable.getName(),
                         olapTable.getCurBinlogConfig().toString(),
                         oldBinlogConfig.toString());
