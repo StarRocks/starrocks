@@ -81,7 +81,7 @@ StarRocks 提供了几类预置角色（system-defined roles）：
 
 > 注意：一个角色的最多继承层数为 16。角色的继承关系不能是双向的，比如将角色 A 赋予给 B，不能同时又把 B 赋予给 A，可能会造成继承关系不清楚。
 
-![role inheritance](../assets/privilege-role-inheri.png)
+![role inheritance](../assets/privilege-role_inheri.png)
 
 如图所示，将角色赋予给用户，用户也对应拥有了角色的权限。
 
