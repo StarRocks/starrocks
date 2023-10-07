@@ -165,6 +165,8 @@ private:
 
     Status _fill_auto_increment_id(const Chunk& chunk);
 
+    Status _check_partial_update_with_sort_key(const Chunk& chunk);
+
     TabletManager* _tablet_manager;
     const int64_t _tablet_id;
     const int64_t _txn_id;
@@ -188,6 +190,7 @@ private:
     // for partial update
     std::shared_ptr<const TabletSchema> _partial_update_tablet_schema;
     std::vector<int32_t> _referenced_column_ids;
+    bool _partial_schema_with_sort_key = false;
 
     // for condition update
     std::string _merge_condition;
@@ -272,8 +275,24 @@ Status DeltaWriterImpl::open() {
     return Status::OK();
 }
 
+Status DeltaWriterImpl::_check_partial_update_with_sort_key(const Chunk& chunk) {
+    if (_partial_schema_with_sort_key && _slots != nullptr && _slots->back()->col_name() == "__op") {
+        size_t op_column_id = chunk.num_columns() - 1;
+        auto& op_column = chunk.get_column_by_index(op_column_id);
+        auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+        for (size_t i = 0; i < chunk.num_rows(); i++) {
+            if (ops[i] == TOpType::UPSERT) {
+                LOG(WARNING) << "table with sort key do not support partial update";
+                return Status::NotSupported("table with sort key do not support partial update");
+            }
+        }
+    }
+    return Status::OK();
+}
+
 Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    RETURN_IF_ERROR(_check_partial_update_with_sort_key(chunk));
 
     if (_mem_table == nullptr) {
         RETURN_IF_ERROR(reset_memtable());
@@ -317,8 +336,7 @@ Status DeltaWriterImpl::handle_partial_update() {
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         if (!std::includes(_referenced_column_ids.begin(), _referenced_column_ids.end(), sort_key_idxes.begin(),
                            sort_key_idxes.end())) {
-            LOG(WARNING) << "table with sort key do not support partial update";
-            return Status::NotSupported("table with sort key do not support partial update");
+            _partial_schema_with_sort_key = true;
         }
         _tablet_schema = _partial_update_tablet_schema;
     }
