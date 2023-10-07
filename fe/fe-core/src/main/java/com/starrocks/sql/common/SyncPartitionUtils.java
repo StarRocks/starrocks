@@ -177,8 +177,14 @@ public class SyncPartitionUtils {
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
         Set<PartitionRange> dstRangeSet = new HashSet<>(dstRanges);
         for (PartitionRange range : srcRanges) {
-            if (!dstRangeSet.contains(range) && rangeToInclude != null && isRangeIncluded(range, rangeToInclude)) {
-                result.put(range.getPartitionName(), range.getPartitionKeyRange());
+            if (!dstRangeSet.contains(range)) {
+                if (rangeToInclude == null) {
+                    result.put(range.getPartitionName(), range.getPartitionKeyRange());
+                } else {
+                    if (isRangeIncluded(range, rangeToInclude)) {
+                        result.put(range.getPartitionName(), range.getPartitionKeyRange());
+                    }
+                }
             }
         }
         return result;
