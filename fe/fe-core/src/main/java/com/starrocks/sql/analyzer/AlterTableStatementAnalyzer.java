@@ -22,9 +22,12 @@ import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
@@ -75,13 +78,15 @@ public class AlterTableStatementAnalyzer {
         }
         AlterTableClauseAnalyzerVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseAnalyzerVisitor();
         for (AlterClause alterClause : alterClauseList) {
-            alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
+            alterTableClauseAnalyzerVisitor.analyze(table, alterClause, context);
         }
     }
 
     static class AlterTableClauseAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+        Table table;
 
-        public void analyze(AlterClause statement, ConnectContext session) {
+        public void analyze(Table table, AlterClause statement, ConnectContext session) {
+            this.table = table;
             visit(statement, session);
         }
 
@@ -280,6 +285,9 @@ public class AlterTableStatementAnalyzer {
                 throw new SemanticException("No column definition in add column clause.");
             }
             try {
+                if (table != null && table.isOlapTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+                    columnDef.setAggregateType(AggregateType.REPLACE);
+                }
                 columnDef.analyze(true);
             } catch (AnalysisException e) {
                 throw new SemanticException("Analyze columnDef error: %s", e.getMessage());
@@ -321,6 +329,9 @@ public class AlterTableStatementAnalyzer {
             }
             for (ColumnDef colDef : columnDefs) {
                 try {
+                    if (table != null && table.isOlapTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+                        colDef.setAggregateType(AggregateType.REPLACE);
+                    }
                     colDef.analyze(true);
                 } catch (AnalysisException e) {
                     throw new SemanticException("Analyze columnDef error: %s", e.getMessage());
