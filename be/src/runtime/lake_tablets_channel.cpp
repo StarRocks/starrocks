@@ -452,6 +452,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_table_id(params.table_id())
                                               .set_immutable_tablet_size(params.min_immutable_tablet_size())
                                               .set_mem_tracker(_mem_tracker)
+                                              .set_index_id(_index_id)
                                               .build());
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
