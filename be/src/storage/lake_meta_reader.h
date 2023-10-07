@@ -19,6 +19,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "runtime/descriptors.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/meta_reader.h"
 #include "storage/olap_common.h"
