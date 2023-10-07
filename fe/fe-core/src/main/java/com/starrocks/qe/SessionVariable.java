@@ -395,8 +395,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
-    public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
-
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
         DEFAULT,            // default, choose the materialized view or not by cost optimizer
@@ -1308,8 +1306,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setCboDeriveRangeJoinPredicate(boolean cboDeriveRangeJoinPredicate) {
         this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
     }
-    @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
-    private boolean enableIcebergIdentityColumnOptimize = true;
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -2520,10 +2516,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getLargeDecimalUnderlyingType() {
         return largeDecimalUnderlyingType;
-    }
-
-    public boolean getEnableIcebergIdentityColumnOptimize() {
-        return enableIcebergIdentityColumnOptimize;
     }
 
     // Serialize to thrift object
