@@ -2,9 +2,7 @@
 
 ## 功能
 
-Routine Load 是一种基于 MySQL 协议的异步导入方式，支持持续消费 Apache Kafka® 的消息并导入至 StarRocks 中。
-
-Routine Load 支持消费 Kafka 中 CSV 或 JSON 格式数据。Routine Load 支持通过无安全认证、SSL 加密和认证、或者 SASL 认证机制访问 Kafka。
+Routine Load 支持持续消费 Apache Kafka® 的消息并导入至 StarRocks 中。Routine Load 支持 Kafka 中消息的格式为 CSV 和 JSON，并且支持通过无安全认证、SSL 加密和认证、或者 SASL 认证机制访问 Kafka。
 
 本文介绍 CREATE ROUTINE LOAD 的语法、参数说明和示例。
 
