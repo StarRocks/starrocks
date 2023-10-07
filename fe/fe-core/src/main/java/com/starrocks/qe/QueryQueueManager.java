@@ -150,8 +150,8 @@ public class QueryQueueManager {
         long expiredAllocatedTimeMs = nowMs + queryTimeoutSecond * 1000L;
 
         int numFragments = coord.getFragments().size();
-        int pipelineDop = coord.getQueryOptions().getPipeline_dop();
-        if (!coord.isStatisticsJob() && !coord.isLoadType()
+        int pipelineDop = coord.getJobSpec().getQueryOptions().getPipeline_dop();
+        if (!coord.getJobSpec().isStatisticsJob() && !coord.isLoadType()
                 && ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnablePipelineAdaptiveDop()) {
             pipelineDop = 0;
         }
