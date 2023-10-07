@@ -44,10 +44,80 @@ private:
     SchemaDescriptor _schema;
 };
 
-std::shared_ptr<const ::parquet::LogicalType> LogicalTypeFromThrift(const tparquet::SchemaElement& schema_element);
+enum SortOrder {
+    SIGNED,
+    UNSIGNED,
+    UNKNOWN,
+};
 
-::parquet::ConvertedType::type ConvertedTypeFromThrift(const tparquet::SchemaElement& schema_element);
+// reference both be/src/formats/parquet/column_converter.cpp
+// and https://github.com/apache/parquet-format/blob/master/LogicalTypes.md
+SortOrder sort_order_of_logical_type(LogicalType type) {
+    switch (type) {
+    case TYPE_BOOLEAN:
+    case TYPE_TINYINT:
+    case TYPE_SMALLINT:
+    case TYPE_INT:
+    case TYPE_BIGINT:
+    case TYPE_FLOAT:
+    case TYPE_DOUBLE:
+    case TYPE_DECIMAL:
+    case TYPE_DECIMALV2:
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
+    case TYPE_DATE:
+    case TYPE_DATETIME:
+    case TYPE_TIME:
+        return SortOrder::SIGNED;
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+    case TYPE_BINARY:
+    case TYPE_VARBINARY:
+        return SortOrder::UNSIGNED;
+    default:
+        return SortOrder::UNKNOWN;
+    }
+}
 
-::parquet::Type::type PrimitiveTypeFromThrift(const tparquet::SchemaElement& schema_element);
+// port from https://github.com/apache/arrow/blob/da6dbd48607089d716505054176e345b704570c5/cpp/src/parquet/metadata.h#L54
+class ApplicationVersion {
+public:
+    // Known Versions with Issues
+    static const ApplicationVersion& PARQUET_251_FIXED_VERSION();
+    static const ApplicationVersion& PARQUET_816_FIXED_VERSION();
+    static const ApplicationVersion& PARQUET_CPP_FIXED_STATS_VERSION();
+    static const ApplicationVersion& PARQUET_MR_FIXED_STATS_VERSION();
+    static const ApplicationVersion& PARQUET_CPP_10353_FIXED_VERSION();
+
+    // Application that wrote the file. e.g. "IMPALA"
+    std::string application_;
+    // Build name
+    std::string build_;
+
+    // Version of the application that wrote the file, expressed as
+    // (<major>.<minor>.<patch>). Unmatched parts default to 0.
+    // "1.2.3"    => {1, 2, 3}
+    // "1.2"      => {1, 2, 0}
+    // "1.2-cdh5" => {1, 2, 0}
+    struct {
+        int major;
+        int minor;
+        int patch;
+        std::string unknown;
+        std::string pre_release;
+        std::string build_info;
+    } version;
+
+    ApplicationVersion() = default;
+    explicit ApplicationVersion(const std::string& created_by);
+    ApplicationVersion(std::string application, int major, int minor, int patch);
+
+    // Returns true if version is strictly less than other_version
+    bool VersionLt(const ApplicationVersion& other_version) const;
+
+    // Returns true if version is strictly equal with other_version
+    bool VersionEq(const ApplicationVersion& other_version) const;
+};
 
 } // namespace starrocks::parquet

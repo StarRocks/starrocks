@@ -14,8 +14,6 @@
 
 #include "formats/parquet/file_reader.h"
 
-#include <parquet/metadata.h>
-
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
@@ -306,19 +304,9 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
     DCHECK_EQ(field.physical_type, column_meta.type);
     *decode_ok = true;
 
-    auto sort_order = ::parquet::SortOrder::UNKNOWN;
-    const auto logical_type = LogicalTypeFromThrift(field.schema_element);
-    const auto primitive_type = PrimitiveTypeFromThrift(field.schema_element);
-    const auto converted_type = ConvertedTypeFromThrift(field.schema_element);
-
-    if (logical_type) {
-        sort_order = ::parquet::GetSortOrder(logical_type, primitive_type);
-    } else {
-        sort_order = ::parquet::GetSortOrder(converted_type, primitive_type);
-    }
-
     // We need to make sure min_max column append value succeed
     bool ret = true;
+    auto sort_order = sort_order_of_logical_type(type.type);
     if (!_can_use_min_max_stats(column_meta, sort_order)) {
         *decode_ok = false;
         return Status::OK();
@@ -420,26 +408,26 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
 
 // Reference: arrow/cpp/src/parquet/metadata.cc
 bool FileReader::_can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
-                                        const ::parquet::SortOrder::type& sort_order) const {
+                                        const SortOrder& sort_order) const {
     // created_by is not populated, which could have been caused by
     // parquet-mr during the same time as PARQUET-251, see PARQUET-297
     if (!_file_metadata->t_metadata().__isset.created_by) {
         return true;
     }
 
-    auto application_version = ::parquet::ApplicationVersion(_file_metadata->t_metadata().created_by);
+    auto application_version = ApplicationVersion(_file_metadata->t_metadata().created_by);
 
     // parquet-cpp version 1.3.0 and parquet-mr 1.10.0 onwards stats are computed
     // correctly for all types
-    if (application_version.VersionLt(::parquet::ApplicationVersion::PARQUET_MR_FIXED_STATS_VERSION()) ||
-        application_version.VersionLt(::parquet::ApplicationVersion::PARQUET_CPP_FIXED_STATS_VERSION())) {
+    if (application_version.VersionLt(ApplicationVersion::PARQUET_MR_FIXED_STATS_VERSION()) ||
+        application_version.VersionLt(ApplicationVersion::PARQUET_CPP_FIXED_STATS_VERSION())) {
         // Only SIGNED are valid unless max and min are the same
         // (in which case the sort order does not matter)
         auto min_equals_max = (column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.max_value &&
                                column_meta.statistics.min_value == column_meta.statistics.max_value) ||
                               (column_meta.statistics.__isset.min && column_meta.statistics.__isset.max &&
                                column_meta.statistics.min == column_meta.statistics.max);
-        if (::parquet::SortOrder::SIGNED != sort_order) {
+        if (SortOrder::SIGNED != sort_order) {
             if (!min_equals_max) {
                 return false;
             }
@@ -447,18 +435,18 @@ bool FileReader::_can_use_min_max_stats(const tparquet::ColumnMetaData& column_m
 
         auto col_type = column_meta.type;
         // Statistics of other types are OK
-        if (col_type != ::parquet::Type::FIXED_LEN_BYTE_ARRAY && col_type != ::parquet::Type::BYTE_ARRAY) {
+        if (col_type != ::tparquet::Type::FIXED_LEN_BYTE_ARRAY && col_type != ::tparquet::Type::BYTE_ARRAY) {
             return true;
         }
     }
 
     // Unknown sort order has incorrect stats
-    if (::parquet::SortOrder::UNKNOWN == sort_order) {
+    if (SortOrder::UNKNOWN == sort_order) {
         return false;
     }
 
     // PARQUET-251
-    if (application_version.VersionLt(::parquet::ApplicationVersion::PARQUET_251_FIXED_VERSION())) {
+    if (application_version.VersionLt(ApplicationVersion::PARQUET_251_FIXED_VERSION())) {
         return false;
     }
 

@@ -35,141 +35,349 @@ std::string FileMetaData::debug_string() const {
     return ss.str();
 }
 
-std::shared_ptr<const ::parquet::LogicalType> LogicalTypeFromThrift(const tparquet::SchemaElement& schema_element) {
-    if (!schema_element.__isset.logicalType) {
-        return nullptr;
-    }
-    auto& type = schema_element.logicalType;
-    if (type.__isset.STRING) {
-        return ::parquet::StringLogicalType::Make();
-    } else if (type.__isset.MAP) {
-        return ::parquet::MapLogicalType::Make();
-    } else if (type.__isset.LIST) {
-        return ::parquet::ListLogicalType::Make();
-    } else if (type.__isset.ENUM) {
-        return ::parquet::EnumLogicalType::Make();
-    } else if (type.__isset.DECIMAL) {
-        return ::parquet::DecimalLogicalType::Make(type.DECIMAL.precision, type.DECIMAL.scale);
-    } else if (type.__isset.DATE) {
-        return ::parquet::DateLogicalType::Make();
-    } else if (type.__isset.TIME) {
-        ::parquet::LogicalType::TimeUnit::unit unit;
-        if (type.TIME.unit.__isset.MILLIS) {
-            unit = ::parquet::LogicalType::TimeUnit::MILLIS;
-        } else if (type.TIME.unit.__isset.MICROS) {
-            unit = ::parquet::LogicalType::TimeUnit::MICROS;
-        } else if (type.TIME.unit.__isset.NANOS) {
-            unit = ::parquet::LogicalType::TimeUnit::NANOS;
-        } else {
-            unit = ::parquet::LogicalType::TimeUnit::UNKNOWN;
-        }
-        return ::parquet::TimeLogicalType::Make(type.TIME.isAdjustedToUTC, unit);
-    } else if (type.__isset.TIMESTAMP) {
-        ::parquet::LogicalType::TimeUnit::unit unit;
-        if (type.TIMESTAMP.unit.__isset.MILLIS) {
-            unit = ::parquet::LogicalType::TimeUnit::MILLIS;
-        } else if (type.TIMESTAMP.unit.__isset.MICROS) {
-            unit = ::parquet::LogicalType::TimeUnit::MICROS;
-        } else if (type.TIMESTAMP.unit.__isset.NANOS) {
-            unit = ::parquet::LogicalType::TimeUnit::NANOS;
-        } else {
-            unit = ::parquet::LogicalType::TimeUnit::UNKNOWN;
-        }
-        return ::parquet::TimestampLogicalType::Make(type.TIMESTAMP.isAdjustedToUTC, unit);
-    } else if (type.__isset.INTEGER) {
-        return ::parquet::IntLogicalType::Make(static_cast<int>(type.INTEGER.bitWidth), type.INTEGER.isSigned);
-    } else if (type.__isset.UNKNOWN) {
-        return ::parquet::NullLogicalType::Make();
-    } else if (type.__isset.JSON) {
-        return ::parquet::JSONLogicalType::Make();
-    } else if (type.__isset.BSON) {
-        return ::parquet::BSONLogicalType::Make();
-    } else if (type.__isset.UUID) {
-        return ::parquet::UUIDLogicalType::Make();
-    }
-    return nullptr;
+const ApplicationVersion& ApplicationVersion::PARQUET_251_FIXED_VERSION() {
+    static ApplicationVersion version("parquet-mr", 1, 8, 0);
+    return version;
 }
 
-::parquet::ConvertedType::type ConvertedTypeFromThrift(const tparquet::SchemaElement& schema_element) {
-    if (!schema_element.__isset.converted_type) {
-        return ::parquet::ConvertedType::type::UNDEFINED;
-    }
-    const auto& type = schema_element.converted_type;
-    switch (type) {
-    case tparquet::ConvertedType::UTF8:
-        return ::parquet::ConvertedType::UTF8;
-    case tparquet::ConvertedType::MAP:
-        return ::parquet::ConvertedType::MAP;
-    case tparquet::ConvertedType::MAP_KEY_VALUE:
-        return ::parquet::ConvertedType::MAP_KEY_VALUE;
-    case tparquet::ConvertedType::LIST:
-        return ::parquet::ConvertedType::LIST;
-    case tparquet::ConvertedType::ENUM:
-        return ::parquet::ConvertedType::ENUM;
-    case tparquet::ConvertedType::DECIMAL:
-        return ::parquet::ConvertedType::DECIMAL;
-    case tparquet::ConvertedType::DATE:
-        return ::parquet::ConvertedType::DATE;
-    case tparquet::ConvertedType::TIME_MILLIS:
-        return ::parquet::ConvertedType::TIME_MILLIS;
-    case tparquet::ConvertedType::TIME_MICROS:
-        return ::parquet::ConvertedType::TIME_MICROS;
-    case tparquet::ConvertedType::TIMESTAMP_MILLIS:
-        return ::parquet::ConvertedType::TIMESTAMP_MILLIS;
-    case tparquet::ConvertedType::TIMESTAMP_MICROS:
-        return ::parquet::ConvertedType::TIMESTAMP_MICROS;
-    case tparquet::ConvertedType::UINT_8:
-        return ::parquet::ConvertedType::UINT_8;
-    case tparquet::ConvertedType::UINT_16:
-        return ::parquet::ConvertedType::UINT_16;
-    case tparquet::ConvertedType::UINT_32:
-        return ::parquet::ConvertedType::UINT_32;
-    case tparquet::ConvertedType::UINT_64:
-        return ::parquet::ConvertedType::UINT_64;
-    case tparquet::ConvertedType::INT_8:
-        return ::parquet::ConvertedType::INT_8;
-    case tparquet::ConvertedType::INT_16:
-        return ::parquet::ConvertedType::INT_16;
-    case tparquet::ConvertedType::INT_32:
-        return ::parquet::ConvertedType::INT_32;
-    case tparquet::ConvertedType::INT_64:
-        return ::parquet::ConvertedType::INT_64;
-    case tparquet::ConvertedType::JSON:
-        return ::parquet::ConvertedType::JSON;
-    case tparquet::ConvertedType::BSON:
-        return ::parquet::ConvertedType::BSON;
-    case tparquet::ConvertedType::INTERVAL:
-        return ::parquet::ConvertedType::INTERVAL;
-    default:
-        return ::parquet::ConvertedType::UNDEFINED;
-    }
+const ApplicationVersion& ApplicationVersion::PARQUET_816_FIXED_VERSION() {
+    static ApplicationVersion version("parquet-mr", 1, 2, 9);
+    return version;
 }
 
-::parquet::Type::type PrimitiveTypeFromThrift(const tparquet::SchemaElement& schema_element) {
-    if (!schema_element.__isset.type) {
-        return ::parquet::Type::type::UNDEFINED;
+const ApplicationVersion& ApplicationVersion::PARQUET_CPP_FIXED_STATS_VERSION() {
+    static ApplicationVersion version("parquet-cpp", 1, 3, 0);
+    return version;
+}
+
+const ApplicationVersion& ApplicationVersion::PARQUET_MR_FIXED_STATS_VERSION() {
+    static ApplicationVersion version("parquet-mr", 1, 10, 0);
+    return version;
+}
+
+const ApplicationVersion& ApplicationVersion::PARQUET_CPP_10353_FIXED_VERSION() {
+    // parquet-cpp versions released prior to Arrow 3.0 would write DataPageV2 pages
+    // with is_compressed==0 but still write compressed data. (See: ARROW-10353).
+    // Parquet 1.5.1 had this problem, and after that we switched to the
+    // application name "parquet-cpp-arrow", so this version is fake.
+    static ApplicationVersion version("parquet-cpp", 2, 0, 0);
+    return version;
+}
+
+ApplicationVersion::ApplicationVersion(std::string application, int major, int minor, int patch)
+        : application_(std::move(application)), version{major, minor, patch, "", "", ""} {}
+
+namespace {
+// Parse the application version format and set parsed values to
+// ApplicationVersion.
+//
+// The application version format must be compatible parquet-mr's
+// one. See also:
+//   * https://github.com/apache/parquet-mr/blob/master/parquet-common/src/main/java/org/apache/parquet/VersionParser.java
+//   * https://github.com/apache/parquet-mr/blob/master/parquet-common/src/main/java/org/apache/parquet/SemanticVersion.java
+//
+// The application version format:
+//   "${APPLICATION_NAME}"
+//   "${APPLICATION_NAME} version ${VERSION}"
+//   "${APPLICATION_NAME} version ${VERSION} (build ${BUILD_NAME})"
+//
+// Eg:
+//   parquet-cpp
+//   parquet-cpp version 1.5.0ab-xyz5.5.0+cd
+//   parquet-cpp version 1.5.0ab-xyz5.5.0+cd (build abcd)
+//
+// The VERSION format:
+//   "${MAJOR}"
+//   "${MAJOR}.${MINOR}"
+//   "${MAJOR}.${MINOR}.${PATCH}"
+//   "${MAJOR}.${MINOR}.${PATCH}${UNKNOWN}"
+//   "${MAJOR}.${MINOR}.${PATCH}${UNKNOWN}-${PRE_RELEASE}"
+//   "${MAJOR}.${MINOR}.${PATCH}${UNKNOWN}-${PRE_RELEASE}+${BUILD_INFO}"
+//   "${MAJOR}.${MINOR}.${PATCH}${UNKNOWN}+${BUILD_INFO}"
+//   "${MAJOR}.${MINOR}.${PATCH}-${PRE_RELEASE}"
+//   "${MAJOR}.${MINOR}.${PATCH}-${PRE_RELEASE}+${BUILD_INFO}"
+//   "${MAJOR}.${MINOR}.${PATCH}+${BUILD_INFO}"
+//
+// Eg:
+//   1
+//   1.5
+//   1.5.0
+//   1.5.0ab
+//   1.5.0ab-cdh5.5.0
+//   1.5.0ab-cdh5.5.0+cd
+//   1.5.0ab+cd
+//   1.5.0-cdh5.5.0
+//   1.5.0-cdh5.5.0+cd
+//   1.5.0+cd
+class ApplicationVersionParser {
+public:
+    ApplicationVersionParser(const std::string& created_by, ApplicationVersion& application_version)
+            : created_by_(created_by),
+              application_version_(application_version),
+              spaces_(" \t\v\r\n\f"),
+              digits_("0123456789") {}
+
+    void Parse() {
+        application_version_.application_ = "unknown";
+        application_version_.version = {0, 0, 0, "", "", ""};
+
+        if (!ParseApplicationName()) {
+            return;
+        }
+        if (!ParseVersion()) {
+            return;
+        }
+        if (!ParseBuildName()) {
+            return;
+        }
     }
-    const auto& type = schema_element.type;
-    switch (type) {
-    case ::tparquet::Type::BOOLEAN:
-        return ::parquet::Type::BOOLEAN;
-    case ::tparquet::Type::INT32:
-        return ::parquet::Type::INT32;
-    case ::tparquet::Type::INT64:
-        return ::parquet::Type::INT64;
-    case ::tparquet::Type::INT96:
-        return ::parquet::Type::INT96;
-    case ::tparquet::Type::DOUBLE:
-        return ::parquet::Type::DOUBLE;
-    case ::tparquet::Type::FLOAT:
-        return ::parquet::Type::FLOAT;
-    case ::tparquet::Type::BYTE_ARRAY:
-        return ::parquet::Type::BYTE_ARRAY;
-    case ::tparquet::Type::FIXED_LEN_BYTE_ARRAY:
-        return ::parquet::Type::FIXED_LEN_BYTE_ARRAY;
-    default:
-        return ::parquet::Type::UNDEFINED;
+
+private:
+    bool IsSpace(const std::string& string, const size_t& offset) {
+        auto target = ::std::string_view(string).substr(offset, 1);
+        return target.find_first_of(spaces_) != ::std::string_view::npos;
     }
+
+    void RemovePrecedingSpaces(const std::string& string, size_t& start, const size_t& end) {
+        while (start < end && IsSpace(string, start)) {
+            ++start;
+        }
+    }
+
+    void RemoveTrailingSpaces(const std::string& string, const size_t& start, size_t& end) {
+        while (start < (end - 1) && (end - 1) < string.size() && IsSpace(string, end - 1)) {
+            --end;
+        }
+    }
+
+    bool ParseApplicationName() {
+        std::string version_mark(" version ");
+        auto version_mark_position = created_by_.find(version_mark);
+        size_t application_name_end;
+        // No VERSION and BUILD_NAME.
+        if (version_mark_position == std::string::npos) {
+            version_start_ = std::string::npos;
+            application_name_end = created_by_.size();
+        } else {
+            version_start_ = version_mark_position + version_mark.size();
+            application_name_end = version_mark_position;
+        }
+
+        size_t application_name_start = 0;
+        RemovePrecedingSpaces(created_by_, application_name_start, application_name_end);
+        RemoveTrailingSpaces(created_by_, application_name_start, application_name_end);
+        application_version_.application_ =
+                created_by_.substr(application_name_start, application_name_end - application_name_start);
+
+        return true;
+    }
+
+    bool ParseVersion() {
+        // No VERSION.
+        if (version_start_ == std::string::npos) {
+            return false;
+        }
+
+        RemovePrecedingSpaces(created_by_, version_start_, created_by_.size());
+        version_end_ = created_by_.find(" (", version_start_);
+        // No BUILD_NAME.
+        if (version_end_ == std::string::npos) {
+            version_end_ = created_by_.size();
+        }
+        RemoveTrailingSpaces(created_by_, version_start_, version_end_);
+        // No VERSION.
+        if (version_start_ == version_end_) {
+            return false;
+        }
+        version_string_ = created_by_.substr(version_start_, version_end_ - version_start_);
+
+        if (!ParseVersionMajor()) {
+            return false;
+        }
+        if (!ParseVersionMinor()) {
+            return false;
+        }
+        if (!ParseVersionPatch()) {
+            return false;
+        }
+        if (!ParseVersionUnknown()) {
+            return false;
+        }
+        if (!ParseVersionPreRelease()) {
+            return false;
+        }
+        if (!ParseVersionBuildInfo()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ParseVersionMajor() {
+        size_t version_major_start = 0;
+        auto version_major_end = version_string_.find_first_not_of(digits_);
+        // MAJOR only.
+        if (version_major_end == std::string::npos) {
+            version_major_end = version_string_.size();
+            version_parsing_position_ = version_major_end;
+        } else {
+            // No ".".
+            if (version_string_[version_major_end] != '.') {
+                return false;
+            }
+            // No MAJOR.
+            if (version_major_end == version_major_start) {
+                return false;
+            }
+            version_parsing_position_ = version_major_end + 1; // +1 is for '.'.
+        }
+        auto version_major_string =
+                version_string_.substr(version_major_start, version_major_end - version_major_start);
+        application_version_.version.major = atoi(version_major_string.c_str());
+        return true;
+    }
+
+    bool ParseVersionMinor() {
+        auto version_minor_start = version_parsing_position_;
+        auto version_minor_end = version_string_.find_first_not_of(digits_, version_minor_start);
+        // MAJOR.MINOR only.
+        if (version_minor_end == std::string::npos) {
+            version_minor_end = version_string_.size();
+            version_parsing_position_ = version_minor_end;
+        } else {
+            // No ".".
+            if (version_string_[version_minor_end] != '.') {
+                return false;
+            }
+            // No MINOR.
+            if (version_minor_end == version_minor_start) {
+                return false;
+            }
+            version_parsing_position_ = version_minor_end + 1; // +1 is for '.'.
+        }
+        auto version_minor_string =
+                version_string_.substr(version_minor_start, version_minor_end - version_minor_start);
+        application_version_.version.minor = atoi(version_minor_string.c_str());
+        return true;
+    }
+
+    bool ParseVersionPatch() {
+        auto version_patch_start = version_parsing_position_;
+        auto version_patch_end = version_string_.find_first_not_of(digits_, version_patch_start);
+        // No UNKNOWN, PRE_RELEASE and BUILD_INFO.
+        if (version_patch_end == std::string::npos) {
+            version_patch_end = version_string_.size();
+        }
+        // No PATCH.
+        if (version_patch_end == version_patch_start) {
+            return false;
+        }
+        auto version_patch_string =
+                version_string_.substr(version_patch_start, version_patch_end - version_patch_start);
+        application_version_.version.patch = atoi(version_patch_string.c_str());
+        version_parsing_position_ = version_patch_end;
+        return true;
+    }
+
+    bool ParseVersionUnknown() {
+        // No UNKNOWN.
+        if (version_parsing_position_ == version_string_.size()) {
+            return true;
+        }
+        auto version_unknown_start = version_parsing_position_;
+        auto version_unknown_end = version_string_.find_first_of("-+", version_unknown_start);
+        // No PRE_RELEASE and BUILD_INFO
+        if (version_unknown_end == std::string::npos) {
+            version_unknown_end = version_string_.size();
+        }
+        application_version_.version.unknown =
+                version_string_.substr(version_unknown_start, version_unknown_end - version_unknown_start);
+        version_parsing_position_ = version_unknown_end;
+        return true;
+    }
+
+    bool ParseVersionPreRelease() {
+        // No PRE_RELEASE.
+        if (version_parsing_position_ == version_string_.size() || version_string_[version_parsing_position_] != '-') {
+            return true;
+        }
+
+        auto version_pre_release_start = version_parsing_position_ + 1; // +1 is for '-'.
+        auto version_pre_release_end = version_string_.find_first_of("+", version_pre_release_start);
+        // No BUILD_INFO
+        if (version_pre_release_end == std::string::npos) {
+            version_pre_release_end = version_string_.size();
+        }
+        application_version_.version.pre_release =
+                version_string_.substr(version_pre_release_start, version_pre_release_end - version_pre_release_start);
+        version_parsing_position_ = version_pre_release_end;
+        return true;
+    }
+
+    bool ParseVersionBuildInfo() {
+        // No BUILD_INFO.
+        if (version_parsing_position_ == version_string_.size() || version_string_[version_parsing_position_] != '+') {
+            return true;
+        }
+
+        auto version_build_info_start = version_parsing_position_ + 1; // +1 is for '+'.
+        application_version_.version.build_info = version_string_.substr(version_build_info_start);
+        return true;
+    }
+
+    bool ParseBuildName() {
+        std::string build_mark(" (build ");
+        auto build_mark_position = created_by_.find(build_mark, version_end_);
+        // No BUILD_NAME.
+        if (build_mark_position == std::string::npos) {
+            return false;
+        }
+        auto build_name_start = build_mark_position + build_mark.size();
+        RemovePrecedingSpaces(created_by_, build_name_start, created_by_.size());
+        auto build_name_end = created_by_.find_first_of(")", build_name_start);
+        // No end ")".
+        if (build_name_end == std::string::npos) {
+            return false;
+        }
+        RemoveTrailingSpaces(created_by_, build_name_start, build_name_end);
+        application_version_.build_ = created_by_.substr(build_name_start, build_name_end - build_name_start);
+
+        return true;
+    }
+
+    const std::string& created_by_;
+    ApplicationVersion& application_version_;
+
+    // For parsing.
+    std::string spaces_;
+    std::string digits_;
+    size_t version_parsing_position_;
+    size_t version_start_;
+    size_t version_end_;
+    std::string version_string_;
+};
+} // namespace
+
+ApplicationVersion::ApplicationVersion(const std::string& created_by) {
+    ApplicationVersionParser parser(created_by, *this);
+    parser.Parse();
+}
+
+bool ApplicationVersion::VersionLt(const ApplicationVersion& other_version) const {
+    if (application_ != other_version.application_) return false;
+
+    if (version.major < other_version.version.major) return true;
+    if (version.major > other_version.version.major) return false;
+    DCHECK_EQ(version.major, other_version.version.major);
+    if (version.minor < other_version.version.minor) return true;
+    if (version.minor > other_version.version.minor) return false;
+    DCHECK_EQ(version.minor, other_version.version.minor);
+    return version.patch < other_version.version.patch;
+}
+
+bool ApplicationVersion::VersionEq(const ApplicationVersion& other_version) const {
+    return application_ == other_version.application_ && version.major == other_version.version.major &&
+           version.minor == other_version.version.minor && version.patch == other_version.version.patch;
 }
 
 } // namespace starrocks::parquet
