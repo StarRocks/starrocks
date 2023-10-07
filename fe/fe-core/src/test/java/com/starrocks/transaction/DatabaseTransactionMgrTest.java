@@ -200,13 +200,13 @@ public class DatabaseTransactionMgrTest {
 
         masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId6, transTablets,
                 Lists.newArrayList(), null);
-        assertEquals(TTransactionStatus.COMMITTED, masterDbTransMgr.getTxnStatus(transactionId5));
+        assertEquals(TTransactionStatus.COMMITTED, masterDbTransMgr.getTxnStatus(transactionId6));
         masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId7, transTablets,
                 Lists.newArrayList(), null);
-        assertEquals(TTransactionStatus.COMMITTED, masterDbTransMgr.getTxnStatus(transactionId6));
+        assertEquals(TTransactionStatus.COMMITTED, masterDbTransMgr.getTxnStatus(transactionId7));
         masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId8, transTablets,
                 Lists.newArrayList(), null);
-        assertEquals(TTransactionStatus.COMMITTED, masterDbTransMgr.getTxnStatus(transactionId7));
+        assertEquals(TTransactionStatus.COMMITTED, masterDbTransMgr.getTxnStatus(transactionId8));
 
         lableToTxnId.put(GlobalStateMgrTestUtil.testTxnLable2, transactionId2);
         lableToTxnId.put(GlobalStateMgrTestUtil.testTxnLable3, transactionId3);
@@ -218,7 +218,7 @@ public class DatabaseTransactionMgrTest {
         lableToTxnId.put(GlobalStateMgrTestUtil.testTxnLable8, transactionId8);
 
         Assert.assertEquals(transactionId2, masterTransMgr.getMinActiveTxnId());
-        Assert.assertEquals(transactionId8, masterTransMgr.getMinActiveCompactionTxnId());
+        Assert.assertEquals(transactionId5, masterTransMgr.getMinActiveCompactionTxnId());
 
         transactionGraph.add(transactionId6, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1));
         transactionGraph.add(transactionId7, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1));
@@ -434,10 +434,11 @@ public class DatabaseTransactionMgrTest {
                 return true;
             }
         };
+
         TransactionStateBatch stateBatch = new TransactionStateBatch(states);
         masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatch, null);
 
-        assertEquals(4, masterDbTransMgr.getRunningTxnNums());
+        assertEquals(3, masterDbTransMgr.getRunningTxnNums());
         assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
         assertEquals(TransactionStatus.VISIBLE, transactionState6.getTransactionStatus());
         assertEquals(TransactionStatus.VISIBLE, transactionState7.getTransactionStatus());

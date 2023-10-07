@@ -51,7 +51,7 @@ public class TransactionStateBatch implements Writable {
                 getPartitionCommitInfo(partitionId).setCompactionScore(quantiles));
     }
 
-    public void setTransactionMessage() {
+    public void setTransactionVisibleInfo() {
         for (TransactionState transactionState : transactionStates) {
             transactionState.setFinishTime(System.currentTimeMillis());
             transactionState.clearErrorMsg();

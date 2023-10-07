@@ -1780,7 +1780,7 @@ public class DatabaseTransactionMgr {
             boolean txnOperated = false;
             writeLock();
             try {
-                stateBatch.setTransactionMessage();
+                stateBatch.setTransactionVisibleInfo();
                 unprotectSetTransactionStateBatch(stateBatch, false);
                 txnOperated = true;
             } finally {
