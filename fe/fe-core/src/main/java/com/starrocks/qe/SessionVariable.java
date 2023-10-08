@@ -179,6 +179,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PARALLEL_EXCHANGE_INSTANCE_NUM = "parallel_exchange_instance_num";
     public static final String EVENT_SCHEDULER = "event_scheduler";
     public static final String STORAGE_ENGINE = "storage_engine";
+
+    public static final String ENABLE_ICEBERG_COLUMN_STATS = "enable_iceberg_column_stats";
     public static final String DIV_PRECISION_INCREMENT = "div_precision_increment";
 
     // see comment of `starrocks_max_scan_key_num` and `max_pushdown_conditions_per_column` in BE config
@@ -552,6 +554,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PIPELINE_QUERY_STATISTIC)
     private boolean enablePipelineQueryStatistic = true;
+
+    @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATS)
+    private boolean enableIcebergColumnStats = true;
+
+    public boolean isEnableIcebergColumnStats() {
+        return enableIcebergColumnStats;
+    }
+
+    public void setEnableIcebergColumnStats(boolean enableIcebergColumnStats) {
+        this.enableIcebergColumnStats = enableIcebergColumnStats;
+    }
 
     @VariableMgr.VarAttr(name = ENABLE_LOCAL_SHUFFLE_AGG)
     private boolean enableLocalShuffleAgg = true;
