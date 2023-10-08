@@ -78,8 +78,8 @@ public class DataCacheStmtAnalyzerTest {
         analyzeFail("create datacache rule * priority = -1");
         analyzeFail("create datacache rule *.a.b priority = -1", "Catalog is *, database and table must use * either");
         analyzeFail("create datacache rule a.*.b priority = -1", "Database is *, table must use * either");
-        analyzeFail("create datacache rule catalog.a.b priority = -1", "Datacache target catalog: catalog does not exist.");
-        analyzeFail("create datacache rule hive0.partitioned_db.b priority = -1", "Datacache target table: b does not exist in [catalog: hive0, database: partitioned_db]");
+        analyzeFail("create datacache rule catalog.a.b priority = -1", "DataCache target catalog: catalog does not exist.");
+        analyzeFail("create datacache rule hive0.partitioned_db.b priority = -1", "DataCache target table: b does not exist in [catalog: hive0, database: partitioned_db]");
         analyzeFail("create datacache rule hive0.partitioned_db.* WHERE dt>'2042' priority = -1", "You must have a specific table when using where clause");
     }
 
