@@ -1422,6 +1422,9 @@ struct TResourceLogicalSlot {
     5: optional i64 expired_pending_time_ms
     6: optional i64 expired_allocated_time_ms
     7: optional i64 fe_start_time_ms
+
+    100: optional i32 num_fragments
+    101: optional i32 pipeline_dop
 }
 
 struct TRequireSlotRequest {
@@ -1435,6 +1438,8 @@ struct TRequireSlotResponse {
 struct TFinishSlotRequirementRequest {
     1: optional Status.TStatus status
     2: optional Types.TUniqueId slot_id
+
+    100: optional i32 pipeline_dop
 }
 
 struct TFinishSlotRequirementResponse {
