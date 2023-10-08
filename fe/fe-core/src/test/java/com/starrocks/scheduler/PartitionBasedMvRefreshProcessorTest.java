@@ -312,7 +312,15 @@ public class PartitionBasedMvRefreshProcessorTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\"\n" +
                         ") " +
-                        "as select a, b, c, d from jdbc0.partitioned_db0.tbl3;");
+                        "as select a, b, c, d from jdbc0.partitioned_db0.tbl3;")
+                .withMaterializedView("create materialized view jdbc_parttbl_mv6 " +
+                        "partition by ss " +
+                        "distributed by hash(a) buckets 10 " +
+                        "REFRESH DEFERRED MANUAL " +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ") " +
+                        "as select str2date(d,'%Y%m%d') ss, a, b, c from jdbc0.partitioned_db0.tbl1;");
 
         new MockUp<StmtExecutor>() {
             @Mock
@@ -1268,7 +1276,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv1"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
-        taskRunProperties.put(PARTITION_START, "20230801");
+        taskRunProperties.put(PARTITION_START, "20230731");
         taskRunProperties.put(TaskRun.PARTITION_END, "20230805");
         taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -1310,7 +1318,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv3"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
-        taskRunProperties.put(PARTITION_START, "20230801");
+        taskRunProperties.put(PARTITION_START, "20230731");
         taskRunProperties.put(TaskRun.PARTITION_END, "20230805");
         taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -1334,7 +1342,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv5"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
-        taskRunProperties.put(PARTITION_START, "20230801");
+        taskRunProperties.put(PARTITION_START, "20230731");
         taskRunProperties.put(TaskRun.PARTITION_END, "20230805");
         taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -2437,5 +2445,36 @@ public class PartitionBasedMvRefreshProcessorTest {
         }
 
         starRocksAssert.dropMaterializedView("partition_prune_mv1");
+    }
+
+    @Test
+    public void testRefreshByParCreateOnlyNecessaryPar() throws Exception {
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
+        MockedJDBCMetadata mockedJDBCMetadata =
+                (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
+        mockedJDBCMetadata.initPartitions();
+
+        // get base table partitions
+        List<String> baseParNames = mockedJDBCMetadata.listPartitionNames("partitioned_db0", "tbl1");
+        System.out.println(baseParNames);
+        Assert.assertEquals(3, baseParNames.size());
+
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv6"));
+        HashMap<String, String> taskRunProperties = new HashMap<>();
+        // check corner case: the first partition of base table is 0000 to 20230801
+        // p20230801 of mv should not be created
+        taskRunProperties.put(PARTITION_START, "20230801");
+        taskRunProperties.put(TaskRun.PARTITION_END, "20230802");
+        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        Collection<Partition> partitions = materializedView.getPartitions();
+        System.out.println(partitions);
+        // check create only one partition
+        Assert.assertEquals(1, partitions.size());
+        Assert.assertNotNull(materializedView.getPartition("p20230801"));
     }
 }
