@@ -287,7 +287,13 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
                                                             _shared_buffered_input_stream.get());
+<<<<<<< HEAD:be/src/exec/vectorized/hdfs_scanner_orc.cpp
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
+=======
+    ORCHdfsFileStream* orc_hdfs_file_stream = input_stream.get();
+
+    SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
+>>>>>>> 8ef0f2e3a6 ([BugFix][Cherry-Pick][Branch-3.1] Fix FSIO stats lost in hdfs_scanner_text (#32180)):be/src/exec/hdfs_scanner_orc.cpp
     std::unique_ptr<orc::Reader> reader;
     try {
         orc::ReaderOptions options;
@@ -358,6 +364,26 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         _lazy_load_ctx.active_load_slots.size() != 0) {
         _orc_reader->set_lazy_load_context(&_lazy_load_ctx);
     }
+<<<<<<< HEAD:be/src/exec/vectorized/hdfs_scanner_orc.cpp
+=======
+
+    // select out strips we are going to read.
+    {
+        uint64_t stripe_number = reader->getNumberOfStripes();
+        std::vector<ORCHdfsFileStream::StripeInformation> stripes;
+        for (uint64_t idx = 0; idx < stripe_number; idx++) {
+            ORCHdfsFileStream::StripeInformation s;
+            auto stripeInfo = reader->getStripeInOrcFormat(idx);
+            if (_orc_row_reader_filter->filterOnOpeningStripe(idx, &stripeInfo)) continue;
+            s.offset = stripeInfo.offset();
+            s.length = stripeInfo.datalength() + stripeInfo.indexlength() + stripeInfo.footerlength();
+            stripes.emplace_back(s);
+            _app_stats.stripe_sizes.push_back(s.length);
+        }
+        orc_hdfs_file_stream->setStripes(std::move(stripes));
+    }
+
+>>>>>>> 8ef0f2e3a6 ([BugFix][Cherry-Pick][Branch-3.1] Fix FSIO stats lost in hdfs_scanner_text (#32180)):be/src/exec/hdfs_scanner_orc.cpp
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader)));
     return Status::OK();
 }
@@ -379,7 +405,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         size_t read_num_values = 0;
         bool has_used_dict_filter = false;
         {
-            SCOPED_RAW_TIMER(&_stats.column_read_ns);
+            SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
             RETURN_IF_ERROR(_orc_reader->read_next(&position));
             // read num values is how many rows actually read before doing dict filtering.
             read_num_values = position.num_values;
@@ -394,7 +420,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         if (_orc_reader->get_cvb_size() != 0) {
             {
                 StatusOr<ChunkPtr> ret;
-                SCOPED_RAW_TIMER(&_stats.column_convert_ns);
+                SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
                 if (!_orc_reader->has_lazy_load_context()) {
                     ret = _orc_reader->get_chunk();
                 } else {
@@ -410,10 +436,10 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
             _scanner_ctx.append_partition_column_to_chunk(chunk, ck->num_rows());
             chunk_size = ck->num_rows();
             // do stats before we filter rows which does not match.
-            _stats.raw_rows_read += chunk_size;
+            _app_stats.raw_rows_read += chunk_size;
             _chunk_filter.assign(chunk_size, 1);
             {
-                SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
+                SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
                 for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
                     // do evaluation.
                     if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
@@ -442,15 +468,19 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
         // if has lazy load fields, skip it if chunk_size == 0
         if (chunk_size == 0) {
+<<<<<<< HEAD:be/src/exec/vectorized/hdfs_scanner_orc.cpp
+=======
+            _app_stats.skip_read_rows += chunk_size_ori;
+>>>>>>> 8ef0f2e3a6 ([BugFix][Cherry-Pick][Branch-3.1] Fix FSIO stats lost in hdfs_scanner_text (#32180)):be/src/exec/hdfs_scanner_orc.cpp
             continue;
         }
         {
-            SCOPED_RAW_TIMER(&_stats.column_read_ns);
+            SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
             RETURN_IF_ERROR(_orc_reader->lazy_seek_to(position.row_in_stripe));
             RETURN_IF_ERROR(_orc_reader->lazy_read_next(read_num_values));
         }
         {
-            SCOPED_RAW_TIMER(&_stats.column_convert_ns);
+            SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
             if (has_used_dict_filter) {
                 _orc_reader->lazy_filter_on_cvb(&_dict_filter);
             }
@@ -470,7 +500,52 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
     _should_skip_file = false;
     _use_orc_sargs = true;
     // todo: build predicate hook and ranges hook.
+<<<<<<< HEAD:be/src/exec/vectorized/hdfs_scanner_orc.cpp
     return Status::OK();
 }
 
 } // namespace starrocks::vectorized
+=======
+    if (!scanner_params.deletes.empty()) {
+        SCOPED_RAW_TIMER(&_app_stats.delete_build_ns);
+        IcebergDeleteBuilder iceberg_delete_builder(scanner_params.fs, scanner_params.path,
+                                                    scanner_params.conjunct_ctxs, scanner_params.materialize_slots,
+                                                    &_need_skip_rowids);
+        for (const auto& tdelete_file : scanner_params.deletes) {
+            RETURN_IF_ERROR(iceberg_delete_builder.build_orc(runtime_state->timezone(), *tdelete_file));
+        }
+        _app_stats.delete_file_per_scan += scanner_params.deletes.size();
+    }
+
+    return Status::OK();
+}
+
+static const std::string kORCProfileSectionPrefix = "ORC";
+
+void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
+    RuntimeProfile::Counter* delete_build_timer = nullptr;
+    RuntimeProfile::Counter* delete_file_per_scan_counter = nullptr;
+    RuntimeProfile::Counter* stripe_sizes_counter = nullptr;
+    RuntimeProfile::Counter* stripe_number_counter = nullptr;
+    RuntimeProfile* root = profile->runtime_profile;
+
+    ADD_COUNTER(root, kORCProfileSectionPrefix, TUnit::NONE);
+
+    delete_build_timer = ADD_CHILD_TIMER(root, "DeleteBuildTimer", kORCProfileSectionPrefix);
+    delete_file_per_scan_counter = ADD_CHILD_COUNTER(root, "DeleteFilesPerScan", TUnit::UNIT, kORCProfileSectionPrefix);
+    COUNTER_UPDATE(delete_build_timer, _app_stats.delete_build_ns);
+    COUNTER_UPDATE(delete_file_per_scan_counter, _app_stats.delete_file_per_scan);
+
+    // we expect to get average stripe size instead of sum.
+    stripe_sizes_counter = root->add_child_counter("StripeSizes", TUnit::BYTES,
+                                                   RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
+                                                   kORCProfileSectionPrefix);
+    stripe_number_counter = ADD_CHILD_COUNTER(root, "StripeNumber", TUnit::UNIT, kORCProfileSectionPrefix);
+    for (auto v : _app_stats.stripe_sizes) {
+        COUNTER_UPDATE(stripe_sizes_counter, v);
+    }
+    COUNTER_UPDATE(stripe_number_counter, _app_stats.stripe_sizes.size());
+}
+
+} // namespace starrocks
+>>>>>>> 8ef0f2e3a6 ([BugFix][Cherry-Pick][Branch-3.1] Fix FSIO stats lost in hdfs_scanner_text (#32180)):be/src/exec/hdfs_scanner_orc.cpp
