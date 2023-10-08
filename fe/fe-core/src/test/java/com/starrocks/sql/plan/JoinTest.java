@@ -2836,22 +2836,25 @@ public class JoinTest extends PlanTestBase {
                 "  |  \n" +
                 "  2:OlapScanNode\n" +
                 "     TABLE: t1");
-        assertContains(plan, "14:TOP-N\n" +
+        assertContains(plan, "13:TOP-N\n" +
                 "  |  order by: <slot 2> 2: v2 ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
-                "  13:HASH JOIN\n" +
+                "  12:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 7: v7\n" +
                 "  |  \n" +
-                "  |----12:EXCHANGE\n" +
+                "  |----11:EXCHANGE\n" +
                 "  |    \n" +
-                "  10:TOP-N\n" +
+                "  9:TOP-N\n" +
                 "  |  order by: <slot 2> 2: v2 ASC\n" +
                 "  |  offset: 0\n" +
-                "  |  limit: 10");
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  8:MERGING-EXCHANGE\n" +
+                "     limit: 20");
 
         sql = "select\n" +
                 "    *\n" +
@@ -2893,12 +2896,12 @@ public class JoinTest extends PlanTestBase {
                 "  2:OlapScanNode\n" +
                 "     TABLE: t1");
 
-        assertContains(plan, "12:TOP-N\n" +
+        assertContains(plan, "11:TOP-N\n" +
                 "  |  order by: <slot 8> 8: v8 ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
-                "  11:OlapScanNode\n" +
+                "  10:OlapScanNode\n" +
                 "     TABLE: t2");
 
         sql = "SELECT\n" +
@@ -3099,19 +3102,19 @@ public class JoinTest extends PlanTestBase {
                 "limit\n" +
                 "    100;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "13:TOP-N\n" +
+        assertContains(plan, "12:TOP-N\n" +
                 "  |  order by: <slot 2> 2: v2 ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 100\n" +
                 "  |  \n" +
-                "  12:HASH JOIN\n" +
+                "  11:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 7: v7\n" +
                 "  |  \n" +
-                "  |----11:EXCHANGE\n" +
+                "  |----10:EXCHANGE\n" +
                 "  |    \n" +
-                "  9:MERGING-EXCHANGE\n" +
+                "  8:MERGING-EXCHANGE\n" +
                 "     limit: 20");
 
         FeConstants.runningUnitTest = true;

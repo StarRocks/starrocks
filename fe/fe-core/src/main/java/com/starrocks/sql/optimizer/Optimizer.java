@@ -41,13 +41,14 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MinMaxCountOptOnScanRule;
-import com.starrocks.sql.optimizer.rule.transformation.OuterJoinAddRedundantTopNRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitRankingWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateRankingWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNBelowOuterJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNBelowUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
@@ -393,11 +394,12 @@ public class Optimizer {
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
 
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new OuterJoinAddRedundantTopNRule());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowUnionRule());
 
         if (isEnableSingleTableMVRewrite(rootTaskContext, sessionVariable, tree)) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
