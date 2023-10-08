@@ -647,7 +647,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     const auto& scan_range = _scan_range;
     std::string native_file_path = scan_range.full_path;
-    if (_hive_table != nullptr && _hive_table->has_partition()) {
+    if (_hive_table != nullptr && _hive_table->has_partition() && !_hive_table->has_base_path()) {
         auto* partition_desc = _hive_table->get_partition(scan_range.partition_id);
         if (partition_desc == nullptr) {
             return Status::InternalError(fmt::format(
@@ -657,6 +657,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         std::filesystem::path file_path(partition_desc->location());
         file_path /= scan_range.relative_path;
         native_file_path = file_path.native();
+    }
+    if (native_file_path.empty()) {
+        native_file_path = _hive_table->get_base_path() + scan_range.relative_path;
     }
 
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
