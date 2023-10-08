@@ -232,7 +232,7 @@ private:
     // concurrency of the brpc threads, so we let the size of _metrics to be the same as the pipeline's dop,
     // and use round-robin to choose the metrics for each brpc thread.
     std::vector<Metrics> _metrics;
-    int32_t _rpc_round_roubin_index = 0;
+    std::atomic<size_t> _rpc_round_roubin_index = 0;
 
     // Sub plan query statistics receiver.
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr;
