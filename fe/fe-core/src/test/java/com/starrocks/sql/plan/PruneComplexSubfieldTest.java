@@ -713,20 +713,15 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  <slot 15> : row(1, 2, 3).col2 IS NULL");
     }
 
+
+
     @Test
     public void testForceReuseCTE1() throws Exception {
         String sql = "with cte1 as (select array_map((x -> uuid()), t.a1) c1, t.map1 c2 from pc0 t) " +
                 "select * from " +
                 "(select * from cte1) t1 join " +
                 "(select * from cte1) t2 on t1.c1=t2.c1 ";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "  MultiCastDataSinks\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
-                "    RANDOM\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 07\n" +
-                "    RANDOM");
+        assertContainsCTEReuse(sql);
     }
 
     @Test
@@ -735,13 +730,82 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "select * from " +
                 "(select * from cte1) t1 join " +
                 "(select * from cte1) t2 on t1.c1=t2.c1 ";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, " MultiCastDataSinks\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
-                "    RANDOM\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 06\n" +
-                "    RANDOM");
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE3() throws Exception {
+        String sql = "with cte1 as (select random() as c1, t.map1 c2 from pc0 t) " +
+                "select * from " +
+                "(select * from cte1) t1 join " +
+                "(select * from cte1) t2 on t1.c1=t2.c1 ";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE4() throws Exception {
+        String sql = "with cte1 as (select v1 as c1, t.map1 c2 from pc0 t where rand() < 0.5) " +
+                "select * from " +
+                "(select * from cte1) t1 join " +
+                "(select * from cte1) t2 on t1.c1=t2.c1 ";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE5() throws Exception {
+        String sql = "with cte1 as (select rand() as c1, t.map1 c2 from pc0 t), " +
+                "cte2 as (select c1, count(1) as c11 from cte1 group by c1)" +
+                "select * from " +
+                "(select * from cte1) t1 join " +
+                "(select * from cte2) t2 on t1.c1=t2.c1 ";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE6() throws Exception {
+        String sql = "with cte1 as (select c1 + 1 as c1, c2 from " +
+                "   (select v1 as c1, t.map1 c2 from pc0 t where rand() < 0.5) t2) " +
+                "select * from " +
+                "(select * from cte1) t1 join " +
+                "(select * from cte1) t2 on t1.c1=t2.c1 ";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE7() throws Exception {
+        String sql = "with cte1 as (select c1 + 1 as c1, c2 from " +
+                "   (select rand() as c1, t.map1 c2 from pc0 t) t2) " +
+                "select * from " +
+                "(select * from cte1) t1 join " +
+                "(select * from cte1) t2 on t1.c1=t2.c1 ";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE8() throws Exception {
+        String sql = "with cte1 as (select rank() over(order by c1) as c1, c2 from " +
+                "   (select rand() as c1, t.map1 c2 from pc0 t) t2) " +
+                "select * from " +
+                "(select * from cte1) t1 join " +
+                "(select * from cte1) t2 on t1.c1=t2.c1 ";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE9() throws Exception {
+        String sql = "with cte1 as (select rand() as c1, t.map1 c2 from pc0 t), " +
+                "cte2 as (select a.c1, b.c2 from cte1 as a join cte1 as b on a.c1 = b.c1)" +
+                "select * from " +
+                "(select * from cte2) t1 join " +
+                "(select * from cte2) t2 on t1.c1=t2.c1 ";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE10() throws Exception {
+        String sql = "with cte1 as (select rand() as c1, t.map1 c2 from pc0 t) " +
+                "select * from cte1 union all " +
+                "select * from cte1";
+        assertContainsCTEReuse(sql);
     }
 }

@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -40,6 +41,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * If the opt expression contains non-deterministic function, force cte reuse to avoid producing wrong result.
+ */
 public class ForceCTEReuseRule extends TransformationRule {
     public ForceCTEReuseRule() {
         super(RuleType.TF_FORCE_CTE_REUSE,
@@ -48,18 +52,10 @@ public class ForceCTEReuseRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        CTEContext cteContext = context.getCteContext();
-        LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) input.getOp();
-        int cteId = produce.getCteId();
-        NonDeterministicVisitor visitor = new NonDeterministicVisitor();
-        boolean hasNonDeterministicFunc = false;
-        for (OptExpression child : input.getInputs()) {
-            if (visitor.visit(child, null)) {
-                hasNonDeterministicFunc = true;
-                break;
-            }
-        }
-        if (hasNonDeterministicFunc) {
+        if (NonDeterministicVisitor.hasNonDeterministicFunction(input)) {
+            LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) input.getOp();
+            CTEContext cteContext = context.getCteContext();
+            int cteId = produce.getCteId();
             cteContext.addForceCTE(cteId);
         }
 
@@ -67,6 +63,10 @@ public class ForceCTEReuseRule extends TransformationRule {
     }
 
     private static class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void> {
+        public static boolean hasNonDeterministicFunction(OptExpression root) {
+            return new NonDeterministicVisitor().visit(root, null);
+        }
+
         boolean checkColumnRefMap(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
             if (columnRefMap == null) {
                 return false;
@@ -79,11 +79,6 @@ public class ForceCTEReuseRule extends TransformationRule {
             return false;
         }
 
-        // If a scalarOperator contains any non-deterministic function, it cannot be reused
-        // because the non-deterministic function results returned each time are inconsistent.
-        // a lambda-dependent expressions also can't be reused if reuseLambdaDependentExpr is false.
-        // For example, array_map(x->2x+1+2x,array),2x is lambda-dependent, so it can't be reused if
-        // reuseLambdaDependentExpr is false, but array_map(x->2x+1+2x,array) can be reused if needed.
         private boolean hasNonDeterministicFunc(ScalarOperator scalarOperator) {
             if (scalarOperator instanceof CallOperator) {
                 String fnName = ((CallOperator) scalarOperator).getFnName();
@@ -139,10 +134,7 @@ public class ForceCTEReuseRule extends TransformationRule {
             if (operator.getProjection() != null && checkProject(operator.getProjection())) {
                 return true;
             }
-            if (operator.accept(this, optExpression, null)) {
-                return true;
-            }
-            return false;
+            return optExpression.getOp().accept(this, optExpression, null);
         }
 
         private Boolean visitChildren(OptExpression optExpression) {
@@ -156,10 +148,16 @@ public class ForceCTEReuseRule extends TransformationRule {
 
         @Override
         public Boolean visit(OptExpression optExpression, Void context) {
-            if (checkOptExpression(optExpression)) {
+            return visitChildren(optExpression);
+        }
+
+        @Override
+        public Boolean visitLogicalTableScan(OptExpression optExpression, Void context) {
+            LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
+            if (scanOperator.getPredicate() != null && hasNonDeterministicFunc(scanOperator.getPredicate())) {
                 return true;
             }
-            return visitChildren(optExpression);
+            return false;
         }
 
         @Override
