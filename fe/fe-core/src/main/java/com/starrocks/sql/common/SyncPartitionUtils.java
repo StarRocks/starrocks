@@ -51,7 +51,11 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Collections;
+<<<<<<< HEAD
 import java.util.Iterator;
+=======
+import java.util.HashSet;
+>>>>>>> 19ab312143 ([Enhancement] Only create necessay partitions when refreshing mv by partition (#32016))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -95,6 +99,7 @@ public class SyncPartitionUtils {
         return deletes != null && !deletes.isEmpty();
     }
 
+<<<<<<< HEAD
     public static PartitionDiff calcSyncRollupPartition(Map<String, Range<PartitionKey>> baseRangeMap,
                                                         Map<String, Range<PartitionKey>> mvRangeMap,
                                                         String granularity, PrimitiveType partitionType) {
@@ -103,6 +108,58 @@ public class SyncPartitionUtils {
         Map<String, Range<PartitionKey>> adds = diffRange(rollupRange, mvRangeMap);
         Map<String, Range<PartitionKey>> deletes = diffRange(mvRangeMap, rollupRange);
         PartitionDiff diff = new PartitionDiff(adds, deletes);
+=======
+    public static boolean hasListPartitionChanged(Map<String, List<List<String>>> baseRangeMap,
+                                                 Map<String, List<List<String>>> mvRangeMap) {
+        Map<String, List<List<String>>> adds = diffList(baseRangeMap, mvRangeMap);
+        if (adds != null && !adds.isEmpty()) {
+            return true;
+        }
+        Map<String, List<List<String>>> deletes = diffList(mvRangeMap, baseRangeMap);
+        return deletes != null && !deletes.isEmpty();
+    }
+
+    public static RangePartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                                 Map<String, Range<PartitionKey>> mvRangeMap,
+                                                                 FunctionCallExpr functionCallExpr,
+                                                                 PrimitiveType partitionType,
+                                                                 Range<PartitionKey> rangeToInclude) {
+
+        Map<String, Range<PartitionKey>> rollupRange = Maps.newHashMap();
+        if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+            String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
+            rollupRange = mappingRangeList(baseRangeMap, granularity, partitionType);
+        } else if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+            rollupRange = mappingRangeList(baseRangeMap);
+        }
+        return getRangePartitionDiff(baseRangeMap, mvRangeMap, rollupRange, rangeToInclude);
+    }
+
+    public static RangePartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                                 Map<String, Range<PartitionKey>> mvRangeMap,
+                                                                 String granularity, PrimitiveType partitionType) {
+        Map<String, Range<PartitionKey>> rollupRange = mappingRangeList(baseRangeMap, granularity, partitionType);
+        return getRangePartitionDiff(baseRangeMap, mvRangeMap, rollupRange, null);
+    }
+
+    @NotNull
+    private static RangePartitionDiff getRangePartitionDiff(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                            Map<String, Range<PartitionKey>> mvRangeMap,
+                                                            Map<String, Range<PartitionKey>> rollupRange,
+                                                            Range<PartitionKey> rangeToInclude) {
+        // TODO: Callers may use `List<PartitionRange>` directly.
+        List<PartitionRange> rollupRanges = rollupRange.keySet().stream().map(name -> new PartitionRange(name,
+                rollupRange.get(name))).collect(Collectors.toList());
+        List<PartitionRange> baseRanges = baseRangeMap.keySet().stream().map(name -> new PartitionRange(name,
+                baseRangeMap.get(name))).collect(Collectors.toList());
+        List<PartitionRange> mvRanges = mvRangeMap.keySet().stream().map(name -> new PartitionRange(name,
+                mvRangeMap.get(name))).collect(Collectors.toList());
+        Map<String, Set<String>> partitionRefMap = getIntersectedPartitions(rollupRanges, baseRanges);
+        Map<String, Range<PartitionKey>> adds = diffRange(rollupRanges, mvRanges, rangeToInclude);
+        Map<String, Range<PartitionKey>> deletes = diffRange(mvRanges, rollupRanges, null);
+
+        RangePartitionDiff diff = new RangePartitionDiff(adds, deletes);
+>>>>>>> 19ab312143 ([Enhancement] Only create necessay partitions when refreshing mv by partition (#32016))
         diff.setRollupToBasePartitionMap(partitionRefMap);
         return diff;
 
@@ -349,6 +406,52 @@ public class SyncPartitionUtils {
         return result;
     }
 
+<<<<<<< HEAD
+=======
+    public static Map<String, Range<PartitionKey>> diffRange(List<PartitionRange> srcRanges,
+                                                             List<PartitionRange> dstRanges,
+                                                             Range<PartitionKey> rangeToInclude) {
+        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
+        Set<PartitionRange> dstRangeSet = new HashSet<>(dstRanges);
+        for (PartitionRange range : srcRanges) {
+            if (!dstRangeSet.contains(range) && (rangeToInclude == null || isRangeIncluded(range, rangeToInclude))) {
+                result.put(range.getPartitionName(), range.getPartitionKeyRange());
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Check whether `range` is included in `rangeToInclude`. Here we only want to
+     * create partitions which is between `start` and `end` when executing
+     * `refresh materialized view xxx partition start (xxx) end (xxx)`
+     *
+     * @param range range to check
+     * @param rangeToInclude range to check whether the to be checked range is in
+     * @return true if included, else false
+     */
+    private static boolean isRangeIncluded(PartitionRange range, Range<PartitionKey> rangeToInclude) {
+        Range<PartitionKey> rangeToCheck = range.getPartitionKeyRange();
+        int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
+        int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
+        return !(lowerCmp >= 0 || upperCmp <= 0);
+    }
+
+    public static Map<String, List<List<String>>> diffList(Map<String, List<List<String>>> srcListMap,
+                                                           Map<String, List<List<String>>> dstListMap) {
+
+        Map<String, List<List<String>>> result = Maps.newHashMap();
+        for (Map.Entry<String, List<List<String>>> srcEntry : srcListMap.entrySet()) {
+            String key = srcEntry.getKey();
+            if (!dstListMap.containsKey(key) ||
+                    ListPartitionInfo.compareByValue(srcListMap.get(key), dstListMap.get(key)) != 0) {
+                result.put(key, srcEntry.getValue());
+            }
+        }
+        return result;
+    }
+
+>>>>>>> 19ab312143 ([Enhancement] Only create necessay partitions when refreshing mv by partition (#32016))
     public static Set<String> getPartitionNamesByRangeWithPartitionLimit(MaterializedView materializedView,
                                                                          String start, String end,
                                                                          int partitionTTLNumber,
