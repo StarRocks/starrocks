@@ -146,6 +146,41 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void setDefineStmt(OriginStatement stmt) {
+        this.defineStmt = stmt;
+    }
+
+    public OriginStatement getDefineStmt() {
+        return this.defineStmt;
+    }
+
+    public long getDbId() {
+        return dbId;
+    }
+
+    public void setDbId(long dbId) {
+        this.dbId = dbId;
+    }
+
+    public String getViewDefineSql() {
+        return viewDefineSql;
+    }
+
+    public void setViewDefineSql(String viewDefineSql) {
+        this.viewDefineSql = viewDefineSql;
+    }
+
+    public boolean isColocateMVIndex() {
+        return isColocateMVIndex;
+    }
+
+    public void setColocateMVIndex(boolean colocateMVIndex) {
+        isColocateMVIndex = colocateMVIndex;
+    }
+
+>>>>>>> 66eace9d59 ([BugFix] Rebuild materialized index meta after schema change (#31577))
     // The column names of the materialized view are all lowercase, but the column names may be uppercase
     @VisibleForTesting
     public void setColumnsDefineExpr(Map<String, Expr> columnNameToDefineExpr) {
