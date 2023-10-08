@@ -31,8 +31,6 @@ void LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk) {
     _local_memory_usage += memory_usage;
     _full_chunk_queue.emplace(std::move(chunk));
     _memory_manager->update_memory_usage(memory_usage, num_rows);
-
-    return;
 }
 
 // Used for PartitionExchanger.

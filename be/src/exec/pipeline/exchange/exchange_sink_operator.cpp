@@ -270,10 +270,9 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
     return Status::OK();
 }
 
-[[nodiscard]] Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state,
-                                                                       PTransmitChunkParamsPtr chunk_request,
-                                                                       const butil::IOBuf& attachment,
-                                                                       int64_t attachment_physical_bytes) {
+Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
+                                                         const butil::IOBuf& attachment,
+                                                         int64_t attachment_physical_bytes) {
     if (_ignore_local_data) {
         return Status::OK();
     }
