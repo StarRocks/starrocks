@@ -828,7 +828,7 @@ public class MaterializedViewAnalyzer {
         }
 
         @VisibleForTesting
-        void checkPartitionColumnWithBasePaimonTable(SlotRef slotRef, PaimonTable table) {
+        public void checkPartitionColumnWithBasePaimonTable(SlotRef slotRef, PaimonTable table) {
             if (table.isUnPartitioned()) {
                 throw new SemanticException("Materialized view partition column in partition exp " +
                         "must be base table partition column");
