@@ -51,9 +51,6 @@ select score, array_agg(name), array_agg(distinct name) from ss where id < 2 gro
 select score, array_agg(distinct name), array_agg(distinct score order by 1) from ss where id < 2 group by score order by 1;
 
 
-<<<<<<< HEAD
-select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss group by id order by id;
-=======
 select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss group by id order by 1;
 select array_agg(distinct name order by 1 asc), array_agg(name order by 1 desc) from ss group by id order by 1;
 select array_agg(distinct name order by 1 asc), array_agg(distinct name order by 1 desc) from ss group by id order by 1;
@@ -69,7 +66,6 @@ select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 de
 select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss order by 1;
 select array_agg(name order by 1 nulls first), array_agg(name order by 1 nulls last) from ss order by 1;
 
->>>>>>> cc32814cd6 ([BugFix] fix duplicate array_agg/group_concat in CallOperator (#31842))
 select array_agg(distinct subject order by 1, name) from ss group by id order by id;
 select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by id;
 select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by id;
@@ -95,33 +91,6 @@ select array_agg( score order by 1,name) from ss group by id order by id;
 select array_agg(distinct 1 order by 1) from ss group by id order by id;
 
 
-<<<<<<< HEAD
-select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss;
-select array_agg(distinct subject order by 1, name) from ss;
-select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss;
-select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss;
-select array_agg(distinct name order by 1) from ss ;
-select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss ;
-select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss;
-select array_agg(distinct subject order by 1, null) from ss ;
-select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss ;
-select array_agg(distinct score order by 1) from ss ;
-select array_agg(distinct score order by 1,name) from ss ;
-select array_agg(distinct 1 order by 1) from ss ;
-select array_agg(distinct 12 order by score) from ss ;
-select array_agg(distinct subject order by 1) from ss;
-select group_concat(name,subject order by 1,2), avg(distinct id), max(score) from ss;
-select array_agg( name order by 1,score), count(distinct id), max(score)  from ss;
-select array_agg( subject order by score,1), count(distinct id), max(score)  from ss;
-select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss ;
-select array_agg(subject order by score,4.00, 1), count(distinct id), max(score)  from ss ;
-select array_agg( name order by score,4.00,1),array_agg(distinct name order by score,4.00, 1) from ss ;
-select array_agg( null order by score,4.00) from ss;
-select array_agg(distinct null order by score,4.00) from ss;
-select array_agg( score order by 1) from ss;
-select array_agg( score order by 1,name) from ss;
-select array_agg(distinct 1 order by 1) from ss
-=======
 select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss order by 1;
 select array_agg(distinct subject order by 1, name) from ss order by 1;
 select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr)) from ss order by 1;
@@ -149,7 +118,6 @@ select array_agg( null order by score,4.00) from ss order by 1;
 select array_agg( score order by 1) from ss order by 1;
 select array_agg( score order by 1,name) from ss order by 1;
 select array_agg(distinct 1 order by 1) from ss order by 1;
->>>>>>> cc32814cd6 ([BugFix] fix duplicate array_agg/group_concat in CallOperator (#31842))
 
 set new_planner_agg_stage = 2;
 select max(id), array_agg(distinct name), count(distinct id), array_agg(name) from ss where id < 2  order by 1;
@@ -199,33 +167,6 @@ select array_agg( score order by 1,name) from ss group by id order by id;
 select array_agg(distinct 1 order by 1) from ss group by id order by id;
 
 
-<<<<<<< HEAD
-select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss;
-select array_agg(distinct subject order by 1, name) from ss;
-select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss;
-select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss;
-select array_agg(distinct name order by 1) from ss ;
-select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss ;
-select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss;
-select array_agg(distinct subject order by 1, null) from ss ;
-select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss ;
-select array_agg(distinct score order by 1) from ss ;
-select array_agg(distinct score order by 1,name) from ss ;
-select array_agg(distinct 1 order by 1) from ss ;
-select array_agg(distinct 12 order by score) from ss ;
-select array_agg(distinct subject order by 1) from ss;
-select group_concat(name,subject order by 1,2), avg(distinct id), max(score) from ss;
-select array_agg( name order by 1,score), count(distinct id), max(score)  from ss;
-select array_agg( subject order by score,1), count(distinct id), max(score)  from ss;
-select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss ;
-select array_agg(subject order by score,4.00, 1), count(distinct id), max(score)  from ss ;
-select array_agg( name order by score,4.00,1),array_agg(distinct name order by score,4.00, 1) from ss ;
-select array_agg( null order by score,4.00) from ss;
-select array_agg(distinct null order by score,4.00) from ss;
-select array_agg( score order by 1) from ss;
-select array_agg( score order by 1,name) from ss;
-select array_agg(distinct 1 order by 1) from ss
-=======
 select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss order by 1;
 select array_agg(distinct subject order by 1, name) from ss order by 1;
 select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr)) from ss order by 1;
@@ -266,7 +207,6 @@ select array_agg(name order by 1 asc), array_agg(name order by 1 desc) from ss o
 select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss order by 1;
 select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss order by 1;
 select array_agg(name order by 1 nulls first), array_agg(name order by 1 nulls last) from ss order by 1;
->>>>>>> cc32814cd6 ([BugFix] fix duplicate array_agg/group_concat in CallOperator (#31842))
 set new_planner_agg_stage = 0;
 
 set enable_exchange_pass_through = false;
@@ -317,33 +257,6 @@ select array_agg( score order by 1,name) from ss group by id order by id;
 select array_agg(distinct 1 order by 1) from ss group by id order by id;
 
 
-<<<<<<< HEAD
-select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss;
-select array_agg(distinct subject order by 1, name) from ss;
-select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss;
-select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss;
-select array_agg(distinct name order by 1) from ss ;
-select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss ;
-select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss;
-select array_agg(distinct subject order by 1, null) from ss ;
-select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss ;
-select array_agg(distinct score order by 1) from ss ;
-select array_agg(distinct score order by 1,name) from ss ;
-select array_agg(distinct 1 order by 1) from ss ;
-select array_agg(distinct 12 order by score) from ss ;
-select array_agg(distinct subject order by 1) from ss;
-select group_concat(name,subject order by 1,2), avg(distinct id), max(score) from ss;
-select array_agg( name order by 1,score), count(distinct id), max(score)  from ss;
-select array_agg( subject order by score,1), count(distinct id), max(score)  from ss;
-select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss ;
-select array_agg(subject order by score,4.00, 1), count(distinct id), max(score)  from ss ;
-select array_agg( name order by score,4.00,1),array_agg(distinct name order by score,4.00, 1) from ss ;
-select array_agg( null order by score,4.00) from ss;
-select array_agg(distinct null order by score,4.00) from ss;
-select array_agg( score order by 1) from ss;
-select array_agg( score order by 1,name) from ss;
-select array_agg(distinct 1 order by 1) from ss
-=======
 select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss order by 1;
 select array_agg(distinct subject order by 1, name) from ss order by 1;
 select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss order by 1;
@@ -384,7 +297,6 @@ select array_agg(name order by 1 asc), array_agg(name order by 1 desc) from ss o
 select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss order by 1;
 select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss order by 1;
 select array_agg(name order by 1 nulls first), array_agg(name order by 1 nulls last) from ss order by 1;
->>>>>>> cc32814cd6 ([BugFix] fix duplicate array_agg/group_concat in CallOperator (#31842))
 
 set enable_query_cache = true;
 select id, array_agg(distinct name), count(distinct score), array_agg(name) from ss where id < 2 group by id order by 1;
@@ -401,19 +313,6 @@ select score, array_agg(distinct name), array_agg(distinct score order by 1) fro
 
 select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss group by id order by id;
 select array_agg(distinct subject order by 1, name) from ss group by id order by id;
-<<<<<<< HEAD
-select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by id;
-select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by id;
-select array_agg(distinct name order by 1) from ss group by id order by id;
-
-select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss;
-select array_agg(distinct subject order by 1, name) from ss;
-select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss;
-select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss;
-select array_agg(distinct name order by 1) from ss ;
-select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss ;
-select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss;
-=======
 select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1;
 select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by 1;
 select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by 1;
@@ -439,7 +338,6 @@ select array_agg(name order by 1 asc), array_agg(name order by 1 desc) from ss o
 select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss order by 1;
 select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss order by 1;
 select array_agg(name order by 1 nulls first), array_agg(name order by 1 nulls last) from ss order by 1;
->>>>>>> cc32814cd6 ([BugFix] fix duplicate array_agg/group_concat in CallOperator (#31842))
 
 select array_agg();
 select array_agg() from ss;
