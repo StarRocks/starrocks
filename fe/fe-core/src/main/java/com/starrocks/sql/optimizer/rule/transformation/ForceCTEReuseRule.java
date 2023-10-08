@@ -172,8 +172,13 @@ public class ForceCTEReuseRule extends TransformationRule {
 
         @Override
         public Boolean visitLogicalAggregate(OptExpression optExpression, Void context) {
-            LogicalAggregationOperator operator = (LogicalAggregationOperator) optExpression.getOp();
-            if (checkAggCall(operator.getAggregations())) {
+            LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) optExpression.getOp();
+            if (checkAggCall(aggregationOperator.getAggregations())) {
+                return true;
+            }
+            // having predicate
+            if (aggregationOperator.getPredicate() != null &&
+                    hasNonDeterministicFunc(aggregationOperator.getPredicate())) {
                 return true;
             }
             return visitChildren(optExpression);

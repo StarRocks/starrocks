@@ -808,4 +808,12 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "select * from cte1";
         assertContainsCTEReuse(sql);
     }
+
+    @Test
+    public void testForceReuseCTE11() throws Exception {
+        String sql = "with cte1 as (select t.v1, sum(t.v1) from pc0 t group by t.v1 having rand() > 0.5) " +
+                "select * from cte1 union all " +
+                "select * from cte1";
+        assertContainsCTEReuse(sql);
+    }
 }
