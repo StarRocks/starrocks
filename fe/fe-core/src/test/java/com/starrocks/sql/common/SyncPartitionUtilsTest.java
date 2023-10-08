@@ -438,7 +438,7 @@ public class SyncPartitionUtilsTest {
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
         PartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
-                "month", PrimitiveType.DATETIME);
+                "month", PrimitiveType.DATETIME, null);
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
         Map<String, Range<PartitionKey>> deletes = diff.getDeletes();
 

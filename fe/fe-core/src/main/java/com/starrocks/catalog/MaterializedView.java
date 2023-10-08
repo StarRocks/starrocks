@@ -1240,7 +1240,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
             String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
             return SyncPartitionUtils.calcSyncRollupPartition(basePartitionMap, mvPartitionMap,
-                    granularity, partitionColumn.getPrimitiveType());
+                    granularity, partitionColumn.getPrimitiveType(), null);
         } else {
             throw UnsupportedException.unsupportedException("unsupported partition expr:" + partitionExpr);
         }
