@@ -1334,7 +1334,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     }
 
     @Test
-    public void test_$str2date_date_trunc() throws Exception {
+    public void test_str2date_date_trunc() throws Exception {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
         MockedJDBCMetadata mockedJDBCMetadata =
                 (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();

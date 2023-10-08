@@ -102,7 +102,6 @@ public class SyncPartitionUtils {
         return new ListPartitionDiff(adds, deletes);
     }
 
-
     public static boolean hasRangePartitionChanged(Map<String, Range<PartitionKey>> baseRangeMap,
                                                    Map<String, Range<PartitionKey>> mvRangeMap) {
         Map<String, Range<PartitionKey>> adds = diffRange(baseRangeMap, mvRangeMap);
@@ -114,7 +113,7 @@ public class SyncPartitionUtils {
     }
 
     public static boolean hasListPartitionChanged(Map<String, List<List<String>>> baseRangeMap,
-                                                 Map<String, List<List<String>>> mvRangeMap) {
+                                                  Map<String, List<List<String>>> mvRangeMap) {
         Map<String, List<List<String>>> adds = diffList(baseRangeMap, mvRangeMap);
         if (adds != null && !adds.isEmpty()) {
             return true;
@@ -172,14 +171,14 @@ public class SyncPartitionUtils {
     private static Map<String, Range<PartitionKey>> mappingRangeListForDate(
             Map<String, Range<PartitionKey>> baseRangeMap) {
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
-            for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
-                Range<PartitionKey> dateRange = convertToDatePartitionRange(rangeEntry.getValue());
-                DateLiteral lowerDate = (DateLiteral) dateRange.lowerEndpoint().getKeys().get(0);
-                DateLiteral upperDate = (DateLiteral) dateRange.upperEndpoint().getKeys().get(0);
-                String mvPartitionName = getMVPartitionName(lowerDate.toLocalDateTime(), upperDate.toLocalDateTime());
+        for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
+            Range<PartitionKey> dateRange = convertToDatePartitionRange(rangeEntry.getValue());
+            DateLiteral lowerDate = (DateLiteral) dateRange.lowerEndpoint().getKeys().get(0);
+            DateLiteral upperDate = (DateLiteral) dateRange.upperEndpoint().getKeys().get(0);
+            String mvPartitionName = getMVPartitionName(lowerDate.toLocalDateTime(), upperDate.toLocalDateTime());
 
-                result.put(mvPartitionName, dateRange);
-            }
+            result.put(mvPartitionName, dateRange);
+        }
 
         return result;
     }
@@ -294,11 +293,11 @@ public class SyncPartitionUtils {
     /**
      * @param srcRanges : src partition ranges
      * @param dstRanges : dst partition ranges
-     * @return          : return all src partition name to intersected dst partition names which the src partition
+     * @return : return all src partition name to intersected dst partition names which the src partition
      * is intersected with dst ranges.
      */
     public static Map<String, Set<String>> getIntersectedPartitions(List<PartitionRange> srcRanges,
-                                                                     List<PartitionRange> dstRanges) {
+                                                                    List<PartitionRange> dstRanges) {
         if (!srcRanges.isEmpty() && !dstRanges.isEmpty()) {
             List<PrimitiveType> srcTypes = srcRanges.get(0).getPartitionKeyRange().lowerEndpoint().getTypes();
             List<PrimitiveType> dstTypes = dstRanges.get(0).getPartitionKeyRange().lowerEndpoint().getTypes();
@@ -513,7 +512,7 @@ public class SyncPartitionUtils {
      * create partitions which is between `start` and `end` when executing
      * `refresh materialized view xxx partition start (xxx) end (xxx)`
      *
-     * @param range range to check
+     * @param range          range to check
      * @param rangeToInclude range to check whether the to be checked range is in
      * @return true if included, else false
      */
@@ -565,10 +564,11 @@ public class SyncPartitionUtils {
 
         int lastPartitionNum;
         if (partitionTTLNumber > 0 && isAutoRefresh && autoRefreshPartitionsLimit > 0) {
-            lastPartitionNum = Math.min(partitionTTLNumber, autoRefreshPartitionsLimit);;
+            lastPartitionNum = Math.min(partitionTTLNumber, autoRefreshPartitionsLimit);
+            ;
         } else if (isAutoRefresh && autoRefreshPartitionsLimit > 0) {
             lastPartitionNum = autoRefreshPartitionsLimit;
-        } else if (partitionTTLNumber > 0)  {
+        } else if (partitionTTLNumber > 0) {
             lastPartitionNum = partitionTTLNumber;
         } else {
             lastPartitionNum = TableProperty.INVALID;
@@ -578,9 +578,9 @@ public class SyncPartitionUtils {
     }
 
     public static Set<String> getPartitionNamesByListWithPartitionLimit(MaterializedView materializedView,
-                                                                         String start, String end,
-                                                                         int partitionTTLNumber,
-                                                                         boolean isAutoRefresh) {
+                                                                        String start, String end,
+                                                                        int partitionTTLNumber,
+                                                                        boolean isAutoRefresh) {
         int autoRefreshPartitionsLimit = materializedView.getTableProperty().getAutoRefreshPartitionsLimit();
         boolean hasPartitionRange = StringUtils.isNoneEmpty(start) || StringUtils.isNoneEmpty(end);
 
@@ -598,10 +598,11 @@ public class SyncPartitionUtils {
 
         int lastPartitionNum;
         if (partitionTTLNumber > 0 && isAutoRefresh && autoRefreshPartitionsLimit > 0) {
-            lastPartitionNum = Math.min(partitionTTLNumber, autoRefreshPartitionsLimit);;
+            lastPartitionNum = Math.min(partitionTTLNumber, autoRefreshPartitionsLimit);
+            ;
         } else if (isAutoRefresh && autoRefreshPartitionsLimit > 0) {
             lastPartitionNum = autoRefreshPartitionsLimit;
-        } else if (partitionTTLNumber > 0)  {
+        } else if (partitionTTLNumber > 0) {
             lastPartitionNum = partitionTTLNumber;
         } else {
             lastPartitionNum = TableProperty.INVALID;
@@ -707,7 +708,6 @@ public class SyncPartitionUtils {
                     baseTable.getName(), baseTable.getTableIdentifier()));
         }
     }
-
 
     public static void dropBaseVersionMeta(MaterializedView mv, String mvPartitionName,
                                            Range<PartitionKey> partitionRange) {
