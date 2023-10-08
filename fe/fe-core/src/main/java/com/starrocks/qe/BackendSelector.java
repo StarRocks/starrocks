@@ -15,7 +15,22 @@
 package com.starrocks.qe;
 
 import com.starrocks.common.UserException;
+import com.starrocks.thrift.TScanRangeLocations;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public interface BackendSelector {
     void computeScanRangeAssignment() throws UserException;
+
+    default void shuffleScanRangeLocations(TScanRangeLocations scanRange) {
+        if (!scanRange.getScan_range().isSetInternal_scan_range()) {
+            Collections.shuffle(scanRange.getLocations());
+        } else {
+            List<Integer> indexes = IntStream.range(0, scanRange.getLocationsSize()).boxed().collect(Collectors.toList());
+
+        }
+    }
 }
