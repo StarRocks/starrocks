@@ -228,6 +228,6 @@ public class CloudConfigurationFactoryTest {
         AWSCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
         Assert.assertEquals(cred.toCredString(),
                 "AWSCloudCredential{useAWSSDKDefaultBehavior=true, useInstanceProfile=false, accessKey='', secretKey='', " +
-                        "sessionToken='', iamRoleArn='', externalId='', region='', endpoint=''}");
+                        "sessionToken='', iamRoleArn='', externalId='', region='us-east-1', endpoint=''}");
     }
 }
