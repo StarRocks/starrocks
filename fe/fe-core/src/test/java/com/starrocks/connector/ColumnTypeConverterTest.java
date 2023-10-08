@@ -14,6 +14,7 @@
 
 package com.starrocks.connector;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
@@ -32,6 +33,11 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.catalog.ScalarType.MAX_VARCHAR_LENGTH;
+import static com.starrocks.catalog.Type.UNKNOWN_TYPE;
+>>>>>>> 22ea1a8458 ([BugFix] Fix hudi type converter (#32143))
 import static com.starrocks.connector.ColumnTypeConverter.columnEquals;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToArrayType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToMapType;
@@ -339,6 +345,10 @@ public class ColumnTypeConverterTest {
         structFields.add(structField2);
         StructType structType = new StructType(structFields);
         Assert.assertEquals(structType, fromHudiType(structSchema));
+
+        structSchema = Schema.createRecord(
+                ImmutableList.of(new Schema.Field("enum", Schema.create(Schema.Type.NULL))));
+        Assert.assertEquals(UNKNOWN_TYPE, fromHudiType(structSchema));
     }
 
     @Test
@@ -362,6 +372,9 @@ public class ColumnTypeConverterTest {
         MapType mapType = new MapType(ScalarType.createDefaultExternalTableString(), structType);
 
         Assert.assertEquals(mapType, fromHudiType(mapSchema));
+
+        mapSchema = Schema.createMap(Schema.create(Schema.Type.NULL));
+        Assert.assertEquals(UNKNOWN_TYPE, fromHudiType(mapSchema));
     }
 
     @Test
