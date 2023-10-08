@@ -51,7 +51,6 @@ public class CountingLatchTest {
                     try {
                         int time = random.nextInt(100) + 1;
                         Thread.sleep(time);
-                        // System.out.println("thread sleeps for " + time + "ms");
                     } catch (InterruptedException e) {
                         throw new RuntimeException(e);
                     }
