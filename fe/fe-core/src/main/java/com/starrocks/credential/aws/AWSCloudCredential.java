@@ -133,9 +133,12 @@ public class AWSCloudCredential implements CloudCredential {
             if (!externalId.isEmpty()) {
                 builder.withExternalId(externalId);
             }
-            AWSSecurityTokenService token =
-                    AWSSecurityTokenServiceClientBuilder.standard().withCredentials(awsCredentialsProvider)
-                            .build();
+            AWSSecurityTokenServiceClientBuilder stsBuilder = AWSSecurityTokenServiceClientBuilder.standard()
+                    .withCredentials(awsCredentialsProvider);
+            if (!region.isEmpty()) {
+                stsBuilder.setRegion(region);
+            }
+            AWSSecurityTokenService token = stsBuilder.build();
             builder.withStsClient(token);
             awsCredentialsProvider = builder.build();
         }
