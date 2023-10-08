@@ -63,6 +63,7 @@ import org.apache.paimon.types.IntType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.utils.SerializationUtils;
+import org.assertj.core.api.Assertions;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -185,8 +186,8 @@ public class PaimonMetadataTest {
         };
         List<String> result = metadata.listPartitionNames("db1", "tbl1");
         Assert.assertEquals(2, result.size());
-        Assert.assertTrue(result.contains("dt=2000/hr=4444"));
-        Assert.assertTrue(result.contains("dt=3000/hr=5555"));
+        List<String> expections = Lists.newArrayList("dt=1975-06-24/hr=4444", "dt=1978-03-20/hr=5555");
+        Assertions.assertThat(result).hasSameElementsAs(expections);
     }
 
     @Test

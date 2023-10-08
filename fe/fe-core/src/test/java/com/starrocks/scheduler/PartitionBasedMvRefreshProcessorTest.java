@@ -59,7 +59,9 @@ import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -76,21 +78,25 @@ public class PartitionBasedMvRefreshProcessorTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
+    @ClassRule
+    public static TemporaryFolder temp = new TemporaryFolder();
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
-        ConnectorPlanTestBase.mockCatalog(connectContext);
+        ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
         starRocksAssert = new StarRocksAssert(connectContext);
-
         if (!starRocksAssert.databaseExist("_statistics_")) {
             StatisticsMetaManager m = new StatisticsMetaManager();
             m.createStatisticsTablesForTest();
         }
         starRocksAssert.withDatabase("test");
         starRocksAssert.useDatabase("test");
+
+
 
         starRocksAssert.withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
@@ -320,7 +326,6 @@ public class PartitionBasedMvRefreshProcessorTest {
                         "\"replication_num\" = \"1\"\n" +
                         ") " +
                         "as select str2date(d,'%Y%m%d') ss, a, b, c from jdbc0.partitioned_db0.tbl1;");
-
 
         new MockUp<StmtExecutor>() {
             @Mock
@@ -662,6 +667,59 @@ public class PartitionBasedMvRefreshProcessorTest {
         ExecPlan execPlan = mvContext.getExecPlan();
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
         Assert.assertTrue(plan.contains("4:HASH JOIN"));
+    }
+
+    @Test
+    public void testcreateUnpartitionedPmnMaterializeView() throws Exception {
+        //unparitioned
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`paimon_parttbl_mv2`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "DISTRIBUTED BY HASH(`pk`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT pk, d  FROM `paimon0`.`pmn_db1`.`unpartitioned_table` as a;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+
+        MaterializedView unpartitionedMaterializedView = ((MaterializedView) testDb.getTable("paimon_parttbl_mv2"));
+        trigerRefreshPaimonMv(testDb, unpartitionedMaterializedView);
+
+        Collection<Partition> partitions = unpartitionedMaterializedView.getPartitions();
+        Assert.assertEquals(1, partitions.size());
+    }
+
+    @Test
+    public void testCreatePartitionedPmnMaterializeView() throws Exception {
+        //paritioned
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`paimon_parttbl_mv1`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`pt`)\n" +
+                        "DISTRIBUTED BY HASH(`pk`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT pk, pt,d  FROM `paimon0`.`pmn_db1`.`partitioned_table` as a;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView partitionedMaterializedView = ((MaterializedView) testDb.getTable("paimon_parttbl_mv1"));
+        trigerRefreshPaimonMv(testDb, partitionedMaterializedView);
+
+        Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
+        Assert.assertEquals(10, partitions.size());
+    }
+
+    private static void trigerRefreshPaimonMv(Database testDb, MaterializedView partitionedMaterializedView)
+            throws Exception {
+        Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
     }
 
     @Test
