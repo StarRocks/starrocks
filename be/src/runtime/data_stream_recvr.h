@@ -217,8 +217,7 @@ private:
         RuntimeProfile::Counter* process_total_timer = nullptr;
 
         // Total spent for senders putting data in the queue
-        RuntimeProfile::Counter* sender_total_timer = nullptr;
-        RuntimeProfile::Counter* sender_wait_lock_timer = nullptr;
+        RuntimeProfile::Counter* wait_lock_timer = nullptr;
 
         RuntimeProfile::Counter* buffer_unplug_counter = nullptr;
         RuntimeProfile::HighWaterMarkCounter* peak_buffer_mem_bytes = nullptr;

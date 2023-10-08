@@ -209,8 +209,7 @@ void DataStreamRecvr::bind_profile(int32_t driver_sequence, RuntimeProfile* prof
     statistics.deserialize_chunk_timer = ADD_TIMER(profile, "DeserializeChunkTime");
     statistics.decompress_chunk_timer = ADD_TIMER(profile, "DecompressChunkTime");
     statistics.process_total_timer = ADD_TIMER(profile, "ReceiverProcessTotalTime");
-    statistics.sender_total_timer = ADD_TIMER(profile, "SenderTotalTime");
-    statistics.sender_wait_lock_timer = ADD_TIMER(profile, "SenderWaitLockTime");
+    statistics.wait_lock_timer = ADD_TIMER(profile, "WaitLockTime");
     statistics.buffer_unplug_counter = ADD_COUNTER(profile, "BufferUnplugCount", TUnit::UNIT);
     statistics.peak_buffer_mem_bytes = profile->AddHighWaterMarkCounter(
             "PeakBufferMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
@@ -243,7 +242,6 @@ Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google
 
     auto& metrics = get_metrics_round_robin();
     SCOPED_TIMER(metrics.process_total_timer);
-    SCOPED_TIMER(metrics.sender_total_timer);
     COUNTER_UPDATE(metrics.request_received_counter, 1);
     int use_sender_id = _is_merging ? request.sender_id() : 0;
     // Add all batches to the same queue if _is_merging is false.

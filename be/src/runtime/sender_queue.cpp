@@ -228,7 +228,7 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkP
     DCHECK(request.chunks_size() > 0);
     int32_t be_number = request.be_number();
     int64_t sequence = request.sequence();
-    ScopedTimer<MonotonicStopWatch> wait_timer(metrics.sender_wait_lock_timer);
+    ScopedTimer<MonotonicStopWatch> wait_timer(metrics.wait_lock_timer);
     {
         std::lock_guard<Mutex> l(_lock);
         wait_timer.stop();
@@ -594,7 +594,7 @@ Status DataStreamRecvr::PipelineSenderQueue::try_to_build_chunk_meta(const PTran
         return Status::OK();
     }
 
-    ScopedTimer<MonotonicStopWatch> wait_timer(metrics.sender_wait_lock_timer);
+    ScopedTimer<MonotonicStopWatch> wait_timer(metrics.wait_lock_timer);
     std::lock_guard<Mutex> l(_lock);
     wait_timer.stop();
 
@@ -690,7 +690,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     if (keep_order) {
         const int32_t be_number = request.be_number();
         const int32_t sequence = request.sequence();
-        ScopedTimer<MonotonicStopWatch> wait_timer(metrics.sender_wait_lock_timer);
+        ScopedTimer<MonotonicStopWatch> wait_timer(metrics.wait_lock_timer);
         std::lock_guard<Mutex> l(_lock);
         wait_timer.stop();
 
