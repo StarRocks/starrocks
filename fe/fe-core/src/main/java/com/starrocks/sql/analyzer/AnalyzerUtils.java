@@ -52,6 +52,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
@@ -546,6 +547,11 @@ public class AnalyzerUtils {
                 IcebergTable icebergTable = (IcebergTable) table;
                 TableName tableName = new TableName(icebergTable.getCatalogName(), icebergTable.getRemoteDbName(),
                         icebergTable.getRemoteTableName());
+                tables.put(tableName, table);
+            } else if (table.isPaimonTable()) {
+                PaimonTable paimonTable = (PaimonTable) table;
+                TableName tableName = new TableName(paimonTable.getCatalogName(), paimonTable.getDbName(),
+                        paimonTable.getTableName());
                 tables.put(tableName, table);
             } else {
                 tables.put(node.getName(), table);
