@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
@@ -21,6 +22,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -31,8 +33,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class OuterJoinAddRedundantTopNRule extends TransformationRule {
-    public OuterJoinAddRedundantTopNRule() {
+public class PushDownTopNBelowOuterJoinRule extends TransformationRule {
+    public PushDownTopNBelowOuterJoinRule() {
         super(RuleType.TF_PUSH_DOWN_TOPN_OUTER_JOIN,
                 Pattern.create(OperatorType.LOGICAL_TOPN).addChildren(
                         Pattern.create(OperatorType.LOGICAL_JOIN, OperatorType.PATTERN_LEAF, OperatorType.PATTERN_LEAF)));
@@ -72,6 +74,7 @@ public class OuterJoinAddRedundantTopNRule extends TransformationRule {
         } else if (joinType.isRightJoin()) {
             joinChild = childExpr.inputAt(1);
         }
+        Preconditions.checkState(joinChild != null);
 
         if (topn.hasLimit() && joinChild.getOp().hasLimit() && topn.getLimit() >= joinChild.getOp().getLimit()) {
             return false;
@@ -102,8 +105,7 @@ public class OuterJoinAddRedundantTopNRule extends TransformationRule {
                 .setOrderByElements(topn.getOrderByElements())
                 .setLimit(topn.getLimit())
                 .setTopNType(topn.getTopNType())
-                .setSortPhase(topn.getSortPhase())
-                .setIsSplit(false)
+                .setSortPhase(SortPhase.PARTIAL)
                 .build(), joinChildWithSort);
 
         OptExpression newJoinOperator;
