@@ -262,7 +262,11 @@ public class IcebergScanNode extends ScanNode {
             TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
             THdfsScanRange hdfsScanRange = new THdfsScanRange();
-            hdfsScanRange.setFull_path(file.path().toString());
+            if (file.path().toString().startsWith(srIcebergTable.getTableLocation())) {
+                hdfsScanRange.setRelative_path(file.path().toString().substring(srIcebergTable.getTableLocation().length()));
+            } else {
+                hdfsScanRange.setFull_path(file.path().toString());
+            }
             hdfsScanRange.setOffset(task.start());
             hdfsScanRange.setLength(task.length());
             // For iceberg table we do not need partition id

@@ -225,10 +225,6 @@ HudiTableDescriptor::HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
     _serde_lib = tdesc.hudiTable.serde_lib;
 }
 
-const std::string& HudiTableDescriptor::get_base_path() const {
-    return _table_location;
-}
-
 const std::string& HudiTableDescriptor::get_instant_time() const {
     return _hudi_instant_time;
 }
