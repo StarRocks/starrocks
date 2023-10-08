@@ -128,10 +128,10 @@ import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.WriteQuorum;
+import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableInfo;
@@ -1027,7 +1027,7 @@ public class GlobalStateMgr {
         return connectorTableMetadataProcessor;
     }
 
-    // Use tryLock to avoid potential dead lock
+    // Use tryLock to avoid potential deadlock
     public boolean tryLock(boolean mustLock) {
         while (true) {
             try {

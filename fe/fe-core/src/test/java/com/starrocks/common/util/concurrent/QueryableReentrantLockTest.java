@@ -15,8 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.common.util;
+package com.starrocks.common.util.concurrent;
 
+import com.starrocks.common.util.Util;
+import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import org.junit.Assert;
 import org.junit.Test;
 
