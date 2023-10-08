@@ -229,6 +229,7 @@ public class SlotManager {
             TFinishSlotRequirementRequest request = new TFinishSlotRequirementRequest();
             request.setStatus(status);
             request.setSlot_id(slot.getSlotId());
+            request.setPipeline_dop(slot.getPipelineDop());
 
             Frontend fe = GlobalStateMgr.getCurrentState().getFeByName(slot.getRequestFeName());
             if (fe == null) {

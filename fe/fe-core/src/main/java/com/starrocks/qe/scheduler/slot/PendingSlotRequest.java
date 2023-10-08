@@ -55,7 +55,8 @@ public class PendingSlotRequest {
         slotFuture.completeExceptionally(cause);
     }
 
-    public void onFinished() {
+    public void onFinished(int pipelineDop) {
+        slot.setPipelineDop(pipelineDop);
         slot.onAllocate();
         slotFuture.complete(slot);
     }
