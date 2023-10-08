@@ -131,7 +131,13 @@ public class ForceCTEReuseRule extends TransformationRule {
 
         private boolean checkOptExpression(OptExpression optExpression) {
             Operator operator = optExpression.getOp();
+            // projections
             if (operator.getProjection() != null && checkProject(operator.getProjection())) {
+                return true;
+            }
+            // predicates
+            if (operator.getPredicate() != null &&
+                    hasNonDeterministicFunc(operator.getPredicate())) {
                 return true;
             }
             return optExpression.getOp().accept(this, optExpression, null);
@@ -174,11 +180,6 @@ public class ForceCTEReuseRule extends TransformationRule {
         public Boolean visitLogicalAggregate(OptExpression optExpression, Void context) {
             LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) optExpression.getOp();
             if (checkAggCall(aggregationOperator.getAggregations())) {
-                return true;
-            }
-            // having predicate
-            if (aggregationOperator.getPredicate() != null &&
-                    hasNonDeterministicFunc(aggregationOperator.getPredicate())) {
                 return true;
             }
             return visitChildren(optExpression);
