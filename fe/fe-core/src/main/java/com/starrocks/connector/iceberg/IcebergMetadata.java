@@ -59,6 +59,7 @@ import org.apache.iceberg.PartitionSpecParser;
 import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
@@ -83,6 +84,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -282,7 +284,14 @@ public class IcebergMetadata implements ConnectorMetadata {
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate) {
         IcebergTable icebergTable = (IcebergTable) table;
-        long snapshotId = icebergTable.getSnapshot().get().snapshotId();
+        Optional<Snapshot> snapshot = icebergTable.getSnapshot();
+        long snapshotId;
+        if (snapshot.isPresent()) {
+            snapshotId = snapshot.get().snapshotId();
+        } else {
+            return Statistics.builder().build();
+        }
+
         IcebergFilter key = IcebergFilter.of(
                 icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), snapshotId, predicate);
 

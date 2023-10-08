@@ -46,13 +46,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 import static com.google.common.base.Verify.verifyNotNull;
-import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.collect.Iterables.getOnlyElement;
 import static com.google.common.collect.Streams.stream;
@@ -64,9 +62,8 @@ import static java.util.stream.Collectors.toMap;
 public class IcebergStatisticProvider {
     private static final Logger LOG = LogManager.getLogger(IcebergStatisticProvider.class);
     private final Map<String, HashMultimap<Integer, Object>> partitionFieldIdToValues = new HashMap<>();
-    private final Map<String, Optional<IcebergFileStats>> uuidToicebergFileStats = new HashMap<>();
+    private final Map<String, Optional<IcebergFileStats>> uuidToIcebergFileStats = new HashMap<>();
     private final Map<String, Set<String>> processedFiles = new HashMap<>();
-    private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     public IcebergStatisticProvider() {
     }
@@ -78,6 +75,7 @@ public class IcebergStatisticProvider {
         Table nativeTable = icebergTable.getNativeTable();
         Statistics.Builder statisticsBuilder = Statistics.builder();
         Optional<Snapshot> snapshot = icebergTable.getSnapshot();
+        String uuid = icebergTable.getUUID();
         if (snapshot.isPresent()) {
             Set<Integer> primitiveColumnsFiledIds = nativeTable.schema().columns().stream()
                     .filter(column -> column.type().isPrimitiveType())
@@ -85,7 +83,6 @@ public class IcebergStatisticProvider {
             Map<Integer, Long> columnNdvs = new HashMap<>();
             if (session != null && session.getSessionVariable().isEnableIcebergNdv()) {
                 columnNdvs = readNdvs(icebergTable, primitiveColumnsFiledIds);
-                String uuid = icebergTable.getUUID();
                 if (partitionFieldIdToValues.containsKey(uuid) && !partitionFieldIdToValues.get(uuid).isEmpty()) {
                     HashMultimap<Integer, Object> partitionFieldIdToValue = partitionFieldIdToValues.get(uuid);
                     Map<Integer, Long> partitionSourceIdToNdv = new HashMap<>();
@@ -101,10 +98,10 @@ public class IcebergStatisticProvider {
             }
 
             IcebergFileStats icebergFileStats;
-            if (!uuidToicebergFileStats.get(icebergTable.getUUID()).isPresent()) {
+            if (!uuidToIcebergFileStats.containsKey(uuid) || !uuidToIcebergFileStats.get(uuid).isPresent()) {
                 icebergFileStats = new IcebergFileStats(1);
             } else {
-                icebergFileStats = uuidToicebergFileStats.get(icebergTable.getUUID()).get();
+                icebergFileStats = uuidToIcebergFileStats.get(uuid).get();
             }
 
             statisticsBuilder.setOutputRowCount(icebergFileStats.getRecordCount());
@@ -172,19 +169,18 @@ public class IcebergStatisticProvider {
             idToValues.put(fieldId, partitionValue);
         }
 
-        Optional<IcebergFileStats> icebergFileStats = uuidToicebergFileStats.computeIfAbsent(uuid, ignored -> Optional.empty());
+        Optional<IcebergFileStats> icebergFileStats = uuidToIcebergFileStats.computeIfAbsent(uuid, ignored -> Optional.empty());
         if (!icebergFileStats.isPresent()) {
-            uuidToicebergFileStats.put(uuid,
+            uuidToIcebergFileStats.put(uuid,
                     Optional.of(new IcebergFileStats(
                             idToTypeMapping,
                             nonPartitionPrimitiveColumns,
-                            ((PartitionData) dataFile.partition()).copy(),
                             dataFile.recordCount(),
                             dataFile.fileSizeInBytes(),
                             IcebergFileStats.toMap(idToTypeMapping, dataFile.lowerBounds()),
                             IcebergFileStats.toMap(idToTypeMapping, dataFile.upperBounds()),
-                            new HashMap<>(dataFile.nullValueCounts()),
-                            new HashMap<>(dataFile.columnSizes()))));
+                            dataFile.nullValueCounts(),
+                            dataFile.columnSizes())));
         } else {
             icebergFileStats.get().incrementFileCount();
             icebergFileStats.get().incrementRecordCount(dataFile.recordCount());
@@ -196,10 +192,6 @@ public class IcebergStatisticProvider {
             icebergFileStats.get().updateNullCount(dataFile.nullValueCounts());
             updateColumnSizes(icebergFileStats.get(), dataFile.columnSizes());
         }
-    }
-
-    private long nextPartitionId() {
-        return partitionIdGen.getAndIncrement();
     }
 
     private Map<ColumnRefOperator, ColumnStatistic> buildColumnStatistics(
