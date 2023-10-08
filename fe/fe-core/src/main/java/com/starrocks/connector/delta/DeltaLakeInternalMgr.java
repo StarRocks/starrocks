@@ -14,6 +14,11 @@
 
 package com.starrocks.connector.delta;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
+>>>>>>> 5f9c1ac55a ([BugFix] Fix deltalake glue catalog (#31839))
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.ReentrantExecutor;
@@ -22,18 +27,31 @@ import com.starrocks.connector.hive.CachingHiveMetastoreConf;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.sql.analyzer.SemanticException;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
+
+>>>>>>> 5f9c1ac55a ([BugFix] Fix deltalake glue catalog (#31839))
 public class DeltaLakeInternalMgr {
+    public static final List<String> SUPPORTED_METASTORE_TYPE = ImmutableList.of("hive", "glue");
     private final String catalogName;
     private final Map<String, String> properties;
     private final HdfsEnvironment hdfsEnvironment;
     private final boolean enableMetastoreCache;
     private final CachingHiveMetastoreConf hmsConf;
     private ExecutorService refreshHiveMetastoreExecutor;
+<<<<<<< HEAD
+=======
+    private final MetastoreType metastoreType;
+>>>>>>> 5f9c1ac55a ([BugFix] Fix deltalake glue catalog (#31839))
 
     public DeltaLakeInternalMgr(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
@@ -41,6 +59,21 @@ public class DeltaLakeInternalMgr {
         this.enableMetastoreCache = Boolean.parseBoolean(properties.getOrDefault("enable_metastore_cache", "false"));
         this.hmsConf = new CachingHiveMetastoreConf(properties, "delta lake");
         this.hdfsEnvironment = hdfsEnvironment;
+<<<<<<< HEAD
+=======
+
+        String hiveMetastoreType = properties.getOrDefault(HIVE_METASTORE_TYPE, "hive").toLowerCase();
+        if (!SUPPORTED_METASTORE_TYPE.contains(hiveMetastoreType)) {
+            throw new SemanticException("hive metastore type [%s] is not supported", hiveMetastoreType);
+        }
+
+        if (hiveMetastoreType.equals("hive")) {
+            String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
+                    "%s must be set in properties when creating catalog of hive-metastore", HIVE_METASTORE_URIS);
+            Util.validateMetastoreUris(hiveMetastoreUris);
+        }
+        this.metastoreType = MetastoreType.get(hiveMetastoreType);
+>>>>>>> 5f9c1ac55a ([BugFix] Fix deltalake glue catalog (#31839))
     }
 
     public IHiveMetastore createHiveMetastore() {

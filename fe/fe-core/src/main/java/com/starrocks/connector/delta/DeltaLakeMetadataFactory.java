@@ -21,6 +21,9 @@ import com.starrocks.connector.hive.HiveMetastoreOperations;
 import com.starrocks.connector.hive.IHiveMetastore;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 
+import java.util.Map;
+
+import static com.starrocks.connector.delta.DeltaLakeConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.hive.CachingHiveMetastore.createQueryLevelInstance;
 
 public class DeltaLakeMetadataFactory {
@@ -30,12 +33,25 @@ public class DeltaLakeMetadataFactory {
     private final HdfsEnvironment hdfsEnvironment;
 
     public DeltaLakeMetadataFactory(String catalogName, IHiveMetastore metastore, CachingHiveMetastoreConf hmsConf,
+<<<<<<< HEAD
                                     String uri, HdfsEnvironment hdfsEnvironment) {
+=======
+                                    Map<String, String> properties, HdfsEnvironment hdfsEnvironment,
+                                    MetastoreType metastoreType) {
+>>>>>>> 5f9c1ac55a ([BugFix] Fix deltalake glue catalog (#31839))
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.perQueryMetastoreMaxNum = hmsConf.getPerQueryCacheMaxNum();
         this.hdfsEnvironment = hdfsEnvironment;
+<<<<<<< HEAD
         this.hdfsEnvironment.getConfiguration().set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), uri);
+=======
+        if (properties.containsKey(HIVE_METASTORE_URIS)) {
+            this.hdfsEnvironment.getConfiguration().set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(),
+                    properties.get(HIVE_METASTORE_URIS));
+        }
+        this.metastoreType = metastoreType;
+>>>>>>> 5f9c1ac55a ([BugFix] Fix deltalake glue catalog (#31839))
     }
 
     public DeltaLakeMetadata create() {
