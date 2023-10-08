@@ -75,7 +75,7 @@ public class SlotProvider {
         return slotRequest.getSlotFuture();
     }
 
-    public Status finishSlotRequirement(TUniqueId slotId, Status status) {
+    public Status finishSlotRequirement(TUniqueId slotId, int pipelineDop, Status status) {
         PendingSlotRequest slotRequest = pendingSlots.remove(slotId);
         if (slotRequest == null) {
             LOG.warn("[Slot] finishSlotRequirement receives a response with non-exist slotId [slotId={}] [status={}]",
@@ -84,7 +84,7 @@ public class SlotProvider {
         }
 
         if (status.ok()) {
-            slotRequest.onFinished();
+            slotRequest.onFinished(pipelineDop);
         } else {
             LOG.warn("[Slot] finishSlotRequirement receives a failed response [slot={}] [status={}]", slotRequest, status);
             slotRequest.onFailed(new UserException(status.getErrorMsg()));
@@ -144,7 +144,7 @@ public class SlotProvider {
                                             "It is grayscale upgrading, so admit this query without requiring slots. [slot={}]",
                                     slotRequest);
                             pendingSlots.remove(slotRequest.getSlot().getSlotId());
-                            slotRequest.onFinished();
+                            slotRequest.onFinished(0);
                             slotRequest.getSlot().onRelease(); // Avoid sending releaseSlot RPC.
                             return null;
                         } else {

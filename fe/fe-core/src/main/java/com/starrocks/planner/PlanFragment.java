@@ -237,6 +237,15 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
     }
 
+    public void limitMaxPipelineDop(int maxPipelineDop) {
+        if (pipelineDop > maxPipelineDop) {
+            pipelineDop = maxPipelineDop;
+            if (useRuntimeAdaptiveDop) {
+                pipelineDop = Utils.computeMaxLEPower2(pipelineDop);
+            }
+        }
+    }
+
     public ExchangeNode getDestNode() {
         return destNode;
     }

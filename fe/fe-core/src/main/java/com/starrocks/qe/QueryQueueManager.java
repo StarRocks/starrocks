@@ -149,7 +149,14 @@ public class QueryQueueManager {
                 nowMs + Math.min(GlobalVariable.getQueryQueuePendingTimeoutSecond(), queryTimeoutSecond) * 1000L;
         long expiredAllocatedTimeMs = nowMs + queryTimeoutSecond * 1000L;
 
+        int numFragments = coord.getFragments().size();
+        int pipelineDop = coord.getJobSpec().getQueryOptions().getPipeline_dop();
+        if (!coord.getJobSpec().isStatisticsJob() && !coord.isLoadType()
+                && ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnablePipelineAdaptiveDop()) {
+            pipelineDop = 0;
+        }
+
         return new LogicalSlot(coord.getQueryId(), frontend.getNodeName(), groupId, 1, expiredPendingTimeMs,
-                expiredAllocatedTimeMs, frontend.getStartTime());
+                expiredAllocatedTimeMs, frontend.getStartTime(), numFragments, pipelineDop);
     }
 }

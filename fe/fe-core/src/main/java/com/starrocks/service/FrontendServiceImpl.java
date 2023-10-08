@@ -2581,9 +2581,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TFinishSlotRequirementResponse finishSlotRequirement(TFinishSlotRequirementRequest request) throws TException {
-
         Status status = GlobalStateMgr.getCurrentState().getSlotProvider()
-                .finishSlotRequirement(request.getSlot_id(), new Status(request.getStatus()));
+                .finishSlotRequirement(request.getSlot_id(), request.getPipeline_dop(), new Status(request.getStatus()));
 
         TFinishSlotRequirementResponse res = new TFinishSlotRequirementResponse();
         res.setStatus(status.toThrift());
