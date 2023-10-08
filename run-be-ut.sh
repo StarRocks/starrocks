@@ -150,6 +150,13 @@ if [ "${USE_STAROS}" == "ON"  ]; then
   fi
   export STARLET_INSTALL_DIR
 fi
+
+# Temporarily keep the default behavior same as before to avoid frequent thirdparty update.
+# Once the starcache version is stable, we will turn on it by default.
+if [[ -z ${WITH_STARCACHE} ]]; then
+  WITH_STARCACHE=${USE_STAROS}
+fi
+
 ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
             -DSTARROCKS_HOME=${STARROCKS_HOME} \
@@ -160,7 +167,7 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
             -DWITH_CACHELIB=${WITH_CACHELIB} \
-            -DWITH_STARCACHE=${USE_STAROS} \
+            -DWITH_STARCACHE=${WITH_STARCACHE} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 
 ${BUILD_SYSTEM} -j${PARALLEL}
