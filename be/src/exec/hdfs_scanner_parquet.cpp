@@ -79,21 +79,21 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     has_page_statistics = ADD_CHILD_COUNTER(root, "HasPageStatistics", TUnit::UNIT, kParquetProfileSectionPrefix);
     page_skip = ADD_CHILD_COUNTER(root, "PageSkipCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
 
-    COUNTER_UPDATE(request_bytes_read, _stats.request_bytes_read);
-    COUNTER_UPDATE(request_bytes_read_uncompressed, _stats.request_bytes_read_uncompressed);
-    COUNTER_UPDATE(value_decode_timer, _stats.value_decode_ns);
-    COUNTER_UPDATE(level_decode_timer, _stats.level_decode_ns);
-    COUNTER_UPDATE(page_read_timer, _stats.page_read_ns);
-    COUNTER_UPDATE(footer_read_timer, _stats.footer_read_ns);
-    COUNTER_UPDATE(column_reader_init_timer, _stats.column_reader_init_ns);
-    COUNTER_UPDATE(group_chunk_read_timer, _stats.group_chunk_read_ns);
-    COUNTER_UPDATE(group_dict_filter_timer, _stats.group_dict_filter_ns);
-    COUNTER_UPDATE(group_dict_decode_timer, _stats.group_dict_decode_ns);
-    COUNTER_UPDATE(build_iceberg_pos_filter_timer, _stats.build_iceberg_pos_filter_ns);
+    COUNTER_UPDATE(request_bytes_read, _app_stats.request_bytes_read);
+    COUNTER_UPDATE(request_bytes_read_uncompressed, _app_stats.request_bytes_read_uncompressed);
+    COUNTER_UPDATE(value_decode_timer, _app_stats.value_decode_ns);
+    COUNTER_UPDATE(level_decode_timer, _app_stats.level_decode_ns);
+    COUNTER_UPDATE(page_read_timer, _app_stats.page_read_ns);
+    COUNTER_UPDATE(footer_read_timer, _app_stats.footer_read_ns);
+    COUNTER_UPDATE(column_reader_init_timer, _app_stats.column_reader_init_ns);
+    COUNTER_UPDATE(group_chunk_read_timer, _app_stats.group_chunk_read_ns);
+    COUNTER_UPDATE(group_dict_filter_timer, _app_stats.group_dict_filter_ns);
+    COUNTER_UPDATE(group_dict_decode_timer, _app_stats.group_dict_decode_ns);
+    COUNTER_UPDATE(build_iceberg_pos_filter_timer, _app_stats.build_iceberg_pos_filter_ns);
 
-    int64_t page_stats = _stats.has_page_statistics ? 1 : 0;
+    int64_t page_stats = _app_stats.has_page_statistics ? 1 : 0;
     COUNTER_UPDATE(has_page_statistics, page_stats);
-    COUNTER_UPDATE(page_skip, _stats.page_skip);
+    COUNTER_UPDATE(page_skip, _app_stats.page_skip);
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
@@ -102,7 +102,7 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
     _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(), _file->get_size().value(),
                                                     _shared_buffered_input_stream.get(), &_need_skip_rowids);
 
-    SCOPED_RAW_TIMER(&_stats.reader_init_ns);
+    SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     RETURN_IF_ERROR(_reader->init(&_scanner_ctx));
     return Status::OK();
 }
