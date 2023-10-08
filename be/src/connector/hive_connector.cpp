@@ -97,7 +97,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (state->query_options().__isset.enable_populate_block_cache) {
         _enable_populate_block_cache = state->query_options().enable_populate_block_cache;
     }
-    // Close block cache when priority = -1
+    // Don't use block cache when priority = -1
     if (_scan_range.__isset.datacache_options && _scan_range.datacache_options.__isset.priority &&
         _scan_range.datacache_options.priority == -1) {
         _use_block_cache = false;
