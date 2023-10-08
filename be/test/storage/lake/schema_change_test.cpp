@@ -949,8 +949,8 @@ public:
         //  | column | type | KEY | NULL | SORTKEY |
         //  +--------+------+-----+------+---------+
         //  |   c0   |  INT | YES |  NO  |   NO    |
-        //  |   c1   |  INT | NO  |  NO  |   YES   |
-        //  |   c2   |  INT | NO  |  NO  |   NO    |
+        //  |   c1   |  INT | NO  |  NO  |   NO    |
+        //  |   c2   |  INT | NO  |  NO  |   YES   |
         auto new_schema = _new_tablet_metadata->mutable_schema();
         new_schema->set_id(next_id());
         new_schema->set_num_short_key_columns(1);
@@ -1027,7 +1027,6 @@ TEST_P(SchemaChangeSortKeyReorderTest1, test_alter_sortkey_reorder_1) {
         indexes[i] = i;
     }
 
-    // write 2 rowsets
     int64_t version = 1;
     int64_t txn_id = 1000;
     auto base_tablet_id = _base_tablet_metadata->id();
@@ -1183,9 +1182,9 @@ public:
         //
         //  | column | type | KEY | NULL | SORTKEY |
         //  +--------+------+-----+------+---------+
-        //  |   c0   |  INT | YES |  NO  |   NO    |
+        //  |   c0   |  INT | YES |  NO  |   YES   |
         //  |   c1   |  INT | NO  |  NO  |   YES   |
-        //  |   c2   |  INT | NO  |  NO  |   NO    |
+        //  |   c2   |  INT | NO  |  NO  |   YES   |
         auto new_schema = _new_tablet_metadata->mutable_schema();
         new_schema->set_id(next_id());
         new_schema->set_num_short_key_columns(1);
@@ -1264,7 +1263,6 @@ TEST_P(SchemaChangeSortKeyReorderTest2, test_alter_sortkey_reorder2) {
         indexes[i] = i;
     }
 
-    // write 2 rowsets
     int64_t version = 1;
     int64_t txn_id = 1000;
     auto base_tablet_id = _base_tablet_metadata->id();
