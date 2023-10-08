@@ -12,14 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
+<<<<<<< HEAD
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+=======
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.BaseTableInfo;
+>>>>>>> 601559f82b ([Feature] Support paimon materialized view (#29476))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -28,6 +35,9 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.utframe.StarRocksAssert;
+import mockit.Expectations;
+import mockit.Mocked;
+import org.apache.hadoop.util.Lists;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -41,6 +51,113 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class MaterializedViewAnalyzerTest {
     static StarRocksAssert starRocksAssert;
+
+    @Test
+    public void testMaterializedAnalyPaimonTable(@Mocked SlotRef slotRef, @Mocked PaimonTable table) {
+        MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor materializedViewAnalyzerVisitor =
+                new MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor();
+
+        {
+            // test check partition column can not be found
+            boolean checkSuccess = false;
+            new Expectations() {
+                {
+                    table.isUnPartitioned();
+                    result = false;
+                }
+            };
+            try {
+                materializedViewAnalyzerVisitor.checkPartitionColumnWithBasePaimonTable(slotRef, table);
+                checkSuccess = true;
+            } catch (Exception e) {
+                Assert.assertTrue(e.getMessage(),
+                        e.getMessage().contains("Materialized view partition column in partition exp " +
+                                "must be base table partition column"));
+            }
+            Assert.assertFalse(checkSuccess);
+        }
+
+        {
+            // test check successfully
+            boolean checkSuccess = false;
+            new Expectations() {
+                {
+                    table.isUnPartitioned();
+                    result = false;
+
+                    table.getPartitionColumnNames();
+                    result = Lists.newArrayList("dt");
+
+                    slotRef.getColumnName();
+                    result = "dt";
+
+                    table.getColumn("dt");
+                    result = new Column("dt", ScalarType.createType(PrimitiveType.DATE));
+                }
+            };
+            try {
+                materializedViewAnalyzerVisitor.checkPartitionColumnWithBasePaimonTable(slotRef, table);
+                checkSuccess = true;
+            } catch (Exception e) {
+            }
+            Assert.assertTrue(checkSuccess);
+        }
+
+        {
+            //test paimon table is unparitioned
+            new Expectations() {
+                {
+                    table.isUnPartitioned();
+                    result = true;
+                }
+            };
+
+            boolean checkSuccess = false;
+            try {
+                materializedViewAnalyzerVisitor.checkPartitionColumnWithBasePaimonTable(slotRef, table);
+            } catch (Exception e) {
+                Assert.assertTrue(e.getMessage(),
+                        e.getMessage().contains("Materialized view partition column in partition exp " +
+                                "must be base table partition column"));
+            }
+            Assert.assertFalse(checkSuccess);
+        }
+    }
+
+    @Test
+    public void testReplacePaimonTableAlias(@Mocked SlotRef slotRef, @Mocked PaimonTable table) {
+        MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor materializedViewAnalyzerVisitor =
+                new MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor();
+        BaseTableInfo baseTableInfo = new BaseTableInfo("test_catalog", "test_db", "test_tbl",
+                "test_tbl:7920f06f-df49-472f-9662-97ac5c32da96(test_tbl) REFERENCES");
+        {
+            new Expectations() {
+                {
+                    table.getCatalogName();
+                    result = "test_catalog";
+                    table.getDbName();
+                    result = "test_db";
+                    table.getTableIdentifier();
+                    result = "test_tbl:7920f06f-df49-472f-9662-97ac5c32da96(test_tbl) REFERENCES";
+                }
+            };
+
+            Assert.assertTrue(materializedViewAnalyzerVisitor.replacePaimonTableAlias(slotRef, table, baseTableInfo));
+        }
+
+        {
+            new Expectations() {
+                {
+                    table.getCatalogName();
+                    result = "test_catalog2";
+
+                }
+            };
+            Assert.assertFalse(materializedViewAnalyzerVisitor.replacePaimonTableAlias(slotRef, table, baseTableInfo));
+
+        }
+
+    }
 
     @BeforeClass
     public static void beforeClass() throws Exception {

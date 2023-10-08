@@ -67,9 +67,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
 
 import java.time.LocalDateTime;
@@ -91,6 +93,9 @@ public class CreateMaterializedViewTest {
     @Rule
     public TestName name = new TestName();
 
+    @ClassRule
+    public static TemporaryFolder temp = new TemporaryFolder();
+
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
     private static Database testDb;
@@ -98,7 +103,7 @@ public class CreateMaterializedViewTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        ConnectorPlanTestBase.beforeClass();
+        ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
         Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;

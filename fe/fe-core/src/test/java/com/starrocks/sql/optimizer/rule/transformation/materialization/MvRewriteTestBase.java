@@ -59,6 +59,8 @@ import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
+import org.junit.rules.TemporaryFolder;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -68,6 +70,8 @@ public class MvRewriteTestBase {
     protected static ConnectContext connectContext;
     protected static PseudoCluster cluster;
     protected static StarRocksAssert starRocksAssert;
+    @ClassRule
+    public static TemporaryFolder temp = new TemporaryFolder();
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -88,7 +92,7 @@ public class MvRewriteTestBase {
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
 
-        ConnectorPlanTestBase.mockCatalog(connectContext);
+        ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test");
 
