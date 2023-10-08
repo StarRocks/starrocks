@@ -22,6 +22,7 @@ import com.starrocks.common.Config;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -98,6 +99,7 @@ public class StatementPlanner {
                 return new DeletePlanner().plan((DeleteStmt) stmt, session);
             }
         } finally {
+            GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (needWholePhaseLock) {
                 unLock(dbs);
             }
