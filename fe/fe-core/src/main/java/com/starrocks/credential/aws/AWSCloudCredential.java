@@ -172,9 +172,10 @@ public class AWSCloudCredential implements CloudCredential {
                 "com.starrocks.credential.provider.AssumedRoleCredentialProvider");
         configuration.set("fs.s3a.assumed.role.arn", iamRoleArn);
         configuration.set(AssumedRoleCredentialProvider.CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID, externalId);
-        if (!region.isEmpty()) {
-            configuration.set("fs.s3a.assumed.role.sts.endpoint.region", region);
-        }
+        // TODO(SmithCruise) Not support assume role in none-ec2 machine
+        // if (!region.isEmpty()) {
+        // configuration.set("fs.s3a.assumed.role.sts.endpoint.region", region);
+        // }
     }
 
     @Override
