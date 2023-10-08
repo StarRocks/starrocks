@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.common.util;
+package com.starrocks.common.util.concurrent;
 
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 

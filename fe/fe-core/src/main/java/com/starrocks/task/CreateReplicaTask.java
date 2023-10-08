@@ -25,8 +25,12 @@ import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Status;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.thrift.TBinlogConfig;
+>>>>>>> 6c12264cd8 ([Enhancement] Optimize global lock when creating table/mv/view (#31951))
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TCreateTabletReq;
