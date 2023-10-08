@@ -269,14 +269,14 @@ void TabletManager::cache_segment(std::string_view key, SegmentPtr segment) {
     fill_metacache(key, value.release(), mem_cost);
 }
 
+// current lru cache does not support updating value size, so use refill to update.
 void TabletManager::update_segment_cache_size(std::string_view key) {
+    // use write lock to protect parallel segment size update
+    std::unique_lock wrlock(_meta_lock);
     auto segment = lookup_segment(key);
     if (segment == nullptr) {
         return;
     }
-
-    // use write lock to protect parallel segment size update
-    std::unique_lock wrlock(_meta_lock);
     cache_segment(key, std::move(segment));
 }
 
