@@ -879,7 +879,7 @@ The `prefix` varies based on the storage system you use:
 
 ## Drop an Iceberg database
 
-Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/privilege_item.md#database) privilege on an Iceberg database, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP%20DATABASE.md) statement to drop that database. This feature is supported from v3.1 onwards. You can only drop empty databases.
+Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/privilege_item.md#database) privilege on databases within an Iceberg database, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP%20DATABASE.md) statement to drop a database from that catalog. This feature is supported from v3.1 onwards. You can only drop empty databases.
 
 > **NOTE**
 >
@@ -895,7 +895,7 @@ DROP DATABASE <database_name>;
 
 ## Create an Iceberg table
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md) or [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20AS%20SELECT.md) statement to create tables in that database. This feature is supported from v3.1 onwards.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/privilege_item.md#database) privilege on databases within an Iceberg catalog, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md) or [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20AS%20SELECT.md) statement to create a table in a specified database within that catalog. This feature is supported from v3.1 onwards.
 
 > **NOTE**
 >
@@ -953,6 +953,14 @@ Currently StarRocks only supports [identity transforms](https://iceberg.apache.o
 
 You can specify the table attributes in the `"key" = "value"` format in `properties`. See [Iceberg table attributes](https://iceberg.apache.org/docs/latest/configuration/).
 
+The following table describes a few key properties.
+
+| **Property**      | **Description**                                              |
+| ----------------- | ------------------------------------------------------------ |
+| location          | The file path in which you want to create the Iceberg table. If you do not specify this property, the table defaults to the file path of the database to which the table belongs. |
+| file_format       | The file format of the Iceberg table. Only the Parquet format is supported. Default value: `parquet`. |
+| compression_codec | The compression algorithm used for the Iceberg table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. |
+
 ### Examples
 
 1. Create a non-partitioned table named `unpartition_tbl`. The table consists of two columns, `id` and `score`, as shown below:
@@ -987,7 +995,7 @@ You can specify the table attributes in the `"key" = "value"` format in `propert
 
 ## Sink data to an Iceberg table
 
-Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/privilege_item.md#table) privilege on an Iceberg table, you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) statement to sink the data of a StarRocks table to a Parquet-formatted Iceberg table. This feature is supported from v3.1 onwards.
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/privilege_item.md#table) privilege on tables within an Iceberg Catalog, you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) statement to sink the data of a StarRocks table to a Parquet-formatted Iceberg table in that catalog. This feature is supported from v3.1 onwards.
 
 > **NOTE**
 >
@@ -1076,7 +1084,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ## Drop an Iceberg table
 
-Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/privilege_item.md#表权限-table) privilege on an Iceberg table, you can use the [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP%20TABLE.md) statement to drop that Iceberg table. This feature is supported from v3.1 onwards.
+Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/privilege_item.md#table) privilege on tables within an Iceberg Catalog, you can use the [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP%20TABLE.md) statement to drop an Iceberg table from that catalog. This feature is supported from v3.1 onwards.
 
 > **NOTE**
 >
