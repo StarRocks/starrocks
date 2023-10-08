@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateIndexClause;
@@ -59,22 +60,37 @@ import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.commons.collections.MapUtils;
+=======
+import com.starrocks.sql.ast.CreateIndexClause;
+import com.starrocks.sql.ast.DropIndexClause;
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> 27d8dc1450 ([Enhancement] allow creating index on mv (#31547))
 
 import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_BF_COLUMNS;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_BF_COLUMNS;
+
+>>>>>>> 27d8dc1450 ([Enhancement] allow creating index on mv (#31547))
 public class AlterTableStatementAnalyzer {
     public static void analyze(AlterTableStmt statement, ConnectContext context) {
         TableName tbl = statement.getTbl();
         MetaUtils.normalizationTableName(context, tbl);
+<<<<<<< HEAD
+=======
+        MetaUtils.checkNotSupportCatalog(tbl.getCatalog(), "ALTER");
+>>>>>>> 27d8dc1450 ([Enhancement] allow creating index on mv (#31547))
         List<AlterClause> alterClauseList = statement.getOps();
         if (alterClauseList == null || alterClauseList.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
         }
 
         Table table = MetaUtils.getTable(context, tbl);
+<<<<<<< HEAD
         if (table instanceof MaterializedView) {
             if (!isIndexClause(alterClauseList.get(0))) {
                 String msg = String.format("The '%s' cannot be alter by 'ALTER TABLE', because it is a materialized view," +
@@ -83,11 +99,25 @@ public class AlterTableStatementAnalyzer {
             }
         }
         AlterTableClauseAnalyzerVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseAnalyzerVisitor();
+=======
+        if (table instanceof MaterializedView && alterClauseList != null) {
+            for (AlterClause alterClause : alterClauseList) {
+                if (!indexCluase(alterClause)) {
+                    String msg = String.format("The '%s' cannot be alter by 'ALTER TABLE', because it is a materialized view," +
+                            "you can use 'ALTER MATERIALIZED VIEW' to alter it.", tbl.getTbl());
+                    throw new SemanticException(msg, tbl.getPos());
+                }
+            }
+        }
+        AlterTableClauseVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseVisitor();
+        alterTableClauseAnalyzerVisitor.setTable(table);
+>>>>>>> 27d8dc1450 ([Enhancement] allow creating index on mv (#31547))
         for (AlterClause alterClause : alterClauseList) {
             alterTableClauseAnalyzerVisitor.analyze(table, alterClause, context);
         }
     }
 
+<<<<<<< HEAD
     static class AlterTableClauseAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         Table table;
 
@@ -532,5 +562,14 @@ public class AlterTableStatementAnalyzer {
 
         return MapUtils.isNotEmpty(alterClause.getProperties()) &&
                 alterClause.getProperties().containsKey(PROPERTIES_BF_COLUMNS);
+=======
+    public static boolean indexCluase(AlterClause alterClause) {
+        if (alterClause instanceof CreateIndexClause || alterClause instanceof DropIndexClause) {
+            return true;
+        } else if (alterClause.getProperties() != null && alterClause.getProperties().containsKey(PROPERTIES_BF_COLUMNS)) {
+            return true;
+        }
+        return false;
+>>>>>>> 27d8dc1450 ([Enhancement] allow creating index on mv (#31547))
     }
 }

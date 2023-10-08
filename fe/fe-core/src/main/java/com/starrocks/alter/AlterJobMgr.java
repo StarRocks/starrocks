@@ -762,9 +762,13 @@ public class AlterJobMgr {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
 
+<<<<<<< HEAD
             boolean isIndexOnMv = table.isMaterializedView() &&
                     AlterTableStatementAnalyzer.isIndexClause(alterClauses.get(0));
             if (!(table.isOlapOrCloudNativeTable() || isIndexOnMv)) {
+=======
+            if (!(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
+>>>>>>> 27d8dc1450 ([Enhancement] allow creating index on mv (#31547))
                 throw new DdlException("Do not support alter non-native table/materialized-view[" + tableName + "]");
             }
             olapTable = (OlapTable) table;
