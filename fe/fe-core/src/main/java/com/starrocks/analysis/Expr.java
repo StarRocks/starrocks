@@ -1838,10 +1838,14 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public static Expr castFold(Expr expr) {
         // Translating expr to scalar in order to do some rewrites
         ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expr);
-        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-        // Add cast and constant fold
-        scalarOperator = scalarRewriter.rewrite(scalarOperator, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-        return ScalarOperatorToExpr.buildExprIgnoreSlot(scalarOperator,
-                new ScalarOperatorToExpr.FormatterContext(Maps.newHashMap()));
+        try {
+            ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+            // Add cast and constant fold
+            scalarOperator = scalarRewriter.rewrite(scalarOperator, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            return ScalarOperatorToExpr.buildExprIgnoreSlot(scalarOperator,
+                    new ScalarOperatorToExpr.FormatterContext(Maps.newHashMap()));
+        } catch (UnsupportedException e) {
+            return expr;
+        }
     }
 }
