@@ -92,7 +92,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
 
     static {
         mockTPCHTable();
-        mockDatacacheTable();
+        mockDataCacheTable();
         mockPartitionTable();
         mockView();
         mockSubfieldTable();
@@ -1146,7 +1146,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                         partitionNames, (long) rowCount, columnStatisticMap, remoteFileInfos));
     }
 
-    public static void mockDataCacheTable() {
+    public static void mockDataCacheTableWithoutPartition() {
         MOCK_TABLE_MAP.putIfAbsent(MOCKED_DATACACHE_DB, new CaseInsensitiveMap<>());
         Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_DATACACHE_DB);
 
@@ -1167,15 +1167,13 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                 new Table("normal_table", "datacache_db", null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null, null,
                         "EXTERNAL_TABLE");
 
-
-
         mockTables.put(region.getTableName(),
                 new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(region, MOCKED_HIVE_CATALOG_NAME),
                         ImmutableList.of(), 5, regionStats, ImmutableList.of(mockDataCacheFile())));
     }
 
-    private static void mockDatacacheTable() {
-        mockDataCacheTable();
+    private static void mockDataCacheTable() {
+        mockDataCacheTableWithoutPartition();
         mockDataCacheTableWithSinglePartitionColumns();
         mockDataCacheTableWithMultiPartitionColumns();
     }

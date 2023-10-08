@@ -733,20 +733,20 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    // ------------------------------- Data Cache Management Statement -------------------------------------------------
-    public R visitCreateDatacacheRuleStatement(CreateDatacacheRuleStmt statement, C context) {
+    // ------------------------------- DataCache Management Statement -------------------------------------------------
+    public R visitCreateDataCacheRuleStatement(CreateDataCacheRuleStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
-    public R visitShowDatacacheRulesStatement(ShowDatacacheRulesStmt statement, C context) {
+    public R visitShowDataCacheRulesStatement(ShowDataCacheRulesStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
-    public R visitDropDatacacheRuleStatement(DropDatacacheRuleStmt statement, C context) {
+    public R visitDropDataCacheRuleStatement(DropDataCacheRuleStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
-    public R visitClearDatacacheRulesStatement(ClearDatacacheRulesStmt statement, C context) {
+    public R visitClearDataCacheRulesStatement(ClearDataCacheRulesStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

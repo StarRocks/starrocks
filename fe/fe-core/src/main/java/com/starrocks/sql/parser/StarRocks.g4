@@ -263,10 +263,10 @@ statement
     | showWhiteListStatement
 
     // Data Cache management statement
-    | createDatacacheRuleStatement
-    | showDatacacheRulesStatement
-    | dropDatacacheRuleStatement
-    | clearDatacacheRulesStatement
+    | createDataCacheRuleStatement
+    | showDataCacheRulesStatement
+    | dropDataCacheRuleStatement
+    | clearDataCacheRulesStatement
 
     // Export Statement
     | exportStatement
@@ -1747,23 +1747,23 @@ showWhiteListStatement
 
 // -------------------------------------- DataCache Management Statement --------------------------------------------
 
-datacacheTarget
+dataCacheTarget
     : identifierOrStringOrStar '.' identifierOrStringOrStar '.' identifierOrStringOrStar
     ;
 
-createDatacacheRuleStatement
-    : CREATE DATACACHE RULE datacacheTarget (WHERE expression)? PRIORITY '=' MINUS_SYMBOL? INTEGER_VALUE properties?
+createDataCacheRuleStatement
+    : CREATE DATACACHE RULE dataCacheTarget (WHERE expression)? PRIORITY '=' MINUS_SYMBOL? INTEGER_VALUE properties?
     ;
 
-showDatacacheRulesStatement
+showDataCacheRulesStatement
     : SHOW DATACACHE RULES
     ;
 
-dropDatacacheRuleStatement
+dropDataCacheRuleStatement
     : DROP DATACACHE RULE INTEGER_VALUE
     ;
 
-clearDatacacheRulesStatement
+clearDataCacheRulesStatement
     : CLEAR DATACACHE RULES
     ;
 

@@ -25,7 +25,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.datacache.DatacacheMgr;
+import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
@@ -60,10 +60,10 @@ import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
-import com.starrocks.sql.ast.ClearDatacacheRulesStmt;
+import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
-import com.starrocks.sql.ast.CreateDatacacheRuleStmt;
+import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -82,7 +82,7 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
-import com.starrocks.sql.ast.DropDatacacheRuleStmt;
+import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
@@ -968,26 +968,26 @@ public class DDLStmtExecutor {
 
         // ==========================================Data Cache Management==============================================
         @Override
-        public ShowResultSet visitCreateDatacacheRuleStatement(CreateDatacacheRuleStmt stmt, ConnectContext context) {
+        public ShowResultSet visitCreateDataCacheRuleStatement(CreateDataCacheRuleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                DatacacheMgr.getInstance().createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(),
+                DataCacheMgr.getInstance().createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(),
                         stmt.getProperties());
             });
             return null;
         }
 
         @Override
-        public ShowResultSet visitDropDatacacheRuleStatement(DropDatacacheRuleStmt stmt, ConnectContext context) {
+        public ShowResultSet visitDropDataCacheRuleStatement(DropDataCacheRuleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                DatacacheMgr.getInstance().dropCacheRule(stmt.getCacheRuleId());
+                DataCacheMgr.getInstance().dropCacheRule(stmt.getCacheRuleId());
             });
             return null;
         }
 
         @Override
-        public ShowResultSet visitClearDatacacheRulesStatement(ClearDatacacheRulesStmt stmt, ConnectContext context) {
+        public ShowResultSet visitClearDataCacheRulesStatement(ClearDataCacheRulesStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                DatacacheMgr.getInstance().clearRules();
+                DataCacheMgr.getInstance().clearRules();
             });
             return null;
         }

@@ -21,8 +21,8 @@ import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
-public class DatacacheExprRewriter {
-    private DatacacheExprRewriter() {}
+public class DataCacheExprRewriter {
+    private DataCacheExprRewriter() {}
 
     // mapping, key is column name, value is literal, means column's actual value
     public static Expr rewrite(Expr expr, Map<String, Expr> mapping) {

@@ -16,21 +16,14 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class DropDatacacheRuleStmt extends DdlStmt {
+public class ClearDataCacheRulesStmt extends DdlStmt {
 
-    private final long cacheRuleId;
-
-    public DropDatacacheRuleStmt(long cacheRuleId, NodePosition pos) {
+    public ClearDataCacheRulesStmt(NodePosition pos) {
         super(pos);
-        this.cacheRuleId = cacheRuleId;
-    }
-
-    public long getCacheRuleId() {
-        return cacheRuleId;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropDatacacheRuleStatement(this, context);
+        return visitor.visitClearDataCacheRulesStatement(this, context);
     }
 }

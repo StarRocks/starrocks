@@ -15,14 +15,14 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.Pair;
-import com.starrocks.datacache.DatacacheMgr;
+import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.ast.ClearDatacacheRulesStmt;
-import com.starrocks.sql.ast.CreateDatacacheRuleStmt;
-import com.starrocks.sql.ast.DropDatacacheRuleStmt;
+import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
+import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
+import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.utframe.UtFrameUtils;
@@ -34,34 +34,33 @@ import org.junit.Test;
 
 import java.util.List;
 
-public class DatacachePlanTest extends PlanTestBase {
+public class DataCachePlanTest extends PlanTestBase {
 
-    private final DatacacheMgr datacacheMgr = DatacacheMgr.getInstance();
+    private final DataCacheMgr dataCacheMgr = DataCacheMgr.getInstance();
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         AnalyzeTestUtil.setConnectContext(connectContext);
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
-
     }
 
     @Before
     public void before() {
-        connectContext.getSessionVariable().setEnableScanDatacache(true);
+        connectContext.getSessionVariable().setEnableScanDataCache(true);
     }
 
     @After
     public void clearDataCacheMgr() {
-        datacacheMgr.clearRules();
+        dataCacheMgr.clearRules();
     }
 
     @Test
     public void testForNormalTable() throws Exception {
         // create rule first
         String sql = "create datacache rule hive0.datacache_db.normal_table priority=-1";
-        CreateDatacacheRuleStmt stmt = (CreateDatacacheRuleStmt) AnalyzeTestUtil.analyzeSuccess(sql);
-        datacacheMgr.createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(), null);
+        CreateDataCacheRuleStmt stmt = (CreateDataCacheRuleStmt) AnalyzeTestUtil.analyzeSuccess(sql);
+        dataCacheMgr.createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(), null);
 
         String executeSql = "select * from hive0.datacache_db.normal_table;";
         Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
@@ -70,7 +69,7 @@ public class DatacachePlanTest extends PlanTestBase {
         Assert.assertEquals(-1, tScanRangeLocations.scan_range.hdfs_scan_range.getDatacache_options().getPriority());
 
         // clear rule
-        ClearDatacacheRulesStmt clearDataCacheRulesStmt = new ClearDatacacheRulesStmt(NodePosition.ZERO);
+        ClearDataCacheRulesStmt clearDataCacheRulesStmt = new ClearDataCacheRulesStmt(NodePosition.ZERO);
         DDLStmtExecutor.execute(clearDataCacheRulesStmt, connectContext);
 
         executeSql = "select * from hive0.datacache_db.normal_table;";
@@ -84,8 +83,8 @@ public class DatacachePlanTest extends PlanTestBase {
     public void testForSinglePartition() throws Exception {
         // create rule first
         String sql = "create datacache rule hive0.datacache_db.single_partition_table where l_shipdate>='1998-01-07' priority=-1";
-        CreateDatacacheRuleStmt stmt = (CreateDatacacheRuleStmt) AnalyzeTestUtil.analyzeSuccess(sql);
-        datacacheMgr.createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(), null);
+        CreateDataCacheRuleStmt stmt = (CreateDataCacheRuleStmt) AnalyzeTestUtil.analyzeSuccess(sql);
+        dataCacheMgr.createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(), null);
 
         String executeSql = "select * from hive0.datacache_db.single_partition_table;";
         Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
@@ -102,7 +101,7 @@ public class DatacachePlanTest extends PlanTestBase {
         }
 
         // drop cache rule id = 0;
-        DropDatacacheRuleStmt dropDataCacheRuleStmt = new DropDatacacheRuleStmt(0, NodePosition.ZERO);
+        DropDataCacheRuleStmt dropDataCacheRuleStmt = new DropDataCacheRuleStmt(0, NodePosition.ZERO);
         DDLStmtExecutor.execute(dropDataCacheRuleStmt, connectContext);
 
         executeSql = "select * from hive0.datacache_db.single_partition_table;";
@@ -120,8 +119,8 @@ public class DatacachePlanTest extends PlanTestBase {
         // create rule first
         String sql = "create datacache rule hive0.datacache_db.multi_partition_table where l_shipdate>='1998-01-03' " +
                 "and l_orderkey=1 priority=-1";
-        CreateDatacacheRuleStmt stmt = (CreateDatacacheRuleStmt) AnalyzeTestUtil.analyzeSuccess(sql);
-        datacacheMgr.createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(), null);
+        CreateDataCacheRuleStmt stmt = (CreateDataCacheRuleStmt) AnalyzeTestUtil.analyzeSuccess(sql);
+        dataCacheMgr.createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(), null);
 
         String executeSql = "select * from hive0.datacache_db.multi_partition_table;";
         Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
@@ -138,7 +137,7 @@ public class DatacachePlanTest extends PlanTestBase {
         }
 
         // clear rule
-        datacacheMgr.clearRules();
+        dataCacheMgr.clearRules();
         executeSql = "select * from hive0.datacache_db.multi_partition_table;";
         pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
         tScanRangeLocationsList = pair.second.getFragments().get(1).collectScanNodes()
@@ -150,13 +149,13 @@ public class DatacachePlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testForDisableDatacache() throws Exception {
-        connectContext.getSessionVariable().setEnableScanDatacache(false);
+    public void testForDisableDataCache() throws Exception {
+        connectContext.getSessionVariable().setEnableScanDataCache(false);
         // create rule first
         String sql = "create datacache rule hive0.datacache_db.multi_partition_table where l_shipdate>='1998-01-03' " +
                 "and l_orderkey=1 priority=-1";
-        CreateDatacacheRuleStmt stmt = (CreateDatacacheRuleStmt) AnalyzeTestUtil.analyzeSuccess(sql);
-        datacacheMgr.createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(), null);
+        CreateDataCacheRuleStmt stmt = (CreateDataCacheRuleStmt) AnalyzeTestUtil.analyzeSuccess(sql);
+        dataCacheMgr.createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(), null);
 
         String executeSql = "select * from hive0.datacache_db.multi_partition_table;";
         Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);

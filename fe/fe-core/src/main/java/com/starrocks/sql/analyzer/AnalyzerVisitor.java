@@ -50,10 +50,10 @@ import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
-import com.starrocks.sql.ast.ClearDatacacheRulesStmt;
+import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
-import com.starrocks.sql.ast.CreateDatacacheRuleStmt;
+import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -73,7 +73,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
-import com.starrocks.sql.ast.DropDatacacheRuleStmt;
+import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
@@ -115,7 +115,7 @@ import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
-import com.starrocks.sql.ast.ShowDatacacheRulesStmt;
+import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -711,26 +711,26 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     // -------------------------------------- Data Cache Management Statement -----------------------------------------
 
     @Override
-    public Void visitCreateDatacacheRuleStatement(CreateDatacacheRuleStmt stmt, ConnectContext context) {
-        DatacacheStmtAnalyzer.analyze(stmt, context);
+    public Void visitCreateDataCacheRuleStatement(CreateDataCacheRuleStmt stmt, ConnectContext context) {
+        DataCacheStmtAnalyzer.analyze(stmt, context);
         return null;
     }
 
     @Override
-    public Void visitShowDatacacheRulesStatement(ShowDatacacheRulesStmt stmt, ConnectContext context) {
-        DatacacheStmtAnalyzer.analyze(stmt, context);
+    public Void visitShowDataCacheRulesStatement(ShowDataCacheRulesStmt stmt, ConnectContext context) {
+        DataCacheStmtAnalyzer.analyze(stmt, context);
         return null;
     }
 
     @Override
-    public Void visitDropDatacacheRuleStatement(DropDatacacheRuleStmt statement, ConnectContext context) {
-        DatacacheStmtAnalyzer.analyze(statement, context);
+    public Void visitDropDataCacheRuleStatement(DropDataCacheRuleStmt statement, ConnectContext context) {
+        DataCacheStmtAnalyzer.analyze(statement, context);
         return null;
     }
 
     @Override
-    public Void visitClearDatacacheRulesStatement(ClearDatacacheRulesStmt statement, ConnectContext context) {
-        DatacacheStmtAnalyzer.analyze(statement, context);
+    public Void visitClearDataCacheRulesStatement(ClearDataCacheRulesStmt statement, ConnectContext context) {
+        DataCacheStmtAnalyzer.analyze(statement, context);
         return null;
     }
 

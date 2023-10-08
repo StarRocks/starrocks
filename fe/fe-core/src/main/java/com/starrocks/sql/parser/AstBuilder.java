@@ -156,7 +156,7 @@ import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CleanTabletSchedQClause;
-import com.starrocks.sql.ast.ClearDatacacheRulesStmt;
+import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.ColumnDef;
@@ -165,7 +165,7 @@ import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
-import com.starrocks.sql.ast.CreateDatacacheRuleStmt;
+import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -199,7 +199,7 @@ import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
-import com.starrocks.sql.ast.DropDatacacheRuleStmt;
+import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFollowerClause;
@@ -329,8 +329,8 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
-import com.starrocks.sql.ast.ShowDatacacheRulesStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
@@ -2956,11 +2956,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowWhiteListStmt();
     }
 
-    // --------------------------------------- Data Cache Management Statement -----------------------------------------
+    // --------------------------------------- DataCache Management Statement -----------------------------------------
     @Override
-    public ParseNode visitCreateDatacacheRuleStatement(StarRocksParser.CreateDatacacheRuleStatementContext ctx) {
+    public ParseNode visitCreateDataCacheRuleStatement(StarRocksParser.CreateDataCacheRuleStatementContext ctx) {
         List<StarRocksParser.IdentifierOrStringOrStarContext> partList =
-                ctx.datacacheTarget().identifierOrStringOrStar();
+                ctx.dataCacheTarget().identifierOrStringOrStar();
         List<String> parts = partList.stream().map(c -> ((Identifier) visit(c)).getValue()).collect(toList());
 
         QualifiedName qualifiedName = QualifiedName.of(parts);
@@ -2985,23 +2985,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        return new CreateDatacacheRuleStmt(qualifiedName, predicates, priority, properties, createPos(ctx));
+        return new CreateDataCacheRuleStmt(qualifiedName, predicates, priority, properties, createPos(ctx));
     }
 
     @Override
-    public ParseNode visitShowDatacacheRulesStatement(StarRocksParser.ShowDatacacheRulesStatementContext ctx) {
-        return new ShowDatacacheRulesStmt(createPos(ctx));
+    public ParseNode visitShowDataCacheRulesStatement(StarRocksParser.ShowDataCacheRulesStatementContext ctx) {
+        return new ShowDataCacheRulesStmt(createPos(ctx));
     }
 
     @Override
-    public ParseNode visitDropDatacacheRuleStatement(StarRocksParser.DropDatacacheRuleStatementContext ctx) {
+    public ParseNode visitDropDataCacheRuleStatement(StarRocksParser.DropDataCacheRuleStatementContext ctx) {
         long id = Long.parseLong(ctx.INTEGER_VALUE().getText());
-        return new DropDatacacheRuleStmt(id, createPos(ctx));
+        return new DropDataCacheRuleStmt(id, createPos(ctx));
     }
 
     @Override
-    public ParseNode visitClearDatacacheRulesStatement(StarRocksParser.ClearDatacacheRulesStatementContext ctx) {
-        return new ClearDatacacheRulesStmt(createPos(ctx));
+    public ParseNode visitClearDataCacheRulesStatement(StarRocksParser.ClearDataCacheRulesStatementContext ctx) {
+        return new ClearDataCacheRulesStmt(createPos(ctx));
     }
 
     // ----------------------------------------------- Export Statement ------------------------------------------------

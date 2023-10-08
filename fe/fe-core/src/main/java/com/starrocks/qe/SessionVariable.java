@@ -1146,7 +1146,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     @VariableMgr.VarAttr(name = ENABLE_SCAN_DATACACHE)
-    private boolean enableScanDatacache = false;
+    private boolean enableScanDataCache = false;
 
     @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
     private int ioTasksPerScanOperator = 4;
@@ -1449,12 +1449,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
     private boolean enableStrictType = false;
 
-    public boolean isEnableScanDatacache() {
-        return enableScanDatacache;
+    public boolean isEnableScanDataCache() {
+        return enableScanDataCache;
     }
 
-    public void setEnableScanDatacache(boolean enableScanDatacache) {
-        this.enableScanDatacache = enableScanDatacache;
+    public void setEnableScanDataCache(boolean enableScanDataCache) {
+        this.enableScanDataCache = enableScanDataCache;
     }
 
     public boolean isCboUseDBLock() {
@@ -2670,7 +2670,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setAllow_throw_exception((sqlMode & SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION) != 0);
 
-        tResult.setUse_scan_block_cache(enableScanDatacache);
+        tResult.setUse_scan_block_cache(enableScanDataCache);
         tResult.setEnable_populate_block_cache(enablePopulateBlockCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
