@@ -50,6 +50,14 @@ public:
         return st;
     }
 
+    StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto nread, _stream->read_at(offset, out, count));
+        _stats->bytes_read += nread;
+        return nread;
+    }
+
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;
     HdfsScanStats* _stats;
