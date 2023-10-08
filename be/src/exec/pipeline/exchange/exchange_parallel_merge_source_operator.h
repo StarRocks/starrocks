@@ -100,7 +100,7 @@ public:
 
     void close(RuntimeState* state) override;
 
-    DataStreamRecvr* get_stream_recvr(RuntimeState* state, const std::shared_ptr<RuntimeProfile>& profile);
+    DataStreamRecvr* get_stream_recvr(RuntimeState* state);
     merge_path::MergePathCascadeMerger* get_merge_path_merger(RuntimeState* state);
     void close_stream_recvr();
 

@@ -157,12 +157,10 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     COUNTER_SET(bytes_sent_counter, _bytes_sent);
     COUNTER_SET(request_sent_counter, _request_sent);
 
-    if (_bytes_enqueued - _bytes_sent > 0) {
-        auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
-        auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
-        COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
-        COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
-    }
+    auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
+    auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
+    COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
+    COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
 
     profile->add_derived_counter(
             "NetworkBandwidth", TUnit::BYTES_PER_SECOND,
