@@ -16,7 +16,6 @@ package com.starrocks.lake;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Range;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
@@ -30,12 +29,8 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
@@ -45,19 +40,15 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Metadata for StarRocks lake table
@@ -221,6 +212,7 @@ public class LakeTable extends OlapTable {
         }
         return TableType.OLAP.name();
     }
+<<<<<<< HEAD
 
     /**
      * Check if data cache is allowed for the specified partition's data:
@@ -266,4 +258,6 @@ public class LakeTable extends OlapTable {
         return true;
     }
 
+=======
+>>>>>>> 3043be3dc3 ([Enhancement] Support fill data cache when querying cloud native mv (#31994))
 }

@@ -58,6 +58,9 @@ import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Partition.PartitionState;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
@@ -109,6 +112,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -117,6 +121,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -2624,6 +2629,54 @@ public class OlapTable extends Table {
 
     public void setStorageInfo(FilePathInfo pathInfo, DataCacheInfo dataCacheInfo) {
         throw new SemanticException("setStorageInfo is not supported");
+    }
+
+    /**
+     * Check if data cache is allowed for the specified partition's data:
+     *  - If the partition is NOT partitioned by DATE or DATETIME, data cache is allowed
+     *  - If the partition is partitioned by DATE or DATETIME:
+     *    - if the partition's end value (of type DATE/DATETIME) is within the last "datacache.partition_duration"
+     *      duration, allow data cache for the partition.
+     *    - otherwise, disallow the data cache for the partition
+     *
+     * @param partition the partition to check. the partition must belong to this table.
+     * @return true if the partition is enabled for the data cache, false otherwise
+     */
+    public boolean isEnableFillDataCache(Partition partition) {
+        try {
+            return isEnableFillDataCacheImpl(Objects.requireNonNull(partition, "partition is null"));
+        } catch (AnalysisException ignored) {
+            return true;
+        }
+    }
+
+    private boolean isEnableFillDataCacheImpl(Partition partition) throws AnalysisException {
+        if (tableProperty == null) {
+            return true;
+        }
+
+        PeriodDuration cacheDuration = tableProperty.getDataCachePartitionDuration();
+        if (cacheDuration != null && getPartitionInfo().isRangePartition()) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) getPartitionInfo();
+            Range<PartitionKey> partitionRange = rangePartitionInfo.getRange(partition.getId());
+            Range<PartitionKey> dataCacheRange;
+            if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATETIME)) {
+                LocalDateTime upper = LocalDateTime.now();
+                LocalDateTime lower = upper.minus(cacheDuration);
+                dataCacheRange = Range.openClosed(PartitionKey.ofDateTime(lower), PartitionKey.ofDateTime(upper));
+                return partitionRange.isConnected(dataCacheRange);
+            } else if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATE)) {
+                LocalDate upper = LocalDate.now();
+                LocalDate lower = upper.minus(cacheDuration);
+                dataCacheRange = Range.openClosed(PartitionKey.ofDate(lower), PartitionKey.ofDate(upper));
+                return partitionRange.isConnected(dataCacheRange);
+            } else {
+                // If the table was not partitioned by DATE/DATETIME, ignore the property "datacache.partition_duration" and
+                // enable data cache by default.
+                return true;
+            }
+        }
+        return true;
     }
     // ------ for lake table and lake materialized view end ------
 }
