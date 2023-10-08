@@ -14,18 +14,19 @@
 
 #include "storage/lake/compaction_task.h"
 
+#include "runtime/exec_env.h"
 #include "storage/lake/tablet.h"
 
 namespace starrocks::lake {
 
-CompactionTask::CompactionTask(int64_t txn_id, int64_t version, std::shared_ptr<Tablet> tablet,
+CompactionTask::CompactionTask(int64_t txn_id, int64_t version, Tablet tablet,
                                std::vector<std::shared_ptr<Rowset>> input_rowsets)
         : _txn_id(txn_id),
           _version(version),
           _tablet(std::move(tablet)),
           _input_rowsets(std::move(input_rowsets)),
           _mem_tracker(std::make_unique<MemTracker>(MemTracker::COMPACTION, -1,
-                                                    "Compaction-" + std::to_string(_tablet->id()),
+                                                    "Compaction-" + std::to_string(_tablet.id()),
                                                     GlobalEnv::GetInstance()->compaction_mem_tracker())) {}
 
 } // namespace starrocks::lake

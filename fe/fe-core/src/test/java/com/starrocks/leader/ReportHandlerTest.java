@@ -351,4 +351,30 @@ public class ReportHandlerTest {
         Config.primary_key_disk_schedule_time = 0;
         handler.handleMigration(tabletMetaMigrationMap, 10001);
     }
+
+    @Test
+    public void testTabletDropDelay() throws InterruptedException {
+        long tabletId = 100001;
+        long backendId = 100002;
+        Config.tablet_report_drop_tablet_delay_sec = 3;
+
+        boolean ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
+        Assert.assertFalse(ready);
+
+        Thread.sleep(1000);
+        ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
+        Assert.assertFalse(ready);
+
+        Thread.sleep(3000);
+        ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
+        Assert.assertTrue(ready);
+
+        // check map is cleaned
+        ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
+        Assert.assertFalse(ready);
+
+        Thread.sleep(4000);
+        ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
+        Assert.assertTrue(ready);
+    }
 }

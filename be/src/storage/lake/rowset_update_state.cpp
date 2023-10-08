@@ -21,6 +21,7 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/update_manager.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet_schema.h"
@@ -69,7 +70,7 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMet
 Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet) {
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
     std::unique_ptr<Rowset> rowset_ptr =
-            std::make_unique<Rowset>(tablet, std::make_shared<RowsetMetadataPB>(op_write.rowset()));
+            std::make_unique<Rowset>(*tablet, std::make_shared<RowsetMetadataPB>(op_write.rowset()));
 
     RETURN_IF_ERROR(_do_load_upserts_deletes(op_write, tablet_schema, tablet, rowset_ptr.get()));
 
@@ -455,7 +456,7 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
     // get rowset schema
-    if (!op_write.has_txn_meta() || op_write.rewrite_segments_size() == 0 || rowset_meta->segments_size() == 0 ||
+    if (!op_write.has_txn_meta() || op_write.rewrite_segments_size() == 0 || rowset_meta->num_rows() == 0 ||
         op_write.txn_meta().has_merge_condition()) {
         return Status::OK();
     }

@@ -69,6 +69,7 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/task/engine_task.h"
 #include "storage/update_manager.h"
+#include "testutil/sync_point.h"
 #include "util/bthreads/executor.h"
 #include "util/lru_cache.h"
 #include "util/scoped_cleanup.h"
@@ -586,6 +587,8 @@ void StorageEngine::stop() {
             // store_pair.second will be delete later
             store_pair.second->stop_bg_worker();
         }
+        // notify the cv in case anyone is waiting for.
+        _report_cv.notify_all();
     }
 
     _bg_worker_stopped.store(true, std::memory_order_release);
@@ -1391,6 +1394,7 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
             _auto_increment_meta_map.insert({tableid, std::make_shared<AutoIncrementMeta>()});
         }
         meta = _auto_increment_meta_map[tableid];
+        TEST_SYNC_POINT_CALLBACK("StorageEngine::get_next_increment_id_interval.1", &meta);
     }
 
     // lock for different tableid

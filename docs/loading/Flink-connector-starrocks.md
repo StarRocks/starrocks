@@ -195,6 +195,7 @@ The Flink connector will buffer the data in memory, and flush them in batch to S
 is triggered is different between at-least-once and exactly-once.
 
 For at-least-once, the flush will be triggered when any of the following conditions are met:
+
 - the bytes of buffered rows reaches the limit `sink.buffer-flush.max-bytes`
 - the number of buffered rows reaches the limit `sink.buffer-flush.max-rows`. (Only valid for sink version V1)
 - the elapsed time since the last flush reaches the limit `sink.buffer-flush.interval-ms`
@@ -482,7 +483,7 @@ This example will show how to load data only to columns `id` and `name`.
 
    - Define the DDL which only includes the columns `id` and `name`.
    - Set the option `sink.properties.partial_update` to `true` which tells the Flink connector to perform partial updates.
-   - If the Flink connector version <= 1.2.7, you also need to set the option `sink.properties.columns` to `id,name,__op` to tells the Flink connector which columns need to be updated. Note that you need to append the field `__op` at the end. The field `__op` indicates that the data loading is an UPSERT or DELETE operation, and its values are set by the connector automatically.
+   - If the Flink connector version `<=` 1.2.7, you also need to set the option `sink.properties.columns` to `id,name,__op` to tells the Flink connector which columns need to be updated. Note that you need to append the field `__op` at the end. The field `__op` indicates that the data loading is an UPSERT or DELETE operation, and its values are set by the connector automatically.
 
     ```SQL
     CREATE TABLE `score_board` (

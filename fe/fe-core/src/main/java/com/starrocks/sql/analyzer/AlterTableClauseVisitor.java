@@ -26,6 +26,7 @@ import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Index;
@@ -304,6 +305,9 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             throw new SemanticException("No column definition in add column clause.");
         }
         try {
+            if (table.isOlapTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+                columnDef.setAggregateType(AggregateType.REPLACE);
+            }
             columnDef.analyze(true);
         } catch (AnalysisException e) {
             throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), columnDef.getPos());
@@ -422,6 +426,9 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         boolean hasNormalColumn = false;
         for (ColumnDef colDef : columnDefs) {
             try {
+                if (table.isOlapTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+                    colDef.setAggregateType(AggregateType.REPLACE);
+                }
                 colDef.analyze(true);
             } catch (AnalysisException e) {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), colDef.getPos());
@@ -541,6 +548,9 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             throw new SemanticException("No column definition in modify column clause.");
         }
         try {
+            if (table.isOlapTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+                columnDef.setAggregateType(AggregateType.REPLACE);
+            }
             columnDef.analyze(true);
         } catch (AnalysisException e) {
             throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), columnDef.getPos());
