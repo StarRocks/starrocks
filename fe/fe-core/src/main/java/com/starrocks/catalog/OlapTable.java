@@ -2866,5 +2866,19 @@ public class OlapTable extends Table {
     public void setStorageInfo(FilePathInfo pathInfo, DataCacheInfo dataCacheInfo) {
         throw new SemanticException("setStorageInfo is not supported");
     }
+    /*
+    public Boolean dataCacheEnable() {
+        if (tableProperty != null) {
+            return tableProperty.dataCacheEnable();
+        }
+        return false;
+    }*/
+
+    public PeriodDuration dataCachePartitionDuration() {
+        if (tableProperty != null) {
+            return tableProperty.dataCachePartitionDuration();
+        }
+        return null;
+    }
     // ------ for lake table and lake materialized view end ------
 }

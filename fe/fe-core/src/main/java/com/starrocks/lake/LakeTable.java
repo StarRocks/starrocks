@@ -228,7 +228,7 @@ public class LakeTable extends OlapTable {
     }
 
     private boolean isEnableFillDataCacheImpl(Partition partition) throws AnalysisException {
-        PeriodDuration cacheDuration = getTableProperty().getDataCachePartitionDuration();
+        PeriodDuration cacheDuration = getTableProperty().dataCachePartitionDuration();
         if (cacheDuration != null && getPartitionInfo().isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) getPartitionInfo();
             Range<PartitionKey> partitionRange = rangePartitionInfo.getRange(partition.getId());

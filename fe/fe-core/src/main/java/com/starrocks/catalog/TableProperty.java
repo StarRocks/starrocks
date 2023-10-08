@@ -749,7 +749,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return binlogAvailabeVersions;
     }
 
-    public PeriodDuration getDataCachePartitionDuration() {
+    public PeriodDuration dataCachePartitionDuration() {
         return dataCachePartitionDuration;
     }
 

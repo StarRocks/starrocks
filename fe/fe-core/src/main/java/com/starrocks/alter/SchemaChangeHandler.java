@@ -88,7 +88,10 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
+import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.TableAddOrDropColumnsInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -116,6 +119,7 @@ import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -1561,10 +1565,11 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     public AlterJobV2 createAlterMetaJob(List<AlterClause> alterClauses, Database db, OlapTable olapTable) throws UserException {
-        LakeTableAlterMetaJob alterMetaJob;
+        LakeTableAlterMetaJob alterMetaJob = null;
         Preconditions.checkState(alterClauses.size() == 1);
         AlterClause alterClause = alterClauses.get(0);
         Map<String, String> properties = alterClause.getProperties();
+        LOG.info("pos 3");
         if (alterClause instanceof ModifyTablePropertiesClause) {
             // update table meta
             // for now enable_persistent_index
@@ -1572,27 +1577,51 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("Only support alter one property in one stmt");
             }
 
-            boolean enablePersistentIndex = false;
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
-                enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
-                        PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
+                boolean enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(
+                        properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
                 boolean oldEnablePersistentIndex = olapTable.enablePersistentIndex();
                 if (oldEnablePersistentIndex == enablePersistentIndex) {
                     LOG.info(String.format("table: %s enable_persistent_index is %s, nothing need to do",
                             olapTable.getName(), enablePersistentIndex));
                     return null;
                 }
+
+                long timeoutSecond = PropertyAnalyzer.analyzeTimeout(properties, Config.alter_table_timeout_second);
+                alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(), db.getId(),
+                        olapTable.getId(),
+                        olapTable.getName(), timeoutSecond, TTabletMetaType.ENABLE_PERSISTENT_INDEX,
+                        enablePersistentIndex);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+                DataCacheInfo dataCacheInfo = PropertyAnalyzer.analyzeDataCacheInfo(properties);
+
+                StorageInfo storageInfo = olapTable.getTableProperty().getStorageInfo();
+                DataCacheInfo oldDataCacheInfo = storageInfo == null ? null : storageInfo.getDataCacheInfo();
+                if (dataCacheInfo.isEnabled() == oldDataCacheInfo.isEnabled()) {
+                    LOG.info(String.format("table: %s datacache.enable is %s, nothing need to do",
+                            olapTable.getName(), dataCacheInfo.isEnabled()));
+                    return null;
+                }
+                LOG.info("pos 4");
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+                PeriodDuration partitionDuration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+                PeriodDuration oldPartitionDuration = olapTable.dataCachePartitionDuration();
+                if (partitionDuration == oldPartitionDuration) {
+                    LOG.info(String.format("table: %s datacache.partition_duration is %s, nothing need to do",
+                            olapTable.getName(), partitionDuration));
+                    return null;
+                }
+
+
+                olapTable.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION,
+                        TimeUtils.toHumanReadableString(partitionDuration));
+                olapTable.getTableProperty().buildDataCachePartitionDuration();
+                LOG.info("pos 5");
+            } else {
+                // shouldn't happen
+                throw new DdlException(
+                        "Cloud Native Table only supports alter table properties enable_persistent_index");
             }
-
-
-            long timeoutSecond = PropertyAnalyzer.analyzeTimeout(properties, Config.alter_table_timeout_second);
-            alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
-                    db.getId(),
-                    olapTable.getId(), olapTable.getName(), timeoutSecond,
-                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, enablePersistentIndex);
-        } else {
-            // shouldn't happen
-            throw new DdlException("Cloud Native Table only supports alter table properties enable_persistent_index");
         }
         return alterMetaJob;
     }

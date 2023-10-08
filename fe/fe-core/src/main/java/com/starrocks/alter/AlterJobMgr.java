@@ -442,6 +442,7 @@ public class AlterJobMgr {
         List<AlterClause> alterClauses = stmt.getOps();
         AlterOperations currentAlterOps = new AlterOperations();
         currentAlterOps.checkConflict(alterClauses);
+        LOG.warn("pos 1");
 
         // check cluster capacity and db quota, only need to check once.
         if (currentAlterOps.needCheckCapacity()) {
@@ -477,6 +478,7 @@ public class AlterJobMgr {
                 isSynchronous = false;
             } else if (currentAlterOps.contains(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC) &&
                     olapTable.isCloudNativeTable()) {
+                LOG.warn("pos 2");
                 schemaChangeHandler.processLakeTableAlterMeta(alterClauses, db, olapTable);
                 isSynchronous = false;
             } else if (currentAlterOps.hasRollupOp()) {

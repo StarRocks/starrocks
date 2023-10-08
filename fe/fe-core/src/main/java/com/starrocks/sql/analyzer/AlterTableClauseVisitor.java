@@ -43,6 +43,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
@@ -272,6 +273,21 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Alter tablet type not supported");
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                 || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+            clause.setNeedTableStable(false);
+            clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+            if (!properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).equalsIgnoreCase("true") &&
+                    !properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).equalsIgnoreCase("false")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE +
+                                " must be bool type(false/true)");
+            }
+            clause.setNeedTableStable(false);
+            clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+            String partitoinDuration = properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION);
+            // The check of partitoinDuration is performed inside parseHumanReadablePeriodOrDuration
+            TimeUtils.parseHumanReadablePeriodOrDuration(partitoinDuration);
             clause.setNeedTableStable(false);
             clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
         } else {
