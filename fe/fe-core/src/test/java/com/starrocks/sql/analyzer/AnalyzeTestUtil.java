@@ -282,6 +282,10 @@ public class AnalyzeTestUtil {
         return connectContext;
     }
 
+    public static void setConnectContext(ConnectContext ctx) {
+        connectContext = ctx;
+    }
+
     public static StarRocksAssert getStarRocksAssert() {
         return starRocksAssert;
     }
