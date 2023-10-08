@@ -625,7 +625,8 @@ public class CoordinatorPreprocessor {
                 // of hostSet, that it to say, each backend has exactly one fragment.
                 Set<TNetworkAddress> hostSet = Sets.newHashSet();
 
-                if (usedComputeNode) {
+                // don't use all nodes in shared_data running mode to avoid heavy exchange cost
+                if (connectContext.getSessionVariable().isPreferComputeNode() && hasComputeNode) {
                     for (Map.Entry<Long, ComputeNode> entry : idToComputeNode.entrySet()) {
                         ComputeNode computeNode = entry.getValue();
                         if (!computeNode.isAlive() || SimpleScheduler.isInBlacklist(computeNode.getId())) {
