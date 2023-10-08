@@ -84,8 +84,9 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
                           << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
                           << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
                           << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
-                          << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " memory: " << memory_usage()
-                          << " status: " << status.to_string() << " time:" << timer.elapsed_time() / 1000000 << "ms";
+                          << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
+                          << " memory: " << memory_usage() << " status: " << status.to_string()
+                          << " time:" << timer.elapsed_time() / 1000000 << "ms";
                 return status;
             } else {
                 LOG(WARNING) << "load persistent index failed, tablet: " << tablet->id() << ", status: " << status;
@@ -293,8 +294,9 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
         return status;
     }
 
-    RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version,
-                                               _l2_versions.size() > 0 ? _l2_versions[0] : EditVersion()));
+    RETURN_IF_ERROR(_delete_expired_index_file(
+            _version, _l1_version,
+            _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
     _dump_snapshot = false;
     _flushed = false;
 
@@ -302,8 +304,8 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
               << " #rowset:" << rowsets->size() << " #segment:" << total_segments << " data_size:" << total_data_size
               << " size: " << _size << " l0_size: " << _l0->size() << " l0_capacity:" << _l0->capacity()
               << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
-              << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " memory: " << memory_usage()
-              << " time: " << timer.elapsed_time() / 1000000 << "ms";
+              << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
+              << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
     return Status::OK();
 }
 
