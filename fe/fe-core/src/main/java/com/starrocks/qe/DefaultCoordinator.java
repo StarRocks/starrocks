@@ -415,6 +415,10 @@ public class DefaultCoordinator extends Coordinator {
                     DebugUtil.printId(jobSpec.getQueryId()), jobSpec.getDescTable());
         }
 
+        if (slot != null && slot.getPipelineDop() > 0 && slot.getPipelineDop() != jobSpec.getQueryOptions().getPipeline_dop()) {
+            jobSpec.getFragments().forEach(fragment -> fragment.limitMaxPipelineDop(slot.getPipelineDop()));
+        }
+
         coordinatorPreprocessor.prepareExec();
 
         prepareResultSink();

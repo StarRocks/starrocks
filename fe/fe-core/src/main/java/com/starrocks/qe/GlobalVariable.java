@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.system.BackendCoreStat;
 
 import java.lang.reflect.Field;
 import java.util.List;
@@ -65,6 +66,8 @@ public final class GlobalVariable {
     public static final String QUERY_QUEUE_FRESH_RESOURCE_USAGE_INTERVAL_MS =
             "query_queue_fresh_resource_usage_interval_ms";
     public static final String QUERY_QUEUE_CONCURRENCY_LIMIT = "query_queue_concurrency_limit";
+    public static final String QUERY_QUEUE_DRIVER_HIGH_WATER = "query_queue_driver_high_water";
+    public static final String QUERY_QUEUE_DRIVER_LOW_WATER = "query_queue_driver_low_water";
     public static final String QUERY_QUEUE_MEM_USED_PCT_LIMIT = "query_queue_mem_used_pct_limit";
     public static final String QUERY_QUEUE_CPU_USED_PERMILLE_LIMIT = "query_queue_cpu_used_permille_limit";
     public static final String QUERY_QUEUE_PENDING_TIMEOUT_SECOND = "query_queue_pending_timeout_second";
@@ -142,6 +145,13 @@ public final class GlobalVariable {
     // Effective iff it is positive.
     @VariableMgr.VarAttr(name = QUERY_QUEUE_CONCURRENCY_LIMIT, flag = VariableMgr.GLOBAL)
     private static int queryQueueConcurrencyLimit = 0;
+
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_DRIVER_HIGH_WATER, flag = VariableMgr.GLOBAL)
+    private static int queryQueueDriverHighWater = 0;
+
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_DRIVER_LOW_WATER, flag = VariableMgr.GLOBAL)
+    private static int queryQueueDriverLowWater = 0;
+
     // Effective iff it is positive.
     @VariableMgr.VarAttr(name = QUERY_QUEUE_MEM_USED_PCT_LIMIT, flag = VariableMgr.GLOBAL)
     private static double queryQueueMemUsedPctLimit = 0;
@@ -200,6 +210,28 @@ public final class GlobalVariable {
 
     public static void setQueryQueueConcurrencyLimit(int queryQueueConcurrencyLimit) {
         GlobalVariable.queryQueueConcurrencyLimit = queryQueueConcurrencyLimit;
+    }
+
+    public static boolean isQueryQueueDriverHighWaterEffective() {
+        return queryQueueDriverHighWater >= 0;
+    }
+
+    public static int getQueryQueueDriverHighWater() {
+        if (queryQueueDriverHighWater == 0) {
+            return BackendCoreStat.getAvgNumOfHardwareCoresOfBe() * 16;
+        }
+        return queryQueueDriverHighWater;
+    }
+
+    public static boolean isQueryQueueDriverLowWaterEffective() {
+        return queryQueueDriverLowWater >= 0;
+    }
+
+    public static int getQueryQueueDriverLowWater() {
+        if (queryQueueDriverLowWater == 0) {
+            return BackendCoreStat.getAvgNumOfHardwareCoresOfBe() * 8;
+        }
+        return queryQueueDriverLowWater;
     }
 
     public static boolean isQueryQueueMemUsedPctLimitEffective() {
