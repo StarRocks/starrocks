@@ -364,7 +364,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
 
-    public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
+    public static final String ENABLE_SCAN_DATACACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
@@ -1145,8 +1145,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableParallelMerge = enableParallelMerge;
     }
 
-    @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
-    private boolean useScanBlockCache = false;
+    @VariableMgr.VarAttr(name = ENABLE_SCAN_DATACACHE)
+    private boolean enableScanDatacache = false;
 
     @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
     private int ioTasksPerScanOperator = 4;
@@ -1448,6 +1448,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
     private boolean enableStrictType = false;
+
+    public boolean isEnableScanDatacache() {
+        return enableScanDatacache;
+    }
+
+    public void setEnableScanDatacache(boolean enableScanDatacache) {
+        this.enableScanDatacache = enableScanDatacache;
+    }
 
     public boolean isCboUseDBLock() {
         return cboUseDBLock;
@@ -2662,7 +2670,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setAllow_throw_exception((sqlMode & SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION) != 0);
 
-        tResult.setUse_scan_block_cache(useScanBlockCache);
+        tResult.setUse_scan_block_cache(enableScanDatacache);
         tResult.setEnable_populate_block_cache(enablePopulateBlockCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
