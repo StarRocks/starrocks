@@ -155,41 +155,6 @@ public class SyncPartitionUtils {
         return diff;
     }
 
-    /**
-     * Check whether `range` is included in `rangeToInclude`. Here we only want to
-     * create partitions which is between `start` and `end` when executing
-     * `refresh materialized view xxx partition start (xxx) end (xxx)`
-     *
-     * @param range range to check
-     * @param rangeToInclude range to check whether the to be checked range is in
-     * @return true if included, else false
-     */
-    private static boolean isRangeIncluded(PartitionRange range, Range<PartitionKey> rangeToInclude) {
-        Range<PartitionKey> rangeToCheck = range.getPartitionKeyRange();
-        int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
-        int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
-        return !(lowerCmp >= 0 || upperCmp <= 0);
-    }
-
-    public static Map<String, Range<PartitionKey>> diffRange(List<PartitionRange> srcRanges,
-                                                             List<PartitionRange> dstRanges,
-                                                             Range<PartitionKey> rangeToInclude) {
-        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
-        Set<PartitionRange> dstRangeSet = new HashSet<>(dstRanges);
-        for (PartitionRange range : srcRanges) {
-            if (!dstRangeSet.contains(range)) {
-                if (rangeToInclude == null) {
-                    result.put(range.getPartitionName(), range.getPartitionKeyRange());
-                } else {
-                    if (isRangeIncluded(range, rangeToInclude)) {
-                        result.put(range.getPartitionName(), range.getPartitionKeyRange());
-                    }
-                }
-            }
-        }
-        return result;
-    }
-
     public static Map<String, Range<PartitionKey>> mappingRangeList(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                     String granularity, PrimitiveType partitionType) {
         Set<LocalDateTime> timePointSet = Sets.newTreeSet();
@@ -461,6 +426,35 @@ public class SyncPartitionUtils {
             }
         }
         return result;
+    }
+
+    public static Map<String, Range<PartitionKey>> diffRange(List<PartitionRange> srcRanges,
+                                                             List<PartitionRange> dstRanges,
+                                                             Range<PartitionKey> rangeToInclude) {
+        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
+        Set<PartitionRange> dstRangeSet = new HashSet<>(dstRanges);
+        for (PartitionRange range : srcRanges) {
+            if (!dstRangeSet.contains(range) && (rangeToInclude == null || isRangeIncluded(range, rangeToInclude))) {
+                result.put(range.getPartitionName(), range.getPartitionKeyRange());
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Check whether `range` is included in `rangeToInclude`. Here we only want to
+     * create partitions which is between `start` and `end` when executing
+     * `refresh materialized view xxx partition start (xxx) end (xxx)`
+     *
+     * @param range range to check
+     * @param rangeToInclude range to check whether the to be checked range is in
+     * @return true if included, else false
+     */
+    private static boolean isRangeIncluded(PartitionRange range, Range<PartitionKey> rangeToInclude) {
+        Range<PartitionKey> rangeToCheck = range.getPartitionKeyRange();
+        int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
+        int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
+        return !(lowerCmp >= 0 || upperCmp <= 0);
     }
 
     public static Set<String> getPartitionNamesByRangeWithPartitionLimit(MaterializedView materializedView,
