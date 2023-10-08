@@ -1001,6 +1001,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             colDef.add(colSb.toString());
         }
         sb.append(Joiner.on(", ").join(colDef));
+
+        // bitmapIndex
+        if (CollectionUtils.isNotEmpty(getIndexes())) {
+            for (Index index : getIndexes()) {
+                sb.append(",\n");
+                sb.append("  ").append(index.toSql());
+            }
+        }
+
         sb.append(")");
         if (!Strings.isNullOrEmpty(this.getComment())) {
             sb.append("\nCOMMENT \"").append(getDisplayComment()).append("\"");
@@ -1085,6 +1094,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         if (!hasStorageMedium) {
             appendUniqueProperties(sb);
+        }
+
+        // bloom filter
+        Set<String> bfColumnNames = getCopiedBfColumns();
+        if (bfColumnNames != null) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
+                    .append("\" = \"");
+            sb.append(Joiner.on(", ").join(getCopiedBfColumns())).append("\"");
         }
 
         sb.append("\n)");
