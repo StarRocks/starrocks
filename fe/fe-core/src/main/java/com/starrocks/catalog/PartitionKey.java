@@ -236,7 +236,6 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         int otherKeyLen = other.keys.size();
         int minLen = Math.min(thisKeyLen, otherKeyLen);
         for (int i = 0; i < minLen; ++i) {
-            assert types.get(i) == other.types.get(i);
             int ret = compareLiteralExpr(this.getKeys().get(i), other.getKeys().get(i));
             if (0 != ret) {
                 return ret;
