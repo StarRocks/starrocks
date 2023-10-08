@@ -227,8 +227,6 @@ public class MetadataMgr {
         if (connectorTable != null) {
             // Load meta information from ConnectorTblMetaInfoMgr for each external table.
             connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
-            connectorTable.catalogName = catalogName;
-            connectorTable.dbName = dbName;
         }
         return connectorTable;
     }
