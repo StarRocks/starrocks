@@ -437,6 +437,8 @@ private:
 
     void check_for_apply() { _check_for_apply(); }
 
+    std::timed_mutex* get_index_lock() { return &_index_lock; }
+
 private:
     Tablet& _tablet;
 
