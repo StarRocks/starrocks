@@ -23,7 +23,6 @@ import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.ReentrantExecutor;
 import com.starrocks.connector.hive.CachingHiveMetastore;
 import com.starrocks.connector.hive.CachingHiveMetastoreConf;
-import com.starrocks.connector.hive.HiveConnector;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.IHiveMetastore;
@@ -35,6 +34,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
 public class DeltaLakeInternalMgr {
     public static final List<String> SUPPORTED_METASTORE_TYPE = ImmutableList.of("hive", "glue");
@@ -59,8 +59,8 @@ public class DeltaLakeInternalMgr {
         }
 
         if (hiveMetastoreType.equals("hive")) {
-            String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HiveConnector.HIVE_METASTORE_URIS),
-                    "%s must be set in properties when creating hive catalog", HiveConnector.HIVE_METASTORE_URIS);
+            String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
+                    "%s must be set in properties when creating catalog of hive-metastore", HIVE_METASTORE_URIS);
             Util.validateMetastoreUris(hiveMetastoreUris);
         }
         this.metastoreType = MetastoreType.get(hiveMetastoreType);
