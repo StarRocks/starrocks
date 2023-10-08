@@ -46,6 +46,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -664,6 +665,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
         Table refBaseTable = mvContext.getRefBaseTable();
         Column refBaseTablePartitionColumn = mvContext.getRefBaseTablePartitionColumn();
+        PrimitiveType mvPartitionColumnType = PrimitiveType.DATE;
 
         RangePartitionDiff rangePartitionDiff = new RangePartitionDiff();
 
@@ -699,8 +701,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
                     }
                     rangePartitionDiff = SyncPartitionUtils.getRangePartitionDiffOfExpr(refBaseTablePartitionMap,
-                            mvRangePartitionMap, functionCallExpr, refBaseTablePartitionColumn.getPrimitiveType(),
-                            rangeToInclude);
+                            mvRangePartitionMap, functionCallExpr, rangeToInclude);
                 } else {
                     throw new SemanticException("Materialized view partition function " +
                             functionCallExpr.getFnName().getFunction() +
