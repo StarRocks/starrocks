@@ -501,7 +501,7 @@ void LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, co
     }
 }
 
-// Convert byte-addressable mask into a bit-addressable mask. Note the 0/1 values are flipped.
+// Bit-pack null column into an LSB-first bitmap. Note the 0/1 values are flipped.
 std::shared_ptr<std::vector<uint8_t>> LevelBuilder::_make_null_bitset(const LevelBuilderContext& ctx,
                                                                       const uint8_t* nulls,
                                                                       const size_t col_size) const {
@@ -512,7 +512,7 @@ std::shared_ptr<std::vector<uint8_t>> LevelBuilder::_make_null_bitset(const Leve
 
         auto bitset = std::make_shared<std::vector<uint8_t>>((col_size + 7) / 8);
         for (size_t i = 0; i < col_size; i++) {
-            (*bitset)[i / 8] |= (1 - nulls[i]) << (i % 8);
+            (*bitset)[i >> 3] |= (1 - nulls[i]) << (i & 0b111);
         }
         return bitset;
     }
@@ -527,7 +527,7 @@ std::shared_ptr<std::vector<uint8_t>> LevelBuilder::_make_null_bitset(const Leve
         }
         uint8_t is_null = nulls != nullptr ? nulls[col_offset] : 0;
         is_null |= (level < ctx._max_def_level); // undefined but having a slot in leaf column
-        (*bitset)[col_offset / 8] |= (1 - is_null) << (col_offset % 8);
+        (*bitset)[col_offset >> 3] |= (1 - is_null) << (col_offset & 0b111);
         col_offset++;
     }
     DCHECK(col_size == col_offset);
