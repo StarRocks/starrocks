@@ -51,6 +51,61 @@ Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelV
     return _update_mgr->get_del_vec(tsid, version, _pk_builder, pdelvec);
 }
 
+<<<<<<< HEAD
+=======
+StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadata& metadata, Tablet* tablet,
+                                                           MetaFileBuilder* builder, int64_t base_version,
+                                                           int64_t new_version) {
+    auto index_entry = _index_cache.get_or_create(tablet->id());
+    index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
+    auto& index = index_entry->value();
+    Status st = index.lake_load(tablet, metadata, base_version, builder);
+    _index_cache.update_object_size(index_entry, index.memory_usage());
+    if (!st.ok()) {
+        _index_cache.remove(index_entry);
+        std::string msg = strings::Substitute("prepare_primary_index: load primary index failed: $0", st.to_string());
+        LOG(ERROR) << msg;
+        return Status::InternalError(msg);
+    }
+    st = index.prepare(EditVersion(new_version, 0), 0);
+    if (!st.ok()) {
+        _index_cache.remove(index_entry);
+        std::string msg =
+                strings::Substitute("prepare_primary_index: prepare primary index failed: $0", st.to_string());
+        LOG(ERROR) << msg;
+        return Status::InternalError(msg);
+    }
+    builder->set_has_update_index();
+    return index_entry;
+}
+
+Status UpdateManager::commit_primary_index(IndexEntry* index_entry, Tablet* tablet) {
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        if (index.enable_persistent_index()) {
+            // only take affect in local persistent index
+            PersistentIndexMetaPB index_meta;
+            DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store();
+            RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, tablet->id(), &index_meta));
+            RETURN_IF_ERROR(index.commit(&index_meta));
+            RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, tablet->id(), index_meta));
+            // Call `on_commited` here, which will remove old files is safe.
+            // Because if publish version fail after `on_commited`, index will be rebuild.
+            RETURN_IF_ERROR(index.on_commited());
+            TRACE("commit primary index");
+        }
+    }
+
+    return Status::OK();
+}
+
+void UpdateManager::release_primary_index(IndexEntry* index_entry) {
+    if (index_entry != nullptr) {
+        _index_cache.release(index_entry);
+    }
+}
+
+>>>>>>> df715c87e8 ([Enhancement] reduce disk cost of persistent index and do some refactoring (#31799))
 // |metadata| contain last tablet meta info with new version
 Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                  const TabletMetadata& metadata, Tablet* tablet,
