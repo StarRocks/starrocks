@@ -50,6 +50,14 @@ public:
         return st;
     }
 
+    StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto nread, _stream->read_at(offset, out, count));
+        _stats->bytes_read += nread;
+        return nread;
+    }
+
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;
     HdfsScanStats* _stats;
@@ -125,7 +133,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.case_sensitive = _scanner_params.case_sensitive;
     ctx.timezone = _runtime_state->timezone();
     ctx.iceberg_schema = _scanner_params.iceberg_schema;
-    ctx.stats = &_stats;
+    ctx.stats = &_app_stats;
 
     return Status::OK();
 }
@@ -136,7 +144,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     Status status = do_get_next(runtime_state, chunk);
     if (status.ok()) {
         if (!_scanner_params.conjunct_ctxs.empty() && _scanner_params.eval_conjunct_ctxs) {
-            SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
+            SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
             RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.conjunct_ctxs, (*chunk).get()));
         }
     } else if (status.is_end_of_file()) {
@@ -144,7 +152,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     } else {
         LOG(ERROR) << "failed to read file: " << _scanner_params.path;
     }
-    _stats.num_rows_read += (*chunk)->num_rows();
+    _app_stats.num_rows_read += (*chunk)->num_rows();
     return status;
 }
 
@@ -195,6 +203,7 @@ Status HdfsScanner::open_random_access_file() {
     CHECK(_file == nullptr) << "File has already been opened";
     ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file,
                      _scanner_params.fs->new_random_access_file(_scanner_params.path))
+    std::cout << "start to open " << _scanner_params.path << std::endl;
     const int64_t file_size = _scanner_params.file_size;
     raw_file->set_size(file_size);
     const std::string& filename = raw_file->filename();
@@ -234,7 +243,7 @@ Status HdfsScanner::open_random_access_file() {
     }
     // input_stream = CountedInputStream(input_stream)
     // NOTE: make sure `CountedInputStream` is last applied, so io time can be accurately timed.
-    input_stream = std::make_shared<CountedSeekableInputStream>(input_stream, &_stats);
+    input_stream = std::make_shared<CountedSeekableInputStream>(input_stream, &_app_stats);
 
     // so wrap function is f(x) = (CountedInputStream (CacheInputStream (DecompressInputStream (CountedInputStream x))))
     _file = std::make_unique<RandomAccessFile>(input_stream, filename);
@@ -277,12 +286,12 @@ void HdfsScanner::update_counter() {
 
     update_hdfs_counter(profile);
 
-    COUNTER_UPDATE(profile->reader_init_timer, _stats.reader_init_ns);
-    COUNTER_UPDATE(profile->rows_read_counter, _stats.raw_rows_read);
-    COUNTER_UPDATE(profile->rows_skip_counter, _stats.skip_read_rows);
-    COUNTER_UPDATE(profile->expr_filter_timer, _stats.expr_filter_ns);
-    COUNTER_UPDATE(profile->column_read_timer, _stats.column_read_ns);
-    COUNTER_UPDATE(profile->column_convert_timer, _stats.column_convert_ns);
+    COUNTER_UPDATE(profile->reader_init_timer, _app_stats.reader_init_ns);
+    COUNTER_UPDATE(profile->rows_read_counter, _app_stats.raw_rows_read);
+    COUNTER_UPDATE(profile->rows_skip_counter, _app_stats.skip_read_rows);
+    COUNTER_UPDATE(profile->expr_filter_timer, _app_stats.expr_filter_ns);
+    COUNTER_UPDATE(profile->column_read_timer, _app_stats.column_read_ns);
+    COUNTER_UPDATE(profile->column_convert_timer, _app_stats.column_convert_ns);
 
     if (_scanner_params.use_block_cache && _cache_input_stream) {
         const io::CacheInputStream::Stats& stats = _cache_input_stream->stats();
@@ -305,9 +314,9 @@ void HdfsScanner::update_counter() {
     }
 
     {
-        COUNTER_UPDATE(profile->app_io_timer, _stats.io_ns);
-        COUNTER_UPDATE(profile->app_io_counter, _stats.io_count);
-        COUNTER_UPDATE(profile->app_io_bytes_read_counter, _stats.bytes_read);
+        COUNTER_UPDATE(profile->app_io_timer, _app_stats.io_ns);
+        COUNTER_UPDATE(profile->app_io_counter, _app_stats.io_count);
+        COUNTER_UPDATE(profile->app_io_bytes_read_counter, _app_stats.bytes_read);
         COUNTER_UPDATE(profile->fs_bytes_read_counter, _fs_stats.bytes_read);
         COUNTER_UPDATE(profile->fs_io_timer, _fs_stats.io_ns);
         COUNTER_UPDATE(profile->fs_io_counter, _fs_stats.io_count);
