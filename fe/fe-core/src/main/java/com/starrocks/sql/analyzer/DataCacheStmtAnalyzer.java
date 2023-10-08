@@ -21,38 +21,38 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.datacache.DatacacheMgr;
+import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.ClearDatacacheRulesStmt;
-import com.starrocks.sql.ast.CreateDatacacheRuleStmt;
-import com.starrocks.sql.ast.DropDatacacheRuleStmt;
+import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
+import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
+import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.StatementBase;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-public class DatacacheStmtAnalyzer {
-    private DatacacheStmtAnalyzer() {
+public class DataCacheStmtAnalyzer {
+    private DataCacheStmtAnalyzer() {
     }
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
-        new DatacacheStmtAnalyzerVisitor().analyze(stmt, session);
+        new DataCacheStmtAnalyzerVisitor().analyze(stmt, session);
     }
 
-    static class DatacacheStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
-        private final DatacacheMgr dataCacheMgr = DatacacheMgr.getInstance();
+    static class DataCacheStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+        private final DataCacheMgr dataCacheMgr = DataCacheMgr.getInstance();
 
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
         }
 
         @Override
-        public Void visitCreateDatacacheRuleStatement(CreateDatacacheRuleStmt statement, ConnectContext context) {
+        public Void visitCreateDataCacheRuleStatement(CreateDataCacheRuleStmt statement, ConnectContext context) {
             int priority = statement.getPriority();
             if (priority != -1) {
                 throw new SemanticException("DataCache only support priority = -1 (aka BlackList) now");
@@ -79,7 +79,7 @@ public class DatacacheStmtAnalyzer {
             // If catalog/db/tbl does not exist, it will throw exception
             Optional<Table> optionalTable = getTable(catalogName, dbName, tblName);
 
-            // Check new datacache rule is conflicted with existed rule
+            // Check new dataCache rule is conflicted with existed rule
             dataCacheMgr.throwExceptionIfRuleIsConflicted(catalogName, dbName, tblName);
 
             Expr predicates = statement.getPredicates();
@@ -103,16 +103,16 @@ public class DatacacheStmtAnalyzer {
         }
 
         @Override
-        public Void visitDropDatacacheRuleStatement(DropDatacacheRuleStmt statement, ConnectContext context) {
+        public Void visitDropDataCacheRuleStatement(DropDataCacheRuleStmt statement, ConnectContext context) {
             long cacheRuleId = statement.getCacheRuleId();
             if (!dataCacheMgr.isExistCacheRule(cacheRuleId)) {
-                throw new SemanticException(String.format("Datacache rule id = %d does not exist", cacheRuleId));
+                throw new SemanticException(String.format("DataCache rule id = %d does not exist", cacheRuleId));
             }
             return null;
         }
 
         @Override
-        public Void visitClearDatacacheRulesStatement(ClearDatacacheRulesStmt statement, ConnectContext context) {
+        public Void visitClearDataCacheRulesStatement(ClearDataCacheRulesStmt statement, ConnectContext context) {
             return null;
         }
     }
@@ -149,21 +149,21 @@ public class DatacacheStmtAnalyzer {
         if (!isSelectAll(catalogName)) {
             // Check catalog is existed
             if (!metadataMgr.getOptionalMetadata(catalogName).isPresent()) {
-                throw new SemanticException(String.format("Datacache target catalog: %s does not exist", catalogName));
+                throw new SemanticException(String.format("DataCache target catalog: %s does not exist", catalogName));
             }
 
             if (!isSelectAll(dbName)) {
                 // Check db is existed
                 Database db = metadataMgr.getDb(catalogName, dbName);
                 if (db == null) {
-                    throw new SemanticException(String.format("Datacache target database: %s does not exist " +
+                    throw new SemanticException(String.format("DataCache target database: %s does not exist " +
                             "in [catalog: %s]", dbName, catalogName));
                 }
                 if (!isSelectAll(tblName)) {
                     // Check tbl is existed
                     table = metadataMgr.getTable(catalogName, dbName, tblName);
                     if (table == null) {
-                        throw new SemanticException(String.format("Datacache target table: %s does not exist in " +
+                        throw new SemanticException(String.format("DataCache target table: %s does not exist in " +
                                 "[catalog: %s, database: %s]", tblName, catalogName, dbName));
                     }
                 }

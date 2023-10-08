@@ -25,10 +25,10 @@ import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.datacache.DatacacheExprRewriter;
-import com.starrocks.datacache.DatacacheMgr;
-import com.starrocks.datacache.DatacacheOptions;
-import com.starrocks.datacache.DatacacheRule;
+import com.starrocks.datacache.DataCacheExprRewriter;
+import com.starrocks.datacache.DataCacheMgr;
+import com.starrocks.datacache.DataCacheOptions;
+import com.starrocks.datacache.DataCacheRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QualifiedName;
@@ -38,7 +38,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
-import com.starrocks.thrift.TDatacacheOptions;
+import com.starrocks.thrift.TDataCacheOptions;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
@@ -78,7 +78,7 @@ public class RemoteScanRangeLocations {
     }
 
     private void addScanRangeLocations(long partitionId, RemoteFileInfo partition, RemoteFileDesc fileDesc,
-                                       RemoteFileBlockDesc blockDesc, DatacacheOptions dataCacheOptions) {
+                                       RemoteFileBlockDesc blockDesc, DataCacheOptions dataCacheOptions) {
         // NOTE: Config.hive_max_split_size should be extracted to a local variable,
         // because it may be changed before calling 'splitScanRangeLocations'
         // and after needSplit has been calculated.
@@ -95,7 +95,7 @@ public class RemoteScanRangeLocations {
     private void splitScanRangeLocations(long partitionId, RemoteFileInfo partition,
                                          RemoteFileDesc fileDesc,
                                          RemoteFileBlockDesc blockDesc,
-                                         long splitSize, DatacacheOptions dataCacheOptions) {
+                                         long splitSize, DataCacheOptions dataCacheOptions) {
         long remainingBytes = blockDesc.getLength();
         long length = blockDesc.getLength();
         long offset = blockDesc.getOffset();
@@ -117,7 +117,7 @@ public class RemoteScanRangeLocations {
     private void createScanRangeLocationsForSplit(long partitionId, RemoteFileInfo partition,
                                                   RemoteFileDesc fileDesc,
                                                   RemoteFileBlockDesc blockDesc,
-                                                  long offset, long length, DatacacheOptions dataCacheOptions) {
+                                                  long offset, long length, DataCacheOptions dataCacheOptions) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
@@ -133,9 +133,9 @@ public class RemoteScanRangeLocations {
         }
 
         if (dataCacheOptions != null) {
-            TDatacacheOptions tDatacacheOptions = new TDatacacheOptions();
-            dataCacheOptions.toThrift(tDatacacheOptions);
-            hdfsScanRange.setDatacache_options(tDatacacheOptions);
+            TDataCacheOptions tDataCacheOptions = new TDataCacheOptions();
+            dataCacheOptions.toThrift(tDataCacheOptions);
+            hdfsScanRange.setDatacache_options(tDataCacheOptions);
         }
 
         TScanRange scanRange = new TScanRange();
@@ -164,7 +164,7 @@ public class RemoteScanRangeLocations {
     private void createHudiScanRangeLocations(long partitionId,
                                               RemoteFileInfo partition,
                                               RemoteFileDesc fileDesc,
-                                              boolean useJNIReader, DatacacheOptions dataCacheOptions) {
+                                              boolean useJNIReader, DataCacheOptions dataCacheOptions) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
@@ -182,7 +182,7 @@ public class RemoteScanRangeLocations {
         }
         hdfsScanRange.setUse_hudi_jni_reader(useJNIReader);
         if (dataCacheOptions != null) {
-            TDatacacheOptions tDataCacheOptions = new TDatacacheOptions();
+            TDataCacheOptions tDataCacheOptions = new TDataCacheOptions();
             dataCacheOptions.toThrift(tDataCacheOptions);
             hdfsScanRange.setDatacache_options(tDataCacheOptions);
         }
@@ -198,23 +198,23 @@ public class RemoteScanRangeLocations {
         result.add(scanRangeLocations);
     }
 
-    private Optional<List<DatacacheOptions>> generateDataCacheOptions(final QualifiedName qualifiedName,
+    private Optional<List<DataCacheOptions>> generateDataCacheOptions(final QualifiedName qualifiedName,
                                                                       final List<String> partitionColumnNames,
                                                                       final List<PartitionKey> partitionKeys) {
-        if (!ConnectContext.get().getSessionVariable().isEnableScanDatacache()) {
+        if (!ConnectContext.get().getSessionVariable().isEnableScanDataCache()) {
             return Optional.empty();
         }
 
-        Optional<DatacacheRule> dataCacheRule = DatacacheMgr.getInstance().getCacheRule(qualifiedName);
+        Optional<DataCacheRule> dataCacheRule = DataCacheMgr.getInstance().getCacheRule(qualifiedName);
         if (!dataCacheRule.isPresent()) {
             return Optional.empty();
         }
 
-        List<DatacacheOptions> dataCacheOptions = new ArrayList<>(partitionKeys.size());
+        List<DataCacheOptions> dataCacheOptions = new ArrayList<>(partitionKeys.size());
         Expr predicates = dataCacheRule.get().getPredicates();
         if (predicates == null) {
             for (int i = 0; i < partitionKeys.size(); i++) {
-                dataCacheOptions.add(new DatacacheOptions(dataCacheRule.get().getPriority()));
+                dataCacheOptions.add(new DataCacheOptions(dataCacheRule.get().getPriority()));
             }
         } else {
             // evaluate partition predicates
@@ -228,13 +228,13 @@ public class RemoteScanRangeLocations {
                 }
                 // Must clone expr first, avoid change original expr
                 Expr clonedExpr = predicates.clone();
-                Expr rewritedExpr = DatacacheExprRewriter.rewrite(clonedExpr, mapping);
+                Expr rewritedExpr = DataCacheExprRewriter.rewrite(clonedExpr, mapping);
                 ScalarOperator op = SqlToScalarOperatorTranslator.translate(rewritedExpr);
                 ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
                 op = scalarRewriter.rewrite(op, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
                 if (op.isConstantTrue()) {
                     // matched partition predicates
-                    dataCacheOptions.add(new DatacacheOptions(dataCacheRule.get().getPriority()));
+                    dataCacheOptions.add(new DataCacheOptions(dataCacheRule.get().getPriority()));
                 } else {
                     // not matched, add null DataCacheOption
                     dataCacheOptions.add(null);
@@ -262,7 +262,7 @@ public class RemoteScanRangeLocations {
         String catalogName = hiveMetaStoreTable.getCatalogName();
         QualifiedName qualifiedName = QualifiedName.of(ImmutableList.of(catalogName,
                 hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName()));
-        Optional<List<DatacacheOptions>> dataCacheOptionsList = generateDataCacheOptions(qualifiedName,
+        Optional<List<DataCacheOptions>> dataCacheOptionsList = generateDataCacheOptions(qualifiedName,
                 hiveMetaStoreTable.getPartitionColumnNames(), partitionKeys);
 
         List<RemoteFileInfo> partitions;
@@ -276,7 +276,7 @@ public class RemoteScanRangeLocations {
 
         if (table instanceof HiveTable) {
             for (int i = 0; i < partitions.size(); i++) {
-                DatacacheOptions dataCacheOptions = null;
+                DataCacheOptions dataCacheOptions = null;
                 if (dataCacheOptionsList.isPresent()) {
                     dataCacheOptions = dataCacheOptionsList.get().get(i);
                 }
@@ -303,7 +303,7 @@ public class RemoteScanRangeLocations {
                     || tableInputFormat.equals(HudiTable.MOR_RT_INPUT_FORMAT_LEGACY);
             boolean forceJNIReader = ConnectContext.get().getSessionVariable().getHudiMORForceJNIReader();
             for (int i = 0; i < partitions.size(); i++) {
-                DatacacheOptions dataCacheOptions = null;
+                DataCacheOptions dataCacheOptions = null;
                 if (dataCacheOptionsList.isPresent()) {
                     dataCacheOptions = dataCacheOptionsList.get().get(i);
                 }

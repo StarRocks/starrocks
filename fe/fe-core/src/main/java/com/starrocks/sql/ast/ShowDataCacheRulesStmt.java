@@ -19,7 +19,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowDatacacheRulesStmt extends ShowStmt {
+public class ShowDataCacheRulesStmt extends ShowStmt {
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -32,13 +32,13 @@ public class ShowDatacacheRulesStmt extends ShowStmt {
                     .addColumn(new Column("Properties", ScalarType.createVarchar(30)))
                     .build();
 
-    public ShowDatacacheRulesStmt(NodePosition pos) {
+    public ShowDataCacheRulesStmt(NodePosition pos) {
         super(pos);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowDatacacheRulesStatement(this, context);
+        return visitor.visitShowDataCacheRulesStatement(this, context);
     }
 
     @Override

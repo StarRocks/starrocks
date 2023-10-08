@@ -71,7 +71,7 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
-import com.starrocks.datacache.DatacacheMgr;
+import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
@@ -92,7 +92,7 @@ import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
-import com.starrocks.sql.ast.ShowDatacacheRulesStmt;
+import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -1285,7 +1285,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowDataCacheRules() throws DdlException, AnalysisException {
-        DatacacheMgr dataCacheMgr = DatacacheMgr.getInstance();
+        DataCacheMgr dataCacheMgr = DataCacheMgr.getInstance();
         dataCacheMgr.createCacheRule(QualifiedName.of(ImmutableList.of("test1", "test1", "test1")), null, -1, null);
 
         Map<String, String> properties = new HashMap<>();
@@ -1295,7 +1295,7 @@ public class ShowExecutorTest {
         dataCacheMgr.createCacheRule(QualifiedName.of(ImmutableList.of("test2", "test2", "test2")),
                 stringLiteral, -1, properties);
 
-        ShowDatacacheRulesStmt stmt = new ShowDatacacheRulesStmt(NodePosition.ZERO);
+        ShowDataCacheRulesStmt stmt = new ShowDataCacheRulesStmt(NodePosition.ZERO);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         List<String> row1 = resultSet.getResultRows().get(0);

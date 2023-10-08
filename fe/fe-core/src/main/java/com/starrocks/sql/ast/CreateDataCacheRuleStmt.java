@@ -19,14 +19,14 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
-public class CreateDatacacheRuleStmt extends DdlStmt {
+public class CreateDataCacheRuleStmt extends DdlStmt {
 
     private final QualifiedName target;
     private final Expr predicates;
     private final int priority;
     private final Map<String, String> properties;
 
-    public CreateDatacacheRuleStmt(QualifiedName target, Expr predicates,
+    public CreateDataCacheRuleStmt(QualifiedName target, Expr predicates,
                                    int priority, Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.target = target;
@@ -53,6 +53,6 @@ public class CreateDatacacheRuleStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateDatacacheRuleStatement(this, context);
+        return visitor.visitCreateDataCacheRuleStatement(this, context);
     }
 }
