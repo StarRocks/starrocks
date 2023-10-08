@@ -15,7 +15,6 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -47,16 +46,20 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.iceberg.AppendFiles;
+import org.apache.iceberg.BaseFileScanTask;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
+import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.PartitionSpecParser;
 import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
@@ -64,6 +67,7 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
@@ -72,6 +76,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -240,6 +245,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         IcebergFilter key = IcebergFilter.of(table.getRemoteDbName(), table.getRemoteTableName(), snapshotId, predicate);
 
+        List<FileScanTask> fileScanTasks;
         if (!tasks.containsKey(key)) {
             List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
             org.apache.iceberg.Table nativeTbl = table.getNativeTable();
@@ -247,7 +253,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
             Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
 
-            ImmutableList.Builder<FileScanTask> builder = ImmutableList.builder();
+            List<FileScanTask> scanTasks = new ArrayList<>();
             org.apache.iceberg.Table nativeTable = table.getNativeTable();
             TableScan scan = nativeTable.newScan().useSnapshot(snapshotId).includeColumnStats();
             if (icebergPredicate.op() != Expression.Operation.TRUE) {
@@ -257,7 +263,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             CloseableIterable<CombinedScanTask> combinedScanTasks = scan.planTasks();
             for (CombinedScanTask combinedScanTask : combinedScanTasks) {
                 for (FileScanTask fileScanTask : combinedScanTask.files()) {
-                    builder.add(fileScanTask);
+                    scanTasks.add(fileScanTask);
                 }
             }
             try {
@@ -271,10 +277,35 @@ public class IcebergMetadata implements ConnectorMetadata {
                                 scanReportWithCounter.getScanReport().tableName() + " / No_" + scanReportWithCounter.getCount(),
                         scanReportWithCounter.getScanReport().scanMetrics().toString());
             });
-            tasks.put(key, builder.build());
+
+            fileScanTasks = scanTasks;
+
+            List<FileScanTask> icebergSplitScanTasks = new ArrayList<>();
+            for (FileScanTask fileScanTask : scanTasks) {
+                long offset = fileScanTask.start();
+                long length = fileScanTask.length();
+                DataFile dataFileWithoutStats = fileScanTask.file().copyWithoutStats();
+                DeleteFile[] deleteFiles = new DeleteFile[fileScanTask.deletes().size()];
+                fileScanTask.deletes().toArray(deleteFiles);
+                String schemaString = SchemaParser.toJson(fileScanTask.spec().schema());
+                String partitionString = PartitionSpecParser.toJson(fileScanTask.spec());
+                ResidualEvaluator residualEvaluator = ResidualEvaluator.of(fileScanTask.spec(), icebergPredicate, true);
+
+                BaseFileScanTask baseFileScanTask = new BaseFileScanTask(
+                        dataFileWithoutStats,
+                        deleteFiles,
+                        schemaString,
+                        partitionString,
+                        residualEvaluator);
+                IcebergSplitScanTask icebergSplitScanTask = new IcebergSplitScanTask(offset, length, baseFileScanTask);
+                icebergSplitScanTasks.add(icebergSplitScanTask);
+            }
+            tasks.put(key, icebergSplitScanTasks);
+        } else {
+            fileScanTasks = tasks.get(key);
         }
 
-        List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(RemoteFileDesc.createIcebergRemoteFileDesc(tasks.get(key)));
+        List<RemoteFileDesc> remoteFileDescs = Lists.newArrayList(RemoteFileDesc.createIcebergRemoteFileDesc(fileScanTasks));
         remoteFileInfo.setFiles(remoteFileDescs);
 
         return Lists.newArrayList(remoteFileInfo);
