@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionT
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitRankingWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateRankingWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNBelowUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
@@ -411,6 +412,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowUnionRule());
 
         if (isEnableSingleTableMVRewrite(rootTaskContext, sessionVariable, tree)) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
