@@ -303,7 +303,7 @@ public class InsertStmt extends DmlStmt {
         if (compressionType == null) {
             throw new SemanticException("compression is a mandatory property. " +
                     "Use \"compression\" = \"your_chosen_compression_type\". Supported compression types are" +
-                    "(uncompressed, gzip, brotli, zstd, lz4, lzo, bz2).");
+                    "(uncompressed, gzip, brotli, zstd, lz4, bz2).");
         }
 
         if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionType)) {
