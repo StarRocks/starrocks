@@ -631,15 +631,7 @@ select array_agg(name order by score,4,1), count(distinct id), max(score)  from 
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
 -- !result
-<<<<<<< HEAD
-select array_agg(subject order by score,4.00), count(distinct id), max(score)  from ss order by 1;
--- result:
-[null,null,null,"数学大不列颠","英语外语美誉",null,"English","语文北京上海","Math数学欧拉方程","Math","English","英文English","English","物理Phy"]	6	99
--- !result
-select array_agg( name order by score,4.00),array_agg(distinct name order by score,4.00) from ss order by 1;
-=======
 select array_agg( name order by 1,score,4.00),array_agg(distinct name order by 1,score,4.00) from ss order by 1;
->>>>>>> cc32814cd6 ([BugFix] fix duplicate array_agg/group_concat in CallOperator (#31842))
 -- result:
 [null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
 -- !result
@@ -1014,15 +1006,7 @@ select array_agg(name order by score,4,1), count(distinct id), max(score)  from 
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
 -- !result
-<<<<<<< HEAD
-select array_agg(subject order by score,4.00), count(distinct id), max(score)  from ss order by 1;
--- result:
-["英语外语美誉",null,"数学大不列颠",null,"English",null,null,"语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]	6	99
--- !result
-select array_agg( name order by score,4.00),array_agg(distinct name order by score,4.00) from ss order by 1;
-=======
 select array_agg( name order by 1,score,4.00),array_agg(distinct name order by 1,score,4.00) from ss order by 1;
->>>>>>> cc32814cd6 ([BugFix] fix duplicate array_agg/group_concat in CallOperator (#31842))
 -- result:
 [null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
 -- !result
@@ -1484,15 +1468,7 @@ select array_agg(name order by score,4,1), count(distinct id), max(score)  from 
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
 -- !result
-<<<<<<< HEAD
-select array_agg(subject order by score,4.00), count(distinct id), max(score)  from ss order by 1;
--- result:
-[null,null,"数学大不列颠",null,null,"英语外语美誉","English","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]	6	99
--- !result
-select array_agg( name order by score,4.00),array_agg(distinct name order by score,4.00) from ss order by 1;
-=======
 select array_agg( name order by 1,score,4.00),array_agg(distinct name order by 1,score,4.00) from ss order by 1;
->>>>>>> cc32814cd6 ([BugFix] fix duplicate array_agg/group_concat in CallOperator (#31842))
 -- result:
 [null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
 -- !result
