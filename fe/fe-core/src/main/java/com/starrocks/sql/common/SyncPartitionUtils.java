@@ -517,6 +517,9 @@ public class SyncPartitionUtils {
      * @return true if included, else false
      */
     private static boolean isRangeIncluded(PartitionRange range, Range<PartitionKey> rangeToInclude) {
+        if (rangeToInclude == null) {
+            return true;
+        }
         Range<PartitionKey> rangeToCheck = range.getPartitionKeyRange();
         int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
         int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());

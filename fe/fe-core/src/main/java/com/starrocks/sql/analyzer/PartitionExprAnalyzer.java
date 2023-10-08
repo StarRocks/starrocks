@@ -69,7 +69,7 @@ public class PartitionExprAnalyzer {
                 analyzeDateTruncFunction(functionCallExpr, partitionSlotRef);
                 return;
             } else if (functionName.equalsIgnoreCase(FunctionSet.TIME_SLICE)) {
-                Type[] timeSliceType = {targetColType, Type.INT, Type.VARCHAR, Type.VARCHAR};
+                Type[] timeSliceType = {Type.DATETIME, Type.INT, Type.VARCHAR, Type.VARCHAR};
                 builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
                         timeSliceType, Function.CompareMode.IS_IDENTICAL);
             } else if (functionName.equalsIgnoreCase(FunctionSet.SUBSTR) ||
