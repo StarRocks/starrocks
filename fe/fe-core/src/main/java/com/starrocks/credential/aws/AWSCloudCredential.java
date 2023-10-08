@@ -164,30 +164,31 @@ public class AWSCloudCredential implements CloudCredential {
         }
     }
 
+    private void applyAssumeRole(String baseCredentialsProvider, Configuration configuration) {
+        configuration.set("fs.s3a.assumed.role.credentials.provider", baseCredentialsProvider);
+        // Original "org.apache.hadoop.fs.s3a.auth.AssumedRoleCredentialProvider" don't support external id,
+        // so we use our own AssumedRoleCredentialProvider.
+        configuration.set("fs.s3a.aws.credentials.provider",
+                "com.starrocks.credential.provider.AssumedRoleCredentialProvider");
+        configuration.set("fs.s3a.assumed.role.arn", iamRoleArn);
+        configuration.set(AssumedRoleCredentialProvider.CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID, externalId);
+        if (!region.isEmpty()) {
+            configuration.set("fs.s3a.assumed.role.sts.endpoint.region", region);
+        }
+    }
+
     @Override
     public void applyToConfiguration(Configuration configuration) {
         if (useAWSSDKDefaultBehavior) {
             if (!iamRoleArn.isEmpty()) {
-                configuration.set("fs.s3a.assumed.role.credentials.provider",
-                        "com.amazonaws.auth.DefaultAWSCredentialsProviderChain");
-                configuration.set("fs.s3a.aws.credentials.provider",
-                        "com.starrocks.credential.provider.AssumedRoleCredentialProvider");
-                configuration.set("fs.s3a.assumed.role.arn", iamRoleArn);
-                configuration.set(AssumedRoleCredentialProvider.CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID, externalId);
+                applyAssumeRole("com.amazonaws.auth.DefaultAWSCredentialsProviderChain", configuration);
             } else {
                 configuration.set("fs.s3a.aws.credentials.provider",
                         "com.amazonaws.auth.DefaultAWSCredentialsProviderChain");
             }
         } else if (useInstanceProfile) {
             if (!iamRoleArn.isEmpty()) {
-                configuration.set("fs.s3a.assumed.role.credentials.provider",
-                        "com.amazonaws.auth.InstanceProfileCredentialsProvider");
-                // Original "org.apache.hadoop.fs.s3a.auth.AssumedRoleCredentialProvider" don't support external id,
-                // so we use our own AssumedRoleCredentialProvider.
-                configuration.set("fs.s3a.aws.credentials.provider",
-                        "com.starrocks.credential.provider.AssumedRoleCredentialProvider");
-                configuration.set("fs.s3a.assumed.role.arn", iamRoleArn);
-                configuration.set(AssumedRoleCredentialProvider.CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID, externalId);
+                applyAssumeRole("com.amazonaws.auth.InstanceProfileCredentialsProvider", configuration);
             } else {
                 configuration.set("fs.s3a.aws.credentials.provider",
                         "com.amazonaws.auth.InstanceProfileCredentialsProvider");
@@ -196,14 +197,7 @@ public class AWSCloudCredential implements CloudCredential {
             configuration.set("fs.s3a.access.key", accessKey);
             configuration.set("fs.s3a.secret.key", secretKey);
             if (!iamRoleArn.isEmpty()) {
-                configuration.set("fs.s3a.assumed.role.credentials.provider",
-                        "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider");
-                // Original "org.apache.hadoop.fs.s3a.auth.AssumedRoleCredentialProvider" don't support external id,
-                // so we use our own AssumedRoleCredentialProvider.
-                configuration.set("fs.s3a.aws.credentials.provider",
-                        "com.starrocks.credential.provider.AssumedRoleCredentialProvider");
-                configuration.set("fs.s3a.assumed.role.arn", iamRoleArn);
-                configuration.set(AssumedRoleCredentialProvider.CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID, externalId);
+                applyAssumeRole("org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider", configuration);
             } else {
                 if (!sessionToken.isEmpty()) {
                     configuration.set("fs.s3a.session.token", sessionToken);
