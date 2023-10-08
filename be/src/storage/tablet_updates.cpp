@@ -1330,9 +1330,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     full_rowset_size = rowset->total_segment_data_size();
 
     PersistentIndexMetaPB index_meta;
-    PersistentIndexMetaLockGuard index_meta_lock_guard;
     if (enable_persistent_index) {
-        index.get_persistent_index_meta_lock_guard(&index_meta_lock_guard);
         st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
         if (!st.ok() && !st.is_not_found()) {
             std::string msg = strings::Substitute("get persistent index meta failed: $0 $1", st.to_string(),
@@ -2020,9 +2018,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     int64_t t_index_delvec = MonotonicMillis();
 
     PersistentIndexMetaPB index_meta;
-    PersistentIndexMetaLockGuard index_meta_lock_guard;
     if (enable_persistent_index) {
-        index.get_persistent_index_meta_lock_guard(&index_meta_lock_guard);
         st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
         if (!st.ok() && !st.is_not_found()) {
             std::string msg = strings::Substitute("get persistent index meta failed: $0 $1", st.to_string(),
@@ -3881,6 +3877,17 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
     }
 }
 
+static double get_pk_index_write_amp_score_from_meta(Tablet* tablet) {
+    PersistentIndexMetaPB index_meta;
+    auto st = TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &index_meta);
+    if (!st.ok()) {
+        // skip compaction if get index meta fail
+        return 0.0;
+    }
+    return PersistentIndex::major_compaction_score((index_meta.has_l1_version() ? 1 : 0),
+                                                   index_meta.l2_versions_size());
+}
+
 double TabletUpdates::get_pk_index_write_amp_score() {
     double score = 0.0;
     auto& index_cache = StorageEngine::instance()->update_manager()->index_cache();
@@ -3889,23 +3896,35 @@ double TabletUpdates::get_pk_index_write_amp_score() {
         auto& index = index_entry->value();
         score = index.get_write_amp_score();
         index_cache.release(index_entry);
+    } else {
+        score = get_pk_index_write_amp_score_from_meta(&_tablet);
     }
     return score;
 }
 
 Status TabletUpdates::pk_index_major_compaction() {
-    Status st = Status::OK();
-    auto& index_cache = StorageEngine::instance()->update_manager()->index_cache();
-    auto index_entry = index_cache.get(_tablet.tablet_id());
-    if (index_entry != nullptr) {
-        auto& index = index_entry->value();
-        st = index.major_compaction(&_tablet);
-        index_cache.release(index_entry);
-    }
+    auto manager = StorageEngine::instance()->update_manager();
+    auto index_entry = manager->index_cache().get_or_create(_tablet.tablet_id());
+    index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(_tablet));
+    auto& index = index_entry->value();
+
+    auto st = index.load(&_tablet);
     if (!st.ok()) {
-        LOG(WARNING) << "PerstentIndex major compaction failed, tablet_id: " << _tablet.tablet_id() << " st: " << st;
+        // remove index entry when loading fail
+        manager->index_cache().remove(index_entry);
+        return st;
     }
-    return st;
+    bool enable_persistent_index = index.enable_persistent_index();
+    // release or remove index entry when function end
+    DeferOp index_defer([&]() {
+        if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
+            manager->index_cache().remove(index_entry);
+        } else {
+            manager->index_cache().release(index_entry);
+        }
+    });
+    manager->index_cache().update_object_size(index_entry, index.memory_usage());
+    return index.major_compaction(&_tablet);
 }
 
 void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
