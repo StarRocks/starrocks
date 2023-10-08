@@ -95,10 +95,10 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
     return Status::OK();
 }
 
-Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, Chunk* chunk,
+Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, Chunk* chunk, Metrics& metrics,
                                                         faststring* uncompressed_buffer) {
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
-        SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
+        SCOPED_TIMER(metrics.deserialize_chunk_timer);
         TRY_CATCH_BAD_ALLOC({
             serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk, _recvr->get_encode_level());
             ASSIGN_OR_RETURN(*chunk, des.deserialize(pchunk.data()));
@@ -106,7 +106,7 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, C
     } else {
         size_t uncompressed_size = 0;
         {
-            SCOPED_TIMER(_recvr->_decompress_chunk_timer);
+            SCOPED_TIMER(metrics.decompress_chunk_timer);
             const BlockCompressionCodec* codec = nullptr;
             RETURN_IF_ERROR(get_block_compression_codec(pchunk.compress_type(), &codec));
             uncompressed_size = pchunk.uncompressed_size();
@@ -115,7 +115,7 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, C
             RETURN_IF_ERROR(codec->decompress(pchunk.data(), &output));
         }
         {
-            SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
+            SCOPED_TIMER(metrics.deserialize_chunk_timer);
             TRY_CATCH_BAD_ALLOC({
                 std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
                 serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk, _recvr->get_encode_level());
@@ -149,13 +149,14 @@ Status DataStreamRecvr::NonPipelineSenderQueue::get_chunk(Chunk** chunk, const i
     *chunk = _chunk_queue.front().chunk_ptr.release();
     auto* closure = _chunk_queue.front().closure;
     auto queue_enter_time = _chunk_queue.front().queue_enter_time;
+    auto& metrics = _recvr->_metrics[0];
 
     _recvr->_num_buffered_bytes -= _chunk_queue.front().chunk_bytes;
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
     _chunk_queue.pop_front();
 
     if (closure != nullptr) {
-        _recvr->_closure_block_timer->update(MonotonicNanos() - queue_enter_time);
+        COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - queue_enter_time);
         // When the execution thread is blocked and the Chunk queue exceeds the memory limit,
         // the execution thread will hold done and will not return, block brpc from sending packets,
         // and the execution thread will call run() to let brpc continue to send packets,
@@ -199,33 +200,35 @@ bool DataStreamRecvr::NonPipelineSenderQueue::try_get_chunk(Chunk** chunk) {
         _recvr->_num_buffered_bytes -= _chunk_queue.front().chunk_bytes;
         auto* closure = _chunk_queue.front().closure;
         auto queue_enter_time = _chunk_queue.front().queue_enter_time;
+        auto& metrics = _recvr->get_metrics_round_robin();
         VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
         _chunk_queue.pop_front();
         if (closure != nullptr) {
-            _recvr->_closure_block_timer->update(MonotonicNanos() - queue_enter_time);
+            COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - queue_enter_time);
             closure->Run();
         }
         return true;
     }
 }
 
-Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
+Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
                                                            ::google::protobuf::Closure** done) {
-    return add_chunks<false>(request, done);
+    return add_chunks<false>(request, metrics, done);
 }
 
 Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks_and_keep_order(const PTransmitChunkParams& request,
+                                                                          Metrics& metrics,
                                                                           ::google::protobuf::Closure** done) {
-    return add_chunks<true>(request, done);
+    return add_chunks<true>(request, metrics, done);
 }
 
 template <bool keep_order>
-Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
+Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
                                                            ::google::protobuf::Closure** done) {
     DCHECK(request.chunks_size() > 0);
     int32_t be_number = request.be_number();
     int64_t sequence = request.sequence();
-    ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
+    ScopedTimer<MonotonicStopWatch> wait_timer(metrics.wait_lock_timer);
     {
         std::lock_guard<Mutex> l(_lock);
         wait_timer.stop();
@@ -265,7 +268,7 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkP
         }
         // We only need to build chunk meta on first chunk
         if (_chunk_meta.types.empty()) {
-            SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
+            SCOPED_TIMER(metrics.deserialize_chunk_timer);
             auto& pchunk = request.chunks(0);
             RETURN_IF_ERROR(_build_chunk_meta(pchunk));
         }
@@ -279,12 +282,12 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkP
         auto& pchunk = request.chunks().Get(i);
         int64_t chunk_bytes = pchunk.data().size();
         ChunkUniquePtr chunk = std::make_unique<Chunk>();
-        RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
+        RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), metrics, &uncompressed_buffer));
         ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
         chunks.emplace_back(std::move(item));
         total_chunk_bytes += chunk_bytes;
     }
-    COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
+    COUNTER_UPDATE(metrics.bytes_received_counter, total_chunk_bytes);
 
     wait_timer.start();
     {
@@ -306,7 +309,7 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkP
             if (has_new_chunks && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
                 _chunk_queue.back().closure = *done;
                 _chunk_queue.back().queue_enter_time = MonotonicNanos();
-                COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
+                COUNTER_UPDATE(metrics.closure_block_counter, 1);
                 *done = nullptr;
             }
             _recvr->_num_buffered_bytes += total_chunk_bytes;
@@ -317,7 +320,7 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkP
             if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
                 chunks.back().closure = *done;
                 chunks.back().queue_enter_time = MonotonicNanos();
-                COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
+                COUNTER_UPDATE(metrics.closure_block_counter, 1);
                 *done = nullptr;
             }
 
@@ -397,9 +400,10 @@ void DataStreamRecvr::NonPipelineSenderQueue::close() {
 }
 
 void DataStreamRecvr::NonPipelineSenderQueue::clean_buffer_queues() {
+    auto& metrics = _recvr->_metrics[0];
     for (auto& item : _chunk_queue) {
         if (item.closure != nullptr) {
-            _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
+            COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - item.queue_enter_time);
             item.closure->Run();
         }
     }
@@ -435,6 +439,7 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(Chunk** chunk, const int3
     size_t index = _is_pipeline_level_shuffle ? driver_sequence : 0;
     auto& chunk_queue = _chunk_queues[index];
     auto& chunk_queue_state = _chunk_queue_states[index];
+    auto& metrics = _recvr->_metrics[driver_sequence];
 
     ChunkItem item;
     if (!chunk_queue.try_dequeue(item)) {
@@ -450,7 +455,7 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(Chunk** chunk, const int3
                     tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->process_mem_tracker());
             DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 #endif
-            _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
+            COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - item.queue_enter_time);
             closure->Run();
             chunk_queue_state.blocked_closure_num--;
         }
@@ -459,7 +464,7 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(Chunk** chunk, const int3
     if (item.chunk_ptr == nullptr) {
         ChunkUniquePtr chunk_ptr = std::make_unique<Chunk>();
         faststring uncompressed_buffer;
-        RETURN_IF_ERROR(_deserialize_chunk(item.pchunk, chunk_ptr.get(), &uncompressed_buffer));
+        RETURN_IF_ERROR(_deserialize_chunk(item.pchunk, chunk_ptr.get(), metrics, &uncompressed_buffer));
         *chunk = chunk_ptr.release();
     } else {
         *chunk = item.chunk_ptr.release();
@@ -468,7 +473,7 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(Chunk** chunk, const int3
 
     _total_chunks--;
     _recvr->_num_buffered_bytes -= item.chunk_bytes;
-    COUNTER_ADD(_recvr->_peak_buffer_mem_bytes, -item.chunk_bytes);
+    COUNTER_ADD(metrics.peak_buffer_mem_bytes, -item.chunk_bytes);
     return Status::OK();
 }
 
@@ -488,6 +493,7 @@ bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(Chunk** chunk) {
     }
     auto& chunk_queue = _chunk_queues[0];
     auto& chunk_queue_state = _chunk_queue_states[0];
+    auto& metrics = _recvr->get_metrics_round_robin();
     ChunkItem item;
     if (!chunk_queue.try_dequeue(item)) {
         return false;
@@ -497,24 +503,25 @@ bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(Chunk** chunk) {
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
     auto* closure = item.closure;
     if (closure != nullptr) {
-        _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
+        COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - item.queue_enter_time);
         closure->Run();
         chunk_queue_state.blocked_closure_num--;
     }
     _total_chunks--;
     _recvr->_num_buffered_bytes -= item.chunk_bytes;
-    COUNTER_ADD(_recvr->_peak_buffer_mem_bytes, -item.chunk_bytes);
+    COUNTER_ADD(metrics.peak_buffer_mem_bytes, -item.chunk_bytes);
     return true;
 }
 
-Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
+Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
                                                         ::google::protobuf::Closure** done) {
-    return add_chunks<false>(request, done);
+    return add_chunks<false>(request, metrics, done);
 }
 
 Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTransmitChunkParams& request,
+                                                                       Metrics& metrics,
                                                                        ::google::protobuf::Closure** done) {
-    return add_chunks<true>(request, done);
+    return add_chunks<true>(request, metrics, done);
 }
 
 void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
@@ -544,6 +551,7 @@ void DataStreamRecvr::PipelineSenderQueue::close() {
 
 void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
     std::lock_guard<Mutex> l(_lock);
+    auto& metrics = _recvr->_metrics[0];
     for (size_t i = 0; i < _chunk_queues.size(); i++) {
         auto& chunk_queue = _chunk_queues[i];
         auto& chunk_queue_state = _chunk_queue_states[i];
@@ -551,13 +559,13 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
         while (chunk_queue.size_approx() > 0) {
             if (chunk_queue.try_dequeue(item)) {
                 if (item.closure != nullptr) {
-                    _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
+                    COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - item.queue_enter_time);
                     item.closure->Run();
                     chunk_queue_state.blocked_closure_num--;
                 }
                 --_total_chunks;
                 _recvr->_num_buffered_bytes -= item.chunk_bytes;
-                COUNTER_ADD(_recvr->_peak_buffer_mem_bytes, -item.chunk_bytes);
+                COUNTER_ADD(metrics.peak_buffer_mem_bytes, -item.chunk_bytes);
             }
         }
     }
@@ -566,7 +574,7 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
         for (auto& [_, chunk_queue] : chunk_queues) {
             for (auto& item : chunk_queue) {
                 if (item.closure != nullptr) {
-                    _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
+                    COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - item.queue_enter_time);
                     item.closure->Run();
                 }
             }
@@ -574,7 +582,8 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
     }
 }
 
-Status DataStreamRecvr::PipelineSenderQueue::try_to_build_chunk_meta(const PTransmitChunkParams& request) {
+Status DataStreamRecvr::PipelineSenderQueue::try_to_build_chunk_meta(const PTransmitChunkParams& request,
+                                                                     Metrics& metrics) {
     // We only need to build chunk meta on first chunk and not use_pass_through
     // By using pass through, chunks are transmitted in shared memory without ser/deser
     // So there is no need to build chunk meta.
@@ -585,7 +594,7 @@ Status DataStreamRecvr::PipelineSenderQueue::try_to_build_chunk_meta(const PTran
         return Status::OK();
     }
 
-    ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
+    ScopedTimer<MonotonicStopWatch> wait_timer(metrics.wait_lock_timer);
     std::lock_guard<Mutex> l(_lock);
     wait_timer.stop();
 
@@ -593,7 +602,7 @@ Status DataStreamRecvr::PipelineSenderQueue::try_to_build_chunk_meta(const PTran
         return Status::OK();
     }
 
-    SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
+    SCOPED_TIMER(metrics.deserialize_chunk_timer);
     auto& pchunk = request.chunks(0);
     RETURN_IF_ERROR(_build_chunk_meta(pchunk));
     _is_chunk_meta_built = true;
@@ -625,7 +634,7 @@ DataStreamRecvr::PipelineSenderQueue::get_chunks_from_pass_through(int32_t sende
 
 template <bool need_deserialization>
 StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::PipelineSenderQueue::get_chunks_from_request(
-        const PTransmitChunkParams& request, size_t& total_chunk_bytes) {
+        const PTransmitChunkParams& request, Metrics& metrics, size_t& total_chunk_bytes) {
     ChunkList chunks;
     faststring uncompressed_buffer;
     for (auto i = 0; i < request.chunks().size(); i++) {
@@ -634,7 +643,7 @@ StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::Pipel
         int64_t chunk_bytes = pchunk.data().size();
         if constexpr (need_deserialization) {
             ChunkUniquePtr chunk = std::make_unique<Chunk>();
-            RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
+            RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), metrics, &uncompressed_buffer));
             chunks.emplace_back(chunk_bytes, driver_sequence, nullptr, std::move(chunk));
         } else {
             chunks.emplace_back(chunk_bytes, driver_sequence, nullptr, pchunk);
@@ -645,7 +654,7 @@ StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::Pipel
 }
 
 template <bool keep_order>
-Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
+Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
                                                         ::google::protobuf::Closure** done) {
     if (keep_order) {
         DCHECK(!request.has_is_pipeline_level_shuffle() && !request.is_pipeline_level_shuffle());
@@ -657,7 +666,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(try_to_build_chunk_meta(request));
+    RETURN_IF_ERROR(try_to_build_chunk_meta(request, metrics));
 
     size_t total_chunk_bytes = 0;
     _is_pipeline_level_shuffle = request.has_is_pipeline_level_shuffle() && request.is_pipeline_level_shuffle();
@@ -666,11 +675,12 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     // there is no chance to handle deserialize error, so the lazy deserialization is not supported now,
     // we can change related interface's defination to do this later.
     ChunkList chunks;
-    ASSIGN_OR_RETURN(chunks, use_pass_through
-                                     ? get_chunks_from_pass_through(request.sender_id(), total_chunk_bytes)
-                                     : (keep_order ? get_chunks_from_request<true>(request, total_chunk_bytes)
-                                                   : get_chunks_from_request<false>(request, total_chunk_bytes)));
-    COUNTER_UPDATE(use_pass_through ? _recvr->_bytes_pass_through_counter : _recvr->_bytes_received_counter,
+    ASSIGN_OR_RETURN(chunks,
+                     use_pass_through
+                             ? get_chunks_from_pass_through(request.sender_id(), total_chunk_bytes)
+                             : (keep_order ? get_chunks_from_request<true>(request, metrics, total_chunk_bytes)
+                                           : get_chunks_from_request<false>(request, metrics, total_chunk_bytes)));
+    COUNTER_UPDATE(use_pass_through ? metrics.bytes_pass_through_counter : metrics.bytes_received_counter,
                    total_chunk_bytes);
 
     if (_is_cancelled) {
@@ -680,7 +690,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     if (keep_order) {
         const int32_t be_number = request.be_number();
         const int32_t sequence = request.sequence();
-        ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
+        ScopedTimer<MonotonicStopWatch> wait_timer(metrics.wait_lock_timer);
         std::lock_guard<Mutex> l(_lock);
         wait_timer.stop();
 
@@ -700,7 +710,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
         if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             chunks.back().closure = *done;
             chunks.back().queue_enter_time = MonotonicNanos();
-            COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
+            COUNTER_UPDATE(metrics.closure_block_counter, 1);
             *done = nullptr;
         }
 
@@ -726,7 +736,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
                 _chunk_queue_states[0].blocked_closure_num += closure != nullptr;
                 _total_chunks++;
                 _recvr->_num_buffered_bytes += chunk_bytes;
-                COUNTER_ADD(_recvr->_peak_buffer_mem_bytes, chunk_bytes);
+                COUNTER_ADD(metrics.peak_buffer_mem_bytes, chunk_bytes);
             }
 
             chunk_queues.erase(it);
@@ -753,7 +763,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
         if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             chunks.back().closure = *done;
             chunks.back().queue_enter_time = MonotonicNanos();
-            COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
+            COUNTER_UPDATE(metrics.closure_block_counter, 1);
             *done = nullptr;
         }
 
@@ -769,7 +779,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
                 short_circuit(index);
             }
             _recvr->_num_buffered_bytes += chunk_bytes;
-            COUNTER_ADD(_recvr->_peak_buffer_mem_bytes, chunk_bytes);
+            COUNTER_ADD(metrics.peak_buffer_mem_bytes, chunk_bytes);
         }
     }
 
@@ -778,6 +788,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
 
 void DataStreamRecvr::PipelineSenderQueue::short_circuit(const int32_t driver_sequence) {
     auto& chunk_queue_state = _chunk_queue_states[driver_sequence];
+    auto& metrics = _recvr->_metrics[driver_sequence];
     chunk_queue_state.is_short_circuited.store(true, std::memory_order_relaxed);
     if (_is_pipeline_level_shuffle) {
         auto& chunk_queue = _chunk_queues[driver_sequence];
@@ -785,13 +796,13 @@ void DataStreamRecvr::PipelineSenderQueue::short_circuit(const int32_t driver_se
         while (chunk_queue.size_approx() > 0) {
             if (chunk_queue.try_dequeue(item)) {
                 if (item.closure != nullptr) {
-                    _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
+                    COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - item.queue_enter_time);
                     item.closure->Run();
                     chunk_queue_state.blocked_closure_num--;
                 }
                 --_total_chunks;
                 _recvr->_num_buffered_bytes -= item.chunk_bytes;
-                COUNTER_ADD(_recvr->_peak_buffer_mem_bytes, item.chunk_bytes);
+                COUNTER_ADD(metrics.peak_buffer_mem_bytes, item.chunk_bytes);
             }
         }
     }
@@ -805,6 +816,7 @@ bool DataStreamRecvr::PipelineSenderQueue::has_output(const int32_t driver_seque
     size_t index = _is_pipeline_level_shuffle ? driver_sequence : 0;
     size_t chunk_num = _chunk_queues[index].size_approx();
     auto& chunk_queue_state = _chunk_queue_states[index];
+    auto& metrics = _recvr->_metrics[driver_sequence];
     // introduce an unplug mechanism similar to scan operator to reduce scheduling overhead
 
     // 1. in the unplug state, return true if there is a chunk, otherwise return false and exit the unplug state
@@ -818,7 +830,7 @@ bool DataStreamRecvr::PipelineSenderQueue::has_output(const int32_t driver_seque
     // 2. if this queue is not in the unplug state, try to batch as much chunk as possible before returning
     // @TODO need an adaptive strategy to determin this threshold
     if (chunk_num >= kUnplugBufferThreshold) {
-        COUNTER_UPDATE(_recvr->_buffer_unplug_counter, 1);
+        COUNTER_UPDATE(metrics.buffer_unplug_counter, 1);
         chunk_queue_state.unpluging = true;
         return true;
     }

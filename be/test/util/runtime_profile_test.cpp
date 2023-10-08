@@ -366,4 +366,82 @@ TEST(TestRuntimeProfile, testCopyCounterWithParent) {
     ASSERT_EQ(14L, kv.first->value());
     ASSERT_EQ("cascade2", kv.second);
 }
+
+TEST(TestRuntimeProfile, testRemoveCounter) {
+    auto create_profile = []() -> std::shared_ptr<RuntimeProfile> {
+        auto profile = std::make_shared<RuntimeProfile>("profile1");
+
+        profile->add_counter("counter1", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+        profile->add_counter("counter2", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+        profile->add_counter("counter3", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+
+        profile->add_child_counter("counter2-1", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT),
+                                   "counter2");
+        profile->add_child_counter("counter2-2", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT),
+                                   "counter2");
+
+        profile->add_child_counter("counter2-2-1", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT),
+                                   "counter2-2");
+        profile->add_child_counter("counter2-2-2", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT),
+                                   "counter2-2");
+
+        profile->add_child_counter("counter3-1", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT),
+                                   "counter3");
+
+        return profile;
+    };
+
+    auto check_countains = [](RuntimeProfile* profile, const std::vector<std::string>& names) {
+        for (auto& name : names) {
+            ASSERT_TRUE(profile->get_counter(name) != nullptr);
+        }
+    };
+
+    {
+        auto profile = create_profile();
+        profile->remove_counter("counter1");
+        check_countains(profile.get(), {"counter2", "counter3", "counter2-1", "counter2-2", "counter2-2-1",
+                                        "counter2-2-2", "counter3-1"});
+    }
+    {
+        auto profile = create_profile();
+        profile->remove_counter("counter2");
+        check_countains(profile.get(), {"counter1", "counter3", "counter3-1"});
+    }
+    {
+        auto profile = create_profile();
+        profile->remove_counter("counter2-1");
+        check_countains(profile.get(), {"counter1", "counter2", "counter3", "counter2-2", "counter2-2-1",
+                                        "counter2-2-2", "counter3-1"});
+    }
+    {
+        auto profile = create_profile();
+        profile->remove_counter("counter2-2");
+        check_countains(profile.get(), {"counter1", "counter2", "counter3", "counter2-1", "counter3-1"});
+    }
+    {
+        auto profile = create_profile();
+        profile->remove_counter("counter2-2-1");
+        check_countains(profile.get(),
+                        {"counter1", "counter2", "counter3", "counter2-1", "counter2-2", "counter2-2-2", "counter3-1"});
+    }
+    {
+        auto profile = create_profile();
+        profile->remove_counter("counter2-2-2");
+        check_countains(profile.get(),
+                        {"counter1", "counter2", "counter3", "counter2-1", "counter2-2", "counter2-2-1", "counter3-1"});
+    }
+    {
+        auto profile = create_profile();
+        profile->remove_counter("counter3");
+        check_countains(profile.get(),
+                        {"counter1", "counter2", "counter2-1", "counter2-2", "counter2-2-1", "counter2-2-2"});
+    }
+    {
+        auto profile = create_profile();
+        profile->remove_counter("counter3-1");
+        check_countains(profile.get(), {"counter1", "counter2", "counter2-1", "counter2-2", "counter2-2-1",
+                                        "counter2-2-2", "counter3"});
+    }
+}
 } // namespace starrocks
