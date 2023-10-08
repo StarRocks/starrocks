@@ -2431,51 +2431,6 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         return tableName;
     }
 
-
-
-
-    /*
-    private static void checkTblPrivilegeForKillAnalyzeStmt(ConnectContext context, String catalogName, String dbName,
-                                                            String tableName, long analyzeId) {
-        Database db = MetaUtils.getDatabase(catalogName, dbName);
-        Table table = MetaUtils.getTable(catalogName, dbName, tableName);
-        if (db != null && table != null) {
-            if (!PrivilegeActions.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-             catalogName, dbName, tableName, PrivilegeType.SELECT) ||
-                    !PrivilegeActions.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    catalogName, dbName, tableName, PrivilegeType.INSERT)
-            ) {
-                throw new SemanticException(String.format(
-                        "You need SELECT and INSERT action on %s.%s.%s to kill analyze job %d",
-                        catalogName, dbName, tableName, analyzeId));
-            }
-        }
-    }
-
-    public static void checkPrivilegeForKillAnalyzeStmt(ConnectContext context, long analyzeId) {
-        AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
-        AnalyzeStatus analyzeStatus = analyzeManager.getAnalyzeStatus(analyzeId);
-        AnalyzeJob analyzeJob = analyzeManager.getAnalyzeJob(analyzeId);
-        if (analyzeStatus != null) {
-            try {
-                String catalogName = analyzeStatus.getCatalogName();
-                String dbName = analyzeStatus.getDbName();
-                String tableName = analyzeStatus.getTableName();
-                checkTblPrivilegeForKillAnalyzeStmt(context, catalogName, dbName, tableName, analyzeId);
-            } catch (MetaNotFoundException ignore) {
-                // If the db or table doesn't exist anymore, we won't check privilege on it
-            }
-        } else if (analyzeJob != null) {
-            Set<TableName> tableNames = getAllTableNamesForAnalyzeJobStmt(analyzeJob.getDbId(),
-                    analyzeJob.getTableId());
-            tableNames.forEach(tableName -> {
-                checkTblPrivilegeForKillAnalyzeStmt(context, tableName.getCatalog(), tableName.getDb(),
-                        tableName.getTbl(), analyzeId);
-            });
-        }
-    }
-     */
-
     private void checkOperateLoadPrivilege(ConnectContext context, String dbName, String label) {
         GlobalStateMgr globalStateMgr = context.getGlobalStateMgr();
         Database db = globalStateMgr.getDb(dbName);
