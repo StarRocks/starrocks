@@ -405,4 +405,47 @@ public class PartitionUtil {
         thread.setDaemon(true);
         thread.start();
     }
+<<<<<<< HEAD
+=======
+
+    public static RangePartitionDiff getPartitionDiff(Expr partitionExpr, Column partitionColumn,
+                                                      Map<String, Range<PartitionKey>> basePartitionMap,
+                                                      Map<String, Range<PartitionKey>> mvPartitionMap) {
+        if (partitionExpr instanceof SlotRef) {
+            return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(basePartitionMap, mvPartitionMap);
+        } else if (partitionExpr instanceof FunctionCallExpr) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
+            if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC) ||
+                    functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+                return SyncPartitionUtils.getRangePartitionDiffOfExpr(basePartitionMap,
+                        mvPartitionMap, functionCallExpr, partitionColumn.getPrimitiveType(), null);
+            } else {
+                throw new SemanticException("Materialized view partition function " +
+                        functionCallExpr.getFnName().getFunction() +
+                        " is not supported yet.", functionCallExpr.getPos());
+            }
+        } else {
+            throw UnsupportedException.unsupportedException("unsupported partition expr:" + partitionExpr);
+        }
+    }
+
+    public static String getPartitionName(String basePath, String partitionPath) {
+        String basePathWithSlash = getPathWithSlash(basePath);
+        String partitionPathWithSlash = getPathWithSlash(partitionPath);
+
+        if (basePathWithSlash.equals(partitionPathWithSlash)) {
+            return "";
+        }
+
+        Preconditions.checkState(partitionPath.startsWith(basePathWithSlash),
+                "Can't infer partition name. base path: %s, partition path: %s", basePath, partitionPath);
+
+        partitionPath = partitionPath.endsWith("/") ? partitionPath.substring(0, partitionPath.length() - 1) : partitionPath;
+        return partitionPath.substring(basePathWithSlash.length());
+    }
+
+    public static String getPathWithSlash(String path) {
+        return path.endsWith("/") ? path : path + "/";
+    }
+>>>>>>> 19ab312143 ([Enhancement] Only create necessay partitions when refreshing mv by partition (#32016))
 }
