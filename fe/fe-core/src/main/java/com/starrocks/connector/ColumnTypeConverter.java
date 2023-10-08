@@ -343,10 +343,11 @@ public class ColumnTypeConverter {
 
                 if (nonNullMembers.size() == 1) {
                     return fromHudiType(nonNullMembers.get(0));
+                } else {
+                    isConvertedFailed = true;
+                    break;
                 }
-
-                isConvertedFailed = true;
-                break;
+            case ENUM:
             default:
                 isConvertedFailed = true;
                 break;
