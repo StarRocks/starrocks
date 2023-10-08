@@ -37,6 +37,7 @@
 #include <memory>
 #include <mutex>
 
+#include "common/config.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
 #include "gen_cpp/doris_internal_service.pb.h"
@@ -73,6 +74,7 @@ public:
         // new one stub and insert into map
         brpc::ChannelOptions options;
         options.connect_timeout_ms = 3000;
+        options.connection_type = config::brpc_connection_type;
         // Explicitly set the max_retry
         // TODO(meegoo): The retry strategy can be customized in the future
         options.max_retry = 3;
@@ -103,6 +105,7 @@ public:
         brpc::ChannelOptions options;
         options.connect_timeout_ms = 3000;
         options.protocol = "http";
+        options.connection_type = config::brpc_connection_type;
         // Explicitly set the max_retry
         // TODO(meegoo): The retry strategy can be customized in the future
         options.max_retry = 3;
