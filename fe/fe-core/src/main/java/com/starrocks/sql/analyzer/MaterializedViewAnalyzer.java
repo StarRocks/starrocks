@@ -181,8 +181,8 @@ public class MaterializedViewAnalyzer {
             String catalogName = icebergTable.getCatalogName();
             return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
         } else if (table instanceof PaimonTable) {
-            PaimonTable icebergTable = (PaimonTable) table;
-            String catalogName = icebergTable.getCatalogName();
+            PaimonTable paimonTable = (PaimonTable) table;
+            String catalogName = paimonTable.getCatalogName();
             return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
         } else {
             return true;
