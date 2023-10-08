@@ -157,6 +157,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     private boolean hasOlapTableSink = false;
     private boolean hasIcebergTableSink = false;
     private boolean hasHiveTableSink = false;
+    private boolean hasTableFunctionTableSink = false;
 
     private boolean forceSetTableSinkDop = false;
     private boolean forceAssignScanRangesPerDriverSeq = false;
@@ -269,7 +270,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     public boolean hasTableSink() {
-        return hasIcebergTableSink() || hasOlapTableSink() || hasHiveTableSink();
+        return hasIcebergTableSink() || hasOlapTableSink() || hasHiveTableSink() || hasTableFunctionTableSink();
     }
 
     public boolean hasOlapTableSink() {
@@ -294,6 +295,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setHasHiveTableSink() {
         this.hasHiveTableSink = true;
+    }
+
+    public boolean hasTableFunctionTableSink() {
+        return this.hasTableFunctionTableSink;
+    }
+
+    public void setHasTableFunctionTableSink() {
+        this.hasTableFunctionTableSink = true;
     }
 
     public boolean forceSetTableSinkDop() {

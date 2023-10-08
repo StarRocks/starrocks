@@ -17,42 +17,10 @@
 #include <utility>
 
 #include "exec/parquet_builder.h"
+#include "table_function_table_sink_operator.h"
 #include "util/path_util.h"
-#include "util/url_coding.h"
 
 namespace starrocks::pipeline {
-
-StatusOr<std::string> column_to_string(const TypeDescriptor& type_desc, const ColumnPtr& column) {
-    auto datum = column->get(0);
-
-    switch (type_desc.type) {
-    case TYPE_BOOLEAN: {
-        return datum.get_uint8() ? "true" : "false";
-    }
-    case TYPE_TINYINT: {
-        return std::to_string(datum.get_int8());
-    }
-    case TYPE_SMALLINT: {
-        return std::to_string(datum.get_int16());
-    }
-    case TYPE_INT: {
-        return std::to_string(datum.get_int32());
-    }
-    case TYPE_BIGINT: {
-        return std::to_string(datum.get_int64());
-    }
-    case TYPE_DATE: {
-        return datum.get_date().to_string();
-    }
-    case TYPE_CHAR:
-    case TYPE_VARCHAR: {
-        return url_encode(datum.get_slice().to_string());
-    }
-    default: {
-        return Status::InvalidArgument("unsupported partition column type" + type_desc.debug_string());
-    }
-    }
-}
 
 static const std::string HIVE_UNPARTITIONED_TABLE_LOCATION = "hive_unpartitioned_table_fake_location";
 
