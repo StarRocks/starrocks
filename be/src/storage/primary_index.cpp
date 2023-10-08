@@ -1385,12 +1385,6 @@ std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema)
     return std::make_unique<PrimaryIndex>(pk_schema);
 }
 
-void PrimaryIndex::get_persistent_index_meta_lock_guard(PersistentIndexMetaLockGuard* guard) {
-    if (_persistent_index != nullptr) {
-        guard->acquire_meta_lock(_persistent_index.get());
-    }
-}
-
 double PrimaryIndex::get_write_amp_score() {
     if (_persistent_index != nullptr) {
         return _persistent_index->get_write_amp_score();
