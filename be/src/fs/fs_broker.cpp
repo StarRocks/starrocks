@@ -336,7 +336,7 @@ StatusOr<std::unique_ptr<WritableFile>> BrokerFileSystem::new_writable_file(cons
                                                                             const std::string& path) {
     if (opts.mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE) {
         if (auto st = _path_exists(path); st.ok()) {
-            return Status::NotSupported("Cannot truncate a file by broker, path={}"_format(path));
+            return Status::NotSupported(fmt::format("Cannot truncate a file by broker, path={}", path));
         }
     } else if (opts.mode == MUST_CREATE) {
         if (auto st = _path_exists(path); st.ok()) {
@@ -346,7 +346,8 @@ StatusOr<std::unique_ptr<WritableFile>> BrokerFileSystem::new_writable_file(cons
         return Status::NotSupported("Open with MUST_EXIST not supported by broker");
     } else if (opts.mode == CREATE_OR_OPEN) {
         if (auto st = _path_exists(path); st.ok()) {
-            return Status::NotSupported("Cannot open an already exists file through broker, path={}"_format(path));
+            return Status::NotSupported(
+                    fmt::format("Cannot open an already exists file through broker, path={}", path));
         }
     } else {
         auto msg = strings::Substitute("Unsupported open mode $0", opts.mode);

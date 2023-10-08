@@ -319,7 +319,7 @@ Status HDFSWritableFile::append(const Slice& data) {
     tSize r = hdfsWrite(_fs, _file, data.data, data.size);
     if (r != data.size) {
         auto error_msg =
-                "Fail to append {}, expect written size: {}, actual written size {} "_format(_path, data.size, r);
+                fmt::format("Fail to append {}, expect written size: {}, actual written size {} ", _path, data.size, r);
         LOG(WARNING) << error_msg;
         return Status::IOError(error_msg);
     }
@@ -342,14 +342,14 @@ Status HDFSWritableFile::close() {
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
         int r = hdfsHSync(_fs, _file);
         if (r != 0) {
-            return Status::IOError("sync error, file: {}"_format(_path));
+            return Status::IOError(fmt::format("sync error, file: {}", _path));
         }
 
         r = hdfsCloseFile(_fs, _file);
         if (r == 0) {
             return Status::OK();
         } else {
-            return Status::IOError("close error, file: {}"_format(_path));
+            return Status::IOError(fmt::format("close error, file: {}", _path));
         }
     });
     Status st = ret->get_future().get();
@@ -468,7 +468,7 @@ Status HdfsFileSystem::iterate_dir(const std::string& dir, const std::function<b
     int numEntries;
     fileinfo = hdfsListDirectory(hdfs_client->hdfs_fs, dir.data(), &numEntries);
     if (fileinfo == nullptr) {
-        return Status::InvalidArgument("hdfs list directory error {}"_format(dir));
+        return Status::InvalidArgument(fmt::format("hdfs list directory error {}", dir));
     }
     for (int i = 0; i < numEntries && fileinfo; ++i) {
         // obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size()
@@ -503,7 +503,7 @@ Status HdfsFileSystem::iterate_dir2(const std::string& dir, const std::function<
     int numEntries;
     fileinfo = hdfsListDirectory(hdfs_client->hdfs_fs, dir.data(), &numEntries);
     if (fileinfo == nullptr) {
-        return Status::InvalidArgument("hdfs list directory error {}"_format(dir));
+        return Status::InvalidArgument(fmt::format("hdfs list directory error {}", dir));
     }
     for (int i = 0; i < numEntries && fileinfo; ++i) {
         // obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size()
@@ -519,7 +519,7 @@ Status HdfsFileSystem::iterate_dir2(const std::string& dir, const std::function<
             std::string mName(fileinfo[i].mName);
             std::size_t found = mName.rfind("/");
             if (found == std::string::npos) {
-                return Status::InvalidArgument("parse path fail {}"_format(dir));
+                return Status::InvalidArgument(fmt::format("parse path fail {}", dir));
             }
 
             dir_size = found + 1;
@@ -558,7 +558,7 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
     int flags = O_WRONLY;
     if (opts.mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE) {
         if (auto st = _path_exists(hdfs_client->hdfs_fs, path); st.ok()) {
-            return Status::NotSupported("Cannot truncate a file by hdfs writer, path="_format(path));
+            return Status::NotSupported(fmt::format("Cannot truncate a file by hdfs writer, path=", path));
         }
     } else if (opts.mode == MUST_CREATE) {
         if (auto st = _path_exists(hdfs_client->hdfs_fs, path); st.ok()) {
@@ -635,7 +635,7 @@ Status HdfsFileSystem::rename_file(const std::string& src, const std::string& ta
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
     int ret = hdfsRename(hdfs_client->hdfs_fs, src.data(), target.data());
     if (ret != 0) {
-        return Status::InvalidArgument("rename file from {} to {} error"_format(src, target));
+        return Status::InvalidArgument(fmt::format("rename file from {} to {} error", src, target));
     }
     return Status::OK();
 }
