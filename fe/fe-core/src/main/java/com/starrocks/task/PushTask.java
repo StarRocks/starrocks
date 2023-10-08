@@ -42,7 +42,12 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
+<<<<<<< HEAD
 import com.starrocks.common.MarkedCountDownLatch;
+=======
+import com.starrocks.common.Status;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+>>>>>>> 6c12264cd8 ([Enhancement] Optimize global lock when creating table/mv/view (#31951))
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TCondition;
 import com.starrocks.thrift.TDescriptorTable;

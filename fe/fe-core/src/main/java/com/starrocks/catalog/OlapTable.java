@@ -66,8 +66,12 @@ import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MarkedCountDownLatch;
+=======
+import com.starrocks.common.InvalidOlapTableStateException;
+>>>>>>> 6c12264cd8 ([Enhancement] Optimize global lock when creating table/mv/view (#31951))
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
@@ -76,7 +80,13 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
+<<<<<<< HEAD
 import com.starrocks.lake.StorageCacheInfo;
+=======
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.lake.StorageInfo;
+>>>>>>> 6c12264cd8 ([Enhancement] Optimize global lock when creating table/mv/view (#31951))
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;

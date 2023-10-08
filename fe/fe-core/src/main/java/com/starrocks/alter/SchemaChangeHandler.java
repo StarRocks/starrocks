@@ -75,14 +75,24 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.common.MarkedCountDownLatch;
+=======
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.NotImplementedException;
+>>>>>>> 6c12264cd8 ([Enhancement] Optimize global lock when creating table/mv/view (#31951))
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.WriteQuorum;
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.PrivPredicate;
+=======
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.persist.TableAddOrDropColumnsInfo;
+>>>>>>> 6c12264cd8 ([Enhancement] Optimize global lock when creating table/mv/view (#31951))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
