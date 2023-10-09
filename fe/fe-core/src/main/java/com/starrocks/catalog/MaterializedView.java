@@ -1214,7 +1214,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     private boolean supportPartialPartitionQueryRewriteForExternalTable(Table table) {
-        return table.isHiveTable();
+        return table.isHiveTable() || table.isIcebergTable();
     }
 
     /**
