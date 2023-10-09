@@ -465,6 +465,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_EXPR_PRUNE_PARTITION = "enable_expr_prune_partition";
 
+    public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1002,6 +1004,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableSortAggregate(boolean enableSortAggregate) {
         this.enableSortAggregate = enableSortAggregate;
+    }
+
+    @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
+    private long cboPushDownTopNLimit = 1000;
+
+    public long getCboPushDownTopNLimit() {
+        return cboPushDownTopNLimit;
+    }
+
+    public void setCboPushDownTopNLimit(long cboPushDownTopNLimit) {
+        this.cboPushDownTopNLimit = cboPushDownTopNLimit;
     }
 
     @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
