@@ -378,6 +378,11 @@ Status TabletManager::delete_tablet(int64_t tablet_id) {
 
 Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
     // write metadata file
+    Status st = Status::OK();
+    TEST_SYNC_POINT_CALLBACK("put_tablet_metadata.1", &st);
+    if (!st.ok()) {
+        return st;
+    }
     auto t0 = butil::gettimeofday_us();
     auto filepath = _location_provider->tablet_metadata_location(metadata->id(), metadata->version());
     auto options = WritableFileOptions{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
