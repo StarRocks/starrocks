@@ -100,6 +100,7 @@ public class IcebergTable extends Table {
         this.icebergProperties = icebergProperties;
     }
 
+    @Override
     public String getCatalogName() {
         return catalogName == null ? getResourceMappingCatalogName(resourceName, "iceberg") : catalogName;
     }
