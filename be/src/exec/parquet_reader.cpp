@@ -45,7 +45,12 @@ ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile
     _parquet = std::move(parquet_file);
     _properties = parquet::ReaderProperties();
     _properties.enable_buffered_stream();
+<<<<<<< HEAD
     _properties.set_buffer_size(8 * 1024 * 1024);
+=======
+    _properties.set_buffer_size(1 * 1024 * 1024);
+    _filename = (reinterpret_cast<ParquetChunkFile*>(_parquet.get()))->filename();
+>>>>>>> 7e42e3965f ([Enhancement] Prevent memory overruns during Parquet data parsing (#32152))
 }
 
 Status ParquetReaderWrap::next_selected_row_group() {
