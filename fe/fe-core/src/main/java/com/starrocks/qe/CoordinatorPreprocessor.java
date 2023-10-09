@@ -48,9 +48,6 @@ import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
-<<<<<<< HEAD
-import com.starrocks.planner.UnionNode;
-=======
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.qe.scheduler.TFragmentInstanceFactory;
 import com.starrocks.qe.scheduler.WorkerProvider;
@@ -58,7 +55,6 @@ import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
@@ -66,30 +62,9 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.ComputeNode;
-<<<<<<< HEAD
-import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.InternalServiceVersion;
-import com.starrocks.thrift.TAdaptiveDopParam;
 import com.starrocks.thrift.TDescriptorTable;
-import com.starrocks.thrift.TEsScanRange;
-import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
-import com.starrocks.thrift.TExecPlanFragmentParams;
-import com.starrocks.thrift.TFunctionVersion;
-import com.starrocks.thrift.THdfsScanRange;
-import com.starrocks.thrift.TInternalScanRange;
-import com.starrocks.thrift.TLoadJobType;
-=======
-import com.starrocks.thrift.TDescriptorTable;
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TQueryGlobals;
-<<<<<<< HEAD
-import com.starrocks.thrift.TQueryOptions;
-import com.starrocks.thrift.TQueryType;
-import com.starrocks.thrift.TRuntimeFilterParams;
-import com.starrocks.thrift.TScanRangeLocation;
-=======
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
@@ -125,86 +100,18 @@ public class CoordinatorPreprocessor {
 
     private final Random random = new Random();
 
-<<<<<<< HEAD
-    private TNetworkAddress coordAddress;
-    private TUniqueId queryId;
-    private final ConnectContext connectContext;
-    private final TQueryGlobals queryGlobals;
-    private final TQueryOptions queryOptions;
-
-    private final boolean usePipeline;
-    // if it has compute node, hasComputeNode is true
-    private boolean hasComputeNode = false;
-    // when use compute node, usedComputeNode is true,
-    // if hasComputeNode but preferComputeNode is false and no hdfsScanNode, usedComputeNode still false
-    private boolean usedComputeNode = false;
-
-    private final Set<Integer> colocateFragmentIds = new HashSet<>();
-    private final Set<Integer> replicateFragmentIds = new HashSet<>();
-    private final Set<Integer> replicateScanIds = new HashSet<>();
-    private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
-    private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
-    private final Set<TUniqueId> instanceIds = Sets.newHashSet();
-
-    private final TDescriptorTable descriptorTable;
-    private final List<PlanFragment> fragments;
-    private final List<ScanNode> scanNodes;
-
-    // populated in computeFragmentExecParams()
-    private final Map<PlanFragmentId, FragmentExecParams> fragmentExecParamsMap = Maps.newHashMap();
-    private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
-    // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
-    private final Map<PlanFragmentId, BucketSeqToScanRange> fragmentIdBucketSeqToScanRangeMap = Maps.newHashMap();
-    // fragment_id -> bucket_num
-    private final Map<PlanFragmentId, Integer> fragmentIdToBucketNumMap = Maps.newHashMap();
-    // fragment_id -> < be_id -> bucket_count >
-    private final Map<PlanFragmentId, Map<Long, Integer>> fragmentIdToBackendIdBucketCountMap = Maps.newHashMap();
-    private final Map<PlanFragmentId, List<Integer>> fragmentIdToSeqToInstanceMap = Maps.newHashMap();
-
-    // used only by channel stream load, records the mapping from channel id to target BE's address
-    private final Map<Integer, TNetworkAddress> channelIdToBEHTTP = Maps.newHashMap();
-    private final Map<Integer, TNetworkAddress> channelIdToBEPort = Maps.newHashMap();
-    // used only by channel stream load, records the mapping from be port to be's webserver port
-    private final Map<TNetworkAddress, TNetworkAddress> bePortToBeWebServerPort = Maps.newHashMap();
-=======
     private final TNetworkAddress coordAddress;
     private final ConnectContext connectContext;
     private final Set<Integer> replicateScanIds = Sets.newHashSet();
 
     private final JobSpec jobSpec;
     private final ExecutionDAG executionDAG;
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 
     // backends which this query will use
     private ImmutableMap<Long, ComputeNode> idToBackend;
     // compute node which this query will use
     private ImmutableMap<Long, ComputeNode> idToComputeNode;
 
-<<<<<<< HEAD
-    // save of related backends of this query
-    private final Set<Long> usedBackendIDs = Sets.newConcurrentHashSet();
-    private final Map<TNetworkAddress, Long> addressToBackendID = Maps.newHashMap();
-
-    // Resource group
-    private final TWorkGroup resourceGroup;
-
-    public CoordinatorPreprocessor(TUniqueId queryId, ConnectContext context, List<PlanFragment> fragments,
-                                   List<ScanNode> scanNodes, TDescriptorTable descriptorTable,
-                                   TQueryGlobals queryGlobals, TQueryOptions queryOptions) {
-        this.connectContext = context;
-        this.queryId = queryId;
-        this.descriptorTable = descriptorTable;
-        this.fragments = fragments;
-        this.scanNodes = scanNodes;
-        this.queryGlobals = queryGlobals;
-        this.queryOptions = queryOptions;
-        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
-
-        // prepare workgroup
-        resourceGroup = prepareResourceGroup(connectContext,
-                queryOptions.getQuery_type() == TQueryType.LOAD ? ResourceGroupClassifier.QueryType.INSERT
-                        : ResourceGroupClassifier.QueryType.SELECT);
-=======
     public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec) {
         this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
 
@@ -216,28 +123,15 @@ public class CoordinatorPreprocessor {
         this.workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
 
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
     }
 
     @VisibleForTesting
     CoordinatorPreprocessor(List<PlanFragment> fragments, List<ScanNode> scanNodes) {
-<<<<<<< HEAD
-        this.scanNodes = scanNodes;
-        this.connectContext = StatisticUtils.buildConnectContext();
-        this.queryId = connectContext.getExecutionId();
-        this.queryGlobals =
-                genQueryGlobals(System.currentTimeMillis(), connectContext.getSessionVariable().getTimeZone());
-        this.queryOptions = connectContext.getSessionVariable().toThrift();
-        this.usePipeline = true;
-        this.descriptorTable = null;
-        this.fragments = fragments;
-=======
         this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
 
         this.connectContext = StatisticUtils.buildConnectContext();
         this.jobSpec = JobSpec.Factory.mockJobSpec(connectContext, fragments, scanNodes);
         this.executionDAG = ExecutionDAG.build(jobSpec);
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 
         this.idToComputeNode = buildComputeNodeInfo();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
@@ -258,13 +152,6 @@ public class CoordinatorPreprocessor {
             }
         }
 
-<<<<<<< HEAD
-        // prepare workgroup
-        resourceGroup = prepareResourceGroup(connectContext,
-                queryOptions.getQuery_type() == TQueryType.LOAD ? ResourceGroupClassifier.QueryType.INSERT
-                        : ResourceGroupClassifier.QueryType.SELECT);
-=======
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
     }
 
     public static TQueryGlobals genQueryGlobals(long startTime, String timezone) {
@@ -292,98 +179,20 @@ public class CoordinatorPreprocessor {
         return connectContext;
     }
 
-<<<<<<< HEAD
-    public boolean isUsePipeline() {
-        return usePipeline;
-    }
-
-    public TQueryGlobals getQueryGlobals() {
-        return queryGlobals;
-    }
-
-    public TQueryOptions getQueryOptions() {
-        return queryOptions;
-    }
-
-    public Set<Integer> getColocateFragmentIds() {
-        return colocateFragmentIds;
-    }
-
-    public Set<Integer> getReplicateFragmentIds() {
-        return replicateFragmentIds;
-    }
-
-    public Set<Integer> getReplicateScanIds() {
-        return replicateScanIds;
-    }
-
-    public Set<Integer> getBucketShuffleFragmentIds() {
-        return bucketShuffleFragmentIds;
-    }
-
-    public Set<Integer> getRightOrFullBucketShuffleFragmentIds() {
-        return rightOrFullBucketShuffleFragmentIds;
-    }
-
-    public Set<TUniqueId> getInstanceIds() {
-        return instanceIds;
-=======
     public ExecutionDAG getExecutionDAG() {
         return executionDAG;
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
     }
 
     public TDescriptorTable getDescriptorTable() {
         return descriptorTable;
     }
 
-<<<<<<< HEAD
-    public List<PlanFragment> getFragments() {
-        return fragments;
-    }
-
-    public List<ScanNode> getScanNodes() {
-        return scanNodes;
-    }
-
-    public Map<PlanFragmentId, FragmentExecParams> getFragmentExecParamsMap() {
-        return fragmentExecParamsMap;
-    }
-
-    public Map<PlanFragmentId, Map<Integer, TNetworkAddress>> getFragmentIdToSeqToAddressMap() {
-        return fragmentIdToSeqToAddressMap;
-    }
-
-    public Map<PlanFragmentId, BucketSeqToScanRange> getFragmentIdBucketSeqToScanRangeMap() {
-        return fragmentIdBucketSeqToScanRangeMap;
-    }
-
-    public Map<PlanFragmentId, Integer> getFragmentIdToBucketNumMap() {
-        return fragmentIdToBucketNumMap;
-    }
-
-    public Map<PlanFragmentId, Map<Long, Integer>> getFragmentIdToBackendIdBucketCountMap() {
-        return fragmentIdToBackendIdBucketCountMap;
-    }
-
-    public Map<PlanFragmentId, List<Integer>> getFragmentIdToSeqToInstanceMap() {
-        return fragmentIdToSeqToInstanceMap;
-    }
-
-    public Map<Integer, TNetworkAddress> getChannelIdToBEHTTP() {
-        return channelIdToBEHTTP;
-    }
-
-    public Map<Integer, TNetworkAddress> getChannelIdToBEPort() {
-        return channelIdToBEPort;
-=======
     public List<ExecutionFragment> getFragmentsInPreorder() {
         return executionDAG.getFragmentsInPreorder();
     }
 
     public TNetworkAddress getCoordAddress() {
         return coordAddress;
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
     }
 
     public Map<TNetworkAddress, TNetworkAddress> getBePortToBeWebServerPort() {
@@ -436,12 +245,7 @@ public class CoordinatorPreprocessor {
 
     public void prepareExec() throws Exception {
         // prepare information
-<<<<<<< HEAD
-        resetFragmentState();
-        prepareFragments();
-=======
         resetExec();
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 
         computeScanRangeAssignment();
         computeFragmentExecParams();
@@ -462,70 +266,6 @@ public class CoordinatorPreprocessor {
         }
     }
 
-<<<<<<< HEAD
-    @VisibleForTesting
-    void prepareFragments() {
-        for (PlanFragment fragment : fragments) {
-            fragmentExecParamsMap.put(fragment.getFragmentId(), new FragmentExecParams(fragment));
-        }
-
-        coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
-
-        this.idToComputeNode = buildComputeNodeInfo();
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            this.idToBackend = this.idToComputeNode;
-        } else {
-            this.idToBackend = ImmutableMap.copyOf(GlobalStateMgr.getCurrentSystemInfo().getIdToBackend());
-        }
-
-        //if it has compute node and contains hdfsScanNode,will use compute node,even though preferComputeNode is false
-        boolean preferComputeNode = connectContext.getSessionVariable().isPreferComputeNode();
-        if (idToComputeNode != null && idToComputeNode.size() > 0) {
-            hasComputeNode = true;
-            if (preferComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                usedComputeNode = true;
-            }
-        }
-
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("idToBackend size={}", idToBackend.size());
-            for (Map.Entry<Long, ComputeNode> entry : idToBackend.entrySet()) {
-                Long backendID = entry.getKey();
-                ComputeNode backend = entry.getValue();
-                LOG.debug("backend: {}-{}-{}", backendID, backend.getHost(), backend.getBePort());
-            }
-
-            LOG.debug("idToComputeNode: {}", idToComputeNode);
-        }
-    }
-
-    private ImmutableMap<Long, ComputeNode> buildComputeNodeInfo() {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            return GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse();
-        }
-
-        ImmutableMap<Long, ComputeNode> idToComputeNode
-                = ImmutableMap.copyOf(GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode());
-
-        int useComputeNodeNumber = connectContext.getSessionVariable().getUseComputeNodes();
-        if (useComputeNodeNumber < 0
-                || useComputeNodeNumber >= idToComputeNode.size()) {
-            return idToComputeNode;
-        } else {
-            Map<Long, ComputeNode> computeNodes = new HashMap<>();
-            for (int i = 0; i < useComputeNodeNumber; i++) {
-                ComputeNode computeNode = SimpleScheduler.getComputeNode(idToComputeNode);
-                if (computeNode == null) {
-                    continue;
-                }
-                computeNodes.put(computeNode.getId(), computeNode);
-            }
-            return ImmutableMap.copyOf(computeNodes);
-        }
-    }
-
-=======
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
     private void traceInstance() {
         if (LOG.isDebugEnabled()) {
             // TODO(zc): add a switch to close this function
@@ -606,57 +346,25 @@ public class CoordinatorPreprocessor {
         // compute hosts *bottom up*.
         boolean isGatherOutput = fragments.get(0).getDataPartition() == DataPartition.UNPARTITIONED;
 
-<<<<<<< HEAD
-        for (int i = fragments.size() - 1; i >= 0; --i) {
-            PlanFragment fragment = fragments.get(i);
-            FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
-=======
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPostorder()) {
             PlanFragment fragment = execFragment.getPlanFragment();
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 
             boolean dopAdaptionEnabled = usePipeline &&
                     connectContext.getSessionVariable().isEnablePipelineAdaptiveDop();
 
             // If left child is MultiCastDataFragment(only support left now), will keep same instance with child.
             if (fragment.getChildren().size() > 0 && fragment.getChild(0) instanceof MultiCastPlanFragment) {
-<<<<<<< HEAD
-                FragmentExecParams childFragmentParams =
-                        fragmentExecParamsMap.get(fragment.getChild(0).getFragmentId());
-                for (FInstanceExecParam childInstanceParam : childFragmentParams.instanceExecParams) {
-                    params.instanceExecParams.add(new FInstanceExecParam(null, childInstanceParam.host, 0, params));
-=======
                 ExecutionFragment childExecFragment = execFragment.getChild(0);
                 for (FragmentInstance childInstance : childExecFragment.getInstances()) {
                     execFragment.addInstance(new FragmentInstance(childInstance.getWorker(), execFragment));
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                 }
                 continue;
             }
 
             if (fragment.getDataPartition() == DataPartition.UNPARTITIONED) {
-<<<<<<< HEAD
-                Reference<Long> backendIdRef = new Reference<>();
-                TNetworkAddress execHostport;
-                if (usedComputeNode) {
-                    execHostport = SimpleScheduler.getComputeNodeHost(this.idToComputeNode, backendIdRef);
-                } else {
-                    execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
-                }
-                if (execHostport == null) {
-                    String msg = FeConstants.getNodeNotFoundError(usedComputeNode);
-                    LOG.warn("DataPartition UNPARTITIONED. " + msg);
-                    throw new UserException(msg + backendInfosString(usedComputeNode));
-                }
-                recordUsedBackend(execHostport, backendIdRef.getRef());
-                FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
-                        0, params);
-                params.instanceExecParams.add(instanceParam);
-=======
                 long workerId = workerProvider.selectNextWorker();
                 FragmentInstance instance = new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
                 execFragment.addInstance(instance);
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                 continue;
             }
 
@@ -713,28 +421,17 @@ public class CoordinatorPreprocessor {
                     if (isUnionFragment(fragment) && isGatherOutput) {
                         // union fragment use all children's host
                         // if output fragment isn't gather, all fragment must keep 1 instance
-<<<<<<< HEAD
-                        for (PlanFragment child : fragment.getChildren()) {
-                            FragmentExecParams childParams = fragmentExecParamsMap.get(child.getFragmentId());
-                            childParams.instanceExecParams.stream().map(e -> e.host).forEach(hostSet::add);
-=======
                         for (int i = 0; i < execFragment.childrenSize(); i++) {
                             ExecutionFragment childExecFragment = execFragment.getChild(i);
                             childExecFragment.getInstances().stream()
                                     .map(FragmentInstance::getWorkerId)
                                     .forEach(workerIdSet::add);
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                         }
                         //make olapScan maxParallelism equals prefer compute node number
                         maxParallelism = hostSet.size() * fragment.getParallelExecNum();
                     } else {
-<<<<<<< HEAD
-                        for (FInstanceExecParam execParams : maxParallelismFragmentExecParams.instanceExecParams) {
-                            hostSet.add(execParams.host);
-=======
                         for (FragmentInstance execParams : maxParallelismExecFragment.getInstances()) {
                             workerIdSet.add(execParams.getWorkerId());
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                         }
                     }
                 }
@@ -752,15 +449,6 @@ public class CoordinatorPreprocessor {
                 if (exchangeInstances > 0 && maxParallelism > exchangeInstances) {
                     // random select some instance
                     // get distinct host,  when parallel_fragment_exec_instance_num > 1, single host may execute several instances
-<<<<<<< HEAD
-                    List<TNetworkAddress> hosts = Lists.newArrayList(hostSet);
-                    Collections.shuffle(hosts, random);
-
-                    for (int index = 0; index < exchangeInstances; index++) {
-                        FInstanceExecParam instanceParam =
-                                new FInstanceExecParam(null, hosts.get(index % hosts.size()), 0, params);
-                        params.instanceExecParams.add(instanceParam);
-=======
                     List<Long> workerIds = Lists.newArrayList(workerIdSet);
                     Collections.shuffle(workerIds, random);
 
@@ -769,21 +457,14 @@ public class CoordinatorPreprocessor {
                         FragmentInstance instance =
                                 new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
                         execFragment.addInstance(instance);
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                     }
                 } else {
                     List<TNetworkAddress> hosts = Lists.newArrayList(hostSet);
                     for (int index = 0; index < maxParallelism; ++index) {
-<<<<<<< HEAD
-                        TNetworkAddress host = hosts.get(index % hosts.size());
-                        FInstanceExecParam instanceParam = new FInstanceExecParam(null, host, 0, params);
-                        params.instanceExecParams.add(instanceParam);
-=======
                         Long workerId = workerIds.get(index % workerIds.size());
                         FragmentInstance instance =
                                 new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
                         execFragment.addInstance(instance);
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                     }
                 }
 
@@ -799,18 +480,6 @@ public class CoordinatorPreprocessor {
 
             int parallelExecInstanceNum = fragment.getParallelExecNum();
             int pipelineDop = fragment.getPipelineDop();
-<<<<<<< HEAD
-            boolean hasColocate = (isColocateFragment(fragment.getPlanRoot()) &&
-                    fragmentIdToSeqToAddressMap.containsKey(fragment.getFragmentId())
-                    && fragmentIdToSeqToAddressMap.get(fragment.getFragmentId()).size() > 0);
-            boolean hasBucketShuffle = isBucketShuffleJoin(fragment.getFragmentId().asInt());
-
-            if (hasColocate || hasBucketShuffle) {
-                computeColocatedJoinInstanceParam(fragmentIdToSeqToAddressMap.get(fragment.getFragmentId()),
-                        fragmentIdBucketSeqToScanRangeMap.get(fragment.getFragmentId()),
-                        parallelExecInstanceNum, pipelineDop, usePipeline, params);
-                computeBucketSeq2InstanceOrdinal(params, fragmentIdToBucketNumMap.get(fragment.getFragmentId()));
-=======
             ColocatedBackendSelector.Assignment colocatedAssignment = execFragment.getColocatedAssignment();
             boolean hasColocate = execFragment.isColocated()
                     && colocatedAssignment != null
@@ -821,22 +490,14 @@ public class CoordinatorPreprocessor {
                 computeColocatedJoinInstanceParam(colocatedAssignment.getSeqToWorkerId(),
                         colocatedAssignment.getSeqToScanRange(),
                         parallelExecInstanceNum, pipelineDop, jobSpec.isEnablePipeline(), execFragment);
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
             } else {
                 boolean assignScanRangesPerDriverSeq = usePipeline &&
                         (fragment.isAssignScanRangesPerDriverSeq() || fragment.isForceAssignScanRangesPerDriverSeq());
-<<<<<<< HEAD
-                for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> tNetworkAddressMapEntry :
-                        fragmentExecParamsMap.get(fragment.getFragmentId()).scanRangeAssignment.entrySet()) {
-                    TNetworkAddress key = tNetworkAddressMapEntry.getKey();
-                    Map<Integer, List<TScanRangeParams>> value = tNetworkAddressMapEntry.getValue();
-=======
                 for (Map.Entry<Long, Map<Integer, List<TScanRangeParams>>> workerIdMapEntry :
                         execFragment.getScanRangeAssignment().entrySet()) {
                     Long workerId = workerIdMapEntry.getKey();
                     ComputeNode worker = workerProvider.getWorkerById(workerId);
                     Map<Integer, List<TScanRangeParams>> value = workerIdMapEntry.getValue();
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 
                     // 1. Handle normal scan node firstly
                     for (Integer planNodeId : value.keySet()) {
@@ -853,13 +514,8 @@ public class CoordinatorPreprocessor {
                                 expectedInstanceNum);
 
                         for (List<TScanRangeParams> scanRangeParams : perInstanceScanRanges) {
-<<<<<<< HEAD
-                            FInstanceExecParam instanceParam = new FInstanceExecParam(null, key, 0, params);
-                            params.instanceExecParams.add(instanceParam);
-=======
                             FragmentInstance instance = new FragmentInstance(worker, execFragment);
                             execFragment.addInstance(instance);
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 
                             boolean assignPerDriverSeq = assignScanRangesPerDriverSeq &&
                                     (enableAssignScanRangesPerDriverSeq(scanRangeParams, pipelineDop)
@@ -891,17 +547,6 @@ public class CoordinatorPreprocessor {
                                     scanRangesPerDriverSeq.put(driverSeq, Lists.newArrayList());
                                 }
                             }
-<<<<<<< HEAD
-                            if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
-                                for (TScanRangeParams scanRange : scanRangeParams) {
-                                    int channelId = scanRange.scan_range.broker_scan_range.channel_id;
-                                    TNetworkAddress beHttpAddress = bePortToBeWebServerPort.get(key);
-                                    channelIdToBEHTTP.put(channelId, beHttpAddress);
-                                    channelIdToBEPort.put(channelId, key);
-                                }
-                            }
-=======
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                         }
                     }
 
@@ -921,170 +566,15 @@ public class CoordinatorPreprocessor {
                 }
             }
 
-<<<<<<< HEAD
-            if (params.instanceExecParams.isEmpty()) {
-                Reference<Long> backendIdRef = new Reference<>();
-                TNetworkAddress execHostport;
-                if (usedComputeNode) {
-                    execHostport = SimpleScheduler.getComputeNodeHost(this.idToComputeNode, backendIdRef);
-                } else {
-                    execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
-                }
-                if (execHostport == null) {
-                    throw new UserException(
-                            FeConstants.getNodeNotFoundError(usedComputeNode) + backendInfosString(usedComputeNode));
-                }
-                this.recordUsedBackend(execHostport, backendIdRef.getRef());
-                FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
-                        0, params);
-                params.instanceExecParams.add(instanceParam);
-=======
             if (execFragment.getInstances().isEmpty()) {
                 long workerId = workerProvider.selectNextWorker();
                 ComputeNode worker = workerProvider.getWorkerById(workerId);
                 FragmentInstance instance = new FragmentInstance(worker, execFragment);
                 execFragment.addInstance(instance);
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
             }
         }
     }
 
-<<<<<<< HEAD
-    private boolean isUnionFragment(PlanFragment fragment) {
-        Deque<PlanNode> dq = new LinkedList<>();
-        dq.offer(fragment.getPlanRoot());
-
-        while (!dq.isEmpty()) {
-            PlanNode nd = dq.poll();
-
-            if (nd instanceof UnionNode) {
-                return true;
-            }
-            if (!(nd instanceof ExchangeNode)) {
-                nd.getChildren().forEach(dq::offer);
-            }
-        }
-        return false;
-    }
-
-    public void computeBucketSeq2InstanceOrdinal(FragmentExecParams params, int numBuckets) {
-        Integer[] bucketSeq2InstanceOrdinal = new Integer[numBuckets];
-        // some buckets are pruned, so set the corresponding instance ordinal to BUCKET_ABSENT to indicate
-        // absence of buckets.
-        for (int bucketSeq = 0; bucketSeq < numBuckets; ++bucketSeq) {
-            bucketSeq2InstanceOrdinal[bucketSeq] = BUCKET_ABSENT;
-        }
-        for (int i = 0; i < params.instanceExecParams.size(); ++i) {
-            FInstanceExecParam instance = params.instanceExecParams.get(i);
-            for (Integer bucketSeq : instance.bucketSeqToDriverSeq.keySet()) {
-                Preconditions.checkArgument(bucketSeq < numBuckets, "bucketSeq exceeds bucketNum in colocate Fragment");
-                bucketSeq2InstanceOrdinal[bucketSeq] = i;
-            }
-        }
-        fragmentIdToSeqToInstanceMap.put(params.fragment.getFragmentId(), Arrays.asList(bucketSeq2InstanceOrdinal));
-    }
-
-    private boolean isColocateFragment(PlanNode node) {
-        // Cache the colocateFragmentIds
-        if (colocateFragmentIds.contains(node.getFragmentId().asInt())) {
-            return true;
-        }
-        // can not cross fragment
-        if (node instanceof ExchangeNode) {
-            return false;
-        }
-
-        if (node.isColocate()) {
-            colocateFragmentIds.add(node.getFragmentId().asInt());
-            return true;
-        }
-
-        boolean childHasColocate = false;
-        if (node.isReplicated()) {
-            // Only check left if node is replicate join
-            childHasColocate = isColocateFragment(node.getChild(0));
-        } else {
-            for (PlanNode childNode : node.getChildren()) {
-                childHasColocate |= isColocateFragment(childNode);
-            }
-        }
-
-        return childHasColocate;
-    }
-
-    private boolean isReplicatedFragment(PlanNode node) {
-        if (replicateFragmentIds.contains(node.getFragmentId().asInt())) {
-            return true;
-        }
-
-        // can not cross fragment
-        if (node instanceof ExchangeNode) {
-            return false;
-        }
-
-        if (node.isReplicated()) {
-            replicateFragmentIds.add(node.getFragmentId().asInt());
-            return true;
-        }
-
-        boolean childHasReplicated = false;
-        for (PlanNode childNode : node.getChildren()) {
-            childHasReplicated |= isReplicatedFragment(childNode);
-        }
-
-        return childHasReplicated;
-    }
-
-    // check whether the node fragment is bucket shuffle join fragment
-    private boolean isBucketShuffleJoin(int fragmentId, PlanNode node) {
-        // check the node is be the part of the fragment
-        if (fragmentId != node.getFragmentId().asInt()) {
-            return false;
-        }
-
-        if (bucketShuffleFragmentIds.contains(fragmentId)) {
-            return true;
-        }
-        // can not cross fragment
-        if (node instanceof ExchangeNode) {
-            return false;
-        }
-
-        // One fragment could only have one HashJoinNode
-        if (node instanceof JoinNode) {
-            JoinNode joinNode = (JoinNode) node;
-            if (joinNode.isLocalHashBucket()) {
-                bucketShuffleFragmentIds.add(joinNode.getFragmentId().asInt());
-                if (joinNode.getJoinOp().isFullOuterJoin() || joinNode.getJoinOp().isRightJoin()) {
-                    rightOrFullBucketShuffleFragmentIds.add(joinNode.getFragmentId().asInt());
-                }
-                return true;
-            }
-        }
-
-        boolean childHasBucketShuffle = false;
-        for (PlanNode childNode : node.getChildren()) {
-            childHasBucketShuffle |= isBucketShuffleJoin(fragmentId, childNode);
-        }
-
-        return childHasBucketShuffle;
-    }
-
-    private boolean isBucketShuffleJoin(int fragmentId) {
-        return bucketShuffleFragmentIds.contains(fragmentId);
-    }
-
-    // Returns the id of the leftmost node of any of the gives types in 'plan_root'.
-    private PlanNode findLeftmostNode(PlanNode plan) {
-        PlanNode newPlan = plan;
-        while (newPlan.getChildren().size() != 0 && !(newPlan instanceof ExchangeNode)) {
-            newPlan = newPlan.getChild(0);
-        }
-        return newPlan;
-    }
-
-=======
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
     /**
      * This strategy assigns buckets to each driver sequence to avoid local shuffle.
      * If the number of buckets assigned to a fragment instance is less than pipelineDop,
@@ -1120,16 +610,10 @@ public class CoordinatorPreprocessor {
                 enablePipeline && addressToScanRanges.values().stream()
                         .allMatch(scanRanges -> enableAssignScanRangesPerDriverSeq(scanRanges, pipelineDop));
 
-<<<<<<< HEAD
-        for (Map.Entry<TNetworkAddress, List<Map.Entry<Integer, Map<Integer,
-                List<TScanRangeParams>>>>> addressScanRange : addressToScanRanges.entrySet()) {
-            List<Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>>> scanRange = addressScanRange.getValue();
-=======
         for (Map.Entry<Long, List<Map.Entry<Integer, Map<Integer,
                 List<TScanRangeParams>>>>> workerIdScanRange : workerIdToScanRanges.entrySet()) {
             ComputeNode worker = workerProvider.getWorkerById(workerIdScanRange.getKey());
             List<Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>>> scanRange = workerIdScanRange.getValue();
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 
             int expectedInstanceNum = 1;
             if (parallelExecInstanceNum > 1) {
@@ -1143,11 +627,7 @@ public class CoordinatorPreprocessor {
 
             // 3.construct instanceExecParam add the scanRange should be scan by instance
             for (List<Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>>> scanRangePerInstance : scanRangesPerInstance) {
-<<<<<<< HEAD
-                FInstanceExecParam instanceParam = new FInstanceExecParam(null, addressScanRange.getKey(), 0, params);
-=======
                 FragmentInstance instance = new FragmentInstance(worker, execFragment);
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                 // record each instance replicate scan id in set, to avoid add replicate scan range repeatedly when they are in different buckets
                 Set<Integer> instanceReplicateScanSet = new HashSet<>();
 
@@ -1233,15 +713,10 @@ public class CoordinatorPreprocessor {
                 // only analysis olap scan node
                 continue;
             }
-<<<<<<< HEAD
-            FragmentScanRangeAssignment assignment =
-                    fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
-=======
 
             ExecutionFragment execFragment = executionDAG.getFragment(scanNode.getFragmentId());
             FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
 
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
             if (scanNode instanceof SchemaScanNode) {
                 BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment);
                 selector.computeScanRangeAssignment();
@@ -1261,13 +736,6 @@ public class CoordinatorPreprocessor {
                 boolean hasBucket = execFragment.isLocalBucketShuffleJoin();
                 boolean hasReplicated = execFragment.isReplicated();
                 if (assignment.size() > 0 && hasReplicated && scanNode.canDoReplicatedJoin()) {
-<<<<<<< HEAD
-                    BackendSelector selector = new ReplicatedBackendSelector(scanNode, locations, assignment);
-                    selector.computeScanRangeAssignment();
-                    replicateScanIds.add(scanNode.getId().asInt());
-                } else if (hasColocate || hasBucket) {
-                    BackendSelector selector = new ColocatedBackendSelector((OlapScanNode) scanNode, assignment);
-=======
                     BackendSelector selector = new ReplicatedBackendSelector(scanNode, locations, assignment,
                             execFragment.getColocatedAssignment());
                     selector.computeScanRangeAssignment();
@@ -1278,7 +746,6 @@ public class CoordinatorPreprocessor {
                     boolean isRightOrFullBucketShuffleFragment = execFragment.isRightOrFullBucketShuffle();
                     BackendSelector selector = new ColocatedBackendSelector((OlapScanNode) scanNode, assignment,
                             colocatedAssignment, isRightOrFullBucketShuffleFragment, workerProvider);
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                     selector.computeScanRangeAssignment();
                 } else {
                     BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment, isLoadType());
@@ -1314,252 +781,11 @@ public class CoordinatorPreprocessor {
                 throw new StarRocksPlannerException("This sql plan has multi result sinks",
                         ErrorType.INTERNAL_ERROR);
             }
-<<<<<<< HEAD
-
-            for (int j = 0; j < params.instanceExecParams.size(); ++j) {
-                // we add instance_num to query_id.lo to create a
-                // globally-unique instance id
-                TUniqueId instanceId = new TUniqueId();
-                instanceId.setHi(queryId.hi);
-                instanceId.setLo(queryId.lo + instanceIds.size() + 1);
-                params.instanceExecParams.get(j).instanceId = instanceId;
-                instanceIds.add(instanceId);
-            }
-        }
-
-        // compute destinations and # senders per exchange node
-        // (the root fragment doesn't have a destination)
-
-        // MultiCastFragment params
-        handleMultiCastFragmentParams();
-
-        for (FragmentExecParams params : fragmentExecParamsMap.values()) {
-            if (params.fragment instanceof MultiCastPlanFragment) {
-                continue;
-            }
-
-            PlanFragment destFragment = params.fragment.getDestFragment();
-
-            if (destFragment == null) {
-                // root plan fragment
-                continue;
-            }
-            FragmentExecParams destParams = fragmentExecParamsMap.get(destFragment.getFragmentId());
-
-            // set # of senders
-            DataSink sink = params.fragment.getSink();
-            // we can only handle unpartitioned (= broadcast) and
-            // hash-partitioned
-            // output at the moment
-
-            // Set params for pipeline level shuffle.
-            params.fragment.getDestNode().setPartitionType(params.fragment.getOutputPartition().getType());
-            if (sink instanceof DataStreamSink) {
-                DataStreamSink dataStreamSink = (DataStreamSink) sink;
-                dataStreamSink.setExchDop(destParams.fragment.getPipelineDop());
-            }
-
-            PlanNodeId exchId = sink.getExchNodeId();
-            if (destParams.perExchNumSenders.get(exchId.asInt()) == null) {
-                destParams.perExchNumSenders.put(exchId.asInt(), params.instanceExecParams.size());
-            } else {
-                // we might have multiple fragments sending to this exchange node
-                // (distributed MERGE), which is why we need to add up the #senders
-                // e.g. sort-merge
-                destParams.perExchNumSenders.put(exchId.asInt(),
-                        params.instanceExecParams.size() + destParams.perExchNumSenders.get(exchId.asInt()));
-            }
-
-            if (needScheduleByShuffleJoin(destFragment.getFragmentId().asInt(), sink)) {
-                int bucketSeq = 0;
-                int bucketNum = getFragmentBucketNum(destFragment.getFragmentId());
-                TNetworkAddress dummyServer = new TNetworkAddress("0.0.0.0", 0);
-
-                while (bucketSeq < bucketNum) {
-                    TPlanFragmentDestination dest = new TPlanFragmentDestination();
-                    // dest bucket may be pruned, these bucket dest should be set an invalid value
-                    // and will be deal with in BE's DataStreamSender
-                    dest.fragment_instance_id = new TUniqueId(-1, -1);
-                    dest.server = dummyServer;
-                    dest.setBrpc_server(dummyServer);
-
-                    for (FInstanceExecParam instanceExecParams : destParams.instanceExecParams) {
-                        Integer driverSeq = instanceExecParams.bucketSeqToDriverSeq.get(bucketSeq);
-                        if (driverSeq != null) {
-                            dest.fragment_instance_id = instanceExecParams.instanceId;
-                            dest.server = toRpcHost(instanceExecParams.host);
-                            dest.setBrpc_server(toIpAddress(SystemInfoService.toBrpcHost(instanceExecParams.host)));
-                            if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
-                                dest.setPipeline_driver_sequence(driverSeq);
-                            }
-                            break;
-                        }
-                    }
-                    Preconditions.checkState(dest.isSetFragment_instance_id());
-                    bucketSeq++;
-                    params.destinations.add(dest);
-                }
-            } else {
-                // add destination host to this fragment's destination
-                for (int j = 0; j < destParams.instanceExecParams.size(); ++j) {
-                    TPlanFragmentDestination dest = new TPlanFragmentDestination();
-                    dest.fragment_instance_id = destParams.instanceExecParams.get(j).instanceId;
-                    dest.server = toRpcHost(destParams.instanceExecParams.get(j).host);
-                    dest.setBrpc_server(toIpAddress(SystemInfoService.toBrpcHost(destParams.instanceExecParams.get(j).host)));
-                    params.destinations.add(dest);
-                }
-            }
-=======
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
         }
 
         executionDAG.finalizeDAG();
     }
 
-<<<<<<< HEAD
-    private void handleMultiCastFragmentParams() throws Exception {
-        for (FragmentExecParams params : fragmentExecParamsMap.values()) {
-            if (!(params.fragment instanceof MultiCastPlanFragment)) {
-                continue;
-            }
-
-            MultiCastPlanFragment multi = (MultiCastPlanFragment) params.fragment;
-            Preconditions.checkState(multi.getSink() instanceof MultiCastDataSink);
-            // set # of senders
-            MultiCastDataSink multiSink = (MultiCastDataSink) multi.getSink();
-
-            for (int i = 0; i < multi.getDestFragmentList().size(); i++) {
-                PlanFragment destFragment = multi.getDestFragmentList().get(i);
-                DataStreamSink sink = multiSink.getDataStreamSinks().get(i);
-
-                if (destFragment == null) {
-                    continue;
-                }
-                FragmentExecParams destParams = fragmentExecParamsMap.get(destFragment.getFragmentId());
-
-                // Set params for pipeline level shuffle.
-                multi.getDestNode(i).setPartitionType(params.fragment.getOutputPartition().getType());
-                sink.setExchDop(destFragment.getPipelineDop());
-
-                PlanNodeId exchId = sink.getExchNodeId();
-                // MultiCastSink only send to itself, destination exchange only one senders
-                // and it's don't support sort-merge
-                Preconditions.checkState(!destParams.perExchNumSenders.containsKey(exchId.asInt()));
-                destParams.perExchNumSenders.put(exchId.asInt(), 1);
-
-                if (needScheduleByShuffleJoin(destFragment.getFragmentId().asInt(), sink)) {
-                    int bucketSeq = 0;
-                    int bucketNum = getFragmentBucketNum(destFragment.getFragmentId());
-                    TNetworkAddress dummyServer = new TNetworkAddress("0.0.0.0", 0);
-
-                    while (bucketSeq < bucketNum) {
-                        TPlanFragmentDestination dest = new TPlanFragmentDestination();
-                        // dest bucket may be pruned, these bucket dest should be set an invalid value
-                        // and will be deal with in BE's DataStreamSender
-                        dest.fragment_instance_id = new TUniqueId(-1, -1);
-                        dest.server = dummyServer;
-                        dest.setBrpc_server(dummyServer);
-
-                        for (FInstanceExecParam instanceExecParams : destParams.instanceExecParams) {
-                            Integer driverSeq = instanceExecParams.bucketSeqToDriverSeq.get(bucketSeq);
-                            if (driverSeq != null) {
-                                dest.fragment_instance_id = instanceExecParams.instanceId;
-                                dest.server = toRpcHost(instanceExecParams.host);
-                                dest.setBrpc_server(SystemInfoService.toBrpcHost(instanceExecParams.host));
-                                if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
-                                    dest.setPipeline_driver_sequence(driverSeq);
-                                }
-                                break;
-                            }
-                        }
-                        Preconditions.checkState(dest.isSetFragment_instance_id());
-                        bucketSeq++;
-                        multiSink.getDestinations().get(i).add(dest);
-                    }
-                } else {
-                    // add destination host to this fragment's destination
-                    for (int j = 0; j < destParams.instanceExecParams.size(); ++j) {
-                        TPlanFragmentDestination dest = new TPlanFragmentDestination();
-                        dest.fragment_instance_id = destParams.instanceExecParams.get(j).instanceId;
-                        dest.server = toRpcHost(destParams.instanceExecParams.get(j).host);
-                        dest.setBrpc_server(SystemInfoService.toBrpcHost(destParams.instanceExecParams.get(j).host));
-                        multiSink.getDestinations().get(i).add(dest);
-                    }
-                }
-            }
-        }
-    }
-
-    private boolean needScheduleByShuffleJoin(int fragmentId, DataSink sink) {
-        if (isBucketShuffleJoin(fragmentId)) {
-            if (sink instanceof DataStreamSink) {
-                DataStreamSink streamSink = (DataStreamSink) sink;
-                return streamSink.getOutputPartition().isBucketShuffle();
-            }
-        }
-        return false;
-    }
-
-    private final Map<TNetworkAddress, Integer> hostToNumbers = Maps.newHashMap();
-
-    // Compute the fragment instance numbers in every BE for one query
-    private void computeBeInstanceNumbers() {
-        hostToNumbers.clear();
-        for (PlanFragment fragment : fragments) {
-            FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
-            for (final FInstanceExecParam instance : params.instanceExecParams) {
-                Integer number = hostToNumbers.getOrDefault(instance.host, 0);
-                hostToNumbers.put(instance.host, ++number);
-            }
-        }
-    }
-
-    private int getFragmentBucketNum(PlanFragmentId fragmentId) {
-        return fragmentIdToBucketNumMap.get(fragmentId);
-    }
-
-    public TNetworkAddress toRpcHost(TNetworkAddress host) throws Exception {
-        ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
-                host.getHostname(), host.getPort());
-        if (computeNode == null) {
-            computeNode =
-                    GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
-            if (computeNode == null) {
-                throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
-            }
-        }
-        return new TNetworkAddress(computeNode.getHost(), computeNode.getBeRpcPort());
-    }
-
-    private String backendInfosString(boolean chooseComputeNode) {
-        if (chooseComputeNode) {
-            String infoStr = "compute node: ";
-            for (Map.Entry<Long, ComputeNode> entry : this.idToComputeNode.entrySet()) {
-                Long backendID = entry.getKey();
-                ComputeNode backend = entry.getValue();
-                infoStr += String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
-                        backend.isAlive(), SimpleScheduler.isInBlacklist(backendID));
-            }
-            return infoStr;
-        } else {
-            if (MapUtils.isEmpty(this.idToBackend)) {
-                return "";
-            }
-            StringBuilder infoStr = new StringBuilder("backend: ");
-            for (Map.Entry<Long, ComputeNode> entry : this.idToBackend.entrySet()) {
-                Long backendID = entry.getKey();
-                ComputeNode backend = entry.getValue();
-                infoStr.append(String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
-                        backend.isAlive(), SimpleScheduler.isInBlacklist(backendID)));
-            }
-            return infoStr.toString();
-        }
-    }
-
-    public Map<Integer, TNetworkAddress> getChannelIdToBEHTTPMap() {
-        if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
-            return channelIdToBEHTTP;
-=======
     public TFragmentInstanceFactory createTFragmentInstanceFactory() {
         return new TFragmentInstanceFactory(connectContext, jobSpec, executionDAG, coordAddress);
     }
@@ -1567,19 +793,13 @@ public class CoordinatorPreprocessor {
     public Map<Integer, TNetworkAddress> getChannelIdToBEHTTPMap() {
         if (jobSpec.isStreamLoad()) {
             return executionDAG.getChannelIdToBEHTTP();
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
         }
         return null;
     }
 
     public Map<Integer, TNetworkAddress> getChannelIdToBEPortMap() {
-<<<<<<< HEAD
-        if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
-            return channelIdToBEPort;
-=======
         if (jobSpec.isStreamLoad()) {
             return executionDAG.getChannelIdToBEPort();
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
         }
         return null;
     }
@@ -1626,753 +846,4 @@ public class CoordinatorPreprocessor {
 
         return resourceGroup;
     }
-<<<<<<< HEAD
-
-    // fragment instance exec param, it is used to assemble
-    // the per-instance TPlanFragmentExecParas, as a member of
-    // FragmentExecParams
-    public static class FInstanceExecParam {
-        static final int ABSENT_PIPELINE_DOP = -1;
-        static final int ABSENT_DRIVER_SEQUENCE = -1;
-
-        TUniqueId instanceId;
-        TNetworkAddress host;
-        Map<Integer, List<TScanRangeParams>> perNodeScanRanges = Maps.newHashMap();
-        Map<Integer, Map<Integer, List<TScanRangeParams>>> nodeToPerDriverSeqScanRanges = Maps.newHashMap();
-
-        int perFragmentInstanceIdx;
-
-        Map<Integer, Integer> bucketSeqToDriverSeq = Maps.newHashMap();
-
-        int backendNum;
-
-        FragmentExecParams fragmentExecParams;
-
-        int pipelineDop = ABSENT_PIPELINE_DOP;
-
-        public void addBucketSeqAndDriverSeq(int bucketSeq, int driverSeq) {
-            this.bucketSeqToDriverSeq.putIfAbsent(bucketSeq, driverSeq);
-        }
-
-        public void addBucketSeq(int bucketSeq) {
-            this.bucketSeqToDriverSeq.putIfAbsent(bucketSeq, ABSENT_DRIVER_SEQUENCE);
-        }
-
-        public FInstanceExecParam(TUniqueId id, TNetworkAddress host,
-                                  int perFragmentInstanceIdx, FragmentExecParams fragmentExecParams) {
-            this.instanceId = id;
-            this.host = host;
-            this.perFragmentInstanceIdx = perFragmentInstanceIdx;
-            this.fragmentExecParams = fragmentExecParams;
-        }
-
-        public PlanFragment fragment() {
-            return fragmentExecParams.fragment;
-        }
-
-        public boolean isSetPipelineDop() {
-            return pipelineDop != ABSENT_PIPELINE_DOP;
-        }
-
-        public int getPipelineDop() {
-            return pipelineDop;
-        }
-
-        public Map<Integer, Integer> getBucketSeqToDriverSeq() {
-            return bucketSeqToDriverSeq;
-        }
-
-        public Map<Integer, List<TScanRangeParams>> getPerNodeScanRanges() {
-            return perNodeScanRanges;
-        }
-
-        public Map<Integer, Map<Integer, List<TScanRangeParams>>> getNodeToPerDriverSeqScanRanges() {
-            return nodeToPerDriverSeqScanRanges;
-        }
-
-        public int getBackendNum() {
-            return backendNum;
-        }
-
-        public void setBackendNum(int backendNum) {
-            this.backendNum = backendNum;
-        }
-
-        public TNetworkAddress getHost() {
-            return host;
-        }
-
-        public TUniqueId getInstanceId() {
-            return instanceId;
-        }
-    }
-
-    static class BucketSeqToScanRange
-            extends HashMap<Integer, Map<Integer, List<TScanRangeParams>>> {
-    }
-
-    // execution parameters for a single fragment,
-    // per-fragment can have multiple FInstanceExecParam,
-    // used to assemble TPlanFragmentExecParas
-    public class FragmentExecParams {
-        public PlanFragment fragment;
-        public List<TPlanFragmentDestination> destinations = Lists.newArrayList();
-        public Map<Integer, Integer> perExchNumSenders = Maps.newHashMap();
-
-        public List<FInstanceExecParam> instanceExecParams = Lists.newArrayList();
-        public FragmentScanRangeAssignment scanRangeAssignment = new FragmentScanRangeAssignment();
-        TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();
-        public boolean bucketSeqToInstanceForFilterIsSet = false;
-
-        public FragmentExecParams(PlanFragment fragment) {
-            this.fragment = fragment;
-        }
-
-        void setBucketSeqToInstanceForRuntimeFilters() {
-            if (bucketSeqToInstanceForFilterIsSet) {
-                return;
-            }
-            bucketSeqToInstanceForFilterIsSet = true;
-            List<Integer> seqToInstance = fragmentIdToSeqToInstanceMap.get(fragment.getFragmentId());
-            if (seqToInstance == null || seqToInstance.isEmpty()) {
-                return;
-            }
-            for (RuntimeFilterDescription rf : fragment.getBuildRuntimeFilters().values()) {
-                if (!rf.isColocateOrBucketShuffle()) {
-                    continue;
-                }
-                rf.setBucketSeqToInstance(seqToInstance);
-            }
-        }
-
-        /**
-         * Set the common fields of all the fragment instances to the destination common thrift params.
-         *
-         * @param commonParams           The destination common thrift params.
-         * @param destHost               The destination host to delivery these instances.
-         * @param descTable              The descriptor table, empty for the non-first instance
-         *                               when enable pipeline and disable multi fragments in one request.
-         * @param isEnablePipelineEngine Whether enable pipeline engine.
-         */
-        private void toThriftForCommonParams(TExecPlanFragmentParams commonParams,
-                                             TNetworkAddress destHost, TDescriptorTable descTable,
-                                             boolean isEnablePipelineEngine, int tableSinkTotalDop,
-                                             boolean isEnableStreamPipeline) {
-            boolean enablePipelineTableSinkDop = isEnablePipelineEngine &&
-                    (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
-            commonParams.setProtocol_version(InternalServiceVersion.V1);
-            commonParams.setFragment(fragment.toThrift());
-            commonParams.setDesc_tbl(descTable);
-            commonParams.setFunc_version(TFunctionVersion.RUNTIME_FILTER_SERIALIZE_VERSION_2.getValue());
-            commonParams.setCoord(coordAddress);
-
-            commonParams.setParams(new TPlanFragmentExecParams());
-            commonParams.params.setUse_vectorized(true);
-            commonParams.params.setQuery_id(queryId);
-            commonParams.params.setInstances_number(hostToNumbers.get(destHost));
-            commonParams.params.setDestinations(destinations);
-            if (enablePipelineTableSinkDop) {
-                commonParams.params.setNum_senders(tableSinkTotalDop);
-            } else {
-                commonParams.params.setNum_senders(instanceExecParams.size());
-            }
-            commonParams.setIs_stream_pipeline(isEnableStreamPipeline);
-            commonParams.params.setPer_exch_num_senders(perExchNumSenders);
-            if (runtimeFilterParams.isSetRuntime_filter_builder_number()) {
-                commonParams.params.setRuntime_filter_params(runtimeFilterParams);
-            }
-            commonParams.params.setSend_query_statistics_with_every_batch(
-                    fragment.isTransferQueryStatisticsWithEveryBatch());
-
-            commonParams.setQuery_globals(queryGlobals);
-            if (isEnablePipelineEngine) {
-                commonParams.setQuery_options(new TQueryOptions(queryOptions));
-            } else {
-                commonParams.setQuery_options(queryOptions);
-            }
-            // For broker load, the ConnectContext.get() is null
-            if (connectContext != null) {
-                SessionVariable sessionVariable = connectContext.getSessionVariable();
-
-                if (isEnablePipelineEngine) {
-                    commonParams.setIs_pipeline(true);
-                    commonParams.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
-                    commonParams.setEnable_shared_scan(sessionVariable.isEnableSharedScan());
-                    commonParams.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
-                    commonParams.params.setEnable_exchange_perf(sessionVariable.isEnableExchangePerf());
-
-                    commonParams.setEnable_resource_group(true);
-                    if (resourceGroup != null) {
-                        commonParams.setWorkgroup(resourceGroup);
-                    }
-                    if (fragment.isUseRuntimeAdaptiveDop()) {
-                        commonParams.setAdaptive_dop_param(new TAdaptiveDopParam());
-                        commonParams.adaptive_dop_param.setMax_block_rows_per_driver_seq(
-                                sessionVariable.getAdaptiveDopMaxBlockRowsPerDriverSeq());
-                        commonParams.adaptive_dop_param.setMax_output_amplification_factor(
-                                sessionVariable.getAdaptiveDopMaxOutputAmplificationFactor());
-                    }
-                }
-
-            }
-        }
-
-        /**
-         * Set the unique fields for a fragment instance to the destination unique thrift params, including:
-         * - backend_num
-         * - pipeline_dop (used when isEnablePipelineEngine is true)
-         * - params.fragment_instance_id
-         * - params.sender_id
-         * - params.per_node_scan_ranges
-         * - fragment.output_sink (only for MultiCastDataStreamSink and ExportSink)
-         *
-         * @param uniqueParams         The destination unique thrift params.
-         * @param fragmentIndex        The index of this instance in this.instanceExecParams.
-         * @param instanceExecParam    The instance param.
-         * @param enablePipelineEngine Whether enable pipeline engine.
-         */
-        private void toThriftForUniqueParams(TExecPlanFragmentParams uniqueParams, int fragmentIndex,
-                                             FInstanceExecParam instanceExecParam, boolean enablePipelineEngine,
-                                             int accTabletSinkDop, int curTableSinkDop)
-                throws Exception {
-            // if pipeline is enable and current fragment contain olap table sink, in fe we will
-            // calculate the number of all tablet sinks in advance and assign them to each fragment instance
-            boolean enablePipelineTableSinkDop = enablePipelineEngine &&
-                    (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
-
-            uniqueParams.setProtocol_version(InternalServiceVersion.V1);
-            uniqueParams.setBackend_num(instanceExecParam.backendNum);
-            if (enablePipelineEngine) {
-                if (instanceExecParam.isSetPipelineDop()) {
-                    uniqueParams.setPipeline_dop(instanceExecParam.pipelineDop);
-                } else {
-                    uniqueParams.setPipeline_dop(fragment.getPipelineDop());
-                }
-            }
-
-            /// Set thrift fragment with the unique fields.
-
-            // Add instance number in file name prefix when export job.
-            if (fragment.getSink() instanceof ExportSink) {
-                ExportSink exportSink = (ExportSink) fragment.getSink();
-                if (exportSink.getFileNamePrefix() != null) {
-                    exportSink.setFileNamePrefix(exportSink.getFileNamePrefix() + fragmentIndex + "_");
-                }
-            }
-            if (!uniqueParams.isSetFragment()) {
-                uniqueParams.setFragment(fragment.toThriftForUniqueFields());
-            }
-            /*
-             * For MultiCastDataFragment, output only send to local, and the instance is keep
-             * same with MultiCastDataFragment
-             * */
-            if (fragment instanceof MultiCastPlanFragment) {
-                List<List<TPlanFragmentDestination>> multiFragmentDestinations =
-                        uniqueParams.getFragment().getOutput_sink().getMulti_cast_stream_sink().getDestinations();
-                List<List<TPlanFragmentDestination>> newDestinations = Lists.newArrayList();
-                for (List<TPlanFragmentDestination> destinations : multiFragmentDestinations) {
-                    Preconditions.checkState(instanceExecParams.size() == destinations.size());
-                    TPlanFragmentDestination ndes = destinations.get(fragmentIndex);
-
-                    Preconditions.checkState(ndes.getServer().equals(toRpcHost(instanceExecParam.host)));
-                    newDestinations.add(Lists.newArrayList(ndes));
-                }
-
-                uniqueParams.getFragment().getOutput_sink().getMulti_cast_stream_sink()
-                        .setDestinations(newDestinations);
-            }
-
-            if (!uniqueParams.isSetParams()) {
-                uniqueParams.setParams(new TPlanFragmentExecParams());
-            }
-            uniqueParams.params.setFragment_instance_id(instanceExecParam.instanceId);
-
-            Map<Integer, List<TScanRangeParams>> scanRanges = instanceExecParam.perNodeScanRanges;
-            if (scanRanges == null) {
-                scanRanges = Maps.newHashMap();
-            }
-            uniqueParams.params.setPer_node_scan_ranges(scanRanges);
-            uniqueParams.params.setNode_to_per_driver_seq_scan_ranges(instanceExecParam.nodeToPerDriverSeqScanRanges);
-
-            if (enablePipelineTableSinkDop) {
-                uniqueParams.params.setSender_id(accTabletSinkDop);
-                uniqueParams.params.setPipeline_sink_dop(curTableSinkDop);
-            } else {
-                uniqueParams.params.setSender_id(fragmentIndex);
-            }
-        }
-
-        /**
-         * Fill required fields of thrift params with meaningless values.
-         *
-         * @param params The thrift params need to be filled required fields.
-         */
-        private void fillRequiredFieldsToThrift(TExecPlanFragmentParams params) {
-            TPlanFragmentExecParams fragmentExecParams = params.getParams();
-
-            if (!fragmentExecParams.isSetFragment_instance_id()) {
-                fragmentExecParams.setFragment_instance_id(new TUniqueId(0, 0));
-            }
-
-            if (!fragmentExecParams.isSetInstances_number()) {
-                fragmentExecParams.setInstances_number(0);
-            }
-
-            if (!fragmentExecParams.isSetSender_id()) {
-                fragmentExecParams.setSender_id(0);
-            }
-
-            if (!fragmentExecParams.isSetPer_node_scan_ranges()) {
-                fragmentExecParams.setPer_node_scan_ranges(Maps.newHashMap());
-            }
-
-            if (!fragmentExecParams.isSetPer_exch_num_senders()) {
-                fragmentExecParams.setPer_exch_num_senders(Maps.newHashMap());
-            }
-
-            if (!fragmentExecParams.isSetQuery_id()) {
-                fragmentExecParams.setQuery_id(new TUniqueId(0, 0));
-            }
-        }
-
-        public List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
-                                                      TDescriptorTable descTable,
-                                                      boolean enablePipelineEngine, int accTabletSinkDop,
-                                                      int tableSinkTotalDop,
-                                                      boolean isEnableStreamPipeline) throws Exception {
-            boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
-            setBucketSeqToInstanceForRuntimeFilters();
-
-            List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
-            for (int i = 0; i < instanceExecParams.size(); ++i) {
-                final FInstanceExecParam instanceExecParam = instanceExecParams.get(i);
-                if (!inFlightInstanceIds.contains(instanceExecParam.instanceId)) {
-                    continue;
-                }
-                int curTableSinkDop = 0;
-                if (forceSetTableSinkDop) {
-                    DataSink dataSink = fragment.getSink();
-                    int dop = fragment.getPipelineDop();
-                    if (!(dataSink instanceof IcebergTableSink)) {
-                        curTableSinkDop = dop;
-                    } else {
-                        int sessionVarSinkDop = ConnectContext.get().getSessionVariable().getPipelineSinkDop();
-                        if (sessionVarSinkDop > 0) {
-                            curTableSinkDop = Math.min(dop, sessionVarSinkDop);
-                        } else {
-                            curTableSinkDop = Math.min(dop, IcebergTableSink.ICEBERG_SINK_MAX_DOP);
-                        }
-                    }
-                } else {
-                    curTableSinkDop = instanceExecParam.getPipelineDop();
-                }
-                TExecPlanFragmentParams params = new TExecPlanFragmentParams();
-
-                toThriftForCommonParams(params, instanceExecParam.getHost(), descTable, enablePipelineEngine,
-                        tableSinkTotalDop, isEnableStreamPipeline);
-                toThriftForUniqueParams(params, i, instanceExecParam, enablePipelineEngine,
-                        accTabletSinkDop, curTableSinkDop);
-
-                paramsList.add(params);
-                accTabletSinkDop += curTableSinkDop;
-            }
-            return paramsList;
-        }
-
-        TExecBatchPlanFragmentsParams toThriftInBatch(
-                Set<TUniqueId> inFlightInstanceIds, TNetworkAddress destHost, TDescriptorTable descTable,
-                boolean enablePipelineEngine, int accTabletSinkDop,
-                int tableSinkTotalDop) throws Exception {
-
-            boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
-
-            setBucketSeqToInstanceForRuntimeFilters();
-
-            TExecPlanFragmentParams commonParams = new TExecPlanFragmentParams();
-            toThriftForCommonParams(commonParams, destHost, descTable, enablePipelineEngine, tableSinkTotalDop, false);
-            fillRequiredFieldsToThrift(commonParams);
-
-            List<TExecPlanFragmentParams> uniqueParamsList = Lists.newArrayList();
-            for (int i = 0; i < instanceExecParams.size(); ++i) {
-                final FInstanceExecParam instanceExecParam = instanceExecParams.get(i);
-                if (!inFlightInstanceIds.contains(instanceExecParam.instanceId)) {
-                    continue;
-                }
-                int curTableSinkDop = 0;
-                if (forceSetTableSinkDop) {
-                    DataSink dataSink = fragment.getSink();
-                    int dop = fragment.getPipelineDop();
-                    if (!(dataSink instanceof IcebergTableSink)) {
-                        curTableSinkDop = dop;
-                    } else {
-                        int sessionVarSinkDop = ConnectContext.get().getSessionVariable().getPipelineSinkDop();
-                        if (sessionVarSinkDop > 0) {
-                            curTableSinkDop = Math.min(dop, sessionVarSinkDop);
-                        } else {
-                            curTableSinkDop = Math.min(dop, IcebergTableSink.ICEBERG_SINK_MAX_DOP);
-                        }
-                    }
-                } else {
-                    curTableSinkDop = instanceExecParam.getPipelineDop();
-                }
-
-                TExecPlanFragmentParams uniqueParams = new TExecPlanFragmentParams();
-                toThriftForUniqueParams(uniqueParams, i, instanceExecParam, enablePipelineEngine,
-                        accTabletSinkDop, curTableSinkDop);
-                fillRequiredFieldsToThrift(uniqueParams);
-
-                uniqueParamsList.add(uniqueParams);
-                accTabletSinkDop += curTableSinkDop;
-            }
-
-            TExecBatchPlanFragmentsParams request = new TExecBatchPlanFragmentsParams();
-            request.setCommon_param(commonParams);
-            request.setUnique_param_per_instance(uniqueParamsList);
-            return request;
-        }
-
-        // Append range information
-        // [tablet_id(version),tablet_id(version)]
-        public void appendScanRange(StringBuilder sb, List<TScanRangeParams> params) {
-            sb.append("range=[");
-            int idx = 0;
-            for (TScanRangeParams range : params) {
-                TInternalScanRange internalScanRange = range.getScan_range().getInternal_scan_range();
-                if (internalScanRange != null) {
-                    if (idx++ != 0) {
-                        sb.append(",");
-                    }
-                    sb.append("{tid=").append(internalScanRange.getTablet_id())
-                            .append(",ver=").append(internalScanRange.getVersion()).append("}");
-                }
-                TEsScanRange esScanRange = range.getScan_range().getEs_scan_range();
-                if (esScanRange != null) {
-                    sb.append("{ index=").append(esScanRange.getIndex())
-                            .append(", shardid=").append(esScanRange.getShard_id())
-                            .append("}");
-                }
-                THdfsScanRange hdfsScanRange = range.getScan_range().getHdfs_scan_range();
-                if (hdfsScanRange != null) {
-                    sb.append("{relative_path=").append(hdfsScanRange.getRelative_path())
-                            .append(", offset=").append(hdfsScanRange.getOffset())
-                            .append(", length=").append(hdfsScanRange.getLength())
-                            .append("}");
-                }
-            }
-            sb.append("]");
-        }
-
-        public void appendTo(StringBuilder sb) {
-            // append fragment
-            sb.append("{plan=");
-            fragment.getPlanRoot().appendTrace(sb);
-            sb.append(",instance=[");
-            // append instance
-            for (int i = 0; i < instanceExecParams.size(); ++i) {
-                if (i != 0) {
-                    sb.append(",");
-                }
-                TNetworkAddress address = instanceExecParams.get(i).host;
-                Map<Integer, List<TScanRangeParams>> scanRanges =
-                        scanRangeAssignment.get(address);
-                sb.append("{");
-                sb.append("id=").append(DebugUtil.printId(instanceExecParams.get(i).instanceId));
-                sb.append(",host=").append(instanceExecParams.get(i).host);
-                if (scanRanges == null) {
-                    sb.append("}");
-                    continue;
-                }
-                sb.append(",range=[");
-                int eIdx = 0;
-                for (Map.Entry<Integer, List<TScanRangeParams>> entry : scanRanges.entrySet()) {
-                    if (eIdx++ != 0) {
-                        sb.append(",");
-                    }
-                    sb.append("id").append(entry.getKey()).append(",");
-                    appendScanRange(sb, entry.getValue());
-                }
-                sb.append("]");
-                sb.append("}");
-            }
-            sb.append("]"); // end of instances
-            sb.append("}");
-        }
-
-        @Override
-        public String toString() {
-            StringBuilder sb = new StringBuilder();
-            appendTo(sb);
-            return sb.toString();
-        }
-    }
-
-    private class NormalBackendSelector implements BackendSelector {
-        private final ScanNode scanNode;
-        private final List<TScanRangeLocations> locations;
-        private final FragmentScanRangeAssignment assignment;
-        private final boolean isLoad;
-
-        public NormalBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                                     FragmentScanRangeAssignment assignment) {
-            this.scanNode = scanNode;
-            this.locations = locations;
-            this.assignment = assignment;
-            this.isLoad = false;
-        }
-
-        public NormalBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                                     FragmentScanRangeAssignment assignment, boolean isLoad) {
-            this.scanNode = scanNode;
-            this.locations = locations;
-            this.assignment = assignment;
-            this.isLoad = isLoad;
-        }
-
-        private boolean isEnableScheduleByRowCnt(TScanRangeLocations scanRangeLocations) {
-            // only enable for load now, The insert into select performance problem caused by data skew is the most serious
-            return Config.enable_schedule_insert_query_by_row_count && isLoad
-                    && scanRangeLocations.getScan_range().isSetInternal_scan_range()
-                    && scanRangeLocations.getScan_range().getInternal_scan_range().isSetRow_count()
-                    && scanRangeLocations.getScan_range().getInternal_scan_range().getRow_count() > 0;
-        }
-
-        @Override
-        public void computeScanRangeAssignment() throws Exception {
-            HashMap<TNetworkAddress, Long> assignedRowCountPerHost = Maps.newHashMap();
-            // sort the scan ranges by row count
-            // only sort the scan range when it is load job
-            // but when there are too many scan ranges, we will not sort them since performance issue
-            if (locations.size() < 10240 && locations.size() > 0 && isEnableScheduleByRowCnt(locations.get(0))) {
-                locations.sort(new Comparator<TScanRangeLocations>() {
-                    @Override
-                    public int compare(TScanRangeLocations l, TScanRangeLocations r) {
-                        return Long.compare(r.getScan_range().getInternal_scan_range().getRow_count(),
-                                l.getScan_range().getInternal_scan_range().getRow_count());
-                    }
-                });
-            }
-            for (TScanRangeLocations scanRangeLocations : locations) {
-                // assign this scan range to the host w/ the fewest assigned row count
-                Long minAssignedBytes = Long.MAX_VALUE;
-                TScanRangeLocation minLocation = null;
-                for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {
-                    Long assignedBytes = BackendSelector.findOrInsert(assignedRowCountPerHost, location.server, 0L);
-                    if (assignedBytes < minAssignedBytes) {
-                        minAssignedBytes = assignedBytes;
-                        minLocation = location;
-                    }
-                }
-                if (minLocation == null) {
-                    throw new UserException("Scan range not found" + backendInfosString(false));
-                }
-
-                // only enable for load now, The insert into select performance problem caused by data skew is the most serious
-                if (isEnableScheduleByRowCnt(scanRangeLocations)) {
-                    assignedRowCountPerHost.put(minLocation.server, assignedRowCountPerHost.get(minLocation.server)
-                            + scanRangeLocations.getScan_range().getInternal_scan_range().getRow_count());
-                } else {
-                    // use tablet num as assigned row count
-                    assignedRowCountPerHost.put(minLocation.server, assignedRowCountPerHost.get(minLocation.server) + 1);
-                }
-
-                Reference<Long> backendIdRef = new Reference<>();
-                TNetworkAddress execHostPort = SimpleScheduler.getHost(minLocation.backend_id,
-                        scanRangeLocations.getLocations(),
-                        idToBackend, backendIdRef);
-
-                if (execHostPort == null) {
-                    throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR
-                            + backendInfosString(false));
-                }
-                recordUsedBackend(execHostPort, backendIdRef.getRef());
-
-                Map<Integer, List<TScanRangeParams>> scanRanges = BackendSelector.findOrInsert(
-                        assignment, execHostPort, new HashMap<>());
-                List<TScanRangeParams> scanRangeParamsList = BackendSelector.findOrInsert(
-                        scanRanges, scanNode.getId().asInt(), new ArrayList<>());
-                // add scan range
-                TScanRangeParams scanRangeParams = new TScanRangeParams();
-                scanRangeParams.scan_range = scanRangeLocations.scan_range;
-                scanRangeParamsList.add(scanRangeParams);
-            }
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("assignedRowCountPerHost: {}", assignedRowCountPerHost);
-            }
-        }
-    }
-
-    private class ReplicatedBackendSelector implements BackendSelector {
-        private final ScanNode scanNode;
-        private final List<TScanRangeLocations> locations;
-        private final FragmentScanRangeAssignment assignment;
-
-        public ReplicatedBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                                         FragmentScanRangeAssignment assignment) {
-            this.scanNode = scanNode;
-            this.locations = locations;
-            this.assignment = assignment;
-        }
-
-        @Override
-        public void computeScanRangeAssignment() {
-            for (TScanRangeLocations scanRangeLocations : locations) {
-                for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> kv : assignment.entrySet()) {
-                    Map<Integer, List<TScanRangeParams>> scanRanges = kv.getValue();
-                    List<TScanRangeParams> scanRangeParamsList = BackendSelector.findOrInsert(
-                            scanRanges, scanNode.getId().asInt(), new ArrayList<>());
-                    // add scan range
-                    TScanRangeParams scanRangeParams = new TScanRangeParams();
-                    scanRangeParams.scan_range = scanRangeLocations.scan_range;
-                    scanRangeParamsList.add(scanRangeParams);
-                }
-            }
-            // If this fragment has bucket/colocate join, there need to fill fragmentIdBucketSeqToScanRangeMap here.
-            // For example:
-            //                       join(replicated)
-            //                    /                    \
-            //            join(bucket/colocate)       scan(C)
-            //              /           \
-            //            scan(A)         scan(B)
-            // There are replicate join and bucket/colocate join in same fragment. for each bucket A,B used, we need to
-            // add table C all tablet because of the character of the replicate join.
-            BucketSeqToScanRange bucketSeqToScanRange = fragmentIdBucketSeqToScanRangeMap.get(scanNode.getFragmentId());
-            if (bucketSeqToScanRange != null && !bucketSeqToScanRange.isEmpty()) {
-                for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> entry : bucketSeqToScanRange.entrySet()) {
-                    for (TScanRangeLocations scanRangeLocations : locations) {
-                        List<TScanRangeParams> scanRangeParamsList = BackendSelector.findOrInsert(
-                                entry.getValue(), scanNode.getId().asInt(), new ArrayList<>());
-                        // add scan range
-                        TScanRangeParams scanRangeParams = new TScanRangeParams();
-                        scanRangeParams.scan_range = scanRangeLocations.scan_range;
-                        scanRangeParamsList.add(scanRangeParams);
-                    }
-                }
-            }
-        }
-    }
-
-    private class ColocatedBackendSelector implements BackendSelector {
-        private final OlapScanNode scanNode;
-        private final FragmentScanRangeAssignment assignment;
-
-        public ColocatedBackendSelector(OlapScanNode scanNode, FragmentScanRangeAssignment assignment) {
-            this.scanNode = scanNode;
-            this.assignment = assignment;
-        }
-
-        @Override
-        public void computeScanRangeAssignment() throws Exception {
-            PlanFragmentId fragmentId = scanNode.getFragmentId();
-            if (!fragmentIdToSeqToAddressMap.containsKey(fragmentId)) {
-                fragmentIdToSeqToAddressMap.put(fragmentId, Maps.newHashMap());
-                fragmentIdBucketSeqToScanRangeMap.put(fragmentId, new BucketSeqToScanRange());
-                fragmentIdToBackendIdBucketCountMap.put(fragmentId, new HashMap<>());
-                fragmentIdToBucketNumMap.put(fragmentId,
-                        scanNode.getOlapTable().getDefaultDistributionInfo().getBucketNum());
-                if (scanNode.getSelectedPartitionIds().size() <= 1) {
-                    for (Long pid : scanNode.getSelectedPartitionIds()) {
-                        fragmentIdToBucketNumMap.put(fragmentId,
-                                scanNode.getOlapTable().getPartition(pid).getDistributionInfo().getBucketNum());
-                    }
-                }
-            }
-            Map<Integer, TNetworkAddress> bucketSeqToAddress =
-                    fragmentIdToSeqToAddressMap.get(fragmentId);
-            BucketSeqToScanRange bucketSeqToScanRange = fragmentIdBucketSeqToScanRangeMap.get(scanNode.getFragmentId());
-
-            for (Integer bucketSeq : scanNode.bucketSeq2locations.keySet()) {
-                //fill scanRangeParamsList
-                List<TScanRangeLocations> locations = scanNode.bucketSeq2locations.get(bucketSeq);
-                if (!bucketSeqToAddress.containsKey(bucketSeq)) {
-                    getExecHostPortForFragmentIDAndBucketSeq(locations.get(0), fragmentId, bucketSeq,
-                            idToBackend);
-                }
-
-                for (TScanRangeLocations location : locations) {
-                    Map<Integer, List<TScanRangeParams>> scanRanges =
-                            bucketSeqToScanRange.computeIfAbsent(bucketSeq, k -> Maps.newHashMap());
-
-                    List<TScanRangeParams> scanRangeParamsList =
-                            scanRanges.computeIfAbsent(scanNode.getId().asInt(), k -> Lists.newArrayList());
-
-                    // add scan range
-                    TScanRangeParams scanRangeParams = new TScanRangeParams();
-                    scanRangeParams.scan_range = location.scan_range;
-                    scanRangeParamsList.add(scanRangeParams);
-                }
-            }
-            // Because of the right table will not send data to the bucket which has been pruned, the right join or full join will get wrong result.
-            // So if this bucket shuffle is right join or full join, we need to add empty bucket scan range which is pruned by predicate.
-            if (rightOrFullBucketShuffleFragmentIds.contains(fragmentId.asInt())) {
-                int bucketNum = getFragmentBucketNum(fragmentId);
-
-                for (int bucketSeq = 0; bucketSeq < bucketNum; ++bucketSeq) {
-                    if (!bucketSeqToAddress.containsKey(bucketSeq)) {
-                        Reference<Long> backendIdRef = new Reference<>();
-                        TNetworkAddress execHostport = SimpleScheduler.getBackendHost(idToBackend, backendIdRef);
-                        if (execHostport == null) {
-                            throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR
-                                    + backendInfosString(false));
-                        }
-                        recordUsedBackend(execHostport, backendIdRef.getRef());
-                        bucketSeqToAddress.put(bucketSeq, execHostport);
-                    }
-                    if (!bucketSeqToScanRange.containsKey(bucketSeq)) {
-                        bucketSeqToScanRange.put(bucketSeq, Maps.newHashMap());
-                        bucketSeqToScanRange.get(bucketSeq).put(scanNode.getId().asInt(), Lists.newArrayList());
-                    }
-                }
-            }
-
-            // use bucketSeqToScanRange to fill FragmentScanRangeAssignment
-            for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> entry : bucketSeqToScanRange.entrySet()) {
-                Integer bucketSeq = entry.getKey();
-                // fill FragmentScanRangeAssignment only when there are scan id in the bucket
-                if (entry.getValue().containsKey(scanNode.getId().asInt())) {
-                    Map<Integer, List<TScanRangeParams>> scanRanges =
-                            assignment.computeIfAbsent(bucketSeqToAddress.get(bucketSeq), k -> Maps.newHashMap());
-                    List<TScanRangeParams> scanRangeParamsList =
-                            scanRanges.computeIfAbsent(scanNode.getId().asInt(), k -> Lists.newArrayList());
-                    scanRangeParamsList.addAll(entry.getValue().get(scanNode.getId().asInt()));
-                }
-            }
-        }
-
-        // Make sure each host have average bucket to scan
-        private void getExecHostPortForFragmentIDAndBucketSeq(TScanRangeLocations seqLocation,
-                                                              PlanFragmentId fragmentId, Integer bucketSeq,
-                                                              ImmutableMap<Long, ComputeNode> idToBackend)
-                throws UserException {
-            Map<Long, Integer> buckendIdToBucketCountMap = fragmentIdToBackendIdBucketCountMap.get(fragmentId);
-            int maxBucketNum = Integer.MAX_VALUE;
-            long buckendId = Long.MAX_VALUE;
-            for (TScanRangeLocation location : seqLocation.locations) {
-                if (buckendIdToBucketCountMap.containsKey(location.backend_id)) {
-                    if (buckendIdToBucketCountMap.get(location.backend_id) < maxBucketNum) {
-                        maxBucketNum = buckendIdToBucketCountMap.get(location.backend_id);
-                        buckendId = location.backend_id;
-                    }
-                } else {
-                    buckendId = location.backend_id;
-                    buckendIdToBucketCountMap.put(buckendId, 0);
-                    break;
-                }
-            }
-
-            buckendIdToBucketCountMap.put(buckendId, buckendIdToBucketCountMap.get(buckendId) + 1);
-            Reference<Long> backendIdRef = new Reference<>();
-            TNetworkAddress execHostPort = SimpleScheduler.getHost(buckendId, seqLocation.locations,
-                    idToBackend, backendIdRef);
-            if (execHostPort == null) {
-                throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR
-                        + backendInfosString(false));
-            }
-
-            recordUsedBackend(execHostPort, backendIdRef.getRef());
-            fragmentIdToSeqToAddressMap.get(fragmentId).put(bucketSeq, execHostPort);
-        }
-    }
-
-=======
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 }

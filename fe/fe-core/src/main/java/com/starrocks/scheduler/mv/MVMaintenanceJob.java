@@ -33,13 +33,10 @@ import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.QeProcessorImpl;
-<<<<<<< HEAD
-=======
 import com.starrocks.qe.scheduler.TFragmentInstanceFactory;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.UnsupportedException;
@@ -301,11 +298,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
             for (int i = 0; i < execFragment.getInstances().size(); i++) {
                 FragmentInstance instance = execFragment.getInstances().get(i);
                 // Get brpc address instead of the default address
-<<<<<<< HEAD
-                TNetworkAddress beRpcAddr = queryCoordinator.getBrpcAddress(instanceParam.getHost());
-=======
                 TNetworkAddress beRpcAddr = queryCoordinator.getBrpcAddress(instance.getWorkerId());
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                 Long taskId = addr2TaskId.get(beRpcAddr);
                 MVMaintenanceTask task;
                 if (taskId == null) {

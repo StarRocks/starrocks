@@ -694,8 +694,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
         return scanNodes;
     }
-<<<<<<< HEAD
-=======
 
     public boolean isUnionFragment() {
         Deque<PlanNode> dq = new LinkedList<>();
@@ -728,5 +726,4 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     public void reset() {
         // Do nothing.
     }
->>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 }
