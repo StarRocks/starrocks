@@ -343,10 +343,6 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(_check_partial_update_with_sort_key(chunk));
-    LOG(INFO) << "chunk num row:" << chunk.num_rows();
-    for (size_t i = 0; i < chunk.num_rows(); i++) {
-        LOG(INFO) << "append chunk row[" << i << "]:" << chunk.debug_row(i);
-    }
 
     // Delay the creation memtables until we write data.
     // Because for the tablet which doesn't have any written data, we will not use their memtables.
