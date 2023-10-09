@@ -2207,7 +2207,7 @@ public class PrivilegeCheckerTest {
                 "ANALYZE SAMPLE TABLE db1.mv1 WITH ASYNC MODE;",
                 "grant SELECT on materialized view db1.mv1 to test",
                 "revoke SELECT on materialized view db1.mv1 from test",
-                "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE mv1 for this operation.");
+                "Access denied; you need (at least one of) the SELECT privilege(s) on MATERIALIZED VIEW mv1 for this operation");
 
         String grantDb = "grant create materialized view on DATABASE db1 to test";
         String revokeDb = "revoke create materialized view on DATABASE db1 from test";
@@ -2229,9 +2229,8 @@ public class PrivilegeCheckerTest {
             ctxToRoot();
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantDb, connectContext), connectContext);
 
-            String expectError = "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE tbl1 " +
-                    "for this operation. Please ask the admin to grant permission(s) or try activating existing " +
-                    "roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE";
+            String expectError =
+                    "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE tbl1 for this operation";
             verifyGrantRevoke(createSql, grantTable, revokeTable, expectError);
 
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeDb, connectContext), connectContext);
