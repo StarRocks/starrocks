@@ -679,7 +679,11 @@ public class UtFrameUtils {
                 }
             }
 
+<<<<<<< HEAD
             try (PlannerProfile.ScopedTimer st1 = PlannerProfile.getScopedTimer("Analyze")) {
+=======
+            try (Timer st1 = Tracers.watchScope("Analyze")) {
+>>>>>>> f20f9df2de ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
                 com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
             }
 

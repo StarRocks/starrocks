@@ -44,6 +44,10 @@ TOP-N (order by [[42: n_name ASC NULLS FIRST, 46: n_name ASC NULLS FIRST, 49: ye
         AGGREGATE ([GLOBAL] aggregate [{363: sum=sum(363: sum)}] group by [[136: n_name1, 137: n_name2, 138: l_shipyear]] having [null]
             EXCHANGE SHUFFLE[136, 137, 138]
                 AGGREGATE ([LOCAL] aggregate [{363: sum=sum(139: sum_saleprice)}] group by [[136: n_name1, 137: n_name2, 138: l_shipyear]] having [null]
+<<<<<<< HEAD
                     SCAN (mv[lineitem_mv_agg_mv2] columns[135: l_shipdate, 136: n_name1, 137: n_name2, 138: l_shipyear, 139: sum_saleprice] predicate[136: n_name1 = CANADA AND 137: n_name2 = IRAN OR 136: n_name1 = IRAN AND 137: n_name2 = CANADA AND 135: l_shipdate < 1997-01-01 AND 135: l_shipdate >= 1995-01-01])
+=======
+                    SCAN (mv[lineitem_mv_agg_mv2] columns[135: l_shipdate, 136: n_name1, 137: n_name2, 138: l_shipyear, 139: sum_saleprice] predicate[136: n_name1 = CANADA AND 137: n_name2 = IRAN OR 136: n_name1 = IRAN AND 137: n_name2 = CANADA AND 135: l_shipdate <= 1996-12-31 AND 135: l_shipdate >= 1995-01-01])
+>>>>>>> f20f9df2de ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
 [end]
 
