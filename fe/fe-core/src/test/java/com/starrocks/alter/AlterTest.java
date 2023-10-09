@@ -1690,7 +1690,31 @@ public class AlterTest {
 
     }
 
+<<<<<<< HEAD
     @Test(expected = AnalysisException.class)
+=======
+    @Test(expected = DdlException.class)
+    public void testModifyPartitionBucket() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE modify_bucket (\n" +
+                "  chuangyi varchar(65533) NULL COMMENT \"创意\",\n" +
+                "  guanggao varchar(65533) NULL COMMENT \"广告\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(chuangyi, guanggao)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(chuangyi, guanggao) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        String stmt = "alter table modify_bucket set (\"dynamic_partition.buckets\" = \"10\");\n";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+    }
+
+    @Test
+>>>>>>> 8766b462f8 ([BugFix] Fix NPE in non-partition table (#32280))
     public void testAddSingleItemListPartition() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
