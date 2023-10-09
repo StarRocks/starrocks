@@ -265,7 +265,7 @@ public:
 
     void remove_increment_map_by_table_id(int64_t table_id);
 
-    bool get_as_cn() { return _as_cn; }
+    bool get_need_write_cluster_id() { return _need_write_cluster_id; }
 
     size_t delta_column_group_list_memory_usage(const DeltaColumnGroupList& dcgs);
 
@@ -458,7 +458,7 @@ private:
 
     std::mutex _auto_increment_mutex;
 
-    bool _as_cn = true;
+    bool _need_write_cluster_id = true;
 
     // Delta Column Group cache, dcg is short for `Delta Column Group`
     // This cache just used for non-Primary Key table

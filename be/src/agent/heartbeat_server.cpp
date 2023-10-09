@@ -218,7 +218,7 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
     // Check cluster id
     if (curr_master_info->cluster_id == -1) {
         // write and update cluster id
-        if (!_olap_engine->get_as_cn()) {
+        if (_olap_engine->get_need_write_cluster_id()) {
             LOG(INFO) << "Received first heartbeat. updating cluster id";
             RETURN_IF_ERROR(_olap_engine->set_cluster_id(master_info.cluster_id));
         }
