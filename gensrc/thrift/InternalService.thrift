@@ -224,6 +224,7 @@ struct TQueryOptions {
   105: optional bool use_column_pool = true;
 
   205: optional bool use_range_join;
+  206: optional bool enable_pipeline_level_shuffle;
 }
 
 
