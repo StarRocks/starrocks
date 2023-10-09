@@ -241,14 +241,13 @@ public class DecimalV3FunctionAnalyzer {
                 }
             }
         }
+        Type[] decimalTypes = new Type[fn.getNumArgs()];
+        Arrays.fill(decimalTypes, argType);
+        Type[] args = replaceArgDecimalType(fn.getArgs(), decimalTypes);
+
         AggregateFunction newFn = (AggregateFunction) fn.copy();
-        newFn.setFunctionId(fn.getFunctionId());
-        newFn.setChecksum(fn.getChecksum());
-        newFn.setBinaryType(fn.getBinaryType());
-        newFn.setHasVarArgs(fn.hasVarArgs());
-        newFn.setId(fn.getId());
-        newFn.setUserVisible(fn.isUserVisible());
-        newFn.setisAnalyticFn(fn.isAnalyticFn());
+        newFn.setArgsType(args);
+        newFn.setRetType(returnType);
         return newFn;
     }
 
@@ -316,5 +315,18 @@ public class DecimalV3FunctionAnalyzer {
         // check array child type
         return Arrays.stream(argumentTypes).filter(Type::isArrayType).map(t -> (ArrayType) t)
                 .anyMatch(t -> t.getItemType().isDecimalV3());
+    }
+
+    private static Type[] replaceArgDecimalType(Type[] originTypes, Type[] normalizedTypes) {
+        Preconditions.checkState(originTypes.length <= normalizedTypes.length);
+        Type[] result = new Type[originTypes.length];
+        for (int i = 0; i < originTypes.length; i++) {
+            if (originTypes[i].isDecimalV3()) {
+                result[i] = normalizedTypes[i];
+            } else {
+                result[i] = originTypes[i];
+            }
+        }
+        return result;
     }
 }
