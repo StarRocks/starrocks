@@ -77,6 +77,7 @@ public class MVRewriteTest {
         connectContext = UtFrameUtils.createDefaultCtx();
 
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
+        FeConstants.enablePruneEmptyOutputScan = false;
 
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withEnableMV().withDatabase(HR_DB_NAME).useDatabase(HR_DB_NAME);

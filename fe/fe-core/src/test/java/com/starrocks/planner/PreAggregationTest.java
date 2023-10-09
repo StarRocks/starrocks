@@ -14,27 +14,15 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.meta.BlackListSql;
-import com.starrocks.meta.SqlBlackList;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.StmtExecutor;
-import com.starrocks.sql.ast.CreateDbStmt;
-import com.starrocks.sql.ast.DropDbStmt;
-import com.starrocks.sql.ast.ShowCreateDbStmt;
-import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.util.List;
-import java.util.Map;
 
 public class PreAggregationTest {
     private static ConnectContext connectContext;
@@ -44,6 +32,8 @@ public class PreAggregationTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+
+        FeConstants.enablePruneEmptyOutputScan = false;
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();

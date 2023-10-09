@@ -34,14 +34,8 @@ import java.util.List;
 
 // For SQL select * from table limit x, we could only query a few of tablets
 public class LimitPruneTabletsRule extends TransformationRule {
-    private LimitPruneTabletsRule() {
+    public LimitPruneTabletsRule() {
         super(RuleType.TF_LIMIT_TABLETS_PRUNE, Pattern.create(OperatorType.LOGICAL_OLAP_SCAN));
-    }
-
-    private static final LimitPruneTabletsRule INSTANCE = new LimitPruneTabletsRule();
-
-    public static LimitPruneTabletsRule getInstance() {
-        return INSTANCE;
     }
 
     @Override

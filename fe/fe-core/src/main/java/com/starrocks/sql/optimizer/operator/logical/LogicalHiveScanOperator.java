@@ -69,7 +69,7 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
         this.hasUnknownColumn = hasUnknownColumn;
     }
 
-    protected boolean noPartitionSelected() {
+    public boolean isEmptyOutputRows() {
         return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
     }
 

@@ -16,6 +16,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.utframe.StarRocksAssert;
@@ -79,6 +80,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "\"in_memory\" = \"false\",\n" +
                 "\"enable_persistent_index\" = \"false\"\n" +
                 ");");
+        FeConstants.enablePruneEmptyOutputScan = false;
     }
 
     private static String removeSlotIds(String s) {
