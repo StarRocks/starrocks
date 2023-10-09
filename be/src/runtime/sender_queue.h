@@ -22,6 +22,7 @@
 #include "serde/protobuf_serde.h"
 #include "util/moodycamel/concurrentqueue.h"
 #include "util/spinlock.h"
+#include "bthread/mutex.h"
 
 namespace google::protobuf {
 class Closure;
@@ -220,7 +221,7 @@ private:
     std::atomic<bool> _is_cancelled{false};
     std::atomic<int> _num_remaining_senders;
 
-    typedef SpinLock Mutex;
+    typedef bthread::Mutex Mutex;
     Mutex _lock;
 
     // if _is_pipeline_level_shuffle=true, we will create a queue for each driver sequence to avoid competition
