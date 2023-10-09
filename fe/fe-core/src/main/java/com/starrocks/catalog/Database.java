@@ -78,6 +78,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
 /**
@@ -445,9 +446,12 @@ public class Database extends MetaObject implements Writable {
     }
 
     // return false if table already exists
-    public boolean createTableWithLock(Table table, boolean isReplay) {
+    public boolean createTableWithLock(Table table, boolean isReplay) throws DdlException {
         writeLock();
         try {
+            if (!isExist()) {
+                throw new DdlException("Database has been dropped when creating table/mv/view");
+            }
             String tableName = table.getName();
             if (nameToTable.containsKey(tableName)) {
                 return false;
@@ -932,5 +936,9 @@ public class Database extends MetaObject implements Writable {
 
     public boolean isExist() {
         return exist;
+    }
+
+    public List<Table> getHiveTables() {
+        return idToTable.values().stream().filter(Table::isHiveTable).collect(Collectors.toList());
     }
 }

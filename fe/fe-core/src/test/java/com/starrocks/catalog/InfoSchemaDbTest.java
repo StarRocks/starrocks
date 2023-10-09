@@ -20,6 +20,7 @@ import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -95,7 +96,7 @@ public class InfoSchemaDbTest {
     }
 
     @Test
-    public void testNormal() throws IOException {
+    public void testNormal() throws IOException, DdlException {
         Database db = new InfoSchemaDb();
 
         Assert.assertFalse(db.createTable(null));

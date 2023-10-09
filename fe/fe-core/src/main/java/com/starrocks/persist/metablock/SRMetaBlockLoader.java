@@ -14,8 +14,11 @@
 
 package com.starrocks.persist.metablock;
 
+import com.starrocks.common.DdlException;
+
 import java.io.IOException;
 
 public interface SRMetaBlockLoader {
-    void apply(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException;
+    void apply(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException,
+            DdlException;
 }

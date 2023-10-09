@@ -2822,7 +2822,7 @@ public class GlobalStateMgr {
         }
     }
 
-    public void replayCreateTable(String dbName, Table table) {
+    public void replayCreateTable(String dbName, Table table) throws DdlException {
         localMetastore.replayCreateTable(dbName, table);
     }
 
