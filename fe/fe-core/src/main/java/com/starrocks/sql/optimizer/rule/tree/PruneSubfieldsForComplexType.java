@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.tree;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ComplexTypeAccessGroup;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -169,7 +170,7 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
         public Void visitPhysicalScan(OptExpression optExpression, PruneComplexTypeUtil.Context context) {
             PhysicalScanOperator physicalScanOperator = (PhysicalScanOperator) optExpression.getOp();
 
-            if (OperatorType.PHYSICAL_OLAP_SCAN.equals(physicalScanOperator.getOpType())) {
+            if (OperatorType.PHYSICAL_OLAP_SCAN.equals(physicalScanOperator.getOpType()) && !FeConstants.runningUnitTest) {
                 // olap scan operator prune column not in this rule
                 return null;
             }

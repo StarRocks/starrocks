@@ -620,8 +620,8 @@ public:
         bool first_read = true;
         size_t real_read = 0;
         for (size_t i = 0; i < field_names.size(); i++) {
-            const auto &field_name = field_names[i];
-            Column *child_column = struct_column->field_column(field_name).get();
+            const auto& field_name = field_names[i];
+            Column* child_column = struct_column->field_column(field_name).get();
             if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
                 if (_child_readers[field_name] != nullptr) {
                     _opts.context->next_row = origin_next_row;

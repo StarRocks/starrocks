@@ -124,7 +124,6 @@ struct HdfsScannerParams {
     // all conjuncts except `conjunct_ctxs_by_slot`
     std::vector<ExprContext*> conjunct_ctxs;
     std::unordered_set<SlotId> slots_in_conjunct;
-    std::unordered_set<SlotId> conjunct_slots;
     // slot used by conjunct_ctxs
     std::unordered_set<SlotId> slots_of_mutli_slot_conjunct;
     bool eval_conjunct_ctxs = true;

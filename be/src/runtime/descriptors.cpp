@@ -67,7 +67,8 @@ SlotDescriptor::SlotDescriptor(SlotId id, const std::string& name, const TypeDes
           _col_name(name),
           _slot_idx(0),
           _slot_size(_type.get_slot_size()),
-          _is_materialized(false) {}
+          _is_materialized(false),
+          _is_output_column(false) {}
 
 SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
         : _id(tdesc.id),

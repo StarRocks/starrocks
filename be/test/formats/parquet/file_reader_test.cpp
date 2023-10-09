@@ -581,15 +581,15 @@ HdfsScannerContext* FileReaderTest::_create_file_struct_in_struct_read_context(c
     type_struct_in_struct.field_names.emplace_back("c_struct");
 
     // tuple desc
-    SlotDesc slot_descs[] = {
+    Utils::SlotDesc slot_descs[] = {
             {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
             {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
             {"c_struct", type_struct},
             {"c_struct_struct", type_struct_in_struct},
             {""},
     };
-    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(file_path));
 
     return ctx;
@@ -608,12 +608,12 @@ HdfsScannerContext* FileReaderTest::_create_file_struct_in_struct_prune_and_no_o
     type_struct_in_struct.field_names.emplace_back("c_struct");
 
     // tuple desc
-    SlotDesc slot_descs[] = {
+    Utils::SlotDesc slot_descs[] = {
             {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
             {"c_struct_struct", type_struct_in_struct},
             {""},
     };
-    TupleDescriptor* tupleDescriptor = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    TupleDescriptor* tupleDescriptor = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     SlotDescriptor* slot = tupleDescriptor->slots()[1];
     TSlotDescriptorBuilder builder;
     builder.column_name(slot->col_name())
@@ -625,7 +625,7 @@ HdfsScannerContext* FileReaderTest::_create_file_struct_in_struct_prune_and_no_o
     SlotDescriptor* new_slot = _pool.add(new SlotDescriptor(tslot));
     (tupleDescriptor->slots())[1] = new_slot;
     ctx->tuple_desc = tupleDescriptor;
-    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->materialized_columns[1].decode_needed = false;
     ctx->scan_ranges.emplace_back(_create_scan_range(file_path));
 
@@ -2780,7 +2780,7 @@ TEST_F(FileReaderTest, TestStructSubfieldDictFilter) {
     _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::EQ, 3, type_struct_in_struct, subfield_path, "55",
                                                     &ctx->conjunct_ctxs_by_slot[3]);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(struct_in_struct_file_path), 100000);
+                                                    std::filesystem::file_size(struct_in_struct_file_path));
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
@@ -2830,7 +2830,7 @@ TEST_F(FileReaderTest, TestStructSubfieldNoDecodeNotOutput) {
     _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::EQ, 1, type_struct_in_struct, subfield_path, "55",
                                                     &ctx->conjunct_ctxs_by_slot[1]);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(struct_in_struct_file_path), 100000);
+                                                    std::filesystem::file_size(struct_in_struct_file_path));
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
