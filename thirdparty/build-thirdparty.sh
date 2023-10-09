@@ -965,18 +965,6 @@ build_gcs_connector() {
     cp -r $TP_SOURCE_DIR/$GCS_CONNECTOR_SOURCE/*.jar $TP_INSTALL_DIR/gcs_connector
 }
 
-build_broker_thirdparty_jars() {
-    check_if_source_exist $BROKER_THIRDPARTY_JARS_SOURCE
-    mkdir -p $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
-    cp -r $TP_SOURCE_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/* $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
-    rm $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/hadoop-aliyun-2.7.2.jar
-    # cloudfs-hadoop-with-dependencies will include aws jars, but we already support aws by official sdk, so we don't need it anymore.
-    # And it will conflict with Iceberg's S3FileIO, make access S3 files failed.
-    rm $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/cloudfs-hadoop-with-dependencies-1.1.21.jar
-    # ensure read permission is granted for all users
-    chmod -R +r $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/
-}
-
 build_aws_cpp_sdk() {
     check_if_source_exist $AWS_SDK_CPP_SOURCE
     cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
@@ -1269,7 +1257,6 @@ build_hyperscan
 build_mariadb
 build_aliyun_jindosdk
 build_gcs_connector
-build_broker_thirdparty_jars
 build_aws_cpp_sdk
 build_vpack
 build_opentelemetry
