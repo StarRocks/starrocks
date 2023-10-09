@@ -117,9 +117,8 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     public ScanOptimzeOption getScanOptimzeOption() {
         return scanOptimzeOption;
     }
-
-    // When using this method for related rules, you need to check the scan type first.
-    protected boolean noPartitionSelected() {
+    // for mark empty partitions/empty tablet
+    public boolean isEmptyOutputRows() {
         return false;
     }
 

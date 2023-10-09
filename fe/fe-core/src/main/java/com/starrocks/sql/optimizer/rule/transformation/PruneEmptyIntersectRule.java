@@ -19,27 +19,36 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
+import java.util.Collections;
 import java.util.List;
 
-public class PruneCTEConsumePlanRule extends TransformationRule {
-    public PruneCTEConsumePlanRule() {
-        super(RuleType.TF_PRUNE_CTE_CONSUME_PLAN, Pattern.create(OperatorType.LOGICAL_CTE_CONSUME)
-                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)));
+/*
+case:
+        Intersect
+      /    |     \       ->  Empty
+   Empty  Child1  Child2
+ */
+public class PruneEmptyIntersectRule extends TransformationRule {
+    public PruneEmptyIntersectRule() {
+        super(RuleType.TF_PRUNE_EMPTY_INTERSECT,
+                Pattern.create(OperatorType.LOGICAL_INTERSECT, OperatorType.PATTERN_MULTI_LEAF));
     }
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        LogicalCTEConsumeOperator consume = (LogicalCTEConsumeOperator) input.getOp();
-        return !context.getCteContext().needInline(consume.getCteId());
+        return input.getInputs().stream().map(OptExpression::getOp).filter(op -> op instanceof LogicalValuesOperator)
+                .anyMatch(op -> ((LogicalValuesOperator) op).getRows().isEmpty());
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        // delete cte consume child plan
-        return Lists.newArrayList(OptExpression.create(input.getOp()));
+        LogicalIntersectOperator intersectOperator = (LogicalIntersectOperator) input.getOp();
+        return Lists.newArrayList(OptExpression
+                .create(new LogicalValuesOperator(intersectOperator.getOutputColumnRefOp(), Collections.emptyList())));
     }
 }
