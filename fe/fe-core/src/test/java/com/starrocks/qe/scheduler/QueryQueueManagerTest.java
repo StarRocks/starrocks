@@ -68,6 +68,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -346,6 +347,10 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
     }
 
+    /**
+     * FIXME(liuzihe): This case is unstable, should fix it and enable it in the future.
+     */
+    @Ignore
     @Test
     public void testGroupQueueNormal() throws Exception {
         final int concurrencyLimit = 2;

@@ -125,6 +125,10 @@ StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
     return _mgr->get_tablet_schema(_id, &_version_hint);
 }
 
+StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_index_id(int64_t index_id) {
+    return _mgr->get_tablet_schema_by_index_id(_id, index_id);
+}
+
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
     ASSIGN_OR_RETURN(auto tablet_metadata, get_metadata(version));
     return get_rowsets(*tablet_metadata);
@@ -135,7 +139,7 @@ StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(const TabletMetadata& metad
     rowsets.reserve(metadata.rowsets_size());
     for (int i = 0, size = metadata.rowsets_size(); i < size; ++i) {
         const auto& rowset_metadata = metadata.rowsets(i);
-        auto rowset = std::make_shared<Rowset>(this, std::make_shared<const RowsetMetadata>(rowset_metadata), i);
+        auto rowset = std::make_shared<Rowset>(*this, std::make_shared<const RowsetMetadata>(rowset_metadata), i);
         rowsets.emplace_back(std::move(rowset));
     }
     return rowsets;

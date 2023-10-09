@@ -12,23 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.datacache;
 
-package com.starrocks.common.util;
+import com.starrocks.thrift.TDataCacheOptions;
 
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+public class DataCacheOptions {
+    private final int priority;
 
-/*
- * This Lock is for exposing the getOwner() method,
- * which is a protected method of ReentrantReadWriteLock
- */
-public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
-
-    public QueryableReentrantReadWriteLock(boolean fair) {
-        super(fair);
+    public DataCacheOptions(int priority) {
+        this.priority = priority;
     }
 
-    @Override
-    public Thread getOwner() {
-        return super.getOwner();
+    public int getPriority() {
+        return priority;
+    }
+
+    public void toThrift(TDataCacheOptions tDataCacheOptions) {
+        tDataCacheOptions.setPriority(priority);
     }
 }

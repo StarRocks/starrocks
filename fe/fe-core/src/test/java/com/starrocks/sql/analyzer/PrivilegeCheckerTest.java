@@ -2191,6 +2191,7 @@ public class PrivilegeCheckerTest {
     @Test
     public void testCreateMaterializedViewStatement() throws Exception {
 
+        // db create privilege
         Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv1 " +
                 "distributed by hash(k2)" +
@@ -2199,14 +2200,45 @@ public class PrivilegeCheckerTest {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, db1.tbl1.k2 from db1.tbl1;";
+        starRocksAssert.withMaterializedView(createSql);
 
-        String expectError = "Access denied; you need (at least one of) the CREATE MATERIALIZED VIEW privilege(s) " +
-                "on DATABASE db1 for this operation";
+        // test analyze on async mv
         verifyGrantRevoke(
-                createSql,
-                "grant create materialized view on DATABASE db1 to test",
-                "revoke create materialized view on DATABASE db1 from test",
-                expectError);
+                "ANALYZE SAMPLE TABLE db1.mv1 WITH ASYNC MODE;",
+                "grant SELECT on materialized view db1.mv1 to test",
+                "revoke SELECT on materialized view db1.mv1 from test",
+                "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE mv1 for this operation.");
+
+        String grantDb = "grant create materialized view on DATABASE db1 to test";
+        String revokeDb = "revoke create materialized view on DATABASE db1 from test";
+        String grantTable = "grant select on db1.tbl1 to test";
+        String revokeTable = "revoke select on db1.tbl1 from test";
+        {
+            ctxToRoot();
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantTable, connectContext), connectContext);
+
+            String expectError =
+                    "Access denied; you need (at least one of) the CREATE MATERIALIZED VIEW privilege(s) " +
+                            "on DATABASE db1 for this operation";
+            verifyGrantRevoke(createSql, grantDb, revokeDb, expectError);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeTable, connectContext), connectContext);
+        }
+
+        // table select privilege
+        {
+            ctxToRoot();
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantDb, connectContext), connectContext);
+
+            String expectError = "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE tbl1 " +
+                    "for this operation. Please ask the admin to grant permission(s) or try activating existing " +
+                    "roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE";
+            verifyGrantRevoke(createSql, grantTable, revokeTable, expectError);
+
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeDb, connectContext), connectContext);
+        }
+
+        grantRevokeSqlAsRoot("grant DROP on materialized view db1.mv1 to test");
+        starRocksAssert.dropMaterializedView("db1.mv1");
     }
 
     @Test

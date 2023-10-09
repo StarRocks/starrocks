@@ -363,6 +363,14 @@ CONF_Double(dictionary_encoding_ratio, "0.7");
 // The minimum chunk size for dictionary encoding speculation
 CONF_Int32(dictionary_speculate_min_chunk_size, "10000");
 
+// Whether to use special thread pool for streaming load to avoid deadlock for
+// concurrent streaming loads. The maximum number of threads and queue size are
+// set INT32_MAX which indicate there is no limit for the thread pool. Note you
+// don't need to change these configurations in general.
+CONF_mBool(enable_streaming_load_thread_pool, "true");
+CONF_Int32(streaming_load_thread_pool_num_min, "0");
+CONF_Int32(streaming_load_thread_pool_idle_time_ms, "2000");
+
 // The maximum amount of data that can be processed by a stream load
 CONF_mInt64(streaming_load_max_mb, "102400");
 // Some data formats, such as JSON, cannot be streamed.
@@ -1056,5 +1064,8 @@ CONF_mInt32(get_txn_status_internal_sec, "30");
 CONF_mBool(dump_metrics_with_bvar, "true");
 
 CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
+
+// 0 means no limit
+CONF_Int32(lake_service_max_concurrency, "0");
 
 } // namespace starrocks::config

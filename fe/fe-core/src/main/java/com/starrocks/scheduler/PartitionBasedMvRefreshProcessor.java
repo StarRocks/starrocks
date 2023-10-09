@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -42,10 +41,12 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -210,7 +211,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         while (!checked) {
             // sync partitions between materialized view and base tables out of lock
             // do it outside lock because it is a time-cost operation
-            syncPartitions();
+            syncPartitions(context);
             // refresh external table meta cache before check the partition changed
             refreshExternalTable(context);
             database.readLock();
@@ -623,7 +624,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     /**
      * Sync base table's partition infos to be used later.
      */
-    private void syncPartitions() {
+    private void syncPartitions(TaskRunContext context) {
         snapshotBaseTables = collectBaseTables(materializedView);
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
         if (!(partitionInfo instanceof SinglePartitionInfo)) {
@@ -635,7 +636,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         mvContext.setPartitionTTLNumber(partitionTTLNumber);
 
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-            syncPartitionsForExpr();
+            syncPartitionsForExpr(context);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             syncPartitionsForList();
         }
@@ -659,7 +660,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return Pair.create(null, null);
     }
 
-    private void syncPartitionsForExpr() {
+    private void syncPartitionsForExpr(TaskRunContext context) {
         Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
         Table refBaseTable = mvContext.getRefBaseTable();
         Column refBaseTablePartitionColumn = mvContext.getRefBaseTablePartitionColumn();
@@ -689,8 +690,17 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
                 if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC) ||
                         functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+                    Range<PartitionKey> rangeToInclude = null;
+                    Column partitionColumn =
+                            ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
+                    String start = context.getProperties().get(TaskRun.PARTITION_START);
+                    String end = context.getProperties().get(TaskRun.PARTITION_END);
+                    if (start != null || end != null) {
+                        rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
+                    }
                     rangePartitionDiff = SyncPartitionUtils.getRangePartitionDiffOfExpr(refBaseTablePartitionMap,
-                            mvRangePartitionMap, functionCallExpr, refBaseTablePartitionColumn.getPrimitiveType());
+                            mvRangePartitionMap, functionCallExpr, refBaseTablePartitionColumn.getPrimitiveType(),
+                            rangeToInclude);
                 } else {
                     throw new SemanticException("Materialized view partition function " +
                             functionCallExpr.getFnName().getFunction() +
@@ -1290,6 +1300,35 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         // For Non-partition based base table, it's not necessary to check the partition changed.
                         if (!snapshotTable.equals(partitionTableAndColumn.first)
                                 || !snapShotJDBCTable.containColumn(partitionColumn.getName())) {
+                            continue;
+                        }
+
+                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.
+                                getPartitionKeyRange(snapshotTable, partitionColumn);
+                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.
+                                getPartitionKeyRange(table, partitionColumn);
+                        return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
+                    }
+                } else if (snapshotTable.isPaimonTable()) {
+                    PaimonTable snapShotPaimonTable = (PaimonTable) snapshotTable;
+                    if (snapShotPaimonTable.isUnPartitioned()) {
+                        if (!table.isUnPartitioned()) {
+                            return true;
+                        }
+                    } else {
+                        PartitionInfo mvPartitionInfo = materializedView.getPartitionInfo();
+                        // TODO: Support list partition later.
+                        // do not need to check base partition table changed when mv is not partitioned
+                        if (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
+                            return false;
+                        }
+
+                        Pair<Table, Column> partitionTableAndColumn =
+                                getRefBaseTableAndPartitionColumn(snapshotBaseTables);
+                        Column partitionColumn = partitionTableAndColumn.second;
+                        // For Non-partition based base table, it's not necessary to check the partition changed.
+                        if (!snapshotTable.equals(partitionTableAndColumn.first)
+                                || !snapShotPaimonTable.containColumn(partitionColumn.getName())) {
                             continue;
                         }
 

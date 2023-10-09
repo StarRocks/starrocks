@@ -101,6 +101,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.credential.CredentialUtil;
+import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -172,6 +173,7 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
@@ -376,6 +378,8 @@ public class ShowExecutor {
             handleShowPlugins();
         } else if (stmt instanceof ShowSqlBlackListStmt) {
             handleShowSqlBlackListStmt();
+        } else if (stmt instanceof ShowDataCacheRulesStmt) {
+            handleShowDataCacheRulesStmt();
         } else if (stmt instanceof ShowAnalyzeJobStmt) {
             handleShowAnalyzeJob();
         } else if (stmt instanceof ShowAnalyzeStatusStmt) {
@@ -2520,6 +2524,11 @@ public class ShowExecutor {
             rows.add(oneSql);
         }
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
+    }
+
+    private void handleShowDataCacheRulesStmt() {
+        ShowDataCacheRulesStmt showStmt = (ShowDataCacheRulesStmt) stmt;
+        resultSet = new ShowResultSet(showStmt.getMetaData(), DataCacheMgr.getInstance().getShowResultSetRows());
     }
 
     private void handleShowAnalyzeJob() {

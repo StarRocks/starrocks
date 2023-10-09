@@ -165,7 +165,6 @@ public:
     HdfsPartitionDescriptor(const THdfsTable& thrift_table, const THdfsPartition& thrift_partition);
     HdfsPartitionDescriptor(const THudiTable& thrift_table, const THdfsPartition& thrift_partition);
     HdfsPartitionDescriptor(const TDeltaLakeTable& thrift_table, const THdfsPartition& thrift_partition);
-    HdfsPartitionDescriptor(const TIcebergTable& thrift_table, const THdfsPartition& thrift_partition);
 
     int64_t id() const { return _id; }
     THdfsFileFormat::type file_format() { return _file_format; }

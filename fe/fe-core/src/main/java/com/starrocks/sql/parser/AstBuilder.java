@@ -156,6 +156,7 @@ import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CleanTabletSchedQClause;
+import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.ColumnDef;
@@ -164,6 +165,7 @@ import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -197,6 +199,7 @@ import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
+import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFollowerClause;
@@ -326,6 +329,7 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
@@ -2950,6 +2954,54 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowWhiteListStatement(StarRocksParser.ShowWhiteListStatementContext context) {
         return new ShowWhiteListStmt();
+    }
+
+    // --------------------------------------- DataCache Management Statement -----------------------------------------
+    @Override
+    public ParseNode visitCreateDataCacheRuleStatement(StarRocksParser.CreateDataCacheRuleStatementContext ctx) {
+        List<StarRocksParser.IdentifierOrStringOrStarContext> partList =
+                ctx.dataCacheTarget().identifierOrStringOrStar();
+        List<String> parts = partList.stream().map(c -> ((Identifier) visit(c)).getValue()).collect(toList());
+
+        QualifiedName qualifiedName = QualifiedName.of(parts);
+
+        int priority = Integer.parseInt(ctx.INTEGER_VALUE().getText());
+        if (ctx.MINUS_SYMBOL() != null) {
+            // handle negative number "-1"
+            priority *= -1;
+        }
+
+        Expr predicates = null;
+        if (ctx.expression() != null) {
+            predicates = (Expr) visit(ctx.expression());
+        }
+
+        Map<String, String> properties = null;
+        if (ctx.properties() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(ctx.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        return new CreateDataCacheRuleStmt(qualifiedName, predicates, priority, properties, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitShowDataCacheRulesStatement(StarRocksParser.ShowDataCacheRulesStatementContext ctx) {
+        return new ShowDataCacheRulesStmt(createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitDropDataCacheRuleStatement(StarRocksParser.DropDataCacheRuleStatementContext ctx) {
+        long id = Long.parseLong(ctx.INTEGER_VALUE().getText());
+        return new DropDataCacheRuleStmt(id, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitClearDataCacheRulesStatement(StarRocksParser.ClearDataCacheRulesStatementContext ctx) {
+        return new ClearDataCacheRulesStmt(createPos(ctx));
     }
 
     // ----------------------------------------------- Export Statement ------------------------------------------------

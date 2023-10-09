@@ -16,12 +16,11 @@
 
 #include <memory>
 
-#include "fs/fs_util.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
-#include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/schema_change_utils.h"
@@ -230,6 +229,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
                                           .set_txn_id(_txn_id)
                                           .set_max_buffer_size(_max_buffer_size)
                                           .set_mem_tracker(CurrentThread::mem_tracker())
+                                          .set_index_id(_new_tablet_schema->id()) // TODO: pass tablet schema directly
                                           .build());
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });

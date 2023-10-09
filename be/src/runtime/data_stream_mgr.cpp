@@ -57,16 +57,15 @@ inline uint32_t DataStreamMgr::get_bucket(const TUniqueId& fragment_instance_id)
 
 std::shared_ptr<DataStreamRecvr> DataStreamMgr::create_recvr(
         RuntimeState* state, const RowDescriptor& row_desc, const TUniqueId& fragment_instance_id,
-        PlanNodeId dest_node_id, int num_senders, int buffer_size, const std::shared_ptr<RuntimeProfile>& profile,
-        bool is_merging, std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline,
+        PlanNodeId dest_node_id, int num_senders, int buffer_size, bool is_merging,
+        std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline,
         int32_t degree_of_parallelism, bool keep_order) {
-    DCHECK(profile != nullptr);
     VLOG_FILE << "creating receiver for fragment=" << fragment_instance_id << ", node=" << dest_node_id;
     PassThroughChunkBuffer* pass_through_chunk_buffer = get_pass_through_chunk_buffer(state->query_id());
     DCHECK(pass_through_chunk_buffer != nullptr);
     std::shared_ptr<DataStreamRecvr> recvr(
             new DataStreamRecvr(this, state, row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging,
-                                buffer_size, profile, std::move(sub_plan_query_statistics_recvr), is_pipeline,
+                                buffer_size, std::move(sub_plan_query_statistics_recvr), is_pipeline,
                                 degree_of_parallelism, keep_order, pass_through_chunk_buffer));
 
     uint32_t bucket = get_bucket(fragment_instance_id);
@@ -140,7 +139,7 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     return Status::OK();
 }
 
-Status DataStreamMgr::deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id) {
+void DataStreamMgr::deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id) {
     std::shared_ptr<DataStreamRecvr> target_recvr;
     VLOG_QUERY << "deregister_recvr(): fragment_instance_id=" << fragment_instance_id << ", node=" << node_id;
     uint32_t bucket = get_bucket(fragment_instance_id);
@@ -166,12 +165,10 @@ Status DataStreamMgr::deregister_recvr(const TUniqueId& fragment_instance_id, Pl
     // cancel_stream maybe take a long time, so we handle it out of lock.
     if (target_recvr) {
         target_recvr->cancel_stream();
-        return Status::OK();
     } else {
         std::stringstream err;
         err << "unknown row receiver id: fragment_instance_id=" << fragment_instance_id << " node_id=" << node_id;
         LOG(ERROR) << err.str();
-        return Status::InternalError(err.str());
     }
 }
 
