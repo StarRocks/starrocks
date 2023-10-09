@@ -2207,10 +2207,6 @@ public class PrivilegeCheckerTest {
                 "ANALYZE SAMPLE TABLE db1.mv1 WITH ASYNC MODE;",
                 "grant SELECT on materialized view db1.mv1 to test",
                 "revoke SELECT on materialized view db1.mv1 from test",
-<<<<<<< HEAD
-                "Access denied; you need (at least one of) the SELECT privilege(s)" +
-                        " on MATERIALIZED VIEW mv1 for this operation");
-=======
                 "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE mv1 for this operation.");
 
         String grantDb = "grant create materialized view on DATABASE db1 to test";
@@ -2241,7 +2237,6 @@ public class PrivilegeCheckerTest {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeDb, connectContext), connectContext);
         }
 
->>>>>>> ac682b89a2 ([BugFix] fix create mv privilege (#32255))
         grantRevokeSqlAsRoot("grant DROP on materialized view db1.mv1 to test");
         starRocksAssert.dropMaterializedView("db1.mv1");
     }
