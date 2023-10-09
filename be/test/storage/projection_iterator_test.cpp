@@ -44,7 +44,7 @@ public:
 
     void reset() {
         _idx = 0;
-        _encoded_schema.clear();
+        _schema.clear();
     }
 
     static Schema schema() {

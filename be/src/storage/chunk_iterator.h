@@ -79,18 +79,20 @@ public:
 
     // Returns the Schema of the result.
     // If a Field uses the global dictionary strategy, the field will be rewritten as INT
-    const Schema& encoded_schema() const { return _encoded_schema.num_fields() == 0 ? _schema : _encoded_schema; }
+    virtual const Schema& encoded_schema() const { return _schema; }
 
     [[nodiscard]] virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) {
-        _encoded_schema.reserve(schema().num_fields());
+        Schema tmp;
+        tmp.reserve(schema().num_fields());
         for (const auto& field : schema().fields()) {
             const auto cid = field->id();
             if (dict_maps.count(cid)) {
-                _encoded_schema.append(Field::convert_to_dict_field(*field));
+                tmp.append(Field::convert_to_dict_field(*field));
             } else {
-                _encoded_schema.append(field);
+                tmp.append(field);
             }
         }
+        _schema = tmp;
         return Status::OK();
     }
 
@@ -98,24 +100,20 @@ public:
         if (_is_init_output_schema) {
             return Status::OK();
         }
+        Schema tmp;
         for (const auto& field : encoded_schema().fields()) {
             const auto cid = field->id();
             if (!unused_output_column_ids.count(cid)) {
-                _output_schema.append(field);
+                tmp.append(field);
             }
         }
-        DCHECK(_output_schema.num_fields() > 0);
+        DCHECK(tmp.num_fields() > 0);
         _is_init_output_schema = true;
+        _schema = tmp;
         return Status::OK();
     }
 
-    const Schema& output_schema() const {
-        if (_is_init_output_schema) {
-            return _output_schema;
-        } else {
-            return encoded_schema();
-        }
-    }
+    virtual const Schema& output_schema() const { return _schema; }
 
     int chunk_size() const { return _chunk_size; }
 
@@ -133,8 +131,6 @@ protected:
     }
 
     Schema _schema;
-    Schema _encoded_schema;
-    Schema _output_schema;
     bool _is_init_output_schema = false;
 
     int _chunk_size = DEFAULT_CHUNK_SIZE;

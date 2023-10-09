@@ -104,6 +104,22 @@ public:
         _get_dcg_st.permit_unchecked_error();
     }
 
+    const Schema& encoded_schema() const override {
+        return _encoded_schema.num_fields() == 0 ? _schema : _encoded_schema;
+    }
+
+    const Schema& output_schema() const override {
+        if (_is_init_output_schema) {
+            return _output_schema;
+        } else {
+            return encoded_schema();
+        }
+    }
+
+    Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override;
+
+    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override;
+
     void close() override;
 
 protected:
@@ -272,6 +288,10 @@ private:
 private:
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
     using ColumnDecoders = std::vector<ColumnDecoder>;
+
+    Schema _encoded_schema;
+    Schema _output_schema;
+
     std::shared_ptr<Segment> _segment;
     std::unordered_map<std::string, std::shared_ptr<Segment>> _dcg_segments;
     SegmentReadOptions _opts;
@@ -430,6 +450,34 @@ Status SegmentIterator::_init() {
 
     _range_iter = _scan_range.new_iterator();
 
+    return Status::OK();
+}
+
+Status SegmentIterator::init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) {
+    _encoded_schema.reserve(schema().num_fields());
+    for (const auto& field : schema().fields()) {
+        const auto cid = field->id();
+        if (dict_maps.count(cid)) {
+            _encoded_schema.append(Field::convert_to_dict_field(*field));
+        } else {
+            _encoded_schema.append(field);
+        }
+    }
+    return Status::OK();
+}
+
+Status SegmentIterator::init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) {
+    if (_is_init_output_schema) {
+        return Status::OK();
+    }
+    for (const auto& field : encoded_schema().fields()) {
+        const auto cid = field->id();
+        if (!unused_output_column_ids.count(cid)) {
+            _output_schema.append(field);
+        }
+    }
+    DCHECK(_output_schema.num_fields() > 0);
+    _is_init_output_schema = true;
     return Status::OK();
 }
 

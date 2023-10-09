@@ -41,7 +41,7 @@ public:
         RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
         RETURN_IF_ERROR(_child->init_output_schema(unused_output_column_ids));
         _index_map.clear();
-        build_index_map(this->_output_schema, _child->output_schema());
+        build_index_map(this->_schema, _child->output_schema());
         return Status::OK();
     }
 
@@ -51,6 +51,7 @@ protected:
 private:
     void build_index_map(const Schema& output, const Schema& input);
 
+private:
     ChunkIteratorPtr _child;
     // mapping from index of column in output chunk to index of column in input chunk.
     std::vector<size_t> _index_map;
