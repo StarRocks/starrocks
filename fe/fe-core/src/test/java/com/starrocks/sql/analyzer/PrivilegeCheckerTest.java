@@ -173,8 +173,202 @@ public class PrivilegeCheckerTest {
         if (testUser != null) {
             auth.replayDropUser(testUser);
         }
+<<<<<<< HEAD
         if (testUser2 != null) {
             auth.replayDropUser(testUser2);
+=======
+        ctxToRoot();
+        grantOrRevoke("grant repository on system to test");
+        ctxToTestUser();
+        expectError = "Access denied; you need (at least one of) the CREATE TABLE privilege(s) on DATABASE db1 " +
+                "for this operation";
+        try {
+            Authorizer.check(statement, starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (Exception e) {
+            System.out.println(e.getMessage() + ", sql: " + restoreSql);
+            Assert.assertTrue(e.getMessage().contains(expectError));
+        }
+        ctxToRoot();
+        grantOrRevoke("grant create table on database db1 to test");
+
+        verifyGrantRevoke(restoreSql,
+                "grant SELECT,INSERT on db1.tbl1 to test",
+                "revoke SELECT,INSERT on db1.tbl1 from test",
+                "Access denied; you need (at least one of) the INSERT privilege(s)");
+        // revoke
+        ctxToRoot();
+        grantOrRevoke("revoke repository on system from test");
+        grantOrRevoke("revoke all on database db1 from test");
+    }
+
+    @Test
+    public void testCreateMaterializedViewStatement() throws Exception {
+
+        // db create privilege
+        Config.enable_experimental_mv = true;
+        String createSql = "create materialized view db1.mv1 " +
+                "distributed by hash(k2)" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, db1.tbl1.k2 from db1.tbl1;";
+        starRocksAssert.withMaterializedView(createSql);
+
+        // test analyze on async mv
+        verifyGrantRevoke(
+                "ANALYZE SAMPLE TABLE db1.mv1 WITH ASYNC MODE;",
+                "grant SELECT on materialized view db1.mv1 to test",
+                "revoke SELECT on materialized view db1.mv1 from test",
+                "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE mv1 for this operation.");
+
+        String grantDb = "grant create materialized view on DATABASE db1 to test";
+        String revokeDb = "revoke create materialized view on DATABASE db1 from test";
+        String grantTable = "grant select on db1.tbl1 to test";
+        String revokeTable = "revoke select on db1.tbl1 from test";
+        {
+            ctxToRoot();
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantTable, connectContext), connectContext);
+
+            String expectError =
+                    "Access denied; you need (at least one of) the CREATE MATERIALIZED VIEW privilege(s) " +
+                            "on DATABASE db1 for this operation";
+            verifyGrantRevoke(createSql, grantDb, revokeDb, expectError);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeTable, connectContext), connectContext);
+        }
+
+        // table select privilege
+        {
+            ctxToRoot();
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantDb, connectContext), connectContext);
+
+            String expectError = "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE tbl1 " +
+                    "for this operation. Please ask the admin to grant permission(s) or try activating existing " +
+                    "roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE";
+            verifyGrantRevoke(createSql, grantTable, revokeTable, expectError);
+
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeDb, connectContext), connectContext);
+        }
+
+        grantRevokeSqlAsRoot("grant DROP on materialized view db1.mv1 to test");
+        starRocksAssert.dropMaterializedView("db1.mv1");
+    }
+
+    @Test
+    public void testAlterMaterializedViewStatement() throws Exception {
+
+        Config.enable_experimental_mv = true;
+        String createSql = "create materialized view db1.mv1 " +
+                "distributed by hash(k2)" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, db1.tbl1.k2 from db1.tbl1;";
+        starRocksAssert.withMaterializedView(createSql);
+        verifyGrantRevoke(
+                "alter materialized view db1.mv1 rename mv2;",
+                "grant alter on materialized view db1.mv1 to test",
+                "revoke alter on materialized view db1.mv1 from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on " +
+                        "MATERIALIZED VIEW mv1 for this operation");
+        ctxToRoot();
+        starRocksAssert.dropMaterializedView("db1.mv1");
+        ctxToTestUser();
+    }
+
+    @Test
+    public void testRefreshMaterializedViewStatement() throws Exception {
+
+        ctxToRoot();
+        Config.enable_experimental_mv = true;
+        String createSql = "create materialized view db1.mv2 " +
+                "distributed by hash(k2)" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, db1.tbl1.k2 from db1.tbl1;";
+        starRocksAssert.withMaterializedView(createSql);
+        verifyGrantRevoke(
+                "REFRESH MATERIALIZED VIEW db1.mv2;",
+                "grant refresh on materialized view db1.mv2 to test",
+                "revoke refresh on materialized view db1.mv2 from test",
+                "Access denied; you need (at least one of) the REFRESH privilege(s) on MATERIALIZED VIEW mv2 " +
+                        "for this operation");
+        verifyGrantRevoke(
+                "CANCEL REFRESH MATERIALIZED VIEW db1.mv2;",
+                "grant refresh on materialized view db1.mv2 to test",
+                "revoke refresh on materialized view db1.mv2 from test",
+                "Access denied; you need (at least one of) the REFRESH privilege(s) on MATERIALIZED VIEW mv2 " +
+                        "for this operation");
+
+        ctxToRoot();
+        starRocksAssert.dropMaterializedView("db1.mv2");
+        ctxToTestUser();
+    }
+
+    @Test
+    public void testShowMaterializedViewStatement() throws Exception {
+        ctxToRoot();
+        Config.enable_experimental_mv = true;
+        String createSql = "create materialized view db1.mv3 " +
+                "distributed by hash(k2)" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, db1.tbl1.k2 from db1.tbl1;";
+        starRocksAssert.withMaterializedView(createSql);
+        String showBackupSql = "SHOW MATERIALIZED VIEWS FROM db1;";
+        StatementBase showExportSqlStmt = UtFrameUtils.parseStmtWithNewParser(showBackupSql, starRocksAssert.getCtx());
+        ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showExportSqlStmt);
+        ShowResultSet set = executor.execute();
+        Assert.assertTrue(set.getResultRows().size() > 0);
+        grantOrRevoke("grant SELECT,INSERT on db1.tbl1 to test");
+        ctxToTestUser();
+        executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showExportSqlStmt);
+        set = executor.execute();
+        Assert.assertEquals(0, set.getResultRows().size());
+        ctxToRoot();
+        grantOrRevoke("grant refresh on materialized view db1.mv3 to test");
+        ctxToTestUser();
+        executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showExportSqlStmt);
+        set = executor.execute();
+        Assert.assertTrue(set.getResultRows().size() > 0);
+        ctxToRoot();
+        grantOrRevoke("revoke SELECT,INSERT on db1.tbl1 from test");
+        grantOrRevoke("revoke refresh on materialized view db1.mv3 from test");
+        starRocksAssert.dropMaterializedView("db1.mv3");
+        ctxToTestUser();
+    }
+
+    @Test
+    public void testDropMaterializedViewStatement() throws Exception {
+
+        ctxToRoot();
+        Config.enable_experimental_mv = true;
+        String createSql = "create materialized view db1.mv4 " +
+                "distributed by hash(k2)" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, db1.tbl1.k2 from db1.tbl1;";
+        starRocksAssert.withMaterializedView(createSql);
+
+        DropMaterializedViewStmt statement = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(
+                "drop materialized view db1.mv4", starRocksAssert.getCtx());
+
+        ctxToTestUser();
+        try {
+            GlobalStateMgr.getCurrentState().dropMaterializedView(statement);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains(
+                    "Access denied; you need (at least one of) the DROP privilege(s)"));
+>>>>>>> ac682b89a2 ([BugFix] fix create mv privilege (#32255))
         }
 
         if (role != null) {
