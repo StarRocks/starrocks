@@ -725,9 +725,25 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 convert_date(data[i], arrow_data[i]);
             }
         } else if constexpr (at_is_datetime<AT>) {
+            auto timezone = concrete_type->timezone();
+            if (timezone.empty()) {
+                // Quote from https://github.com/apache/arrow/blob/4743e181596b9ee45c6b063bcf59fdf9eb72418f/cpp/src/arrow/type.h#L1217
+
+                /// If a TimestampType is constructed without a timezone (or, equivalently, if the
+                /// timezone supplied is an empty string) then the resulting Arrow field (column) is
+                /// considered "timezone-naive".  The producer of a timezone-naive column may populate
+                /// its constituent integer arrays with datetime values from any timezone; the consumer
+                /// of a timezone-naive column should make no assumptions about the interoperability or
+                /// comparability of the values of such a column with those of any other timestamp
+                /// column or datetime value.
+
+                // When the parquet timezone is empty, populate data with runtime timezone instead.
+                timezone = ctx->state->timezone();
+            }
+
             cctz::time_zone ctz;
-            if (!TimezoneUtils::find_cctz_time_zone(concrete_type->timezone(), ctz)) {
-                return Status::InternalError(strings::Substitute("Not found TimeZone($0)", concrete_type->timezone()));
+            if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
+                return Status::InternalError(strings::Substitute("Not found TimeZone($0)", timezone));
             }
             return convert_datetime(data, arrow_data, num_elements, ctz, null_data, concrete_type->unit());
         }
