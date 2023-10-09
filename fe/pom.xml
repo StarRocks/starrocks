@@ -621,6 +621,20 @@ under the License.
                 <version>${hadoop.version}</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/com.qcloud.cos/hadoop-cos -->
+            <dependency>
+                <groupId>com.qcloud.cos</groupId>
+                <artifactId>hadoop-cos</artifactId>
+                <version>3.3.0-8.3.2</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.qcloud/chdfs_hadoop_plugin_network -->
+            <dependency>
+                <groupId>com.qcloud</groupId>
+                <artifactId>chdfs_hadoop_plugin_network</artifactId>
+                <version>3.2</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-azure-datalake -->
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
