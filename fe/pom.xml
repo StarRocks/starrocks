@@ -621,11 +621,11 @@ under the License.
                 <version>${hadoop.version}</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-cos -->
+            <!-- https://mvnrepository.com/artifact/com.qcloud.cos/hadoop-cos -->
             <dependency>
-                <groupId>org.apache.hadoop</groupId>
+                <groupId>com.qcloud.cos</groupId>
                 <artifactId>hadoop-cos</artifactId>
-                <version>${hadoop.version}</version>
+                <version>3.3.0-8.3.2</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.qcloud/chdfs_hadoop_plugin_network -->
