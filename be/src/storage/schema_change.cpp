@@ -745,6 +745,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     }
 
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
+<<<<<<< HEAD
         const auto& base_sort_key_idxes = base_tablet->tablet_schema().sort_key_idxes();
         const auto& new_sort_key_idxes = new_tablet->tablet_schema().sort_key_idxes();
         std::vector<int32_t> base_sort_key_unique_ids;
@@ -774,6 +775,8 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
             }
         }
 
+=======
+>>>>>>> 5f943b1672 ([Enhancement] Support sortkey reorder (#32105))
         // pk table can handle the case that convert version > request version, duplicate versions will be skipped
         int64_t request_version = request.alter_version;
         int64_t base_max_version = base_tablet->max_version().first;
