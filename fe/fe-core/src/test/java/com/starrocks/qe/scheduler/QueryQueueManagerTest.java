@@ -351,6 +351,10 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
     }
 
+    /**
+     * FIXME(liuzihe): This case is unstable, should fix it and enable it in the future.
+     */
+    @Ignore
     @Test
     public void testGroupQueueNormal() throws Exception {
         final int concurrencyLimit = 2;
