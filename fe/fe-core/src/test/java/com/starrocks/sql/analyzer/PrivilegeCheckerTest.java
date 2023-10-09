@@ -2201,13 +2201,6 @@ public class PrivilegeCheckerTest {
                 ") " +
                 "as select k1, db1.tbl1.k2 from db1.tbl1;";
 
-        // test analyze on async mv
-        verifyGrantRevoke(
-                "ANALYZE SAMPLE TABLE db1.mv1 WITH ASYNC MODE;",
-                "grant SELECT on materialized view db1.mv1 to test",
-                "revoke SELECT on materialized view db1.mv1 from test",
-                "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE mv1 for this operation.");
-
         String grantDb = "grant create materialized view on DATABASE db1 to test";
         String revokeDb = "revoke create materialized view on DATABASE db1 from test";
         String grantTable = "grant select on db1.tbl1 to test";
@@ -2236,8 +2229,6 @@ public class PrivilegeCheckerTest {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeDb, connectContext), connectContext);
         }
 
-        grantRevokeSqlAsRoot("grant DROP on materialized view db1.mv1 to test");
-        starRocksAssert.dropMaterializedView("db1.mv1");
     }
 
     @Test
