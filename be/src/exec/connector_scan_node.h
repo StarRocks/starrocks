@@ -49,6 +49,10 @@ public:
     connector::ConnectorType connector_type() { return _connector_type; }
     bool always_shared_scan() const override;
 
+#ifdef BE_TEST
+    bool use_stream_load_thread_pool() { return _use_stream_load_thread_pool; };
+#endif
+
 private:
     RuntimeState* _runtime_state = nullptr;
     connector::DataSourceProviderPtr _data_source_provider = nullptr;
@@ -59,6 +63,9 @@ private:
     Status _start_scan_thread(RuntimeState* state);
     Status _create_and_init_scanner(RuntimeState* state, TScanRange& scan_range);
     bool _submit_scanner(ConnectorScanner* scanner, bool blockable);
+    // The logic of _submit_streaming_load_scanner is almost the same as _submit_scanner,
+    // and the main difference if that we use a ThreadPool rather than PriorityPool
+    bool _submit_streaming_load_scanner(ConnectorScanner* scanner, bool blockable);
     void _scanner_thread(ConnectorScanner* scanner);
     void _release_scanner(ConnectorScanner* scanner);
     void _update_status(const Status& status);
@@ -125,5 +132,9 @@ private:
     int64_t _mem_limit = 0;
     size_t _estimated_scan_row_bytes = 0;
     size_t _estimated_mem_usage_per_chunk_source = 0;
+
+#ifdef BE_TEST
+    std::atomic_bool _use_stream_load_thread_pool = false;
+#endif
 };
 } // namespace starrocks
