@@ -201,6 +201,7 @@ class ParquetScannerTest : public ::testing::Test {
                 {"col_json_uint32", TypeDescriptor::create_json_type()},
                 {"col_json_uint64", TypeDescriptor::create_json_type()},
                 {"col_json_timestamp", TypeDescriptor::create_json_type()},
+                {"col_json_timestamp_not_normalized", TypeDescriptor::create_json_type()},
 
                 {"col_json_float32", TypeDescriptor::create_json_type()},
                 {"col_json_float64", TypeDescriptor::create_json_type()},
@@ -324,7 +325,8 @@ class ParquetScannerTest : public ::testing::Test {
         for (size_t i = 0; i < expected_schema.size(); ++i) {
             EXPECT_EQ(schema[i].col_name(), expected_schema[i].first);
             EXPECT_TRUE(schema[i].type() == expected_schema[i].second)
-                    << schema[i].col_name() << " got: " << schema[i].type().debug_string();
+                    << schema[i].col_name() << " got: " << schema[i].type().debug_string()
+                    << " expect: " << expected_schema[i].second.debug_string();
         }
     }
 
@@ -551,6 +553,7 @@ TEST_F(ParquetScannerTest, test_to_json) {
             {"col_json_int32", {"1", "2", "3"}},
             {"col_json_uint64", {"1", "2", "3"}},
             {"col_json_timestamp", {"1659962123000", "1659962124000", "1659962125000"}},
+            {"col_json_timestamp_not_normalized", {"1659962123000", "1659962124000", "1659962125000"}},
 
             {"col_json_float32", {"1.100000023841858", "2.0999999046325684", "3.0999999046325684"}},
             {"col_json_float64", {"1.1", "2.1", "3.1"}},
@@ -680,9 +683,10 @@ TEST_F(ParquetScannerTest, get_file_schema) {
               {"col_json_int64", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
               {"col_json_uint8", TypeDescriptor::from_logical_type(TYPE_INT)},
               {"col_json_uint16", TypeDescriptor::from_logical_type(TYPE_INT)},
-              {"col_json_uint32", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+              {"col_json_uint32", TypeDescriptor::from_logical_type(TYPE_INT)},
               {"col_json_uint64", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
               {"col_json_timestamp", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
+              {"col_json_timestamp_not_normalized", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
               {"col_json_float32", TypeDescriptor::from_logical_type(TYPE_FLOAT)},
               {"col_json_float64", TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
               {"col_json_bool", TypeDescriptor::from_logical_type(TYPE_BOOLEAN)},
