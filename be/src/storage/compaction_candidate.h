@@ -29,6 +29,9 @@ struct CompactionCandidate {
     CompactionType type;
     double score = 0;
 
+    // time to be added into candidate set
+    int64_t wait_start_time = 0;
+
     CompactionCandidate() : tablet(nullptr), type(INVALID_COMPACTION) {}
 
     CompactionCandidate(TabletSharedPtr t, CompactionType compaction_type)
@@ -40,12 +43,14 @@ struct CompactionCandidate {
         tablet = other.tablet;
         type = other.type;
         score = other.score;
+        wait_start_time = other.wait_start_time;
     }
 
     CompactionCandidate& operator=(const CompactionCandidate& rhs) {
         tablet = rhs.tablet;
         type = rhs.type;
         score = rhs.score;
+        wait_start_time = rhs.wait_start_time;
         return *this;
     }
 
@@ -53,12 +58,14 @@ struct CompactionCandidate {
         tablet = std::move(other.tablet);
         type = other.type;
         score = other.score;
+        wait_start_time = other.wait_start_time;
     }
 
     CompactionCandidate& operator=(CompactionCandidate&& rhs) {
         tablet = std::move(rhs.tablet);
         type = rhs.type;
         score = rhs.score;
+        wait_start_time = rhs.wait_start_time;
         return *this;
     }
 

@@ -21,6 +21,7 @@
 #include <unordered_map>
 
 #include "common/statusor.h"
+#include "compaction_manager.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/delta_column_group.h"
 #include "storage/edit_version.h"
@@ -68,6 +69,15 @@ struct CompactionInfo {
     EditVersion start_version;
     std::vector<uint32_t> inputs;
     uint32_t output = UINT32_MAX;
+};
+
+struct CompactionMetric {
+    size_t input_rowsets_num;
+    std::vector<uint32_t> input_rowset_ids;
+    int64_t input_segments_num;
+    size_t input_data_size;
+    int64_t start_time;
+    CompactionAlgorithm algorithm;
 };
 
 struct EditVersionInfo {
@@ -189,6 +199,10 @@ public:
     // this method go through all rowsets and identify them for further repair
     // return list of <rowsetid, segment file num> pair
     StatusOr<std::vector<std::pair<uint32_t, uint32_t>>> list_rowsets_need_repair_compaction();
+
+    bool get_running_task_status(CompactionManager::RunningCompactionMetric& update_metric);
+
+    bool has_running_task();
 
     void get_compaction_status(std::string* json_result);
 
@@ -474,6 +488,12 @@ private:
     int64_t _last_compaction_time_ms = 0;
     std::atomic<int64_t> _last_compaction_success_millis{0};
     std::atomic<int64_t> _last_compaction_failure_millis{0};
+
+    std::atomic<int64_t> _last_compaction_cost_time{0};
+
+    // used for lock compaction metric info
+    mutable std::mutex _compaction_metric_lock;
+    std::shared_ptr<CompactionMetric> _current_compaction_task_info;
 
     mutable std::mutex _rowset_stats_lock;
     // maintain current version(applied version) rowsets' stats

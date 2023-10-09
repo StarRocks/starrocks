@@ -63,6 +63,7 @@ RowsetSharedPtr& tablet_meta_with_max_rowset_version(std::vector<RowsetSharedPtr
 
 Status Compaction::do_compaction_impl() {
     OlapStopWatch watch;
+    int64_t start_time = UnixMillis();
 
     int64_t segments_num = 0;
     for (auto& rowset : _input_rowsets) {
@@ -119,6 +120,11 @@ Status Compaction::do_compaction_impl() {
     if (!st.ok()) {
         LOG(WARNING) << "fail to do " << compaction_name() << ". res=" << st << ", tablet=" << _tablet->tablet_id()
                      << ", output_version=" << _output_version.first << "-" << _output_version.second;
+        if (compaction_type() == ReaderType::READER_CUMULATIVE_COMPACTION) {
+            _tablet->set_last_cumu_compaction_cost_time(0);
+        } else {
+            _tablet->set_last_base_compaction_cost_time(0);
+        }
         return st;
     }
     TRACE("merge rowsets finished");
@@ -140,11 +146,14 @@ Status Compaction::do_compaction_impl() {
     RETURN_IF_ERROR(modify_rowsets());
     TRACE("modify rowsets finished");
 
-    int64_t now = UnixMillis();
+    int64_t end_time = UnixMillis();
+    int64_t cost_time = end_time - start_time;
     if (compaction_type() == ReaderType::READER_CUMULATIVE_COMPACTION) {
-        _tablet->set_last_cumu_compaction_success_time(now);
+        _tablet->set_last_cumu_compaction_success_time(end_time);
+        _tablet->set_last_cumu_compaction_cost_time(cost_time);
     } else {
-        _tablet->set_last_base_compaction_success_time(now);
+        _tablet->set_last_base_compaction_success_time(end_time);
+        _tablet->set_last_base_compaction_cost_time(cost_time);
     }
 
     LOG(INFO) << "succeed to do " << compaction_name() << ". tablet=" << _tablet->tablet_id()

@@ -40,6 +40,44 @@ public:
 
     ~CompactionManager();
 
+    struct RunningCompactionMetric {
+        uint64_t task_id = 0;
+        std::string type;
+        int64_t partition_id = 0;
+        int64_t tablet_id = 0;
+        std::string start_time;
+        std::string algorithm;
+        size_t input_rowset_num = 0;
+        size_t input_segment_num = 0;
+        std::string input_data_size;
+        size_t compaction_score = 0;
+        std::string progress;
+        std::vector<std::string> input_rowsets;
+    };
+
+    struct WaitingCompactionMetric {
+        std::string type;
+        int64_t partition_id = 0;
+        int64_t tablet_id = 0;
+        std::string start_time;
+        size_t compaction_score = 0;
+    };
+
+    struct CompactionTaskNum {
+        size_t running_total_num = 0;
+        size_t running_base_num = 0;
+        size_t running_cumu_num = 0;
+        size_t running_update_num = 0;
+        size_t waiting_total_num = 0;
+        size_t waiting_base_num = 0;
+        size_t waiting_cumu_num = 0;
+
+        std::string to_string() {
+            return strings::Substitute("$0 $1 $2 $3 $4 $5 $6", running_total_num, running_base_num, running_cumu_num,
+                                       running_update_num, waiting_total_num, waiting_base_num, waiting_cumu_num);
+        }
+    };
+
     void init_max_task_num(int32_t num);
 
     size_t candidates_size() {
@@ -65,8 +103,8 @@ public:
 
     void get_running_status(std::string* json_result);
 
+    // the caller needs to lock the _tasks_mutex
     uint16_t running_tasks_num() {
-        std::lock_guard lg(_tasks_mutex);
         size_t res = 0;
         for (const auto& it : _running_tasks) {
             res += it.second.size();
@@ -81,11 +119,8 @@ public:
             exceed = true;
         }
         std::lock_guard lg(_tasks_mutex);
-        size_t running_tasks_num = 0;
-        for (const auto& it : _running_tasks) {
-            running_tasks_num += it.second.size();
-        }
-        if (running_tasks_num >= _max_task_num) {
+        size_t running_task_num = running_tasks_num();
+        if (running_task_num >= _max_task_num) {
             VLOG(2) << "register compaction task failed for running tasks reach max limit:" << _max_task_num;
             exceed = true;
         }
@@ -125,6 +160,15 @@ public:
     std::unordered_set<CompactionTask*> get_running_task(const TabletSharedPtr& tablet);
 
     int get_waiting_task_num();
+
+    Status get_running_task_status(std::vector<RunningCompactionMetric>& base_metric,
+                                   std::vector<RunningCompactionMetric>& cumu_metric,
+                                   std::vector<RunningCompactionMetric>& update_metric);
+
+    Status get_waiting_tasks_status(std::vector<WaitingCompactionMetric>& base_metric,
+                                    std::vector<WaitingCompactionMetric>& cumu_metric);
+
+    Status get_compaction_task_num(CompactionTaskNum& compaction_task_num);
 
 private:
     CompactionManager(const CompactionManager& compaction_manager) = delete;
