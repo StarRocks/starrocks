@@ -449,12 +449,11 @@ public class HiveMetastoreApiConverter {
     }
 
     public static RemoteFileInputFormat toRemoteFileInputFormat(String inputFormat) {
-        if (!isHudiTable(inputFormat)) {
-            return RemoteFileInputFormat.fromHdfsInputFormatClass(inputFormat);
-        } else {
+        if (isHudiTable(inputFormat)) {
             // Currently, we only support parquet on hudi format.
             return RemoteFileInputFormat.PARQUET;
         }
+        return RemoteFileInputFormat.fromHdfsInputFormatClass(inputFormat);
     }
 
     public static TextFileFormatDesc toTextFileFormatDesc(Map<String, String> serdeParams) {

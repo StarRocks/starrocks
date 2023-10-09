@@ -71,7 +71,7 @@ public class UnifiedMetadata implements ConnectorMetadata {
 
     private Table.TableType getTableType(String dbName, String tblName) {
         Table table = hiveMetadata.getTable(dbName, tblName);
-        if (table == null) {
+        if (table == null || table.isHiveView()) {
             return HIVE; // use hive metadata by default
         }
         if (table.isHudiTable()) {
