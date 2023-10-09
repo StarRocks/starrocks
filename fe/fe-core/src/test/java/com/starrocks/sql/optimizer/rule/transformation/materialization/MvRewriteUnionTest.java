@@ -23,7 +23,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
@@ -113,7 +112,6 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
     }
 
     @Test
-    @Ignore
     public void testUnionRewrite1() throws Exception {
         // single table union
         createAndRefreshMv("test", "union_mv_1", "create materialized view union_mv_1" +
@@ -129,7 +127,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 "     TABLE: union_mv_1");
         PlanTestBase.assertContains(plan1, "TABLE: emps2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 9: empid <= 4, 9: empid >= 3");
+                "     PREDICATES: 9: empid < 5, 9: empid >= 3");
 
         String query7 = "select deptno, empid from emps2 where empid < 5";
         String plan7 = getFragmentPlan(query7);
@@ -144,7 +142,6 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
     }
 
     @Test
-    @Ignore
     public void testUnionRewrite2() throws Exception {
         // multi tables query
         createAndRefreshMv("test", "join_union_mv_1", "create materialized view join_union_mv_1" +
