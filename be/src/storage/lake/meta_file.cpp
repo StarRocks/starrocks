@@ -57,9 +57,15 @@ void MetaFileBuilder::append_delvec(DelVectorPtr delvec, uint32_t segment_id) {
     }
 }
 
-void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::vector<std::string>& orphan_files) {
+void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
+                                    const std::map<int, std::string>& replace_segments,
+                                    const std::vector<std::string>& orphan_files) {
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(op_write.rowset());
+    for (const auto& replace_seg : replace_segments) {
+        // when handle partial update, replace old segments with new rewrite segments
+        rowset->set_segments(replace_seg.first, replace_seg.second);
+    }
     rowset->set_id(_tablet_meta->next_rowset_id());
     // if rowset don't contain segment files, still inc next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
