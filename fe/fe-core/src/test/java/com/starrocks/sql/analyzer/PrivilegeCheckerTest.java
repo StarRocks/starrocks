@@ -2201,15 +2201,6 @@ public class PrivilegeCheckerTest {
                 ") " +
                 "as select k1, db1.tbl1.k2 from db1.tbl1;";
 
-<<<<<<< HEAD
-        String expectError = "Access denied; you need (at least one of) the CREATE MATERIALIZED VIEW privilege(s) " +
-                "on DATABASE db1 for this operation";
-        verifyGrantRevoke(
-                createSql,
-                "grant create materialized view on DATABASE db1 to test",
-                "revoke create materialized view on DATABASE db1 from test",
-                expectError);
-=======
         // test analyze on async mv
         verifyGrantRevoke(
                 "ANALYZE SAMPLE TABLE db1.mv1 WITH ASYNC MODE;",
@@ -2247,7 +2238,6 @@ public class PrivilegeCheckerTest {
 
         grantRevokeSqlAsRoot("grant DROP on materialized view db1.mv1 to test");
         starRocksAssert.dropMaterializedView("db1.mv1");
->>>>>>> ac682b89a2 ([BugFix] fix create mv privilege (#32255))
     }
 
     @Test
