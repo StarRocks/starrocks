@@ -197,8 +197,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
                 return StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey));
             }
         } else {
-            Preconditions.checkArgument(false, "Unreachable");
-            return AnonymousCredentialsProvider.create();
+            throw new IllegalArgumentException("Please configure the correct aws authentication parameters");
         }
     }
 
