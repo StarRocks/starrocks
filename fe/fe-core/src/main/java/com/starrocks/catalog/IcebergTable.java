@@ -210,6 +210,7 @@ public class IcebergTable extends Table {
 
         TIcebergTable tIcebergTable = new TIcebergTable();
 
+        tIcebergTable.setLocation(getTableLocation());
         List<TColumn> tColumns = Lists.newArrayList();
         for (Column column : getBaseSchema()) {
             tColumns.add(column.toThrift());
