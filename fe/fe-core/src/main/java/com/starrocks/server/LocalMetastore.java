@@ -2604,21 +2604,37 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
             }
             try {
+                /*
+                 * When creating table or mv, we need to create the tablets and prepare some of the
+                 * metadata first before putting this new table or mv in the database. So after the
+                 * first step, we need to acquire the global lock and double check whether the db still
+                 * exists because it maybe dropped by other concurrent client. And if we don't use the lock
+                 * protection and handle the concurrency properly, the replay of table/mv creation may fail
+                 * on restart or on follower.
+                 *
+                 * After acquire the db lock, we also need to acquire the db lock and write edit log. Since the
+                 * db lock maybe under high contention and IO is busy, current thread can hold the global lock
+                 * for quite a long time and make the other operation waiting for the global lock fail.
+                 *
+                 * So here after the confirmation of existence of modifying database, we release the global lock
+                 * When dropping database, we will set the `exist` field of db object to false. And in the following
+                 * creation process, we will double-check the `exist` field.
+                 */
                 if (getDb(db.getId()) == null) {
                     throw new DdlException("database has been dropped when creating table");
                 }
-                createTblSuccess = db.createTableWithLock(table, false);
-                if (!createTblSuccess) {
-                    if (!stmt.isSetIfNotExists()) {
-                        ErrorReport
-                                .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
-                    } else {
-                        LOG.info("Create table[{}] which already exists", tableName);
-                        return;
-                    }
-                }
             } finally {
                 unlock();
+            }
+            createTblSuccess = db.createTableWithLock(table, false);
+            if (!createTblSuccess) {
+                if (!stmt.isSetIfNotExists()) {
+                    ErrorReport
+                            .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+                } else {
+                    LOG.info("Create table[{}] which already exists", tableName);
+                    return;
+                }
             }
 
             // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
@@ -2788,24 +2804,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         try {
-            /*
-             * When creating table or mv, we need to create the tablets and prepare some of the
-             * metadata first before putting this new table or mv in the database. So after the
-             * first step, we need to acquire the global lock and double check whether the db still
-             * exists because it maybe dropped by other concurrent client. And if we don't use the lock
-             * protection and handle the concurrency properly, the replay of table/mv creation may fail
-             * on restart or on follower.
-             *
-             * After acquire the db lock, we also need to acquire the db lock and write edit log. Since the
-             * db lock maybe under high contention and IO is busy, current thread can hold the global lock
-             * for quite a long time and make the other operation waiting for the global lock fail.
-             *
-             * So here after the confirmation of existence of modifying database, we release the global lock
-             * When dropping database, we will set the `exist` field of db object to false. And in the following
-             * creation process, we will double-check the `exist` field.
-             */
             if (getDb(db.getId()) == null) {
-<<<<<<< HEAD
                 throw new DdlException("database has been dropped when creating table");
             }
             if (!db.createTableWithLock(jdbcTable, false)) {
@@ -2840,51 +2839,12 @@ public class LocalMetastore implements ConnectorMetadata {
                     LOG.info("Create table[{}] which already exists", table.getName());
                 }
             }
-=======
-                throw new DdlException("Database has been dropped when creating table/mv/view");
-            }
->>>>>>> ec3fd6414a ([Enhancement] Optimize global lock when creating table/mv/view (#31951) (#32331))
         } finally {
             unlock();
         }
-
-        if (db.isSystemDatabase()) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
-                    "cannot create table in system database");
-        }
-
-        db.writeLock();
-        try {
-            if (!db.isExist()) {
-                throw new DdlException("Database has been dropped when creating table/mv/view");
-            }
-            if (!db.registerTableUnlocked(table)) {
-                if (!isSetIfNotExists) {
-                    if (table instanceof OlapTable) {
-                        OlapTable olapTable = (OlapTable) table;
-                        olapTable.onErase(false);
-                    }
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
-                            "table already exists");
-                } else {
-                    LOG.info("Create table[{}] which already exists", table.getName());
-                    return;
-                }
-            }
-
-            // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
-            LOG.info("Successfully create table: {}-{}, in database: {}-{}",
-                    table.getName(), table.getId(), db.getFullName(), db.getId());
-
-            CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo);
-            table.onCreate(db);
-        } finally {
-            db.writeUnlock();
-        }
     }
 
-    public void replayCreateTable(String dbName, Table table) {
+    public void replayCreateTable(String dbName, Table table) throws DdlException {
         Database db = this.fullNameToDb.get(dbName);
         db.createTableWithLock(table, true);
         if (!isCheckpointThread()) {
@@ -3746,6 +3706,14 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         try {
             if (getDb(db.getId()) == null) {
+                throw new DdlException("database has been dropped when creating materialized view");
+            }
+        } finally {
+            unlock();
+        }
+        db.writeLock();
+        try {
+            if (!db.isExist()) {
                 throw new DdlException("Database has been dropped when creating materialized view");
             }
             createMvSuccess = db.createMaterializedWithLock(materializedView, false);
@@ -3763,7 +3731,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
         } finally {
-            unlock();
+            db.writeUnlock();
         }
         LOG.info("Successfully create materialized view [{}:{}]", mvName, materializedView.getMvId());
 
@@ -4751,12 +4719,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("failed to init view stmt", e);
             }
 
-            // check database exists again, because database can be dropped when creating table
-            if (!tryLock(false)) {
-                throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
-            }
+            db.writeLock();
             try {
-                if (getDb(db.getId()) == null) {
+                if (!db.isExist()) {
                     throw new DdlException("database has been dropped when creating view");
                 }
                 if (!db.createTableWithLock(view, false)) {
@@ -4769,7 +4734,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             } finally {
-                unlock();
+                db.writeUnlock();
             }
 
             LOG.info("successfully create view[" + tableName + "-" + view.getId() + "]");
@@ -5596,7 +5561,8 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+    public void load(SRMetaBlockReader reader) throws
+            IOException, SRMetaBlockException, SRMetaBlockEOFException, DdlException {
         int dbSize = reader.readJson(int.class);
         for (int i = 0; i < dbSize; ++i) {
             Database db = reader.readJson(Database.class);
