@@ -394,7 +394,7 @@ public class CTEPlanTest extends PlanTestBase {
     public void testEmptyCTE() throws Exception {
         String sql = "WITH w_t0 as (SELECT * FROM t0), " +
                 "          w_t1 as (select * from t1)\n" +
-                "SELECT v1, v2, v3 FROM  w_t0 x0 where false " +
+                "SELECT v1, v2, v3 FROM w_t0 x0 where false " +
                 "union " +
                 "select v1, v2, v3 from w_t0 x1 where abs(1) = 2 " +
                 "union " +
@@ -629,19 +629,7 @@ public class CTEPlanTest extends PlanTestBase {
     public void testAllCTEConsumePruned() throws Exception {
         String sql = "select * from t0 where (abs(2) = 1 or v1 in (select v4 from t1)) and v1 = 2 and v1 = 5";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  |----2:EXCHANGE\n" +
-                "  |    \n" +
-                "  0:EMPTYSET\n" +
-                "\n" +
-                "PLAN FRAGMENT 1\n" +
-                " OUTPUT EXPRS:\n" +
-                "  PARTITION: UNPARTITIONED\n" +
-                "\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
-                "    UNPARTITIONED\n" +
-                "\n" +
-                "  1:EMPTYSET");
+        assertContains(plan, "0:EMPTYSET");
     }
 
     @Test

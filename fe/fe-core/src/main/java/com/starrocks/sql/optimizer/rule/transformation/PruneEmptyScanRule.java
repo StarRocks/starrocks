@@ -12,51 +12,47 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
-public class CastToEmptyRule extends TransformationRule {
-    private static final ConstantOperator FALSE_OPERATOR = ConstantOperator.createBoolean(false);
+// transform empty scan to empty values
+public class PruneEmptyScanRule extends TransformationRule {
+    public static final PruneEmptyScanRule OLAP_SCAN = new PruneEmptyScanRule(OperatorType.LOGICAL_OLAP_SCAN);
+    public static final PruneEmptyScanRule HIVE_SCAN = new PruneEmptyScanRule(OperatorType.LOGICAL_HIVE_SCAN);
+    public static final PruneEmptyScanRule HUDI_SCAN = new PruneEmptyScanRule(OperatorType.LOGICAL_HUDI_SCAN);
+    public static final PruneEmptyScanRule ICEBERG_SCAN = new PruneEmptyScanRule(OperatorType.LOGICAL_ICEBERG_SCAN);
+    public static final PruneEmptyScanRule PAIMON_SCAN = new PruneEmptyScanRule(OperatorType.LOGICAL_PAIMON_SCAN);
 
-    public CastToEmptyRule() {
-        super(RuleType.TF_CAST_TO_EMPTY, Pattern.create(OperatorType.PATTERN_LEAF));
+    private PruneEmptyScanRule(OperatorType logicalOperatorType) {
+        super(RuleType.TF_PRUNE_EMPTY_SCAN, Pattern.create(logicalOperatorType));
     }
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        LogicalOperator lo = (LogicalOperator) input.getOp();
-        for (ScalarOperator op : Utils.extractConjuncts(lo.getPredicate())) {
-            if (!(op.isConstantRef())) {
-                continue;
-            }
-
-            ConstantOperator predicate = (ConstantOperator) op;
-            if (FALSE_OPERATOR.equals(predicate) || predicate.isNull()) {
-                return true;
-            }
+        if (!FeConstants.enablePruneEmptyOutputScan) {
+            return false;
         }
-        return false;
+
+        LogicalScanOperator scan = input.getOp().cast();
+        return scan.isEmptyOutputRows();
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         List<ColumnRefOperator> refs =
                 input.getOutputColumns().getColumnRefOperators(context.getColumnRefFactory());
-        return Lists.newArrayList(OptExpression.create(new LogicalValuesOperator(refs)));
+        return Lists.newArrayList(OptExpression.create(new LogicalValuesOperator(refs, Lists.newArrayList())));
     }
 }
