@@ -123,7 +123,7 @@ public class IcebergStatisticProvider {
         return columnStatistics;
     }
 
-    public void makeIcebergFileStats(IcebergTable icebergTable, FileScanTask fileScanTask,
+    public void updateIcebergFileStats(IcebergTable icebergTable, FileScanTask fileScanTask,
                                      Map<Integer, Type.PrimitiveType> idToTypeMapping,
                                      List<Types.NestedField> nonPartitionPrimitiveColumns) {
         String uuid = icebergTable.getUUID();
