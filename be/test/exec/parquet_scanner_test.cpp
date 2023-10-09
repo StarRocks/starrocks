@@ -325,7 +325,8 @@ class ParquetScannerTest : public ::testing::Test {
         for (size_t i = 0; i < expected_schema.size(); ++i) {
             EXPECT_EQ(schema[i].col_name(), expected_schema[i].first);
             EXPECT_TRUE(schema[i].type() == expected_schema[i].second)
-                    << schema[i].col_name() << " got: " << schema[i].type().debug_string();
+                    << schema[i].col_name() << " got: " << schema[i].type().debug_string()
+                    << " expect: " << expected_schema[i].second.debug_string();
         }
     }
 
@@ -682,7 +683,7 @@ TEST_F(ParquetScannerTest, get_file_schema) {
               {"col_json_int64", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
               {"col_json_uint8", TypeDescriptor::from_logical_type(TYPE_INT)},
               {"col_json_uint16", TypeDescriptor::from_logical_type(TYPE_INT)},
-              {"col_json_uint32", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+              {"col_json_uint32", TypeDescriptor::from_logical_type(TYPE_INT)},
               {"col_json_uint64", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
               {"col_json_timestamp", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
               {"col_json_timestamp_not_normalized", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
