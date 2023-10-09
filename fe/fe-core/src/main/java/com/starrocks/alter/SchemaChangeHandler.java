@@ -2358,16 +2358,20 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
                 List<Integer> sortKeyUniqueIds = currentIndexMeta.getSortKeyUniqueIds();
                 List<Integer> newSortKeyIdxes = new ArrayList<Integer>();
-                for (Integer uniqueId : sortKeyUniqueIds) {
-                    Optional<Column> col = indexSchema.stream().filter(c -> c.getUniqueId() == uniqueId).findFirst();
-                    if (!col.isPresent()) {
-                        throw new DdlException("Sork key col with unique id: " + uniqueId + " not exists");
+                if (sortKeyUniqueIds != null) {
+                    for (Integer uniqueId : sortKeyUniqueIds) {
+                        Optional<Column> col = indexSchema.stream().filter(c -> c.getUniqueId() == uniqueId).findFirst();
+                        if (!col.isPresent()) {
+                            throw new DdlException("Sork key col with unique id: " + uniqueId + " not exists");
+                        }
+                        int sortKeyIdx = indexSchema.indexOf(col.get());
+                        newSortKeyIdxes.add(sortKeyIdx);
                     }
-                    int sortKeyIdx = indexSchema.indexOf(col.get());
-                    newSortKeyIdxes.add(sortKeyIdx);
                 }
                 currentIndexMeta.setSchema(indexSchema);
-                currentIndexMeta.setSortKeyIdxes(newSortKeyIdxes);
+                if (!newSortKeyIdxes.isEmpty()) {
+                    currentIndexMeta.setSortKeyIdxes(newSortKeyIdxes);
+                }
 
                 int currentSchemaVersion = currentIndexMeta.getSchemaVersion();
                 int newSchemaVersion = currentSchemaVersion + 1;

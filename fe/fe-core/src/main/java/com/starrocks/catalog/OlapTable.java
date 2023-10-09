@@ -545,17 +545,20 @@ public class OlapTable extends Table {
     // the order of columns in fullSchema is meaningless
     public void rebuildFullSchema() {
         List<Column> newFullSchema = new CopyOnWriteArrayList<>();
+        nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Column baseColumn : indexIdToMeta.get(baseIndexId).getSchema()) {
             newFullSchema.add(baseColumn);
+            nameToColumn.put(baseColumn.getName(), baseColumn);
         }
         for (MaterializedIndexMeta indexMeta : indexIdToMeta.values()) {
             for (Column column : indexMeta.getSchema()) {
                 if (!nameToColumn.containsKey(column.getName())) {
                     newFullSchema.add(column);
+                    nameToColumn.put(column.getName(), column);
                 }
             }
         }
-        setNewFullSchema(newFullSchema);
+        fullSchema = newFullSchema;
         LOG.debug("after rebuild full schema. table {}, schema: {}", id, fullSchema);
     }
 
