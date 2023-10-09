@@ -380,7 +380,7 @@ public class WebBaseAction extends BaseAction {
                     buff.append("&lt;");
                     break;
                 case '>':
-                    buff.append("&lt;");
+                    buff.append("&gt;");
                     break;
                 case '"':
                     buff.append("&quot;");
