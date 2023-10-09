@@ -111,7 +111,7 @@ private:
 
     // Try to send rpc if buffer is not empty and channel is not busy
     // And we need to put this function and other extra works(pre_works) together as an atomic operation
-    Status _try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works);
+    [[nodiscard]] Status _try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works);
 
     // send by rpc or http
     Status _send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure, const TransmitChunkInfo& req);
