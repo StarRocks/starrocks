@@ -53,6 +53,14 @@ public class LogicalPaimonScanOperator extends LogicalScanOperator {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public boolean isEmptyOutputRows() {
+        return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
+    }
+
+    @Override
+>>>>>>> 69ad9b77e1 ([Enhancement] support empty node prune (#31301))
     public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
         this.predicates = predicates;
     }

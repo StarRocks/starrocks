@@ -117,6 +117,13 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     public ScanOptimzeOption getScanOptimzeOption() {
         return scanOptimzeOption;
     }
+<<<<<<< HEAD
+=======
+    // for mark empty partitions/empty tablet
+    public boolean isEmptyOutputRows() {
+        return false;
+    }
+>>>>>>> 69ad9b77e1 ([Enhancement] support empty node prune (#31301))
 
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {

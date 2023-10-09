@@ -58,8 +58,14 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
         this.predicates = predicates;
     }
 
+<<<<<<< HEAD
     public boolean hasUnknownColumn() {
         return hasUnknownColumn;
+=======
+    @Override
+    public boolean isEmptyOutputRows() {
+        return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
+>>>>>>> 69ad9b77e1 ([Enhancement] support empty node prune (#31301))
     }
 
     public void setHasUnknownColumn(boolean hasUnknownColumn) {
