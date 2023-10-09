@@ -97,7 +97,7 @@ StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath>
     options.backend_uid = UniqueId::gen_uid();
     options.compaction_mem_tracker = global_env->compaction_mem_tracker();
     options.update_mem_tracker = global_env->update_mem_tracker();
-    options.as_cn = as_cn;
+    options.need_write_cluster_id = !as_cn;
     StorageEngine* engine = nullptr;
 
     EXIT_IF_ERROR(StorageEngine::open(options, &engine));

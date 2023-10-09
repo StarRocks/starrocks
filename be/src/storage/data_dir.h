@@ -67,7 +67,7 @@ public:
     DataDir(const DataDir&) = delete;
     void operator=(const DataDir&) = delete;
 
-    Status init(bool read_only = false, bool as_cn = false);
+    Status init(bool read_only = false);
     void stop_bg_worker();
 
     const std::string& path() const { return _path; }
