@@ -444,7 +444,11 @@ Status StorageEngine::_check_all_root_path_cluster_id() {
 
     // write cluster id into cluster_id_path if get effective cluster id success
     if (_effective_cluster_id != -1 && !_is_all_cluster_id_exist && _need_write_cluster_id) {
+<<<<<<< HEAD
         set_cluster_id(_effective_cluster_id);
+=======
+        RETURN_IF_ERROR(set_cluster_id(_effective_cluster_id));
+>>>>>>> bc5b64a506 ([BugFix]Revert "[Enhancement] remove some useless operatitons when start as c… (#32229))
     }
 
     return Status::OK();
