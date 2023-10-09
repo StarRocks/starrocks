@@ -43,9 +43,9 @@ case2:
       /      \     ->  Child1
    Child1    Empty
  */
-public class PruneUnionEmptyRule extends TransformationRule {
-    public PruneUnionEmptyRule() {
-        super(RuleType.TF_PRUNE_UNION_EMPTY,
+public class PruneEmptyUnionRule extends TransformationRule {
+    public PruneEmptyUnionRule() {
+        super(RuleType.TF_PRUNE_EMPTY_UNION,
                 Pattern.create(OperatorType.LOGICAL_UNION, OperatorType.PATTERN_MULTI_LEAF));
     }
 

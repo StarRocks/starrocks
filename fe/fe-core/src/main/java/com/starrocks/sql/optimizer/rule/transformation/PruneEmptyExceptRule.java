@@ -44,9 +44,9 @@ case2:
       /      \     ->  Child1
    Child1    Empty
  */
-public class PruneExceptEmptyRule extends TransformationRule {
-    public PruneExceptEmptyRule() {
-        super(RuleType.TF_PRUNE_EXCEPT_EMPTY,
+public class PruneEmptyExceptRule extends TransformationRule {
+    public PruneEmptyExceptRule() {
+        super(RuleType.TF_PRUNE_EMPTY_EXCEPT,
                 Pattern.create(OperatorType.LOGICAL_EXCEPT, OperatorType.PATTERN_MULTI_LEAF));
     }
 

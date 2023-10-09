@@ -84,6 +84,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
+        FeConstants.enablePruneEmptyOutputScan = false;
         Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();

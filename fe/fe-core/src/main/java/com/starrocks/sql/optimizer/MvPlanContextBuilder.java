@@ -29,6 +29,7 @@ public class MvPlanContextBuilder {
         optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
         optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
         optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
+        optimizerConfig.disableRule(RuleType.TF_PRUNE_EMPTY_SCAN);
         // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
         if (mv.getRefreshScheme().isSync()) {
             optimizerConfig.disableRule(RuleType.TF_MATERIALIZED_VIEW);

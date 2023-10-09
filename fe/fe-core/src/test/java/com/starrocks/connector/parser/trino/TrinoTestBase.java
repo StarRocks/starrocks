@@ -53,6 +53,7 @@ public class TrinoTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+        FeConstants.enablePruneEmptyOutputScan = false;
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         String dbName = "test";

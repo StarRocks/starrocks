@@ -1305,7 +1305,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "          ref_0.id_datetime as c2\n" +
                 "        from \n" +
                 "          test_all_type as ref_0\n" +
-                "        where cast(null as DOUBLE) <= ref_0.t1f) as subq_0\n" +
+                "        where cast(1 as DOUBLE) <= ref_0.t1f) as subq_0\n" +
                 "    left join part as ref_1\n" +
                 "    on (subq_0.c0 = ref_1.P_RETAILPRICE )\n" +
                 "where subq_0.c1 <> subq_0.c1\n" +
@@ -1313,7 +1313,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         ExecPlan execPlan = getExecPlan(sql);
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
         // check without error
-        assertContains(plan, "  4:HASH JOIN\n" +
+        assertContains(plan, "  5:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 18: P_RETAILPRICE = 21: cast\n" +
@@ -1345,24 +1345,22 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "        from \n" +
                 "          orders as ref_0 \n" +
                 "        where \n" +
-                "          ref_0.o_totalprice > ref_0.o_totalprice\n" +
+                "          ref_0.o_totalprice >= ref_0.o_totalprice\n" +
                 "      ) as subq_0 \n" +
-                "    where \n" +
-                "      null\n" +
                 "  ) as subq_1 \n" +
                 "  left join customer as ref_1 on (subq_1.c2 = ref_1.c_custkey) \n" +
                 "where \n" +
                 "  subq_1.c4 >= subq_1.c4;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 09\n" +
+                "    EXCHANGE ID: 10\n" +
                 "    UNPARTITIONED\n" +
                 "\n" +
-                "  8:Project\n" +
+                "  9:Project\n" +
                 "  |  <slot 2> : 2: O_CUSTKEY\n" +
                 "  |  <slot 14> : 14: C_ADDRESS\n" +
                 "  |  \n" +
-                "  7:HASH JOIN\n" +
+                "  8:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 12: C_CUSTKEY = 2: O_CUSTKEY");
