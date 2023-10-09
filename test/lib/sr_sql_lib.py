@@ -959,12 +959,12 @@ class StarrocksSQLApiLib(object):
         res = self.execute_sql(sql, True)
         tools.assert_false(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
 
-    def wait_alter_table_finish(self, alter_type="COLUMN"):
+    def wait_alter_table_finish(self, alter_type="COLUMN", timeout=600):
         """
         wait alter table job finish and return status
         """
         status = ""
-        while True:
+        while timeout > 0:
             res = self.execute_sql(
                 "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
                 True,
@@ -975,15 +975,16 @@ class StarrocksSQLApiLib(object):
             status = res["result"][0][9]
             if status == "FINISHED" or status == "CANCELLED" or status == "":
                 break
-            time.sleep(0.5)
+            time.sleep(1)
+            timeout -= 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
-    def wait_optimize_table_finish(self, alter_type="OPTIMIZE"):
+    def wait_optimize_table_finish(self, alter_type="OPTIMIZE", timeout=600):
         """
         wait alter table job finish and return status
         """
         status = ""
-        while True:
+        while timeout > 0:
             res = self.execute_sql(
                 "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
                 True,
@@ -994,7 +995,8 @@ class StarrocksSQLApiLib(object):
             status = res["result"][0][6]
             if status == "FINISHED" or status == "CANCELLED" or status == "":
                 break
-            time.sleep(0.5)
+            time.sleep(1)
+            timeout -= 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
     def wait_global_dict_ready(self, column_name, table_name):
