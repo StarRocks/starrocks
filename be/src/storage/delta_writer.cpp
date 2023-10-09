@@ -112,7 +112,6 @@ Status DeltaWriter::_init() {
         _set_state(kUninitialized, st);
         return st;
     }
-    LOG(INFO) << "init tablet:" << _tablet->tablet_id() << " delta writer";
     if (_tablet->updates() != nullptr) {
         auto tracker = _storage_engine->update_manager()->mem_tracker();
         if (tracker->limit_exceeded()) {

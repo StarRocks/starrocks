@@ -127,6 +127,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -543,20 +544,18 @@ public class OlapTable extends Table {
     // rebuild the full schema of table
     // the order of columns in fullSchema is meaningless
     public void rebuildFullSchema() {
-        fullSchema.clear();
-        nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        List<Column> newFullSchema = new CopyOnWriteArrayList<>();
         for (Column baseColumn : indexIdToMeta.get(baseIndexId).getSchema()) {
-            fullSchema.add(baseColumn);
-            nameToColumn.put(baseColumn.getName(), baseColumn);
+            newFullSchema.add(baseColumn);
         }
         for (MaterializedIndexMeta indexMeta : indexIdToMeta.values()) {
             for (Column column : indexMeta.getSchema()) {
                 if (!nameToColumn.containsKey(column.getName())) {
-                    fullSchema.add(column);
-                    nameToColumn.put(column.getName(), column);
+                    newFullSchema.add(column);
                 }
             }
         }
+        setNewFullSchema(newFullSchema);
         LOG.debug("after rebuild full schema. table {}, schema: {}", id, fullSchema);
     }
 

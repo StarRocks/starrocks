@@ -407,8 +407,6 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                 int base_index = _slot_id_to_index_map[ref_column];
                 const TypeInfoPtr& ref_type_info = base_schema.field(base_index)->type();
                 const TypeInfoPtr& new_type_info = new_schema.field(i)->type();
-                LOG(INFO) << "base_schema[" << base_index << "]:" << base_schema.field(base_index)->name()
-                          << " new_schema[" << i << "]:" << new_schema.field(i)->name();
 
                 int reftype_precision = ref_type_info->precision();
                 int reftype_scale = ref_type_info->scale();

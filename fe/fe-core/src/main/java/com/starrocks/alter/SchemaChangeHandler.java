@@ -2356,7 +2356,18 @@ public class SchemaChangeHandler extends AlterHandler {
                     Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
                     modifiedColumns.add(originSchema.get(dropIdx).getName());
                 }
+                List<Integer> sortKeyUniqueIds = currentIndexMeta.getSortKeyUniqueIds();
+                List<Integer> newSortKeyIdxes = new ArrayList<Integer>();
+                for (Integer uniqueId : sortKeyUniqueIds) {
+                    Optional<Column> col = indexSchema.stream().filter(c -> c.getUniqueId() == uniqueId).findFirst();
+                    if (!col.isPresent()) {
+                        throw new DdlException("Sork key col with unique id: " + uniqueId + " not exists");
+                    }
+                    int sortKeyIdx = indexSchema.indexOf(col.get());
+                    newSortKeyIdxes.add(sortKeyIdx);
+                }
                 currentIndexMeta.setSchema(indexSchema);
+                currentIndexMeta.setSortKeyIdxes(newSortKeyIdxes);
 
                 int currentSchemaVersion = currentIndexMeta.getSchemaVersion();
                 int newSchemaVersion = currentSchemaVersion + 1;
