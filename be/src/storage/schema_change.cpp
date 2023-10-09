@@ -760,35 +760,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     }
 
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
-        const auto& base_sort_key_idxes = base_tablet->tablet_schema()->sort_key_idxes();
-        const auto& new_sort_key_idxes = new_tablet->tablet_schema()->sort_key_idxes();
-        std::vector<int32_t> base_sort_key_unique_ids;
-        std::vector<int32_t> new_sort_key_unique_ids;
-        for (auto idx : base_sort_key_idxes) {
-            base_sort_key_unique_ids.emplace_back(base_tablet->tablet_schema()->column(idx).unique_id());
-        }
-        for (auto idx : new_sort_key_idxes) {
-            new_sort_key_unique_ids.emplace_back(new_tablet->tablet_schema()->column(idx).unique_id());
-        }
-
-        if (new_sort_key_unique_ids.size() > base_sort_key_unique_ids.size()) {
-            // new sort keys' size is greater than base sort keys, must be sc_sorting
-            sc_params.sc_sorting = true;
-            sc_params.sc_directly = false;
-        } else {
-            auto base_iter = base_sort_key_unique_ids.cbegin();
-            auto new_iter = new_sort_key_unique_ids.cbegin();
-            // check wheather new sort keys are just subset of base sort keys
-            while (new_iter != new_sort_key_unique_ids.cend() && *base_iter == *new_iter) {
-                ++base_iter;
-                ++new_iter;
-            }
-            if (new_iter != new_sort_key_unique_ids.cend()) {
-                sc_params.sc_sorting = true;
-                sc_params.sc_directly = false;
-            }
-        }
-
         // pk table can handle the case that convert version > request version, duplicate versions will be skipped
         int64_t request_version = request.alter_version;
         int64_t base_max_version = base_tablet->max_version().first;
