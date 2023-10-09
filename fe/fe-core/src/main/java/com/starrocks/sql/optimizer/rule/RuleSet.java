@@ -69,6 +69,7 @@ import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityWithoutInnerRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
+import com.starrocks.sql.optimizer.rule.transformation.LimitPruneTabletsRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeApplyWithTableFunction;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
@@ -80,13 +81,18 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule
 import com.starrocks.sql.optimizer.rule.transformation.PruneAssertOneRowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEConsumeColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEProduceRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyDirectRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyExceptRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyIntersectRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyUnionRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneExceptColumnsRule;
-import com.starrocks.sql.optimizer.rule.transformation.PruneExceptEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneFilterColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneGroupByKeysRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneHDFSScanColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneIntersectColumnsRule;
-import com.starrocks.sql.optimizer.rule.transformation.PruneIntersectEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneJoinColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneProjectColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneProjectEmptyRule;
@@ -97,7 +103,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneTableFunctionColumnR
 import com.starrocks.sql.optimizer.rule.transformation.PruneTopNColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTrueFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUnionColumnsRule;
-import com.starrocks.sql.optimizer.rule.transformation.PruneUnionEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneValuesColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneWindowColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggFilterRule;
@@ -239,7 +244,8 @@ public class RuleSet {
                 ExternalScanPartitionPruneRule.DELTALAKE_SCAN,
                 ExternalScanPartitionPruneRule.FILE_SCAN,
                 ExternalScanPartitionPruneRule.ES_SCAN,
-                ExternalScanPartitionPruneRule.PAIMON_SCAN
+                ExternalScanPartitionPruneRule.PAIMON_SCAN,
+                new LimitPruneTabletsRule()
         ));
 
         REWRITE_RULES.put(RuleSetType.PRUNE_COLUMNS, ImmutableList.of(
@@ -347,12 +353,6 @@ public class RuleSet {
                 new RewriteMultiDistinctRule()
         ));
 
-        REWRITE_RULES.put(RuleSetType.PRUNE_SET_OPERATOR, ImmutableList.of(
-                new PruneUnionEmptyRule(),
-                new PruneIntersectEmptyRule(),
-                new PruneExceptEmptyRule()
-        ));
-
         REWRITE_RULES.put(RuleSetType.PRUNE_PROJECT, ImmutableList.of(
                 new PruneProjectRule(),
                 new PruneProjectEmptyRule(),
@@ -385,6 +385,20 @@ public class RuleSet {
                 OnlyJoinRule.getInstance()
         ));
 
+        REWRITE_RULES.put(RuleSetType.PRUNE_EMPTY_OPERATOR, ImmutableList.of(
+                PruneEmptyScanRule.OLAP_SCAN,
+                PruneEmptyScanRule.HIVE_SCAN,
+                PruneEmptyScanRule.HUDI_SCAN,
+                PruneEmptyScanRule.ICEBERG_SCAN,
+                PruneEmptyScanRule.PAIMON_SCAN,
+                PruneEmptyJoinRule.JOIN_LEFT_EMPTY,
+                PruneEmptyJoinRule.JOIN_RIGHT_EMPTY,
+                new PruneEmptyDirectRule(),
+                new PruneEmptyUnionRule(),
+                new PruneEmptyIntersectRule(),
+                new PruneEmptyExceptRule(),
+                new PruneEmptyWindowRule()
+        ));
     }
 
     public RuleSet() {

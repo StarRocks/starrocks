@@ -66,6 +66,7 @@ public class ReplayFromDumpTestBase {
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
         FeConstants.showLocalShuffleColumnsInExplain = false;
+        FeConstants.enablePruneEmptyOutputScan = false;
 
         new MockUp<EditLog>() {
             @Mock
