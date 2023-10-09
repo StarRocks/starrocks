@@ -67,13 +67,6 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.TimeUnitUtils.DAY;
-import static com.starrocks.sql.common.TimeUnitUtils.HOUR;
-import static com.starrocks.sql.common.TimeUnitUtils.MINUTE;
-import static com.starrocks.sql.common.TimeUnitUtils.MONTH;
-import static com.starrocks.sql.common.TimeUnitUtils.QUARTER;
-import static com.starrocks.sql.common.TimeUnitUtils.YEAR;
-
 /**
  * Process lower bound and upper bound for Expression Partition,
  * only support SlotRef and FunctionCallExpr
@@ -129,17 +122,17 @@ public class SyncPartitionUtils {
                                                                  Map<String, Range<PartitionKey>> mvRangeMap,
                                                                  FunctionCallExpr functionCallExpr,
                                                                  Range<PartitionKey> rangeToInclude) {
-        String granularity = functionCallExpr.getParams().exprs().get(0).<LiteralExpr>cast().getStringValue();
+        PrimitiveType partitionType = functionCallExpr.getType().getPrimitiveType();
         Map<String, Range<PartitionKey>> rollupRange =
-                mappingRangeList(baseRangeMap, granularity, partitionType, functionCallExpr);
+                mappingRangeList(baseRangeMap, partitionType, functionCallExpr);
         return getRangePartitionDiff(baseRangeMap, mvRangeMap, rollupRange, rangeToInclude);
     }
 
     @VisibleForTesting
     public static RangePartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                  Map<String, Range<PartitionKey>> mvRangeMap,
-                                                                 String granularity, PrimitiveType partitionType) {
-        Map<String, Range<PartitionKey>> rollupRange = mappingRangeList(baseRangeMap, granularity, partitionType, null);
+                                                                 PrimitiveType partitionType) {
+        Map<String, Range<PartitionKey>> rollupRange = mappingRangeList(baseRangeMap, partitionType, null);
         return getRangePartitionDiff(baseRangeMap, mvRangeMap, rollupRange, null);
     }
 
@@ -168,7 +161,7 @@ public class SyncPartitionUtils {
     }
 
     public static Map<String, Range<PartitionKey>> mappingRangeList(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                                    String granularity, PrimitiveType partitionType,
+                                                                    PrimitiveType partitionType,
                                                                     FunctionCallExpr functionCallExpr) {
         Set<LocalDateTime> timePointSet = Sets.newTreeSet();
         for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
@@ -193,7 +186,7 @@ public class SyncPartitionUtils {
                 Type columnType = Type.fromPrimitiveType(partitionType);
                 lowerPartitionKey.pushColumn(new DateLiteral(lowerDateTime, columnType), partitionType);
                 upperPartitionKey.pushColumn(new DateLiteral(upperDateTime, columnType), partitionType);
-                String mvPartitionName = getMVPartitionName(lowerDateTime, upperDateTime, granularity);
+                String mvPartitionName = getMVPartitionName(lowerDateTime, upperDateTime);
                 result.put(mvPartitionName, Range.closedOpen(lowerPartitionKey, upperPartitionKey));
             } catch (AnalysisException ex) {
                 throw new SemanticException("Convert to DateLiteral failed:", ex);
@@ -368,35 +361,12 @@ public class SyncPartitionUtils {
         }
     }
 
-    public static String getMVPartitionName(LocalDateTime lower, LocalDateTime upper) {
-        return DEFAULT_PREFIX + lower.format(DateUtils.DATEKEY_FORMATTER)
-                + "_" + upper.format(DateUtils.DATEKEY_FORMATTER);
-    }
-
-    public static String getMVPartitionName(LocalDateTime lowerDateTime, LocalDateTime upperDateTime,
-                                            String granularity) {
-        switch (granularity) {
-            case MINUTE:
-                return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.MINUTE_FORMATTER) +
-                        "_" + upperDateTime.format(DateUtils.MINUTE_FORMATTER);
-            case HOUR:
-                return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.HOUR_FORMATTER) +
-                        "_" + upperDateTime.format(DateUtils.HOUR_FORMATTER);
-            case DAY:
-                return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.DATEKEY_FORMATTER) +
-                        "_" + upperDateTime.format(DateUtils.DATEKEY_FORMATTER);
-            case MONTH:
-                return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.MONTH_FORMATTER) +
-                        "_" + upperDateTime.format(DateUtils.MONTH_FORMATTER);
-            case QUARTER:
-                return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.QUARTER_FORMATTER) +
-                        "_" + upperDateTime.format(DateUtils.QUARTER_FORMATTER);
-            case YEAR:
-                return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.YEAR_FORMATTER) +
-                        "_" + upperDateTime.format(DateUtils.YEAR_FORMATTER);
-            default:
-                throw new SemanticException("Do not support date_trunc format string:{}", granularity);
-        }
+    public static String getMVPartitionName(LocalDateTime lowerDateTime, LocalDateTime upperDateTime) {
+        String lowerStr = lowerDateTime.format(DateUtils.MINUTE_FORMATTER_UNIX);
+        lowerStr = StringUtils.removeEnd(lowerStr, "0");
+        String upperStr = upperDateTime.format(DateUtils.MINUTE_FORMATTER_UNIX);
+        upperStr = StringUtils.removeEnd(upperStr, "0");
+        return lowerStr + "_" + upperStr;
     }
 
     public static Map<String, Range<PartitionKey>> diffRange(Map<String, Range<PartitionKey>> srcRangeMap,
