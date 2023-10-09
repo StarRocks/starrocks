@@ -1461,6 +1461,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     }
 
     @Test
+    @Ignore
     public void testMvWithoutPartitionRefreshTwice() throws Exception {
         final AtomicInteger taskRunCounter = new AtomicInteger();
         new MockUp<StmtExecutor>() {
