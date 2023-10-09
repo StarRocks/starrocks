@@ -17,12 +17,12 @@
 #include <condition_variable>
 #include <utility>
 
+#include "bthread/mutex.h"
 #include "column/vectorized_fwd.h"
 #include "runtime/data_stream_recvr.h"
 #include "serde/protobuf_serde.h"
 #include "util/moodycamel/concurrentqueue.h"
 #include "util/spinlock.h"
-#include "bthread/mutex.h"
 
 namespace google::protobuf {
 class Closure;
