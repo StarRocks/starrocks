@@ -1320,29 +1320,11 @@ public class StmtExecutor {
     }
 
     private void checkTblPrivilegeForKillAnalyzeStmt(ConnectContext context, String catalogName, String dbName,
-                                                     String tableName, long analyzeId) {
+                                                     String tableName) {
         MetaUtils.getDatabase(catalogName, dbName);
         MetaUtils.getTable(catalogName, dbName, tableName);
-
-        try {
-            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    catalogName, dbName, tableName, PrivilegeType.SELECT);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    catalogName,
-                    ConnectContext.get().getCurrentUserIdentity(),
-                    ConnectContext.get().getCurrentRoleIds(), PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName);
-        }
-
-        try {
-            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    catalogName, dbName, tableName, PrivilegeType.INSERT);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    catalogName,
-                    ConnectContext.get().getCurrentUserIdentity(),
-                    ConnectContext.get().getCurrentRoleIds(), PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), tableName);
-        }
+        Authorizer.checkActionForAnalyzeStatement(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                new TableName(catalogName, dbName, tableName));
     }
 
     public void checkPrivilegeForKillAnalyzeStmt(ConnectContext context, long analyzeId) {
@@ -1354,7 +1336,7 @@ public class StmtExecutor {
                 String catalogName = analyzeStatus.getCatalogName();
                 String dbName = analyzeStatus.getDbName();
                 String tableName = analyzeStatus.getTableName();
-                checkTblPrivilegeForKillAnalyzeStmt(context, catalogName, dbName, tableName, analyzeId);
+                checkTblPrivilegeForKillAnalyzeStmt(context, catalogName, dbName, tableName);
             } catch (MetaNotFoundException ignore) {
                 // If the db or table doesn't exist anymore, we won't check privilege on it
             }
@@ -1364,7 +1346,7 @@ public class StmtExecutor {
                     nativeAnalyzeJob.getTableId());
             tableNames.forEach(tableName ->
                     checkTblPrivilegeForKillAnalyzeStmt(context, tableName.getCatalog(), tableName.getDb(),
-                            tableName.getTbl(), analyzeId)
+                            tableName.getTbl())
             );
         }
     }
