@@ -258,9 +258,15 @@ public class SlotRef extends Expr {
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.SLOT_REF;
         if (desc != null) {
-            msg.slot_ref = new TSlotRef(desc.getId().asInt(), desc.getParent().getId().asInt());
+            if (desc.getParent() != null) {
+                msg.slot_ref = new TSlotRef(desc.getId().asInt(), desc.getParent().getId().asInt());
+            } else {
+                // tuple id is meaningless here
+                msg.slot_ref = new TSlotRef(desc.getId().asInt(), 0);
+            }
         } else {
-            msg.slot_ref = new TSlotRef(0,0);
+            // slot id and tuple id are meaningless here
+            msg.slot_ref = new TSlotRef(0, 0);
         }
 
         msg.setOutput_column(outputColumn);

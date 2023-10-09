@@ -23,7 +23,6 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
@@ -77,9 +76,6 @@ public class StreamLoadScanNodeTest {
 
     @Injectable
     OlapTable dstTable;
-
-    @Mocked
-    CastExpr castExpr;
 
     TStreamLoadPutRequest getBaseRequest() {
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
