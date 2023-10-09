@@ -118,6 +118,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     @SerializedName("cpr")
     private Map<String, String> customProperties = Maps.newHashMap();
     private Map<String, String> convertedCustomProperties = Maps.newHashMap();
+    @SerializedName("csru")
     private String confluentSchemaRegistryUrl = null;
     @SerializedName("ckpo")
     private List<Pair<Integer, Long>> customeKafkaPartitionOffsets = null;
