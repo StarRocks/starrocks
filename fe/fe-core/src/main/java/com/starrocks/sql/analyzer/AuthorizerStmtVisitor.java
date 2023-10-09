@@ -1415,9 +1415,23 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                      ConnectContext context) {
+<<<<<<< HEAD
         Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                 statement.getTableName().getDb(), PrivilegeType.CREATE_MATERIALIZED_VIEW);
+=======
+        try {
+            Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    statement.getTableName().getDb(), PrivilegeType.CREATE_MATERIALIZED_VIEW);
+            visitQueryStatement(statement.getQueryStatement(), context);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.CREATE_MATERIALIZED_VIEW.name(), ObjectType.DATABASE.name(), statement.getTableName().getDb());
+        }
+>>>>>>> ac682b89a2 ([BugFix] fix create mv privilege (#32255))
         return null;
     }
 
