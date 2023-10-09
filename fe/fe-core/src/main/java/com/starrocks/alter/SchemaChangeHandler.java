@@ -88,7 +88,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StorageInfo;
@@ -1605,17 +1604,17 @@ public class SchemaChangeHandler extends AlterHandler {
                 LOG.info("pos 4");
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
                 PeriodDuration partitionDuration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+                if (partitionDuration == null) {
+                    throw new DdlException("invalid datacache.partition_duration inputed");
+                }
+
                 PeriodDuration oldPartitionDuration = olapTable.dataCachePartitionDuration();
                 if (partitionDuration == oldPartitionDuration) {
                     LOG.info(String.format("table: %s datacache.partition_duration is %s, nothing need to do",
                             olapTable.getName(), partitionDuration));
                     return null;
                 }
-
-
-                olapTable.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION,
-                        TimeUtils.toHumanReadableString(partitionDuration));
-                olapTable.getTableProperty().buildDataCachePartitionDuration();
+                olapTable.setDataCachePartitionDuration(partitionDuration);
                 LOG.info("pos 5");
             } else {
                 // shouldn't happen
