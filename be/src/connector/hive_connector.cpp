@@ -198,7 +198,7 @@ Status HiveDataSource::_init_partition_values() {
     return Status::OK();
 }
 
-int32_t HiveDataSource::is_scan_range_indicate_const_column(SlotId id) const {
+int32_t HiveDataSource::scan_range_indicate_const_column_index(SlotId id) const {
     if (!_scan_range.__isset.identity_partition_slot_ids) {
         return -1;
     }
@@ -225,7 +225,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
             _partition_index_in_chunk.push_back(i);
             _partition_index_in_hdfs_partition_columns.push_back(_hive_table->get_partition_col_index(slots[i]));
             _has_partition_columns = true;
-        } else if (int32_t index = is_scan_range_indicate_const_column(slots[i]->id()); index >= 0) {
+        } else if (int32_t index = scan_range_indicate_const_column_index(slots[i]->id()); index >= 0) {
             _partition_slots.push_back(slots[i]);
             _partition_index_in_chunk.push_back(i);
             _partition_index_in_hdfs_partition_columns.push_back(index);
