@@ -213,9 +213,11 @@ public class DynamicPartitionUtil {
         String timeZone = properties.get(DynamicPartitionProperty.TIME_ZONE);
         String end = properties.get(DynamicPartitionProperty.END);
         String enable = properties.get(DynamicPartitionProperty.ENABLE);
+        String buckets = properties.get(DynamicPartitionProperty.BUCKETS);
 
         if (!(Strings.isNullOrEmpty(enable) && Strings.isNullOrEmpty(timeUnit) && Strings.isNullOrEmpty(timeZone)
-                && Strings.isNullOrEmpty(prefix) && Strings.isNullOrEmpty(start) && Strings.isNullOrEmpty(end))) {
+                && Strings.isNullOrEmpty(prefix) && Strings.isNullOrEmpty(start) && Strings.isNullOrEmpty(end)
+                && Strings.isNullOrEmpty(buckets))) {
 
             if (partitionInfo.getType() != PartitionType.RANGE || partitionInfo.isMultiColumnPartition()) {
                 throw new DdlException("Dynamic partition only support single-column range partition");
