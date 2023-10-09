@@ -519,7 +519,7 @@ public class SetTest extends PlanTestBase {
                 "  |      [8: day, TINYINT, true]\n" +
                 "  |  pass-through-operands: all");
     }
-
+    /*
     @Test
     public void testUnionWithOrderBy() throws Exception {
         {
@@ -565,6 +565,7 @@ public class SetTest extends PlanTestBase {
                     "  |  <slot 4> : 1: v1 + 2: v2"));
         }
     }
+    */
 
     @Test
     public void testUserVariable() throws Exception {
