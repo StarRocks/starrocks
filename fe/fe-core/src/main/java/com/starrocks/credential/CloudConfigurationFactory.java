@@ -21,7 +21,11 @@ import com.starrocks.credential.aws.AWSCloudCredential;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvoder;
 import com.starrocks.credential.hdfs.HDFSCloudConfigurationProvider;
+<<<<<<< HEAD
 import com.starrocks.credential.hdfs.StrictHDFSCloudConfigurationProvider;
+=======
+import com.starrocks.credential.tencent.TencentCloudConfigurationProvider;
+>>>>>>> 6a792a3fcb ([Feature] Support Tencent cos filesystem (#31758))
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.iceberg.aws.AwsClientProperties;
 import org.apache.iceberg.aws.s3.S3FileIOProperties;
@@ -36,6 +40,7 @@ public class CloudConfigurationFactory {
             new AzureCloudConfigurationProvider(),
             new GCPCloudConfigurationProvoder(),
             new AliyunCloudConfigurationProvider(),
+            new TencentCloudConfigurationProvider(),
             new HDFSCloudConfigurationProvider(),
             (Map<String, String> properties) -> new CloudConfiguration());
 
