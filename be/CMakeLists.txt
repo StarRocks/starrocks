@@ -399,12 +399,6 @@ if (${WITH_CACHELIB} STREQUAL "ON")
     endforeach()
 endif()
 
-if (${WITH_STARCACHE} STREQUAL "ON")
-    add_library(starcache STATIC IMPORTED GLOBAL)
-    set_target_properties(starcache PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/starcache/lib/libstarcache.a)
-    include_directories(SYSTEM ${THIRDPARTY_DIR}/starcache/include)
-endif()
-
 if ("${USE_STAROS}" STREQUAL "ON")
     if (DEFINED ENV{STARLET_INSTALL_DIR})
         set(STARLET_INSTALL_DIR "$ENV{STARLET_INSTALL_DIR}")
@@ -433,7 +427,6 @@ if ("${USE_STAROS}" STREQUAL "ON")
     add_library(brpc::brpc ALIAS brpc)
     add_library(leveldb::leveldb ALIAS leveldb)
     add_library(CURL::libcurl ALIAS curl)
-    add_library(starcache::starcache ALIAS starcache)
 
     set(absl_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
     find_package(absl CONFIG REQUIRED)
@@ -467,6 +460,11 @@ if ("${USE_STAROS}" STREQUAL "ON")
     find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
     set(AZURE_SDK_LIB Azure::azure-identity Azure::azure-storage-blobs Azure::azure-core Azure::azure-storage-common)
 
+    set(starcache_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake/starcache" CACHE PATH "starcachelib search path")
+    find_package(starcache CONFIG REQUIRED)
+    set_target_properties(starcache::starcache PROPERTIES IMPORTED_GLOBAL TRUE)
+    add_library(starcachelib ALIAS starcache::starcache)
+
     set(starlet_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake" CACHE PATH "starlet search path")
     find_package(starlet CONFIG REQUIRED)
     message(STATUS "Using starlet ${starlet_VERSION}")
@@ -483,7 +481,7 @@ if ("${USE_STAROS}" STREQUAL "ON")
        ${STARROCKS_DEPENDENCIES}
        starlet
        starlet_fslib_all
-       starcache
+       starcachelib
        ${AZURE_SDK_LIB}
        )
 endif()
@@ -794,16 +792,6 @@ if (${WITH_CACHELIB} STREQUAL "ON")
         ${WL_START_GROUP}
         ${Boost_LIBRARIES}
         ${CACHELIB_DEPENDENCIES}
-        ${WL_END_GROUP}
-    )
-endif()
-
-if (${WITH_STARCACHE} STREQUAL "ON")
-    set(STARROCKS_DEPENDENCIES
-        ${STARROCKS_DEPENDENCIES}
-        ${WL_START_GROUP}
-        brpc
-        starcache
         ${WL_END_GROUP}
     )
 endif()
