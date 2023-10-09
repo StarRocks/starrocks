@@ -1601,11 +1601,10 @@ public class SchemaChangeHandler extends AlterHandler {
                             olapTable.getName(), dataCacheInfo.isEnabled()));
                     return null;
                 }
-                LOG.info("pos 4");
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
                 PeriodDuration partitionDuration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
                 if (partitionDuration == null) {
-                    throw new DdlException("invalid datacache.partition_duration inputed");
+                    throw new DdlException("Null datacache.partition_duration");
                 }
 
                 PeriodDuration oldPartitionDuration = olapTable.dataCachePartitionDuration();
@@ -1615,7 +1614,6 @@ public class SchemaChangeHandler extends AlterHandler {
                     return null;
                 }
                 olapTable.setDataCachePartitionDuration(partitionDuration);
-                LOG.info("pos 5");
             } else {
                 // shouldn't happen
                 throw new DdlException(
