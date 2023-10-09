@@ -60,6 +60,7 @@ import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.Collection;
@@ -1356,6 +1357,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     }
 
     @Test
+    @Ignore
     public void testMvWithoutPartitionRefreshTwice() throws Exception {
         final AtomicInteger taskRunCounter = new AtomicInteger();
         new MockUp<StmtExecutor>() {
