@@ -39,10 +39,13 @@
 #include <sstream>
 
 #include "common/object_pool.h"
+#include "exprs/base64.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/descriptors.pb.h"
+#include "util/compression/block_compression.h"
+#include "util/thrift_util.h"
 
 namespace starrocks {
 using boost::algorithm::join;
@@ -182,9 +185,32 @@ IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, Ob
     _columns = tdesc.icebergTable.columns;
     _t_iceberg_schema = tdesc.icebergTable.iceberg_schema;
     _partition_column_names = tdesc.icebergTable.partition_column_names;
-    for (const auto& entry : tdesc.icebergTable.partitions) {
-        auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.icebergTable, entry.second));
-        _partition_id_to_desc_map[entry.first] = partition;
+    if (tdesc.icebergTable.__isset.compressed_partitions) {
+        std::string base64_partition_map = tdesc.icebergTable.compressed_partitions.compressed_serialized_partitions;
+        std::string compressed_buf;
+        compressed_buf.resize(base64_partition_map.size() + 3);
+        base64_decode2(base64_partition_map.data(), base64_partition_map.size(), compressed_buf.data());
+        compressed_buf.resize(tdesc.icebergTable.compressed_partitions.compressed_len);
+
+        std::string uncompressed_buf;
+        uncompressed_buf.resize(tdesc.icebergTable.compressed_partitions.original_len);
+        Slice uncompress_output(uncompressed_buf);
+        const BlockCompressionCodec* zlib_uncompress_codec = nullptr;
+        Status st;
+        st = get_block_compression_codec(starrocks::CompressionTypePB::ZLIB, &zlib_uncompress_codec);
+        if (st.ok()) {
+            st = zlib_uncompress_codec->decompress(compressed_buf, &uncompress_output);
+        }
+        if (st.ok()) {
+            TPartitionMap* tPartitionMap = pool->add(new TPartitionMap());
+            st = deserialize_thrift_msg(reinterpret_cast<uint8_t*>(uncompress_output.data), reinterpret_cast<uint32_t*>(&uncompress_output.size), TProtocolType::BINARY, tPartitionMap);
+            if (st.ok()) {
+                for (const auto& entry : tPartitionMap->partitions) {
+                    auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.icebergTable, entry.second));
+                    _partition_id_to_desc_map[entry.first] = partition;
+                }
+            }
+        }
     }
 }
 
