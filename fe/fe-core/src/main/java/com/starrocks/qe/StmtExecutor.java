@@ -1158,11 +1158,8 @@ public class StmtExecutor {
                                                      String tableName, long analyzeId) {
         MetaUtils.getDatabase(catalogName, dbName);
         MetaUtils.getTable(catalogName, dbName, tableName);
-
-        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                catalogName, dbName, tableName, PrivilegeType.SELECT);
-        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                catalogName, dbName, tableName, PrivilegeType.INSERT);
+        Authorizer.checkActionForAnalyzeStatement(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                new TableName(catalogName, dbName, tableName));
     }
 
     public void checkPrivilegeForKillAnalyzeStmt(ConnectContext context, long analyzeId) {

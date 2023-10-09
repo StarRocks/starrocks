@@ -38,7 +38,7 @@ public class MockedMetadataMgr extends MetadataMgr {
 
     @Override
     public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
-        if (CatalogMgr.isInternalCatalog(catalogName)) {
+        if (catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
             return Optional.of(localMetastore);
         } else {
             return Optional.ofNullable(metadatas.get(catalogName));
