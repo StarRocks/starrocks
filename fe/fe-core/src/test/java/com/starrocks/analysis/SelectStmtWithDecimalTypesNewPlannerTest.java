@@ -478,7 +478,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         sql = "select count(`dec_18_0`) from `test_decimal_type6`;";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         Assert.assertTrue(plan.contains(
-                "aggregate: count[([2: dec_18_0, DECIMAL64(18,0), false]); args: DECIMAL64; result: BIGINT; args nullable: false; result nullable: true]"));
+                "aggregate: count[([2: dec_18_0, DECIMAL64(18,0), false]); args: DECIMAL64; result: BIGINT; args nullable: false; result nullable: false]"));
 
         // test decimal add return a nullable column
         sql = "select count(`dec_18_0` + `dec_18_18`) from `test_decimal_type6`;";
