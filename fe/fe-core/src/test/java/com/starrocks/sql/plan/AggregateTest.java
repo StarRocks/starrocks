@@ -1890,7 +1890,6 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testRewriteSumByAssociativeRule() throws Exception {
         // 1. different types
-        // 1.1 nullable
         String sql = "select sum(t1b+1),sum(t1c+1),sum(t1d+1),sum(t1e+1),sum(t1f+1),sum(t1g+1),sum(id_decimal+1)" +
                 " from test_all_type";
         String plan = getVerboseExplain(sql);
@@ -1950,23 +1949,6 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 10> : 10: id_decimal\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
-        // 1.2 not null
-        sql = "select sum(t1b+1),sum(t1c+1),sum(t1d+1),sum(t1e+1),sum(t1f+1),sum(t1g+1),sum(id_decimal+1)" +
-                " from test_all_type_not_null";
-        plan = getVerboseExplain(sql);
-        // for each sum(col + 1), should rewrite to sum(col) + count() * 1,
-        // so count() will be a common expression
-        assertContains(plan, "  3:Project\n" +
-                "  |  output columns:\n" +
-                "  |  18 <-> [25: sum, BIGINT, true] + [26: count, BIGINT, true] * 1\n" +
-                "  |  19 <-> [27: sum, BIGINT, true] + [28: count, BIGINT, true] * 1\n" +
-                "  |  20 <-> [29: sum, BIGINT, true] + [40: multiply, BIGINT, true]\n" +
-                "  |  21 <-> [32: sum, DOUBLE, true] + cast([33: count, BIGINT, true] as DOUBLE) * 1.0\n" +
-                "  |  22 <-> [34: sum, DOUBLE, true] + cast([35: count, BIGINT, true] as DOUBLE) * 1.0\n" +
-                "  |  23 <-> [36: sum, BIGINT, true] + [40: multiply, BIGINT, true]\n" +
-                "  |  24 <-> [38: sum, DECIMAL128(38,2), true] + cast([39: count, BIGINT, true] as DECIMAL128(18,0)) * 1\n" +
-                "  |  common expressions:\n" +
-                "  |  40 <-> [37: count, BIGINT, true] * 1");
 
         // 2. aggregate result reuse
         sql = "select sum(t1b), sum(t1b+1), sum(t1b+2) from test_all_type";
@@ -2040,6 +2022,25 @@ public class AggregateTest extends PlanTestBase {
                 "  |  17 <-> [18: sum, BIGINT, true] + [19: count, BIGINT, true] * 2 + 1");
         assertContains(plan, "  |  group by: [3: t1c, INT, true]\n" +
                 "  |  having: [18: sum, BIGINT, true] + [19: count, BIGINT, true] * 1 > 10");
+        // 5. agg after join
+        sql = "select sum(t2.t1b+1) from test_all_type as t1 join test_all_type_not_null as t2 " +
+                "on t1.t1c = t2.t1c";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  5:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: sum[([12: t1b, SMALLINT, false]); " +
+                "args: SMALLINT; result: BIGINT; args nullable: false; result nullable: true], " +
+                "count[([12: t1b, SMALLINT, false]); " +
+                "args: SMALLINT; result: BIGINT; args nullable: false; result nullable: true]");
+        sql = "select sum(t2.t1b+1) from test_all_type as t1 left outer join test_all_type_not_null as t2 " +
+                "on t1.t1c = t2.t1c";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  6:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: sum[([12: t1b, SMALLINT, true]); " +
+                "args: SMALLINT; result: BIGINT; args nullable: true; result nullable: true], " +
+                "count[([12: t1b, SMALLINT, true]); " +
+                "args: SMALLINT; result: BIGINT; args nullable: true; result nullable: true]\n" +
+                "  |  hasNullableGenerateChild: true");
+
     }
 
     @Test
