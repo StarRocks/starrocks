@@ -50,7 +50,15 @@ StatusOr<vectorized::ChunkPtr> HashJoinBuildOperator::pull_chunk(RuntimeState* s
 }
 
 Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
+<<<<<<< HEAD
     _is_finished = true;
+=======
+    DeferOp op([this]() { _is_finished = true; });
+
+    if (state->is_cancelled()) {
+        return Status::Cancelled("runtime state is cancelled");
+    }
+>>>>>>> ebb00c0688 ([BugFix][Enhancement] skip building ht in hash join build side if query is cancelled (#32219))
     RETURN_IF_ERROR(_join_builder->build_ht(state));
 
     size_t merger_index = _driver_sequence;
