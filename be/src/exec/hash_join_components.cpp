@@ -87,11 +87,8 @@ Status HashJoinBuilder::append_chunk(RuntimeState* state, const ChunkPtr& chunk)
 }
 
 Status HashJoinBuilder::build(RuntimeState* state) {
-    // if query is already cancelled, building hash table is unnecessary, just skip it
-    if (!state->is_cancelled()) {
-        SCOPED_TIMER(_hash_joiner.build_metrics().build_ht_timer);
-        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.build(state)));
-    }
+    SCOPED_TIMER(_hash_joiner.build_metrics().build_ht_timer);
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.build(state)));
     _ready = true;
     return Status::OK();
 }
