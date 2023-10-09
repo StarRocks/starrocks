@@ -36,7 +36,6 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.TFragmentInstanceFactory;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
-import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.UnsupportedException;
@@ -369,6 +368,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
             throw ex;
         }
     }
+
     private void setMVMaintenanceTasksInfo(TMVMaintenanceTasks request,
                                            MVMaintenanceTask task) {
         // Request information
@@ -475,6 +475,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
     public long getViewId() {
         return viewId;
     }
+
     public long getDbId() {
         return dbId;
     }

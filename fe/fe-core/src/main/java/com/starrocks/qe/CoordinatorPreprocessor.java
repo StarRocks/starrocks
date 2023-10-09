@@ -25,9 +25,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
-import com.starrocks.common.Reference;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.DnsCache;
 import com.starrocks.common.util.ListUtil;
@@ -39,6 +36,7 @@ import com.starrocks.planner.FileTableScanNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.MultiCastDataSink;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PaimonScanNode;
@@ -48,9 +46,7 @@ import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
-import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.qe.scheduler.TFragmentInstanceFactory;
-import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
@@ -63,13 +59,15 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TDescriptorTable;
+import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TQueryGlobals;
+import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
-import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -80,11 +78,8 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -628,7 +623,8 @@ public class CoordinatorPreprocessor {
             // 3.construct instanceExecParam add the scanRange should be scan by instance
             for (List<Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>>> scanRangePerInstance : scanRangesPerInstance) {
                 FragmentInstance instance = new FragmentInstance(worker, execFragment);
-                // record each instance replicate scan id in set, to avoid add replicate scan range repeatedly when they are in different buckets
+                // record each instance replicate scan id in set, to avoid add replicate scan range repeatedly when they are in
+                // different buckets
                 Set<Integer> instanceReplicateScanSet = new HashSet<>();
 
                 int expectedDop = 1;
