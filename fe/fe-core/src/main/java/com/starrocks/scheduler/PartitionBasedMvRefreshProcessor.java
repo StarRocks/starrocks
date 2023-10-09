@@ -125,6 +125,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     public static final String MV_ID = "mvId";
 
+    public static final String ICEBERG_ALL_PARTITION = "ALL";
+
     // session.enable_spill
     public static final String MV_SESSION_ENABLE_SPILL =
             PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.ENABLE_SPILL;
@@ -537,14 +539,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = tableEntry.getValue();
             currentTablePartitionInfo.putAll(partitionInfoMap);
 
-            // iceberg table do not need to record each partition version,
-            // use ALL as partition name, so we don't need to remove partition info
-            if (!baseTableInfo.getTable().isIcebergTable()) {
-                // remove partition info of not-exist partition for snapshot table from version map
-                Set<String> partitionNames = Sets.newHashSet(PartitionUtil.getPartitionNames(baseTableInfo.getTable()));
-                currentTablePartitionInfo.keySet().removeIf(partitionName ->
-                        !partitionNames.contains(partitionName));
-            }
+            // remove partition info of not-exist partition for snapshot table from version map
+            Set<String> partitionNames = Sets.newHashSet(PartitionUtil.getPartitionNames(baseTableInfo.getTable()));
+            // iceberg table use ALL as partition name, so we don't need to remove partition info
+            currentTablePartitionInfo.keySet().removeIf(partitionName ->
+                    (!partitionNames.contains(partitionName) && !partitionName.equals(ICEBERG_ALL_PARTITION)));
         }
         if (!changedTablePartitionInfos.isEmpty()) {
             ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
@@ -1530,7 +1529,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                 partitionName -> new MaterializedView.BasePartitionInfo(-1,
                                 icebergTable.getRefreshSnapshotTime(), icebergTable.getRefreshSnapshotTime())));
                 // add ALL partition info, use this partition info to check if the partition has been updated.
-                partitionInfos.put("ALL", new MaterializedView.BasePartitionInfo(-1,
+                partitionInfos.put(ICEBERG_ALL_PARTITION, new MaterializedView.BasePartitionInfo(-1,
                                 icebergTable.getRefreshSnapshotTime(), icebergTable.getRefreshSnapshotTime()));
                 changedOlapTablePartitionInfos.put(baseTableInfo, partitionInfos);
             }
