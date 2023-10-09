@@ -18,8 +18,10 @@ import com.google.common.collect.AbstractSequentialIterator;
 import com.google.common.collect.HashMultimap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.connector.iceberg.IcebergFilter;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.iceberg.BlobMetadata;
@@ -62,15 +64,16 @@ import static java.util.stream.Collectors.toMap;
 public class IcebergStatisticProvider {
     private static final Logger LOG = LogManager.getLogger(IcebergStatisticProvider.class);
     private final Map<String, HashMultimap<Integer, Object>> partitionFieldIdToValues = new HashMap<>();
-    private final Map<String, Optional<IcebergFileStats>> uuidToIcebergFileStats = new HashMap<>();
-    private final Map<String, Set<String>> processedFiles = new HashMap<>();
+    private final Map<IcebergFilter, Optional<IcebergFileStats>> filterToIcebergFileStats = new HashMap<>();
+    private final Map<IcebergFilter, Set<String>> processedFiles = new HashMap<>();
 
     public IcebergStatisticProvider() {
     }
 
     public Statistics getTableStatistics(IcebergTable icebergTable,
                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                         OptimizerContext session) {
+                                         OptimizerContext session,
+                                         ScalarOperator predicate) {
         LOG.debug("Begin to make iceberg table statistics!");
         Table nativeTable = icebergTable.getNativeTable();
         Statistics.Builder statisticsBuilder = Statistics.builder();
@@ -97,11 +100,14 @@ public class IcebergStatisticProvider {
                 }
             }
 
+            IcebergFilter icebergFilter = IcebergFilter.of(icebergTable.getRemoteDbName(),
+                    icebergTable.getRemoteTableName(), snapshot.get().snapshotId(), predicate);
             IcebergFileStats icebergFileStats;
-            if (!uuidToIcebergFileStats.containsKey(uuid) || !uuidToIcebergFileStats.get(uuid).isPresent()) {
+            if (!filterToIcebergFileStats.containsKey(icebergFilter) ||
+                    !filterToIcebergFileStats.get(icebergFilter).isPresent()) {
                 icebergFileStats = new IcebergFileStats(1);
             } else {
-                icebergFileStats = uuidToIcebergFileStats.get(uuid).get();
+                icebergFileStats = filterToIcebergFileStats.get(icebergFilter).get();
             }
 
             statisticsBuilder.setOutputRowCount(icebergFileStats.getRecordCount());
@@ -115,7 +121,7 @@ public class IcebergStatisticProvider {
         return statisticsBuilder.build();
     }
 
-    private Map<ColumnRefOperator, ColumnStatistic> buildUnknownColumnStatistics(Set<ColumnRefOperator> columnRefOperatorSet) {
+    public Map<ColumnRefOperator, ColumnStatistic> buildUnknownColumnStatistics(Set<ColumnRefOperator> columnRefOperatorSet) {
         Map<ColumnRefOperator, ColumnStatistic> columnStatistics = new HashMap<>();
         for (ColumnRefOperator columnRefOperator : columnRefOperatorSet) {
             columnStatistics.put(columnRefOperator, ColumnStatistic.unknown());
@@ -123,15 +129,16 @@ public class IcebergStatisticProvider {
         return columnStatistics;
     }
 
-    public void makeIcebergFileStats(IcebergTable icebergTable, FileScanTask fileScanTask,
+    public void updateIcebergFileStats(IcebergTable icebergTable, FileScanTask fileScanTask,
                                      Map<Integer, Type.PrimitiveType> idToTypeMapping,
-                                     List<Types.NestedField> nonPartitionPrimitiveColumns) {
+                                     List<Types.NestedField> nonPartitionPrimitiveColumns,
+                                     IcebergFilter key) {
         String uuid = icebergTable.getUUID();
 
         Table nativeTable = icebergTable.getNativeTable();
         List<PartitionField> partitionFields = nativeTable.spec().fields();
 
-        Set<String> files = processedFiles.computeIfAbsent(uuid, ignored -> new HashSet<>());
+        Set<String> files = processedFiles.computeIfAbsent(key, ignored -> new HashSet<>());
 
         DataFile dataFile = fileScanTask.file();
         // ignore this data file.
@@ -169,9 +176,10 @@ public class IcebergStatisticProvider {
             idToValues.put(fieldId, partitionValue);
         }
 
-        Optional<IcebergFileStats> icebergFileStats = uuidToIcebergFileStats.computeIfAbsent(uuid, ignored -> Optional.empty());
+        Optional<IcebergFileStats> icebergFileStats = filterToIcebergFileStats.computeIfAbsent(
+                key, ignored -> Optional.empty());
         if (!icebergFileStats.isPresent()) {
-            uuidToIcebergFileStats.put(uuid,
+            filterToIcebergFileStats.put(key,
                     Optional.of(new IcebergFileStats(
                             idToTypeMapping,
                             nonPartitionPrimitiveColumns,
