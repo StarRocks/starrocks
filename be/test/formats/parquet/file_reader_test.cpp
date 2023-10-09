@@ -73,10 +73,20 @@ protected:
     HdfsScannerContext* _create_file_map_base_context();
     HdfsScannerContext* _create_file_map_partial_materialize_context();
 
+    HdfsScannerContext* _create_file_struct_in_struct_read_context(const std::string& file_path);
+
+    HdfsScannerContext* _create_file_struct_in_struct_prune_and_no_output_read_context(const std::string& file_path);
+
     void _create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, int value,
                                    std::vector<ExprContext*>* conjunct_ctxs);
     void _create_string_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
                                       std::vector<ExprContext*>* conjunct_ctxs);
+
+    void _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id,
+                                                         const TypeDescriptor& type,
+                                                         const std::vector<std::string>& subfiled_path,
+                                                         const std::string& value,
+                                                         std::vector<ExprContext*>* conjunct_ctxs);
 
     static ChunkPtr _create_chunk();
     static ChunkPtr _create_multi_page_chunk();
@@ -553,6 +563,75 @@ HdfsScannerContext* FileReaderTest::_create_file_map_partial_materialize_context
     return ctx;
 }
 
+HdfsScannerContext* FileReaderTest::_create_file_struct_in_struct_read_context(const std::string& file_path) {
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+    type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_struct.field_names.emplace_back("c0");
+
+    type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_struct.field_names.emplace_back("c1");
+
+    TypeDescriptor type_struct_in_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+    type_struct_in_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_struct_in_struct.field_names.emplace_back("c0");
+
+    type_struct_in_struct.children.emplace_back(type_struct);
+    type_struct_in_struct.field_names.emplace_back("c_struct");
+
+    // tuple desc
+    Utils::SlotDesc slot_descs[] = {
+            {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"c_struct", type_struct},
+            {"c_struct_struct", type_struct_in_struct},
+            {""},
+    };
+    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(file_path));
+
+    return ctx;
+}
+
+HdfsScannerContext* FileReaderTest::_create_file_struct_in_struct_prune_and_no_output_read_context(
+        const std::string& file_path) {
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+    type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_struct.field_names.emplace_back("c0");
+
+    TypeDescriptor type_struct_in_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+    type_struct_in_struct.children.emplace_back(type_struct);
+    type_struct_in_struct.field_names.emplace_back("c_struct");
+
+    // tuple desc
+    Utils::SlotDesc slot_descs[] = {
+            {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"c_struct_struct", type_struct_in_struct},
+            {""},
+    };
+    TupleDescriptor* tupleDescriptor = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    SlotDescriptor* slot = tupleDescriptor->slots()[1];
+    TSlotDescriptorBuilder builder;
+    builder.column_name(slot->col_name())
+            .type(slot->type())
+            .id(slot->id())
+            .nullable(slot->is_nullable())
+            .is_output_column(false);
+    TSlotDescriptor tslot = builder.build();
+    SlotDescriptor* new_slot = _pool.add(new SlotDescriptor(tslot));
+    (tupleDescriptor->slots())[1] = new_slot;
+    ctx->tuple_desc = tupleDescriptor;
+    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->materialized_columns[1].decode_needed = false;
+    ctx->scan_ranges.emplace_back(_create_scan_range(file_path));
+
+    return ctx;
+}
+
 void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, int value,
                                                std::vector<ExprContext*>* conjunct_ctxs) {
     std::vector<TExprNode> nodes;
@@ -633,6 +712,64 @@ void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, Slot
     node2.__set_string_literal(string_literal);
     node2.is_nullable = false;
     nodes.emplace_back(node2);
+
+    TExpr t_expr;
+    t_expr.nodes = nodes;
+
+    std::vector<TExpr> t_conjuncts;
+    t_conjuncts.emplace_back(t_expr);
+
+    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr);
+    Expr::prepare(*conjunct_ctxs, _runtime_state);
+    Expr::open(*conjunct_ctxs, _runtime_state);
+}
+
+void FileReaderTest::_create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id,
+                                                                     const TypeDescriptor& type,
+                                                                     const std::vector<std::string>& subfiled_path,
+                                                                     const std::string& value,
+                                                                     std::vector<ExprContext*>* conjunct_ctxs) {
+    std::vector<TExprNode> nodes;
+
+    TExprNode node0;
+    node0.node_type = TExprNodeType::BINARY_PRED;
+    node0.opcode = opcode;
+    node0.child_type = TPrimitiveType::VARCHAR;
+    node0.num_children = 2;
+    node0.__isset.opcode = true;
+    node0.__isset.child_type = true;
+    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    nodes.emplace_back(node0);
+
+    TExprNode node1;
+    node1.node_type = TExprNodeType::SUBFIELD_EXPR;
+    node1.is_nullable = true;
+    node1.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    node1.num_children = 1;
+    node1.used_subfield_names = subfiled_path;
+    node1.__isset.used_subfield_names = true;
+    nodes.emplace_back(node1);
+
+    TExprNode node2;
+    node2.node_type = TExprNodeType::SLOT_REF;
+    node2.type = type.to_thrift();
+    node2.num_children = 0;
+    TSlotRef t_slot_ref = TSlotRef();
+    t_slot_ref.slot_id = slot_id;
+    t_slot_ref.tuple_id = 0;
+    node2.__set_slot_ref(t_slot_ref);
+    node2.is_nullable = true;
+    nodes.emplace_back(node2);
+
+    TExprNode node3;
+    node3.node_type = TExprNodeType::STRING_LITERAL;
+    node3.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    node3.num_children = 0;
+    TStringLiteral string_literal;
+    string_literal.value = value;
+    node3.__set_string_literal(string_literal);
+    node3.is_nullable = false;
+    nodes.emplace_back(node3);
 
     TExpr t_expr;
     t_expr.nodes = nodes;
@@ -849,8 +986,8 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
 
     // c3 is dict filter column
     {
-        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices.size());
-        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices[0];
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_column_indices[0];
         ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
     }
 
@@ -924,8 +1061,8 @@ TEST_F(FileReaderTest, TestMultiFilterWithMultiPage) {
 
     // c3 is dict filter column
     {
-        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices.size());
-        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices[0];
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_column_indices[0];
         ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
     }
 
@@ -985,8 +1122,8 @@ TEST_F(FileReaderTest, TestReadStructUpperColumns) {
 
     // c3 is dict filter column
     {
-        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices.size());
-        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices[0];
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_column_indices[0];
         ASSERT_EQ(1, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
     }
 
@@ -2595,6 +2732,130 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
     }
 
     EXPECT_EQ(1, total_row_nums);
+}
+
+TEST_F(FileReaderTest, TestStructSubfieldDictFilter) {
+    /*
+    c1 = np.arange(10000, 0, -1)
+    data = {
+        'c1': c1
+    }
+    data['c0'] = np.arange(1, 10001)
+    data['c1'] = np.arange(10000, 0, -1)
+    df = pd.DataFrame(data)
+    df_dict = pd.DataFrame({
+        "c_struct": df.apply(lambda x: pd.NA if x["c0"] % 10 == 0 else {"c1": str(x["c1"] % 100), "c0": str(x["c0"] % 100)}, axis=1),
+        "c0": df["c0"],
+        "c1": df["c1"]
+    })
+    df_with_dict = pd.DataFrame({
+        "c0": df_dict["c0"],
+        "c1": df_dict["c1"],
+        "c_struct" : df_dict["c_struct"],
+        "c_struct_struct" : df_dict.apply(lambda x: pd.NA if x["c0"] % 10 == 0 else {"c0" : str(x["c0"] % 100), "c_struct" : x["c_struct"]}, axis = 1)
+    })
+     */
+    const std::string struct_in_struct_file_path =
+            "./be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet";
+    auto ctx = _create_file_struct_in_struct_read_context(struct_in_struct_file_path);
+
+    auto file = _create_file(struct_in_struct_file_path);
+
+    TypeDescriptor type_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+    type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_struct.field_names.emplace_back("c0");
+
+    type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_struct.field_names.emplace_back("c1");
+
+    TypeDescriptor type_struct_in_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+    type_struct_in_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_struct_in_struct.field_names.emplace_back("c0");
+
+    type_struct_in_struct.children.emplace_back(type_struct);
+    type_struct_in_struct.field_names.emplace_back("c_struct");
+
+    std::vector<std::string> subfield_path({"c_struct", "c0"});
+
+    _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::EQ, 3, type_struct_in_struct, subfield_path, "55",
+                                                    &ctx->conjunct_ctxs_by_slot[3]);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(struct_in_struct_file_path));
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
+                         chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
+                         chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct_in_struct, true), chunk->num_columns());
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_indices.size());
+    ASSERT_EQ(3, file_reader->_row_group_readers[0]->_dict_column_indices[0]);
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_sub_field_paths.size());
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_sub_field_paths[3].size());
+    ASSERT_EQ(subfield_path, file_reader->_row_group_readers[0]->_dict_column_sub_field_paths[3][0]);
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        if (chunk->num_rows() != 0) {
+            ASSERT_EQ("{c0:'55',c_struct:{c0:'55',c1:'46'}}", chunk->get_column_by_slot_id(3)->debug_item(0));
+        }
+    }
+    EXPECT_EQ(100, total_row_nums);
+}
+
+TEST_F(FileReaderTest, TestStructSubfieldNoDecodeNotOutput) {
+    const std::string struct_in_struct_file_path =
+            "./be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet";
+    auto ctx = _create_file_struct_in_struct_prune_and_no_output_read_context(struct_in_struct_file_path);
+
+    auto file = _create_file(struct_in_struct_file_path);
+
+    TypeDescriptor type_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+    type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_struct.field_names.emplace_back("c0");
+
+    TypeDescriptor type_struct_in_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+    type_struct_in_struct.children.emplace_back(type_struct);
+    type_struct_in_struct.field_names.emplace_back("c_struct");
+
+    std::vector<std::string> subfield_path({"c_struct", "c0"});
+
+    _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::EQ, 1, type_struct_in_struct, subfield_path, "55",
+                                                    &ctx->conjunct_ctxs_by_slot[1]);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(struct_in_struct_file_path));
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
+                         chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct_in_struct, true), chunk->num_columns());
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_indices.size());
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_indices[0]);
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_sub_field_paths.size());
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_sub_field_paths[1].size());
+    ASSERT_EQ(std::vector<std::string>({"c_struct", "c0"}),
+              file_reader->_row_group_readers[0]->_dict_column_sub_field_paths[1][0]);
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        if (chunk->num_rows() != 0) {
+            ASSERT_EQ("{c_struct:{c0:NULL}}", chunk->get_column_by_slot_id(1)->debug_item(0));
+        }
+    }
+    EXPECT_EQ(100, total_row_nums);
 }
 
 } // namespace starrocks::parquet

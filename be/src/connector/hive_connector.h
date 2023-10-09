@@ -99,6 +99,11 @@ private:
     std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
     std::unordered_set<SlotId> _slots_in_conjunct;
 
+    // used for reader to decide decode or not
+    // if only used by filter(not output) and only used in conjunct_ctx_by_slot
+    // there is no need to decode.
+    std::unordered_set<SlotId> _slots_of_mutli_slot_conjunct;
+
     // partition conjuncts of each partition slot.
     std::vector<ExprContext*> _partition_conjunct_ctxs;
     std::vector<ExprContext*> _partition_values;

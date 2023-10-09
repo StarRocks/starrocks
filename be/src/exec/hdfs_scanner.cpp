@@ -108,6 +108,9 @@ Status HdfsScanner::_build_scanner_context() {
         column.col_type = slot->type();
         column.slot_id = slot->id();
         column.col_name = slot->col_name();
+        column.decode_needed =
+                slot->is_output_column() || _scanner_params.slots_of_mutli_slot_conjunct.find(slot->id()) !=
+                                                    _scanner_params.slots_of_mutli_slot_conjunct.end();
 
         ctx.materialized_columns.emplace_back(std::move(column));
     }
