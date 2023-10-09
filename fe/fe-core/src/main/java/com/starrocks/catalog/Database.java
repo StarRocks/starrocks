@@ -103,9 +103,9 @@ public class Database extends MetaObject implements Writable {
     private long lastSlowLockLogTime = 0;
 
     // This param is used to make sure db not dropped when leader node writes wal,
-    // so this param dose not need to be persistent,
+    // so this param does not need to be persistent,
     // and this param maybe not right when the db is dropped and the catalog has done a checkpoint,
-    // but that'ok to meet our needs.
+    // but that's ok to meet our needs.
     private volatile boolean exist = true;
 
     public Database() {
@@ -412,9 +412,12 @@ public class Database extends MetaObject implements Writable {
     }
 
     // return false if table already exists
-    public boolean createTableWithLock(Table table, boolean isReplay) {
+    public boolean createTableWithLock(Table table, boolean isReplay) throws DdlException {
         writeLock();
         try {
+            if (!isExist()) {
+                throw new DdlException("Database has been dropped when creating table/mv/view");
+            }
             String tableName = table.getName();
             if (nameToTable.containsKey(tableName)) {
                 return false;
@@ -858,6 +861,10 @@ public class Database extends MetaObject implements Writable {
     // the invoker should hold db's writeLock
     public void setExist(boolean exist) {
         this.exist = exist;
+    }
+
+    public boolean isExist() {
+        return exist;
     }
 
     public List<Table> getHiveTables() {
