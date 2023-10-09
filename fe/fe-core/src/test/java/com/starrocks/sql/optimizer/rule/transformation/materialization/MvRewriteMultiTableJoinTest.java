@@ -107,7 +107,11 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
                 "\"enable_persistent_index\"=\"false\",\n" +
                 "\"compression\"=\"LZ4\"\n" +
                 ")");
+<<<<<<< HEAD
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv1 \n" +
+=======
+        createAndRefreshMv("test", "test_mv1", "CREATE MATERIALIZED VIEW test_mv1 \n" +
+>>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
                 "PARTITION BY (dt)\n" +
                 "DISTRIBUTED BY HASH(dt, p1_col2) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
@@ -121,7 +125,11 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
 
     @Test
     public void testPartitionPrune1() throws Exception {
+<<<<<<< HEAD
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv2\n" +
+=======
+        createAndRefreshMv("test", "test_mv2", "CREATE MATERIALIZED VIEW test_mv2\n" +
+>>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
                 "PARTITION BY (dt)\n" +
                 "DISTRIBUTED BY HASH(dt, p1_col2) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
@@ -237,7 +245,11 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
 
     @Test
     public void testPartitionPrune2() throws Exception {
+<<<<<<< HEAD
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv2\n" +
+=======
+        createAndRefreshMv("test", "test_mv2", "CREATE MATERIALIZED VIEW test_mv2\n" +
+>>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
                 "PARTITION BY (dt)\n" +
                 "DISTRIBUTED BY HASH(dt, p1_col2) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +

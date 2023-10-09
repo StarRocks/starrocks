@@ -27,6 +27,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class ScanOperatorPredicates {
     // id -> partition key
@@ -35,7 +36,7 @@ public class ScanOperatorPredicates {
 
     // partitionConjuncts contains partition filters.
     private List<ScalarOperator> partitionConjuncts = Lists.newArrayList();
-    // After partition pruner prune, conjuncts that are not evaled will be send to backend.
+    // After partition pruner prune, conjuncts that are not evaled will be sent to backend.
     private List<ScalarOperator> noEvalPartitionConjuncts = Lists.newArrayList();
     // nonPartitionConjuncts contains non-partition filters, and will be sent to backend.
     private List<ScalarOperator> nonPartitionConjuncts = Lists.newArrayList();
@@ -70,6 +71,11 @@ public class ScanOperatorPredicates {
 
     public List<ScalarOperator> getNoEvalPartitionConjuncts() {
         return noEvalPartitionConjuncts;
+    }
+
+    public List<ScalarOperator> getPrunedPartitionConjuncts() {
+        return partitionConjuncts.stream()
+                .filter(x -> !nonPartitionConjuncts.contains(x)).collect(Collectors.toList());
     }
 
     public List<ScalarOperator> getNonPartitionConjuncts() {

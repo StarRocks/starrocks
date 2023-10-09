@@ -55,7 +55,11 @@ public class MaterializationContext {
 
     private Map<ColumnRefOperator, ColumnRefOperator> outputMapping;
 
+    // Updated partition names of the materialized view
     private final Set<String> mvPartitionNamesToRefresh;
+
+    // Updated partition names of the ref base table which will be used in compensating partition predicates
+    private final Set<String> refTableUpdatePartitionNames;
 
     private final List<Table> baseTables;
 
@@ -84,7 +88,8 @@ public class MaterializationContext {
                                   List<Table> baseTables,
                                   Set<ColumnRefOperator> originQueryColumns,
                                   List<Table> intersectingTables,
-                                  ScalarOperator mvPartialPartitionPredicate) {
+                                  ScalarOperator mvPartialPartitionPredicate,
+                                  Set<String> refTableUpdatePartitionNames) {
         this.optimizerContext = optimizerContext;
         this.mv = mv;
         this.mvExpression = mvExpression;
@@ -96,6 +101,7 @@ public class MaterializationContext {
         this.intersectingTables = intersectingTables;
         this.matchedGroups = Lists.newArrayList();
         this.mvPartialPartitionPredicate = mvPartialPartitionPredicate;
+        this.refTableUpdatePartitionNames = refTableUpdatePartitionNames;
     }
 
     public MaterializedView getMv() {
@@ -174,6 +180,7 @@ public class MaterializationContext {
         this.mvUsedCount += 1;
     }
 
+<<<<<<< HEAD
     private boolean checkOperatorCompatible(OperatorType query) {
         // Prune based on query operator
         if (query == OperatorType.LOGICAL_AGGR) {
@@ -361,4 +368,9 @@ public class MaterializationContext {
         }
     }
 
+=======
+    public Set<String> getRefTableUpdatePartitionNames() {
+        return this.refTableUpdatePartitionNames;
+    }
+>>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
 }
