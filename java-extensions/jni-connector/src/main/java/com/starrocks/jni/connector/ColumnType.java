@@ -73,11 +73,14 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("byte", TypeValue.BYTE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("boolean", TypeValue.BOOLEAN);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("short", TypeValue.SHORT);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("smallint", TypeValue.SHORT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("int", TypeValue.INT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("float", TypeValue.FLOAT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("bigint", TypeValue.LONG);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("double", TypeValue.DOUBLE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("string", TypeValue.STRING);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("varchar", TypeValue.STRING);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("char", TypeValue.STRING);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("binary", TypeValue.BINARY);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("date", TypeValue.DATE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp", TypeValue.DATETIME);

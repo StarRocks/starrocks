@@ -1,0 +1,10 @@
+{
+    "type": "record",
+    "name": "basic",
+    "fields" : [
+        {"name": "booleantype", "type" : "boolean"},
+        {"name": "longtype", "type": "long"},
+        {"name": "doubletype", "type": "double"},
+        {"name": "stringtype", "type": "string"}
+    ]
+}

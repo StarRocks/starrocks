@@ -15,7 +15,8 @@
 package com.starrocks.connector.hive;
 
 public class HiveClassNames {
-    public static final String HIVE_IGNORE_KEY_OUTPUT_FORMAT_CLASS = "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat";
+    public static final String HIVE_IGNORE_KEY_OUTPUT_FORMAT_CLASS =
+            "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat";
     public static final String PARQUET_HIVE_SERDE_CLASS = "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe";
     public static final String MAPRED_PARQUET_INPUT_FORMAT_CLASS =
             "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat";
@@ -28,5 +29,27 @@ public class HiveClassNames {
     public static final String TEXT_INPUT_FORMAT_CLASS = "org.apache.hadoop.mapred.TextInputFormat";
     public static final String HUDI_PARQUET_INPUT_FORMAT = "org.apache.hudi.hadoop.HoodieParquetInputFormat";
 
-    private HiveClassNames() {}
+    public static final String AVRO_INPUT_FORMAT_CLASS = "org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat";
+
+    public static final String AVRO_OUTPUT_FORMAT_CLASS = "org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat";
+
+    public static final String AVRO_SERDE_CLASS = "org.apache.hadoop.hive.serde2.avro.AvroSerDe";
+
+    public static final String RCFILE_INPUT_FORMAT_CLASS = "org.apache.hadoop.hive.ql.io.RCFileInputFormat";
+
+    public static final String RCFILE_OUTPUT_FORMAT_CLASS = "org.apache.hadoop.hive.ql.io.RCFileOutputFormat";
+
+    public static final String LAZY_BINARY_COLUMNAR_SERDE_CLASS =
+            "org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe";
+
+    public static final String COLUMNAR_SERDE_CLASS = "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe";
+
+    public static final String SEQUENCE_INPUT_FORMAT_CLASS =
+            "org.apache.hadoop.mapred.SequenceFileInputFormat";
+
+    public static final String SEQUENCE_OUTPUT_FORMAT_CLASS =
+            "org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat";
+
+    public static final String SEQUENCE_SERDE_CLASS = "org.apache.hadoop.hive.serde2.avro.AvroSerDe";
+
 }

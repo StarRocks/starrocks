@@ -458,7 +458,12 @@ void HdfsScannerContext::append_partition_column_to_chunk(ChunkPtr* chunk, size_
             }
             chunk_part_column->assign(row_count, 0);
         }
-        ck->append_column(std::move(chunk_part_column), slot_desc->id());
+
+        if (ck->is_slot_exist(slot_desc->id())) {
+            ck->update_column(chunk_part_column, slot_desc->id());
+        } else {
+            ck->append_column(std::move(chunk_part_column), slot_desc->id());
+        }
     }
 }
 

@@ -219,6 +219,16 @@ public:
     HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~HdfsTableDescriptor() override = default;
     bool has_partition() const override { return true; }
+    const std::string& get_hive_column_names() const;
+    const std::string& get_hive_column_types() const;
+    const std::string& get_input_format() const;
+    const std::string& get_serde_lib() const;
+
+private:
+    std::string _serde_lib;
+    std::string _input_format;
+    std::string _hive_column_names;
+    std::string _hive_column_types;
 };
 
 class IcebergTableDescriptor : public HiveTableDescriptor {

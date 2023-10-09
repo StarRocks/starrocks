@@ -401,7 +401,15 @@ Status JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk) {
         return Status::EndOfFile("");
     }
     _app_stats.raw_rows_read += num_rows;
-    auto slot_desc_list = _scanner_params.tuple_desc->slots();
+
+    std::vector<SlotDescriptor*> slot_desc_list;
+    // for hive table, we only need non-partition columns
+    if (_jni_scanner_factory_class == "com/starrocks/hive/reader/HiveScannerFactory") {
+        slot_desc_list = _scanner_params.materialize_slots;
+    } else {
+        slot_desc_list = _scanner_params.tuple_desc->slots();
+    }
+
     for (size_t col_idx = 0; col_idx < slot_desc_list.size(); col_idx++) {
         SlotDescriptor* slot_desc = slot_desc_list[col_idx];
         const std::string& slot_name = slot_desc->col_name();
@@ -441,6 +449,10 @@ Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
     size_t chunk_size = (*chunk)->num_rows();
     _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
+    // right now only hive table need append partition columns explictly, paimon and hudi reader will append partition columns in Java side
+    if (_jni_scanner_factory_class == "com/starrocks/hive/reader/HiveScannerFactory") {
+        _scanner_ctx.append_partition_column_to_chunk(chunk, chunk_size);
+    }
     RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));
     return status;
 }
