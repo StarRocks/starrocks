@@ -500,10 +500,252 @@ int64_t ExecEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
     return storage_cache_limit;
 }
 
+<<<<<<< HEAD
 Status ExecEnv::_init_storage_page_cache() {
     int64_t storage_cache_limit = get_storage_page_cache_size();
     storage_cache_limit = check_storage_page_cache_size(storage_cache_limit);
     StoragePageCache::create_global_cache(page_cache_mem_tracker(), storage_cache_limit);
+=======
+template <class... Args>
+std::shared_ptr<MemTracker> GlobalEnv::regist_tracker(Args&&... args) {
+    auto mem_tracker = std::make_shared<MemTracker>(std::forward<Args>(args)...);
+    _mem_trackers.emplace_back(mem_tracker);
+    return mem_tracker;
+}
+
+int64_t GlobalEnv::calc_max_query_memory(int64_t process_mem_limit, int64_t percent) {
+    if (process_mem_limit <= 0) {
+        // -1 means no limit
+        return -1;
+    }
+    if (percent < 0 || percent > 100) {
+        percent = 90;
+    }
+    return process_mem_limit * percent / 100;
+}
+
+Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
+    _store_paths = store_paths;
+    _external_scan_context_mgr = new ExternalScanContextMgr(this);
+    _metrics = StarRocksMetrics::instance()->metrics();
+    _stream_mgr = new DataStreamMgr();
+    _result_mgr = new ResultBufferMgr();
+    _result_queue_mgr = new ResultQueueMgr();
+    _backend_client_cache = new BackendServiceClientCache(config::max_client_cache_size_per_host);
+    _frontend_client_cache = new FrontendServiceClientCache(config::max_client_cache_size_per_host);
+    _broker_client_cache = new BrokerServiceClientCache(config::max_client_cache_size_per_host);
+    // query_context_mgr keeps slotted map with 64 slot to reduce contention
+    _query_context_mgr = new pipeline::QueryContextManager(6);
+    RETURN_IF_ERROR(_query_context_mgr->init());
+    _thread_pool =
+            new PriorityThreadPool("table_scan_io", // olap/external table scan thread pool
+                                   config::scanner_thread_pool_thread_num, config::scanner_thread_pool_queue_size);
+
+    // Thread pool used for streaming load to scan StreamLoadPipe. The maximum number of
+    // threads and queue size are set INT32_MAX which indicate there is no limit for the
+    // thread pool, and this can avoid deadlock for concurrent streaming loads. The thread
+    // pool will not be full easily because fragment execution pool and http workers also
+    // limit the streaming load concurrency which is controlled by fragment_pool_thread_num_max
+    // and webserver_num_workers respectively. This pool will be used when
+    // enable_streaming_load_thread_pool is true.
+    std::unique_ptr<ThreadPool> streaming_load_pool;
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("stream_load_io")
+                    .set_min_threads(config::streaming_load_thread_pool_num_min)
+                    .set_max_threads(INT32_MAX)
+                    .set_max_queue_size(INT32_MAX)
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
+                    .build(&streaming_load_pool));
+    _streaming_load_thread_pool = streaming_load_pool.release();
+
+    _udf_call_pool = new PriorityThreadPool("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
+    _fragment_mgr = new FragmentMgr(this);
+
+    RETURN_IF_ERROR(ThreadPoolBuilder("automatic_partition") // automatic partition pool
+                            .set_min_threads(0)
+                            .set_max_threads(8)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&_automatic_partition_pool));
+
+    int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
+    if (num_prepare_threads == 0) {
+        num_prepare_threads = CpuInfo::num_cores();
+    } else if (num_prepare_threads < 0) {
+        // -n: means n * num_cpu_cores
+        num_prepare_threads = -num_prepare_threads * CpuInfo::num_cores();
+    }
+    _pipeline_prepare_pool =
+            new PriorityThreadPool("pip_prepare", num_prepare_threads, config::pipeline_prepare_thread_pool_queue_size);
+    // register the metrics to monitor the task queue len
+    auto task_qlen_fun = [] {
+        auto pool = ExecEnv::GetInstance()->pipeline_prepare_pool();
+        return (pool == nullptr) ? 0U : pool->get_queue_size();
+    };
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_prepare_pool_queue_len, task_qlen_fun);
+
+    int num_sink_io_threads = config::pipeline_sink_io_thread_pool_thread_num;
+    if (num_sink_io_threads <= 0) {
+        num_sink_io_threads = CpuInfo::num_cores();
+    }
+    if (config::pipeline_sink_io_thread_pool_queue_size <= 0) {
+        return Status::InvalidArgument("pipeline_sink_io_thread_pool_queue_size shoule be greater than 0");
+    }
+    _pipeline_sink_io_pool =
+            new PriorityThreadPool("pip_sink_io", num_sink_io_threads, config::pipeline_sink_io_thread_pool_queue_size);
+
+    int query_rpc_threads = config::internal_service_query_rpc_thread_num;
+    if (query_rpc_threads <= 0) {
+        query_rpc_threads = CpuInfo::num_cores();
+    }
+    _query_rpc_pool = new PriorityThreadPool("query_rpc", query_rpc_threads, std::numeric_limits<uint32_t>::max());
+
+    // The _load_rpc_pool now handles routine load RPC and table function RPC.
+    RETURN_IF_ERROR(ThreadPoolBuilder("load_rpc") // thread pool for load rpc
+                            .set_min_threads(10)
+                            .set_max_threads(1000)
+                            .set_max_queue_size(0)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&_load_rpc_pool));
+    REGISTER_GAUGE_STARROCKS_METRIC(load_rpc_threadpool_size, _load_rpc_pool->num_threads)
+
+    std::unique_ptr<ThreadPool> driver_executor_thread_pool;
+    _max_executor_threads = CpuInfo::num_cores();
+    if (config::pipeline_exec_thread_pool_thread_num > 0) {
+        _max_executor_threads = config::pipeline_exec_thread_pool_thread_num;
+    }
+    _max_executor_threads = std::max<int64_t>(1, _max_executor_threads);
+    LOG(INFO) << strings::Substitute("[PIPELINE] Exec thread pool: thread_num=$0", _max_executor_threads);
+
+    _driver_limiter =
+            new pipeline::DriverLimiter(_max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread);
+
+    std::unique_ptr<ThreadPool> wg_driver_executor_thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_executor") // pipeline executor for workgroup
+                            .set_min_threads(0)
+                            .set_max_threads(_max_executor_threads)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&wg_driver_executor_thread_pool));
+    _wg_driver_executor =
+            new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
+    _wg_driver_executor->initialize(_max_executor_threads);
+
+    int connector_num_io_threads = int(config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
+    CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
+
+    if (config::hdfs_client_enable_hedged_read) {
+        // Set hdfs client hedged read pool size
+        config::hdfs_client_hedged_read_threadpool_size =
+                std::min(connector_num_io_threads * 2, config::hdfs_client_hedged_read_threadpool_size);
+        CHECK_GT(config::hdfs_client_hedged_read_threadpool_size, 0)
+                << "hdfs_client_hedged_read_threadpool_size should greater than 0";
+    }
+
+    std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_with_workgroup;
+    RETURN_IF_ERROR(ThreadPoolBuilder("con_wg_scan_io")
+                            .set_min_threads(0)
+                            .set_max_threads(connector_num_io_threads)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&connector_scan_worker_thread_pool_with_workgroup));
+    _connector_scan_executor =
+            new workgroup::ScanExecutor(std::move(connector_scan_worker_thread_pool_with_workgroup),
+                                        std::make_unique<workgroup::WorkGroupScanTaskQueue>(
+                                                workgroup::WorkGroupScanTaskQueue::SchedEntityType::CONNECTOR));
+    _connector_scan_executor->initialize(connector_num_io_threads);
+
+    workgroup::DefaultWorkGroupInitialization default_workgroup_init;
+
+    if (store_paths.empty() && as_cn) {
+        _load_path_mgr = new DummyLoadPathMgr();
+    } else {
+        _load_path_mgr = new LoadPathMgr(this);
+    }
+
+    _broker_mgr = new BrokerMgr(this);
+    _bfd_parser = BfdParser::create();
+    _load_channel_mgr = new LoadChannelMgr();
+    _load_stream_mgr = new LoadStreamMgr();
+    _brpc_stub_cache = new BrpcStubCache();
+    _stream_load_executor = new StreamLoadExecutor(this);
+    _stream_context_mgr = new StreamContextMgr();
+    _transaction_mgr = new TransactionMgr(this);
+
+    _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
+    RETURN_IF_ERROR(_routine_load_task_executor->init());
+
+    _small_file_mgr = new SmallFileMgr(this, config::small_file_dir);
+    _runtime_filter_worker = new RuntimeFilterWorker(this);
+    _runtime_filter_cache = new RuntimeFilterCache(8);
+    RETURN_IF_ERROR(_runtime_filter_cache->init());
+    _profile_report_worker = new ProfileReportWorker(this);
+
+    _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
+    _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
+    _broker_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "broker");
+    RETURN_IF_ERROR(_result_mgr->init());
+
+    int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
+                                 ? CpuInfo::num_cores()
+                                 : config::pipeline_scan_thread_pool_thread_num;
+
+    std::unique_ptr<ThreadPool> scan_worker_thread_pool_with_workgroup;
+    RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_scan_io")
+                            .set_min_threads(0)
+                            .set_max_threads(num_io_threads)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&scan_worker_thread_pool_with_workgroup));
+    _scan_executor = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_with_workgroup),
+                                                 std::make_unique<workgroup::WorkGroupScanTaskQueue>(
+                                                         workgroup::WorkGroupScanTaskQueue::SchedEntityType::OLAP));
+    _scan_executor->initialize(num_io_threads);
+    // it means acting as compute node while store_path is empty. some threads are not needed for that case.
+    Status status = _load_path_mgr->init();
+    if (!status.ok()) {
+        LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
+        exit(-1);
+    }
+
+#if defined(USE_STAROS) && !defined(BE_TEST)
+    _lake_location_provider = new lake::StarletLocationProvider();
+    _lake_update_manager =
+            new lake::UpdateManager(_lake_location_provider, GlobalEnv::GetInstance()->update_mem_tracker());
+    _lake_tablet_manager =
+            new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
+    if (config::starlet_cache_dir.empty()) {
+        std::vector<std::string> starlet_cache_paths;
+        std::for_each(store_paths.begin(), store_paths.end(), [&](const StorePath& root_path) {
+            std::string starlet_cache_path = root_path.path + "/starlet_cache";
+            starlet_cache_paths.emplace_back(starlet_cache_path);
+        });
+        config::starlet_cache_dir = JoinStrings(starlet_cache_paths, ":");
+    }
+
+#elif defined(BE_TEST)
+    _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
+    _lake_update_manager =
+            new lake::UpdateManager(_lake_location_provider, GlobalEnv::GetInstance()->update_mem_tracker());
+    _lake_tablet_manager =
+            new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
+#endif
+
+    _agent_server = new AgentServer(this, false);
+    _agent_server->init_or_die();
+
+    _broker_mgr->init();
+    RETURN_IF_ERROR(_small_file_mgr->init());
+
+    RETURN_IF_ERROR(_load_channel_mgr->init(GlobalEnv::GetInstance()->load_mem_tracker()));
+
+    _heartbeat_flags = new HeartbeatFlags();
+    auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
+    _cache_mgr = new query_cache::CacheManager(capacity);
+
+    _spill_dir_mgr = std::make_shared<spill::DirManager>();
+    RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
+>>>>>>> de32360e52 ([BugFix] Don't limit scan threads for stream load to avoid deadlock (#31929))
 
     // TODO(zc): The current memory usage configuration is a bit confusing,
     // we need to sort out the use of memory
@@ -542,6 +784,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_connector_scan_executor_without_workgroup);
     SAFE_DELETE(_connector_scan_executor_with_workgroup);
     SAFE_DELETE(_thread_pool);
+    SAFE_DELETE(_streaming_load_thread_pool);
 
     if (_lake_tablet_manager != nullptr) {
         _lake_tablet_manager->prune_metacache();
