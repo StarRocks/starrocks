@@ -189,7 +189,11 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(vectorized::Chunk* chun
         _chunks[driver_sequence]->set_num_rows(0);
     }
 
-    _chunks[driver_sequence]->append_selective(*chunk, indexes, from, size);
+    {
+        SCOPED_TIMER(_parent->_shuffle_chunk_append_timer);
+        _chunks[driver_sequence]->append_selective(*chunk, indexes, from, size);
+        COUNTER_UPDATE(_parent->_shuffle_chunk_append_counter, 1);
+    }
     return Status::OK();
 }
 
@@ -427,6 +431,8 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _uncompressed_bytes_counter = ADD_COUNTER(_unique_metrics, "UncompressedBytes", TUnit::BYTES);
     _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");
+    _shuffle_chunk_append_counter = ADD_COUNTER(_unique_metrics, "ShuffleChunkAppendCounter", TUnit::UNIT);
+    _shuffle_chunk_append_timer = ADD_TIMER(_unique_metrics, "ShuffleChunkAppendTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
 
     for (auto& [_, channel] : _instance_id2channel) {

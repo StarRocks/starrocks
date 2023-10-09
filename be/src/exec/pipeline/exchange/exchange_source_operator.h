@@ -53,8 +53,7 @@ public:
     bool could_local_shuffle() const override;
     TPartitionType::type partition_type() const override;
 
-    std::shared_ptr<DataStreamRecvr> create_stream_recvr(RuntimeState* state,
-                                                         const std::shared_ptr<RuntimeProfile>& profile);
+    std::shared_ptr<DataStreamRecvr> create_stream_recvr(RuntimeState* state);
     void close_stream_recvr();
 
 private:
