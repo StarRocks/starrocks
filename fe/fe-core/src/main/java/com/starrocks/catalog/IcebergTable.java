@@ -29,14 +29,17 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.Util;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.TCompressedPartitionMap;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.TIcebergTable;
+import com.starrocks.thrift.TPartitionMap;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
@@ -46,11 +49,15 @@ import org.apache.iceberg.SortField;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
+import org.apache.thrift.TSerializer;
+import org.apache.thrift.protocol.TBinaryProtocol;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -266,14 +273,32 @@ public class IcebergTable extends Table {
         tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(nativeTable.schema()));
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
 
-        for (int i = 0; i < partitions.size(); i++) {
-            DescriptorTable.ReferencedPartitionInfo info = partitions.get(i);
-            PartitionKey key = info.getKey();
-            long partitionId = info.getId();
-            THdfsPartition tPartition = new THdfsPartition();
-            List<LiteralExpr> keys = key.getKeys();
-            tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
-            tIcebergTable.putToPartitions(partitionId, tPartition);
+        if (!partitions.isEmpty()) {
+            TPartitionMap tPartitionMap = new TPartitionMap();
+            for (int i = 0; i < partitions.size(); i++) {
+                DescriptorTable.ReferencedPartitionInfo info = partitions.get(i);
+                PartitionKey key = info.getKey();
+                long partitionId = info.getId();
+                THdfsPartition tPartition = new THdfsPartition();
+                List<LiteralExpr> keys = key.getKeys();
+                tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
+                tPartitionMap.putToPartitions(partitionId, tPartition);
+            }
+
+            // partition info may be very big, and it is the same in plan fragment send to every be.
+            // extract and serialize it as a string, will get better performance(about 3x in test).
+            try {
+                TSerializer serializer = new TSerializer(TBinaryProtocol::new);
+                byte[] bytes = serializer.serialize(tPartitionMap);
+                byte[] compressedBytes = Util.compress(bytes);
+                TCompressedPartitionMap tCompressedPartitionMap = new TCompressedPartitionMap();
+                tCompressedPartitionMap.setOriginal_len(bytes.length);
+                tCompressedPartitionMap.setCompressed_len(compressedBytes.length);
+                tCompressedPartitionMap.setCompressed_serialized_partitions(Base64.getEncoder().encodeToString(compressedBytes));
+                tIcebergTable.setCompressed_partitions(tCompressedPartitionMap);
+            } catch (TException | IOException ignore) {
+                tIcebergTable.setPartitions(tPartitionMap.getPartitions());
+            }
         }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.ICEBERG_TABLE,
