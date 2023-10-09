@@ -241,9 +241,7 @@ public class DecimalV3FunctionAnalyzer {
                 }
             }
         }
-        AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), Arrays.asList(argType), returnType,
-                fn.getIntermediateType(), fn.hasVarArgs());
-
+        AggregateFunction newFn = (AggregateFunction) fn.copy();
         newFn.setFunctionId(fn.getFunctionId());
         newFn.setChecksum(fn.getChecksum());
         newFn.setBinaryType(fn.getBinaryType());
