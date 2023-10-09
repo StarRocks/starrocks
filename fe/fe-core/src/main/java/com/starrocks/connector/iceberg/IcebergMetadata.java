@@ -381,11 +381,6 @@ public class IcebergMetadata implements ConnectorMetadata {
                 statisticProvider.updateIcebergFileStats(icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns);
                 BaseFileScanTask baseFileScanTask = makeScanTaskWithoutStats(scanTask, icebergPredicate);
                 tasks.get(key).add(baseFileScanTask);
-                try {
-                    Thread.sleep(300);
-                } catch (Exception e) {
-
-                }
             });
         } catch (IOException e) {
             throw new UncheckedIOException(e);

@@ -63,7 +63,6 @@ public class IcebergStatisticProvider {
     private static final Logger LOG = LogManager.getLogger(IcebergStatisticProvider.class);
     private final Map<String, HashMultimap<Integer, Object>> partitionFieldIdToValues = new HashMap<>();
     private final Map<String, Optional<IcebergFileStats>> uuidToIcebergFileStats = new HashMap<>();
-    private final Map<String, Set<String>> processedFiles = new HashMap<>();
 
     public IcebergStatisticProvider() {
     }
@@ -131,17 +130,12 @@ public class IcebergStatisticProvider {
         Table nativeTable = icebergTable.getNativeTable();
         List<PartitionField> partitionFields = nativeTable.spec().fields();
 
-        Set<String> files = processedFiles.computeIfAbsent(uuid, ignored -> new HashSet<>());
-
         DataFile dataFile = fileScanTask.file();
         // ignore this data file.
         if (dataFile.recordCount() == 0) {
             return;
         }
-        if (files.contains(dataFile.path().toString())) {
-            return;
-        }
-        files.add(dataFile.path().toString());
+
         PartitionData partitionData = (PartitionData) fileScanTask.file().partition();
 
         for (int i = 0; i < partitionData.size(); i++) {
