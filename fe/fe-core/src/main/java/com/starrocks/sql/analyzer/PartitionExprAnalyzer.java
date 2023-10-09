@@ -67,7 +67,8 @@ public class PartitionExprAnalyzer {
             String functionName = functionCallExpr.getFnName().getFunction();
             if (functionName.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
                 analyzeDateTruncFunction(functionCallExpr, partitionSlotRef);
-                return;
+                builtinFunction = functionCallExpr.getFn();
+                targetColType = functionCallExpr.getType();
             } else if (functionName.equalsIgnoreCase(FunctionSet.TIME_SLICE)) {
                 Type[] timeSliceType = {Type.DATETIME, Type.INT, Type.VARCHAR, Type.VARCHAR};
                 builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),

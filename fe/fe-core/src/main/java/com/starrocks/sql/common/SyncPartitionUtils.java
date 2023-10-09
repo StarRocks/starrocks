@@ -568,7 +568,6 @@ public class SyncPartitionUtils {
         int lastPartitionNum;
         if (partitionTTLNumber > 0 && isAutoRefresh && autoRefreshPartitionsLimit > 0) {
             lastPartitionNum = Math.min(partitionTTLNumber, autoRefreshPartitionsLimit);
-            ;
         } else if (isAutoRefresh && autoRefreshPartitionsLimit > 0) {
             lastPartitionNum = autoRefreshPartitionsLimit;
         } else if (partitionTTLNumber > 0) {
