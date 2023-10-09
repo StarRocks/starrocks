@@ -14,11 +14,9 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.credential.aws.AWSCloudConfigurationProvider;
 import org.apache.iceberg.aws.AwsClientFactory;
 import org.apache.iceberg.aws.AwsProperties;
-import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
@@ -197,8 +195,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
                 return StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey));
             }
         } else {
-            Preconditions.checkArgument(false, "Unreachable");
-            return AnonymousCredentialsProvider.create();
+            throw new IllegalArgumentException("Please configure the correct aws authentication parameters");
         }
     }
 
