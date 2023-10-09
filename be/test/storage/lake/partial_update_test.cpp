@@ -578,4 +578,128 @@ TEST_P(PartialUpdateTest, test_partial_update_publish_retry) {
 INSTANTIATE_TEST_SUITE_P(PartialUpdateTest, PartialUpdateTest,
                          ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false}));
 
+class LakeIncompleteSortKeyPartialUpdateTest : public TestBase {
+public:
+    LakeIncompleteSortKeyPartialUpdateTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata->set_id(next_id());
+        _tablet_metadata->set_version(1);
+        _tablet_metadata->set_next_rowset_id(1);
+        //
+        //  | column | type | KEY | NULL | SORTKEY |
+        //  +--------+------+-----+------+---------+
+        //  |   c0   |  INT | YES |  NO  |   NO    |
+        //  |   c1   |  INT | NO  |  NO  |   YES   |
+        //  |   c2   |  INT | NO  |  NO  |   YES   |
+        auto schema = _tablet_metadata->mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(PRIMARY_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        {
+            c0->set_unique_id(next_id());
+            c0->set_name("c0");
+            c0->set_type("INT");
+            c0->set_is_key(true);
+            c0->set_is_nullable(false);
+        }
+        auto c1 = schema->add_column();
+        {
+            c1->set_unique_id(next_id());
+            c1->set_name("c1");
+            c1->set_type("INT");
+            c1->set_is_key(false);
+            c1->set_is_nullable(false);
+            c1->set_aggregation("REPLACE");
+        }
+        auto c2 = schema->add_column();
+        {
+            c2->set_unique_id(next_id());
+            c2->set_name("c2");
+            c2->set_type("INT");
+            c2->set_is_key(false);
+            c2->set_is_nullable(false);
+            c2->set_aggregation("REPLACE");
+            //c2->set_default_value("10");
+        }
+
+        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        _slot_pointers.emplace_back(&_slots[0]);
+        _slot_pointers.emplace_back(&_slots[1]);
+        _slot_pointers.emplace_back(&_slots[2]);
+
+        _slot_cid_map.emplace(0, 0);
+        _slot_cid_map.emplace(1, 1);
+        _slot_cid_map.emplace(2, 2);
+
+        schema->add_sort_key_idxes(1);
+        schema->add_sort_key_idxes(2);
+        _tablet_schema = TabletSchema::create(*schema);
+    }
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    void TearDown() override {
+        // check primary index cache's ref
+        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        ExecEnv::GetInstance()->vacuum_thread_pool()->wait();
+        remove_test_dir_or_die();
+    }
+
+    Chunk generate_data(int64_t chunk_size, int shift, int update_ratio) {
+        std::vector<int> v0(chunk_size);
+        std::vector<int> v1(chunk_size);
+        std::vector<int> v2(chunk_size);
+        for (int i = 0; i < chunk_size; i++) {
+            v0[i] = i + shift * chunk_size;
+        }
+        auto rng = std::default_random_engine{};
+        std::shuffle(v0.begin(), v0.end(), rng);
+        for (int i = 0; i < chunk_size; i++) {
+            v1[i] = v0[i] * update_ratio;
+        }
+
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+
+        return Chunk({c0, c1}, _slot_cid_map);
+    }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_lake_incomplete_sort_key_partial_update";
+    constexpr static const int kChunkSize = 12;
+
+    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    int64_t _partition_id = 4561;
+    std::vector<SlotDescriptor> _slots;
+    std::vector<SlotDescriptor*> _slot_pointers;
+    Chunk::SlotHashMap _slot_cid_map;
+};
+
+TEST_F(LakeIncompleteSortKeyPartialUpdateTest, test_incomplete_sort_key) {
+    auto chunk0 = generate_data(kChunkSize, 0, 3);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto tablet_id = _tablet_metadata->id();
+
+    // incomplete sort key partial write.
+    auto txn_id = next_id();
+    auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, &_slot_pointers,
+                                            _mem_tracker.get());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_ERROR(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+}
+
 } // namespace starrocks::lake
