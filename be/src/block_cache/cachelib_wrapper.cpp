@@ -42,13 +42,13 @@ Status CacheLibWrapper::init(const CacheOptions& options) {
         }
         nvmConfig.navyConfig.blockCache().setRegionSize(16 * 1024 * 1024);
         nvmConfig.navyConfig.blockCache().setDataChecksum(options.enable_checksum);
-        nvmConfig.navyConfig.setMaxParcelMemoryMB(options.max_parcel_memory_mb);
+        nvmConfig.navyConfig.setMaxParcelMemoryMB(options.max_flying_memory_mb);
         nvmConfig.navyConfig.setMaxConcurrentInserts(options.max_concurrent_inserts);
         config.enableNvmCache(nvmConfig);
     }
 
     Cache::MMConfig mm_config;
-    mm_config.lruInsertionPointSpec = options.lru_insertion_point;
+    mm_config.lruInsertionPointSpec = 1;
     _cache = std::make_unique<Cache>(config);
     _default_pool = _cache->addPool("default pool", _cache->getCacheMemoryStats().cacheSize, {}, mm_config);
     _meta_path = options.meta_path;
