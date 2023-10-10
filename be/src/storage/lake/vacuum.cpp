@@ -40,8 +40,7 @@ namespace starrocks::lake {
 
 static bvar::LatencyRecorder g_del_file_latency("lake_vacuum_del_file"); // unit: us
 static bvar::Adder<uint64_t> g_del_fails("lake_vacuum_del_file_fails");
-static bvar::LatencyRecorder g_metadata_travel_latency("lake_vacuum_metadata_travel");    // unit: ms
-static bvar::LatencyRecorder g_vacuum_single_tablet_latency("lake_vacuum_single_tablet"); // unit: ms
+static bvar::LatencyRecorder g_metadata_travel_latency("lake_vacuum_metadata_travel"); // unit: ms
 static bvar::LatencyRecorder g_txnlog_travel_latency("lake_vacuum_txnlog_travel");
 
 static Status delete_file(FileSystem* fs, const std::string& path) {
@@ -110,16 +109,18 @@ static void collect_garbage_files(const TabletMetadataPB& metadata, const std::s
 }
 
 static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_view root_dir, int64_t tablet_id,
-                                      int64_t grace_timestamp, bool* skip_check_grace_timestamp,
-                                      int64_t* retain_version, std::vector<std::string>* datafiles_to_vacuum,
+                                      int64_t grace_timestamp, int64_t min_retain_version,
+                                      std::vector<std::string>* datafiles_to_vacuum,
                                       std::vector<std::string>* metafiles_to_vacuum, int64_t* total_datafile_size) {
     auto t0 = butil::gettimeofday_ms();
     auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
-    auto version = *retain_version;
-    int64_t num_opened_metadata = 0;
+    auto final_retain_version = min_retain_version;
+    auto version = final_retain_version;
+    // grace_timestamp <= 0 means no grace timestamp
+    auto skip_check_grace_timestamp = grace_timestamp <= 0;
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
-    // Starting at |*retain_version|, read the tablet metadata forward along
+    // Starting at |*final_retain_version|, read the tablet metadata forward along
     // the |prev_garbage_version| pointer until the tablet metadata does not exist.
     while (version > 0) {
         auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, version));
@@ -130,20 +131,11 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
         } else if (!res.ok()) {
             return res.status();
         } else {
-            num_opened_metadata++;
             auto metadata = std::move(res).value();
-            if (*skip_check_grace_timestamp) {
-                // Reached here means all versions less than |*retain_version| were create before
+            if (skip_check_grace_timestamp) {
+                // Reached here means all versions less than |*final_retain_version| were create before
                 // |grace_timestamp| and can be vacuumed.
-                //
-                // Note: As a compromise design, here we use the creation time of the first tablet in
-                // the request and compare it with grace_timestamp to determine whether the tablet
-                // metadata can be deleted or not, because the creation time of the metadata of
-                // different tablets may be different, so it is possible to delete a tablet metadata
-                // created after the grace_timestamp. A more rigorous approach might be to take the
-                // maximum creation time of different tablet metadata and compare it to grace_timestamp.
-                // However, this can be costly when there are a lot of tablets in a partition.
-                DCHECK_LE(version, *retain_version);
+                DCHECK_LE(version, final_retain_version);
                 collect_garbage_files(*metadata, data_dir, datafiles_to_vacuum, total_datafile_size);
             } else {
                 // Reached here means that the tablet metadata that has been traversed was created after
@@ -160,22 +152,22 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                     // before |grace_timestamp|, so the last version created before |grace_timestamp| should
                     // be kept in case the query fails. And the |version| here is probably the last version
                     // created before grace_timestamp.
-                    *retain_version = version;
-                    *skip_check_grace_timestamp = true;
+                    final_retain_version = version;
+                    skip_check_grace_timestamp = true;
 
-                    // We need to retain metadata files with version |*retain_version|, but garbage
+                    // We need to retain metadata files with version |final_retain_version|, but garbage
                     // files recorded in it can be deleted.
                     collect_garbage_files(*metadata, data_dir, datafiles_to_vacuum, total_datafile_size);
 
-                    // from now on, all versions smaller than |*retain_version| are versions that can
+                    // from now on, all versions smaller than |final_retain_version| are versions that can
                     // be cleaned up, and it is no longer necessary to check the modification time of the
                     // tablet metadata.
                 } else {
-                    // Although |version| is smaller than |*retain_version|, since |version| was created after
+                    // Although |version| is smaller than |final_retain_version|, since |version| was created after
                     // the |grace_timestamp|, |version| cannot be deleted either;
                     // set |version| as the new retain version.
-                    DCHECK_LE(version, *retain_version);
-                    *retain_version = version;
+                    DCHECK_LE(version, final_retain_version);
+                    final_retain_version = version;
                 }
             }
 
@@ -186,12 +178,12 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     auto t1 = butil::gettimeofday_ms();
     g_metadata_travel_latency << (t1 - t0);
 
-    if (!*skip_check_grace_timestamp) {
+    if (!skip_check_grace_timestamp) {
         // All tablet metadata files encountered were created after the grace timestamp, there were no files to delete
         return Status::OK();
     }
-    DCHECK_LE(version, *retain_version);
-    for (auto v = version + 1; v < *retain_version; v++) {
+    DCHECK_LE(version, final_retain_version);
+    for (auto v = version + 1; v < final_retain_version; v++) {
         metafiles_to_vacuum->emplace_back(join_path(meta_dir, tablet_metadata_filename(tablet_id, v)));
     }
     return Status::OK();
@@ -207,16 +199,13 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     DCHECK(vacuumed_files != nullptr);
     DCHECK(vacuumed_file_size != nullptr);
 
-    bool skip_check_grace_time = false;
     int64_t max_batch_delete_size = config::lake_vacuum_max_batch_delete_size;
-    int64_t actual_retain_version = min_retain_version;
     std::vector<std::string> datafiles_to_vacuum;
     std::vector<std::string> metafiles_to_vacuum;
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
     for (auto tablet_id : tablet_ids) {
-        RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_id, grace_timestamp,
-                                                &skip_check_grace_time, &actual_retain_version, &datafiles_to_vacuum,
-                                                &metafiles_to_vacuum, vacuumed_file_size));
+        RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_id, grace_timestamp, min_retain_version,
+                                                &datafiles_to_vacuum, &metafiles_to_vacuum, vacuumed_file_size));
         if (datafiles_to_vacuum.size() >= max_batch_delete_size ||
             metafiles_to_vacuum.size() >= max_batch_delete_size) {
             (*vacuumed_files) += (datafiles_to_vacuum.size() + metafiles_to_vacuum.size());
@@ -226,7 +215,6 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
             metafiles_to_vacuum.clear();
         }
     }
-    CHECK_LE(actual_retain_version, min_retain_version);
     (*vacuumed_files) += (datafiles_to_vacuum.size() + metafiles_to_vacuum.size());
     RETURN_IF_ERROR(delete_files(fs.get(), datafiles_to_vacuum));
     RETURN_IF_ERROR(delete_files(fs.get(), metafiles_to_vacuum));
