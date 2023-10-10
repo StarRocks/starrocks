@@ -42,10 +42,7 @@ public:
         return n > 0 ? Status::OK() : Status::EndOfFile("eof");
     }
 
-    void reset() {
-        _idx = 0;
-        _schema.clear();
-    }
+    void reset() { _idx = 0; }
 
     static Schema schema() {
         FieldPtr f1 = std::make_shared<Field>(0, "c1", get_type_info(TYPE_INT), false);

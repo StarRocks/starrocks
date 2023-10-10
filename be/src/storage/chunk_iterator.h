@@ -82,6 +82,10 @@ public:
     virtual const Schema& encoded_schema() const { return _schema; }
 
     [[nodiscard]] virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) {
+        if (dict_maps.empty()) {
+            return Status::OK();
+        }
+
         Schema tmp;
         tmp.reserve(schema().num_fields());
         for (const auto& field : schema().fields()) {
@@ -92,6 +96,9 @@ public:
                 tmp.append(field);
             }
         }
+        for (const auto& cid : schema().sort_key_idxes()) {
+            tmp.append_sort_key_idx(cid);
+        }
         _schema = tmp;
         return Status::OK();
     }
@@ -100,12 +107,19 @@ public:
         if (_is_init_output_schema) {
             return Status::OK();
         }
+        if (unused_output_column_ids.empty()) {
+            _is_init_output_schema = true;
+            return Status::OK();
+        }
         Schema tmp;
         for (const auto& field : encoded_schema().fields()) {
             const auto cid = field->id();
             if (!unused_output_column_ids.count(cid)) {
                 tmp.append(field);
             }
+        }
+        for (const auto& cid : schema().sort_key_idxes()) {
+            tmp.append_sort_key_idx(cid);
         }
         DCHECK(tmp.num_fields() > 0);
         _is_init_output_schema = true;
