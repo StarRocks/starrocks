@@ -42,8 +42,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 public class ScalarOperatorFunctionsTest {
     private static ConstantOperator O_DT_20101102_183010;
@@ -1357,6 +1356,22 @@ public class ScalarOperatorFunctionsTest {
         assertEquals("", ScalarOperatorFunctions.substring(
                 new ConstantOperator("starrocks", Type.VARCHAR),
                 new ConstantOperator(10, Type.INT)).getVarchar());
+    }
+
+    @Test
+    public void testUrlExtractParameter() {
+        assertEquals("100", ScalarOperatorFunctions.urlExtractParameter(
+                new ConstantOperator("https://starrocks.com/doc?k1=100&k2=3", Type.VARCHAR),
+                new ConstantOperator("k1", Type.VARCHAR)
+        ).getVarchar());
+        assertEquals(ScalarOperatorFunctions.urlExtractParameter(
+                new ConstantOperator("1234i5", Type.VARCHAR),
+                new ConstantOperator("k1", Type.VARCHAR)),
+                ConstantOperator.createNull(Type.VARCHAR));
+        assertEquals(ScalarOperatorFunctions.urlExtractParameter(
+                new ConstantOperator("https://starrocks.com/doc?k1=100&k2=3", Type.VARCHAR),
+                new ConstantOperator("k3", Type.VARCHAR)),
+                ConstantOperator.createNull(Type.VARCHAR));
     }
 
 }
