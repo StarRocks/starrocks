@@ -42,7 +42,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class ScalarOperatorFunctionsTest {
     private static ConstantOperator O_DT_20101102_183010;
