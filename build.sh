@@ -137,7 +137,7 @@ if [ -e /proc/cpuinfo ] ; then
     fi
 fi
 
-# The `WITH_CACHELIB` just controls whether cachelib is compiled in, while starcache is now always compiled in.
+# The `WITH_CACHELIB` just controls whether cachelib is compiled in, while starcache is controlled by "WITH_STARCACHE".
 # This option will soon be deprecated.
 if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     # force turn off cachelib on arm platform
@@ -149,6 +149,15 @@ fi
 if [[ "${WITH_CACHELIB}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
     echo "WITH_CACHELIB=ON but missing depdency libraries(cachelib)"
     exit 1
+fi
+
+if [[ -z ${WITH_STARCACHE} ]]; then
+  WITH_STARCACHE=ON
+fi
+
+if [[ "${WITH_STARCACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/starcache/lib/libstarcache.a ]]; then
+	echo "WITH_STARCACHE=ON but missing depdency libraries(starcache), download and extract it to thirdparty installed directory."
+	exit 1
 fi
 
 if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
@@ -288,7 +297,6 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     mkdir -p ${CMAKE_BUILD_DIR}
 
     source ${STARROCKS_HOME}/bin/common.sh
-    update_submodules
 
     cd ${CMAKE_BUILD_DIR}
     if [ "${USE_STAROS}" == "ON"  ]; then
@@ -309,8 +317,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DUSE_STAROS=${USE_STAROS} \
                     -DWITH_BENCH=${WITH_BENCH} \
                     -DWITH_CACHELIB=${WITH_CACHELIB} \
-                    -DSTARCACHE_THIRDPARTY_DIR=${STARROCKS_THIRDPARTY}/installed \
-                    -DSTARCACHE_SKIP_INSTALL=ON \
+                    -DWITH_STARCACHE=${WITH_STARCACHE} \
                     -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
                     -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
                     -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \
@@ -327,8 +334,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DUSE_JEMALLOC=$USE_JEMALLOC \
                     -DWITH_BENCH=${WITH_BENCH} \
                     -DWITH_CACHELIB=${WITH_CACHELIB} \
-                    -DSTARCACHE_THIRDPARTY_DIR=${STARROCKS_THIRDPARTY}/installed \
-                    -DSTARCACHE_SKIP_INSTALL=ON \
+                    -DWITH_STARCACHE=${WITH_STARCACHE} \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
     fi
     time ${BUILD_SYSTEM} -j${PARALLEL}
