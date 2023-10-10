@@ -46,7 +46,6 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.View;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -71,7 +70,6 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -304,7 +302,7 @@ public class MaterializedViewAnalyzer {
          * @return
          */
         private Map<TableName, Table> getAllBaseTables(QueryStatement queryStatement, ConnectContext context) {
-            Map<TableName, Table> aliasTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
+            Map<TableName, Table> aliasTableMap = AnalyzerUtils.collectAllTableAndView(queryStatement);
             List<ViewRelation> viewRelations = AnalyzerUtils.collectViewRelations(queryStatement);
             if (viewRelations.isEmpty()) {
                 return aliasTableMap;
@@ -573,78 +571,25 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private static class ExprShuttleContext {
-            private Expr parent;
-            private int childIdx;
-
-            public ExprShuttleContext(Expr parent, int childIdx) {
-                this.parent = parent;
-                this.childIdx = childIdx;
-            }
-        }
-
+        /**
+         * Resolve the materialized view's partition expr's slot ref.
+         * @param partitionColumnExpr : the materialized view's partition expr
+         * @param connectContext      : connect context of the current session.
+         * @param queryStatement      : the sub query statment that contains the partition column slot ref
+         * @return                    : return the resolved partition expr.
+         */
         private Expr resolvePartitionExpr(Expr partitionColumnExpr,
                                           ConnectContext connectContext,
                                           QueryStatement queryStatement) {
-            if (partitionColumnExpr instanceof SlotRef) {
-                return resolvePartitionExprOfSlotRef((SlotRef) partitionColumnExpr, connectContext, queryStatement);
+            Expr expr = AnalyzerUtils.resolveExpr(partitionColumnExpr, queryStatement);
+            SlotRef slot;
+            if (expr instanceof SlotRef) {
+                slot = (SlotRef) expr;
             } else {
-                final AstVisitor exprShuttle = new AstVisitor<Void, ExprShuttleContext>() {
-                    @Override
-                    public Void visitExpression(Expr expr, ExprShuttleContext context) {
-                        for (int i = 0; i < expr.getChildren().size(); i++) {
-                            expr.getChild(i).accept(this, new ExprShuttleContext(expr, i));
-                        }
-                        return null;
-                    }
-
-                    @Override
-                    public Void visitSlot(SlotRef slotRef, ExprShuttleContext context) {
-                        Expr resolved = resolvePartitionExprOfSlotRef(slotRef, connectContext, queryStatement);
-                        if (resolved == null) {
-                            throw new RuntimeException(String.format("can not resolve slotRef: %s", slotRef.debugString()));
-                        }
-                        if (resolved != slotRef) {
-                            if (context.parent != null) {
-                                context.parent.setChild(context.childIdx, resolved);
-                            }
-                        }
-                        return null;
-                    }
-                };
-
-                partitionColumnExpr.accept(exprShuttle, new ExprShuttleContext(null, -1));
-                return partitionColumnExpr;
+                slot = getSlotRef(expr);
             }
-        }
-
-        /**
-         * Resolve the materialized view's partition expr's slot ref.
-         * @param slotRef           : the materialized view's partition expr's slot ref
-         * @param connectContext    : connect context of the current session.
-         * @param queryStatement    : the sub query statment that contains the partition column slot ref
-         * @return                  : return the resolved partition column slot ref.
-         */
-        private Expr resolvePartitionExprOfSlotRef(SlotRef slotRef,
-                                                   ConnectContext connectContext,
-                                                   QueryStatement queryStatement) {
-            Map<TableName, SubqueryRelation> tableNameSubqueryRelationMap =
-                    AnalyzerUtils.collectOneLevelSubQueryRelation(queryStatement);
-            if (!tableNameSubqueryRelationMap.isEmpty()) {
-                // choose the query statement that can resolve the partition column expr
-                for (Map.Entry<TableName, SubqueryRelation> e : tableNameSubqueryRelationMap.entrySet()) {
-                    QueryStatement subQueryStatement = e.getValue().getQueryStatement();
-
-                    Expr resolved = AnalyzerUtils.resolveSlotRef(slotRef, subQueryStatement);
-                    if (resolved != null) {
-                        return resolvePartitionExpr(resolved, connectContext, subQueryStatement);
-                    }
-                }
-                return null;
-            }
-
             Map<TableName, Table> aliasTableMap = getNormalizedBaseTables(queryStatement, connectContext);
-            TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+            TableName tableName = slot.getTblNameWithoutAnalyzed();
             tableName.normalization(connectContext);
 
             Table table = aliasTableMap.get(tableName);
@@ -655,32 +600,13 @@ public class MaterializedViewAnalyzer {
                         .getMetadataMgr().getTable(catalog, tableName.getDb(), tableName.getTbl());
                 if (table == null) {
                     throw new SemanticException("Materialized view partition expression %s could only ref to base table",
-                            slotRef.toSql());
+                            slot.toSql());
                 }
             }
-
-            if (!table.isView()) {
-                // for table, it must be slotRef
-                if (!table.getName().equalsIgnoreCase(tableName.getTbl())) {
-                    slotRef.setType(table.getColumn(slotRef.getColumnName()).getType());
-                }
-                return slotRef;
-            } else {
-                // resolve the view table
-                View view = (View) table;
-                QueryStatement viewQueryStatement = view.getQueryStatement();
-                Expr resolved = AnalyzerUtils.resolveSlotRef(slotRef, viewQueryStatement);
-                if (resolved == null) {
-                    return null;
-                }
-                SlotRef slot = getSlotRef(resolved);
-                // TableName's catalog may be null, so normalization it
-                slot.getTblNameWithoutAnalyzed().normalization(connectContext);
-                // resolved may be view's column, resolve it recursively
-                // NOTE: Why here not use `viewQueryStatement`? because `viewQueryStatement`'s relation
-                // is not analyzed yet cannot be used directly.
-                return resolvePartitionExpr(resolved, connectContext, queryStatement);
-            }
+            // TableName's catalog may be null, so normalization it
+            slot.getTblNameWithoutAnalyzed().normalization(connectContext);
+            slot.setType(table.getColumn(slot.getColumnName()).getType());
+            return expr;
         }
 
         private void checkPartitionExpPatterns(CreateMaterializedViewStatement statement) {
