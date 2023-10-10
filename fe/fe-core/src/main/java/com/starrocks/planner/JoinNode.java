@@ -182,7 +182,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             return;
         }
 
-        if (distrMode.equals(DistributionMode.PARTITIONED) || distrMode.equals(DistributionMode.LOCAL_HASH_BUCKET)) {
+        if (distrMode.equals(DistributionMode.PARTITIONED) || distrMode.equals(DistributionMode.SHUFFLE_HASH_BUCKET)) {
             // If it's partitioned join, and we can not get correct ndv
             // then it's hard to estimate right bloom filter size, or it's too big.
             // so we'd better to skip this global runtime filter.
