@@ -69,12 +69,8 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
     return Status::OK();
 }
 
-<<<<<<< HEAD
 Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk,
-=======
-Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, Chunk* chunk, Metrics& metrics,
->>>>>>> 90e6414a8 ([Enhancement] Refine profile for version smaller than or equals to 3.0 (#32218))
-                                                        faststring* uncompressed_buffer) {
+                                                        Metrics& metrics, faststring* uncompressed_buffer) {
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         SCOPED_TIMER(metrics.deserialize_chunk_timer);
         TRY_CATCH_BAD_ALLOC({
@@ -259,13 +255,8 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkP
     for (auto i = 0; i < request.chunks().size(); ++i) {
         auto& pchunk = request.chunks().Get(i);
         int64_t chunk_bytes = pchunk.data().size();
-<<<<<<< HEAD
         ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
-        RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
-=======
-        ChunkUniquePtr chunk = std::make_unique<Chunk>();
         RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), metrics, &uncompressed_buffer));
->>>>>>> 90e6414a8 ([Enhancement] Refine profile for version smaller than or equals to 3.0 (#32218))
         ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
         chunks.emplace_back(std::move(item));
         total_chunk_bytes += chunk_bytes;
@@ -455,10 +446,6 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(vectorized::Chunk** chunk
 
     _total_chunks--;
     _recvr->_num_buffered_bytes -= item.chunk_bytes;
-<<<<<<< HEAD
-=======
-    COUNTER_ADD(metrics.peak_buffer_mem_bytes, -item.chunk_bytes);
->>>>>>> 90e6414a8 ([Enhancement] Refine profile for version smaller than or equals to 3.0 (#32218))
     return Status::OK();
 }
 
@@ -494,10 +481,6 @@ bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(vectorized::Chunk** chu
     }
     _total_chunks--;
     _recvr->_num_buffered_bytes -= item.chunk_bytes;
-<<<<<<< HEAD
-=======
-    COUNTER_ADD(metrics.peak_buffer_mem_bytes, -item.chunk_bytes);
->>>>>>> 90e6414a8 ([Enhancement] Refine profile for version smaller than or equals to 3.0 (#32218))
     return true;
 }
 
@@ -553,10 +536,6 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
                 }
                 --_total_chunks;
                 _recvr->_num_buffered_bytes -= item.chunk_bytes;
-<<<<<<< HEAD
-=======
-                COUNTER_ADD(metrics.peak_buffer_mem_bytes, -item.chunk_bytes);
->>>>>>> 90e6414a8 ([Enhancement] Refine profile for version smaller than or equals to 3.0 (#32218))
             }
         }
     }
@@ -621,13 +600,8 @@ StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::Pipel
         int32_t driver_sequence = _is_pipeline_level_shuffle ? request.driver_sequences(i) : -1;
         int64_t chunk_bytes = pchunk.data().size();
         if constexpr (need_deserialization) {
-<<<<<<< HEAD
             ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
-            RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
-=======
-            ChunkUniquePtr chunk = std::make_unique<Chunk>();
             RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), metrics, &uncompressed_buffer));
->>>>>>> 90e6414a8 ([Enhancement] Refine profile for version smaller than or equals to 3.0 (#32218))
             chunks.emplace_back(chunk_bytes, driver_sequence, nullptr, std::move(chunk));
         } else {
             chunks.emplace_back(chunk_bytes, driver_sequence, nullptr, pchunk);
@@ -720,10 +694,6 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
                 _chunk_queue_states[0].blocked_closure_num += closure != nullptr;
                 _total_chunks++;
                 _recvr->_num_buffered_bytes += chunk_bytes;
-<<<<<<< HEAD
-=======
-                COUNTER_ADD(metrics.peak_buffer_mem_bytes, chunk_bytes);
->>>>>>> 90e6414a8 ([Enhancement] Refine profile for version smaller than or equals to 3.0 (#32218))
             }
 
             chunk_queues.erase(it);
@@ -766,10 +736,6 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
                 short_circuit(index);
             }
             _recvr->_num_buffered_bytes += chunk_bytes;
-<<<<<<< HEAD
-=======
-            COUNTER_ADD(metrics.peak_buffer_mem_bytes, chunk_bytes);
->>>>>>> 90e6414a8 ([Enhancement] Refine profile for version smaller than or equals to 3.0 (#32218))
         }
     }
 
@@ -792,10 +758,6 @@ void DataStreamRecvr::PipelineSenderQueue::short_circuit(const int32_t driver_se
                 }
                 --_total_chunks;
                 _recvr->_num_buffered_bytes -= item.chunk_bytes;
-<<<<<<< HEAD
-=======
-                COUNTER_ADD(metrics.peak_buffer_mem_bytes, item.chunk_bytes);
->>>>>>> 90e6414a8 ([Enhancement] Refine profile for version smaller than or equals to 3.0 (#32218))
             }
         }
     }

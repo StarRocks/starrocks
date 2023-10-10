@@ -56,15 +56,10 @@ using std::make_pair;
 
 namespace starrocks {
 
-<<<<<<< HEAD
 using vectorized::ChunkUniquePtr;
 
-Status DataStreamRecvr::create_merger(RuntimeState* state, const SortExecExprs* exprs, const std::vector<bool>* is_asc,
-                                      const std::vector<bool>* is_null_first) {
-=======
 Status DataStreamRecvr::create_merger(RuntimeState* state, RuntimeProfile* profile, const SortExecExprs* exprs,
                                       const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first) {
->>>>>>> 90e6414a8 ([Enhancement] Refine profile for version smaller than or equals to 3.0 (#32218))
     DCHECK(_is_merging);
     _chunks_merger = std::make_unique<vectorized::SortedChunksMerger>(state, _keep_order);
     vectorized::ChunkSuppliers chunk_suppliers;
@@ -160,24 +155,7 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
         _sender_queues.push_back(queue);
     }
 
-<<<<<<< HEAD
-    // Initialize the counters
-    _bytes_received_counter = ADD_COUNTER(_profile, "BytesReceived", TUnit::BYTES);
-    _bytes_pass_through_counter = ADD_COUNTER(_profile, "BytesPassThrough", TUnit::BYTES);
-    _request_received_counter = ADD_COUNTER(_profile, "RequestReceived", TUnit::UNIT);
-    _closure_block_timer = ADD_TIMER(_profile, "ClosureBlockTime");
-    _closure_block_counter = ADD_COUNTER(_profile, "ClosureBlockCount", TUnit::UNIT);
-    _deserialize_chunk_timer = ADD_TIMER(_profile, "DeserializeChunkTime");
-    _decompress_chunk_timer = ADD_TIMER(_profile, "DecompressChunkTime");
-    _process_total_timer = ADD_TIMER(_profile, "ReceiverProcessTotalTime");
-
-    _sender_total_timer = ADD_TIMER(_profile, "SenderTotalTime");
-    _sender_wait_lock_timer = ADD_TIMER(_profile, "SenderWaitLockTime");
-
-    _buffer_unplug_counter = ADD_COUNTER(_profile, "BufferUnplugCount", TUnit::UNIT);
-=======
     _metrics.resize(degree_of_parallelism);
->>>>>>> 90e6414a8 ([Enhancement] Refine profile for version smaller than or equals to 3.0 (#32218))
 
     _pass_through_context.init();
     if (runtime_state->query_options().__isset.transmission_encode_level) {
@@ -185,9 +163,6 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
     }
 }
 
-<<<<<<< HEAD
-Status DataStreamRecvr::get_next(vectorized::ChunkPtr* chunk, bool* eos) {
-=======
 void DataStreamRecvr::bind_profile(int32_t driver_sequence, RuntimeProfile* profile) {
     DCHECK(profile != nullptr);
     DCHECK_GE(driver_sequence, 0);
@@ -204,12 +179,9 @@ void DataStreamRecvr::bind_profile(int32_t driver_sequence, RuntimeProfile* prof
     statistics.process_total_timer = ADD_TIMER(profile, "ReceiverProcessTotalTime");
     statistics.wait_lock_timer = ADD_TIMER(profile, "WaitLockTime");
     statistics.buffer_unplug_counter = ADD_COUNTER(profile, "BufferUnplugCount", TUnit::UNIT);
-    statistics.peak_buffer_mem_bytes = profile->AddHighWaterMarkCounter(
-            "PeakBufferMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
 }
 
-Status DataStreamRecvr::get_next(ChunkPtr* chunk, bool* eos) {
->>>>>>> 90e6414a8 ([Enhancement] Refine profile for version smaller than or equals to 3.0 (#32218))
+Status DataStreamRecvr::get_next(vectorized::ChunkPtr* chunk, bool* eos) {
     DCHECK(_chunks_merger.get() != nullptr);
     return _chunks_merger->get_next(chunk, eos);
 }

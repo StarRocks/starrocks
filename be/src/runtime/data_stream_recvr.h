@@ -204,11 +204,7 @@ private:
         // Total spent for senders putting data in the queue
         RuntimeProfile::Counter* wait_lock_timer = nullptr;
 
-<<<<<<< HEAD
-    RuntimeProfile::Counter* _buffer_unplug_counter = nullptr;
-=======
         RuntimeProfile::Counter* buffer_unplug_counter = nullptr;
-        RuntimeProfile::HighWaterMarkCounter* peak_buffer_mem_bytes = nullptr;
     };
 
     // One DataStreamRecvr will be shared by a group of ExchangeSourceOperator
@@ -220,7 +216,6 @@ private:
     // and use round-robin to choose the metrics for each brpc thread.
     std::vector<Metrics> _metrics;
     std::atomic<size_t> _rpc_round_roubin_index = 0;
->>>>>>> 90e6414a8 ([Enhancement] Refine profile for version smaller than or equals to 3.0 (#32218))
 
     // Sub plan query statistics receiver.
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr;
