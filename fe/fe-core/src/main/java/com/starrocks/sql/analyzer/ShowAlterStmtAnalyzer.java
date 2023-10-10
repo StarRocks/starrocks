@@ -77,6 +77,8 @@ public class ShowAlterStmtAnalyzer {
                 sb.append("/schema_change");
             } else if (type == ShowAlterStmt.AlterType.ROLLUP || type == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
                 sb.append("/rollup");
+            } else if (type == ShowAlterStmt.AlterType.OPTIMIZE) {
+                sb.append("/optimize");
             }
 
             // create show proc stmt
