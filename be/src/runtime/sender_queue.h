@@ -50,11 +50,8 @@ public:
 protected:
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
 
-<<<<<<< HEAD
-    Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk, faststring* uncompressed_buffer);
-=======
-    Status _deserialize_chunk(const ChunkPB& pchunk, Chunk* chunk, Metrics& metrics, faststring* uncompressed_buffer);
->>>>>>> 90e6414a8 ([Enhancement] Refine profile for version smaller than or equals to 3.0 (#32218))
+    Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk, Metrics& metrics,
+                              faststring* uncompressed_buffer);
 
     DataStreamRecvr* _recvr = nullptr;
 
