@@ -69,20 +69,6 @@ public class LakeTable extends OlapTable {
         this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, null);
     }
 
-    private FilePathInfo getDefaultFilePathInfo() {
-        return tableProperty.getStorageInfo().getFilePathInfo();
-    }
-
-    @Override
-    public String getStoragePath() {
-        return getDefaultFilePathInfo().getFullPath();
-    }
-
-    @Override
-    public FilePathInfo getPartitionFilePathInfo() {
-        return getDefaultFilePathInfo();
-    }
-
     @Override
     public FileCacheInfo getPartitionFileCacheInfo(long partitionId) {
         FileCacheInfo cacheInfo = null;
@@ -163,7 +149,7 @@ public class LakeTable extends OlapTable {
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash,
                                           long partitionId, long shardGroupId) {
-        FilePathInfo fsInfo = getPartitionFilePathInfo();
+        FilePathInfo fsInfo = getPartitionFilePathInfo(partitionId);
         FileCacheInfo cacheInfo = getPartitionFileCacheInfo(partitionId);
         Map<String, String> properties = new HashMap<>();
         properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(partitionId));

@@ -79,6 +79,7 @@ import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
@@ -128,6 +129,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.zip.Adler32;
+import javax.annotation.Nullable;
 
 /**
  * Internal representation of tableFamilyGroup-related metadata. A OlaptableFamilyGroup contains several tableFamily.
@@ -2615,12 +2617,22 @@ public class OlapTable extends Table {
     }
 
     // ------ for lake table and lake materialized view start ------
-    public String getStoragePath() {
-        throw new SemanticException("getStoragePath is not supported");
+    @Nullable
+    public FilePathInfo getDefaultFilePathInfo() {
+        StorageInfo storageInfo = tableProperty != null ? tableProperty.getStorageInfo() : null;
+        return storageInfo != null ? storageInfo.getFilePathInfo() : null;
     }
 
-    public FilePathInfo getPartitionFilePathInfo() {
-        throw new SemanticException("getPartitionFilePathInfo is not supported");
+    @Nullable
+    public FilePathInfo getPartitionFilePathInfo(long partitionId) {
+        FilePathInfo pathInfo = getDefaultFilePathInfo();
+        if (pathInfo != null) {
+            FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+            builder.mergeFrom(pathInfo);
+            builder.setFullPath(builder.getFullPath() + "/" + partitionId);
+            return builder.build();
+        }
+        return null;
     }
 
     public FileCacheInfo getPartitionFileCacheInfo(long partitionId) {
