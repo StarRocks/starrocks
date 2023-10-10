@@ -513,6 +513,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_ICEBERG_NDV = "enable_iceberg_ndv";
 
+    public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1105,6 +1107,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableIcebergNdv(boolean enableIcebergNdv) {
         this.enableIcebergNdv = enableIcebergNdv;
+    }
+
+    @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
+    private long cboPushDownTopNLimit = 1000;
+
+    public long getCboPushDownTopNLimit() {
+        return cboPushDownTopNLimit;
+    }
+
+    public void setCboPushDownTopNLimit(long cboPushDownTopNLimit) {
+        this.cboPushDownTopNLimit = cboPushDownTopNLimit;
     }
 
     @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)

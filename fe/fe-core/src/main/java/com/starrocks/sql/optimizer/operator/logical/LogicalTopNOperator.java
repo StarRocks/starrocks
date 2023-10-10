@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -101,6 +102,10 @@ public class LogicalTopNOperator extends LogicalOperator {
 
     public long getOffset() {
         return offset;
+    }
+
+    public boolean hasOffset() {
+        return offset != Operator.DEFAULT_OFFSET;
     }
 
     public List<ColumnRefOperator> getPartitionByColumns() {
