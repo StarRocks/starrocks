@@ -176,6 +176,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     private long startTime;
     @SerializedName(value = "sortKeyIdxes")
     private List<Integer> sortKeyIdxes;
+    @SerializedName(value = "sortKeyUniqueIds")
+    private List<Integer> sortKeyUniqueIds;
 
     // save all schema change tasks
     private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
@@ -231,6 +233,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
     public void setSortKeyIdxes(List<Integer> sortKeyIdxes) {
         this.sortKeyIdxes = sortKeyIdxes;
+    }
+    
+    public void setSortKeyUniqueIds(List<Integer> sortKeyUniqueIds) {
+        this.sortKeyUniqueIds = sortKeyUniqueIds;
     }
 
     /**
@@ -317,6 +323,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     }
 
                     List<Integer> copiedSortKeyIdxes = index.getSortKeyIdxes();
+                    List<Integer> copiedSortKeyUniqueIds = index.getSortKeyUniqueIds();
+                    // TODO
+                    // the following code appears to be deletable 
                     if (index.getSortKeyIdxes() != null) {
                         if (originSchema.size() > shadowSchema.size()) {
                             List<Column> differences = originSchema.stream().filter(element ->
@@ -349,6 +358,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     } else if (copiedSortKeyIdxes != null && !copiedSortKeyIdxes.isEmpty()) {
                         sortKeyIdxes = copiedSortKeyIdxes;
                     }
+                    // reorder, change sort key columns
+                    if (sortKeyUniqueIds != null) {
+                        copiedSortKeyUniqueIds = sortKeyUniqueIds;
+                    }
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         List<Replica> shadowReplicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
@@ -365,7 +378,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     tbl.enablePersistentIndex(),
                                     tbl.primaryIndexCacheExpireSec(),
                                     tbl.getPartitionInfo().getTabletType(partitionId),
-                                    tbl.getCompressionType(), copiedSortKeyIdxes);
+                                    tbl.getCompressionType(), copiedSortKeyIdxes,
+                                    sortKeyUniqueIds);
                             createReplicaTask.setBaseTablet(
                                     partitionIndexTabletMap.get(partitionId, shadowIdxId).get(shadowTabletId),
                                     originSchemaHash);
@@ -455,7 +469,17 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion,
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
+<<<<<<< HEAD
                     tbl.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyIdxes);
+=======
+                    tbl.getKeysTypeByIndexId(orgIndexId), null, sortKeyIdxes,
+                    sortKeyUniqueIds);
+            MaterializedIndexMeta orgIndexMeta = tbl.getIndexMetaByIndexId(orgIndexId);
+            Preconditions.checkNotNull(orgIndexMeta);
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(shadowIdxId);
+            Preconditions.checkNotNull(indexMeta);
+            rebuildMaterializedIndexMeta(orgIndexMeta, indexMeta);
+>>>>>>> dbe758bf48 ([Feature] Support pk light schema change of adding and dropping columns (#31569))
         }
 
         tbl.rebuildFullSchema();

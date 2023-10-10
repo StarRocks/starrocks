@@ -126,6 +126,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -495,6 +496,13 @@ public class OlapTable extends Table {
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
             int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
             OriginStatement origStmt, List<Integer> sortColumns) {
+        setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
+                origStmt, sortColumns, null);
+    }
+
+    public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
+            int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
+            OriginStatement origStmt, List<Integer> sortColumns, List<Integer> sortColumnUniqueIds) {
         // Nullable when meta comes from schema change log replay.
         // The replay log only save the index id, so we need to get name by id.
         if (indexName == null) {
@@ -517,7 +525,8 @@ public class OlapTable extends Table {
         }
 
         MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema, schemaVersion,
-                schemaHash, shortKeyColumnCount, storageType, keysType, origStmt, sortColumns);
+                schemaHash, shortKeyColumnCount, storageType, keysType, origStmt, sortColumns,
+                sortColumnUniqueIds);
         indexIdToMeta.put(indexId, indexMeta);
         indexNameToId.put(indexName, indexId);
     }
@@ -534,20 +543,21 @@ public class OlapTable extends Table {
     // rebuild the full schema of table
     // the order of columns in fullSchema is meaningless
     public void rebuildFullSchema() {
-        fullSchema.clear();
+        List<Column> newFullSchema = new CopyOnWriteArrayList<>();
         nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Column baseColumn : indexIdToMeta.get(baseIndexId).getSchema()) {
-            fullSchema.add(baseColumn);
+            newFullSchema.add(baseColumn);
             nameToColumn.put(baseColumn.getName(), baseColumn);
         }
         for (MaterializedIndexMeta indexMeta : indexIdToMeta.values()) {
             for (Column column : indexMeta.getSchema()) {
                 if (!nameToColumn.containsKey(column.getName())) {
-                    fullSchema.add(column);
+                    newFullSchema.add(column);
                     nameToColumn.put(column.getName(), column);
                 }
             }
         }
+        fullSchema = newFullSchema;
         LOG.debug("after rebuild full schema. table {}, schema: {}", id, fullSchema);
     }
 

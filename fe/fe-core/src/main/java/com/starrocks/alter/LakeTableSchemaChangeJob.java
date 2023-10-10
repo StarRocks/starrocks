@@ -196,7 +196,16 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         for (long shadowIdxId : indexIdMap.keySet()) {
             table.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId), indexSchemaMap.get(shadowIdxId), 0, 0,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
+<<<<<<< HEAD
                     table.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyIdxes);
+=======
+                    table.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyIdxes, null);
+            MaterializedIndexMeta orgIndexMeta = table.getIndexMetaByIndexId(orgIndexId);
+            Preconditions.checkNotNull(orgIndexMeta);
+            MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(shadowIdxId);
+            Preconditions.checkNotNull(indexMeta);
+            rebuildMaterializedIndexMeta(orgIndexMeta, indexMeta);
+>>>>>>> dbe758bf48 ([Feature] Support pk light schema change of adding and dropping columns (#31569))
         }
 
         table.rebuildFullSchema();
@@ -344,9 +353,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         CreateReplicaTask createReplicaTask = new CreateReplicaTask(backendId, dbId, tableId, partitionId,
                                 shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0, Partition.PARTITION_INIT_VERSION,
                                 originKeysType, TStorageType.COLUMN, storageMedium, copiedShadowSchema, bfColumns, bfFpp,
-                                countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(), 
+                                countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(),
                                 table.primaryIndexCacheExpireSec(), TTabletType.TABLET_TYPE_LAKE, table.getCompressionType(), 
-                                copiedSortKeyIdxes);
+                                copiedSortKeyIdxes, null);
                         batchTask.addTask(createReplicaTask);
                     }
                 }
