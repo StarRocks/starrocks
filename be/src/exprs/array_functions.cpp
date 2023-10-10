@@ -359,13 +359,8 @@ template <LogicalType TYPE>
 struct ArrayCumSumImpl {
 public:
     static StatusOr<ColumnPtr> evaluate(const ColumnPtr& col) {
-        if (col->is_constant()) {
-            auto* input = down_cast<ConstColumn*>(col.get());
-            auto arr_col_h = input->data_column()->clone();
-            auto* arr_col = down_cast<ArrayColumn*>(arr_col_h.get());
-            call_cum_sum(arr_col, nullptr);
-            return ConstColumn::create(std::move(arr_col_h), input->size());
-        } else if (col->is_nullable()) {
+        // const colum may be const<nullable col>
+        if (col->is_nullable()) {
             auto res = col->clone();
             auto* input = down_cast<NullableColumn*>(res.get());
             NullColumn* null_column = input->mutable_null_column();
@@ -441,14 +436,14 @@ private:
     }
 };
 
-#define DEFINE_ARRAY_CUMSUM_FN(NAME, TYPE)                                                              \
-    StatusOr<ColumnPtr> ArrayFunctions::array_cum_sum_##NAME([[maybe_unused]] FunctionContext* context, \
-                                                             const Columns& columns) {                  \
-        DCHECK_EQ(columns.size(), 1);                                                                   \
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);                                                           \
-        const ColumnPtr& arg0 = columns[0];                                                             \
-                                                                                                        \
-        return ArrayCumSumImpl<TYPE>::evaluate(arg0);                                                   \
+#define DEFINE_ARRAY_CUMSUM_FN(NAME, TYPE)                                                                       \
+    StatusOr<ColumnPtr> ArrayFunctions::array_cum_sum_##NAME([[maybe_unused]] FunctionContext* context,          \
+                                                             const Columns& columns) {                           \
+        DCHECK_EQ(columns.size(), 1);                                                                            \
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);                                                                    \
+        const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); \
+                                                                                                                 \
+        return ArrayCumSumImpl<TYPE>::evaluate(arg0);                                                            \
     }
 
 DEFINE_ARRAY_CUMSUM_FN(bigint, TYPE_BIGINT)
