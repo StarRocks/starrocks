@@ -439,9 +439,9 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |clone_worker_count|3|克隆的线程数。|
 |storage_medium_migrate_count|1|介质迁移的线程数，SATA 迁移到 SSD。|
 |check_consistency_worker_count|1|计算 tablet 的校验和 (checksum)。|
-|sys_log_dir|${STARROCKS_HOME}/log|存放日志的地方，包括 INFO，WARNING，ERROR，FATAL 等日志。|
-|user_function_dir|${STARROCKS_HOME}/lib/udf|UDF 程序存放的路径。|
-|small_file_dir|${STARROCKS_HOME}/lib/small_file|保存文件管理器下载的文件的目录。|
+|sys_log_dir|`${STARROCKS_HOME}/log`|存放日志的地方，包括 INFO，WARNING，ERROR，FATAL 等日志。|
+|user_function_dir|`${STARROCKS_HOME}/lib/udf`|UDF 程序存放的路径。|
+|small_file_dir|`${STARROCKS_HOME}/lib/small_file`|保存文件管理器下载的文件的目录。|
 |sys_log_level|INFO|日志级别，INFO < WARNING < ERROR < FATAL。|
 |sys_log_roll_mode|SIZE-MB-1024|日志拆分的大小，每 1G 拆分一个日志。|
 |sys_log_roll_num|10|日志保留的数目。|
@@ -452,7 +452,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |compress_rowbatches|TRUE|BE 之间 RPC 通信是否压缩 RowBatch，用于查询层之间的数据传输。|
 |serialize_batch|FALSE|BE 之间 RPC 通信是否序列化 RowBatch，用于查询层之间的数据传输。|
 |file_descriptor_cache_clean_interval|3600|文件句柄缓存清理的间隔，用于清理长期不用的文件句柄|
-|storage_root_path|${STARROCKS_HOME}/storage|存储数据的目录以及存储介质类型，多块盘配置使用分号 `;` 隔开。<br />如果为 SSD 磁盘，需在路径后添加 `,medium:ssd`，如果为 HDD 磁盘，需在路径后添加 `,medium:hdd`。例如：`/data1,medium:hdd;/data2,medium:ssd`。|
+|storage_root_path|`${STARROCKS_HOME}/storage`|存储数据的目录以及存储介质类型，多块盘配置使用分号 `;` 隔开。<br />如果为 SSD 磁盘，需在路径后添加 `,medium:ssd`，如果为 HDD 磁盘，需在路径后添加 `,medium:hdd`。例如：`/data1,medium:hdd;/data2,medium:ssd`。|
 |max_length_for_bitmap_function|1000000|bitmap 函数输入值的最大长度。单位：字节。|
 |max_length_for_to_base64|200000|to_base64() 函数输入值的最大长度。单位：字节。|
 |max_percentage_of_error_disk|0|磁盘错误达到一定比例，BE 退出。|
@@ -484,7 +484,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |flush_thread_num_per_store|2|每个 Store 用以 Flush MemTable 的线程数。|
 | block_cache_enable     | false | 是否启用 Data Cache。<ul><li>`true`：启用。</li><li>`false`：不启用，为默认值。</li></ul> 如要启用，设置该参数值为 `true`。|
 | block_cache_disk_path  | N/A | 磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。配置路径后，StarRocks 会自动创建名为 **cachelib_data** 的文件用于缓存 block。 |
-| block_cache_meta_path  | N/A | Block 的元数据存储目录，可自定义。推荐创建在 **$STARROCKS_HOME** 路径下。 |
+| block_cache_meta_path  | N/A | Block 的元数据存储目录，可自定义。推荐创建在 **`$STARROCKS_HOME`** 路径下。 |
 | block_cache_block_size | 1048576 | 单个 block 大小，单位：字节。默认值为 `1048576`，即 1 MB。   |
 | block_cache_mem_size   | 2147483648 | 内存缓存数据量的上限，单位：字节。默认值为 `2147483648`，即 2 GB。推荐将该参数值最低设置成 20 GB。如在开启 Data Cache 期间，存在大量从磁盘读取数据的情况，可考虑调大该参数。 |
 | block_cache_disk_size  | 0 | 单个磁盘缓存数据量的上限，单位：字节。举例：在 `block_cache_disk_path` 中配置了 2 个磁盘，并设置 `block_cache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。 |
