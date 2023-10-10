@@ -264,6 +264,63 @@ TEST_F(ArrayFunctionsTest, array_length) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_cum_sum) {
+    // []
+    // NULL
+    // [NULL]
+    // [1]
+    // [1,2,3,4,5]
+    // [null,null,1, null]
+    {
+        auto c = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+        c->append_datum(Datum(DatumArray{}));
+        c->append_datum(Datum());
+        c->append_datum(Datum(DatumArray{Datum()}));
+        c->append_datum(Datum(DatumArray{Datum((int64_t)1)}));
+        c->append_datum(Datum(DatumArray{Datum((int64_t)1), Datum((int64_t)2), Datum((int64_t)3), Datum((int64_t)4),
+                                         Datum((int64_t)5)}));
+        c->append_datum(Datum(DatumArray{Datum(), Datum(), Datum((int64_t)1), Datum()}));
+
+        auto result = ArrayFunctions::array_cum_sum_bigint(nullptr, {c}).value();
+        EXPECT_EQ(6, result->size());
+
+        ASSERT_FALSE(result->get(0).is_null());
+        ASSERT_TRUE(result->get(1).is_null());
+        ASSERT_FALSE(result->get(2).is_null());
+        ASSERT_FALSE(result->get(3).is_null());
+        ASSERT_FALSE(result->get(4).is_null());
+        ASSERT_FALSE(result->get(5).is_null());
+
+        EXPECT_EQ(0, result->get(0).get_array().size());
+        EXPECT_EQ(1, result->get(2).get_array().size());
+        EXPECT_EQ(1, result->get(3).get_array().size());
+        EXPECT_EQ(5, result->get(4).get_array().size());
+        EXPECT_EQ(4, result->get(5).get_array().size());
+    }
+
+    // [] only null
+    {
+        auto c = ColumnHelper::create_const_null_column(3);
+
+        auto result = ArrayFunctions::array_cum_sum_bigint(nullptr, {c}).value();
+        EXPECT_EQ(3, result->size());
+        EXPECT_TRUE(result->is_null(0));
+        EXPECT_TRUE(result->is_null(1));
+        EXPECT_TRUE(result->is_null(2));
+    }
+
+    // [] only const
+    {
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+        src_column->append_datum(Datum(DatumArray{Datum((int64_t)1), Datum((int64_t)2), Datum((int64_t)3),
+                                                  Datum((int64_t)4), Datum((int64_t)5)}));
+        auto c = std::make_shared<ConstColumn>(src_column, 3);
+        auto result = ArrayFunctions::array_cum_sum_bigint(nullptr, {c}).value();
+        EXPECT_EQ(3, result->size());
+    }
+}
+
+// NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
     // array_contains([], 1)
     {
