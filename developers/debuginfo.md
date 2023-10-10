@@ -4,7 +4,7 @@
 
 对于普通用户，当前改动对日常使用没有任何影响，您依旧可以只下载二进制包来进行部署和升级操作。debuginfo 包仅适用于开发者使用 GDB 对程序进行调试时使用。您可以在[StarRocks 官网](https://www.starrocks.io/download/community)下载对应版本的 debuginfo 包。
 
-![debuginfo](/assets/debug_info.png)
+![debuginfo](../assets/debug_info.png)
 
 ## 注意事项
 
