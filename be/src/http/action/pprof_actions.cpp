@@ -60,8 +60,8 @@ static const int kPprofDefaultSampleSecs = 30;
 static std::mutex kPprofActionMutex;
 
 int set_jemalloc_profiling(bool enable) {
-    int ret = je_mallctl("prof.active", nullptr, 0, &enable, 1);
-    ret |= je_mallctl("prof.thread_active_init", nullptr, 0, &enable, 1);
+    int ret = je_mallctl("prof.active", nullptr, nullptr, &enable, 1);
+    ret |= je_mallctl("prof.thread_active_init", nullptr, nullptr, &enable, 1);
     return ret;
 }
 
