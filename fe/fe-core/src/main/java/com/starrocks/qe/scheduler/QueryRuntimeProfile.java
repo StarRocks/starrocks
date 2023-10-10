@@ -434,7 +434,7 @@ public class QueryRuntimeProfile {
                     }
 
                     if (commonMetrics.containsInfoString("IsFinalSink")) {
-                        Counter outputFullTime = pipelineProfile.getCounter("OutputFullTime");
+                        Counter outputFullTime = pipelineProfile.getMaxCounter("OutputFullTime");
                         if (outputFullTime != null) {
                             long resultDeliverTime = outputFullTime.getValue();
                             Counter resultDeliverTimer =
