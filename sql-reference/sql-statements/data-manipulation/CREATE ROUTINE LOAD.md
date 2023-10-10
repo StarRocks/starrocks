@@ -108,7 +108,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 | max_batch_interval        | 否           | 任务的调度间隔，即任务多久执行一次。单位：秒。取值范围：`5`～`60`。默认值：`10`。建议取值为导入间隔 10s 以上，否则会因为导入频率过高可能会报错版本数过多。 |
 | max_batch_rows            | 否           | 该参数只用于定义错误检测窗口范围，错误检测窗口范围为单个 Routine Load 导入任务所消费的 `10 * max-batch-rows` 行数据，默认为 `10 * 200000 = 2000000`。导入任务时会检测窗口中数据是否存在错误。错误数据是指 StarRocks 无法解析的数据，比如非法的 JSON。 |
 | max_error_number          | 否           | 错误检测窗口范围内允许的错误数据行数的上限。当错误数据行数超过该值时，导入作业会暂停，此时您需要执行 [SHOW ROUTINE LOAD](../data-manipulation/SHOW%20ROUTINE%20LOAD.md)，根据 `ErrorLogUrls`，检查 Kafka 中的消息并且更正错误。默认为 `0`，表示不允许有错误行。错误行不包括通过 WHERE 子句过滤掉的数据。 |
-| strict_mode               | 否           | 是否开启严格模式。取值范围：`TRUE` 或者 `FALSE`。默认值：`FALSE`。开启后，如果源数据某列的值为 `NULL`，但是目标表中该列不允许为 `NULL`，则该行数据会被过滤掉。<br>关于该模式的介绍，参见[严格模式](../../../loading/load_concept/strict_mode.md)。|
+| strict_mode               | 否           | 是否开启严格模式。取值范围：`TRUE` 或者 `FALSE`。默认值：`FALSE`。开启后，如果源数据某列的值为 `NULL`，但是目标表中该列不允许为 `NULL`，则该行数据会被过滤掉。<br />关于该模式的介绍，参见[严格模式](../../../loading/load_concept/strict_mode.md)。|
 | timezone                  | 否           | 该参数的取值会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/timezone.md)。导入参数 `timezone` 设置的时区对应[设置时区](../../../administration/timezone.md)中所述的会话级时区。 |
 | merge_condition           | 否           | 用于指定作为更新生效条件的列名。这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。参见[通过导入实现数据变更](../../../loading/Load_to_Primary_Key_tables.md)。指定的列必须为非主键列，且仅主键模型表支持条件更新。 |
 | format                    | 否           | 源数据的格式，取值范围：`CSV`、`JSON` 或者 `Avro`（自 v3.0.1）。默认值：`CSV`。|

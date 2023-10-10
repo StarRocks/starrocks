@@ -104,32 +104,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |desired_max_waiting_jobs|1024|最多等待的任务数，适用于所有的任务，建表、导入、schema change。<br />如果 FE 中处于 PENDING 状态的作业数目达到该值，FE 会拒绝新的导入请求。该参数配置仅对异步执行的导入有效。从 2.5 版本开始，该参数默认值从 100 变为 1024。|
 |max_load_timeout_second|259200|导入作业的最大超时时间，适用于所有导入，单位为秒。|
 |min_load_timeout_second|1|导入作业的最小超时时间，适用于所有导入，单位为秒。|
-<<<<<<< HEAD
-|max_running_txn_num_per_db|100|StarRocks 集群每个数据库中正在运行的导入相关事务的最大个数，默认值为 `100`。<br>当数据库中正在运行的导入相关事务超过最大个数限制时，后续的导入不会执行。如果是同步的导入作业请求，作业会被拒绝；如果是异步的导入作业请求，作业会在队列中等待。不建议调大该值，会增加系统负载。|
+|max_running_txn_num_per_db|100|StarRocks 集群每个数据库中正在运行的导入相关事务的最大个数，默认值为 `100`。<br/>当数据库中正在运行的导入相关事务超过最大个数限制时，后续的导入不会执行。如果是同步的导入作业请求，作业会被拒绝；如果是异步的导入作业请求，作业会在队列中等待。不建议调大该值，会增加系统负载。|
 |load_parallel_instance_num|1|单个 BE 上每个作业允许的最大并发实例数。|
 |disable_load_job|FALSE|是否禁用任何导入任务，集群出问题时的止损措施。|
 |history_job_keep_max_second|604800|历史任务最大的保留时长，例如 schema change 任务，单位为秒。|
 |label_keep_max_num|1000|一定时间内所保留导入任务的最大数量。超过之后历史导入作业的信息会被删除。|
-|label_keep_max_second|259200|已经完成、且处于 FINISHED 或 CANCELLED 状态的导入作业记录在 StarRocks 系统 label 的保留时长，默认值为 3 天。<br>该参数配置适用于所有模式的导入作业。单位为秒。设定过大将会消耗大量内存。|
+|label_keep_max_second|259200|已经完成、且处于 FINISHED 或 CANCELLED 状态的导入作业记录在 StarRocks 系统 label 的保留时长，默认值为 3 天。<br/>该参数配置适用于所有模式的导入作业。单位为秒。设定过大将会消耗大量内存。|
 |max_routine_load_job_num|100|最大的 Routine Load 作业数。|
-=======
-|max_running_txn_num_per_db|1000|StarRocks 集群每个数据库中正在运行的导入相关事务的最大个数，默认值为 `1000`。自 3.1 版本起，默认值由 100 变为 1000。<br />当数据库中正在运行的导入相关事务超过最大个数限制时，后续的导入不会执行。如果是同步的导入作业请求，作业会被拒绝；如果是异步的导入作业请求，作业会在队列中等待。不建议调大该值，会增加系统负载。|
-|load_parallel_instance_num|1|单个 BE 上每个作业允许的最大并发实例数。自 3.1 版本起弃用。|
-|disable_load_job|FALSE|是否禁用任何导入任务，集群出问题时的止损措施。|
-|history_job_keep_max_second|604800|历史任务最大的保留时长，例如 schema change 任务，单位为秒。|
-|label_keep_max_num|1000|一定时间内所保留导入任务的最大数量。超过之后历史导入作业的信息会被删除。|
-|label_keep_max_second|259200|已经完成、且处于 FINISHED 或 CANCELLED 状态的导入作业记录在 StarRocks 系统 label 的保留时长，默认值为 3 天。<br />该参数配置适用于所有模式的导入作业。单位为秒。设定过大将会消耗大量内存。|
->>>>>>> 9bc54965 ([Doc] fix some markdown errors (backport #6724) (#6727))
 |max_routine_load_task_concurrent_num|5|每个 Routine Load 作业最大并发执行的 task 数。|
 |max_routine_load_task_num_per_be|5|每个 BE 最大并发执行的 Routine Load task 数，需要小于等于 BE 的配置项 `routine_load_thread_pool_size`。|
 |max_routine_load_batch_size|4294967296|每个 Routine Load task 导入的最大数据量，单位为 Byte。|
-<<<<<<< HEAD
 |routine_load_task_consume_second|15|每个 Routine Load task 消费数据的最大时间，单位为秒。|
 |routine_load_task_timeout_second|60|每个 Routine Load task 超时时间，单位为秒。|
-=======
-|routine_load_task_consume_second|15|集群内每个 Routine Load 导入任务消费数据的最大时间，单位为秒。<br />自 v3.1.0 起，Routine Load 导入作业 [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD#job_properties) 新增参数 `task_consume_second`，作用于单个 Routine Load 导入作业内的导入任务，更加灵活。 |
-|routine_load_task_timeout_second|60|集群内每个 Routine Load 导入任务超时时间，单位为秒。<br />自 v3.1.0 起，Routine Load 导入作业 [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD#job_properties) 新增参数 `task_timeout_second`，作用于单个 Routine Load 导入作业内的任务，更加灵活。|
->>>>>>> 9bc54965 ([Doc] fix some markdown errors (backport #6724) (#6727))
 |max_tolerable_backend_down_num|0|允许的最大故障 BE 数。如果故障的 BE 节点数超过该阈值，则不能自动恢复 Routine Load 作业。|
 |period_of_auto_resume_min|5|自动恢复 Routine Load 的时间间隔，单位为分钟。|
 |spark_load_default_timeout_second|86400|Spark 导入的超时时间，单位为秒。|
@@ -156,13 +142,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |storage_usage_soft_limit_reserve_bytes|200 \* 1024 \* 1024 \* 1024|默认 200GB，单位为 Byte，如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_soft_limit_percent`，则不能继续往该路径 clone tablet。|
 |catalog_trash_expire_second|86400|删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以在恢复，单位为秒。|
 |alter_table_timeout_second|86400|Schema change 超时时间，单位为秒。|
-<<<<<<< HEAD
-|recover_with_empty_tablet|FALSE|在 tablet 副本丢失/损坏时，是否使用空的 tablet 代替。<br>这样可以保证在有 tablet 副本丢失/损坏时，query 依然能被执行（但是由于缺失了数据，结果可能是错误的）。默认为 false，不进行替代，查询会失败。|
-|tablet_create_timeout_second|10|创建 tablet 的超时时长，单位为秒。|
-=======
 |recover_with_empty_tablet|FALSE|在 tablet 副本丢失/损坏时，是否使用空的 tablet 代替。<br />这样可以保证在有 tablet 副本丢失/损坏时，query 依然能被执行（但是由于缺失了数据，结果可能是错误的）。默认为 false，不进行替代，查询会失败。|
-|tablet_create_timeout_second|10|创建 tablet 的超时时长，单位为秒。自 3.1 版本起，默认值由 1 改为 10。|
->>>>>>> 9bc54965 ([Doc] fix some markdown errors (backport #6724) (#6727))
+|tablet_create_timeout_second|10|创建 tablet 的超时时长，单位为秒。|
 |tablet_delete_timeout_second|2|删除 tablet 的超时时长，单位为秒。|
 |check_consistency_default_timeout_second|600|副本一致性检测的超时时间，单位为秒。|
 |tablet_sched_slot_num_per_path|8|一个 BE 存储目录能够同时执行 tablet 相关任务的数目。参数别名 `schedule_slot_num_per_path`。从 2.5 版本开始，该参数默认值从 2.4 版本的 `4` 变为 `8`。|
