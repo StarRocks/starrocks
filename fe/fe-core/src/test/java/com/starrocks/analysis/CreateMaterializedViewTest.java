@@ -118,6 +118,19 @@ public class CreateMaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.TBL1 \n" +
+                        "(\n" +
+                        "    K1 date,\n" +
+                        "    K2 int,\n" +
+                        "    V1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(K1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2020-01-01'),('2020-02-01')),\n" +
+                        "    PARTITION p2 values [('2020-02-01'),('2020-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(K2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
                 .withTable("CREATE TABLE `aggregate_table_with_null` (\n" +
                         "`k1` date,\n" +
                         "`v2` datetime MAX,\n" +
@@ -3035,6 +3048,78 @@ public class CreateMaterializedViewTest {
         Assert.assertTrue(explainString.contains("partitions=2/2\n" +
                 "     rollup: sync_mv1\n" +
                 "     tabletRatio=6/6"));
+    }
+
+    @Test
+    public void testCreateSyncMV_WithUpperColumn() throws Exception {
+        // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
+        String sql = "create materialized view UPPER_MV1 as select K1, sum(V1) from TBL1 group by K1;";
+        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
+                parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+
+        waitingRollupJobV2Finish();
+        {
+            sql = "select * from UPPER_MV1 [_SYNC_MV_];";
+            Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
+            // output columns should be same with the base table.
+            Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
+                    " OUTPUT EXPRS:1: K1 | 2: mv_sum_V1\n" +
+                    "  PARTITION: UNPARTITIONED"));
+        }
+        {
+            sql = "select K1, sum(V1) from TBL1 group by K1";
+            Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
+            Assert.assertTrue(explainString.contains("1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(4: mv_sum_V1)\n" +
+                    "  |  group by: 1: K1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: TBL1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=2/2\n" +
+                    "     rollup: UPPER_MV1"));
+        }
+        starRocksAssert.dropMaterializedView("UPPER_MV1");
+    }
+
+    @Test
+    public void testCreateSyncMV_WithLowerColumn() throws Exception {
+        // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
+        String sql = "create materialized view lower_mv1 as select k1, sum(v1) from tbl1 group by K1;";
+        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
+                parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+
+        waitingRollupJobV2Finish();
+        {
+            sql = "select * from lower_mv1 [_SYNC_MV_];";
+            Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
+            // output columns should be same with the base table.
+            Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
+                    " OUTPUT EXPRS:1: k1 | 2: mv_sum_v1\n" +
+                    "  PARTITION: UNPARTITIONED"));
+        }
+        {
+            sql = "select K1, sum(v1) from tbl1 group by K1";
+            Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
+            Assert.assertTrue(explainString.contains("1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(4: mv_sum_v1)\n" +
+                    "  |  group by: 1: k1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: tbl1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=2/2\n" +
+                    "     rollup: lower_mv1"));
+        }
+        starRocksAssert.dropMaterializedView("lower_mv1");
     }
 
     @Test
