@@ -340,7 +340,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
             if (!resetCoords.isEmpty()) {
                 queryIdToShouldThrow.put(resetCoords.get(0).getQueryId(), new UserException("Cancelled"));
-                resetCoords.get(0).cancel();
+                resetCoords.get(0).cancel("Cancel by test");
                 Assert.assertEquals(LogicalSlot.State.CANCELLED, resetCoords.get(0).getSlot().getState());
                 resetCoords.remove(0);
             }
@@ -757,7 +757,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                     throw new TException("mocked-release-slot-exception");
                 }
             });
-            coord.cancel();
+            coord.cancel("Cancel by test");
             mockFrontendService(new MockFrontendServiceClient());
             Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
             Assert.assertEquals(LogicalSlot.State.CANCELLED, coord.getSlot().getState());
@@ -782,7 +782,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                     return res;
                 }
             });
-            coord.cancel();
+            coord.cancel("Cancel by test");
             mockFrontendService(new MockFrontendServiceClient());
             Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
             Assert.assertEquals(LogicalSlot.State.CANCELLED, coord.getSlot().getState());
@@ -808,7 +808,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                     return res;
                 }
             });
-            coord.cancel();
+            coord.cancel("Cancel by test");
             mockFrontendService(new MockFrontendServiceClient());
             Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
             Assert.assertEquals(LogicalSlot.State.CANCELLED, coord.getSlot().getState());
@@ -862,7 +862,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             Awaitility.await().atMost(5, TimeUnit.SECONDS)
                     .until(() -> GlobalStateMgr.getCurrentState().getSlotManager().getSlots().size() == concurrencyLimit - 1);
 
-            coord.cancel();
+            coord.cancel("Cancel by test");
         }
 
         {
@@ -926,7 +926,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
         coords2.forEach(DefaultCoordinator::onFinished);
 
-        coords.forEach(DefaultCoordinator::cancel);
+        coords.forEach((coor -> coor.cancel("Cancel by test")));
     }
 
     @Test
@@ -1407,7 +1407,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             Assert.assertEquals(4, res.getResultRows().size());
         }
 
-        coords.forEach(DefaultCoordinator::cancel);
+        coords.forEach(coor -> coor.cancel("Cancel by test"));
         runningCoords.forEach(DefaultCoordinator::onFinished);
     }
 
