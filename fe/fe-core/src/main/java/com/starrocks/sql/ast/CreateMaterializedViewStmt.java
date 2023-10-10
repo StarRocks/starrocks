@@ -443,7 +443,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         Type type = defineExpr.getType();
         String columnName;
         if (defineExpr instanceof SlotRef) {
-            columnName = ((SlotRef) defineExpr).getColumnName().toLowerCase();
+            columnName = ((SlotRef) defineExpr).getColumnName();
         } else {
             if (Strings.isNullOrEmpty(selectListItem.getAlias())) {
                 throw new SemanticException("Create materialized view non-slot ref expression should have an alias:" +
@@ -452,8 +452,8 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             columnName = MVUtils.getMVColumnName(selectListItem.getAlias());
             type = AnalyzerUtils.transformTableColumnType(type, false);
         }
-        Set<String> baseColumnNames = baseSlotRefs.stream().map(slot -> slot.getColumnName().toLowerCase()).
-                collect(Collectors.toSet());
+        Set<String> baseColumnNames = baseSlotRefs.stream().map(slot -> slot.getColumnName())
+                        .collect(Collectors.toSet());
         return new MVColumnItem(columnName, type, null, false, defineExpr,
                 defineExpr.isNullable(),  baseColumnNames);
     }
@@ -470,7 +470,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         Type type;
         String mvColumnName = null;
         if (defineExpr instanceof SlotRef) {
-            String baseColumName = baseSlotRefs.get(0).getColumnName().toLowerCase();
+            String baseColumName = baseSlotRefs.get(0).getColumnName();
             mvColumnName = MVUtils.getMVAggColumnName(functionName, baseColumName);
         } else {
             if (defineExpr instanceof FunctionCallExpr) {
@@ -481,7 +481,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     case FunctionSet.HLL_HASH:
                     case FunctionSet.PERCENTILE_HASH: {
                         if (argFunc.getChild(0) instanceof SlotRef) {
-                            String baseColumName = baseSlotRefs.get(0).getColumnName().toLowerCase();
+                            String baseColumName = baseSlotRefs.get(0).getColumnName();
                             mvColumnName = MVUtils.getMVAggColumnName(functionName, baseColumName);
                         }
                         break;
@@ -541,8 +541,8 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             throw new SemanticException(
                     String.format("Invalid aggregate function '%s' for '%s'", mvAggregateType, type));
         }
-        Set<String> baseColumnNames = baseSlotRefs.stream().map(slot -> slot.getColumnName().toLowerCase()).
-                collect(Collectors.toSet());
+        Set<String> baseColumnNames = baseSlotRefs.stream().map(slot -> slot.getColumnName())
+                        .collect(Collectors.toSet());
         return new MVColumnItem(mvColumnName, type, mvAggregateType, false,
                 defineExpr, functionCallExpr.isNullable(), baseColumnNames);
     }
