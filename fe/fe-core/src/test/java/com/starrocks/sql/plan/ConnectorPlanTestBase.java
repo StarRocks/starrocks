@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.common.DdlException;
@@ -82,5 +83,19 @@ public class ConnectorPlanTestBase extends PlanTestBase {
 
         MockedJDBCMetadata mockedJDBCMetadata = new MockedJDBCMetadata(properties);
         metadataMgr.registerMockedMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME, mockedJDBCMetadata);
+
+        Map<String, String> pgProperties = ImmutableMap.<String, String>builder()
+                .put(JDBCResource.TYPE, "jdbc")
+                .put(JDBCResource.DRIVER_CLASS, "com.postgres.Driver")
+                .put(JDBCResource.URI, "jdbc:postgres://127.0.0.1:3306")
+                .put(JDBCResource.USER, "root")
+                .put(JDBCResource.PASSWORD, "123456")
+                .put(JDBCResource.CHECK_SUM, "xxxx")
+                .put(JDBCResource.DRIVER_URL, "xxxx")
+                .build();
+        GlobalStateMgr.getCurrentState().getCatalogMgr().
+                createCatalog("jdbc", MockedJDBCMetadata.MOCKED_JDBC_PG_CATALOG_NAME, "", pgProperties);
+        metadataMgr.registerMockedMetadata(MockedJDBCMetadata.MOCKED_JDBC_PG_CATALOG_NAME,
+                new MockedJDBCMetadata(pgProperties));
     }
 }
