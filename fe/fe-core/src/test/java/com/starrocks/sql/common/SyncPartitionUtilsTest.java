@@ -44,7 +44,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -313,7 +312,8 @@ public class SyncPartitionUtilsTest {
     }
 
     public static Map<String, Range<PartitionKey>> mappingRangeList(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                                    PrimitiveType partitionType) {
+                                                                    PrimitiveType partitionType)
+            throws AnalysisException {
         return SyncPartitionUtils.mappingRangeList(baseRangeMap, partitionType, null);
     }
 
@@ -356,21 +356,17 @@ public class SyncPartitionUtilsTest {
 
         // less than
         Range<PartitionKey> baseRange = createLessThanRange("2020-05-03");
-        PartitionMapping mappedRange = SyncPartitionUtils.mappingRange(baseRange, dateTruncCall);
+        Range<PartitionKey> mappedRange = SyncPartitionUtils.mappingRange(baseRange, dateTruncCall);
 
-        Assert.assertEquals("0000-01-01T00:00:00",
-                mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
-        Assert.assertEquals("2020-05-03T00:00:00",
-                mappedRange.getUpperDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
+        Assert.assertEquals("0000-01-01T00:00:00", mappedRange.lowerEndpoint().toString());
+        Assert.assertEquals("2020-05-03T00:00:00", mappedRange.upperEndpoint().toString());
 
         // big partition
         baseRange = createRange("2020-01-01", "2020-02-01");
         mappedRange = SyncPartitionUtils.mappingRange(baseRange, dateTruncCall);
 
-        Assert.assertEquals("2020-01-01T00:00:00",
-                mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
-        Assert.assertEquals("2020-02-01T00:00:00",
-                mappedRange.getUpperDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
+        Assert.assertEquals("2020-01-01T00:00:00", mappedRange.lowerEndpoint().toString());
+        Assert.assertEquals("2020-02-01T00:00:00", mappedRange.upperEndpoint().toString());
     }
 
     @Test

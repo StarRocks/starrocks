@@ -47,12 +47,12 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
-import org.apache.commons.collections4.ListUtils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -124,7 +124,12 @@ public class SyncPartitionUtils {
                                                                  Range<PartitionKey> rangeToInclude) {
         PrimitiveType partitionType = functionCallExpr.getType().getPrimitiveType();
         Map<String, Range<PartitionKey>> rollupRange =
-                mappingRangeList(baseRangeMap, partitionType, functionCallExpr);
+                null;
+        try {
+            rollupRange = mappingRangeList(baseRangeMap, partitionType, functionCallExpr);
+        } catch (AnalysisException e) {
+            throw new RuntimeException(e);
+        }
         return getRangePartitionDiff(baseRangeMap, mvRangeMap, rollupRange, rangeToInclude);
     }
 
@@ -132,7 +137,12 @@ public class SyncPartitionUtils {
     public static RangePartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                  Map<String, Range<PartitionKey>> mvRangeMap,
                                                                  PrimitiveType partitionType) {
-        Map<String, Range<PartitionKey>> rollupRange = mappingRangeList(baseRangeMap, partitionType, null);
+        Map<String, Range<PartitionKey>> rollupRange = null;
+        try {
+            rollupRange = mappingRangeList(baseRangeMap, partitionType, null);
+        } catch (AnalysisException e) {
+            throw new RuntimeException(e);
+        }
         return getRangePartitionDiff(baseRangeMap, mvRangeMap, rollupRange, null);
     }
 
@@ -162,35 +172,27 @@ public class SyncPartitionUtils {
 
     public static Map<String, Range<PartitionKey>> mappingRangeList(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                     PrimitiveType partitionType,
-                                                                    FunctionCallExpr functionCallExpr) {
-        Set<LocalDateTime> timePointSet = Sets.newTreeSet();
+                                                                    FunctionCallExpr functionCallExpr)
+            throws AnalysisException {
+        Set<PartitionKey> timePointSet = Sets.newTreeSet();
         for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
-            PartitionMapping mappedRange = mappingRange(rangeEntry.getValue(), functionCallExpr);
+            Range<PartitionKey> mappedRange = mappingRange(rangeEntry.getValue(), functionCallExpr);
             // this mappedRange may exist range overlap
-            timePointSet.add(mappedRange.getLowerDateTime());
-            timePointSet.add(mappedRange.getUpperDateTime());
+            timePointSet.add(mappedRange.lowerEndpoint());
+            timePointSet.add(mappedRange.upperEndpoint());
         }
 
-        List<LocalDateTime> timePointList = Lists.newArrayList(timePointSet);
+        List<PartitionKey> timePointList = Lists.newArrayList(timePointSet);
         // deal overlap
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
         if (timePointList.size() < 2) {
             return result;
         }
         for (int i = 1; i < timePointList.size(); i++) {
-            try {
-                PartitionKey lowerPartitionKey = new PartitionKey();
-                LocalDateTime lowerDateTime = timePointList.get(i - 1);
-                LocalDateTime upperDateTime = timePointList.get(i);
-                PartitionKey upperPartitionKey = new PartitionKey();
-                Type columnType = Type.fromPrimitiveType(partitionType);
-                lowerPartitionKey.pushColumn(new DateLiteral(lowerDateTime, columnType), partitionType);
-                upperPartitionKey.pushColumn(new DateLiteral(upperDateTime, columnType), partitionType);
-                String mvPartitionName = getMVPartitionName(lowerDateTime, upperDateTime);
-                result.put(mvPartitionName, Range.closedOpen(lowerPartitionKey, upperPartitionKey));
-            } catch (AnalysisException ex) {
-                throw new SemanticException("Convert to DateLiteral failed:", ex);
-            }
+            PartitionKey lowerKey = timePointList.get(i - 1);
+            PartitionKey upperKey = timePointList.get(i);
+            String mvPartitionName = getMVPartitionName(lowerKey, upperKey);
+            result.put(mvPartitionName, Range.closedOpen(lowerKey, upperKey));
         }
         return result;
     }
@@ -258,13 +260,15 @@ public class SyncPartitionUtils {
         return lowerResult.getDate();
     }
 
-    public static PartitionMapping mappingRange(Range<PartitionKey> baseRange, FunctionCallExpr functionCallExpr) {
+    public static Range<PartitionKey> mappingRange(Range<PartitionKey> baseRange, FunctionCallExpr functionCallExpr)
+            throws AnalysisException {
         // assume expr partition must be DateLiteral and only one partition
         baseRange = convertToDatePartitionRange(baseRange);
         LiteralExpr lowerExpr = baseRange.lowerEndpoint().getKeys().get(0);
         LiteralExpr upperExpr = baseRange.upperEndpoint().getKeys().get(0);
-        return new PartitionMapping(evaluatePartitionExpr(functionCallExpr, lowerExpr),
-                evaluatePartitionExpr(functionCallExpr, upperExpr));
+        PartitionKey lowerKey = PartitionKey.ofDateTime(evaluatePartitionExpr(functionCallExpr, lowerExpr));
+        PartitionKey upperKey = PartitionKey.ofDateTime(evaluatePartitionExpr(functionCallExpr, upperExpr));
+        return Range.range(lowerKey, baseRange.lowerBoundType(), upperKey, baseRange.upperBoundType());
     }
 
     /**
@@ -361,7 +365,9 @@ public class SyncPartitionUtils {
         }
     }
 
-    public static String getMVPartitionName(LocalDateTime lowerDateTime, LocalDateTime upperDateTime) {
+    public static String getMVPartitionName(PartitionKey lowerKey, PartitionKey upperKey) {
+        LocalDateTime lowerDateTime = lowerKey.getKeys().get(0).<DateLiteral>cast().toLocalDateTime();
+        LocalDateTime upperDateTime = upperKey.getKeys().get(0).<DateLiteral>cast().toLocalDateTime();
         String lowerStr = lowerDateTime.format(DateUtils.MINUTE_FORMATTER_UNIX);
         lowerStr = StringUtils.removeEnd(lowerStr, "0");
         String upperStr = upperDateTime.format(DateUtils.MINUTE_FORMATTER_UNIX);
