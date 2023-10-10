@@ -1445,18 +1445,11 @@ public class PartitionBasedMvRefreshProcessorTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-<<<<<<< HEAD
-        Collection<Partition> partitions = materializedView.getPartitions();
-        Assert.assertEquals(2, partitions.size());
-        Assert.assertNotNull(materializedView.getPartition("p20230801"));
-        Assert.assertNotNull(materializedView.getPartition("p20230802"));
-=======
 
         List<String> partitions = materializedView.getPartitions().stream()
                 .map(Partition::getName).sorted().collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p00010101_20230801", "p20230801_20230802", "p20230802_99991231"),
                 partitions);
->>>>>>> 77d73d3521 ([Enhancement] support partition rollup for string column in mv (#32141))
     }
 
     @Test
@@ -2575,16 +2568,8 @@ public class PartitionBasedMvRefreshProcessorTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-<<<<<<< HEAD
-        Collection<Partition> partitions = materializedView.getPartitions();
-        System.out.println(partitions);
-        // check create only one partition
-        Assert.assertEquals(1, partitions.size());
-        Assert.assertNotNull(materializedView.getPartition("p20230801"));
-=======
         List<String> partitions = materializedView.getPartitions().stream()
                 .map(Partition::getName).collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
->>>>>>> 77d73d3521 ([Enhancement] support partition rollup for string column in mv (#32141))
     }
 }

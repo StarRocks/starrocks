@@ -93,22 +93,8 @@ public class SyncPartitionUtils {
         return new RangePartitionDiff(adds, deletes);
     }
 
-<<<<<<< HEAD
     public static boolean hasPartitionChange(Map<String, Range<PartitionKey>> baseRangeMap,
                                              Map<String, Range<PartitionKey>> mvRangeMap) {
-=======
-    public static ListPartitionDiff getListPartitionDiff(Map<String, List<List<String>>> baseListMap,
-                                                         Map<String, List<List<String>>> mvListMap) {
-        // This synchronization method has a one-to-one correspondence
-        // between the base table and the partition of the mv.
-        Map<String, List<List<String>>> adds = diffList(baseListMap, mvListMap);
-        Map<String, List<List<String>>> deletes = diffList(mvListMap, baseListMap);
-        return new ListPartitionDiff(adds, deletes);
-    }
-
-    public static boolean hasRangePartitionChanged(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                   Map<String, Range<PartitionKey>> mvRangeMap) {
->>>>>>> 77d73d3521 ([Enhancement] support partition rollup for string column in mv (#32141))
         Map<String, Range<PartitionKey>> adds = diffRange(baseRangeMap, mvRangeMap);
         if (adds != null && !adds.isEmpty()) {
             return true;
@@ -117,19 +103,6 @@ public class SyncPartitionUtils {
         return deletes != null && !deletes.isEmpty();
     }
 
-<<<<<<< HEAD
-=======
-    public static boolean hasListPartitionChanged(Map<String, List<List<String>>> baseRangeMap,
-                                                  Map<String, List<List<String>>> mvRangeMap) {
-        Map<String, List<List<String>>> adds = diffList(baseRangeMap, mvRangeMap);
-        if (adds != null && !adds.isEmpty()) {
-            return true;
-        }
-        Map<String, List<List<String>>> deletes = diffList(mvRangeMap, baseRangeMap);
-        return deletes != null && !deletes.isEmpty();
-    }
-
->>>>>>> 77d73d3521 ([Enhancement] support partition rollup for string column in mv (#32141))
     public static RangePartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                  Map<String, Range<PartitionKey>> mvRangeMap,
                                                                  FunctionCallExpr functionCallExpr,
@@ -140,11 +113,7 @@ public class SyncPartitionUtils {
             String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
             rollupRange = mappingRangeList(baseRangeMap, granularity, partitionColumnType);
         } else if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
-<<<<<<< HEAD
-            rollupRange = baseRangeMap;
-=======
             rollupRange = mappingRangeListForDate(baseRangeMap);
->>>>>>> 77d73d3521 ([Enhancement] support partition rollup for string column in mv (#32141))
         }
         return getRangePartitionDiff(baseRangeMap, mvRangeMap, rollupRange, rangeToInclude);
     }
@@ -190,8 +159,6 @@ public class SyncPartitionUtils {
         return diff;
     }
 
-<<<<<<< HEAD
-=======
     private static Map<String, Range<PartitionKey>> mappingRangeListForDate(
             Map<String, Range<PartitionKey>> baseRangeMap) {
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
@@ -207,7 +174,6 @@ public class SyncPartitionUtils {
         return result;
     }
 
->>>>>>> 77d73d3521 ([Enhancement] support partition rollup for string column in mv (#32141))
     public static Map<String, Range<PartitionKey>> mappingRangeList(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                     String granularity, PrimitiveType partitionType) {
         Set<LocalDateTime> timePointSet = Sets.newTreeSet();
@@ -327,7 +293,10 @@ public class SyncPartitionUtils {
         if (!srcRanges.isEmpty() && !dstRanges.isEmpty()) {
             List<PrimitiveType> srcTypes = srcRanges.get(0).getPartitionKeyRange().lowerEndpoint().getTypes();
             List<PrimitiveType> dstTypes = dstRanges.get(0).getPartitionKeyRange().lowerEndpoint().getTypes();
-            Preconditions.checkArgument(Objects.equals(srcTypes, dstTypes), "types must be identical");
+            if (!Objects.equals(srcTypes, dstTypes)) {
+                Preconditions.checkArgument(Objects.equals(srcTypes, dstTypes),
+                        String.format("types must be identical, but %s vs %s", srcTypes, dstTypes));
+            }
         }
 
         Map<String, Set<String>> result = srcRanges.stream().collect(
@@ -588,45 +557,7 @@ public class SyncPartitionUtils {
             lastPartitionNum = TableProperty.INVALID;
         }
 
-<<<<<<< HEAD
         return materializedView.getValidPartitionMap(lastPartitionNum).keySet();
-=======
-        return materializedView.getValidRangePartitionMap(lastPartitionNum).keySet();
-    }
-
-    public static Set<String> getPartitionNamesByListWithPartitionLimit(MaterializedView materializedView,
-                                                                        String start, String end,
-                                                                        int partitionTTLNumber,
-                                                                        boolean isAutoRefresh) {
-        int autoRefreshPartitionsLimit = materializedView.getTableProperty().getAutoRefreshPartitionsLimit();
-        boolean hasPartitionRange = StringUtils.isNoneEmpty(start) || StringUtils.isNoneEmpty(end);
-
-        if (hasPartitionRange) {
-            Set<String> result = Sets.newHashSet();
-
-            Map<String, List<List<String>>> listMap = materializedView.getValidListPartitionMap(partitionTTLNumber);
-            for (Map.Entry<String, List<List<String>>> entry : listMap.entrySet()) {
-                if (entry.getKey().compareTo(start) >= 0 && entry.getKey().compareTo(end) <= 0) {
-                    result.add(entry.getKey());
-                }
-            }
-            return result;
-        }
-
-        int lastPartitionNum;
-        if (partitionTTLNumber > 0 && isAutoRefresh && autoRefreshPartitionsLimit > 0) {
-            lastPartitionNum = Math.min(partitionTTLNumber, autoRefreshPartitionsLimit);
-            ;
-        } else if (isAutoRefresh && autoRefreshPartitionsLimit > 0) {
-            lastPartitionNum = autoRefreshPartitionsLimit;
-        } else if (partitionTTLNumber > 0) {
-            lastPartitionNum = partitionTTLNumber;
-        } else {
-            lastPartitionNum = TableProperty.INVALID;
-        }
-
-        return materializedView.getValidListPartitionMap(lastPartitionNum).keySet();
->>>>>>> 77d73d3521 ([Enhancement] support partition rollup for string column in mv (#32141))
     }
 
     public static Range<PartitionKey> createRange(String lowerBound, String upperBound, Column partitionColumn)
