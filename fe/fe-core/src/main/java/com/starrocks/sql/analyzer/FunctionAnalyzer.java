@@ -121,6 +121,10 @@ public class FunctionAnalyzer {
             return;
         }
 
+        if (fnName.getFunction().equals(FunctionSet.COUNT_IF) && fnParams.isDistinct()) {
+            throw new SemanticException("COUNT_IF does not support DISTINCT", functionCallExpr.getPos());
+        }
+
         if (fnName.getFunction().equals(FunctionSet.GROUP_CONCAT)) {
             if (functionCallExpr.getChildren().size() - fnParams.getOrderByElemNum() < 2) {
                 throw new SemanticException(

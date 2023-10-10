@@ -363,6 +363,7 @@
       + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
       + [bitmap_agg](./sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
+      + [count_if](./sql-reference/sql-functions/aggregate-functions/count_if.md)
       + [corr](./sql-reference/sql-functions/aggregate-functions/corr.md)
       + [covar_pop](./sql-reference/sql-functions/aggregate-functions/covar_pop.md)
       + [covar_samp](./sql-reference/sql-functions/aggregate-functions/covar_samp.md)
