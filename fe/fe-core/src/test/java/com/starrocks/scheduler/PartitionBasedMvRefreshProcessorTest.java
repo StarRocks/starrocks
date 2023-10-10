@@ -21,6 +21,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.JDBCResource;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
@@ -29,6 +31,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -1206,6 +1209,34 @@ public class PartitionBasedMvRefreshProcessorTest {
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
         Assert.assertTrue(plan.contains("PARTITION PREDICATES: 5: par_date >= '2020-01-01', 5: par_date < '2020-01-03'"));
         Assert.assertTrue(plan.contains("partitions=3/7"));
+    }
+
+    @Test
+    public void testJDBCProtocolType() {
+        JDBCTable table = new JDBCTable();
+        table.getProperties().put(JDBCResource.URI, "jdbc:postgres:aaa");
+        Assert.assertEquals(JDBCTable.ProtocolType.POSTGRES, table.getProtocolType());
+        table.getProperties().put(JDBCResource.URI, "jdbc:mysql:aaa");
+        Assert.assertEquals(JDBCTable.ProtocolType.MYSQL, table.getProtocolType());
+        table.getProperties().put(JDBCResource.URI, "jdbc:h2:aaa");
+        Assert.assertEquals(JDBCTable.ProtocolType.UNKNOWN, table.getProtocolType());
+    }
+
+    @Test
+    public void testPartitionJDBCSupported() throws Exception {
+        // not supported
+        Assert.assertThrows(AnalysisException.class, () ->
+                starRocksAssert.withMaterializedView("create materialized view mv_jdbc_postgres " +
+                        "partition by d " +
+                        "refresh manual " +
+                        "AS SELECT `a`, `b`, `c`, `d`  FROM `jdbc_postgres`.`partitioned_db0`.`tbl0`;")
+        );
+
+        // supported
+        starRocksAssert.withMaterializedView("create materialized view mv_jdbc_mysql " +
+                "partition by d " +
+                "refresh manual " +
+                "AS SELECT `a`, `b`, `c`, `d`  FROM `jdbc0`.`partitioned_db0`.`tbl0`;");
     }
 
     @Test
