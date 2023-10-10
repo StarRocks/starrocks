@@ -44,7 +44,6 @@ static bvar::LatencyRecorder g_metadata_travel_latency("lake_vacuum_metadata_tra
 static bvar::LatencyRecorder g_txnlog_travel_latency("lake_vacuum_txnlog_travel");
 
 static Status delete_file(FileSystem* fs, const std::string& path) {
-#ifndef STARROCKS_VACUUM_DISABLE_FILE_DELETION
     auto wait_duration = config::experimental_lake_wait_per_delete_ms;
     if (wait_duration > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(wait_duration));
@@ -60,13 +59,9 @@ static Status delete_file(FileSystem* fs, const std::string& path) {
         LOG(WARNING) << "Fail to delete " << path << ": " << st;
     }
     return st;
-#else
-    return Status::OK();
-#endif
 }
 
 static Status delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
-#ifndef STARROCKS_VACUUM_DISABLE_FILE_DELETION
     if (paths.empty()) {
         return Status::OK();
     }
@@ -89,9 +84,6 @@ static Status delete_files(FileSystem* fs, const std::vector<std::string>& paths
     }
     TEST_SYNC_POINT_CALLBACK("vacuum.delete_files", &st);
     return st;
-#else
-    return Status::OK();
-#endif
 }
 
 static void collect_garbage_files(const TabletMetadataPB& metadata, const std::string& base_dir,
