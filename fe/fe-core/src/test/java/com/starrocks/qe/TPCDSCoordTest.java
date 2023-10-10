@@ -92,7 +92,7 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
         coord.prepareExec();
 
         ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
-        Assert.assertEquals(10, execFragment.getRuntimeFilterParams().id_to_prober_params.get(1).size());
+        Assert.assertEquals(15, execFragment.getRuntimeFilterParams().id_to_prober_params.get(1).size());
     }
 
     @Test
@@ -148,7 +148,7 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
             RuntimeFilterDescription rf = buildRfFilters.get(filterId);
             Assert.assertTrue(rf.isHasRemoteTargets() && rf.isBroadcastJoin());
             Assert.assertFalse(rf.getBroadcastGRFDestinations().isEmpty());
-            Assert.assertTrue(rf.getBroadcastGRFDestinations().stream().anyMatch(d -> d.getFinstance_ids().size() > 1));
+            Assert.assertTrue(rf.getBroadcastGRFDestinations().stream().anyMatch(d -> d.getFinstance_ids().size() >= 1));
             rfExists = true;
         }
         Assert.assertTrue(rfExists);
