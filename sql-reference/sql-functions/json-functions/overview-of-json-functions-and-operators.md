@@ -28,11 +28,11 @@ JSON 查询和处理函数可以查询和处理 JSON 类型的数据。例如查
 | [json_keys](../../sql-functions/json-functions/json-query-and-processing-functions/json_keys.md) | 返回 JSON 对象中所有最上层成员 (key) 组成的数组。                     | `SELECT JSON_KEYS('{"a": 1, "b": 2, "c": 3}');`          | `["a", "b", "c"]`                             |
 | [json_length](../../sql-functions/json-functions/json-query-and-processing-functions/json_length.md) | 返回 JSON 字符串的长度。    | `SELECT json_length('{"Name": "Alice"}');`    | `1`                       |
 | [json_query](../../sql-functions/json-functions/json-query-and-processing-functions/json_query.md) | 查询 JSON 对象中指定路径下的值。                             | `SELECT JSON_QUERY('{"a": 1}', '$.a');`                    | `1`                                                            |
-| [json_string](../../sql-functions/json-functions/json-query-and-processing-functions/json_string.md)   | 将 JSON 对象转化为 JSON 字符串。      | select json_string(parse_json('{"Name": "Alice"}')); | {"Name": "Alice"}  |
+| [json_string](../../sql-functions/json-functions/json-query-and-processing-functions/json_string.md)   | 将 JSON 对象转化为 JSON 字符串。      | `SELECT json_string(parse_json('{"Name": "Alice"}'));` | `{"Name": "Alice"}`  |
 
 ## JSON 运算符
 
-StarRocks 支持使用 <，<=，>，>=， =，!= 运算符查询 JSON 数据，不支持使用 IN 运算符。JSON 运算符的更多说明，请参见 [JSON 运算符](../../sql-functions/json-functions/json-operators.md)。
+StarRocks 支持使用 `<`，`<=`，`>`，`>=`， `=`，`!=` 运算符查询 JSON 数据，不支持使用 IN 运算符。JSON 运算符的更多说明，请参见 [JSON 运算符](../../sql-functions/json-functions/json-operators.md)。
 
 ## JSON Path
 
@@ -53,8 +53,8 @@ StarRocks 支持使用 <，<=，>，>=， =，!= 运算符查询 JSON 数据，�
 
 | JSON Path 的符号 | 说明                                                         | JSON Path 示例        | 查询上述 JSON 对象的值                                         |
 | --------------- | ------------------------------------------------------------ | -------------------- | ------------------------------------------------------------ |
-| $               | 表示根节点的对象。                                           | '$'                  | { "people": [ { "name": "Daniel", "surname": "Smith" }, { "name": "Lily", "surname": Smith, "active": true } ] } |
-| .               | 表示子节点。                                                 | ' $.people'          | [ { "name": "Daniel", "surname": "Smith" }, { "name": "Lily", "surname": Smith, "active": true } ] |
-| []              | 表示一个或多个数组下标。[n] 表示选择数组中第 n 个元素，从 0 开始计数。<br />**从 2.5 版本开始支持查询多维数组，例如 ["Lucy", "Daniel"], ["James", "Smith"]。如果要查询到 "Lucy"这个元素，可以使用路径 `$.people[0][0]`。**| '$.people[0]' | { "name": "Daniel", "surname": "Smith"} |
+| $               | 表示根节点的对象。                                           | '$'                  | `{ "people": [ { "name": "Daniel", "surname": "Smith" }, { "name": "Lily", "surname": Smith, "active": true } ] }` |
+| .               | 表示子节点。                                                 | ' $.people'          | `[ { "name": "Daniel", "surname": "Smith" }, { "name": "Lily", "surname": Smith, "active": true } ]` |
+| []              | 表示一个或多个数组下标。[n] 表示选择数组中第 n 个元素，从 0 开始计数。<br />**从 2.5 版本开始支持查询多维数组，例如 ["Lucy", "Daniel"], ["James", "Smith"]。如果要查询到 "Lucy"这个元素，可以使用路径 `$.people[0][0]`。**| '$.people[0]' | `{ "name": "Daniel", "surname": "Smith"}` |
 | [*]             | 表示数组中的全部元素。                                       | '$.people[*].name'   | ["Daniel", "Lily"]                                            |
 | [start: end]     | 表示数组片段，区间为 [start, end)，不包含 end 代表的元素。       | '$.people[0: 1].name' | ["Daniel"]                                                   |
