@@ -1045,9 +1045,6 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_udf = false;
 
-    @ConfField
-    public static boolean enable_remote_script = false;
-
     @ConfField(mutable = true)
     public static boolean enable_decimal_v3 = true;
 
