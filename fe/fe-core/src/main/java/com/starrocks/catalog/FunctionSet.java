@@ -408,6 +408,8 @@ public class FunctionSet {
     public static final String BITMAP_UNION_COUNT = "bitmap_union_count";
     public static final String BITMAP_UNION_INT = "bitmap_union_int";
     public static final String INTERSECT_COUNT = "intersect_count";
+    public static final String ORTHOGONAL_BITMAP_INTERSECT = "orthogonal_bitmap_intersect";
+
     public static final String BITMAP_DICT = "bitmap_dict";
     public static final String BITMAP_FROM_BINARY = "bitmap_from_binary";
     public static final String EXCHANGE_BYTES = "exchange_bytes";
@@ -953,6 +955,7 @@ public class FunctionSet {
                     .add(WINDOW_FUNNEL)
                     .add(APPROX_TOP_K)
                     .add(INTERSECT_COUNT)
+                    .add(ORTHOGONAL_BITMAP_INTERSECT)
                     .add(LC_PERCENTILE_DISC)
                     .add(MAP_AGG)
                     .add(SUM_MAP)
@@ -1429,6 +1432,11 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(INTERSECT_COUNT,
                     Lists.newArrayList(BitmapType.BITMAP, t, t), IntegerType.BIGINT, VarcharType.VARCHAR, true,
                     true, false, true));
+            // INTERSECT
+            addBuiltin(AggregateFunction.createBuiltin(ORTHOGONAL_BITMAP_INTERSECT,
+                    Lists.newArrayList(BitmapType.BITMAP, t, t), BitmapType.BITMAP, VarcharType.VARCHAR, true,
+                    true, false, true));
+
         }
 
         // MULTI_DISTINCT_COUNT

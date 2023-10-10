@@ -422,27 +422,28 @@ public class FunctionAnalyzer {
                     functionCallExpr.getPos());
         }
 
-        if (fnName.equals(FunctionSet.INTERSECT_COUNT)) {
+        if (fnName.getFunction().equals(FunctionSet.INTERSECT_COUNT)
+                || fnName.getFunction().equals(FunctionSet.ORTHOGONAL_BITMAP_INTERSECT)) {
             if (functionCallExpr.getChildren().size() <= 2) {
-                throw new SemanticException("intersect_count(bitmap_column, column_to_filter, filter_values) " +
+                throw new SemanticException(fnName.getFunction() + "(bitmap_column, column_to_filter, filter_values) " +
                         "function requires at least three parameters", functionCallExpr.getPos());
             }
 
             Type inputType = functionCallExpr.getChild(0).getType();
             if (!inputType.isBitmapType()) {
                 throw new SemanticException(
-                        "intersect_count function first argument should be of BITMAP getType(), but was " + inputType,
+                        fnName.getFunction() +  "function first argument should be of BITMAP getType(), but was " + inputType,
                         functionCallExpr.getChild(0).getPos());
             }
 
             if (functionCallExpr.getChild(1).isConstant()) {
-                throw new SemanticException("intersect_count function filter_values arg must be column",
+                throw new SemanticException(fnName.getFunction() + " function filter_values arg must be column",
                         functionCallExpr.getChild(1).getPos());
             }
 
             for (int i = 2; i < functionCallExpr.getChildren().size(); i++) {
                 if (!functionCallExpr.getChild(i).isConstant()) {
-                    throw new SemanticException("intersect_count function filter_values arg must be constant",
+                    throw new SemanticException(fnName.getFunction() + " function filter_values arg must be constant",
                             functionCallExpr.getChild(i).getPos());
                 }
             }

@@ -43,6 +43,7 @@
 #include "exprs/agg/intersect_count.h"
 #include "exprs/agg/mann_whitney.h"
 #include "exprs/agg/map_agg.h"
+#include "exprs/agg/orthogonal_bitmap_intersect.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/maxmin_by.h"
 #include "exprs/agg/minmax_n.h"
@@ -95,6 +96,9 @@ public:
 
     template <LogicalType LT>
     static AggregateFunctionPtr MakeIntersectCountAggregateFunction();
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeOrthogonalBitmapIntersectAggregateFunction();
 
     template <bool IsWindowFunc>
     static AggregateFunctionPtr MakeCountAggregateFunction();
@@ -287,6 +291,11 @@ public:
 template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakeIntersectCountAggregateFunction() {
     return new IntersectCountAggregateFunction<LT>();
+}
+
+template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeOrthogonalBitmapIntersectAggregateFunction() {
+    return new OrthogonalBitmapIntersectAggregateFunction<LT>();
 }
 
 template <bool IsWindowFunc>

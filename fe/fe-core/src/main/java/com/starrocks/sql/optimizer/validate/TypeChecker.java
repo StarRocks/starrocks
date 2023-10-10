@@ -55,6 +55,7 @@ import static com.starrocks.catalog.FunctionSet.MAX_BY;
 import static com.starrocks.catalog.FunctionSet.MIN;
 import static com.starrocks.catalog.FunctionSet.MIN_BY;
 import static com.starrocks.catalog.FunctionSet.NDV;
+import static com.starrocks.catalog.FunctionSet.ORTHOGONAL_BITMAP_INTERSECT;
 import static com.starrocks.catalog.FunctionSet.PERCENTILE_APPROX;
 import static com.starrocks.catalog.FunctionSet.PERCENTILE_APPROX_WEIGHTED;
 import static com.starrocks.catalog.FunctionSet.PERCENTILE_CONT;
@@ -465,6 +466,7 @@ public class TypeChecker implements PlanValidator.Checker {
                     }
                     break;
                 case INTERSECT_COUNT:
+                case ORTHOGONAL_BITMAP_INTERSECT:
                     if (!isMergeAggFn) {
                         checkColType(arguments.get(0), aggCall, definedTypes[0], argTypes.get(0));
                         checkColType(arguments.get(1), aggCall, definedTypes[1], argTypes.get(1));
