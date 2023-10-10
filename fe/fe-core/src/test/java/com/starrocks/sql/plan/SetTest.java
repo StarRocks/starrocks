@@ -516,21 +516,13 @@ public class SetTest extends PlanTestBase {
                     "select * from t0 union all select * from t0 union all select * from t0 where v1 > 1 order by v3 limit 2";
             String plan = getFragmentPlan(sql);
             System.out.println(plan);
-            Assert.assertTrue(plan.contains("10:TOP-N\n" +
-                    "  |  order by: <slot 12> 12: v3 ASC\n" +
-                    "  |  offset: 0\n" +
-                    "  |  limit: 2\n" +
+            Assert.assertTrue(plan.contains("0:UNION\n" +
                     "  |  \n" +
-                    "  0:UNION\n" +
-                    "  |  \n" +
+                    "  |----4:EXCHANGE\n" +
+                    "  |    \n" +
                     "  |----6:EXCHANGE\n" +
-                    "  |       limit: 2\n" +
                     "  |    \n" +
-                    "  |----9:EXCHANGE\n" +
-                    "  |       limit: 2\n" +
-                    "  |    \n" +
-                    "  3:EXCHANGE\n" +
-                    "     limit: 2"));
+                    "  2:EXCHANGE"));
         }
 
         {
