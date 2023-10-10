@@ -555,9 +555,22 @@ class QueryTransformer {
             return subOpt;
         }
 
+        removeOrder(subOpt, orderByExpressions, orderByColumns);
+
+        if (orderByColumns.isEmpty()) {
+            return subOpt;
+        }
+
+        LogicalTopNOperator sortOperator = new LogicalTopNOperator(orderings);
+
+        return subOpt.withNewRoot(sortOperator);
+    }
+
+    public void removeOrder(OptExprBuilder subOpt, List<OrderByElement> orderByExpressions,
+                            List<ColumnRefOperator> orderByColumns) {
         List<Ordering> orderings = new ArrayList<>();
         for (OrderByElement item : orderByExpressions) {
-            if (item.getExpr().isLiteral()) {
+            if (item.getExpr().isConstant()) {
                 continue;
             }
             ColumnRefOperator column =
@@ -570,14 +583,6 @@ class QueryTransformer {
                 orderByColumns.add(column);
             }
         }
-
-        if (orderByColumns.isEmpty()) {
-            return subOpt;
-        }
-
-        LogicalTopNOperator sortOperator = new LogicalTopNOperator(orderings);
-
-        return subOpt.withNewRoot(sortOperator);
     }
 
     private OptExprBuilder distinct(OptExprBuilder subOpt, boolean isDistinct, List<Expr> outputExpressions) {

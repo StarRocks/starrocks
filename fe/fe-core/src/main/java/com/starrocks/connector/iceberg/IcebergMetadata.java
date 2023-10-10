@@ -169,7 +169,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         Map<String, String> properties = stmt.getProperties() == null ? new HashMap<>() : stmt.getProperties();
         String tableLocation = properties.get(LOCATION_PROPERTY);
         Map<String, String> createTableProperties = IcebergApiConverter.rebuildCreateTableProperties(properties);
-
         return icebergCatalog.createTable(dbName, tableName, schema, partitionSpec, tableLocation, createTableProperties);
     }
 
