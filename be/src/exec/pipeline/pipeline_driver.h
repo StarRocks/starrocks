@@ -298,7 +298,8 @@ public:
     // drivers in PRECONDITION_BLOCK state must be marked READY after its dependent runtime-filters or hash tables
     // are finished.
     void mark_precondition_ready(RuntimeState* runtime_state);
-    void start_schedule(int64_t start_count, int64_t start_time);
+    void start_timers();
+    void stop_timers();
     int64_t get_active_time() const { return _active_timer->value(); }
     void submit_operators();
     // Notify all the unfinished operators to be finished.
@@ -477,7 +478,7 @@ protected:
     void _update_driver_acct(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
     void _update_statistics(RuntimeState* state, size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
     void _update_scan_statistics(RuntimeState* state);
-    void _update_overhead_timer();
+    void _update_driver_level_timer();
 
     RuntimeState* _runtime_state = nullptr;
     Operators _operators;
