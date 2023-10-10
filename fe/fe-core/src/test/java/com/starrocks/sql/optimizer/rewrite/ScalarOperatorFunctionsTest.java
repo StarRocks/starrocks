@@ -1359,4 +1359,20 @@ public class ScalarOperatorFunctionsTest {
                 new ConstantOperator(10, Type.INT)).getVarchar());
     }
 
+    @Test
+    public void testUrlExtractParameter() {
+        assertEquals("100", ScalarOperatorFunctions.urlExtractParameter(
+                new ConstantOperator("https://starrocks.com/doc?k1=100&k2=3", Type.VARCHAR),
+                new ConstantOperator("k1", Type.VARCHAR)
+        ).getVarchar());
+        assertEquals(ScalarOperatorFunctions.urlExtractParameter(
+                new ConstantOperator("1234i5", Type.VARCHAR),
+                new ConstantOperator("k1", Type.VARCHAR)),
+                ConstantOperator.createNull(Type.VARCHAR));
+        assertEquals(ScalarOperatorFunctions.urlExtractParameter(
+                new ConstantOperator("https://starrocks.com/doc?k1=100&k2=3", Type.VARCHAR),
+                new ConstantOperator("k3", Type.VARCHAR)),
+                ConstantOperator.createNull(Type.VARCHAR));
+    }
+
 }
