@@ -33,6 +33,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class MockedJDBCMetadata implements ConnectorMetadata {
     private final AtomicLong idGen = new AtomicLong(0L);
     public static final String MOCKED_JDBC_CATALOG_NAME = "jdbc0";
+    public static final String MOCKED_JDBC_PG_CATALOG_NAME = "jdbc_postgres";
     public static final String MOCKED_PARTITIONED_DB_NAME = "partitioned_db0";
     public static final String MOCKED_PARTITIONED_TABLE_NAME0 = "tbl0";
     public static final String MOCKED_PARTITIONED_TABLE_NAME1 = "tbl1";
