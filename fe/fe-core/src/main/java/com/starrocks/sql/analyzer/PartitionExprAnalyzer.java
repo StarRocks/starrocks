@@ -27,6 +27,38 @@ import java.util.ArrayList;
 
 public class PartitionExprAnalyzer {
 
+    /**
+     * Recursive analyze the date_trunc function
+     */
+    public static void analyzeDateTruncFunction(FunctionCallExpr funcCall, SlotRef partitionSlotRef) {
+        String functionName = funcCall.getFnName().getFunction();
+        if (functionName.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+            Expr arg1 = funcCall.getParams().exprs().get(1);
+            if (arg1 instanceof SlotRef) {
+                Type targetColType = partitionSlotRef.getType();
+                Type[] dateTruncType = {Type.VARCHAR, targetColType};
+                Function builtinFunction = Expr.getBuiltinFunction(funcCall.getFnName().getFunction(),
+                        dateTruncType, Function.CompareMode.IS_IDENTICAL);
+
+                funcCall.setFn(builtinFunction);
+                funcCall.setType(targetColType);
+            } else if (arg1 instanceof FunctionCallExpr) {
+                analyzePartitionExpr((FunctionCallExpr) arg1, partitionSlotRef);
+
+                Type targetColType = arg1.getType();
+                Type[] dateTruncType = {Type.VARCHAR, targetColType};
+                Function builtinFunction = Expr.getBuiltinFunction(funcCall.getFnName().getFunction(),
+                        dateTruncType, Function.CompareMode.IS_IDENTICAL);
+
+                funcCall.setFn(builtinFunction);
+                funcCall.setType(targetColType);
+            }
+        }
+    }
+
+    /**
+     * TODO(murphy) refactor the analyze procedure with standard Analyzer instead of manual analyzing
+     */
     public static void analyzePartitionExpr(Expr expr, SlotRef partitionSlotRef) {
         if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
@@ -34,11 +66,11 @@ public class PartitionExprAnalyzer {
             Type targetColType = partitionSlotRef.getType();
             String functionName = functionCallExpr.getFnName().getFunction();
             if (functionName.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
-                Type[] dateTruncType = {Type.VARCHAR, targetColType};
-                builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
-                        dateTruncType, Function.CompareMode.IS_IDENTICAL);
+                analyzeDateTruncFunction(functionCallExpr, partitionSlotRef);
+                builtinFunction = functionCallExpr.getFn();
+                targetColType = functionCallExpr.getType();
             } else if (functionName.equalsIgnoreCase(FunctionSet.TIME_SLICE)) {
-                Type[] timeSliceType = {targetColType, Type.INT, Type.VARCHAR, Type.VARCHAR};
+                Type[] timeSliceType = {Type.DATETIME, Type.INT, Type.VARCHAR, Type.VARCHAR};
                 builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
                         timeSliceType, Function.CompareMode.IS_IDENTICAL);
             } else if (functionName.equalsIgnoreCase(FunctionSet.SUBSTR) ||

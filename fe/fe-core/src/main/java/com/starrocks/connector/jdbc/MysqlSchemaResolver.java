@@ -150,7 +150,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 return Lists.newArrayList();
             }
         } catch (SQLException | NullPointerException e) {
-            throw new StarRocksConnectorException(e.getMessage());
+            throw new StarRocksConnectorException(e.getMessage(), e);
         }
     }
 
@@ -174,7 +174,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 return Lists.newArrayList();
             }
         } catch (SQLException | NullPointerException e) {
-            throw new StarRocksConnectorException(e.getMessage());
+            throw new StarRocksConnectorException(e.getMessage(), e);
         }
     }
 
@@ -203,7 +203,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 return Lists.newArrayList();
             }
         } catch (SQLException | NullPointerException e) {
-            throw new StarRocksConnectorException(e.getMessage());
+            throw new StarRocksConnectorException(e.getMessage(), e);
         }
     }
 }
