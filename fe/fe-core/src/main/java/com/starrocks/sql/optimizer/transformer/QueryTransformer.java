@@ -557,7 +557,7 @@ class QueryTransformer {
 
         List<Ordering> orderings = new ArrayList<>();
         for (OrderByElement item : orderByExpressions) {
-            if (item.getExpr().isLiteral()) {
+            if (item.getExpr().isConstant()) {
                 continue;
             }
             ColumnRefOperator column =
