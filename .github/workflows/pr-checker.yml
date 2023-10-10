@@ -40,43 +40,48 @@ jobs:
       - name: Format Check1
         id: check1
         if: >
-          !contains(github.event.pull_request.body, '[ ] Yes, this PR will result in a change in behavior') && !contains(github.event.pull_request.body, '[x] Yes, this PR will result in a change in behavior')
+          (!contains(toJson(github.event.pull_request.body), '[ ] Yes, this PR will result in a change in behavior') &&
+          !contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior')) ||
+          (!contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior') &&
+          !contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')) ||
+          (contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
+          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')) ||
+          (contains(toJson(github.event.pull_request.body), '[ ] Yes, this PR will result in a change in behavior') &&
+          contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior'))
         run: |
           echo "::error::Please check the format of your pr body about the behavior change checkbox!"
           exit 1
 
-      - name: Format Check2
-        id: check2
+      - name: Behavior Unchanged Label
+        id: unchanged
         if: >
-          (!contains(github.event.pull_request.body, '[ ] No, this PR will not result in a change in behavior') &&
-           !contains(github.event.pull_request.body, '[x] No, this PR will not result in a change in behavior'))
+          steps.check.outcome == 'skipped' &&
+          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: 'behavior_changed'
+
+      - name: Behavior Changed Check
+        id: changed_check
+        if: >
+          always() && steps.check.outcome == 'skipped' && steps.unchanged.outcome == 'skipped' &&
+          contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
+          contains(toJson(github.event.pull_request.body), '[ ] Interface/UI changes: syntax, type conversion, expression evaluation, display information') &&
+          contains(toJson(github.event.pull_request.body), '[ ] Parameter changes: default values, similar parameters but with different default values') &&
+          contains(toJson(github.event.pull_request.body), '[ ] Policy changes: use new policy to replace old one, functionality automatically enabled') &&
+          contains(toJson(github.event.pull_request.body), '[ ] Feature removed') &&
+          contains(toJson(github.event.pull_request.body), '[ ] Miscellaneous: upgrade & downgrade compatibility, etc')
         run: |
-          echo "::error::Please check the format of your pr body about the behavior change checkbox!"
+          echo "::error::You must specify the type of change!"
           exit 1
 
-      - name: Format Check3
-        id: check3
+      - name: Behavior Changed Label
         if: >
-          (contains(github.event.pull_request.body, '[x] Yes, this PR will result in a change in behavior') &&
-           contains(github.event.pull_request.body, '[x] No, this PR will not result in a change in behavior'))
-        run: |
-          echo "::error::Please check the format of your pr body about the behavior change checkbox!"
-          exit 1
-
-      - name: Format Check4
-        id: check4
-        if: >
-          contains(github.event.pull_request.body, '[ ] Yes, this PR will result in a change in behavior')
-        run: |
-          echo "::error::Please check the format of your pr body about the behavior change checkbox!"
-          exit 1
-
-      - name: Format Check5
-        id: check5
-        if: >
-          always() && !contains(github.event.pull_request.body, '[x] Yes, this PR will result in a change in behavior')
-        run: |
-          echo "::error::Please check the format of your pr body about the behavior change checkbox!"
-          exit 1
-      
+          always() &&
+          steps.check.outcome == 'skipped' &&
+          steps.unchanged.outcome == 'skipped' &&
+          steps.changed_check.outcome != 'failure'
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: 'behavior_changed'
 
