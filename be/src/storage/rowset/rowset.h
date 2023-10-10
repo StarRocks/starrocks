@@ -197,6 +197,15 @@ public:
     StatusOr<std::vector<ChunkIteratorPtr>> get_update_file_iterators(const Schema& schema,
                                                                       OlapReaderStatistics* stats);
 
+    // only used for updatable tablets' rowset in column mode partial update
+    // get iterator by update file's id, and it iterate all rows without complex options like predicates
+    // |schema| read schema
+    // |update_file_id| the index of update file which we want to get iterator from
+    // |stats| used for iterator read stats
+    // if the segment is empty, return empty iterator
+    StatusOr<ChunkIteratorPtr> get_update_file_iterator(const Schema& schema, uint32_t update_file_id,
+                                                        OlapReaderStatistics* stats);
+
     // publish rowset to make it visible to read
     void make_visible(Version version);
 
@@ -310,7 +319,9 @@ public:
                 if (_refs_by_reader == 0 && _rowset_state_machine.rowset_state() == ROWSET_UNLOADING) {
                     // first do close, then change state
                     do_close();
-                    _rowset_state_machine.on_release();
+                    WARN_IF_ERROR(_rowset_state_machine.on_release(),
+                                  strings::Substitute("rowset state on_release error, $0",
+                                                      _rowset_state_machine.rowset_state()));
                 }
             }
             if (_rowset_state_machine.rowset_state() == ROWSET_UNLOADED) {

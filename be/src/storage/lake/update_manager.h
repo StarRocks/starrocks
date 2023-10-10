@@ -90,7 +90,7 @@ public:
     size_t get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta);
 
     Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, const TabletMetadata& metadata,
-                                      Tablet* tablet, IndexEntry* index_entry, MetaFileBuilder* builder,
+                                      Tablet tablet, IndexEntry* index_entry, MetaFileBuilder* builder,
                                       int64_t base_version);
 
     // remove primary index entry from cache, called when publish version error happens.
@@ -132,6 +132,8 @@ public:
 
     // release index entry if it isn't nullptr
     void release_primary_index(IndexEntry* index_entry);
+
+    DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
 
 private:
     // print memory tracker state

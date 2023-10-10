@@ -14,6 +14,8 @@
 
 #include "formats/parquet/file_reader.h"
 
+#include <parquet/metadata.h>
+
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
@@ -82,11 +84,12 @@ Status FileReader::_parse_footer() {
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
         RETURN_IF_ERROR(_file->read_at_fully(_file_size - footer_read_size, footer_buffer.data(), footer_read_size));
-        _scanner_ctx->stats->request_bytes_read += footer_read_size;
-        _scanner_ctx->stats->request_bytes_read_uncompressed += footer_read_size;
     }
 
     ASSIGN_OR_RETURN(uint32_t metadata_length, _parse_metadata_length(footer_buffer));
+
+    _scanner_ctx->stats->request_bytes_read += metadata_length + PARQUET_FOOTER_SIZE;
+    _scanner_ctx->stats->request_bytes_read_uncompressed += metadata_length + PARQUET_FOOTER_SIZE;
 
     if (footer_read_size < (metadata_length + PARQUET_FOOTER_SIZE)) {
         // footer_buffer's size is not enough to read the whole metadata, we need to re-read for larger size
@@ -95,8 +98,6 @@ Status FileReader::_parse_footer() {
         {
             SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
             RETURN_IF_ERROR(_file->read_at_fully(_file_size - re_read_size, footer_buffer.data(), re_read_size));
-            _scanner_ctx->stats->request_bytes_read += re_read_size;
-            _scanner_ctx->stats->request_bytes_read_uncompressed += re_read_size;
         }
     }
 
@@ -211,7 +212,9 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
                 return true;
             }
 
-            if (min_chunk->columns()[0]->equals(0, *max_chunk->columns()[0], 0)) {
+            // skip topn runtime filter, because it has taken effect on min/max filtering
+            // if row-group contains exactly one value(i.e. min_value = max_value), use bloom filter to test
+            if (!filter->always_true() && min_chunk->columns()[0]->equals(0, *max_chunk->columns()[0], 0)) {
                 ColumnPtr& chunk_part_column = min_chunk->columns()[0];
                 JoinRuntimeFilter::RunningContext ctx;
                 ctx.use_merged_selection = false;
@@ -299,7 +302,7 @@ int32_t FileReader::_get_partition_column_idx(const std::string& col_name) const
 Status FileReader::_decode_min_max_column(const ParquetField& field, const std::string& timezone,
                                           const TypeDescriptor& type, const tparquet::ColumnMetaData& column_meta,
                                           const tparquet::ColumnOrder* column_order, ColumnPtr* min_column,
-                                          ColumnPtr* max_column, bool* decode_ok) {
+                                          ColumnPtr* max_column, bool* decode_ok) const {
     DCHECK_EQ(field.physical_type, column_meta.type);
     *decode_ok = true;
     // We need to make sure min_max column append value succeed
@@ -403,16 +406,29 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
     return Status::OK();
 }
 
+// Reference: arrow/cpp/src/parquet/metadata.cc
 bool FileReader::_can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
-                                        const tparquet::ColumnOrder* column_order) {
-    // disregard column sort order if statistics max/min are equal
-    if (column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.max_value &&
-        column_meta.statistics.min_value == column_meta.statistics.max_value) {
+                                        const tparquet::ColumnOrder* column_order) const {
+    // created_by is not populated, which could have been caused by
+    // parquet-mr during the same time as PARQUET-251, see PARQUET-297
+    if (!_file_metadata->t_metadata().__isset.created_by) {
         return true;
     }
-    if (column_meta.statistics.__isset.min && column_meta.statistics.__isset.max &&
-        column_meta.statistics.min == column_meta.statistics.max) {
-        return true;
+
+    auto application_version = ::parquet::ApplicationVersion(_file_metadata->t_metadata().created_by);
+    auto min_equals_max = (column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.max_value &&
+                           column_meta.statistics.min_value == column_meta.statistics.max_value) ||
+                          (column_meta.statistics.__isset.min && column_meta.statistics.__isset.max &&
+                           column_meta.statistics.min == column_meta.statistics.max);
+
+    // disregard column sort order if statistics max/min are equal
+    if (min_equals_max) {
+        if (column_meta.type != tparquet::Type::BYTE_ARRAY &&
+            column_meta.type != tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
+            return true;
+        }
+        // PARQUET-251: stats are incorrect for binary columns
+        return !application_version.VersionLt(::parquet::ApplicationVersion::PARQUET_251_FIXED_VERSION());
     }
 
     if (column_meta.statistics.__isset.min_value && _can_use_stats(column_meta.type, column_order)) {

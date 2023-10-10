@@ -206,6 +206,7 @@ set(EXEC_FILES
         ./storage/lake/location_provider_test.cpp
         ./storage/lake/rowset_test.cpp
         ./storage/lake/schema_change_test.cpp
+        ./storage/lake/alter_tablet_meta_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/partial_update_test.cpp
         ./storage/lake/auto_increment_partial_update_test.cpp

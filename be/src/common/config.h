@@ -41,7 +41,7 @@ namespace starrocks::config {
 CONF_Int32(cluster_id, "-1");
 // The port on which ImpalaInternalService is exported.
 CONF_Int32(be_port, "9060");
-CONF_Int32(thrift_port, "9060");
+CONF_Int32(thrift_port, "0");
 
 // The port for brpc.
 CONF_Int32(brpc_port, "8060");
@@ -362,6 +362,14 @@ CONF_Int32(be_exit_after_disk_write_hang_second, "60");
 CONF_Double(dictionary_encoding_ratio, "0.7");
 // The minimum chunk size for dictionary encoding speculation
 CONF_Int32(dictionary_speculate_min_chunk_size, "10000");
+
+// Whether to use special thread pool for streaming load to avoid deadlock for
+// concurrent streaming loads. The maximum number of threads and queue size are
+// set INT32_MAX which indicate there is no limit for the thread pool. Note you
+// don't need to change these configurations in general.
+CONF_mBool(enable_streaming_load_thread_pool, "true");
+CONF_Int32(streaming_load_thread_pool_num_min, "0");
+CONF_Int32(streaming_load_thread_pool_idle_time_ms, "2000");
 
 // The maximum amount of data that can be processed by a stream load
 CONF_mInt64(streaming_load_max_mb, "102400");
@@ -1040,6 +1048,9 @@ CONF_Int32(default_mv_resource_group_cpu_limit, "1");
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");
 
+// used for control the max memory cost when batch get pk index in each tablet
+CONF_mInt64(primary_key_batch_get_index_memory_limit, "104857600"); // 100MB
+
 // If your sort key cardinality is very high,
 // You could enable this config to speed up the point lookup query,
 // otherwise, StarRocks will use zone map for one column filter
@@ -1053,5 +1064,8 @@ CONF_mInt32(get_txn_status_internal_sec, "30");
 CONF_mBool(dump_metrics_with_bvar, "true");
 
 CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
+
+// 0 means no limit
+CONF_Int32(lake_service_max_concurrency, "0");
 
 } // namespace starrocks::config

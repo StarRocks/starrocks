@@ -466,8 +466,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_prune_columns"), null, TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  206:Project\n" +
-                "  |  <slot 1> : 1: c_1_0"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("<slot 1> : 1: c_1_0"));
     }
 
     @Test
@@ -691,6 +690,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         connectContext.getSessionVariable().disableJoinReorder();
         Pair<String, ExecPlan> result = UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext,
                 getDumpInfoFromJson(jsonStr));
+        System.out.println(result.second.getPhysicalPlan().debugString());
         OptExpression expression = result.second.getPhysicalPlan().inputAt(1);
         Assert.assertEquals(new CTEProperty(1), expression.getLogicalProperty().getUsedCTEs());
         Assert.assertEquals(4, result.second.getCteProduceFragments().size());
@@ -760,5 +760,44 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             }
         }
         return fileNames;
+    }
+
+    @Test
+    public void testUnionAllWithTopNRuntimeFilter() throws Exception {
+        QueryDumpInfo queryDumpInfo =
+                getDumpInfoFromJson(getDumpInfoFromFile("query_dump/union_all_with_topn_runtime_filter"));
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setScanOrToUnionThreshold(-1);
+        sessionVariable.setScanOrToUnionLimit(10);
+        sessionVariable.setSelectRatioThreshold(20.0);
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/union_all_with_topn_runtime_filter"),
+                        sessionVariable, TExplainLevel.VERBOSE);
+        System.out.println(replayPair.second);
+        String plan = replayPair.second;
+
+        // tbl_mock_015
+        Assert.assertTrue(plan, plan.contains("17:TOP-N\n" +
+                "  |  order by: [60, DATETIME, false] DESC\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 3, build_expr = (<slot 60> 60: mock_004), remote = false"));
+        Assert.assertTrue(plan, plan.contains("table: tbl_mock_015, rollup: tbl_mock_015\n" +
+                "     preAggregation: on\n" +
+                "     Predicates: [61: mock_005, VARCHAR, true] = '1000'"));
+        Assert.assertTrue(plan, plan.contains(" probe runtime filters:\n" +
+                "     - filter_id = 3, probe_expr = (60: mock_004)"));
+
+        // table: tbl_mock_001, rollup: tbl_mock_001
+        Assert.assertTrue(plan, plan.contains("4:TOP-N\n" +
+                "  |  order by: [37, DATETIME, false] DESC\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (<slot 37> 37: mock_004), remote = false"));
+        Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (37: mock_004)"));
+        Assert.assertTrue(plan, plan.contains("6:OlapScanNode\n" +
+                "     table: tbl_mock_001, rollup: tbl_mock_001\n" +
+                "     preAggregation: on\n" +
+                "     Predicates: [39: mock_008, VARCHAR, true] = '1000', (38: mock_005 != '1000') OR (38: mock_005 IS NULL)"));
+
     }
 }

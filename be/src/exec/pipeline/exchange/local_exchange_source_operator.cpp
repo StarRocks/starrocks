@@ -21,18 +21,16 @@ namespace starrocks::pipeline {
 
 // Used for PassthroughExchanger.
 // The input chunk is most likely full, so we don't merge it to avoid copying chunk data.
-Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk) {
+void LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk) {
     std::lock_guard<std::mutex> l(_chunk_lock);
     if (_is_finished) {
-        return Status::OK();
+        return;
     }
     size_t memory_usage = chunk->memory_usage();
     size_t num_rows = chunk->num_rows();
     _local_memory_usage += memory_usage;
     _full_chunk_queue.emplace(std::move(chunk));
     _memory_manager->update_memory_usage(memory_usage, num_rows);
-
-    return Status::OK();
 }
 
 // Used for PartitionExchanger.

@@ -605,6 +605,18 @@ under the License.
             <artifactId>hadoop-aws</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/com.qcloud.cos/hadoop-cos -->
+        <dependency>
+            <groupId>com.qcloud.cos</groupId>
+            <artifactId>hadoop-cos</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.qcloud/chdfs_hadoop_plugin_network -->
+        <dependency>
+            <groupId>com.qcloud</groupId>
+            <artifactId>chdfs_hadoop_plugin_network</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-azure-datalake -->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
@@ -725,6 +737,11 @@ under the License.
             <artifactId>paimon-s3</artifactId>
             <version>${paimon.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.xerial.snappy</groupId>
+            <artifactId>snappy-java</artifactId>
+            <version>1.1.9.1</version>
+        </dependency>
 
         <dependency>
             <groupId>com.starrocks</groupId>
@@ -755,10 +772,10 @@ under the License.
             <artifactId>opentelemetry-exporter-jaeger</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/mysql/mysql-connector-java -->
+        <!-- https://mvnrepository.com/artifact/com.mysql/mysql-connector-j -->
         <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->

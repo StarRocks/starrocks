@@ -359,12 +359,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
-    public static final String ENABLE_PER_BUCKET_OPTIMIZE = "enable_per_bucket_optmize";
+    public static final String ENABLE_PER_BUCKET_OPTIMIZE = "enable_per_bucket_optimize";
     public static final String ENABLE_PARALLEL_MERGE = "enable_parallel_merge";
 
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
 
-    public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
+    public static final String ENABLE_SCAN_DATACACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
@@ -373,11 +373,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS = "connector_io_tasks_slow_io_latency_ms";
     public static final String SCAN_USE_QUERY_MEM_RATIO = "scan_use_query_mem_ratio";
     public static final String CONNECTOR_SCAN_USE_QUERY_MEM_RATIO = "connector_scan_use_query_mem_ratio";
-
-    public static final String ENABLE_QUERY_CACHE_V2 = "enable_query_cache_v2";
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
-
-    public static final String QUERY_CACHE_DENY_OVERSIZE_RESULT = "query_cache_deny_oversize_result";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
     public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
@@ -1149,8 +1145,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableParallelMerge = enableParallelMerge;
     }
 
-    @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
-    private boolean useScanBlockCache = false;
+    @VariableMgr.VarAttr(name = ENABLE_SCAN_DATACACHE)
+    private boolean enableScanDataCache = false;
 
     @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
     private int ioTasksPerScanOperator = 4;
@@ -1176,11 +1172,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
     private boolean hudiMORForceJNIReader = false;
 
-    @VarAttr(name = ENABLE_QUERY_CACHE_V2, alias = ENABLE_QUERY_CACHE, show = ENABLE_QUERY_CACHE)
-    private boolean enableQueryCache = true;
-
-    @VarAttr(name = QUERY_CACHE_DENY_OVERSIZE_RESULT, flag = VariableMgr.INVISIBLE)
-    private boolean queryCacheDenyOversizeResult = true;
+    @VarAttr(name = ENABLE_QUERY_CACHE)
+    private boolean enableQueryCache = false;
 
     @VarAttr(name = QUERY_CACHE_FORCE_POPULATE)
     private boolean queryCacheForcePopulate = false;
@@ -1455,6 +1448,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
     private boolean enableStrictType = false;
+
+    public boolean isEnableScanDataCache() {
+        return enableScanDataCache;
+    }
+
+    public void setEnableScanDataCache(boolean enableScanDataCache) {
+        this.enableScanDataCache = enableScanDataCache;
+    }
 
     public boolean isCboUseDBLock() {
         return cboUseDBLock;
@@ -2288,14 +2289,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         enableQueryCache = on;
     }
 
-    public void setQueryCacheDenyOversizeResult(boolean on) {
-        queryCacheDenyOversizeResult = on;
-    }
-
-    public boolean isQueryCacheDenyOversizeResult() {
-        return queryCacheDenyOversizeResult;
-    }
-
     public boolean isQueryCacheForcePopulate() {
         return queryCacheForcePopulate;
     }
@@ -2677,7 +2670,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setAllow_throw_exception((sqlMode & SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION) != 0);
 
-        tResult.setUse_scan_block_cache(useScanBlockCache);
+        tResult.setUse_scan_block_cache(enableScanDataCache);
         tResult.setEnable_populate_block_cache(enablePopulateBlockCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);

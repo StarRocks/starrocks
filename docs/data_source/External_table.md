@@ -462,14 +462,14 @@ StarRocks supports predicate pushdown. Filters can be pushed down to Elasticsear
 
 |   SQL syntax  |   ES syntax  |
 | :---: | :---: |
-|  =   |  term query   |
-|  in   |  terms query   |
-|  \>=,  <=, >, <   |  range   |
-|  and   |  bool.filter   |
-|  or   |  bool.should   |
-|  not   |  bool.must_not   |
-|  not in   |  bool.must_not + terms   |
-|  esquery   |  ES Query DSL  |
+|  `=`   |  term query   |
+|  `in`   |  terms query   |
+|  `>=,  <=, >, <`   |  range   |
+|  `and`   |  bool.filter   |
+|  `or`   |  bool.should   |
+|  `not`   |  bool.must_not   |
+|  `not in`   |  bool.must_not + terms   |
+|  `esquery`   |  ES Query DSL  |
 
 ### Examples
 
@@ -924,7 +924,7 @@ The following table describes the parameters.
 | Parameter           | Description                                                  |
 | ------------------- | ------------------------------------------------------------ |
 | type                | The type of the Hudi resource. Set the vaue to hudi.         |
-| hive.metastore.uris | The Thrift URI of the Hive metastore to which the Hudi resource connects. After connecting the Hudi resource to a Hive metastore, you can create and manage Hudi tables by using Hive. The Thrift URI is in the <IP address of the Hive metastore\>:<Port number of the Hive metastore\> format. The default port number is 9083. |
+| hive.metastore.uris | The Thrift URI of the Hive metastore to which the Hudi resource connects. After connecting the Hudi resource to a Hive metastore, you can create and manage Hudi tables by using Hive. The Thrift URI is in the `<IP address of the Hive metastore>:<Port number of the Hive metastore>` format. The default port number is 9083. |
 
 From v2.3 onwards, StarRocks allows changing the `hive.metastore.uris` value of a Hudi resource. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md).
 

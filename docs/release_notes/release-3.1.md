@@ -26,7 +26,7 @@ Fixed the following issues:
 - Modifying the FE dynamic parameter `max_broker_load_job_concurrency` using the `ADMIN SET FRONTEND CONFIG` command does not take effect. [#29964](https://github.com/StarRocks/starrocks/pull/29964) [#29720](https://github.com/StarRocks/starrocks/pull/29720)
 - BEs crash if the time unit in the [date_diff()](../sql-reference/sql-functions/date-time-functions/date_diff.md) function is a constant but the dates are not constants. [#29937](https://github.com/StarRocks/starrocks/issues/29937)
 - In the shared-data architecture, automatic partitioning does not take effect after asynchronous load is enabled. [#29986](https://github.com/StarRocks/starrocks/issues/29986)
-- If users create a Primary Key table by using the [CREATE TABLE LIKE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20LIKE.md) statement, an error "Unexpected exception: Unknown properties: {persistent_index_type=LOCAL}" is thrown. [#30255](https://github.com/StarRocks/starrocks/pull/30255)
+- If users create a Primary Key table by using the [CREATE TABLE LIKE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20LIKE.md) statement, an error `Unexpected exception: Unknown properties: {persistent_index_type=LOCAL}` is thrown. [#30255](https://github.com/StarRocks/starrocks/pull/30255)
 - Restoring Primary Key tables causes metadata inconsistency after BEs are restarted. [#30135](https://github.com/StarRocks/starrocks/pull/30135)
 - If users load data into a Primary Key table on which truncate operations and queries are concurrently performed, an error "java.lang.NullPointerException" is thrown in certain cases. [#30573](https://github.com/StarRocks/starrocks/pull/30573)
 - If predicate expressions are specified in materialized view creation statements, the refresh results of those materialized views are incorrect. [#29904](https://github.com/StarRocks/starrocks/pull/29904)
@@ -61,8 +61,8 @@ Release date: August 18, 2023
 
 ### New Features
 
-- Supports Azure Blob Storage for [shared-data clusters](../deployment/deploy_shared_data.md).
-- Supports List partitioning for [shared-data clusters](../deployment/deploy_shared_data.md).
+- Supports Azure Blob Storage for [shared-data clusters](../deployment/shared_data/s3.md).
+- Supports List partitioning for [shared-data clusters](../deployment/shared_data/s3.md).
 - Supports aggregate functions [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md), [COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md), and [CORR](../sql-reference/sql-functions/aggregate-functions/corr.md).
 - Supports the following [window functions](../sql-reference/sql-functions/Window_function.md): COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP.
 
@@ -90,7 +90,7 @@ Release date: August 7, 2023
 - Added support for Primary Key tables, on which persistent indexes cannot be enabled.
 - Supports the [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md) column attribute, which enables a globally unique ID for each data row and thus simplifies data management.
 - Supports [automatically creating partitions during loading and using partitioning expressions to define partitioning rules](../table_design/expression_partitioning.md), thereby making partition creation easier to use and more flexible.
-- Supports [abstraction of storage volumes](../deployment/deploy_shared_data.md#create-default-storage-volume), in which users can configure storage location and authentication information, in StarRocks shared-data clusters. Users can directly reference an existing storage volume when creating a database or table, making authentication configuration easier.
+- Supports [abstraction of storage volumes](../deployment/shared_data/s3.md#create-default-storage-volume), in which users can configure storage location and authentication information, in StarRocks shared-data clusters. Users can directly reference an existing storage volume when creating a database or table, making authentication configuration easier.
 
 #### Data Lake analytics
 
@@ -177,6 +177,7 @@ Optimized the data cache in StarRocks shared-data clusters. The optimized data c
 - Optimized the collection of statistics for the CBO. This reduces the impact of statistics collection on data ingestion and increases statistics collection performance.
 - Optimized the merge algorithm to increase the overall performance by up to 2 times in permutation scenarios.
 - Optimized the query logic to reduce dependency on database locks.
+- Dynamic partitioning further supports the partitioning unit to be year. [#28386](https://github.com/StarRocks/starrocks/pull/28386)
 
 #### SQL reference
 
@@ -224,6 +225,7 @@ Fixed the following issues:
 - The BE configuration item `txn_commit_rpc_timeout_ms` and the system variable `tx_visible_wait_timeout` are deprecated. Now the `time_out` parameter is used to specify the transaction timeout duration.
 - The FE configuration items `max_broker_concurrency` and `load_parallel_instance_num` are deprecated.
 - The FE configuration item `max_routine_load_job_num` is deprecated. Now StarRocks dynamically infers the maximum number of Routine Load tasks supported by each individual BE node based on the `max_routine_load_task_num_per_be` parameter and provides suggestions on task failures.
+- The CN configuration item `thrift_port` is renamed as `be_port`.
 - Two new Routine Load job properties, `task_consume_second` and `task_timeout_second`, are added to control the maximum amount of time to consume data and the timeout duration for individual load tasks within a Routine Load job, making job adjustment more flexible. If users do not specify these two properties in their Routine Load job, the FE configuration items `routine_load_task_consume_second` and `routine_load_task_timeout_second` prevail.
 - The session variable `enable_resource_group` is deprecated because the [Resource Group](../administration/resource_group.md) feature is enabled by default since v3.1.0.
 - Two new reserved keywords, COMPACTION and TEXT, are added.

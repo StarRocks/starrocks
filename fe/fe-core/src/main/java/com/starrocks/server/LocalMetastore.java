@@ -108,7 +108,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
-import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
@@ -118,6 +117,8 @@ import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.common.util.concurrent.CountingLatch;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -278,6 +279,13 @@ public class LocalMetastore implements ConnectorMetadata {
     private final GlobalStateMgr stateMgr;
     private final CatalogRecycleBin recycleBin;
     private ColocateTableIndex colocateTableIndex;
+    /**
+     * Concurrent colocate table creation process have dependency on each other
+     * (even in different databases), but we do not want to affect the performance
+     * of non-colocate table creation, so here we use a separate latch to
+     * synchronize only the creation of colocate tables.
+     */
+    private final CountingLatch colocateTableCreateSyncer = new CountingLatch(0);
 
     public LocalMetastore(GlobalStateMgr globalStateMgr, CatalogRecycleBin recycleBin,
                           ColocateTableIndex colocateTableIndex) {
@@ -455,39 +463,43 @@ public class LocalMetastore implements ConnectorMetadata {
     @Override
     public void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
         // 1. check if database exists
+        Database db;
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
-        List<Runnable> runnableList;
         try {
             if (!fullNameToDb.containsKey(dbName)) {
                 throw new MetaNotFoundException("Database not found");
             }
+            db = this.fullNameToDb.get(dbName);
+        } finally {
+            unlock();
+        }
 
-            // 2. drop tables in db
-            Database db = this.fullNameToDb.get(dbName);
-            db.writeLock();
-            try {
-                if (!isForceDrop && stateMgr.getGlobalTransactionMgr().existCommittedTxns(db.getId(), null, null)) {
-                    throw new DdlException(
-                            "There are still some transactions in the COMMITTED state waiting to be completed. " +
-                                    "The database [" + dbName +
-                                    "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
-                                    " please use \"DROP DATABASE <database> FORCE\".");
-                }
-
-                // save table names for recycling
-                Set<String> tableNames = new HashSet(db.getTableNamesViewWithLock());
-                runnableList = unprotectDropDb(db, isForceDrop, false);
-                if (!isForceDrop) {
-                    recycleBin.recycleDatabase(db, tableNames);
-                } else {
-                    stateMgr.onEraseDatabase(db.getId());
-                }
-                db.setExist(false);
-            } finally {
-                db.writeUnlock();
+        List<Runnable> runnableList;
+        // 2. drop tables in db
+        db.writeLock();
+        try {
+            if (!db.isExist()) {
+                throw new MetaNotFoundException("Database '" + dbName + "' not found");
             }
+            if (!isForceDrop && stateMgr.getGlobalTransactionMgr().existCommittedTxns(db.getId(), null, null)) {
+                throw new DdlException(
+                        "There are still some transactions in the COMMITTED state waiting to be completed. " +
+                                "The database [" + dbName +
+                                "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
+                                " please use \"DROP DATABASE <database> FORCE\".");
+            }
+
+            // save table names for recycling
+            Set<String> tableNames = new HashSet<>(db.getTableNamesViewWithLock());
+            runnableList = unprotectDropDb(db, isForceDrop, false);
+            if (!isForceDrop) {
+                recycleBin.recycleDatabase(db, tableNames);
+            } else {
+                stateMgr.onEraseDatabase(db.getId());
+            }
+            db.setExist(false);
 
             // 3. remove db from globalStateMgr
             idToDb.remove(db.getId());
@@ -508,7 +520,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             LOG.info("finish drop database[{}], id: {}, is force : {}", dbName, db.getId(), isForceDrop);
         } finally {
-            unlock();
+            db.writeUnlock();
         }
 
         for (Runnable runnable : runnableList) {
@@ -2165,51 +2177,71 @@ public class LocalMetastore implements ConnectorMetadata {
         table.setStorageInfo(pathInfo, dataCacheInfo);
     }
 
-    void onCreate(Database db, Table table, String storageVolumeId, boolean isSetIfNotExists) throws DdlException {
+    public void onCreate(Database db, Table table, String storageVolumeId, boolean isSetIfNotExists)
+            throws DdlException {
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
+            throw new DdlException("Failed to acquire globalStateMgr lock. " +
+                    "Try again or increasing value of `catalog_try_lock_timeout_ms` configuration.");
         }
 
         try {
+            /*
+             * When creating table or mv, we need to create the tablets and prepare some of the
+             * metadata first before putting this new table or mv in the database. So after the
+             * first step, we need to acquire the global lock and double check whether the db still
+             * exists because it maybe dropped by other concurrent client. And if we don't use the lock
+             * protection and handle the concurrency properly, the replay of table/mv creation may fail
+             * on restart or on follower.
+             *
+             * After acquire the db lock, we also need to acquire the db lock and write edit log. Since the
+             * db lock maybe under high contention and IO is busy, current thread can hold the global lock
+             * for quite a long time and make the other operation waiting for the global lock fail.
+             *
+             * So here after the confirmation of existence of modifying database, we release the global lock
+             * When dropping database, we will set the `exist` field of db object to false. And in the following
+             * creation process, we will double-check the `exist` field.
+             */
             if (getDb(db.getId()) == null) {
-                throw new DdlException("Database has been dropped when creating table");
+                throw new DdlException("Database has been dropped when creating table/mv/view");
             }
-
-            if (db.isSystemDatabase()) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
-                        "cannot create table in system database");
-            }
-
-            db.writeLock();
-            try {
-                if (!db.registerTableUnlocked(table)) {
-                    if (!isSetIfNotExists) {
-                        if (table instanceof OlapTable) {
-                            OlapTable olapTable = (OlapTable) table;
-                            olapTable.onErase(false);
-                        }
-                        ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
-                                "table already exists");
-                    } else {
-                        LOG.info("Create table[{}] which already exists", table.getName());
-                        return;
-                    }
-                }
-
-                // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
-                LOG.info("Successfully create table: {}-{}, in database: {}-{}",
-                        table.getName(), table.getId(), db.getFullName(), db.getId());
-
-                CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
-                GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo);
-                table.onCreate(db);
-            } finally {
-                db.writeUnlock();
-            }
-
         } finally {
             unlock();
+        }
+
+        if (db.isSystemDatabase()) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
+                    "cannot create table in system database");
+        }
+
+        db.writeLock();
+        try {
+            if (!db.isExist()) {
+                throw new DdlException("Database has been dropped when creating table/mv/view");
+            }
+            if (!db.registerTableUnlocked(table)) {
+                if (!isSetIfNotExists) {
+                    if (table instanceof OlapTable) {
+                        OlapTable olapTable = (OlapTable) table;
+                        olapTable.onErase(false);
+                    }
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
+                            "table already exists");
+                } else {
+                    LOG.info("Create table[{}] which already exists", table.getName());
+                    return;
+                }
+            }
+
+            // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
+            LOG.info("Successfully create table: {}-{}, in database: {}-{}",
+                    table.getName(), table.getId(), db.getFullName(), db.getId());
+
+            CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo);
+            table.onCreate(db);
+        } finally {
+            db.writeUnlock();
         }
     }
 
@@ -2306,89 +2338,124 @@ public class LocalMetastore implements ConnectorMetadata {
         List<List<Long>> backendsPerBucketSeq = null;
         ColocateTableIndex.GroupId groupId = null;
         boolean initBucketSeqWithSameOrigNameGroup = false;
-        if (colocateTableIndex.isColocateTable(tabletMeta.getTableId())) {
-            // if this is a colocate table, try to get backend seqs from colocation index.
-            Database db = getDb(tabletMeta.getDbId());
-            groupId = colocateTableIndex.getGroup(tabletMeta.getTableId());
-            // Use db write lock here to make sure the backendsPerBucketSeq is
-            // consistent when the backendsPerBucketSeq is updating.
-            // This lock will release very fast.
-            db.writeLock();
-            try {
-                backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
-                if (backendsPerBucketSeq.isEmpty()) {
-                    List<ColocateTableIndex.GroupId> colocateWithGroupsInOtherDb =
-                            colocateTableIndex.getColocateWithGroupsInOtherDb(groupId);
-                    if (!colocateWithGroupsInOtherDb.isEmpty()) {
-                        backendsPerBucketSeq =
-                                colocateTableIndex.getBackendsPerBucketSeq(colocateWithGroupsInOtherDb.get(0));
-                        initBucketSeqWithSameOrigNameGroup = true;
-                    }
-                }
-            } finally {
-                db.writeUnlock();
-            }
-        }
-
+        boolean isColocateTable = colocateTableIndex.isColocateTable(tabletMeta.getTableId());
         // chooseBackendsArbitrary is true, means this may be the first table of colocation group,
         // or this is just a normal table, and we can choose backends arbitrary.
         // otherwise, backends should be chosen from backendsPerBucketSeq;
-        boolean chooseBackendsArbitrary = backendsPerBucketSeq == null || backendsPerBucketSeq.isEmpty();
-        if (chooseBackendsArbitrary) {
-            backendsPerBucketSeq = Lists.newArrayList();
-        }
-        for (int i = 0; i < distributionInfo.getBucketNum(); ++i) {
-            // create a new tablet with random chosen backends
-            LocalTablet tablet = new LocalTablet(getNextId());
+        boolean chooseBackendsArbitrary;
 
-            // add tablet to inverted index first
-            index.addTablet(tablet, tabletMeta);
-            tabletIdSet.add(tablet.getId());
-
-            // get BackendIds
-            List<Long> chosenBackendIds;
-            if (chooseBackendsArbitrary) {
-                // This is the first colocate table in the group, or just a normal table,
-                // randomly choose backends
-                if (Config.enable_strict_storage_medium_check) {
-                    chosenBackendIds =
-                            chosenBackendIdBySeq(replicationNum, tabletMeta.getStorageMedium());
-                } else {
-                    try {
-                        chosenBackendIds = chosenBackendIdBySeq(replicationNum);
-                    } catch (DdlException ex) {
-                        throw new DdlException(String.format("%s, table=%s, default_replication_num=%d",
-                                ex.getMessage(), table.getName(), Config.default_replication_num));
+        // We should synchronize the creation of colocate tables, otherwise it can have concurrent issues.
+        // Considering the following situation,
+        // T1: P1 issues `create colocate table` and finds that there isn't a bucket sequence associated
+        //     with the colocate group, so it will initialize the bucket sequence for the first time
+        // T2: P2 do the same thing as P1
+        // T3: P1 set the bucket sequence for colocate group stored in `ColocateTableIndex`
+        // T4: P2 also set the bucket sequence, hence overwrite what P1 just wrote
+        // T5: After P1 creates the colocate table, the actual tablet distribution won't match the bucket sequence
+        //     of the colocate group, and balancer will create a lot of COLOCATE_MISMATCH tasks which shouldn't exist.
+        if (isColocateTable) {
+            try {
+                // Optimization: wait first time, before global lock
+                colocateTableCreateSyncer.awaitZero();
+                // Since we have supported colocate tables in different databases,
+                // we should use global lock, not db lock.
+                tryLock(false);
+                try {
+                    // Wait again, for safety
+                    // We are in global lock, we should have timeout in case holding lock for too long
+                    colocateTableCreateSyncer.awaitZero(Config.catalog_try_lock_timeout_ms, TimeUnit.MILLISECONDS);
+                    // if this is a colocate table, try to get backend seqs from colocation index.
+                    groupId = colocateTableIndex.getGroup(tabletMeta.getTableId());
+                    backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+                    if (backendsPerBucketSeq.isEmpty()) {
+                        List<ColocateTableIndex.GroupId> colocateWithGroupsInOtherDb =
+                                colocateTableIndex.getColocateWithGroupsInOtherDb(groupId);
+                        if (!colocateWithGroupsInOtherDb.isEmpty()) {
+                            backendsPerBucketSeq =
+                                    colocateTableIndex.getBackendsPerBucketSeq(colocateWithGroupsInOtherDb.get(0));
+                            initBucketSeqWithSameOrigNameGroup = true;
+                        }
                     }
+                    chooseBackendsArbitrary = backendsPerBucketSeq == null || backendsPerBucketSeq.isEmpty();
+                    if (chooseBackendsArbitrary) {
+                        colocateTableCreateSyncer.increment();
+                    }
+                } finally {
+                    unlock();
                 }
-                backendsPerBucketSeq.add(chosenBackendIds);
-            } else {
-                // get backends from existing backend sequence
-                chosenBackendIds = backendsPerBucketSeq.get(i);
+            } catch (InterruptedException e) {
+                LOG.warn("wait for concurrent colocate table creation finish failed, msg: {}",
+                        e.getMessage(), e);
+                Thread.currentThread().interrupt();
+                throw new DdlException("wait for concurrent colocate table creation finish failed", e);
             }
-
-            // create replicas
-            for (long backendId : chosenBackendIds) {
-                long replicaId = getNextId();
-                Replica replica = new Replica(replicaId, backendId, replicaState, version,
-                        tabletMeta.getOldSchemaHash());
-                tablet.addReplica(replica);
-            }
-            Preconditions.checkState(chosenBackendIds.size() == replicationNum,
-                    chosenBackendIds.size() + " vs. " + replicationNum);
+        } else {
+            chooseBackendsArbitrary = true;
         }
 
-        // In the following two situations, we should set the bucket seq for colocate group and persist the info,
-        //   1. This is the first time we add a table to colocate group, and it doesn't have the same original name
-        //      with colocate group in other database.
-        //   2. It's indeed the first time, but it should colocate with group in other db
-        //      (because of having the same original name), we should use the bucket
-        //      seq of other group to initialize our own.
-        if ((groupId != null && chooseBackendsArbitrary) || initBucketSeqWithSameOrigNameGroup) {
-            colocateTableIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
-            ColocatePersistInfo info =
-                    ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
-            GlobalStateMgr.getCurrentState().getEditLog().logColocateBackendsPerBucketSeq(info);
+
+
+        try {
+            if (chooseBackendsArbitrary) {
+                backendsPerBucketSeq = Lists.newArrayList();
+            }
+            for (int i = 0; i < distributionInfo.getBucketNum(); ++i) {
+                // create a new tablet with random chosen backends
+                LocalTablet tablet = new LocalTablet(getNextId());
+
+                // add tablet to inverted index first
+                index.addTablet(tablet, tabletMeta);
+                tabletIdSet.add(tablet.getId());
+
+                // get BackendIds
+                List<Long> chosenBackendIds;
+                if (chooseBackendsArbitrary) {
+                    // This is the first colocate table in the group, or just a normal table,
+                    // randomly choose backends
+                    if (Config.enable_strict_storage_medium_check) {
+                        chosenBackendIds =
+                                chosenBackendIdBySeq(replicationNum, tabletMeta.getStorageMedium());
+                    } else {
+                        try {
+                            chosenBackendIds = chosenBackendIdBySeq(replicationNum);
+                        } catch (DdlException ex) {
+                            throw new DdlException(String.format("%s, table=%s, default_replication_num=%d",
+                                    ex.getMessage(), table.getName(), Config.default_replication_num));
+                        }
+                    }
+                    backendsPerBucketSeq.add(chosenBackendIds);
+                } else {
+                    // get backends from existing backend sequence
+                    chosenBackendIds = backendsPerBucketSeq.get(i);
+                }
+
+                // create replicas
+                for (long backendId : chosenBackendIds) {
+                    long replicaId = getNextId();
+                    Replica replica = new Replica(replicaId, backendId, replicaState, version,
+                            tabletMeta.getOldSchemaHash());
+                    tablet.addReplica(replica);
+                }
+                Preconditions.checkState(chosenBackendIds.size() == replicationNum,
+                        chosenBackendIds.size() + " vs. " + replicationNum);
+            }
+
+            // In the following two situations, we should set the bucket seq for colocate group and persist the info,
+            //   1. This is the first time we add a table to colocate group, and it doesn't have the same original name
+            //      with colocate group in other database.
+            //   2. It's indeed the first time, but it should colocate with group in other db
+            //      (because of having the same original name), we should use the bucket
+            //      seq of other group to initialize our own.
+            if ((groupId != null && chooseBackendsArbitrary) || initBucketSeqWithSameOrigNameGroup) {
+                colocateTableIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
+                ColocatePersistInfo info =
+                        ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
+                GlobalStateMgr.getCurrentState().getEditLog().logColocateBackendsPerBucketSeq(info);
+            }
+        } finally {
+            if (isColocateTable && chooseBackendsArbitrary) {
+                colocateTableCreateSyncer.decrement();
+            }
         }
     }
 
@@ -3855,6 +3922,11 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         tableProperty.buildEnablePersistentIndex();
 
+        if (table.isCloudNativeTable()) {
+            // now default to LOCAL
+            tableProperty.buildPersistentIndexType();
+        }
+
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
         GlobalStateMgr.getCurrentState().getEditLog().logModifyEnablePersistentIndex(info);
@@ -4110,6 +4182,9 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 } else if (opCode == OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX) {
                     olapTable.setEnablePersistentIndex(tableProperty.enablePersistentIndex());
+                    if (olapTable.isCloudNativeTable()) {
+                        olapTable.setPersistentIndexType(tableProperty.getPersistentIndexType());
+                    }
                 } else if (opCode == OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
                     olapTable.setPrimaryIndexCacheExpireSec(tableProperty.primaryIndexCacheExpireSec());
                 } else if (opCode == OperationType.OP_MODIFY_BINLOG_CONFIG) {

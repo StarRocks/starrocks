@@ -373,8 +373,8 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
-    public void setExecPlanSupplier(Supplier<ExecPlan> execPlanSupplier) {
-        queryProfile.setExecPlanSupplier(execPlanSupplier);
+    public void setExecPlan(ExecPlan execPlan) {
+        queryProfile.setExecPlan(execPlan);
     }
 
     @Override
@@ -413,6 +413,10 @@ public class DefaultCoordinator extends Coordinator {
             }
             LOG.debug("debug: in Coordinator::exec. query id: {}, desc table: {}",
                     DebugUtil.printId(jobSpec.getQueryId()), jobSpec.getDescTable());
+        }
+
+        if (slot != null && slot.getPipelineDop() > 0 && slot.getPipelineDop() != jobSpec.getQueryOptions().getPipeline_dop()) {
+            jobSpec.getFragments().forEach(fragment -> fragment.limitMaxPipelineDop(slot.getPipelineDop()));
         }
 
         coordinatorPreprocessor.prepareExec();

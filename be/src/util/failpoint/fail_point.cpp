@@ -185,7 +185,7 @@ FailPointRegistry::FailPointRegistry() {
 }
 
 FailPointRegisterer::FailPointRegisterer(FailPoint* fp) {
-    FailPointRegistry::GetInstance()->add(fp);
+    (void)FailPointRegistry::GetInstance()->add(fp);
 }
 
 DEFINE_FAIL_POINT(random_error);

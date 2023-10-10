@@ -448,8 +448,7 @@ public class OlapScanNode extends ScanNode {
         String schemaHashStr = String.valueOf(schemaHash);
         long visibleVersion = physicalPartition.getVisibleVersion();
         String visibleVersionStr = String.valueOf(visibleVersion);
-        boolean fillDataCache =
-                olapTable.isCloudNativeTable() && ((LakeTable) olapTable).isEnableFillDataCache(partition);
+        boolean fillDataCache = olapTable.isEnableFillDataCache(partition);
         selectedPartitionNames.add(partition.getName());
         selectedPartitionVersions.add(visibleVersion);
 
@@ -1140,9 +1139,6 @@ public class OlapScanNode extends ScanNode {
                     normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleIds.get(0)).getSlots().stream()
                             .filter(s -> aggColumnNames.contains(s.getColumn().getName())).map(s -> s.getId())
                             .collect(Collectors.toSet());
-            int numTablets = Math.max(1, this.getScanTabletIds().size());
-            normalizer.setNumTablets(numTablets);
-            normalizer.setRowCountPerTablet(Math.max(1L, this.getCardinality() / numTablets));
             normalizer.setSlotsUseAggColumns(aggColumnSlotIds);
         } else {
             List<Long> partitionIds = getSelectedPartitionIds();

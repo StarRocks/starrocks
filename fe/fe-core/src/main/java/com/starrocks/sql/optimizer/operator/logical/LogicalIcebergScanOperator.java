@@ -59,7 +59,7 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
     }
 
     @Override
-    protected boolean noPartitionSelected() {
+    public boolean isEmptyOutputRows() {
         return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
     }
 

@@ -152,9 +152,15 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": block cache init successfully";
 
     // Start thrift server
-    auto thrift_server = BackendService::create<BackendService>(exec_env, config::be_port);
+    int thrift_port = config::be_port;
+    if (as_cn && config::thrift_port != 0) {
+        thrift_port = config::thrift_port;
+        LOG(WARNING) << "'thrift_port' is deprecated, please update be.conf to use 'be_port' instead!";
+    }
+    auto thrift_server = BackendService::create<BackendService>(exec_env, thrift_port);
+
     if (auto status = thrift_server->start(); !status.ok()) {
-        LOG(ERROR) << "Fail to start BackendService thrift server on port " << config::be_port << ": " << status;
+        LOG(ERROR) << "Fail to start BackendService thrift server on port " << thrift_port << ": " << status;
         shutdown_logging();
         exit(1);
     }
@@ -177,6 +183,15 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     if (config::brpc_num_threads != -1) {
         options.num_threads = config::brpc_num_threads;
     }
+    const auto lake_service_max_concurrency = config::lake_service_max_concurrency;
+    const auto service_name = "starrocks.lake.LakeService";
+    const auto methods = {"abort_txn",           "abort_compaction", "compact",          "drop_table",
+                          "delete_data",         "delete_tablet",    "get_tablet_stats", "publish_version",
+                          "publish_log_version", "vacuum",           "vacuum_full"};
+    for (auto method : methods) {
+        brpc_server->MaxConcurrencyOf(service_name, method) = lake_service_max_concurrency;
+    }
+
     if (auto ret = brpc_server->Start(config::brpc_port, &options); ret != 0) {
         LOG(ERROR) << "BRPC service did not start correctly, exiting errcoe: " << ret;
         shutdown_logging();
@@ -262,7 +277,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
 #if defined(WITH_CACHELIB) || defined(WITH_STARCACHE)
     if (config::block_cache_enable) {
-        BlockCache::instance()->shutdown();
+        (void)BlockCache::instance()->shutdown();
         LOG(INFO) << process_name << " exit step " << exit_step++ << ": block cache shutdown successfully";
     }
 #endif

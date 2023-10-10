@@ -79,13 +79,40 @@ struct ColumnPartialUpdateState {
     }
 };
 
+using ColumnUniquePtr = std::unique_ptr<Column>;
+
+// It contains multi segment's pk list, segment's id is between [start_idx, end_idx)
+struct BatchPKs {
+    ColumnUniquePtr upserts;
+    uint32_t start_idx;
+    uint32_t end_idx;
+    std::vector<uint64_t> src_rss_rowids;
+    // use offsets to record each segment's position in upserts and src_rss_rowids
+    // Last item of offsets is equal to upserts size
+    std::vector<size_t> offsets;
+
+    // if this idx is last of this BatchPKs
+    bool is_last(uint32_t idx) const { return idx == end_idx - 1; }
+
+    // get src_ress_rowids by idx, and set it to `target_src_rss_rowids`
+    void split_src_rss_rowids(uint32_t idx, std::vector<uint64_t>& target_src_rss_rowids) {
+        DCHECK(idx - start_idx + 1 < offsets.size());
+        target_src_rss_rowids.insert(target_src_rss_rowids.begin(), src_rss_rowids.begin() + offsets[idx - start_idx],
+                                     src_rss_rowids.begin() + offsets[idx - start_idx + 1]);
+    }
+
+    size_t upserts_size(uint32_t idx) const { return offsets[idx + 1] - offsets[idx]; }
+    size_t upserts_size() const { return upserts->size(); }
+};
+
+using BatchPKsPtr = std::shared_ptr<BatchPKs>;
+
 // `RowsetColumnUpdateState` is used for maintain the middle state when handling partial update in column mode.
 // It will be maintain in update_manager by `DynamicCache<string, RowsetColumnUpdateState>`, mapped from each rowset to it.
 // It is created when new rowset is generated, and released when rowset apply finished.
 // Because each tablet do apply in one thread, so it wouldn't be updated by multi threads.
 class RowsetColumnUpdateState {
 public:
-    using ColumnUniquePtr = std::unique_ptr<Column>;
     using DeltaColumnGroupPtr = std::shared_ptr<DeltaColumnGroup>;
     // rowid -> <update file id, update_rowids>
     using RowidsToUpdateRowids = std::map<uint32_t, std::pair<uint32_t, uint32_t>>;
@@ -112,8 +139,6 @@ public:
     Status finalize(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, PersistentIndexMetaPB& index_meta,
                     vector<std::pair<uint32_t, DelVectorPtr>>& delvecs, PrimaryIndex& index);
 
-    const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
-
     std::size_t memory_usage() const { return _memory_usage; }
 
     std::string to_string() const;
@@ -122,10 +147,13 @@ public:
 
     const std::map<uint32_t, DeltaColumnGroupPtr>& delta_column_groups() const { return _rssid_to_delta_column_group; }
 
-private:
-    Status _load_upserts(Rowset* rowset, uint32_t upsert_id);
+    // For UT test now
+    const std::vector<BatchPKsPtr>& upserts() const { return _upserts; }
 
-    void _release_upserts(uint32_t upsert_id);
+private:
+    Status _load_upserts(Rowset* rowset, uint32_t start_idx, uint32_t* end_idx);
+
+    void _release_upserts(uint32_t start_idx, uint32_t end_idx);
 
     Status _do_load(Tablet* tablet, Rowset* rowset);
 
@@ -137,17 +165,18 @@ private:
     Status _finalize_partial_update_state(Tablet* tablet, Rowset* rowset, EditVersion latest_applied_version,
                                           const PrimaryIndex& index);
 
-    Status _check_and_resolve_conflict(Tablet* tablet, uint32_t rowset_id, uint32_t segment_id,
+    Status _check_and_resolve_conflict(Tablet* tablet, uint32_t rowset_id, uint32_t start_idx, uint32_t end_idx,
                                        EditVersion latest_applied_version, const PrimaryIndex& index);
 
     StatusOr<std::unique_ptr<SegmentWriter>> _prepare_delta_column_group_writer(
             Rowset* rowset, const std::shared_ptr<TabletSchema>& tschema, uint32_t rssid, int64_t ver);
 
     // to build `_partial_update_states`
-    Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx, bool need_lock);
+    Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t start_idx, uint32_t end_idx,
+                                          bool need_lock);
 
     // rebuild src_rss_rowids and rss_rowid_to_update_rowid
-    Status _resolve_conflict(Tablet* tablet, uint32_t rowset_id, uint32_t segment_id,
+    Status _resolve_conflict(Tablet* tablet, uint32_t rowset_id, uint32_t start_idx, uint32_t end_idx,
                              EditVersion latest_applied_version, const PrimaryIndex& index);
 
     /// To reduce memory usage in primary index, we use 32-bit rssid as value.
@@ -158,11 +187,9 @@ private:
     // build the map from rssid to <RowsetId, segment id>
     Status _init_rowset_seg_id(Tablet* tablet);
 
-    Status _read_chunk_from_update(const RowidsToUpdateRowids& rowid_to_update_rowid,
-                                   std::vector<ChunkIteratorPtr>& update_iterators, std::vector<uint32_t>& rowids,
+    Status _read_chunk_from_update(const RowidsToUpdateRowids& rowid_to_update_rowid, const Schema& partial_schema,
+                                   Rowset* rowset, OlapReaderStatistics* stats, std::vector<uint32_t>& rowids,
                                    Chunk* result_chunk);
-
-    void _check_if_preload_column_mode_update_data(Rowset* rowset, MemTracker* update_mem_tracker);
 
     StatusOr<std::unique_ptr<SegmentWriter>> _prepare_segment_writer(Rowset* rowset,
                                                                      const TabletSchemaCSPtr& tablet_schema,
@@ -186,8 +213,7 @@ private:
     std::once_flag _load_once_flag;
     Status _status;
     // it contains primary key seriable column for each update segment file
-    std::vector<ColumnUniquePtr> _upserts;
-    // cache chunks read from update segment files
+    std::vector<BatchPKsPtr> _upserts;
     std::vector<ChunkPtr> _update_chunk_cache;
     // total memory usage in current state.
     // it will not record the temp memory usage.
@@ -202,9 +228,6 @@ private:
     // when generate delta column group finish, these fields will be filled
     bool _finalize_finished = false;
     std::map<uint32_t, DeltaColumnGroupPtr> _rssid_to_delta_column_group;
-
-    // if need to pre load update data from rowset
-    bool _enable_preload_column_mode_update_data = false;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetColumnUpdateState& o) {

@@ -24,7 +24,8 @@ namespace starrocks::pipeline {
 Status ExchangeParallelMergeSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     auto* factory = down_cast<ExchangeParallelMergeSourceOperatorFactory*>(_factory);
-    _stream_recvr = factory->get_stream_recvr(state, _unique_metrics);
+    _stream_recvr = factory->get_stream_recvr(state);
+    _stream_recvr->bind_profile(_driver_sequence, _unique_metrics.get());
     _merger = factory->get_merge_path_merger(state);
     _merger->bind_profile(_driver_sequence, _unique_metrics.get());
     return Status::OK();
@@ -82,14 +83,12 @@ void ExchangeParallelMergeSourceOperatorFactory::close(RuntimeState* state) {
     OperatorFactory::close(state);
 }
 
-DataStreamRecvr* ExchangeParallelMergeSourceOperatorFactory::get_stream_recvr(
-        RuntimeState* state, const std::shared_ptr<RuntimeProfile>& profile) {
+DataStreamRecvr* ExchangeParallelMergeSourceOperatorFactory::get_stream_recvr(RuntimeState* state) {
     if (_stream_recvr == nullptr) {
         auto query_statistic_recv = state->query_recv();
         _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
                 state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
-                config::exchg_node_buffer_size_bytes, profile, true, query_statistic_recv, true,
-                DataStreamRecvr::INVALID_DOP_FOR_NON_PIPELINE_LEVEL_SHUFFLE, true);
+                config::exchg_node_buffer_size_bytes, true, query_statistic_recv, true, _degree_of_parallelism, true);
     }
     return _stream_recvr.get();
 }

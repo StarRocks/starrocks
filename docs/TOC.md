@@ -25,7 +25,11 @@
         + [Deploy StarRocks with Operator](./deployment/sr_operator.md)
         + [Deploy StarRocks with Helm](./deployment/helm.md)
       + [Deploy StarRocks on AWS](./deployment/starrocks_on_aws.md)
-    + [Deploy and use shared-data StarRocks](./deployment/deploy_shared_data.md)
+    + Deploy shared-data StarRocks
+      + [shared-data StarRocks with S3](./deployment/shared_data/s3.md)
+      + [shared-data StarRocks with GCS](./deployment/shared_data/gcs.md)
+      + [shared-data StarRocks with MinIO](./deployment/shared_data/minio.md)
+      + [shared-data StarRocks with Azure Blob Storage](./deployment/shared_data/azure.md)
   + Manage
     + [Post-deployment setup](./deployment/post_deployment_setup.md)
     + [Upgrade StarRocks](./deployment/upgrade.md)
@@ -680,6 +684,7 @@
       + [ucase](./sql-reference/sql-functions/string-functions/ucase.md)
       + [unhex](./sql-reference/sql-functions/string-functions/unhex.md)
       + [upper](./sql-reference/sql-functions/string-functions/upper.md)
+      + [url_extract_host](./sql-reference/sql-functions/string-functions/url_extract_host.md)
       + [url_decode](./sql-reference/sql-functions/string-functions/url_decode.md)
       + [url_encode](./sql-reference/sql-functions/string-functions/url_encode.md)
     + Pattern Matching Functions
@@ -745,6 +750,7 @@
 + Benchmark
   + [SSB Benchmark](./benchmarking/SSB_Benchmarking.md)
   + [TPC-H Benchmark](./benchmarking/TPC-H_Benchmarking.md)
+  + [TPC-DS Benchmark](./benchmarking/TPC_DS_Benchmark.md)
 + Developers
   + [Contribute to StarRocks](./developers/How_to_Contribute.md)
   + Code Style Guides

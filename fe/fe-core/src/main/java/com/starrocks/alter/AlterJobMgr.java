@@ -462,8 +462,8 @@ public class AlterJobMgr {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
 
-            if (!table.isOlapOrCloudNativeTable()) {
-                throw new DdlException("Do not support alter non-native table[" + tableName + "]");
+            if (!(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
+                throw new DdlException("Do not support alter non-native table/materialized-view[" + tableName + "]");
             }
             olapTable = (OlapTable) table;
 
@@ -474,6 +474,10 @@ public class AlterJobMgr {
             if (currentAlterOps.hasSchemaChangeOp()) {
                 // if modify storage type to v2, do schema change to convert all related tablets to segment v2 format
                 schemaChangeHandler.process(alterClauses, db, olapTable);
+                isSynchronous = false;
+            } else if (currentAlterOps.contains(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC) &&
+                    olapTable.isCloudNativeTable()) {
+                schemaChangeHandler.processLakeTableAlterMeta(alterClauses, db, olapTable);
                 isSynchronous = false;
             } else if (currentAlterOps.hasRollupOp()) {
                 materializedViewHandler.process(alterClauses, db, olapTable);

@@ -113,7 +113,7 @@ The following table describes the parameter you need to configure in `MetastoreP
 | Parameter           | Required | Description                                                  |
 | ------------------- | -------- | ------------------------------------------------------------ |
 | hive.metastore.type | Yes      | The type of metastore that you use for your Hudi cluster. Set the value to `hive`. |
-| hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+| hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 
 ##### AWS Glue
 
@@ -225,8 +225,8 @@ The following table describes the parameters you need to configure in `StorageCr
 
 | Parameter                        | Required | Description                                                  |
 | -------------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.enable_ssl                | Yes      | Specifies whether to enable SSL connection.<br>Valid values: `true` and `false`. Default value: `true`. |
-| aws.s3.enable_path_style_access  | Yes      | Specifies whether to enable path-style access.<br>Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`.<br>Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. |
+| aws.s3.enable_ssl                | Yes      | Specifies whether to enable SSL connection.<br />Valid values: `true` and `false`. Default value: `true`. |
+| aws.s3.enable_path_style_access  | Yes      | Specifies whether to enable path-style access.<br />Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`.<br />Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. |
 | aws.s3.endpoint                  | Yes      | The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3. |
 | aws.s3.access_key                | Yes      | The access key of your IAM user. |
 | aws.s3.secret_key                | Yes      | The secret key of your IAM user. |
@@ -445,6 +445,20 @@ However, if the frequency of data updates in Hudi is high, you can tune these pa
 ### Examples
 
 The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_catalog_glue`, depending on the type of metastore you use, to query data from your Hudi cluster.
+
+#### HDFS
+
+If you use HDFS as storage, run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG hudi_catalog_hms
+PROPERTIES
+(
+    "type" = "hudi",
+    "hive.metastore.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+);
+```
 
 #### AWS S3
 
@@ -752,6 +766,25 @@ You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-m
 SHOW CREATE CATALOG hudi_catalog_glue;
 ```
 
+## Switch to a Hudi Catalog and a database in it
+
+You can use one of the following methods to switch to a Hudi catalog and a database in it:
+
+- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to specify a Hudi catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+
+  ```SQL
+  -- Switch to a specified catalog in the current session:
+  SET CATALOG <catalog_name>
+  -- Specify the active database in the current session:
+  USE <db_name>
+  ```
+
+- Directly use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to switch to a Hudi catalog and a database in it:
+
+  ```SQL
+  USE <catalog_name>.<db_name>
+  ```
+
 ## Drop a Hudi catalog
 
 You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop an external catalog.
@@ -786,23 +819,7 @@ You can use one of the following syntaxes to view the schema of a Hudi table:
    SHOW DATABASES FROM <catalog_name>
    ```
 
-2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to switch to the destination catalog in the current session:
-
-    ```SQL
-    SET CATALOG <catalog_name>;
-    ```
-
-    Then, use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify the active database in the current session:
-
-    ```SQL
-    USE <db_name>;
-    ```
-
-    Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly specify the active database in the destination catalog:
-
-    ```SQL
-    USE <catalog_name>.<db_name>;
-    ```
+2. [Switch to a Hudi Catalog and a database in it](#switch-to-a-hudi-catalog-and-a-database-in-it).
 
 3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
 

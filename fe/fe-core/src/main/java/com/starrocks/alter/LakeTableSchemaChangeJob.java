@@ -42,9 +42,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarMgrMetaSyncer;
@@ -194,9 +194,15 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
 
         for (long shadowIdxId : indexIdMap.keySet()) {
+            long orgIndexId = indexIdMap.get(shadowIdxId);
             table.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId), indexSchemaMap.get(shadowIdxId), 0, 0,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
                     table.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyIdxes);
+            MaterializedIndexMeta orgIndexMeta = table.getIndexMetaByIndexId(orgIndexId);
+            Preconditions.checkNotNull(orgIndexMeta);
+            MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(shadowIdxId);
+            Preconditions.checkNotNull(indexMeta);
+            rebuildMaterializedIndexMeta(orgIndexMeta, indexMeta);
         }
 
         table.rebuildFullSchema();

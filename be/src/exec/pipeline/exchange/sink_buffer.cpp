@@ -157,12 +157,10 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     COUNTER_SET(bytes_sent_counter, _bytes_sent);
     COUNTER_SET(request_sent_counter, _request_sent);
 
-    if (_bytes_enqueued - _bytes_sent > 0) {
-        auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
-        auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
-        COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
-        COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
-    }
+    auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
+    auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
+    COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
+    COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
 
     profile->add_derived_counter(
             "NetworkBandwidth", TUnit::BYTES_PER_SECOND,
@@ -382,10 +380,10 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                 LOG(WARNING) << fmt::format("transmit chunk rpc failed:{}, msg:{}", print_id(ctx.instance_id),
                                             status.message());
             } else {
-                _try_to_send_rpc(ctx.instance_id, [&]() {
+                static_cast<void>(_try_to_send_rpc(ctx.instance_id, [&]() {
                     _update_network_time(ctx.instance_id, ctx.send_timestamp, result.receiver_post_process_time());
                     _process_send_window(ctx.instance_id, ctx.sequence);
-                });
+                }));
             }
             --_total_in_flight_rpc;
         });

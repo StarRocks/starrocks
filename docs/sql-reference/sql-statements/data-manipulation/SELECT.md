@@ -701,7 +701,7 @@ Examples:
     SELECT name FROM table WHERE salary = (SELECT MAX(salary) FROM table);
     ```
 
-2. Uncorrelated scalar quantum queries with predicates >, <etc. For example, output information about people who are paid more than average.
+2. Uncorrelated scalar quantum queries with predicates `>`, `<` etc. For example, output information about people who are paid more than average.
 
     ```sql
     SELECT name FROM table WHERE salary > (SELECT AVG(salary) FROM table);
@@ -779,11 +779,11 @@ Example:
 select c1 from t1 where month between 1 and 6;
 ```
 
-#### Comparison operator
+#### Comparison operators
 
-The comparison operator is used to determine whether columns and columns are equal or to sort them. =,!=, >= All data types are available.
+Comparison operators are used to compare two values. `=`, `!=`, `>=` apply to all data types.
 
-The `<>` and `!=` operators indicate that value `a` is not equal to value `b`.
+The `<>` and `!=` operators are equivalent, which indicate that two values are not equal.
 
 #### In Operator
 

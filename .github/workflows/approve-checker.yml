@@ -1,0 +1,93 @@
+name: REVIEW CHECKER
+
+on:
+
+  pull_request_review:
+    types:
+      - submitted
+
+permissions:
+  checks: write
+  actions: write
+  contents: write
+  deployments: write
+  discussions: write
+  issues: write
+  packages: write
+  pages: write
+  pull-requests: write
+  repository-projects: write
+  security-events: write
+  statuses: write
+
+jobs:
+
+  info:
+    if: >
+      (github.event.pull_request && github.event.requested_team) ||
+      (github.event.pull_request.requested_teams && github.event.review && github.event.review.state == 'approved')
+    runs-on: ubuntu-latest
+    env:
+      REPO: ${{ github.repository }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      LABELS: ${{ steps.label_info.outputs.labels }}
+      PR_NUMBER: ${{ steps.pr.outputs.PR_NUMBER }}
+
+    steps:
+      - name: PR
+        id: pr
+        run: |
+          if [[ "${{ github.event.number }}" != "" ]]; then
+            echo "PR_NUMBER=${{ github.event.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: LABELS
+        id: label_info
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.PR_NUMBER }}
+        run: |
+          labels=$(gh pr view ${PR_NUMBER} -R ${REPO} --json labels -q '.labels[].name')
+          echo "labels<<EOF" >> $GITHUB_OUTPUT
+          echo "$labels" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          cat $GITHUB_OUTPUT
+
+  meta-review:
+    needs: info
+    runs-on: [ self-hosted, normal ]
+    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'META-REVIEW')
+    name: META-REVIEW
+
+    env:
+      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
+      REPO: ${{ github.repository }}
+      TEAM: meta-committer
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: META-REVIEW
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          ./scripts/check-approve.sh
+
+  proto-review:
+    needs: info
+    runs-on: [ self-hosted, normal ]
+    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'PROTO-REVIEW')
+    name: PROTO-REVIEW
+
+    env:
+      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
+      REPO: ${{ github.repository }}
+      TEAM: proto-team
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: PROTO-REVIEW
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          ./scripts/check-approve.sh

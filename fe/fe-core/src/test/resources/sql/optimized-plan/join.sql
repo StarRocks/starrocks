@@ -205,28 +205,19 @@ FULL OUTER JOIN (join-predicate [1: v1 = 5: v5 AND false] post-join-predicate [n
 [sql]
 select v1,v2,v3,v4 from t0 left outer join t1 on v1=v5 and 1>2
 [result]
-LEFT OUTER JOIN (join-predicate [1: v1 = 5: v5] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    EXCHANGE SHUFFLE[5]
-        VALUES
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]
 select v1,v2,v3 from t0 left semi join t1 on v1=v5 and 1>2
 [result]
-LEFT SEMI JOIN (join-predicate [1: v1 = 5: v5] post-join-predicate [null])
-    VALUES
-    EXCHANGE BROADCAST
-        SCAN (columns[5: v5] predicate[5: v5 IS NOT NULL])
+VALUES
 [end]
 
 [sql]
 select v1,v2,v3,v4 from t0 inner join t1 on v1=v5 and 1>2
 [result]
-CROSS JOIN (join-predicate [null] post-join-predicate [null])
-    VALUES
-    EXCHANGE BROADCAST
-        VALUES
+VALUES
 [end]
 
 [sql]
@@ -253,10 +244,7 @@ SELECT COUNT(*) FROM  t0 LEFT JOIN t1 ON v1 = v4 AND ((NULL)-(NULL)) >= ((NULL)%
 AGGREGATE ([GLOBAL] aggregate [{7: count=count(7: count)}] group by [[]] having [null]
     EXCHANGE GATHER
         AGGREGATE ([LOCAL] aggregate [{7: count=count()}] group by [[]] having [null]
-            LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
-                SCAN (columns[1: v1] predicate[null])
-                EXCHANGE SHUFFLE[4]
-                    VALUES
+            SCAN (columns[1: v1] predicate[null])
 [end]
 [sql]
 select * from (select abs(v1) as t from t0 ) ta left join (select abs(v4) as t from t1 group by t) tb on ta.t = tb.t

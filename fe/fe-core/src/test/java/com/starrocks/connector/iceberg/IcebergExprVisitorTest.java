@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -48,7 +49,10 @@ public class IcebergExprVisitorTest {
                     Types.NestedField.required(3, "k3", Types.DateType.get()),
                     Types.NestedField.required(4, "k4", Types.TimestampType.withoutZone()),
                     Types.NestedField.required(5, "k5", Types.BooleanType.get()),
-                    Types.NestedField.required(6, "k6", Types.StringType.get()));
+                    Types.NestedField.required(6, "k6", Types.StringType.get()),
+                    Types.NestedField.required(7, "k7", Types.LongType.get()),
+                    Types.NestedField.required(8, "k8", Types.FloatType.get()),
+                    Types.NestedField.required(9, "k9", Types.DoubleType.get()));
 
     private static final ColumnRefOperator K1 = new ColumnRefOperator(3, Type.INT, "k1", true, false);
     private static final ColumnRefOperator K2 = new ColumnRefOperator(4, Type.INT, "k2", true, false);
@@ -56,6 +60,12 @@ public class IcebergExprVisitorTest {
     private static final ColumnRefOperator K4 = new ColumnRefOperator(6, Type.DATETIME, "k4", true, false);
     private static final ColumnRefOperator K5 = new ColumnRefOperator(7, Type.BOOLEAN, "k5", true, false);
     private static final ColumnRefOperator K6 = new ColumnRefOperator(8, Type.STRING, "k6", true, false);
+
+    private static final ColumnRefOperator K7 = new ColumnRefOperator(9, Type.BIGINT, "k7", true, false);
+
+    private static final ColumnRefOperator K8 = new ColumnRefOperator(10, Type.FLOAT, "k8", true, false);
+
+    private static final ColumnRefOperator K9 = new ColumnRefOperator(11, Type.DOUBLE, "k9", true, false);
 
     @Test
     public void testToIcebergExpression() {
@@ -186,5 +196,91 @@ public class IcebergExprVisitorTest {
         expectedExpr = Expressions.or(expression1, expression2);
         Assert.assertEquals("Generated or expression should be correct",
                 expectedExpr.toString(), convertedExpr.toString());
+    }
+
+    @Test
+    public void testToIcebergCastExpression() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        Expression convertedExpr;
+        Expression expectedExpr;
+
+        // cast string column to date
+        ConstantOperator value = ConstantOperator.createDate(LocalDate.parse("2022-11-11").atTime(0, 0, 0, 0));
+        CastOperator cast = new CastOperator(Type.DATE, K6);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, cast, value)), context);
+        expectedExpr = Expressions.equal("k6", "2022-11-11");
+        Assert.assertEquals("Generated equal expression should be correct",
+                expectedExpr.toString(), convertedExpr.toString());
+
+        // cast date column to string
+        value = ConstantOperator.createVarchar("2022-11-11");
+        cast = new CastOperator(Type.VARCHAR, K3);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.LT, cast, value)), context);
+        long epochDay = LocalDate.parse("2022-11-11").toEpochDay();
+        expectedExpr = Expressions.lessThan("k3", epochDay);
+        Assert.assertEquals("Generated lessThan expression should be correct",
+                expectedExpr.toString(), convertedExpr.toString());
+
+        // cast string column to int
+        // don't support cast string to int, different comparator
+        value = ConstantOperator.createInt(11);
+        cast = new CastOperator(Type.INT, K6);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.LT, cast, value)), context);
+        Assert.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+
+        // don't support cast float to varchar, different comparator
+        value = ConstantOperator.createVarchar("11.11");
+        cast = new CastOperator(Type.VARCHAR, K8);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.LT, cast, value)), context);
+        Assert.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+
+        // don't support cast double to varchar, different comparator
+        value = ConstantOperator.createVarchar("11.11");
+        cast = new CastOperator(Type.VARCHAR, K9);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.LT, cast, value)), context);
+        Assert.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+
+        // 11.11 -> LONG throw exception
+        value = ConstantOperator.createVarchar("11.11");
+        cast = new CastOperator(Type.VARCHAR, K7);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.LT, cast, value)), context);
+        Assert.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+
+        // time cast throw exception
+        value = ConstantOperator.createTime(124578990d);
+        cast = new CastOperator(Type.TIME, K4);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, cast, value)), context);
+        Assert.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+
+        // LONG -> char
+        value = ConstantOperator.createBigint(11);
+        cast = new CastOperator(Type.BIGINT, K6);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, cast, value)), context);
+        Assert.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+
+        // Double -> char
+        value = ConstantOperator.createDouble(11.11);
+        cast = new CastOperator(Type.DOUBLE, K6);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, cast, value)), context);
+        Assert.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+
+        // Float -> char
+        value = ConstantOperator.createFloat(11.11);
+        cast = new CastOperator(Type.FLOAT, K6);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, cast, value)), context);
+        Assert.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+
     }
 }
