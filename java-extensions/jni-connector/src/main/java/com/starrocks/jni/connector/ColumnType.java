@@ -25,9 +25,6 @@ public class ColumnType {
     public static final String FIELD_0_NAME = FIELD_PREFIX + "0";
     public static final String FIELD_1_NAME = FIELD_PREFIX + "1";
 
-    public static final int MAX_DECIMAL32_PRECISION = 9;
-    public static final int MAX_DECIMAL64_PRECISION = 18;
-
     public enum TypeValue {
         UNKNOWN,
         BYTE,
@@ -61,7 +58,6 @@ public class ColumnType {
     List<String> childNames;
     List<ColumnType> childTypes;
     List<Integer> fieldIndex;
-    int precision = -1;
     int scale = -1;
     private static final Map<String, TypeValue> PRIMITIVE_TYPE_VALUE_MAPPING = new HashMap<>();
     private static final Map<TypeValue, Integer> PRIMITIVE_TYPE_VALUE_SIZE = new HashMap<>();
@@ -115,13 +111,11 @@ public class ColumnType {
         }
 
         int indexOf(char... args) {
-            if (!s.startsWith("decimal")) {
-                for (int i = offset; i < s.length(); i++) {
-                    char c = s.charAt(i);
-                    for (char ch : args) {
-                        if (c == ch) {
-                            return i;
-                        }
+            for (int i = offset; i < s.length(); i++) {
+                char c = s.charAt(i);
+                for (char ch : args) {
+                    if (c == ch) {
+                        return i;
                     }
                 }
             }
@@ -176,7 +170,12 @@ public class ColumnType {
     }
 
     private void parse(StringScanner scanner) {
-        int p = scanner.indexOf('<', ',', '>');
+        int p;
+        if (scanner.s.startsWith("decimal")) {
+            p = scanner.s.length();
+        } else {
+            p = scanner.indexOf('<', ',', '>');
+        }
         String t = scanner.substr(p);
         scanner.moveTo(p);
         // assume there is no blank char in `type`.
@@ -207,34 +206,6 @@ public class ColumnType {
             }
             break;
             default: {
-                // convert decimal(x,y) to decimal
-                if (t.startsWith("decimal")) {
-                    int s = t.indexOf('(');
-                    int e = t.indexOf(')');
-                    if (s != -1 && e != -1) {
-                        String[] ps = t.substring(s + 1, e).split(",");
-                        precision = Integer.parseInt(ps[0].trim());
-                        scale = Integer.parseInt(ps[1].trim());
-                        if (t.startsWith("decimalv2")) {
-                            typeValue = TypeValue.DECIMALV2;
-                        } else if (t.startsWith("decimal32")) {
-                            typeValue = TypeValue.DECIMAL32;
-                        } else if (t.startsWith("decimal64")) {
-                            typeValue = TypeValue.DECIMAL64;
-                        } else if (t.startsWith("decimal128")) {
-                            typeValue = TypeValue.DECIMAL128;
-                        } else {
-                            if (precision <= MAX_DECIMAL32_PRECISION) {
-                                typeValue = TypeValue.DECIMAL32;
-                            } else if (precision <= MAX_DECIMAL64_PRECISION) {
-                                typeValue = TypeValue.DECIMAL64;
-                            } else {
-                                typeValue = TypeValue.DECIMAL128;
-                            }
-                        }
-                    }
-                    return;
-                }
                 typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
             }
         }
@@ -414,8 +385,8 @@ public class ColumnType {
         }
     }
 
-    public int getPrecision() {
-        return precision;
+    public void setScale(int scale) {
+        this.scale = scale;
     }
 
     public int getScale() {

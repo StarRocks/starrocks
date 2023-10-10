@@ -16,6 +16,7 @@ package com.starrocks.hudi.reader;
 
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
+import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.serde2.objectinspector.ListObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.MapObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -156,6 +157,6 @@ public class HudiColumnValue implements ColumnValue {
 
     @Override
     public BigDecimal getDecimal() {
-        return (BigDecimal) inspectObject();
+        return ((HiveDecimal) inspectObject()).bigDecimalValue();
     }
 }
