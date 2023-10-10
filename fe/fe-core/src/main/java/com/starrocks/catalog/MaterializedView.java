@@ -115,6 +115,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         UNKNOWN
     }
 
+    @Override
+    public Boolean getUseLightSchemaChange() {
+        return false;
+    }
+
+    @Override
+    public void setUseLightSchemaChange(boolean useLightSchemaChange) {}
+
     public static class BasePartitionInfo {
 
         @SerializedName(value = "id")
