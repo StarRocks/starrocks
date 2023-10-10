@@ -72,6 +72,7 @@ import com.starrocks.thrift.TTableType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.Snapshot;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -89,6 +90,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.scheduler.PartitionBasedMvRefreshProcessor.ICEBERG_ALL_PARTITION;
 
 /**
  * meta structure for materialized view
@@ -718,10 +721,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName());
-            long currentVersion = baseTable.getNativeTable().currentSnapshot().timestampMillis();
+            Snapshot snapshot = baseTable.getNativeTable().currentSnapshot();
+            long currentVersion = snapshot != null ? snapshot.timestampMillis() : -1;
 
             Map<String, BasePartitionInfo> baseTableInfoVisibleVersionMap = getBaseTableRefreshInfo(baseTableInfo);
-            BasePartitionInfo basePartitionInfo = baseTableInfoVisibleVersionMap.get("ALL");
+            BasePartitionInfo basePartitionInfo = baseTableInfoVisibleVersionMap.get(ICEBERG_ALL_PARTITION);
             if (basePartitionInfo == null) {
                 baseTable.setRefreshSnapshotTime(currentVersion);
                 return new HashSet<>(partitionNames);
