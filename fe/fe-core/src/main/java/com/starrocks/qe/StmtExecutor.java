@@ -1931,7 +1931,7 @@ public class StmtExecutor {
                     errMsg = coord.getExecStatus().getErrorCodeString();
                 }
                 LOG.warn("insert failed: {}", errMsg);
-                ErrorReport.reportDdlException(errMsg, ErrorCode.ERR_FAILED_WHEN_INSERT);
+                ErrorReport.reportDdlException("%s", ErrorCode.ERR_FAILED_WHEN_INSERT, errMsg);
             }
 
             LOG.debug("delta files is {}", coord.getDeltaUrls());
@@ -2124,7 +2124,7 @@ public class StmtExecutor {
             } catch (Exception abortTxnException) {
                 LOG.warn("errors when cancel insert load job {}", jobId);
             }
-            throw new UserException(t.getMessage());
+            throw new UserException(t.getMessage(), t);
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
             if (insertError) {
