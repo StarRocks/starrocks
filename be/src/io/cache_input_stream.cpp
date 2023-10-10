@@ -205,6 +205,7 @@ Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count)
 }
 
 StatusOr<int64_t> CacheInputStream::read(void* data, int64_t count) {
+    count = std::min(_size - _offset, count);
     RETURN_IF_ERROR(read_at_fully(_offset, data, count));
     _offset += count;
     return count;
