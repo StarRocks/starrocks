@@ -2263,6 +2263,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         assertContains(plan, "  9:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [4: t1a, VARCHAR, true] = [16: cast, VARCHAR(1048576), false]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 1, build_expr = (16: cast), remote = true\n" +
                 "  |  output columns: 1, 4\n" +
                 "  |  cardinality: 9000\n" +
                 "  |  \n" +

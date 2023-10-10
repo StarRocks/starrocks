@@ -316,6 +316,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
     public static final String GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE = "global_runtime_filter_build_max_size";
+
+    public static final String GLOBAL_RUNTIME_FILTER_BUILD_MIN_SIZE = "global_runtime_filter_build_min_size";
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE = "global_runtime_filter_probe_min_size";
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY =
             "global_runtime_filter_probe_min_selectivity";
@@ -968,6 +970,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // otherwise would decide based on the cardinality
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE, flag = VariableMgr.INVISIBLE)
     private long globalRuntimeFilterBuildMaxSize = 64L * 1024L * 1024L;
+
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_BUILD_MIN_SIZE, flag = VariableMgr.INVISIBLE)
+    private long globalRuntimeFilterBuildMinSize = 128L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE, flag = VariableMgr.INVISIBLE)
     private long globalRuntimeFilterProbeMinSize = 100L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
@@ -1855,6 +1860,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getGlobalRuntimeFilterBuildMaxSize() {
         return globalRuntimeFilterBuildMaxSize;
+    }
+
+    public void setGlobalRuntimeFilterBuildMinSize(long value) {
+        this.globalRuntimeFilterBuildMinSize = value;
+    }
+
+    public long getGlobalRuntimeFilterBuildMinSize() {
+        return globalRuntimeFilterBuildMinSize;
     }
 
     public long getGlobalRuntimeFilterProbeMinSize() {

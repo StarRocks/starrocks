@@ -220,9 +220,11 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "join (select * from t1 join t3 on t1.v4 = t3.v10 join t0 on t1.v4 = t0.v2 join t2 on t1.v5 = t2.v8) as a  " +
                 "on t1.v5 = a.v8 ";
         String planFragment = getCostExplain(sql);
-        Assert.assertTrue(planFragment, planFragment.contains("22:HASH JOIN\n" +
+        Assert.assertTrue(planFragment, planFragment.contains("  22:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [13: v10, BIGINT, true] = [10: v4, BIGINT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 5, build_expr = (10: v4), remote = false\n" +
                 "  |  output columns: 7\n" +
                 "  |  cardinality: 56250000"));
 
