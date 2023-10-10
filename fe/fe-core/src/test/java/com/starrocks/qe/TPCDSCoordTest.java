@@ -92,9 +92,14 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
                 execPlan.getDescTbl().toThrift());
         coord.prepareExec();
 
+<<<<<<< HEAD
         PlanFragmentId topFragmentId = coord.getFragments().get(0).getFragmentId();
         CoordinatorPreprocessor.FragmentExecParams params = coord.getFragmentExecParamsMap().get(topFragmentId);
         Assert.assertEquals(params.runtimeFilterParams.id_to_prober_params.get(1).size(), 15);
+=======
+        ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
+        Assert.assertEquals(15, execFragment.getRuntimeFilterParams().id_to_prober_params.get(1).size());
+>>>>>>> 18cd2073b8 ([Refactor] Enhance runtime filter push-down (#32178))
     }
 
     @Test
