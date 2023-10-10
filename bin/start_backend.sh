@@ -71,7 +71,8 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-if [ "$JEMALLOC_CONF" = "" ]; then
+# Set JEMALLOC_CONF environment variable if not already set
+if [[ -z "$JEMALLOC_CONF" ]]; then
     export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true"
 else
     echo "JEMALLOC_CONF from conf is '$JEMALLOC_CONF'"
