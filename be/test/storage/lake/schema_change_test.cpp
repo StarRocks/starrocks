@@ -956,7 +956,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_sortkey_reorder";
+    constexpr static const char* const kTestGroupPath = "test_lake_sortkey_reorder_1";
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -1182,7 +1182,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_sortkey_reorder";
+    constexpr static const char* const kTestGroupPath = "test_lake_sortkey_reorder_2";
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -1406,7 +1406,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_sortkey_reorder";
+    constexpr static const char* const kTestGroupPath = "test_lake_sortkey_reorder_3";
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
