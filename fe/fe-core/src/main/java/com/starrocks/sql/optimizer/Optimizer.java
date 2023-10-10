@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
+import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
@@ -358,6 +359,8 @@ public class Optimizer {
             if (cteContext.needPushLimit()) {
                 ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.MERGE_LIMIT);
             }
+
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new ForceCTEReuseRule());
         }
 
         if (!optimizerConfig.isRuleDisable(TF_MATERIALIZED_VIEW)
