@@ -34,10 +34,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 public class IcebergHadoopCatalogTest {
     @Test
     public void testNewIcebergHadoopCatalog(@Mocked HadoopCatalog hadoopCatalog) {
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> new IcebergHadoopCatalog("catalog", new Configuration(), Map.of()));
-        assertEquals(e.getMessage(), "Iceberg hadoop catalog must set warehouse location (\"iceberg.catalog.warehouse\" = \"s3://path/to/warehouse\").");
-
-        assertDoesNotThrow(() -> new IcebergHadoopCatalog("catalog", new Configuration(), Map.of("iceberg.catalog.warehouse", "s3://path/to/warehouse")));
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> new IcebergHadoopCatalog("catalog",
+                new Configuration(), Map.of()));
+        assertEquals(e.getMessage(), "Iceberg hadoop catalog must set warehouse location " +
+                "(\"iceberg.catalog.warehouse\" = \"s3://path/to/warehouse\").");
+        assertDoesNotThrow(() -> new IcebergHadoopCatalog("catalog", new Configuration(),
+                Map.of("iceberg.catalog.warehouse", "s3://path/to/warehouse")));
     }
 
 
