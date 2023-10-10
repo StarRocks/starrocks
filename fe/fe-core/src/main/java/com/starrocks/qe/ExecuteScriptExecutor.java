@@ -51,9 +51,12 @@ public class ExecuteScriptExecutor {
     }
 
     public static ShowResultSet execute(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
+<<<<<<< HEAD
         if (!"127.0.0.1".equals(ctx.getRemoteIP())) {
             throw new UserException("script can only be executed on localhost");
         }
+=======
+>>>>>>> 7f958453a0 ([Refactor] Remove limitation of groovy script (#31500))
         if (stmt.isFrontendScript()) {
             return executeFrontendScript(stmt, ctx);
         } else {
