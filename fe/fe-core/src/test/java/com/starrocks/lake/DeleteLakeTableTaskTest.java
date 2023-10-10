@@ -19,7 +19,7 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Partition;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -42,7 +42,7 @@ public class DeleteLakeTableTaskTest {
 
     @Test
     public void test(@Mocked LakeTable table,
-                     @Mocked PhysicalPartition partition,
+                     @Mocked Partition partition,
                      @Mocked MaterializedIndex index,
                      @Mocked LakeTablet tablet,
                      @Mocked LakeService lakeService) throws StarClientException {
@@ -64,7 +64,7 @@ public class DeleteLakeTableTaskTest {
 
         new Expectations() {
             {
-                table.getAllPhysicalPartitions();
+                table.getAllPartitions();
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
                 maxTimes = 1;
@@ -97,7 +97,7 @@ public class DeleteLakeTableTaskTest {
 
     @Test
     public void testNoTablet(@Mocked LakeTable table,
-                     @Mocked PhysicalPartition partition,
+                     @Mocked Partition partition,
                      @Mocked MaterializedIndex index,
                      @Mocked LakeTablet tablet,
                      @Mocked LakeService lakeService) {
@@ -105,7 +105,7 @@ public class DeleteLakeTableTaskTest {
 
         new Expectations() {
             {
-                table.getAllPhysicalPartitions();
+                table.getAllPartitions();
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
                 maxTimes = 1;
@@ -128,7 +128,7 @@ public class DeleteLakeTableTaskTest {
 
     @Test
     public void testNoAliveNode(@Mocked LakeTable table,
-                               @Mocked PhysicalPartition partition,
+                               @Mocked Partition partition,
                                @Mocked MaterializedIndex index,
                                @Mocked LakeTablet tablet,
                                @Mocked LakeService lakeService) throws StarClientException {
@@ -143,7 +143,7 @@ public class DeleteLakeTableTaskTest {
 
         new Expectations() {
             {
-                table.getAllPhysicalPartitions();
+                table.getAllPartitions();
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
                 maxTimes = 1;
@@ -171,7 +171,7 @@ public class DeleteLakeTableTaskTest {
 
     @Test
     public void testGetShardInfoFailed(@Mocked LakeTable table,
-                     @Mocked PhysicalPartition partition,
+                     @Mocked Partition partition,
                      @Mocked MaterializedIndex index,
                      @Mocked LakeTablet tablet,
                      @Mocked LakeService lakeService) throws StarClientException {
@@ -179,7 +179,7 @@ public class DeleteLakeTableTaskTest {
 
         new Expectations() {
             {
-                table.getAllPhysicalPartitions();
+                table.getAllPartitions();
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
                 maxTimes = 1;
@@ -207,7 +207,7 @@ public class DeleteLakeTableTaskTest {
 
     @Test
     public void testRPCFailed(@Mocked LakeTable table,
-                     @Mocked PhysicalPartition partition,
+                     @Mocked Partition partition,
                      @Mocked MaterializedIndex index,
                      @Mocked LakeTablet tablet,
                      @Mocked LakeService lakeService) throws StarClientException {
@@ -229,7 +229,7 @@ public class DeleteLakeTableTaskTest {
 
         new Expectations() {
             {
-                table.getAllPhysicalPartitions();
+                table.getAllPartitions();
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
                 maxTimes = 1;

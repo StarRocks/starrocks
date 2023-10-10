@@ -46,17 +46,6 @@ class DeleteLakeTableTask implements Runnable {
     // If failed, manual removal of directories may be required by user.
     @Override
     public void run() {
-<<<<<<< HEAD
-        Tablet anyTablet = null;
-        Set<Long> tabletIds = new HashSet<>();
-        for (Partition partition : table.getAllPartitions()) {
-            List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
-            for (MaterializedIndex materializedIndex : allIndices) {
-                for (Tablet tablet : materializedIndex.getTablets()) {
-                    tabletIds.add(tablet.getId());
-                    anyTablet = tablet;
-                }
-=======
         Map<String, LakeTablet> storagePathToTablet = findUniquePartitionDirectories();
         // TODO: If the remote storage is HDFS instead of object storage, after deleting
         //  all partition directories, an empty table directory may be left, which is the
@@ -72,7 +61,7 @@ class DeleteLakeTableTask implements Runnable {
     // multiple partitions share it.
     private Map<String, LakeTablet> findUniquePartitionDirectories() {
         Map<String, LakeTablet> storagePathToTablet = new HashMap<>();
-        for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+        for (Partition partition : table.getAllPartitions()) {
             LakeTablet anyTablet = getAnyTablet(partition);
             if (anyTablet == null) {
                 continue;
@@ -84,13 +73,12 @@ class DeleteLakeTableTask implements Runnable {
             } catch (Exception e) {
                 LOG.warn("Fail to get shard info of tablet {}: {}", anyTablet.getId(), e.getMessage());
                 break;
->>>>>>> c0b7aaa36c ([Feature] Organize directories by partition in shared_data cluster (#30776))
             }
         }
         return storagePathToTablet;
     }
 
-    private LakeTablet getAnyTablet(PhysicalPartition partition) {
+    private LakeTablet getAnyTablet(Partition partition) {
         List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
         for (MaterializedIndex materializedIndex : allIndices) {
             List<Tablet> tablets = materializedIndex.getTablets();

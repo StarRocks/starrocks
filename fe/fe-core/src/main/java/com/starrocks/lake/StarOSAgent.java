@@ -684,19 +684,6 @@ public class StarOSAgent {
             throw new UserException("Fail to get workers by default group id, error: " + e.getMessage());
         }
     }
-<<<<<<< HEAD
-=======
-
-    // dump all starmgr meta, for DEBUG purpose
-    public String dump() {
-        prepare();
-
-        try {
-            return client.dump();
-        } catch (StarClientException e) {
-            return "Fail to dump starmgr meta, " + e.getMessage();
-        }
-    }
 
     @NotNull
     public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
@@ -705,5 +692,4 @@ public class StarOSAgent {
         Preconditions.checkState(shardInfos.size() == 1);
         return shardInfos.get(0);
     }
->>>>>>> c0b7aaa36c ([Feature] Organize directories by partition in shared_data cluster (#30776))
 }
