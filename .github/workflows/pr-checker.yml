@@ -40,8 +40,8 @@ jobs:
       - name: Format Check1
         id: check1
         if: >
-          (!contains(toJson(github.event.pull_request.body), '[ ] Yes, this PR will result in a change in behavior') &&
-          !contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior'))
+          (!contains(github.event.pull_request.body, '[ ] Yes, this PR will result in a change in behavior') &&
+          !contains(github.event.pull_request.body, '[x] Yes, this PR will result in a change in behavior'))
         run: |
           echo "::error::Please check the format of your pr body about the behavior change checkbox!"
           exit 1
@@ -49,8 +49,8 @@ jobs:
       - name: Format Check2
         id: check2
         if: >
-          (!contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior') &&
-           !contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior'))
+          (!contains(github.event.pull_request.body, '[ ] No, this PR will not result in a change in behavior') &&
+           !contains(github.event.pull_request.body, '[x] No, this PR will not result in a change in behavior'))
         run: |
           echo "::error::Please check the format of your pr body about the behavior change checkbox!"
           exit 1
@@ -58,8 +58,8 @@ jobs:
       - name: Format Check3
         id: check3
         if: >
-          (contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
-           contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior'))
+          (contains(github.event.pull_request.body, '[x] Yes, this PR will result in a change in behavior') &&
+           contains(github.event.pull_request.body, '[x] No, this PR will not result in a change in behavior'))
         run: |
           echo "::error::Please check the format of your pr body about the behavior change checkbox!"
           exit 1
