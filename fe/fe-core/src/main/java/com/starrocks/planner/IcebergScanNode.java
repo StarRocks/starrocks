@@ -307,12 +307,15 @@ public class IcebergScanNode extends ScanNode {
         }
 
         if (detailLevel == TExplainLevel.VERBOSE && !isResourceMappingCatalog(srIcebergTable.getCatalogName())) {
-            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    srIcebergTable.getCatalogName(), srIcebergTable.getRemoteDbName(), srIcebergTable.getRemoteTableName());
-
-            output.append(prefix).append(
-                    String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
-                            partitionNames.size() == 0 ? 1 : partitionNames.size()));
+            try {
+                List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                        srIcebergTable.getCatalogName(), srIcebergTable.getRemoteDbName(), srIcebergTable.getRemoteTableName());
+                output.append(prefix).append(
+                        String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
+                                partitionNames.size() == 0 ? 1 : partitionNames.size()));
+            } catch (Exception e) {
+                output.append(prefix).append(String.format("partitions=?/?(%s)", e.getMessage()));
+            }
             output.append("\n");
         }
 
