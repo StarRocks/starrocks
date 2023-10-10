@@ -99,7 +99,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 
 ### ENGINE type
 
-Default value: `olap``. If this parameter is not specified, an OLAP table (StarRocks native table) is created by default.
+Default value: `olap`. If this parameter is not specified, an OLAP table (StarRocks native table) is created by default.
 
 Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc` (2.3 and later), `iceberg`, and `hudi` (2.2 and later). If you want to create an external table to query external data sources, specify `CREATE EXTERNAL TABLE` and set `ENGINE` to any of these values. You can refer to [External table](../../../data_source/External_table.md) for more information.
 
