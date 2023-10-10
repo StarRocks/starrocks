@@ -21,6 +21,7 @@ import com.starrocks.credential.aws.AWSCloudCredential;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvoder;
 import com.starrocks.credential.hdfs.HDFSCloudConfigurationProvider;
+import com.starrocks.credential.tencent.TencentCloudConfigurationProvider;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.iceberg.aws.AwsProperties;
 
@@ -34,6 +35,7 @@ public class CloudConfigurationFactory {
             new AzureCloudConfigurationProvider(),
             new GCPCloudConfigurationProvoder(),
             new AliyunCloudConfigurationProvider(),
+            new TencentCloudConfigurationProvider(),
             new HDFSCloudConfigurationProvider(),
             new CloudConfigurationProvider() {
                 @Override

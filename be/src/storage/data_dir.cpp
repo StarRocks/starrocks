@@ -83,7 +83,7 @@ DataDir::~DataDir() {
     delete _kv_store;
 }
 
-Status DataDir::init(bool read_only, bool as_cn) {
+Status DataDir::init(bool read_only) {
     ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
     RETURN_IF_ERROR(_fs->path_exists(_path));
     std::string align_tag_path = _path + ALIGN_TAG_PREFIX;
@@ -96,9 +96,7 @@ Status DataDir::init(bool read_only, bool as_cn) {
     RETURN_IF_ERROR_WITH_WARN(_cluster_id_mgr->init(), "_cluster_id_mgr init failed");
     RETURN_IF_ERROR_WITH_WARN(_init_data_dir(), "_init_data_dir failed");
     RETURN_IF_ERROR_WITH_WARN(_init_tmp_dir(), "_init_tmp_dir failed");
-    if (!as_cn) {
-        RETURN_IF_ERROR_WITH_WARN(_init_meta(read_only), "_init_meta failed");
-    }
+    RETURN_IF_ERROR_WITH_WARN(_init_meta(read_only), "_init_meta failed");
 
     _is_used = true;
     return Status::OK();
