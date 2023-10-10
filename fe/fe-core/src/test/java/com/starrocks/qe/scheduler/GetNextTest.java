@@ -245,7 +245,7 @@ public class GetNextTest extends SchedulerTestBase {
         String sql = "select count(1) from lineitem";
         DefaultCoordinator scheduler = startScheduling(sql);
 
-        scheduler.cancel();
+        scheduler.cancel("Cancelled");
 
         Assert.assertThrows("Cancelled", UserException.class, scheduler::getNext);
 

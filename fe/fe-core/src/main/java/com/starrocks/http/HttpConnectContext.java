@@ -148,7 +148,7 @@ public class HttpConnectContext extends ConnectContext {
     }
 
     @Override
-    public void kill(boolean killConnection) {
+    public void kill(boolean killConnection, String cancelledMessage) {
         LOG.warn("kill query, {}, kill connection: {}", remoteAddres, killConnection);
         // Now, cancel running process.
         StmtExecutor executorRef = executor;
@@ -156,7 +156,7 @@ public class HttpConnectContext extends ConnectContext {
             isKilled = true;
         }
         if (executorRef != null) {
-            executorRef.cancel();
+            executorRef.cancel(cancelledMessage);
         }
 
         if (killConnection) {

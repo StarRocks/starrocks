@@ -319,7 +319,7 @@ public class StartSchedulingTest extends SchedulerTestBase {
         // All the instances should be deployed.
         Assert.assertEquals(executionDAG.getInstances().size(), executionDAG.getExecutions().size());
 
-        scheduler.cancel();
+        scheduler.cancel("Cancel by test");
         Assert.assertEquals(numSuccessCancelledInstances, successCancelledInstanceIds.size());
         // Receive execution reports from the successfully cancelled instances.
         executionDAG.getExecutions().forEach(execution -> {

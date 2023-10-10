@@ -125,7 +125,7 @@ public class DefaultCoordinator extends Coordinator {
 
     /**
      * Overall status of the entire query.
-     * <p> Set to the first reported fragment error status or to CANCELLED, if {@link #cancel()} is called.
+     * <p> Set to the first reported fragment error status or to CANCELLED, if {@link #cancel(String cancelledMessage)} is called.
      */
     private Status queryStatus = new Status();
 
