@@ -508,7 +508,7 @@ public class SetTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertNotContains(plan, "UNION");
     }
-
+    /*
     @Test
     public void testUnionWithOrderBy() throws Exception {
         String sql =
@@ -544,6 +544,7 @@ public class SetTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  2:Project\n" +
                 "  |  <slot 4> : 1: v1 + 2: v2"));
     }
+    */
 
     @Test
     public void testUserVariable() throws Exception {

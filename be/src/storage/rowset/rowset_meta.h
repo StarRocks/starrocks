@@ -46,6 +46,7 @@
 #include "json2pb/pb_to_json.h"
 #include "storage/olap_common.h"
 #include "storage/tablet_schema.h"
+#include "storage/tablet_schema_map.h"
 
 namespace starrocks {
 
@@ -219,10 +220,14 @@ public:
     const RowsetMetaPB& get_meta_pb() const { return *_rowset_meta_pb; }
 
     void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema_ptr) {
+        _rowset_meta_pb->clear_tablet_schema();
         TabletSchemaPB* ts_pb = _rowset_meta_pb->mutable_tablet_schema();
         tablet_schema_ptr->to_schema_pb(ts_pb);
-        CHECK(_schema == nullptr);
-        _schema = TabletSchemaCSPtr(TabletSchema::copy(tablet_schema_ptr));
+        if (ts_pb->has_id() && ts_pb->id() != TabletSchema::invalid_id()) {
+            _schema = GlobalTabletSchemaMap::Instance()->emplace(*ts_pb).first;
+        } else {
+            _schema = TabletSchemaCSPtr(TabletSchema::copy(tablet_schema_ptr));
+        }
     }
 
     const TabletSchemaCSPtr tablet_schema() { return _schema; }
@@ -244,8 +249,14 @@ private:
         } else {
             _rowset_id.init(_rowset_meta_pb->rowset_id());
         }
+
         if (_rowset_meta_pb->has_tablet_schema()) {
-            _schema = TabletSchema::create(_rowset_meta_pb->tablet_schema());
+            if (_rowset_meta_pb->tablet_schema().has_id() &&
+                _rowset_meta_pb->tablet_schema().id() != TabletSchema::invalid_id()) {
+                _schema = GlobalTabletSchemaMap::Instance()->emplace(_rowset_meta_pb->tablet_schema()).first;
+            } else {
+                _schema = TabletSchema::create(_rowset_meta_pb->tablet_schema());
+            }
         }
     }
 

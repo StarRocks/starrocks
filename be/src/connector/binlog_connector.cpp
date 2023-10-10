@@ -181,7 +181,8 @@ BinlogMetaFieldMap BinlogDataSource::_build_binlog_meta_fields(ColumnId start_ci
 }
 
 StatusOr<Schema> BinlogDataSource::_build_binlog_schema() {
-    BinlogMetaFieldMap binlog_meta_map = _build_binlog_meta_fields(_tablet->tablet_schema()->num_columns());
+    auto tablet_schema = _tablet->tablet_schema();
+    BinlogMetaFieldMap binlog_meta_map = _build_binlog_meta_fields(tablet_schema->num_columns());
     std::vector<uint32_t> data_column_cids;
     std::vector<uint32_t> meta_column_slot_index;
     Fields meta_fields;
@@ -189,7 +190,7 @@ StatusOr<Schema> BinlogDataSource::_build_binlog_schema() {
     for (auto slot : _tuple_desc->slots()) {
         DCHECK(slot->is_materialized());
         slot_index += 1;
-        int32_t index = _tablet->field_index(slot->col_name());
+        int32_t index = tablet_schema->field_index(slot->col_name());
         if (index >= 0) {
             data_column_cids.push_back(index);
         } else if (slot->col_name() == _column_name_constants.BINLOG_OP_COLUMN_NAME) {
@@ -215,7 +216,6 @@ StatusOr<Schema> BinlogDataSource::_build_binlog_schema() {
         return Status::InternalError("failed to build binlog schema, no materialized data slot!");
     }
 
-    const TabletSchemaCSPtr& tablet_schema = _tablet->tablet_schema();
     Schema schema = ChunkHelper::convert_schema(tablet_schema, data_column_cids);
     for (int32_t i = 0; i < meta_column_slot_index.size(); i++) {
         uint32_t index = meta_column_slot_index[i];
