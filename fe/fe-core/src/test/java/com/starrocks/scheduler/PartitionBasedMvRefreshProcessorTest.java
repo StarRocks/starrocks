@@ -1171,9 +1171,6 @@ public class PartitionBasedMvRefreshProcessorTest {
     }
 
     @Test
-<<<<<<< HEAD
-    public void testRangePartitionRefreshWithJDBCTable() throws Exception {
-=======
     public void testJDBCProtocolType() {
         JDBCTable table = new JDBCTable();
         table.getProperties().put(JDBCResource.URI, "jdbc:postgres:aaa");
@@ -1206,9 +1203,8 @@ public class PartitionBasedMvRefreshProcessorTest {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
         MockedJDBCMetadata mockedJDBCMetadata =
                 (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
-        mockedJDBCMetadata.initPartitions();
+        mockedJDBCMetadata.addPartitions();
 
->>>>>>> f98f665aa2 ([BugFix] check whether partitioned mv for jdbc is supported (#32266))
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
@@ -1219,17 +1215,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        Collection<Partition> partitions = materializedView.getPartitions();
-        Assert.assertEquals(3, partitions.size());
-        Assert.assertNotNull(materializedView.getPartition("P20230801"));
-        Assert.assertNotNull(materializedView.getPartition("P20230802"));
-        Assert.assertNotNull(materializedView.getPartition("P20230803"));
 
-        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
-        MockedJDBCMetadata mockedJDBCMetadata =
-                (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
-        mockedJDBCMetadata.addPartitions();
-        taskRun.executeTaskRun();
         Collection<Partition> incrementalPartitions = materializedView.getPartitions();
         Assert.assertEquals(4, incrementalPartitions.size());
         Assert.assertNotNull(materializedView.getPartition("P20230802"));
