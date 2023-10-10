@@ -676,7 +676,7 @@ public class ConnectContext {
     }
 
     // kill operation with no protect.
-    public void kill(boolean killConnection) {
+    public void kill(boolean killConnection, String cancelledMessage) {
         LOG.warn("kill query, {}, kill connection: {}",
                 getMysqlChannel().getRemoteHostPortString(), killConnection);
         // Now, cancel running process.
@@ -685,7 +685,7 @@ public class ConnectContext {
             isKilled = true;
         }
         if (executorRef != null) {
-            executorRef.cancel();
+            executorRef.cancel(cancelledMessage);
         }
         if (killConnection) {
             int times = 0;
@@ -736,7 +736,7 @@ public class ConnectContext {
             }
         }
         if (killFlag) {
-            kill(killConnection);
+            kill(killConnection, "query timeout");
         }
     }
 

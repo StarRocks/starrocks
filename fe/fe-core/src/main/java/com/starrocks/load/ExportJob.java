@@ -802,7 +802,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
             // cancel all running coordinators
             for (Coordinator coord : coordList) {
-                coord.cancel();
+                coord.cancel(msg);
             }
 
             // try to remove exported temp files
