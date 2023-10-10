@@ -72,6 +72,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     private static final String HUDI_TABLE_PRE_COMBINE_FIELD = "hudi.table.preCombineField";
     private static final String HUDI_BASE_PATH = "hudi.table.base.path";
     private static final String HUDI_TABLE_BASE_FILE_FORMAT = "hudi.table.base.file.format";
+    private static final String HUDI_TABLE_INPUT_FOAMT = "hudi.table.input.format";
     private static final String HUDI_DB = "database";
     private static final String HUDI_TABLE = "table";
     private static final String HUDI_RESOURCE = "resource";
@@ -249,6 +250,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
         HoodieFileFormat hudiBaseFileFormat = hudiTableConfig.getBaseFileFormat();
         hudiProperties.put(HUDI_TABLE_BASE_FILE_FORMAT, hudiBaseFileFormat.name());
+
+        String inputFormat = metastoreTable.getSd().getInputFormat();
+        if (!Strings.isNullOrEmpty(inputFormat)) {
+            hudiProperties.put(HUDI_TABLE_INPUT_FOAMT, inputFormat);
+        }
 
         TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
         Schema tableSchema;
