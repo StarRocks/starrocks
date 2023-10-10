@@ -456,7 +456,7 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
         if (idx.first >= 0) {
             auto column_file = dcg->column_files(parent_name(_segment->file_name()))[idx.first];
             if (_dcg_segments.count(column_file) == 0) {
-                ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg, idx.first));
+                ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg, idx.first, _opts.tablet_schema));
                 _dcg_segments[column_file] = dcg_segment;
             }
             if (col_index != nullptr) {
@@ -468,8 +468,13 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
                 */
                 DCHECK(_dcg_segments[column_file]->num_columns() <= dcg->column_ids()[idx.first].size());
                 if (_dcg_segments[column_file]->num_columns() < dcg->column_ids()[idx.first].size()) {
-                    const auto& new_schema = TabletSchema::create_with_uid(_segment->tablet_schema_share_ptr(),
-                                                                           dcg->column_ids()[idx.first]);
+                    auto new_schema = std::make_shared<TabletSchema>();
+                    if (_opts.tablet_schema != nullptr) {
+                        new_schema = TabletSchema::create_with_uid(_opts.tablet_schema, dcg->column_ids()[idx.first]);
+                    } else {
+                        new_schema = TabletSchema::create_with_uid(_segment->tablet_schema_share_ptr(),
+                                                                   dcg->column_ids()[idx.first]);
+                    }
 
                     *col_index = INT32_MIN;
                     for (int i = 0; i < new_schema->columns().size(); ++i) {

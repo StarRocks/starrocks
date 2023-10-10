@@ -112,7 +112,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assert.assertEquals(1, alterJobsV2.size());
-        Assert.assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
+        Assert.assertEquals(OlapTableState.NORMAL, olapTable.getState());
     }
 
     // start a schema change, then finished
@@ -121,6 +121,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        olapTable.setUseLightSchemaChange(false);
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
 
         schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
@@ -173,6 +174,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        olapTable.setUseLightSchemaChange(false);
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
 
         schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);

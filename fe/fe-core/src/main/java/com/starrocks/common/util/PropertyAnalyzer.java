@@ -573,16 +573,11 @@ public class PropertyAnalyzer {
 
     public static Boolean analyzeUseLightSchemaChange(Map<String, String> properties) throws AnalysisException {
         if (properties == null || properties.isEmpty()) {
-            return false;
+            return Config.allow_default_light_schema_change;
         }
         String value = properties.get(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
-        // set light schema change false by default
-        if (Config.allow_default_light_schema_change) {
-            properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
-            return true;
-        }
         if (null == value) {
-            return false;
+            return Config.allow_default_light_schema_change;
         }
         properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
         if (Boolean.TRUE.toString().equalsIgnoreCase(value)) {

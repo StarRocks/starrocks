@@ -55,6 +55,8 @@ public:
     // [thread-safe]
     std::pair<TabletSchemaPtr, bool> emplace(const TabletSchemaPB& schema_pb);
 
+    std::pair<TabletSchemaPtr, bool> emplace(const TabletSchemaPtr& tablet_schema);
+
     // Removes the TabletSchema (if one exists) with the id equivalent to id.
     //
     // Returns number of elements removed (0 or 1).
@@ -74,6 +76,7 @@ private:
     constexpr static int kShardSize = 16;
 
     bool check_schema_unique_id(const TabletSchemaPB& schema_pb, const TabletSchemaCSPtr& schema_ptr);
+    bool check_schema_unique_id(const TabletSchemaCSPtr& in_schema, const TabletSchemaCSPtr& ori_schema);
     struct MapShard {
         mutable std::mutex mtx;
         phmap::flat_hash_map<SchemaId, std::weak_ptr<const TabletSchema>> map;

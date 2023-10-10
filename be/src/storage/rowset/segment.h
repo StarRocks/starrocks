@@ -104,7 +104,8 @@ public:
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
-    StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx);
+    StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
+                                                       const TabletSchemaCSPtr& read_tablet_schema);
 
     uint64_t id() const { return _segment_id; }
 
@@ -146,6 +147,8 @@ public:
     const ColumnReader* column(size_t i) const {
         return _column_readers.at(_tablet_schema->column(i).unique_id()).get();
     }
+
+    const ColumnReader* column_with_uid(size_t uid) const { return _column_readers.at(uid).get(); }
 
     FileSystem* file_system() const { return _fs.get(); }
 

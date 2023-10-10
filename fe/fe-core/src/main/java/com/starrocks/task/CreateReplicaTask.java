@@ -76,6 +76,7 @@ public class CreateReplicaTask extends AgentTask {
 
     private List<Column> columns;
     private List<Integer> sortKeyIdxes;
+    private List<Integer> sortKeyUniqueIds;
 
     // bloom filter columns
     private Set<String> bfColumns;
@@ -120,8 +121,8 @@ public class CreateReplicaTask extends AgentTask {
                              TTabletType tabletType, TCompressionType compressionType) {
         this(backendId, dbId, tableId, partitionId, indexId, tabletId, shortKeyColumnCount,
                 schemaHash, version, keysType, storageType, storageMedium, columns, bfColumns,
-                bfFpp, latch, indexes, isInMemory, enablePersistentIndex, primaryIndexCacheExpireSec, 
-                tabletType, compressionType, null);
+                bfFpp, latch, indexes, isInMemory, enablePersistentIndex, primaryIndexCacheExpireSec,
+                tabletType, compressionType, null, null);
     }
 
     public CreateReplicaTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
@@ -134,11 +135,12 @@ public class CreateReplicaTask extends AgentTask {
                              boolean enablePersistentIndex,
                              int primaryIndexCacheExpireSec,
                              BinlogConfig binlogConfig,
-                             TTabletType tabletType, TCompressionType compressionType, List<Integer> sortKeyIdxes) {
+                             TTabletType tabletType, TCompressionType compressionType, List<Integer> sortKeyIdxes,
+                             List<Integer> sortKeyUniqueIds) {
 
         this(backendId, dbId, tableId, partitionId, indexId, tabletId, shortKeyColumnCount, schemaHash, version,
                 keysType, storageType, storageMedium, columns, bfColumns, bfFpp, latch, indexes, isInMemory,
-                enablePersistentIndex, primaryIndexCacheExpireSec, tabletType, compressionType, sortKeyIdxes);
+                enablePersistentIndex, primaryIndexCacheExpireSec, tabletType, compressionType, sortKeyIdxes, sortKeyUniqueIds);
         this.binlogConfig = binlogConfig;
     }
 
@@ -151,7 +153,8 @@ public class CreateReplicaTask extends AgentTask {
                              boolean isInMemory,
                              boolean enablePersistentIndex,
                              int primaryIndexCacheExpireSec,
-                             TTabletType tabletType, TCompressionType compressionType, List<Integer> sortKeyIdxes) {
+                             TTabletType tabletType, TCompressionType compressionType, List<Integer> sortKeyIdxes,
+                             List<Integer> sortKeyUniqueIds) {
         super(null, backendId, TTaskType.CREATE, dbId, tableId, partitionId, indexId, tabletId);
 
         this.shortKeyColumnCount = shortKeyColumnCount;
@@ -165,6 +168,7 @@ public class CreateReplicaTask extends AgentTask {
 
         this.columns = columns;
         this.sortKeyIdxes = sortKeyIdxes;
+        this.sortKeyUniqueIds = sortKeyUniqueIds;
 
         this.bfColumns = bfColumns;
         this.indexes = indexes;
@@ -190,10 +194,11 @@ public class CreateReplicaTask extends AgentTask {
                              boolean enablePersistentIndex,
                              int primaryIndexCacheExpireSec,
                              TPersistentIndexType persistentIndexType,
-                             TTabletType tabletType, TCompressionType compressionType, List<Integer> sortKeyIdxes) {
+                             TTabletType tabletType, TCompressionType compressionType, List<Integer> sortKeyIdxes,
+                             List<Integer> sortKeyUniqueIds) {
         this(backendId, dbId, tableId, partitionId, indexId, tabletId, shortKeyColumnCount, schemaHash, version,
                 keysType, storageType, storageMedium, columns, bfColumns, bfFpp, latch, indexes, isInMemory,
-                enablePersistentIndex, primaryIndexCacheExpireSec, tabletType, compressionType, sortKeyIdxes);
+                enablePersistentIndex, primaryIndexCacheExpireSec, tabletType, compressionType, sortKeyIdxes, sortKeyUniqueIds);
         this.persistentIndexType = persistentIndexType;
     }
 
@@ -265,6 +270,7 @@ public class CreateReplicaTask extends AgentTask {
         }
         tSchema.setColumns(tColumns);
         tSchema.setSort_key_idxes(sortKeyIdxes);
+        tSchema.setSort_key_unique_ids(sortKeyUniqueIds);
 
         if (CollectionUtils.isNotEmpty(indexes)) {
             List<TOlapTableIndex> tIndexes = new ArrayList<>();

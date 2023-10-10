@@ -135,7 +135,7 @@ void TabletUpdatesTest::test_convert_from(bool enable_persistent_index) {
     auto chunk_changer = std::make_unique<ChunkChanger>(tablet_to_schema_change->tablet_schema());
     for (int i = 0; i < tablet_to_schema_change->unsafe_tablet_schema_ref().num_columns(); ++i) {
         const auto& new_column = tablet_to_schema_change->unsafe_tablet_schema_ref().column(i);
-        int32_t column_index = _tablet->field_index(std::string{new_column.name()});
+        int32_t column_index = _tablet->field_index_with_max_version(std::string{new_column.name()});
         auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_index >= 0) {
             column_mapping->ref_column = column_index;
@@ -170,7 +170,7 @@ void TabletUpdatesTest::test_convert_from_with_pending(bool enable_persistent_in
     auto chunk_changer = std::make_unique<ChunkChanger>(tablet_to_schema_change->tablet_schema());
     for (int i = 0; i < tablet_to_schema_change->unsafe_tablet_schema_ref().num_columns(); ++i) {
         const auto& new_column = tablet_to_schema_change->unsafe_tablet_schema_ref().column(i);
-        int32_t column_index = _tablet->field_index(std::string{new_column.name()});
+        int32_t column_index = _tablet->field_index_with_max_version(std::string{new_column.name()});
         auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_index >= 0) {
             column_mapping->ref_column = column_index;
@@ -207,7 +207,7 @@ void TabletUpdatesTest::test_convert_from_with_mutiple_segment(bool enable_persi
     auto chunk_changer = std::make_unique<ChunkChanger>(tablet_to_schema_change->tablet_schema());
     for (int i = 0; i < tablet_to_schema_change->unsafe_tablet_schema_ref().num_columns(); ++i) {
         const auto& new_column = tablet_to_schema_change->unsafe_tablet_schema_ref().column(i);
-        int32_t column_index = _tablet->field_index(std::string{new_column.name()});
+        int32_t column_index = _tablet->field_index_with_max_version(std::string{new_column.name()});
         auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_index >= 0) {
             column_mapping->ref_column = column_index;
@@ -274,7 +274,7 @@ void TabletUpdatesTest::test_reorder_from(bool enable_persistent_index) {
     auto chunk_changer = std::make_unique<ChunkChanger>(tablet_with_sort_key1->tablet_schema());
     for (int i = 0; i < tablet_with_sort_key1->unsafe_tablet_schema_ref().num_columns(); ++i) {
         const auto& new_column = tablet_with_sort_key1->unsafe_tablet_schema_ref().column(i);
-        int32_t column_index = _tablet->field_index(std::string{new_column.name()});
+        int32_t column_index = _tablet->field_index_with_max_version(std::string{new_column.name()});
         auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_index >= 0) {
             column_mapping->ref_column = column_index;
@@ -291,7 +291,7 @@ void TabletUpdatesTest::test_reorder_from(bool enable_persistent_index) {
     chunk_changer = std::make_unique<ChunkChanger>(tablet_with_sort_key2->tablet_schema());
     for (int i = 0; i < tablet_with_sort_key2->unsafe_tablet_schema_ref().num_columns(); ++i) {
         const auto& new_column = tablet_with_sort_key2->unsafe_tablet_schema_ref().column(i);
-        int32_t column_index = _tablet->field_index(std::string{new_column.name()});
+        int32_t column_index = _tablet->field_index_with_max_version(std::string{new_column.name()});
         auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_index >= 0) {
             column_mapping->ref_column = column_index;

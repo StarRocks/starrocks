@@ -156,9 +156,10 @@ public:
         writer_context.rowset_path_prefix = tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
 
-        writer_context.partial_update_tablet_schema = partial_schema;
-        writer_context.referenced_column_ids = column_indexes;
         writer_context.tablet_schema = partial_schema;
+        writer_context.referenced_column_ids = column_indexes;
+        writer_context.full_tablet_schema = tablet->tablet_schema();
+        writer_context.is_partial_update = true;
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
@@ -781,7 +782,8 @@ TEST_P(RowsetColumnPartialUpdateTest, test_get_column_values) {
             auto column = ChunkHelper::column_from_field(*read_column_schema.field(colid).get());
             columns[colid] = column->clone_empty();
         }
-        ASSERT_OK(tablet->updates()->get_column_values(column_ids, version, false, rowids_by_rssid, &columns, nullptr));
+        ASSERT_OK(tablet->updates()->get_column_values(column_ids, version, false, rowids_by_rssid, &columns, nullptr,
+                                                       tablet->tablet_schema()));
         // check column values
         for (int i = 0; i < N; i++) {
             ASSERT_EQ(columns[0]->get(i).get_int64(), i);

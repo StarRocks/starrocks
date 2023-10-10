@@ -314,15 +314,17 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         all_ref_columns_ids.emplace_back(0);
     }
 
-    Schema read_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema(), all_ref_columns_ids);
+    auto base_tablet_schema = base_tablet->tablet_schema();
+    Schema read_schema = ChunkHelper::convert_schema(base_tablet_schema, all_ref_columns_ids);
     ChunkPtr read_chunk = ChunkHelper::new_chunk(read_schema, config::vector_chunk_size);
 
-    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema(), new_columns_ids);
+    auto new_tablet_schema = new_tablet->tablet_schema();
+    Schema new_schema = ChunkHelper::convert_schema(new_tablet_schema, new_columns_ids);
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
     OlapReaderStatistics stats;
     RowsetReleaseGuard guard(src_rowset->shared_from_this());
-    auto res = src_rowset->get_segment_iterators2(read_schema, nullptr, version, &stats,
+    auto res = src_rowset->get_segment_iterators2(read_schema, base_tablet_schema, nullptr, version, &stats,
                                                   base_tablet->data_dir()->get_meta());
     if (!res.ok()) {
         return res.status();
@@ -356,7 +358,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
                 }
             }
             status = chunk_changer->append_generated_columns(read_chunk, new_chunk, all_ref_columns_ids,
-                                                             base_tablet->tablet_schema()->num_columns());
+                                                             base_tablet_schema->num_columns());
             if (!status.ok()) {
                 LOG(WARNING) << "failed to append generated columns";
                 return Status::InternalError("failed to append generated columns");
@@ -370,11 +372,11 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         // must record unique column id in delta column group
         std::vector<uint32_t> unique_column_ids;
         for (const auto& iter : *chunk_changer->get_gc_exprs()) {
-            ColumnUID unique_id = new_tablet->tablet_schema()->column(iter.first).unique_id();
+            ColumnUID unique_id = new_tablet_schema->column(iter.first).unique_id();
             unique_column_ids.emplace_back(unique_id);
         }
         std::sort(unique_column_ids.begin(), unique_column_ids.end());
-        auto cols_file_schema = TabletSchema::create_with_uid(new_tablet->tablet_schema(), unique_column_ids);
+        auto cols_file_schema = TabletSchema::create_with_uid(new_tablet_schema, unique_column_ids);
 
         (void)fs->delete_file(path); // delete .cols if already exist
         WritableFileOptions opts{.sync_on_close = true};
@@ -694,20 +696,14 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     }
 
     // Create a new tablet schema, should merge with dropped columns in light weight schema change
-    TabletSchemaSPtr base_tablet_schema = std::make_shared<TabletSchema>();
+    auto base_tablet_schema = std::make_shared<TabletSchema>();
     base_tablet_schema->copy_from(base_tablet->tablet_schema());
-    if (!request.columns.empty() && request.columns[0].col_unique_id >= 0) {
-        base_tablet_schema->clear_columns();
-        for (const auto& column : request.columns) {
-            base_tablet_schema->append_column(TabletColumn(column));
-        }
-    }
+    auto new_tablet_schema = new_tablet->tablet_schema();
 
     SchemaChangeParams sc_params;
     sc_params.base_tablet = base_tablet;
     sc_params.new_tablet = new_tablet;
-    auto tablet_schema_ptr = new_tablet->tablet_schema();
-    sc_params.chunk_changer = std::make_unique<ChunkChanger>(tablet_schema_ptr);
+    sc_params.chunk_changer = std::make_unique<ChunkChanger>(new_tablet_schema);
     sc_params.base_tablet_schema = base_tablet_schema;
 
     if (request.__isset.materialized_view_params && request.materialized_view_params.size() > 0) {
@@ -729,7 +725,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     // primary key do not support materialized view, initialize materialized_params_map here,
     // just for later column_mapping of _parse_request.
     SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map);
-    Status status = SchemaChangeUtils::parse_request(base_tablet_schema, tablet_schema_ptr,
+    Status status = SchemaChangeUtils::parse_request(base_tablet_schema, new_tablet_schema,
                                                      sc_params.chunk_changer.get(), sc_params.materialized_params_map,
                                                      !base_tablet->delete_predicates().empty(), &sc_params.sc_sorting,
                                                      &sc_params.sc_directly, &generated_column_idxs);

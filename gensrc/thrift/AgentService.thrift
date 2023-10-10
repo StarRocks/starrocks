@@ -53,6 +53,7 @@ struct TTabletSchema {
     8: optional bool is_in_memory // Deprecated
     9: optional i64 id;
     10: optional list<i32> sort_key_idxes
+    11: optional list<i32> sort_key_unique_ids
 }
 
 // this enum stands for different storage format in src_backends
