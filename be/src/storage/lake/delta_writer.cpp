@@ -292,11 +292,11 @@ Status DeltaWriterImpl::_check_partial_update_with_sort_key(const Chunk& chunk) 
 
 Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-    RETURN_IF_ERROR(_check_partial_update_with_sort_key(chunk));
 
     if (_mem_table == nullptr) {
         RETURN_IF_ERROR(reset_memtable());
     }
+    RETURN_IF_ERROR(_check_partial_update_with_sort_key(chunk));
     Status st;
     bool full = _mem_table->insert(chunk, indexes, 0, indexes_size);
     if (_mem_tracker->limit_exceeded()) {
