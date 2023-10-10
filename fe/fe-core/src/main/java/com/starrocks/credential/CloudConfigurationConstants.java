@@ -108,6 +108,9 @@ public class CloudConfigurationConstants {
     public static final String HDFS_CONFIG_RESOURCES = "hadoop.config.resources";
     public static final String HDFS_RUNTIME_JARS = "hadoop.runtime.jars";
 
+    public static final String HDFS_CLOUD_CONFIGURATION_STRING = "hadoop.cloud.configuration.string";
+    public static final String HDFS_CONFIG_RESOURCES_LOADED = "hadoop.config.resources.loaded";
+
     // Credential for Aliyun OSS
     public static final String ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";
     public static final String ALIYUN_OSS_SECRET_KEY = "aliyun.oss.secret_key";

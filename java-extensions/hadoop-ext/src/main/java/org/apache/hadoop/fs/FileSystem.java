@@ -3726,6 +3726,8 @@ public abstract class FileSystem extends Configured
      */
     private static FileSystem createFileSystem(URI uri, Configuration conf)
             throws IOException {
+        HadoopExt.addConfigResourcesToConfiguration(conf);
+        LOGGER.info(String.format("%s FileSystem.createFileSystem", HadoopExt.LOGGER_MESSAGE_PREFIX));
         Tracer tracer = FsTracer.get(conf);
         try (TraceScope scope = tracer.newScope("FileSystem#createFileSystem");
                 DurationInfo ignored =
@@ -4009,6 +4011,7 @@ public abstract class FileSystem extends Configured
             final String authority;
             final UserGroupInformation ugi;
             final long unique;   // an artificial way to make a key unique
+            final String cloudConf;
 
             Key(URI uri, Configuration conf) throws IOException {
                 this(uri, conf, 0);
@@ -4022,11 +4025,13 @@ public abstract class FileSystem extends Configured
                 this.unique = unique;
 
                 this.ugi = UserGroupInformation.getCurrentUser();
+
+                this.cloudConf = HadoopExt.getCloudConfString(conf);
             }
 
             @Override
             public int hashCode() {
-                return (scheme + authority).hashCode() + ugi.hashCode() + (int) unique;
+                return (scheme + authority + cloudConf).hashCode() + ugi.hashCode() + (int) unique;
             }
 
             static boolean isEqual(Object a, Object b) {
@@ -4042,6 +4047,7 @@ public abstract class FileSystem extends Configured
                     Key that = (Key) obj;
                     return isEqual(this.scheme, that.scheme)
                             && isEqual(this.authority, that.authority)
+                            && isEqual(this.cloudConf, that.cloudConf)
                             && isEqual(this.ugi, that.ugi)
                             && (this.unique == that.unique);
                 }
@@ -4050,7 +4056,7 @@ public abstract class FileSystem extends Configured
 
             @Override
             public String toString() {
-                return "(" + ugi.toString() + ")@" + scheme + "://" + authority;
+                return "(ugi = " + ugi.toString() + ", cloudConf = " + cloudConf + ")@" + scheme + "://" + authority;
             }
         }
     }
