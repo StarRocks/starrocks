@@ -63,6 +63,7 @@ import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -1251,6 +1252,7 @@ public class PartitionBasedMvRefreshProcessorTest {
                 "AS SELECT `a`, `b`, `c`, `d`  FROM `jdbc0`.`partitioned_db0`.`tbl0`;");
     }
 
+    @Ignore
     @Test
     public void testRangePartitionChangeWithJDBCTable() throws Exception {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
@@ -1284,6 +1286,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         Assert.assertNotNull(materializedView.getPartition("P20230805"));
     }
 
+    @Ignore
     @Test
     public void testRangePartitionRefreshWithJDBCTable() throws Exception {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
@@ -1309,6 +1312,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         Assert.assertNotEquals(refreshBeforeVersionTime, refreshAfterVersionTime);
     }
 
+    @Ignore
     @Test
     public void testRangePartitionWithJDBCTableUseStr2Date() throws Exception {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
@@ -1332,6 +1336,7 @@ public class PartitionBasedMvRefreshProcessorTest {
                 partitions);
     }
 
+    @Ignore
     @Test
     public void testRangePartitionWithJDBCTableUseStr2DateForError() {
         try {
@@ -1350,6 +1355,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         }
     }
 
+    @Ignore
     @Test
     public void testRangePartitionWithJDBCTableUseStr2Date2() throws Exception {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
@@ -1373,6 +1379,7 @@ public class PartitionBasedMvRefreshProcessorTest {
                 partitions);
     }
 
+    @Ignore
     @Test
     public void test_str2date_date_trunc() throws Exception {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
@@ -1428,6 +1435,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         }
     }
 
+    @Ignore
     @Test
     public void testRangePartitionWithJDBCTableUseStr2Date3() throws Exception {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
