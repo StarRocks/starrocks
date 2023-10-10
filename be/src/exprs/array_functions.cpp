@@ -364,7 +364,7 @@ public:
             auto arr_col_h = input->data_column()->clone();
             auto* arr_col = down_cast<ArrayColumn*>(arr_col_h.get());
             call_cum_sum(arr_col, nullptr);
-            return ConstColumn::create(std::move(arr_col_h));
+            return ConstColumn::create(std::move(arr_col_h), input->size());
         } else if (col->is_nullable()) {
             auto res = col->clone();
             auto* input = down_cast<NullableColumn*>(res.get());
@@ -418,26 +418,14 @@ private:
         }
 
         for (int i = 0; i < num_rows; ++i) {
-            size_t offset = offsets[i];
-            size_t array_size = offsets[i + 1] - offsets[i];
             if constexpr (nullable) {
                 DCHECK(null_data != nullptr);
-                if (null_data[offset]) {
+                if (null_data[i]) {
                     continue;
                 }
             }
-            RunTimeCppType<TYPE> cum_sum{};
-            if constexpr (element_nullable) {
-                if (element_null_data[offset]) {
-                    // skip null
-                } else {
-                    cum_sum += element_data[offset];
-                }
-            } else {
-                cum_sum += element_data[offset];
-            }
-
-            for (int j = offset + 1; j < offset + array_size; ++j) {
+            RunTimeCppType<TYPE> cum_sum{}; // TODO: to solve overflow
+            for (int j = offsets[i]; j < offsets[i + 1]; ++j) {
                 if constexpr (element_nullable) {
                     if (element_null_data[j]) {
                         // skip null
