@@ -20,6 +20,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.JDBCResource;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
@@ -28,6 +30,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -1169,7 +1172,44 @@ public class PartitionBasedMvRefreshProcessorTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testRangePartitionRefreshWithJDBCTable() throws Exception {
+=======
+    public void testJDBCProtocolType() {
+        JDBCTable table = new JDBCTable();
+        table.getProperties().put(JDBCResource.URI, "jdbc:postgres:aaa");
+        Assert.assertEquals(JDBCTable.ProtocolType.POSTGRES, table.getProtocolType());
+        table.getProperties().put(JDBCResource.URI, "jdbc:mysql:aaa");
+        Assert.assertEquals(JDBCTable.ProtocolType.MYSQL, table.getProtocolType());
+        table.getProperties().put(JDBCResource.URI, "jdbc:h2:aaa");
+        Assert.assertEquals(JDBCTable.ProtocolType.UNKNOWN, table.getProtocolType());
+    }
+
+    @Test
+    public void testPartitionJDBCSupported() throws Exception {
+        // not supported
+        Assert.assertThrows(AnalysisException.class, () ->
+                starRocksAssert.withMaterializedView("create materialized view mv_jdbc_postgres " +
+                        "partition by d " +
+                        "refresh manual " +
+                        "AS SELECT `a`, `b`, `c`, `d`  FROM `jdbc_postgres`.`partitioned_db0`.`tbl0`;")
+        );
+
+        // supported
+        starRocksAssert.withMaterializedView("create materialized view mv_jdbc_mysql " +
+                "partition by d " +
+                "refresh manual " +
+                "AS SELECT `a`, `b`, `c`, `d`  FROM `jdbc0`.`partitioned_db0`.`tbl0`;");
+    }
+
+    @Test
+    public void testRangePartitionChangeWithJDBCTable() throws Exception {
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
+        MockedJDBCMetadata mockedJDBCMetadata =
+                (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
+        mockedJDBCMetadata.initPartitions();
+
+>>>>>>> f98f665aa2 ([BugFix] check whether partitioned mv for jdbc is supported (#32266))
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv"));
         HashMap<String, String> taskRunProperties = new HashMap<>();

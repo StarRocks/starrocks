@@ -108,6 +108,9 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
 public class MaterializedViewAnalyzer {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewAnalyzer.class);
 
+    private static final Set<JDBCTable.ProtocolType> SUPPORTED_JDBC_PARTITION_TYPE =
+            ImmutableSet.of(JDBCTable.ProtocolType.MYSQL);
+
     private static final Set<Table.TableType> SUPPORTED_TABLE_TYPE =
             ImmutableSet.of(Table.TableType.OLAP,
                     Table.TableType.HIVE,
@@ -771,6 +774,10 @@ public class MaterializedViewAnalyzer {
 
         private void checkPartitionColumnWithBaseJDBCTable(SlotRef slotRef, JDBCTable table) {
             checkPartitionColumnWithBaseTable(slotRef, table.getPartitionColumns(), table.isUnPartitioned());
+            if (!SUPPORTED_JDBC_PARTITION_TYPE.contains(table.getProtocolType())) {
+                throw new SemanticException(String.format("Materialized view PARTITION BY for JDBC %s is not " +
+                        "supported, you could remove the PARTITION BY clause", table.getProtocolType()));
+            }
         }
 
         // if mv is partitioned, mv will be refreshed by partition.
