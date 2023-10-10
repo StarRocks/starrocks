@@ -1448,7 +1448,7 @@ public class PartitionBasedMvRefreshProcessorTest {
 
         List<String> partitions = materializedView.getPartitions().stream()
                 .map(Partition::getName).sorted().collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p00010101_20230801", "p20230801_20230802", "p20230802_99991231"),
+        Assert.assertEquals(Arrays.asList("p00010101_20230801", "p20230801_20230802"),
                 partitions);
     }
 

@@ -30,6 +30,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakePartitionKey;
 import com.starrocks.catalog.FunctionSet;
@@ -84,6 +85,10 @@ import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
 public class PartitionUtil {
     private static final Logger LOG = LogManager.getLogger(PartitionUtil.class);
+
+    private static final String PARTITION_USE_STR2DATE_MINVALUE = "0001-01-01";
+    private static final String PARTITION_USE_STR2DATE_MAXVALUE = "9999-12-31";
+    private static final String MYSQL_PARTITION_MAXVALUE = "MAXVALUE";
 
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
         return createPartitionKey(values, columns, Table.TableType.HIVE);
@@ -473,30 +478,52 @@ public class PartitionUtil {
         PartitionKey lastPartitionKey = null;
         String lastPartitionName = null;
 
-        boolean isConvertToDate = isConvertToDate(partitionExpr);
         Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
         for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
-            if (index == 0) {
-                lastPartitionName = entry.getKey();
-                lastPartitionKey = isConvertToDate ? convertToDate(entry.getValue()) : entry.getValue();
-                if (lastPartitionKey.getKeys().get(0).isNullable()) {
-                    // If partition key is NULL literal, rewrite it to min value.
-                    lastPartitionKey = PartitionKey.createInfinityPartitionKeyWithType(
-                            ImmutableList.of(isConvertToDate ? PrimitiveType.DATE : partitionColumn.getPrimitiveType()), false);
+            if (entry.getValue().getKeys().get(0) instanceof StringLiteral) {
+                if (index == 0) {
+                    lastPartitionKey = entry.getValue();
+                    PartitionKey startPartitionKey = new PartitionKey();
+                    startPartitionKey.pushColumn(StringLiteral.create(PARTITION_USE_STR2DATE_MINVALUE,
+                                    partitionColumn.getType()),
+                            partitionColumn.getPrimitiveType());
+                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(startPartitionKey, entry.getValue()));
+                    ++index;
+                    continue;
                 }
-                ++index;
-                continue;
+                Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
+                if (entry.getValue().getKeys().get(0).getStringValue().equals(MYSQL_PARTITION_MAXVALUE)) {
+                    PartitionKey endKey = new PartitionKey();
+                    endKey.pushColumn(StringLiteral.create(PARTITION_USE_STR2DATE_MAXVALUE,
+                                    partitionColumn.getType()),
+                            partitionColumn.getPrimitiveType());
+                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(lastPartitionKey, endKey));
+                } else {
+                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(lastPartitionKey, entry.getValue()));
+                }
+                lastPartitionKey = entry.getValue();
+            } else {
+                if (index == 0) {
+                    lastPartitionName = entry.getKey();
+                    lastPartitionKey = entry.getValue();
+                    if (lastPartitionKey.getKeys().get(0).isNullable()) {
+                        // If partition key is NULL literal, rewrite it to min value.
+                        lastPartitionKey =
+                                PartitionKey.createInfinityPartitionKey(ImmutableList.of(partitionColumn), false);
+                    }
+                    ++index;
+                    continue;
+                }
+                Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
+                mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, entry.getValue()));
+                lastPartitionName = entry.getKey();
+                lastPartitionKey = entry.getValue();
             }
-            Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
-            PartitionKey upperBound = isConvertToDate ? convertToDate(entry.getValue()) : entry.getValue();
-            mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, upperBound));
-            lastPartitionName = entry.getKey();
-            lastPartitionKey = upperBound;
         }
         if (lastPartitionName != null) {
             PartitionKey endKey = new PartitionKey();
             endKey.pushColumn(addOffsetForLiteral(lastPartitionKey.getKeys().get(0), 1),
-                    isConvertToDate ? PrimitiveType.DATE : partitionColumn.getPrimitiveType());
+                    partitionColumn.getPrimitiveType());
 
             Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
             mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, endKey));
