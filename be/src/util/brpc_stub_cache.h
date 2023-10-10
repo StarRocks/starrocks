@@ -36,6 +36,7 @@
 
 #include <memory>
 #include <mutex>
+#include <vector>
 
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
@@ -66,23 +67,13 @@ public:
 
     doris::PBackendService_Stub* get_stub(const butil::EndPoint& endpoint) {
         std::lock_guard<SpinLock> l(_lock);
-        auto stub_ptr = _stub_map.seek(endpoint);
-        if (stub_ptr != nullptr) {
-            return *stub_ptr;
+        auto stub_pool = _stub_map.seek(endpoint);
+        if (stub_pool == nullptr) {
+            StubPool* pool = new StubPool();
+            _stub_map.insert(endpoint, pool);
+            return pool->get_or_create(endpoint);
         }
-        // new one stub and insert into map
-        brpc::ChannelOptions options;
-        options.connect_timeout_ms = 3000;
-        // Explicitly set the max_retry
-        // TODO(meegoo): The retry strategy can be customized in the future
-        options.max_retry = 3;
-        std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
-        if (channel->Init(endpoint, &options)) {
-            return nullptr;
-        }
-        auto stub = new doris::PBackendService_Stub(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
-        _stub_map.insert(endpoint, stub);
-        return stub;
+        return (*stub_pool)->get_or_create(endpoint);
     }
 
     // rarely used, so create as needed
@@ -136,8 +127,50 @@ public:
     }
 
 private:
+    // StubPool is used to store all stubs with a single endpoint, and the client in the same BE process maintains up to
+    // brpc_max_connections_per_server single connections with each server.
+    // These connections will be created during the first few accesses and will be reused later.
+    struct StubPool {
+        StubPool() { _stubs.reserve(config::brpc_max_connections_per_server); }
+
+        ~StubPool() {
+            for (auto& stub : _stubs) {
+                delete stub;
+            }
+        }
+
+        doris::PBackendService_Stub* get_or_create(const butil::EndPoint& endpoint) {
+            if (UNLIKELY(_stubs.size() < config::brpc_max_connections_per_server)) {
+                brpc::ChannelOptions options;
+                options.connect_timeout_ms = 3000;
+                // Explicitly set the max_retry
+                // TODO(meegoo): The retry strategy can be customized in the future
+                options.max_retry = 3;
+                // the single connection of brpc will only maintain one connection with the same server by default,
+                // all requests are sent on this connection and the throughput will be limited by this.
+                // we use `connection_group` to create multiple single connections to remove this bottleneck.
+                options.connection_group = std::to_string(_stubs.size());
+                std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
+                if (channel->Init(endpoint, &options)) {
+                    return nullptr;
+                }
+                auto stub = new doris::PBackendService_Stub(channel.release(),
+                                                            google::protobuf::Service::STUB_OWNS_CHANNEL);
+                _stubs.push_back(stub);
+                return stub;
+            }
+            if (++_idx >= config::brpc_max_connections_per_server) {
+                _idx = 0;
+            }
+            return _stubs[_idx];
+        }
+
+        std::vector<doris::PBackendService_Stub*> _stubs;
+        int64_t _idx = -1;
+    };
+
     SpinLock _lock;
-    butil::FlatMap<butil::EndPoint, doris::PBackendService_Stub*> _stub_map;
+    butil::FlatMap<butil::EndPoint, StubPool*> _stub_map;
 };
 
 } // namespace starrocks
