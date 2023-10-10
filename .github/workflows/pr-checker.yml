@@ -1,7 +1,7 @@
 name: PR CHECKER
 
 on:
-  pull_request_target:
+  pull_request:
     branches:
       - main
       - 'branch-[0-9].[0-9]'
@@ -28,179 +28,41 @@ permissions:
 
 jobs:
 
-  sync-checker:
-    runs-on: ubuntu-latest
-    if: >
-      !contains(github.event.pull_request.title, '(sync #') &&
-      !contains(github.event.pull_request.labels.*.name, 'sync') &&
-      (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
-    name: SYNC CHECKER
-    steps:
-      - run: echo "Normal PR."
-
-  title-check:
-    runs-on: ubuntu-latest
-    needs: sync-checker
-    steps:
-      - uses: thehanimo/pr-title-checker@v1.3.5
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          pass_on_octokit_error: false
-          configuration_path: ".github/pr-title-checker-config.json"
-
-  backport-check:
-    needs: title-check
-    runs-on: ubuntu-latest
-    if: >
-      (startsWith(github.event.pull_request.title, '[BugFix]') ||
-       startsWith(github.event.pull_request.title, '[Enhancement]')) &&
-      !contains(github.event.pull_request.title, 'cherry-pick') &&
-      !contains(github.event.pull_request.title, 'backport')
-    steps:
-      - name: add branch-3.2 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 3.2')
-        uses: actions-ecosystem/action-add-labels@v1
-        with:
-          labels: '3.2'
-
-      - name: add branch-3.1 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 3.1')
-        uses: actions-ecosystem/action-add-labels@v1
-        with:
-          labels: '3.1'
-
-      - name: add branch-3.0 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 3.0')
-        uses: actions-ecosystem/action-add-labels@v1
-        with:
-          labels: '3.0'
-
-      - name: add branch-2.5 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 2.5')
-        uses: actions-ecosystem/action-add-labels@v1
-        with:
-          labels: '2.5'
-
-      - name: remove branch-3.2 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 3.2') && contains(github.event.pull_request.labels.*.name, '3.2')
-        uses: actions-ecosystem/action-remove-labels@v1
-        with:
-          labels: '3.2'
-
-      - name: remove branch-3.1 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 3.1') && contains(github.event.pull_request.labels.*.name, '3.1')
-        uses: actions-ecosystem/action-remove-labels@v1
-        with:
-          labels: '3.1'
-
-      - name: remove branch-3.0 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 3.0') && contains(github.event.pull_request.labels.*.name, '3.0')
-        uses: actions-ecosystem/action-remove-labels@v1
-        with:
-          labels: '3.0'
-
-      - name: remove branch-2.5 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 2.5') && contains(github.event.pull_request.labels.*.name, '2.5')
-        uses: actions-ecosystem/action-remove-labels@v1
-        with:
-          labels: '2.5'
-
-      - name: check-done
-        if: >
-          (startsWith(github.event.pull_request.title, '[BugFix]') ||
-           startsWith(github.event.pull_request.title, '[Enhancement]'))&&
-          !contains(github.event.pull_request.title, 'cherry-pick') &&
-          !contains(github.event.pull_request.title, 'backport') &&
-          contains(toJson(github.event.pull_request.body), '[ ] I have checked the version labels')
-        run: |
-          echo "::error::You must mark this checkbox - I have checked the version labels which the pr will be auto-backported to the target branch"
-          exit 1
-
   behavior-check:
     runs-on: ubuntu-latest
     if: >
       !startsWith(github.event.pull_request.title, '[Doc]') && github.base_ref == 'main'
     steps:
-      - name: Format Check
-        id: check
+      - name: info
+        run: |
+          cat $GITHUB_EVENT_PATH
+
+      - name: Format Check1
+        id: check1
         if: >
           (!contains(toJson(github.event.pull_request.body), '[ ] Yes, this PR will result in a change in behavior') &&
-          !contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior')) ||
-          (!contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior') &&
-          !contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')) ||
-          (contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
-          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior'))
+          !contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior'))
         run: |
           echo "::error::Please check the format of your pr body about the behavior change checkbox!"
           exit 1
 
-      - name: Behavior Unchanged Label
-        id: unchanged
+      - name: Format Check2
+        id: check2
         if: >
-          steps.check.outcome == 'skipped' &&
-          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')
-        uses: actions-ecosystem/action-remove-labels@v1
-        with:
-          labels: 'behavior_changed'
-
-      - name: Behavior Changed Check
-        id: changed_check
-        if: >
-          always() && steps.check.outcome == 'skipped' && steps.unchanged.outcome == 'skipped' &&
-          contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
-          contains(toJson(github.event.pull_request.body), '[ ] Interface/UI changes: syntax, type conversion, expression evaluation, display information') &&
-          contains(toJson(github.event.pull_request.body), '[ ] Parameter changes: default values, similar parameters but with different default values') &&
-          contains(toJson(github.event.pull_request.body), '[ ] Policy changes: use new policy to replace old one, functionality automatically enabled') &&
-          contains(toJson(github.event.pull_request.body), '[ ] Feature removed') &&
-          contains(toJson(github.event.pull_request.body), '[ ] Miscellaneous: upgrade & downgrade compatibility, etc')
+          (!contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior') &&
+           !contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior'))
         run: |
-          echo "::error::You must specify the type of change!"
+          echo "::error::Please check the format of your pr body about the behavior change checkbox!"
           exit 1
 
-      - name: Behavior Changed Label
+      - name: Format Check3
+        id: check3
         if: >
-          always() &&
-          steps.check.outcome == 'skipped' &&
-          steps.unchanged.outcome == 'skipped' &&
-          steps.changed_check.outcome != 'failure'
-        uses: actions-ecosystem/action-add-labels@v1
-        with:
-          labels: 'behavior_changed'
-
-  automerge-check:
-    runs-on: ubuntu-latest
-    needs: backport-check
-    if: >
-      !failure() &&
-      github.base_ref != 'main' &&
-      startsWith(github.head_ref, 'mergify/') &&
-      (contains(github.event.pull_request.title, 'cherry-pick') || 
-      contains(github.event.pull_request.title, 'backport'))
-    steps:
-      - name: add automerge label
-        uses: actions-ecosystem/action-add-labels@v1
-        with:
-          github_token: ${{ secrets.PAT }}
-          labels: automerge
-
-      - name: automerge
-        uses: peter-evans/enable-pull-request-automerge@v2
-        with:
-          token: ${{ secrets.PAT }}
-          pull-request-number: ${{ github.event.pull_request.number }}
-          merge-method: rebase
-
-  changelist-check:
-    runs-on: [self-hosted, normal]
-    if: >
-      (github.event.action == 'opened' || github.event.action == 'synchronize') &&
-      !contains(github.event.pull_request.title, 'cherry-pick') &&
-      !contains(github.event.pull_request.title, 'backport')
-    env:
-      PR_NUMBER: ${{ github.event.number }}
-      GH_TOKEN: ${{ secrets.PAT }}
-    steps:
-      - name: CHECK CHANGELIST
+          (contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
+           contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior'))
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/check-pr-changelist.sh
+          echo "::error::Please check the format of your pr body about the behavior change checkbox!"
+          exit 1
+          
+      
+
