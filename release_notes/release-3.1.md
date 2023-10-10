@@ -27,7 +27,7 @@
 - 调用 [date_diff()](../sql-reference/sql-functions/date-time-functions/date_diff.md) 函数时，如果函数中指定的时间单位是个常量而日期是非常量，会导致 BE Crash。[#29937](https://github.com/StarRocks/starrocks/issues/29937)
 - 如果 [Hive Catalog](../data_source/catalog/hive_catalog.md) 是多级目录，且数据存储在腾讯云 COS 中，会导致查询结果不正确。[#30363](https://github.com/StarRocks/starrocks/pull/30363)
 - 存算分离架构下，开启数据异步写入后，自动分区不生效。[#29986](https://github.com/StarRocks/starrocks/issues/29986)
-- 通过 [CREATE TABLE LIKE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20LIKE.md) 语句创建主键模型表时，会报错“Unexpected exception: Unknown properties: {persistent_index_type=LOCAL}”。[#30255](https://github.com/StarRocks/starrocks/pull/30255)
+- 通过 [CREATE TABLE LIKE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20LIKE.md) 语句创建主键模型表时，会报错`Unexpected exception: Unknown properties: {persistent_index_type=LOCAL}`。[#30255](https://github.com/StarRocks/starrocks/pull/30255)
 - 主键模型表 Restore 之后，BE 重启后元数据发生错误，导致元数据不一致。[#30135](https://github.com/StarRocks/starrocks/pull/30135)
 - 主键模型表导入时，如果 Truncate 操作和查询并发，在有些情况下会报错“java.lang.NullPointerException”。[#30573](https://github.com/StarRocks/starrocks/pull/30573)
 - 物化视图创建语句中包含谓词表达式时，刷新结果不正确。[#29904](https://github.com/StarRocks/starrocks/pull/29904)
