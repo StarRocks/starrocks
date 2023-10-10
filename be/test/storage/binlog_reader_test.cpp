@@ -163,8 +163,11 @@ void BinlogReaderTest::ingestion_rowsets(std::vector<std::vector<RowsetInfo>>& r
         for (auto& rowset_info : rowset_infos) {
             RowsetSharedPtr rowset;
             create_rowset(&start_key, rowset_info, &rowset);
-            rowset_info.create_time_in_us = rowset->creation_time() * 1000000;
             ASSERT_OK(_tablet->add_inc_rowset(rowset, rowset_info.version));
+            // the creation time of the rowset will be set to the visible time in add_inc_rowset(), and
+            // the binlog timestamp actually use the creation time after rowset is visible, so should
+            // get the creation time after add_inc_rowset() to verify the correctness of binlog timestamp
+            rowset_info.create_time_in_us = rowset->creation_time() * 1000000;
         }
         binlog_manager->close_active_writer();
     }
