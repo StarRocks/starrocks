@@ -1254,32 +1254,6 @@ public class AnalyzerUtils {
         return null;
     }
 
-<<<<<<< HEAD
-    public static Expr resolveSlotRef(SlotRef slotRef, QueryStatement queryStatement) {
-        AstVisitor<Expr, Void> slotRefResolver = new AstVisitor<Expr, Void>() {
-            @Override
-            public Expr visitSelect(SelectRelation node, Void context) {
-                for (SelectListItem selectListItem : node.getSelectList().getItems()) {
-                    if (selectListItem.isStar()) {
-                        // `select *` expr
-                        for (Expr expr : node.getOutputExpression()) {
-                            if (expr instanceof SlotRef) {
-                                SlotRef slot = (SlotRef) expr;
-                                if (slot.getColumnName().equalsIgnoreCase(slotRef.getColumnName())) {
-                                    return slot;
-                                }
-                            } else if (expr instanceof FieldReference) {
-                                FieldReference fieldReference = (FieldReference) expr;
-                                Field field = node.getScope().getRelationFields()
-                                        .getFieldByIndex(fieldReference.getFieldIndex());
-                                if (field.getName().equalsIgnoreCase(slotRef.getColumnName())) {
-                                    return new SlotRef(field.getRelationAlias(), field.getName());
-                                }
-                            }
-                        }
-                        return null;
-                    } else {
-=======
     private static class SlotRefResolverFactory {
         public static class AstVisitors {
             public AstVisitor<Expr, Relation> exprShuttle;
@@ -1315,7 +1289,6 @@ public class AnalyzerUtils {
                 public Expr visitSelect(SelectRelation node, SlotRef slot) {
                     for (SelectListItem selectListItem : node.getSelectList().getItems()) {
                         TableName tableName = slot.getTblNameWithoutAnalyzed();
->>>>>>> 9895188064 ([Enhancement] use resolveExpr to resolve the materialized view's partition expr (#32077))
                         if (selectListItem.getAlias() == null) {
                             if (selectListItem.getExpr() instanceof SlotRef) {
                                 SlotRef result = (SlotRef) selectListItem.getExpr();
