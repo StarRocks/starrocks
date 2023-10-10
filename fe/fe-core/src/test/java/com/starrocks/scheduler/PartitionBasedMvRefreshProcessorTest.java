@@ -1242,7 +1242,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv0"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
-        taskRunProperties.put(PARTITION_START, "20230801");
+        taskRunProperties.put(PARTITION_START, "20230731");
         taskRunProperties.put(TaskRun.PARTITION_END, "20230805");
         taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -1270,7 +1270,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv0"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
-        taskRunProperties.put(PARTITION_START, "20230801");
+        taskRunProperties.put(PARTITION_START, "20230731");
         taskRunProperties.put(TaskRun.PARTITION_END, "20230805");
         taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -1295,7 +1295,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv1"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
-        taskRunProperties.put(PARTITION_START, "20230801");
+        taskRunProperties.put(PARTITION_START, "20230731");
         taskRunProperties.put(TaskRun.PARTITION_END, "20230805");
         taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -1337,9 +1337,9 @@ public class PartitionBasedMvRefreshProcessorTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv3"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
-        taskRunProperties.put(PARTITION_START, "20230801");
+        taskRunProperties.put(PARTITION_START, "20230731");
         taskRunProperties.put(TaskRun.PARTITION_END, "20230805");
-        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
+        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(true));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
@@ -1361,7 +1361,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv5"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
-        taskRunProperties.put(PARTITION_START, "20230801");
+        taskRunProperties.put(PARTITION_START, "20230731");
         taskRunProperties.put(TaskRun.PARTITION_END, "20230805");
         taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
