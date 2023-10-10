@@ -40,7 +40,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 ## 使用示例
 
-本文以自建 Kafka 集群为例，介绍如何配置 Kafka connector 并启动Kafka connect ，导入数据至 StarRocks。
+本文以自建 Kafka 集群为例，介绍如何配置 Kafka connector 并启动 Kafka connect ，导入数据至 StarRocks。
 
 1. 创建 Kafka connector 配置文件 **connect-StarRocks-sink.properties**，并配置对应参数。参数和相关说明，参见[参数说明](#参数说明)。
 
@@ -58,7 +58,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
     > **注意**
     >
-    > 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键模型的表，为了将源端的数据变更同步至主键模型的表，则您还需要[配置 `transform`](#导入-debezium-cdc-格式数据)。
+    > 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键模型的表，为了将源端的数据变更同步至主键模型的表，则您还需要[配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
 
 2. 启动 Kafka Connect。命令中的参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。
 
@@ -133,7 +133,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 ### 导入 Debezium CDC 格式数据
 
-如果 Kafka 数据为 Debezium CDC 格式，并且 StaRrocks 表为主键模型表，则您还需要在配置 `transforms`。
+如果 Kafka 数据为 Debezium CDC 格式，并且 StarRocks 表为主键模型表，则在 Kafka connector 配置文件 **connect-StarRocks-sink.properties** 中除了[配置基础参数](#使用示例)外，还需要配置 `transforms` 以及相关参数。
 
 ```Properties
 transforms=addfield,unwrap
