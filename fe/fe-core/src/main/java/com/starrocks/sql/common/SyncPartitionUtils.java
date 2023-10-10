@@ -47,6 +47,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -56,9 +57,9 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -101,7 +102,6 @@ public class SyncPartitionUtils {
         return new ListPartitionDiff(adds, deletes);
     }
 
-
     public static boolean hasRangePartitionChanged(Map<String, Range<PartitionKey>> baseRangeMap,
                                                    Map<String, Range<PartitionKey>> mvRangeMap) {
         Map<String, Range<PartitionKey>> adds = diffRange(baseRangeMap, mvRangeMap);
@@ -113,7 +113,7 @@ public class SyncPartitionUtils {
     }
 
     public static boolean hasListPartitionChanged(Map<String, List<List<String>>> baseRangeMap,
-                                                 Map<String, List<List<String>>> mvRangeMap) {
+                                                  Map<String, List<List<String>>> mvRangeMap) {
         Map<String, List<List<String>>> adds = diffList(baseRangeMap, mvRangeMap);
         if (adds != null && !adds.isEmpty()) {
             return true;
@@ -125,15 +125,14 @@ public class SyncPartitionUtils {
     public static RangePartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                  Map<String, Range<PartitionKey>> mvRangeMap,
                                                                  FunctionCallExpr functionCallExpr,
-                                                                 PrimitiveType partitionType,
                                                                  Range<PartitionKey> rangeToInclude) {
-
+        PrimitiveType partitionColumnType = functionCallExpr.getType().getPrimitiveType();
         Map<String, Range<PartitionKey>> rollupRange = Maps.newHashMap();
         if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
-            rollupRange = mappingRangeList(baseRangeMap, granularity, partitionType);
+            rollupRange = mappingRangeList(baseRangeMap, granularity, partitionColumnType);
         } else if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
-            rollupRange = mappingRangeList(baseRangeMap);
+            rollupRange = mappingRangeListForDate(baseRangeMap);
         }
         return getRangePartitionDiff(baseRangeMap, mvRangeMap, rollupRange, rangeToInclude);
     }
@@ -151,12 +150,15 @@ public class SyncPartitionUtils {
                                                             Map<String, Range<PartitionKey>> rollupRange,
                                                             Range<PartitionKey> rangeToInclude) {
         // TODO: Callers may use `List<PartitionRange>` directly.
-        List<PartitionRange> rollupRanges = rollupRange.keySet().stream().map(name -> new PartitionRange(name,
-                rollupRange.get(name))).collect(Collectors.toList());
-        List<PartitionRange> baseRanges = baseRangeMap.keySet().stream().map(name -> new PartitionRange(name,
-                baseRangeMap.get(name))).collect(Collectors.toList());
-        List<PartitionRange> mvRanges = mvRangeMap.keySet().stream().map(name -> new PartitionRange(name,
-                mvRangeMap.get(name))).collect(Collectors.toList());
+        List<PartitionRange> rollupRanges = rollupRange.keySet().stream()
+                .map(name -> new PartitionRange(name, rollupRange.get(name)))
+                .collect(Collectors.toList());
+        List<PartitionRange> baseRanges = baseRangeMap.keySet().stream()
+                .map(name -> new PartitionRange(name, convertToDatePartitionRange(baseRangeMap.get(name))))
+                .collect(Collectors.toList());
+        List<PartitionRange> mvRanges = mvRangeMap.keySet().stream()
+                .map(name -> new PartitionRange(name, mvRangeMap.get(name)))
+                .collect(Collectors.toList());
         Map<String, Set<String>> partitionRefMap = getIntersectedPartitions(rollupRanges, baseRanges);
         Map<String, Range<PartitionKey>> adds = diffRange(rollupRanges, mvRanges, rangeToInclude);
         Map<String, Range<PartitionKey>> deletes = diffRange(mvRanges, rollupRanges, null);
@@ -166,28 +168,18 @@ public class SyncPartitionUtils {
         return diff;
     }
 
-    private static Map<String, Range<PartitionKey>> mappingRangeList(Map<String, Range<PartitionKey>> baseRangeMap) {
+    private static Map<String, Range<PartitionKey>> mappingRangeListForDate(
+            Map<String, Range<PartitionKey>> baseRangeMap) {
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
-        try {
-            for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
-                LiteralExpr lowerExpr = rangeEntry.getValue().lowerEndpoint().getKeys().get(0);
-                LiteralExpr upperExpr = rangeEntry.getValue().upperEndpoint().getKeys().get(0);
+        for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
+            Range<PartitionKey> dateRange = convertToDatePartitionRange(rangeEntry.getValue());
+            DateLiteral lowerDate = (DateLiteral) dateRange.lowerEndpoint().getKeys().get(0);
+            DateLiteral upperDate = (DateLiteral) dateRange.upperEndpoint().getKeys().get(0);
+            String mvPartitionName = getMVPartitionName(lowerDate.toLocalDateTime(), upperDate.toLocalDateTime());
 
-                Preconditions.checkArgument(lowerExpr instanceof StringLiteral
-                        && upperExpr instanceof StringLiteral);
-
-                PartitionKey lowerPartitionKey = new PartitionKey();
-                PartitionKey upperPartitionKey = new PartitionKey();
-                LocalDateTime lowerDate = DateUtils.parseStrictDateTime(lowerExpr.getStringValue());
-                LocalDateTime upperDate = DateUtils.parseStrictDateTime(upperExpr.getStringValue());
-                lowerPartitionKey.pushColumn(new DateLiteral(lowerDate, Type.DATE), PrimitiveType.DATE);
-                upperPartitionKey.pushColumn(new DateLiteral(upperDate, Type.DATE), PrimitiveType.DATE);
-
-                result.put(rangeEntry.getKey(), Range.closedOpen(lowerPartitionKey, upperPartitionKey));
-            }
-        } catch (AnalysisException e) {
-            throw new SemanticException("Convert to PartitionMapping failed:", e);
+            result.put(mvPartitionName, dateRange);
         }
+
         return result;
     }
 
@@ -232,9 +224,33 @@ public class SyncPartitionUtils {
         return result;
     }
 
+    private static PartitionRange convertToDatePartitionRange(PartitionRange range) {
+        return new PartitionRange(range.getPartitionName(), convertToDatePartitionRange(range.getPartitionKeyRange()));
+    }
+
+    private static Range<PartitionKey> convertToDatePartitionRange(Range<PartitionKey> range) {
+        LiteralExpr lower = range.lowerEndpoint().getKeys().get(0);
+        LiteralExpr upper = range.upperEndpoint().getKeys().get(0);
+        if (!(lower instanceof StringLiteral)) {
+            return range;
+        }
+        LocalDateTime lowerDate = DateUtils.parseStrictDateTime(lower.getStringValue());
+        LocalDateTime upperDate = DateUtils.parseStrictDateTime(upper.getStringValue());
+        try {
+            PartitionKey lowerPartitionKey = new PartitionKey();
+            PartitionKey upperPartitionKey = new PartitionKey();
+            lowerPartitionKey.pushColumn(new DateLiteral(lowerDate, Type.DATE), PrimitiveType.DATE);
+            upperPartitionKey.pushColumn(new DateLiteral(upperDate, Type.DATE), PrimitiveType.DATE);
+            return Range.closedOpen(lowerPartitionKey, upperPartitionKey);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Convert to DateLiteral failed:", e);
+        }
+    }
+
     public static PartitionMapping mappingRange(Range<PartitionKey> baseRange, String granularity)
             throws AnalysisException {
         // assume expr partition must be DateLiteral and only one partition
+        baseRange = convertToDatePartitionRange(baseRange);
         LiteralExpr lowerExpr = baseRange.lowerEndpoint().getKeys().get(0);
         LiteralExpr upperExpr = baseRange.upperEndpoint().getKeys().get(0);
         Preconditions.checkArgument(lowerExpr instanceof DateLiteral);
@@ -265,21 +281,29 @@ public class SyncPartitionUtils {
         }
 
         // TODO: Callers may use `List<PartitionRange>` directly.
-        List<PartitionRange> srcRanges = srcRangeMap.keySet().stream().map(name -> new PartitionRange(name,
-                srcRangeMap.get(name))).collect(Collectors.toList());
-        List<PartitionRange> dstRanges = dstRangeMap.keySet().stream().map(name -> new PartitionRange(name,
-                dstRangeMap.get(name))).collect(Collectors.toList());
+        List<PartitionRange> srcRanges = srcRangeMap.keySet().stream()
+                .map(name -> new PartitionRange(name, convertToDatePartitionRange(srcRangeMap.get(name))))
+                .collect(Collectors.toList());
+        List<PartitionRange> dstRanges = dstRangeMap.keySet().stream()
+                .map(name -> new PartitionRange(name, convertToDatePartitionRange(dstRangeMap.get(name))))
+                .collect(Collectors.toList());
         return getIntersectedPartitions(srcRanges, dstRanges);
     }
 
     /**
      * @param srcRanges : src partition ranges
      * @param dstRanges : dst partition ranges
-     * @return          : return all src partition name to intersected dst partition names which the src partition
+     * @return : return all src partition name to intersected dst partition names which the src partition
      * is intersected with dst ranges.
      */
-    private static Map<String, Set<String>> getIntersectedPartitions(List<PartitionRange> srcRanges,
-                                                                     List<PartitionRange> dstRanges) {
+    public static Map<String, Set<String>> getIntersectedPartitions(List<PartitionRange> srcRanges,
+                                                                    List<PartitionRange> dstRanges) {
+        if (!srcRanges.isEmpty() && !dstRanges.isEmpty()) {
+            List<PrimitiveType> srcTypes = srcRanges.get(0).getPartitionKeyRange().lowerEndpoint().getTypes();
+            List<PrimitiveType> dstTypes = dstRanges.get(0).getPartitionKeyRange().lowerEndpoint().getTypes();
+            Preconditions.checkArgument(Objects.equals(srcTypes, dstTypes), "types must be identical");
+        }
+
         Map<String, Set<String>> result = srcRanges.stream().collect(
                 Collectors.toMap(PartitionRange::getPartitionName, x -> Sets.newHashSet()));
 
@@ -338,6 +362,11 @@ public class SyncPartitionUtils {
             gatherPotentialRefreshPartitionNames(needRefreshMvPartitionNames, baseChangedPartitionNames,
                     baseToMvNameRef, mvToBaseNameRef);
         }
+    }
+
+    public static String getMVPartitionName(LocalDateTime lower, LocalDateTime upper) {
+        return DEFAULT_PREFIX + lower.format(DateUtils.DATEKEY_FORMATTER)
+                + "_" + upper.format(DateUtils.DATEKEY_FORMATTER);
     }
 
     public static String getMVPartitionName(LocalDateTime lowerDateTime, LocalDateTime upperDateTime,
@@ -452,12 +481,11 @@ public class SyncPartitionUtils {
 
     public static Map<String, Range<PartitionKey>> diffRange(Map<String, Range<PartitionKey>> srcRangeMap,
                                                              Map<String, Range<PartitionKey>> dstRangeMap) {
-
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
         for (Map.Entry<String, Range<PartitionKey>> srcEntry : srcRangeMap.entrySet()) {
             if (!dstRangeMap.containsKey(srcEntry.getKey()) ||
                     !RangeUtils.isRangeEqual(srcEntry.getValue(), dstRangeMap.get(srcEntry.getKey()))) {
-                result.put(srcEntry.getKey(), srcEntry.getValue());
+                result.put(srcEntry.getKey(), convertToDatePartitionRange(srcEntry.getValue()));
             }
         }
         return result;
@@ -466,14 +494,17 @@ public class SyncPartitionUtils {
     public static Map<String, Range<PartitionKey>> diffRange(List<PartitionRange> srcRanges,
                                                              List<PartitionRange> dstRanges,
                                                              Range<PartitionKey> rangeToInclude) {
-        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
-        Set<PartitionRange> dstRangeSet = new HashSet<>(dstRanges);
-        for (PartitionRange range : srcRanges) {
-            if (!dstRangeSet.contains(range) && (rangeToInclude == null || isRangeIncluded(range, rangeToInclude))) {
-                result.put(range.getPartitionName(), range.getPartitionKeyRange());
-            }
+        if (!srcRanges.isEmpty() && !dstRanges.isEmpty()) {
+            List<PrimitiveType> srcTypes = srcRanges.get(0).getPartitionKeyRange().lowerEndpoint().getTypes();
+            List<PrimitiveType> dstTypes = dstRanges.get(0).getPartitionKeyRange().lowerEndpoint().getTypes();
+            Preconditions.checkArgument(Objects.equals(srcTypes, dstTypes), "types must be identical");
         }
-        return result;
+        List<PartitionRange> diffs = ListUtils.subtract(srcRanges, dstRanges);
+        return diffs.stream()
+                .filter(r -> isRangeIncluded(r, rangeToInclude))
+                .collect(Collectors.toMap(PartitionRange::getPartitionName,
+                        diff -> convertToDatePartitionRange(diff).getPartitionKeyRange()
+                ));
     }
 
     /**
@@ -481,11 +512,14 @@ public class SyncPartitionUtils {
      * create partitions which is between `start` and `end` when executing
      * `refresh materialized view xxx partition start (xxx) end (xxx)`
      *
-     * @param range range to check
+     * @param range          range to check
      * @param rangeToInclude range to check whether the to be checked range is in
      * @return true if included, else false
      */
     private static boolean isRangeIncluded(PartitionRange range, Range<PartitionKey> rangeToInclude) {
+        if (rangeToInclude == null) {
+            return true;
+        }
         Range<PartitionKey> rangeToCheck = range.getPartitionKeyRange();
         int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
         int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
@@ -533,10 +567,10 @@ public class SyncPartitionUtils {
 
         int lastPartitionNum;
         if (partitionTTLNumber > 0 && isAutoRefresh && autoRefreshPartitionsLimit > 0) {
-            lastPartitionNum = Math.min(partitionTTLNumber, autoRefreshPartitionsLimit);;
+            lastPartitionNum = Math.min(partitionTTLNumber, autoRefreshPartitionsLimit);
         } else if (isAutoRefresh && autoRefreshPartitionsLimit > 0) {
             lastPartitionNum = autoRefreshPartitionsLimit;
-        } else if (partitionTTLNumber > 0)  {
+        } else if (partitionTTLNumber > 0) {
             lastPartitionNum = partitionTTLNumber;
         } else {
             lastPartitionNum = TableProperty.INVALID;
@@ -546,9 +580,9 @@ public class SyncPartitionUtils {
     }
 
     public static Set<String> getPartitionNamesByListWithPartitionLimit(MaterializedView materializedView,
-                                                                         String start, String end,
-                                                                         int partitionTTLNumber,
-                                                                         boolean isAutoRefresh) {
+                                                                        String start, String end,
+                                                                        int partitionTTLNumber,
+                                                                        boolean isAutoRefresh) {
         int autoRefreshPartitionsLimit = materializedView.getTableProperty().getAutoRefreshPartitionsLimit();
         boolean hasPartitionRange = StringUtils.isNoneEmpty(start) || StringUtils.isNoneEmpty(end);
 
@@ -566,10 +600,11 @@ public class SyncPartitionUtils {
 
         int lastPartitionNum;
         if (partitionTTLNumber > 0 && isAutoRefresh && autoRefreshPartitionsLimit > 0) {
-            lastPartitionNum = Math.min(partitionTTLNumber, autoRefreshPartitionsLimit);;
+            lastPartitionNum = Math.min(partitionTTLNumber, autoRefreshPartitionsLimit);
+            ;
         } else if (isAutoRefresh && autoRefreshPartitionsLimit > 0) {
             lastPartitionNum = autoRefreshPartitionsLimit;
-        } else if (partitionTTLNumber > 0)  {
+        } else if (partitionTTLNumber > 0) {
             lastPartitionNum = partitionTTLNumber;
         } else {
             lastPartitionNum = TableProperty.INVALID;
@@ -675,7 +710,6 @@ public class SyncPartitionUtils {
                     baseTable.getName(), baseTable.getTableIdentifier()));
         }
     }
-
 
     public static void dropBaseVersionMeta(MaterializedView mv, String mvPartitionName,
                                            Range<PartitionKey> partitionRange) {
