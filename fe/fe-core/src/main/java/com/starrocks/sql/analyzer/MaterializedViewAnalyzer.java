@@ -507,18 +507,12 @@ public class MaterializedViewAnalyzer {
         private boolean isValidPartitionExpr(Expr partitionExpr) {
             if (partitionExpr instanceof FunctionCallExpr) {
                 FunctionCallExpr partitionColumnExpr = (FunctionCallExpr) partitionExpr;
-                // support time_slice(dt, 'minute')
-                if (partitionColumnExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.TIME_SLICE)) {
-                    if (!(partitionColumnExpr.getChild(0) instanceof SlotRef)) {
-                        return false;
-                    }
-                    return true;
+                String fnName = partitionColumnExpr.getFnName().getFunction();
+                if (fnName.equalsIgnoreCase(FunctionSet.TIME_SLICE) || fnName.equalsIgnoreCase(FunctionSet.STR2DATE)) {
+                    return partitionColumnExpr.getChild(0) instanceof SlotRef;
                 }
             }
-            if (!(partitionExpr instanceof SlotRef)) {
-                return false;
-            }
-            return true;
+            return partitionExpr instanceof SlotRef;
         }
 
         private void checkPartitionColumnExprs(CreateMaterializedViewStatement statement,
