@@ -19,6 +19,8 @@ import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.rest.RESTCatalog;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -29,12 +31,12 @@ import java.util.Map;
 
 public class IcebergRESTCatalogTest {
     @Test
-    public void testListAllDatabases(@Mocked IcebergRESTCatalog restCatalog) {
+    public void testListAllDatabases(@Mocked RESTCatalog restCatalog) {
         new Expectations() {
             {
-                restCatalog.listAllDatabases();
-                result = Arrays.asList("db1", "db2");
-                minTimes = 0;
+                restCatalog.listNamespaces();
+                result = List.of(Namespace.of("db1"), Namespace.of("db2"));
+                times = 1;
             }
         };
 

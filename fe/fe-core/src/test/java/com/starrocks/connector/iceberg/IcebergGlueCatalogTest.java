@@ -19,6 +19,8 @@ import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.aws.glue.GlueCatalog;
+import org.apache.iceberg.catalog.Namespace;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -30,12 +32,12 @@ import java.util.Map;
 public class IcebergGlueCatalogTest {
 
     @Test
-    public void testListAllDatabases(@Mocked IcebergGlueCatalog glueCatalog) {
+    public void testListAllDatabases(@Mocked GlueCatalog glueCatalog) {
         new Expectations() {
             {
-                glueCatalog.listAllDatabases();
-                result = Arrays.asList("db1", "db2");
-                minTimes = 0;
+                glueCatalog.listNamespaces();
+                result = List.of(Namespace.of("db1"), Namespace.of("db2"));
+                times = 1;
             }
         };
 
