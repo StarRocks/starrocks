@@ -668,8 +668,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
                     }
                     rangePartitionDiff = SyncPartitionUtils.getRangePartitionDiffOfExpr(refBaseTablePartitionMap,
-                            mvRangePartitionMap, functionCallExpr, refBaseTablePartitionColumn.getPrimitiveType(),
-                            rangeToInclude);
+                            mvRangePartitionMap, functionCallExpr, rangeToInclude);
                 } else {
                     throw new SemanticException("Materialized view partition function " +
                             functionCallExpr.getFnName().getFunction() +

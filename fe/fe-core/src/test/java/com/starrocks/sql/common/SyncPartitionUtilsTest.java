@@ -14,6 +14,12 @@
 
 package com.starrocks.sql.common;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+>>>>>>> 77d73d3521 ([Enhancement] support partition rollup for string column in mv (#32141))
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.DateLiteral;
@@ -30,6 +36,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
@@ -40,6 +47,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -605,6 +613,34 @@ public class SyncPartitionUtilsTest {
         SyncPartitionUtils.dropBaseVersionMeta(mv, "p1", null);
 
         Assert.assertNull(tableMap.get("p1"));
+    }
+
+    private PartitionRange buildPartitionRange(String name, String start, String end) throws AnalysisException {
+        return new PartitionRange(name,
+                Range.closedOpen(
+                        PartitionKey.ofDateTime(DateUtils.parseStrictDateTime(start)),
+                        PartitionKey.ofDateTime(DateUtils.parseStrictDateTime(end))));
+    }
+
+    @Test
+    public void test_getIntersectedPartitions() throws AnalysisException {
+        List<PartitionRange> srcs = Arrays.asList(
+                buildPartitionRange("p20230801", "00000101", "20230801"),
+                buildPartitionRange("p20230802", "20230801", "20230802"),
+                buildPartitionRange("p20230803", "20230802", "20230803")
+        );
+        List<PartitionRange> dsts = Arrays.asList(
+                buildPartitionRange("p000101_202308", "0001-01-01", "2023-08-01"),
+                buildPartitionRange("p202308_202309", "2023-08-01", "2023-09-01")
+        );
+        Map<String, Set<String>> res = SyncPartitionUtils.getIntersectedPartitions(srcs, dsts);
+        Assert.assertEquals(
+                ImmutableMap.of(
+                        "p20230801", ImmutableSet.of("p000101_202308"),
+                        "p20230802", ImmutableSet.of("p202308_202309"),
+                        "p20230803", ImmutableSet.of("p202308_202309")
+                ),
+                res);
     }
 
 }
