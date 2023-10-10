@@ -15,6 +15,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -35,7 +36,7 @@ public class IcebergRESTCatalogTest {
         new Expectations() {
             {
                 restCatalog.listNamespaces();
-                result = List.of(Namespace.of("db1"), Namespace.of("db2"));
+                result = ImmutableList.of(Namespace.of("db1"), Namespace.of("db2"));
                 times = 1;
             }
         };

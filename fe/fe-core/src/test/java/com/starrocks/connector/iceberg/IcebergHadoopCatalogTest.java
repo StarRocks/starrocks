@@ -15,6 +15,8 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.connector.iceberg.hadoop.IcebergHadoopCatalog;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -25,7 +27,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,11 +36,11 @@ public class IcebergHadoopCatalogTest {
     @Test
     public void testNewIcebergHadoopCatalog(@Mocked HadoopCatalog hadoopCatalog) {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> new IcebergHadoopCatalog("catalog",
-                new Configuration(), Map.of()));
+                new Configuration(), ImmutableMap.of()));
         assertEquals(e.getMessage(), "Iceberg hadoop catalog must set warehouse location " +
                 "(\"iceberg.catalog.warehouse\" = \"s3://path/to/warehouse\").");
         assertDoesNotThrow(() -> new IcebergHadoopCatalog("catalog", new Configuration(),
-                Map.of("iceberg.catalog.warehouse", "s3://path/to/warehouse")));
+                ImmutableMap.of("iceberg.catalog.warehouse", "s3://path/to/warehouse")));
     }
 
 
@@ -48,13 +49,13 @@ public class IcebergHadoopCatalogTest {
         new Expectations() {
             {
                 hadoopCatalog.listNamespaces();
-                result = List.of(Namespace.of("db1"), Namespace.of("db2"));
+                result = ImmutableList.of(Namespace.of("db1"), Namespace.of("db2"));
                 minTimes = 0;
             }
         };
 
         IcebergHadoopCatalog icebergHadoopCatalog = new IcebergHadoopCatalog(
-                "catalog", new Configuration(), Map.of("iceberg.catalog.warehouse", "s3://path/to/warehouse"));
+                "catalog", new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", "s3://path/to/warehouse"));
         List<String> dbs = icebergHadoopCatalog.listAllDatabases();
         assertEquals(Arrays.asList("db1", "db2"), dbs);
     }
