@@ -740,7 +740,7 @@ under the License.
         <dependency>
             <groupId>org.xerial.snappy</groupId>
             <artifactId>snappy-java</artifactId>
-            <version>1.1.9.1</version>
+            <version>1.1.10.5</version>
         </dependency>
 
         <dependency>
