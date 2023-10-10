@@ -19,6 +19,7 @@
 #include "service/service_be/lake_service.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
+#include "util/mem_info.h"
 #include "util/thrift_server.h"
 
 namespace brpc {
