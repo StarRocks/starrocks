@@ -602,12 +602,12 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     public void collectProbeRuntimeFilters(PlanNode root) {
-        if (root instanceof ExchangeNode) {
-            return;
-        }
-
         for (RuntimeFilterDescription description : root.getProbeRuntimeFilters()) {
             probeRuntimeFilters.put(description.getFilterId(), description);
+        }
+
+        if (root instanceof ExchangeNode) {
+            return;
         }
 
         for (PlanNode node : root.getChildren()) {
