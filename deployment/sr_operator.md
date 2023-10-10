@@ -232,34 +232,44 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 
 Kubernetes 还支持使用 `behavior`，根据业务场景定制扩缩容行为，实现快速扩容，缓慢缩容，禁用缩容等。更多自动扩容容策略的说明，请参见 [Pod 水平自动扩缩](https://kubernetes.io/zh-cn/docs/tasks/run-application/horizontal-pod-autoscale/)。
 
-如下是 StarRocks 提供的 [CN 自动扩缩策略模版](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/examples/starrocks/starrocks-fe-and-cn-with-autoscaler.yaml)。
+如下是 StarRocks 提供的 [CN 自动扩缩策略模版](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/examples/starrocks/deploy_a_starrocks_cluster_with_cn.yaml)。
 
 ```Bash
   starRocksCnSpec:
-    image: starrocks/cn-ubuntu:3.0-latest
+    image: starrocks/cn-ubuntu:latest
+    limits:
+      cpu: 16
+      memory: 64Gi
     requests:
-      cpu: 4
-      memory: 4Gi
-      #when you use autoscalingPolicy, it is recommended that replicas removed from manifests.
-    autoScalingPolicy: # auto-scaling policy of CN cluster
-      maxReplicas: 10 #  CN 数量的上限 10
-      minReplicas: 1 # CN 数量的下限 1
+      cpu: 16
+      memory: 64Gi
+    # when you use autoscalingPolicy, it is recommended that replicas removed from manifests.
+    autoScalingPolicy: # Automatic scaling policy of the CN cluster.
+      maxReplicas: 10 # The maximum number of CNs is set to 10.
+      minReplicas: 1 # The minimum number of CNs is set to 1.
+      # operator creates an HPA resource based on the following field.
+      # see https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/ for more information.
       hpaPolicy:
-        metrics: # 资源指标
+        metrics: # Resource metrics
           - type: Resource
-            resource: 
-              name: memory # 资源指标为内存
+            resource:
+              name: memory  # The average memory usage of CNs is specified as a resource metric.
               target:
-                averageUtilization: 30 
-                # 触发水平扩缩容的阈值为 30%。 Kubernetes 集群中 CN 内存使用率超过 30% 时，增加 CN 数量进行扩容，低于 30% 时，减少 CN 数量进行缩容。
-                type: Utilization
-          - type: Resource
-            resource: 
-              name: cpu # 触发水平扩缩容的阈值为 60%。Kubernetes 集群中 CN CPU 内存使用率超过 60% 时，增加 CN 数量进行扩容，低于 60% 时，减少 CN 数量进行缩容。
-              target:
+                # The elastic scaling threshold is 60%.
+                # When the average memory utilization of CNs exceeds 60%, the number of CNs increases for scale-out.
+                # When the average memory utilization of CNs is below 60%, the number of CNs decreases for scale-in.
                 averageUtilization: 60
                 type: Utilization
-        behavior: # 根据业务场景定制扩缩容行为，实现快速扩容、缓慢缩容、禁用缩容等。 
+          - type: Resource
+            resource:
+              name: cpu # The average CPU utilization of CNs is specified as a resource metric.
+              target:
+                # The elastic scaling threshold is 60%.
+                # When the average CPU utilization of CNs exceeds 60%, the number of CNs increases for scale-out.
+                # When the average CPU utilization of CNs is below 60%, the number of CNs decreases for scale-in.
+                averageUtilization: 60
+                type: Utilization
+        behavior: # 根据业务场景定制扩缩容行为，实现快速扩容、缓慢缩容、禁用缩容等。
           scaleUp:
             policies:
               - type: Pods
@@ -274,8 +284,8 @@ Kubernetes 还支持使用 `behavior`，根据业务场景定制扩缩容行为�
 - 水平扩缩时 CN 数量的上限和下限。
 
   ```Bash
-  maxReplicas: 10# CN 数量上限为 10
-  minReplicas: 1# CN 数量下限为 1
+  maxReplicas: 10 # CN 数量上限为 10
+  minReplicas: 1  # CN 数量下限为 1
   ```
 
 - 触发水平扩缩的阈值。
