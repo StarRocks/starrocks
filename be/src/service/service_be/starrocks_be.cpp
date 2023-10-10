@@ -38,6 +38,7 @@
 #include "service/staros_worker.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
+#include "util/mem_info.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_server.h"
 
@@ -50,44 +51,67 @@ DECLARE_int64(socket_max_unwritten_bytes);
 
 namespace starrocks {
 
-void init_block_cache() {
+Status init_datacache(GlobalEnv* global_env) {
+    if (!config::datacache_enable && config::block_cache_enable) {
+        config::datacache_enable = true;
+        config::datacache_mem_size = std::to_string(config::block_cache_mem_size);
+        config::datacache_disk_size = std::to_string(config::block_cache_disk_size);
+        config::datacache_disk_path = config::block_cache_disk_path;
+        config::datacache_meta_path = config::block_cache_meta_path;
+        config::datacache_block_size = config::block_cache_block_size;
+        config::datacache_max_concurrent_inserts = config::block_cache_max_concurrent_inserts;
+        config::datacache_checksum_enable = config::block_cache_checksum_enable;
+        config::datacache_direct_io_enable = config::block_cache_direct_io_enable;
+        config::datacache_engine = config::block_cache_engine;
+        LOG(WARNING) << "The configuration items prefixed with `block_cache_` will be deprecated soon"
+                     << ", you'd better use the configuration items prefixed `datacache` instead!";
+    }
+
 #if !defined(WITH_CACHELIB) && !defined(WITH_STARCACHE)
-    if (config::block_cache_enable) {
-        config::block_cache_enable = false;
+    if (config::datacache_enable) {
+        config::datacache_enable = false;
     }
 #endif
 
-    if (config::block_cache_enable) {
+    if (config::datacache_enable) {
         BlockCache* cache = BlockCache::instance();
+
         CacheOptions cache_options;
-        cache_options.mem_space_size = config::block_cache_mem_size;
+        int64_t mem_limit = MemInfo::physical_mem();
+        if (global_env->process_mem_tracker()->has_limit()) {
+            mem_limit = global_env->process_mem_tracker()->limit();
+        }
+        cache_options.mem_space_size = parse_mem_size(config::datacache_mem_size, mem_limit);
 
         std::vector<std::string> paths;
-        EXIT_IF_ERROR(parse_conf_block_cache_paths(config::block_cache_disk_path, &paths));
-
+        RETURN_IF_ERROR(parse_conf_datacache_paths(config::datacache_disk_path, &paths));
         for (auto& p : paths) {
-            cache_options.disk_spaces.push_back(
-                    {.path = p, .size = static_cast<size_t>(config::block_cache_disk_size)});
+            int64_t disk_size = parse_disk_size(p, config::datacache_disk_size);
+            if (disk_size < 0) {
+                LOG(ERROR) << "invalid disk size for datacache: " << disk_size;
+                return Status::InvalidArgument("invalid disk size for datacache");
+            }
+            cache_options.disk_spaces.push_back({.path = p, .size = static_cast<size_t>(disk_size)});
         }
 
         // Adjust the default engine based on build switches.
-        if (config::block_cache_engine == "") {
+        if (config::datacache_engine == "") {
 #if defined(WITH_STARCACHE)
-            config::block_cache_engine = "starcache";
+            config::datacache_engine = "starcache";
 #else
-            config::block_cache_engine = "cachelib";
+            config::datacache_engine = "cachelib";
 #endif
         }
-        cache_options.meta_path = config::block_cache_meta_path;
-        cache_options.block_size = config::block_cache_block_size;
-        cache_options.max_parcel_memory_mb = config::block_cache_max_parcel_memory_mb;
-        cache_options.max_concurrent_inserts = config::block_cache_max_concurrent_inserts;
-        cache_options.lru_insertion_point = config::block_cache_lru_insertion_point;
-        cache_options.enable_checksum = config::block_cache_checksum_enable;
-        cache_options.enable_direct_io = config::block_cache_direct_io_enable;
-        cache_options.engine = config::block_cache_engine;
-        EXIT_IF_ERROR(cache->init(cache_options));
+        cache_options.meta_path = config::datacache_meta_path;
+        cache_options.block_size = config::datacache_block_size;
+        cache_options.max_flying_memory_mb = config::datacache_max_flying_memory_mb;
+        cache_options.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
+        cache_options.enable_checksum = config::datacache_checksum_enable;
+        cache_options.enable_direct_io = config::datacache_direct_io_enable;
+        cache_options.engine = config::datacache_engine;
+        return cache->init(cache_options);
     }
+    return Status::OK();
 }
 
 StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath> paths, bool as_cn) {
@@ -148,8 +172,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step" << start_step++ << ": staros worker init successfully";
 #endif
 
-    init_block_cache();
-    LOG(INFO) << process_name << " start step " << start_step++ << ": block cache init successfully";
+    if (!init_datacache(global_env).ok()) {
+        LOG(ERROR) << "Fail to init datacache";
+        exit(1);
+    }
+    LOG(INFO) << "BE start step " << start_step++ << ": datacache init successfully";
 
     // Start thrift server
     int thrift_port = config::be_port;
@@ -276,9 +303,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 #endif
 
 #if defined(WITH_CACHELIB) || defined(WITH_STARCACHE)
-    if (config::block_cache_enable) {
-        BlockCache::instance()->shutdown();
-        LOG(INFO) << process_name << " exit step " << exit_step++ << ": block cache shutdown successfully";
+    if (config::datacache_enable) {
+        (void)BlockCache::instance()->shutdown();
+        LOG(INFO) << process_name << " exit step " << exit_step++ << ": datacache shutdown successfully";
     }
 #endif
 
