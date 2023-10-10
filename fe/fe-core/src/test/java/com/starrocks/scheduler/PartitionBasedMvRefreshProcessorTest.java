@@ -66,7 +66,6 @@ import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -1379,11 +1378,10 @@ public class PartitionBasedMvRefreshProcessorTest {
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv1"));
 
         refreshMVRange(materializedView.getName(), "20230731", "20230805", false);
-        Collection<Partition> partitions = materializedView.getPartitions();
-        Assert.assertEquals(3, partitions.size());
-        Assert.assertNotNull(materializedView.getPartition("p20230801"));
-        Assert.assertNotNull(materializedView.getPartition("p20230802"));
-        Assert.assertNotNull(materializedView.getPartition("p20230803"));
+        List<String> partitions = materializedView.getPartitions().stream()
+                .map(Partition::getName).sorted().collect(Collectors.toList());
+        Assert.assertEquals(ImmutableList.of("p00010101_20230801", "p20230801_20230802", "p20230802_20230803"),
+                partitions);
     }
 
     @Test
@@ -1408,11 +1406,10 @@ public class PartitionBasedMvRefreshProcessorTest {
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv3"));
 
         refreshMVRange(materializedView.getName(), "20230731", "20230805", false);
-        Collection<Partition> partitions = materializedView.getPartitions();
-        Assert.assertEquals(3, partitions.size());
-        Assert.assertNotNull(materializedView.getPartition("P20230801"));
-        Assert.assertNotNull(materializedView.getPartition("P20230802"));
-        Assert.assertNotNull(materializedView.getPartition("P20230803"));
+        List<String> partitions = materializedView.getPartitions().stream()
+                .map(Partition::getName).sorted().collect(Collectors.toList());
+        Assert.assertEquals(ImmutableList.of("p00010101_20230801", "p20230801_20230802", "p20230802_20230803"),
+                partitions);
     }
 
     @Test
@@ -1426,11 +1423,10 @@ public class PartitionBasedMvRefreshProcessorTest {
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv5"));
 
         refreshMVRange(materializedView.getName(), "20230731", "20230805", false);
-        Collection<Partition> partitions = materializedView.getPartitions();
-        Assert.assertEquals(3, partitions.size());
-        Assert.assertNotNull(materializedView.getPartition("p20230801"));
-        Assert.assertNotNull(materializedView.getPartition("p20230802"));
-        Assert.assertNotNull(materializedView.getPartition("pmaxvalue"));
+        List<String> partitions = materializedView.getPartitions().stream()
+                .map(Partition::getName).sorted().collect(Collectors.toList());
+        Assert.assertEquals(ImmutableList.of("p00010101_20230801", "p20230801_20230802", "p20230802_99991231"),
+                partitions);
     }
 
     @Test
@@ -2278,7 +2274,8 @@ public class PartitionBasedMvRefreshProcessorTest {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT part_tbl1.c1, part_tbl2.c2, part_tbl1.par_date FROM `hive0`.`partitioned_db`.`part_tbl1` join " +
+                        "AS SELECT part_tbl1.c1, part_tbl2.c2, part_tbl1.par_date FROM " +
+                        "`hive0`.`partitioned_db`.`part_tbl1` join " +
                         "`hive0`.`partitioned_db`.`part_tbl2` using (par_date)");
 
         MaterializedView materializedView =
@@ -2401,7 +2398,8 @@ public class PartitionBasedMvRefreshProcessorTest {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT t2_par.c1, t2_par.c2, t1_par.par_col, t1_par.par_date FROM `hive0`.`partitioned_db`.`t2_par` join " +
+                        "AS SELECT t2_par.c1, t2_par.c2, t1_par.par_col, t1_par.par_date " +
+                        "FROM `hive0`.`partitioned_db`.`t2_par` join " +
                         "`hive0`.`partitioned_db`.`t1_par` using (par_col)");
 
         MaterializedView materializedView =
@@ -2617,10 +2615,8 @@ public class PartitionBasedMvRefreshProcessorTest {
         // check corner case: the first partition of base table is 0000 to 20230801
         // p20230801 of mv should not be created
         refreshMVRange(materializedView.getName(), "20230801", "20230802", false);
-        Collection<Partition> partitions = materializedView.getPartitions();
-        System.out.println(partitions);
-        // check create only one partition
-        Assert.assertEquals(1, partitions.size());
-        Assert.assertNotNull(materializedView.getPartition("p20230802"));
+        List<String> partitions = materializedView.getPartitions().stream()
+                .map(Partition::getName).sorted().collect(Collectors.toList());
+        Assert.assertEquals(ImmutableList.of("p20230801_20230802"), partitions);
     }
 }
