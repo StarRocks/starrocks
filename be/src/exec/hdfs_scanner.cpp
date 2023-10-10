@@ -239,10 +239,10 @@ Status HdfsScanner::open_random_access_file() {
         input_stream = _shared_buffered_input_stream;
 
         // input_stream = CacheInputStream(input_stream)
-        if (_scanner_params.use_block_cache) {
+        if (_scanner_params.use_datacache) {
             _cache_input_stream = std::make_shared<io::CacheInputStream>(_shared_buffered_input_stream, filename,
                                                                          file_size, _scanner_params.modification_time);
-            _cache_input_stream->set_enable_populate_cache(_scanner_params.enable_populate_block_cache);
+            _cache_input_stream->set_enable_populate_cache(_scanner_params.enable_populate_datacache);
             _shared_buffered_input_stream->set_align_size(_cache_input_stream->get_align_size());
             input_stream = _cache_input_stream;
         }
@@ -299,18 +299,18 @@ void HdfsScanner::update_counter() {
     COUNTER_UPDATE(profile->column_read_timer, _app_stats.column_read_ns);
     COUNTER_UPDATE(profile->column_convert_timer, _app_stats.column_convert_ns);
 
-    if (_scanner_params.use_block_cache && _cache_input_stream) {
+    if (_scanner_params.use_datacache && _cache_input_stream) {
         const io::CacheInputStream::Stats& stats = _cache_input_stream->stats();
-        COUNTER_UPDATE(profile->block_cache_read_counter, stats.read_cache_count);
-        COUNTER_UPDATE(profile->block_cache_read_bytes, stats.read_cache_bytes);
-        COUNTER_UPDATE(profile->block_cache_read_timer, stats.read_cache_ns);
-        COUNTER_UPDATE(profile->block_cache_write_counter, stats.write_cache_count);
-        COUNTER_UPDATE(profile->block_cache_write_bytes, stats.write_cache_bytes);
-        COUNTER_UPDATE(profile->block_cache_write_timer, stats.write_cache_ns);
-        COUNTER_UPDATE(profile->block_cache_write_fail_counter, stats.write_cache_fail_count);
-        COUNTER_UPDATE(profile->block_cache_write_fail_bytes, stats.write_cache_fail_bytes);
-        COUNTER_UPDATE(profile->block_cache_read_block_buffer_counter, stats.read_block_buffer_count);
-        COUNTER_UPDATE(profile->block_cache_read_block_buffer_bytes, stats.read_block_buffer_bytes);
+        COUNTER_UPDATE(profile->datacache_read_counter, stats.read_cache_count);
+        COUNTER_UPDATE(profile->datacache_read_bytes, stats.read_cache_bytes);
+        COUNTER_UPDATE(profile->datacache_read_timer, stats.read_cache_ns);
+        COUNTER_UPDATE(profile->datacache_write_counter, stats.write_cache_count);
+        COUNTER_UPDATE(profile->datacache_write_bytes, stats.write_cache_bytes);
+        COUNTER_UPDATE(profile->datacache_write_timer, stats.write_cache_ns);
+        COUNTER_UPDATE(profile->datacache_write_fail_counter, stats.write_cache_fail_count);
+        COUNTER_UPDATE(profile->datacache_write_fail_bytes, stats.write_cache_fail_bytes);
+        COUNTER_UPDATE(profile->datacache_read_block_buffer_counter, stats.read_block_buffer_count);
+        COUNTER_UPDATE(profile->datacache_read_block_buffer_bytes, stats.read_block_buffer_bytes);
     }
     if (_shared_buffered_input_stream) {
         COUNTER_UPDATE(profile->shared_buffered_shared_io_count, _shared_buffered_input_stream->shared_io_count());
