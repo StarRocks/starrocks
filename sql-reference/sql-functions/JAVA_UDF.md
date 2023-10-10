@@ -294,7 +294,7 @@ public class WindowSumInt {
 - peer_group_end：当前分区结束的位置。
 - frame_start：当前窗口框架（window frame）起始位置。<br />窗口框架：window frame 子句指定了运算范围，以当前行为准，前后若干行作为窗口函数运算的对象。例如 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING，表示运算范围为当前行和它前后各一行数据。
 - frame_end：当前窗口框架（window frame）结束位置。
-- inputs：表示一个窗口中输入的数据，为包装类数组。包装类需要对应输入数据的类型，本示例中输入数据类型为 INT，因此包装类数组为 Integer[]。
+- inputs：表示一个窗口中输入的数据，为包装类数组。包装类需要对应输入数据的类型，本示例中输入数据类型为 INT，因此包装类数组为 `Integer[]`。
 
 #### 开发 UDTF
 

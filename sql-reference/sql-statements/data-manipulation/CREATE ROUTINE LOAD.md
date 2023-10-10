@@ -137,7 +137,7 @@ FROM <data_source>
 | kafka_broker_list | Kafka 的 Broker 连接信息。格式为 `<kafka_broker_ip>:<kafka port>`，多个 Broker 之间以英文逗号 (,) 分隔。 Kafka Broker 默认端口号为 `9092`。示例：`"kafka_broker_list" = "xxx.xx.xxx.xx:9092,xxx.xx.xxx.xx:9092"` |
 | kafka_topic       | Kafka Topic 名称。一个导入作业仅支持消费一个 Topic 的消息。  |
 | kafka_partitions  | 待消费的分区。示例：`"kafka_partitions" = "0, 1, 2, 3"`。如果不配置该参数，则默认消费所有分区。 |
-| kafka_offsets     | 待消费分区的起始消费位点，必须一一对应 `kafka_partitions` 中指定的每个分区。如果不配置该参数，则默认为从分区的末尾开始消费。支持取值为<ul><li> 具体消费位点：从分区中该消费位点的数据开始消费。</li><li>`OFFSET_BEGINNING`：从分区中有数据的位置开始消费。</li><li>`OFFSET_END`：从分区的末尾开始消费。</li></ul>多个起始消费位点之间用英文逗号（, ）分隔。<br>示例： `"kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"`。|
+| kafka_offsets     | 待消费分区的起始消费位点，必须一一对应 `kafka_partitions` 中指定的每个分区。如果不配置该参数，则默认为从分区的末尾开始消费。支持取值为<ul><li> 具体消费位点：从分区中该消费位点的数据开始消费。</li><li>`OFFSET_BEGINNING`：从分区中有数据的位置开始消费。</li><li>`OFFSET_END`：从分区的末尾开始消费。</li></ul>多个起始消费位点之间用英文逗号（, ）分隔。<br />示例： `"kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"`。|
 | property.kafka_default_offsets | 所有待消费分区的默认起始消费位点。支持的取值与 `kafka_offsets` 一致。 |
 
 **更多数据源相关参数**

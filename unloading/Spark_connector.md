@@ -174,7 +174,7 @@ Spark Connector Jar 包的命名格式如下：
 | 参数名称                             | 默认值  | 说明                                                         |
 | ----------------------------------- | ------ | ------------------------------------------------------------ |
 | starrocks.fe.http.url               | 无     | FE 的 HTTP 地址。从 Spark Connector 1.1.0 版本开始支持，与 `starrocks.fenodes` 等价，两者填一个即可。在 Spark Connector 1.1.0 及以后版本，推荐使用该参数，`starrocks.fenodes` 在后续版本可能会淘汰。 |
-| starrocks.fe.jdbc.url               | 无     | FE 的 MySQL Server 连接地址。格式为 `jdbc:mysql://<fe_host>:<fe_query_port>`。<br>**注意**<br>在 Spark Connector 1.1.0 及以后版本，该参数必填。    |
+| starrocks.fe.jdbc.url               | 无     | FE 的 MySQL Server 连接地址。格式为 `jdbc:mysql://<fe_host>:<fe_query_port>`。<br />**注意**<br />在 Spark Connector 1.1.0 及以后版本，该参数必填。    |
 | user                                | 无     | StarRocks 集群账号的用户名。  |
 | starrocks.user                      | 无     | StarRocks 集群账号的用户名。从 Spark Connector 1.1.0 版本开始支持，与 `user` 等价，两者填一个即可。在 Spark Connector 1.1.0 及以后版本，推荐使用该参数，`user` 在后续版本可能会淘汰。   |
 | password                            | 无     | StarRocks 集群账号的用户密码。  |

@@ -245,8 +245,8 @@ StarRocks 访问存储系统的认证配置。
       | **参数名称**                         | **参数说明**                                                 |
       | ------------------------------------------------------- | --------------------------- |
       | dfs.nameservices                  | 自定义 HDFS 集群的名称。                                     |
-      | dfs.ha.namenodes.XXX              | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。  <br>其中 `xxx` 为 `dfs.nameservices` 中自定义的HDFS 服务的名称。 |
-      | dfs.namenode.rpc-address.XXX.NN    | 指定 NameNode 的 RPC 地址信息。  <br>其中 `NN` 表示 `dfs.ha.namenodes.XXX` 中自定义 NameNode 的名称。 |
+      | dfs.ha.namenodes.XXX              | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。  <br />其中 `xxx` 为 `dfs.nameservices` 中自定义的HDFS 服务的名称。 |
+      | dfs.namenode.rpc-address.XXX.NN    | 指定 NameNode 的 RPC 地址信息。  <br />其中 `NN` 表示 `dfs.ha.namenodes.XXX` 中自定义 NameNode 的名称。 |
       | dfs.client.failover.proxy.provider | 指定客户端连接的 NameNode 的提供者，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。 |
 
   > **说明**
@@ -471,7 +471,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 - `strict_mode`
 
-  是否开启严格模式。取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。<br>关于该模式的介绍，参见[严格模式](../../../loading/load_concept/strict_mode.md)。
+  是否开启严格模式。取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。<br />关于该模式的介绍，参见[严格模式](../../../loading/load_concept/strict_mode.md)。
 
 - `timezone`
 

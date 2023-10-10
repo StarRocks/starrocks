@@ -8,9 +8,9 @@ JSON 构造函数可以构造 JSON 类型的数据。例如 JSON 类型的对象
 
 | 函数名称                                                     | 功能                                 | 示例                                                      | 返回结果                               |
 | ------------------------------------------------------------ | ------------------------------------ | --------------------------------------------------------- | -------------------------------------- |
-| [json_object](../../sql-functions/json-functions/json-constructor-functions/json_object.md) | 构造 JSON 类型的对象。                 | SELECT JSON_OBJECT(' Daniel Smith', 26, 'Lily Smith', 25); | {"Daniel Smith": 26, "Lily Smith": 25} |
-| [json_array](../../sql-functions/json-functions/json-constructor-functions/json_array.md)   | 构造 JSON 类型的数组。                | SELECT JSON_ARRAY(1, 2, 3);                                | [1,2,3]                                |
-| [parse_json](../../sql-functions/json-functions/json-constructor-functions/parse_json.md)   | 从字符串解析并构造出 JSON 类型的数据。    | SELECT PARSE_JSON('{"a": 1}');                             | {"a": 1}                               |
+| [json_object](../../sql-functions/json-functions/json-constructor-functions/json_object.md) | 构造 JSON 类型的对象。                 | `SELECT JSON_OBJECT(' Daniel Smith', 26, 'Lily Smith', 25);` | `{"Daniel Smith": 26, "Lily Smith": 25}` |
+| [json_array](../../sql-functions/json-functions/json-constructor-functions/json_array.md)   | 构造 JSON 类型的数组。                | `SELECT JSON_ARRAY(1, 2, 3);`                                | `[1,2,3]`                                |
+| [parse_json](../../sql-functions/json-functions/json-constructor-functions/parse_json.md)   | 从字符串解析并构造出 JSON 类型的数据。    | `SELECT PARSE_JSON('{"a": 1}');`                             | `{"a": 1}`                               |
 
 ## JSON 查询和处理函数
 
@@ -55,6 +55,5 @@ StarRocks 支持使用 `<`，`<=`，`>`，`>=`， `=`，`!=` 运算符查询 JSO
 | --------------- | ------------------------------------------------------------ | -------------------- | ------------------------------------------------------------ |
 | $               | 表示根节点的对象。                                           | '$'                  | `{ "people": [ { "name": "Daniel", "surname": "Smith" }, { "name": "Lily", "surname": Smith, "active": true } ] }` |
 | .               | 表示子节点。                                                 | ' $.people'          | `[ { "name": "Daniel", "surname": "Smith" }, { "name": "Lily", "surname": Smith, "active": true } ]` |
-| []              | 表示一个或多个数组下标。[n] 表示选择数组中第 n 个元素，从 0 开始计数。<br />**从 2.5 版本开始支持查询多维数组，例如 ["Lucy", "Daniel"], ["James", "Smith"]。如果要查询到 "Lucy"这个元素，可以使用路径 `$.people[0][0]`。**| '$.people[0]' | `{ "name": "Daniel", "surname": "Smith"}` |
 | [*]             | 表示数组中的全部元素。                                       | '$.people[*].name'   | ["Daniel", "Lily"]                                            |
 | [start: end]     | 表示数组片段，区间为 [start, end)，不包含 end 代表的元素。       | '$.people[0: 1].name' | ["Daniel"]                                                   |

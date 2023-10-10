@@ -59,7 +59,7 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog 和
   </tbody>
 </table>
 
-<br>
+<br />
 
 与直接查询数据湖数据或将数据导入到本地表中相比，物化视图提供了几个独特的优势：
 
@@ -67,7 +67,7 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog 和
 - **无需维护加载任务**：物化视图通过自动刷新任务透明地更新数据，无需维护导入任务。此外，基于 Hive Catalog 的物化视图可以检测数据更改并在分区级别执行增量刷新。
 - **智能查询改写**：查询可以被透明改写至物化视图，无需修改应用使用的查询语句即可加速查询。
 
-<br>
+<br />
 
 因此，我们建议在以下情况下使用物化视图：
 
@@ -75,7 +75,7 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog 和
 - 查询涉及可复用的部份，如固定的聚合方式、Join 模式。
 - 数据以分区方式组织，而查询聚合度较高（例如按天聚合）。
 
-<br>
+<br />
 
 在以下情况下，我们建议优先通过 Data Cache 来实现加速：
 

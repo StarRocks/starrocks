@@ -115,23 +115,23 @@ connector jar包的命名格式如下
 
 - 数据类型映射默认如下：
 
-|  Spark 数据类型  | StarRocks 数据类型                                             |
-| --------------- | ------------------------------------------------------------ |
-| BooleanType     | BOOLEAN                                                      |
-| ByteType        | TINYINT                                                      |
-| ShortType       | SMALLINT                                                     |
-| IntegerType     | INT                                                          |
-| LongType        | BIGINT                                                       |
-| StringType      | LARGEINT                                                     |
-| FloatType       | FLOAT                                                        |
-| DoubleType      | DOUBLE                                                       |
-| DecimalType     | DECIMAL                                                      |
-| StringType      | CHAR                                                         |
-| StringType      | VARCHAR                                                      |
-| StringType      | STRING                                                       |
-| DateType        | DATE                                                         |
-| TimestampType   | DATETIME                                                     |
-| ArrayType       | ARRAY <br> **说明:** <br> **自版本 1.1.1 开始支持。** 详细步骤, 请参见 [导入至 ARRAY 类型的列](#load-data-into-columns-of-array-type). |
+  |  Spark 数据类型  | StarRocks 数据类型                                             |
+  | --------------- | ------------------------------------------------------------ |
+  | BooleanType     | BOOLEAN                                                      |
+  | ByteType        | TINYINT                                                      |
+  | ShortType       | SMALLINT                                                     |
+  | IntegerType     | INT                                                          |
+  | LongType        | BIGINT                                                       |
+  | StringType      | LARGEINT                                                     |
+  | FloatType       | FLOAT                                                        |
+  | DoubleType      | DOUBLE                                                       |
+  | DecimalType     | DECIMAL                                                      |
+  | StringType      | CHAR                                                         |
+  | StringType      | VARCHAR                                                      |
+  | StringType      | STRING                                                       |
+  | DateType        | DATE                                                         |
+  | TimestampType   | DATETIME                                                     |
+  | ArrayType       | ARRAY <br /> **说明:** <br /> **自版本 1.1.1 开始支持。** 详细步骤, 请参见 [导入至 ARRAY 类型的列](#load-data-into-columns-of-array-type). |
 
 - 您还可以自定义数据类型映射。
 
