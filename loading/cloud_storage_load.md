@@ -49,7 +49,7 @@ Broker Load 支持如下数据文件格式：
 
 下图展示了 Broker Load 的主要流程：
 
-![Broker Load 原理图](/assets/broker_load_how-to-work_zh.png)
+![Broker Load 原理图](../assets/broker_load_how-to-work_zh.png)
 
 ## 准备数据样例
 

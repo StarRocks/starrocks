@@ -13,7 +13,7 @@ StarRocks 自 2.3 版本起支持 Catalog（数据目录）功能，实现在一
 
 当前 StarRocks 提供两种类型 Catalog：internal catalog 和 external catalog。
 
-![figure1](/assets/3.12-1.png)
+![figure1](../../assets/3.12-1.png)
 
 - **Internal catalog**: 内部数据目录，用于管理 StarRocks 所有内部数据。例如，执行 CREATE DATABASE 和 CREATE TABLE 语句创建的数据库和数据表都由 internal catalog 管理。 每个 StarRocks 集群都有且只有一个 internal catalog 名为 [default_catalog](../catalog/default_catalog.md)。
 - **External catalog**: 外部数据目录，用于连接外部 metastore。在 StarRocks 中，您可以通过 external catalog 直接查询外部数据，无需进行数据导入或迁移。当前支持创建以下类型的 external catalog：

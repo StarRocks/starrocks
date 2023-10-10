@@ -57,11 +57,11 @@ Query Cache 支持全部数据分区策略，包括 Unpartitioned、Multi-Column
 
    BE 收集查询所涉及的所有 Tablet 的中间计算结果，并将这些结果合并成最终结果。
 
-   ![Query cache - How it works - 1](/assets/query_cache_principle-1.png)
+   ![Query cache - How it works - 1](../assets/query_cache_principle-1.png)
 
 后续发起的类似查询，就可以复用之前缓存的查询结果。比如下图所示的查询，一共涉及三个 Tablet（编号 0 到 2），Query Cache 中缓存了第一个Tablet（即 Tablet 0）的中间结果。此时，BE 可以从 Query Cache 直接获取 Tablet 0 的中间计算结果，而不必访问磁盘上的数据。如果 Query Cache 完全预热，就会包含所有三个 Tablet 的中间计算结果，此时，BE 不需要访问磁盘上的任何数据。
 
-![Query cache - How it works - 2](/assets/query_cache_principle-2.png)
+![Query cache - How it works - 2](../assets/query_cache_principle-2.png)
 
 为释放额外占用的内存，Query Cache 采用基于“最近最少使用” (Least Recently Used，简称 LRU) 算法的移出策略对缓存条目进行管理。当 Query Cache 占用的内存超过 `query_cache_capacity` 参数中设置的缓存大小时，最近最少使用的缓存条目会移出 Query Cache。
 
