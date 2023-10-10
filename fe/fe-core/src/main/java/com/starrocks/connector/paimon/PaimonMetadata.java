@@ -158,7 +158,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         try {
             paimonNativeTable = this.paimonNativeCatalog.getTable(identifier);
         } catch (Catalog.TableNotExistException e) {
-            LOG.error("Paimon table {}.{} does not exist.", dbName, tblName);
+            LOG.error("Paimon table {}.{} does not exist.", dbName, tblName, e);
             return null;
         }
         List<DataField> fields = paimonNativeTable.rowType().getFields();
