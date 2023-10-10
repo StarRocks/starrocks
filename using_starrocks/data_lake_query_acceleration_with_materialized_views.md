@@ -48,7 +48,7 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog 和
     </tr>
     <tr>
       <td><b>查询性能</b></td>
-      <td colspan="3" style="text-align: center;">Data Cache &le; 物化视图 = 本地表</td>
+      <td colspan="3" style={{textAlign: 'center'}} >Data Cache &le; 物化视图 = 本地表</td>
     </tr>
     <tr>
       <td><b>查询语句</b></td>
