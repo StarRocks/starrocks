@@ -531,12 +531,45 @@ Buckets reflect how data files are actually organized in StarRocks.
 
   - Method 1: automatically set the number of buckets (recommended)
 
-    | Bucketing method                       | Description                                                  | Example                                                      |
-    | -------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-    | Table configured with hash bucketing   | Since v2.5.7, StarRocks can automatically set the number of buckets based on machine resources and data volume for a partition.<br>NOTICE：<br>If the raw data size of a partition exceeds 100 GB, we recommend that you manually configure the number of buckets using the Method 2. | CREATE TABLE site_access(<br/>site_id INT DEFAULT '10',<br/>city_code SMALLINT,<br/>user_name VARCHAR(32) DEFAULT '',<br/>pv BIGINT SUM DEFAULT '0'<br/>)<br/>AGGREGATE KEY(site_id, city_code, user_name)<br/>DISTRIBUTED BY HASH(site_id,city_code); -- Do not need to set the number of buckets |
-    | Table configured with random bucketing | Since v2.5.7, StarRocks can automatically set the number of buckets based on machine resources and data volume for a partition. Since v3.2.0, StarRocks optimizes the logic for automatically setting the number of buckets. After creating a table, StarRocks increases the number of buckets in a partition **dynamically and accordingly**, based on the cluster capacity and the volume of loaded data. So it not only provides more convenience for users, but also does not affect performance when data is loaded in a bulk or high-frequency manner. <!--To further adjust the number of buckets, you can modify the system variable [`pipeline_dop`](../reference/System_variable#pipeline_dop) and the table property `max_mutable_partition_num` based on the logic???--> | CREATE TABLE site_access(<br/>site_id INT DEFAULT '10',<br/>city_code SMALLINT,<br/>user_name VARCHAR(32) DEFAULT '',<br/>pv BIGINT SUM DEFAULT '0'<br/>)<br/>AGGREGATE KEY(site_id, city_code, user_name)<br/>; -- Do not need to set the number of bucket and the bucketing key|
+    - Table configured with hash bucketing
 
-    After creating a table, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) to view the number of buckets set by StarRocks for each partition. As for a table configured with hash bucketing, the number of buckets for each partitions is **fixed**. As for a table configured with random bucketing, the number of buckets for each partition can br **dynamically changed**. So the returned result displays the **current** number of buckets for each partition.
+      > **NOTICE**
+      >
+      > If the raw data size of a partition exceeds 100 GB, we recommend that you manually configure the number of buckets using the Method 2.
+
+      Example:
+
+      Since v2.5.7, StarRocks can automatically set the number of buckets based on machine resources and data volume for a partition.
+
+      ```sql
+      CREATE TABLE site_access(
+      site_id INT DEFAULT '10',
+      city_code SMALLINT,
+      user_name VARCHAR(32) DEFAULT '',
+      pv BIGINT SUM DEFAULT '0')
+      AGGREGATE KEY(site_id, city_code, user_name)
+      DISTRIBUTED BY HASH(site_id,city_code); -- Do not need to set the number of buckets
+      ```
+
+    - Table configured with random bucketing
+
+      Since v2.5.7, StarRocks can automatically set the number of buckets based on machine resources and data volume for a partition. Since v3.2.0, StarRocks optimizes the logic for automatically setting the number of buckets. After creating a table, StarRocks increases the number of buckets in a partition **dynamically and accordingly**, based on the cluster capacity and the volume of loaded data. So it not only provides more convenience for users, but also does not affect performance when data is loaded in a bulk or high-frequency manner.
+
+      Example:
+
+      ```SQL
+      CREATE TABLE site_access1 (
+          event_day DATE,
+          site_id INT DEFAULT '10', 
+          pv BIGINT DEFAULT '0' ,
+          city_code VARCHAR(100),
+          user_name VARCHAR(32) DEFAULT ''
+      )
+      DUPLICATE KEY (event_day,site_id,pv)
+      ;-- Do not need to set the number of bucket and the bucketing key
+      ```
+
+      After creating a table, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) to view the number of buckets set by StarRocks for each partition. As for a table configured with hash bucketing, the number of buckets for each partitions is **fixed**. As for a table configured with random bucketing, the number of buckets for each partition can br **dynamically changed**. So the returned result displays the **current** number of buckets for each partition.
 
   - Method 2: manually set the number of buckets
 
@@ -559,10 +592,16 @@ Buckets reflect how data files are actually organized in StarRocks.
 - How to set the number of buckets when adding a new partition
 
   - Method 1: automatically set the number of buckets (recommended)
-    | Bucketing method                       | Description                                                  |
-    | -------------------------------------- | ------------------------------------------------------------ |
-    | Table configured with hash bucketing   | Since v2.5.7, StarRocks supports automatically setting the number of buckets based on machine resources and data volume for a partition. <br>NOTICE：<br>If the raw data size of a partition exceeds 100 GB, we recommend that you manually configure the number of buckets using the Method 2. |
-    | Table configured with random bucketing | Since v2.5.7, StarRocks can automatically set the number of buckets based on machine resources and data volume for a partition. Since v3.2.0, StarRocks optimizes the logic for automatically setting the number of buckets. After adding a new partition, StarRocks increases the number of buckets in the partition **dynamically and accordingly**, based on cluster capacity and the volume of loaded data. So it not only provides more convenience for users, but also does not affect performance when data is loaded in a bulk or high-frequency manner. <!--To further adjust the number of buckets, you can modify the system variable [`pipeline_dop`](../reference/System_variable#pipeline_dop) and the table property `max_mutable_partition_num` based on the logic???--> |
+    - Table configured with hash bucketing
+
+      Since v2.5.7, StarRocks supports automatically setting the number of buckets based on machine resources and data volume for a partition. 
+      > **NOTICE**
+      >
+      > If the raw data size of a partition exceeds 100 GB, we recommend that you manually configure the number of buckets using the Method 2.
+
+    - Table configured with random bucketing
+
+      Since v2.5.7, StarRocks can automatically set the number of buckets based on machine resources and data volume for a partition. Since v3.2.0, StarRocks optimizes the logic for automatically setting the number of buckets. After adding a new partition, StarRocks increases the number of buckets in the partition **dynamically and accordingly**, based on cluster capacity and the volume of loaded data. So it not only provides more convenience for users, but also does not affect performance when data is loaded in a bulk or high-frequency manner.
 
     After adding a table, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) to view the number of buckets set by StarRocks for the new partition. As for a table configured with hash bucketing, the number of buckets for the new partition is **fixed**. As for a table configured with random bucketing, the number of buckets for the new partition can be **dynamically changed**. So the returned result displays the **current** number of buckets for the new partition.
 
