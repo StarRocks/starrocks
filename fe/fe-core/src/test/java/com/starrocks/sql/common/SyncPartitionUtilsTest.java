@@ -14,12 +14,8 @@
 
 package com.starrocks.sql.common;
 
-<<<<<<< HEAD
-=======
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
->>>>>>> 77d73d3521 ([Enhancement] support partition rollup for string column in mv (#32141))
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.DateLiteral;
@@ -49,6 +45,7 @@ import org.junit.Test;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 

@@ -272,6 +272,9 @@ public class MaterializedViewAnalyzer {
                 checkPartitionExpPatterns(statement);
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, aliasTableMap);
+                // TODO: check window function
+                SlotRef partitionSlotRef = getSlotRef(statement.getPartitionRefTableExpr());
+                PartitionExprAnalyzer.analyzePartitionExpr(statement.getPartitionRefTableExpr(), partitionSlotRef);
             }
             // check and analyze distribution
             checkDistribution(statement, aliasTableMap);
