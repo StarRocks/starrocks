@@ -424,6 +424,40 @@ void PipelineDriver::check_short_circuit() {
     }
 }
 
+<<<<<<< HEAD
+=======
+bool PipelineDriver::need_report_exec_state() {
+    if (is_finished()) {
+        return false;
+    }
+
+    return _fragment_ctx->need_report_exec_state();
+}
+
+void PipelineDriver::report_exec_state_if_necessary() {
+    if (is_finished()) {
+        return;
+    }
+
+    _fragment_ctx->report_exec_state_if_necessary();
+}
+
+void PipelineDriver::runtime_report_action() {
+    if (is_finished()) {
+        return;
+    }
+
+    _update_driver_level_timer();
+
+    for (auto& op : _operators) {
+        COUNTER_SET(op->_total_timer, op->_pull_timer->value() + op->_push_timer->value() +
+                                              op->_finishing_timer->value() + op->_finished_timer->value() +
+                                              op->_close_timer->value());
+        op->update_metrics(_fragment_ctx->runtime_state());
+    }
+}
+
+>>>>>>> d353b0f4ae ([Enhancement] Refine profile to support visualization refactor(5) (#32303))
 void PipelineDriver::mark_precondition_not_ready() {
     for (auto& op : _operators) {
         _operator_stages[op->get_id()] = OperatorStage::PRECONDITION_NOT_READY;
@@ -437,17 +471,30 @@ void PipelineDriver::mark_precondition_ready(RuntimeState* runtime_state) {
     }
 }
 
+<<<<<<< HEAD
 void PipelineDriver::start_schedule(int64_t start_count, int64_t start_time) {
     _global_schedule_counter->set(start_count);
     _global_schedule_timer->set(start_time);
 
     // start timers
+=======
+void PipelineDriver::start_timers() {
+>>>>>>> d353b0f4ae ([Enhancement] Refine profile to support visualization refactor(5) (#32303))
     _total_timer_sw->start();
     _pending_timer_sw->start();
     _precondition_block_timer_sw->start();
     _input_empty_timer_sw->start();
     _output_full_timer_sw->start();
     _pending_finish_timer_sw->start();
+}
+
+void PipelineDriver::stop_timers() {
+    _total_timer_sw->stop();
+    _pending_timer_sw->stop();
+    _precondition_block_timer_sw->stop();
+    _input_empty_timer_sw->stop();
+    _output_full_timer_sw->stop();
+    _pending_finish_timer_sw->stop();
 }
 
 void PipelineDriver::submit_operators() {
@@ -523,6 +570,7 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op
 
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count,
                               int64_t execution_time) {
+<<<<<<< HEAD
     if (schedule_count > 0) {
         _global_schedule_counter->set(schedule_count - _global_schedule_counter->value());
     } else {
@@ -533,6 +581,9 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, in
     } else {
         _global_schedule_timer->set((int64_t)-1);
     }
+=======
+    stop_timers();
+>>>>>>> d353b0f4ae ([Enhancement] Refine profile to support visualization refactor(5) (#32303))
     int64_t time_spent = 0;
     // The driver may be destructed after finalizing, so use a temporal driver to record
     // the information about the driver queue and workgroup.
@@ -555,9 +606,13 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, in
 
     set_driver_state(state);
 
+<<<<<<< HEAD
     COUNTER_UPDATE(_total_timer, _total_timer_sw->elapsed_time());
     COUNTER_UPDATE(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
     _update_overhead_timer();
+=======
+    _update_driver_level_timer();
+>>>>>>> d353b0f4ae ([Enhancement] Refine profile to support visualization refactor(5) (#32303))
 
     // Acquire the pointer to avoid be released when removing query
     auto query_trace = _query_ctx->shared_query_trace();
@@ -566,7 +621,14 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, in
     QUERY_TRACE_END("finalize", driver_name);
 }
 
-void PipelineDriver::_update_overhead_timer() {
+void PipelineDriver::_update_driver_level_timer() {
+    // Total Time
+    COUNTER_SET(_total_timer, static_cast<int64_t>(_total_timer_sw->elapsed_time()));
+
+    // Schedule Time
+    COUNTER_SET(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
+
+    // Overhead Time
     int64_t overhead_time = _active_timer->value();
     RuntimeProfile* profile = _runtime_profile.get();
     std::vector<RuntimeProfile*> operator_profiles;
