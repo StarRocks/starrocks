@@ -285,7 +285,7 @@ ALTER RESOURCE GROUP <group_name> DROP ALL;
 
 ## Monitor resource group
 
-You can set [monitor and alert](Monitor_and_alert.md) for your resource groups.
+You can set [monitor and alert](Monitor_and_Alert.md) for your resource groups.
 
 Metrics you can monitor regarding resource groups include:
 
