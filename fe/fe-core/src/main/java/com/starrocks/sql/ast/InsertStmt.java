@@ -282,7 +282,8 @@ public class InsertStmt extends DmlStmt {
         String single = props.get("single");
         boolean writeSingleFile = Boolean.parseBoolean(single);
         if (!writeSingleFile && single != null && !single.equalsIgnoreCase("false")) {
-            throw new SemanticException("got invalid parameter \"single\" = \"%s\", expect a boolean value (true or false).", single);
+            throw new SemanticException("got invalid parameter \"single\" = \"%s\", expect a boolean value (true or false).",
+                    single);
         }
 
         String path = props.get("path");
