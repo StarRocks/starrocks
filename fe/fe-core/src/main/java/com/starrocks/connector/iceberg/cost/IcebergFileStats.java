@@ -17,7 +17,6 @@ package com.starrocks.connector.iceberg.cost;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import org.apache.iceberg.StructLike;
 import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
@@ -42,7 +41,6 @@ import static java.util.stream.Collectors.toSet;
 public class IcebergFileStats {
     private Map<Integer, Type.PrimitiveType> idToTypeMapping;
     private List<Types.NestedField> nonPartitionPrimitiveColumns;
-    private StructLike values;
     private long recordCount;
     private long fileCount;
     private long size;
@@ -56,7 +54,6 @@ public class IcebergFileStats {
     public IcebergFileStats(
             Map<Integer, Type.PrimitiveType> idToTypeMapping,
             List<Types.NestedField> nonPartitionPrimitiveColumns,
-            StructLike values,
             long recordCount,
             long size,
             Map<Integer, Object> minValues,
@@ -66,7 +63,6 @@ public class IcebergFileStats {
         this.idToTypeMapping = ImmutableMap.copyOf(requireNonNull(idToTypeMapping, "idToTypeMapping is null"));
         this.nonPartitionPrimitiveColumns = ImmutableList.copyOf(
                 requireNonNull(nonPartitionPrimitiveColumns, "nonPartitionPrimitiveColumns is null"));
-        this.values = requireNonNull(values, "values is null");
         this.recordCount = recordCount;
         this.fileCount = 1;
         this.size = size;
@@ -101,10 +97,6 @@ public class IcebergFileStats {
 
     public List<Types.NestedField> getNonPartitionPrimitiveColumns() {
         return nonPartitionPrimitiveColumns;
-    }
-
-    public StructLike getValues() {
-        return values;
     }
 
     public long getRecordCount() {
