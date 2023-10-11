@@ -49,6 +49,12 @@ static const int kPprofDefaultSampleSecs = 30;
 // Protect, only one thread can work
 static std::mutex kPprofActionMutex;
 
+int set_jemalloc_profiling(bool enable) {
+    int ret = je_mallctl("prof.active", nullptr, nullptr, &enable, 1);
+    ret |= je_mallctl("prof.thread_active_init", nullptr, nullptr, &enable, 1);
+    return ret;
+}
+
 void HeapAction::handle(HttpRequest* req) {
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     (void)kPprofDefaultSampleSecs; // Avoid unused variable warning.
@@ -56,13 +62,31 @@ void HeapAction::handle(HttpRequest* req) {
     std::string str = "Heap profiling is not available with address sanitizer builds.";
 
     HttpChannel::send_reply(req, str);
+<<<<<<< HEAD
 #elif defined(USE_JEMALLOC)
     (void)kPprofDefaultSampleSecs; // Avoid unused variable warning.
+=======
+#else
+    int seconds = kPprofDefaultSampleSecs;
+    const std::string& seconds_str = req->param(SECOND_KEY);
+    if (!seconds_str.empty()) {
+        if (int value = std::atoi(seconds_str.c_str()); value > 0) {
+            seconds = value;
+        }
+    }
+>>>>>>> 7c75f38418 ([Feature] support heap profiling at runtime (#30686))
 
     std::lock_guard<std::mutex> lock(kPprofActionMutex);
     std::string str;
     std::stringstream tmp_prof_file_name;
     tmp_prof_file_name << config::pprof_profile_dir << "/heap_profile." << getpid() << "." << rand();
+    if (set_jemalloc_profiling(true) != 0) {
+        std::string error_msg = "enable jemalloc profiling error.";
+        HttpChannel::send_reply(req, HttpStatus::BAD_REQUEST, error_msg);
+        return;
+    }
+    LOG(INFO) << "enable jemalloc profiling";
+    sleep(seconds);
 
     // NOTE: Use fname to make the content which fname_cstr references to is still valid
     // when je_mallctl is executing
@@ -74,6 +98,8 @@ void HeapAction::handle(HttpRequest* req) {
     } else {
         std::string str = "dump jemalloc prof file failed";
     }
+    (void)set_jemalloc_profiling(false);
+    LOG(INFO) << "disable jemalloc profiling";
     HttpChannel::send_reply(req, str);
 #else
     std::lock_guard<std::mutex> lock(kPprofActionMutex);
@@ -211,5 +237,4 @@ void SymbolAction::handle(HttpRequest* req) {
         HttpChannel::send_reply(req, result);
     }
 }
-
 } // namespace starrocks
