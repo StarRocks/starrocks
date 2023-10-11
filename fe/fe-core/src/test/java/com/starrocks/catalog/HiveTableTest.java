@@ -190,4 +190,11 @@ public class HiveTableTest {
         com.starrocks.catalog.Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
+
+    @Test
+    public void testHasBoolPartitionColumn() {
+        Table msTable = hiveClient.getTable("hive_db", "hive_table");
+        HiveTable oTable = HiveMetastoreApiConverter.toHiveTable(msTable, getResourceMappingCatalogName("hive0", "hive"));
+        Assert.assertFalse(oTable.hasBooleanTypePartitionColumn());
+    }
 }

@@ -235,6 +235,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return hiveProperties == null ? new HashMap<>() : hiveProperties;
     }
 
+    public boolean hasBooleanTypePartitionColumn() {
+        return getPartitionColumns().stream().anyMatch(column -> column.getType().isBoolean());
+    }
+
     public void modifyTableSchema(String dbName, String tableName, HiveTable updatedTable) {
         ImmutableList.Builder<Column> fullSchemaTemp = ImmutableList.builder();
         ImmutableMap.Builder<String, Column> nameToColumnTemp = ImmutableMap.builder();

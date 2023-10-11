@@ -58,7 +58,7 @@ public interface IHiveMetastore {
 
     void dropPartition(String dbName, String tableName, List<String> partValues, boolean deleteData);
 
-    boolean partitionExists(String dbName, String tableName, List<String> partitionValues);
+    boolean partitionExists(Table table, List<String> partitionValues);
 
     Map<String, Partition> getPartitionsByNames(String dbName, String tableName, List<String> partitionNames);
 

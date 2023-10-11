@@ -271,8 +271,8 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     @Override
-    public boolean partitionExists(String dbName, String tableName, List<String> partitionValues) {
-        return metastore.partitionExists(dbName, tableName, partitionValues);
+    public boolean partitionExists(Table table, List<String> partitionValues) {
+        return metastore.partitionExists(table, partitionValues);
     }
 
     private List<String> loadPartitionKeys(HivePartitionValue hivePartitionValue) {
