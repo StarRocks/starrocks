@@ -27,7 +27,7 @@ SET DEFAULT ROLE NONE TO <user_identity>;
 
 Individual users can set default roles for themselves. `user_admin` can set default roles for other users. Before you perform this operation, make sure that the user has already been assigned these roles.
 
-You can query the roles of a user using [SHOW GRANTS](SHOW%20GRANTS.md).
+You can query the roles of a user using [SHOW GRANTS](SHOW_GRANTS.md).
 
 ## Examples
 

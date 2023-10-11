@@ -117,9 +117,15 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPart title="References​">
 <NavBoxPartItem>
 
+<<<<<<< HEAD
 - [SQL reference](../sql-reference/sql-statements/account-management/ALTER%20USER.md)
 - [Function reference](../sql-reference/sql-functions/date-time-functions/convert_tz.md)
 - [Data type](../sql-reference/sql-statements/data-types/TINYINT.md)
+=======
+- [SQL reference](../sql-reference/sql-statements/account-management/ALTER_USER)
+- [Function reference](../sql-reference/sql-functions/date-time-functions/convert_tz)
+- [Data type](../sql-reference/sql-statements/data-types/TINYINT)
+>>>>>>> ad1d16540e ([Doc] Fix filename spaces (#32525))
 
 </NavBoxPartItem>
 </NavBoxPart>

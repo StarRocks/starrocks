@@ -174,7 +174,15 @@ Buckets reflect how data files are organized in StarRocks.
     DISTRIBUTED BY HASH(site_id,city_code); -- do not need to set the number of buckets
     ```
 
+<<<<<<< HEAD
     To enable this feature, make sure that the FE dynamic parameter `enable_auto_tablet_distribution` is set to `TRUE`. After a table is created, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) to view the bucket number automatically set by StarRocks for each partition.
+=======
+    To enable this feature, make sure that the FE dynamic parameter `enable_auto_tablet_distribution` is set to `TRUE`. After a table is created, you can execute [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_VIEW.md) to view the bucket number automatically set by StarRocks.
+
+    > **NOTICE**
+    >
+    > If the raw data size of a partition exceeds 100 GB, we recommend that you manually configure the number of buckets using the Method 2.
+>>>>>>> ad1d16540e ([Doc] Fix filename spaces (#32525))
 
   - Method 2: manually set the number of buckets
 

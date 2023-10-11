@@ -431,6 +431,6 @@ The task ID for a manual collection task can be obtained from SHOW ANALYZE STATU
 
 ## References
 
-- To query FE configuration items, run [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SHOW%20CONFIG.md).
+- To query FE configuration items, run [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md).
 
-- To modify FE configuration items, run [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md).
+- To modify FE configuration items, run [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md).
