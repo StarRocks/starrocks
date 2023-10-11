@@ -38,7 +38,6 @@ bool RowStoreEncoder::is_field_supported(const Field& f) {
     case TYPE_LARGEINT:
     case TYPE_VARCHAR:
     case TYPE_DATE:
-    case OLAP_FIELD_TYPE_DATE_V2:
     case TYPE_DATETIME:
         return true;
     default:

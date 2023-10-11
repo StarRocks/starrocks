@@ -16,6 +16,7 @@
 // under the License.
 
 #include "exec/short_circuit.h"
+#include "exec/short_circuit_hybrid.h"
 
 #include "column/column_helper.h"
 #include "common/object_pool.h"
@@ -103,6 +104,29 @@ private:
     std::vector<ExprContext*> _output_expr_ctxs;
 };
 
+ShortCircuitExecutor::~ShortCircuitExecutor() {
+    close();
+}
+
+Status ShortCircuitExecutor::close() {
+    if (_closed) {
+        return Status::OK();
+    }
+    _closed = true;
+
+    if (_runtime_state != nullptr) {
+        if (_source != nullptr) {
+            _source->close(_runtime_state.get());
+        }
+        if (_sink != nullptr) {
+            RETURN_IF_ERROR(
+                    _sink->close(_runtime_state.get(),
+                                 _finish ? Status::OK() : Status::InternalError("short circuit execute failed")));
+        }
+    }
+    return Status::OK();
+}
+
 ShortCircuitExecutor::ShortCircuitExecutor(ExecEnv* exec_env)
         : _query_id(generate_uuid()), _fragment_instance_id(generate_uuid()), _exec_env(exec_env) {
     TQueryOptions query_options;
@@ -126,7 +150,7 @@ Status ShortCircuitExecutor::prepare(TExecShortCircuitParams& common_request) {
 
     // build descs
     DescriptorTbl* desc_tbl = nullptr;
-    RETURN_IF_ERROR(DescriptorTbl::create(runtime_state(), runtime_state()->obj_pool(), *_t_desc_tbl, &desc_tbl, 1024));
+    RETURN_IF_ERROR(DescriptorTbl::create(runtime_state(), runtime_state()->obj_pool(), t_desc_tbl, &desc_tbl, 1024));
     runtime_state()->set_desc_tbl(desc_tbl);
 
     // build source

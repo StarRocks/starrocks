@@ -17,6 +17,18 @@
 
 #include "exec/short_circuit_hybrid.h"
 
+#include "column/column_helper.h"
+#include "common/object_pool.h"
+#include "common/status.h"
+#include "exec/scan_node.h"
+#include "exprs/expr.h"
+#include "runtime/exec_env.h"
+#include "runtime/memory_scratch_sink.h"
+#include "storage/chunk_helper.h"
+#include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
+#include "util/thrift_util.h"
+
 namespace starrocks {
 // scan use current thread instead of io thread pool asynchronously
 
@@ -67,7 +79,7 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
         }
     }
 
-    auto tablet_schema = _tablets[0]->tablet_schema().schema();
+    auto tablet_schema = _tablets[0]->tablet_schema()->schema();
     auto column_ids = tablet_schema->field_column_ids();
     auto tablet_schema_without_rowstore = std::make_unique<Schema>(tablet_schema, column_ids);
     auto result_chunk = ChunkHelper::new_chunk(*_tuple_desc, result_size);
@@ -101,9 +113,9 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
 
 Status ShortCircuitHybridScanNode::_process_key_chunk() {
     DCHECK(_tablets.size() > 0);
-    _tablet_schema = &(_tablets[0]->tablet_schema());
+    _tablet_schema = _tablets[0]->tablet_schema();
     auto& key_column_cids = _tablet_schema->sort_key_idxes();
-    auto key_schema = ChunkHelper::convert_schema_to_format_v2(*_tablet_schema, key_column_cids);
+    auto key_schema = ChunkHelper::convert_schema(_tablet_schema, key_column_cids);
 
     _key_chunk = ChunkHelper::new_chunk(key_schema, _num_rows);
     _key_chunk->reset();
@@ -124,7 +136,7 @@ Status ShortCircuitHybridScanNode::_process_key_chunk() {
             std::vector<ExprContext*> expr_ctxs;
             std::vector<TExpr> key_literal_expr{keys_literal_expr[j]};
             // prepare
-            Expr::create_expr_trees(runtime_state()->obj_pool(), key_literal_expr, &expr_ctxs);
+            Expr::create_expr_trees(runtime_state()->obj_pool(), key_literal_expr, &expr_ctxs, runtime_state());
             Expr::prepare(expr_ctxs, runtime_state());
             Expr::open(expr_ctxs, runtime_state());
             auto& iteral_expr_ctx = expr_ctxs[0];

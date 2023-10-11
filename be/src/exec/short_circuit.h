@@ -33,6 +33,7 @@ namespace starrocks {
 class ShortCircuitExecutor {
 public:
     ShortCircuitExecutor(ExecEnv* exec_env);
+    ~ShortCircuitExecutor();
 
     Status prepare(TExecShortCircuitParams& common_request);
 
@@ -43,6 +44,7 @@ public:
     RuntimeState* runtime_state();
 
 private:
+    Status close();
     Status build_source_exec_helper(starrocks::ObjectPool* pool, std::vector<TPlanNode>& tnodes, int* index,
                                     DescriptorTbl& descs, const TScanRange& scan_range, starrocks::ExecNode** node);
     Status build_source_exec_node(starrocks::ObjectPool* pool, TPlanNode& t_node, DescriptorTbl& descs,

@@ -21,6 +21,7 @@
 #include "common/status.h"
 #include "exec/data_sink.h"
 #include "exec/exec_node.h"
+#include "exec/scan_node.h"
 #include "gen_cpp/ShortCircuit_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -34,7 +35,7 @@ using TableReaderPtr = std::shared_ptr<TableReader>;
 class TabletManager;
 
 // scan use current thread instead of io thread pool asynchronously
-class ShortCircuitHybridScanNode : public starrocks::ScanNode {
+class ShortCircuitHybridScanNode : public ScanNode {
 public:
     ShortCircuitHybridScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs,
                                const TScanRange& scan_range, RuntimeProfile* runtime_profile,
@@ -64,7 +65,7 @@ private:
     const std::vector<TKeyLiteralExpr>* _key_literal_exprs;
     TupleDescriptor* _tuple_desc;
     std::vector<TabletSharedPtr> _tablets;
-    const TabletSchema* _tablet_schema;
+    TabletSchemaCSPtr _tablet_schema;
     TupleId _tuple_id;
     std::vector<string> _versions;
     int64_t _num_rows;

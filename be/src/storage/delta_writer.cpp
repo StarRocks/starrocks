@@ -195,16 +195,8 @@ Status DeltaWriter::_init() {
             return _opt.slots->size();
         }
     }();
-    size_t real_num_columns = _tablet_schema->num_columns();
-    if (_tablet->is_column_with_row_store()) {
-        if (_tablet_schema->columns().back().name() != "__row") {
-            return Status::InternalError("bad column_with_row schema, not __row column");
-        }
-        real_num_columns -= 1;
-    }
 
     // build tablet schema in request level
-    auto tablet_schema_ptr = _tablet->tablet_schema();
     RETURN_IF_ERROR(_build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, _tablet->tablet_schema()));
     size_t real_num_columns = _tablet_schema->num_columns();
     if (_tablet->is_column_with_row_store()) {
