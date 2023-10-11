@@ -75,7 +75,7 @@ public class QueryRuntimeProfile {
      */
     private boolean profileAlreadyReported = false;
 
-    private final RuntimeProfile queryProfile;
+    private RuntimeProfile queryProfile;
     private final List<RuntimeProfile> fragmentProfiles;
 
     /**
@@ -556,4 +556,7 @@ public class QueryRuntimeProfile {
         return defaultValue;
     }
 
+    public void setQueryProfile(RuntimeProfile queryProfile) {
+        this.queryProfile = queryProfile;
+    }
 }

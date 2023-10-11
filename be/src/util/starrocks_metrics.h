@@ -277,6 +277,10 @@ public:
 
     METRIC_DEFINE_UINT_GAUGE(load_rpc_threadpool_size, MetricUnit::NOUNIT);
 
+    // short circuit executor
+    METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(short_circuit_request_duration_us, MetricUnit::MICROSECONDS);
+
     static StarRocksMetrics* instance() {
         static StarRocksMetrics instance;
         return &instance;

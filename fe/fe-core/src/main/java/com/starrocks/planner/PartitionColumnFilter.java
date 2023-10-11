@@ -143,6 +143,10 @@ public class PartitionColumnFilter {
         return null;
     }
 
+    public boolean isPoint() {
+        return lowerBoundInclusive && upperBoundInclusive && lowerBound != null && lowerBound.equals(upperBound);
+    }
+
     @Override
     public String toString() {
         String str = "";

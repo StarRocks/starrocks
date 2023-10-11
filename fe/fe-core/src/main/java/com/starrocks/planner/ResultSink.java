@@ -59,6 +59,7 @@ public class ResultSink extends DataSink {
     private TResultSinkType sinkType;
     private String brokerName;
     private TResultFileSinkOptions fileSinkOptions;
+    private boolean isBinaryRow;
 
     public ResultSink(PlanNodeId exchNodeId, TResultSinkType sinkType) {
         this.exchNodeId = exchNodeId;
@@ -83,6 +84,7 @@ public class ResultSink extends DataSink {
         if (ConnectContext.get() instanceof HttpConnectContext) {
             tResultSink.setFormat(((HttpConnectContext) ConnectContext.get()).getResultSinkFormatType());
         }
+        tResultSink.setIs_binary_row(isBinaryRow);
         result.setResult_sink(tResultSink);
         return result;
     }
@@ -136,5 +138,9 @@ public class ResultSink extends DataSink {
     public boolean canUseRuntimeAdaptiveDop() {
         return sinkType == TResultSinkType.MYSQL_PROTOCAL || sinkType == TResultSinkType.STATISTIC ||
                 sinkType == TResultSinkType.VARIABLE;
+    }
+
+    public void setBinaryRow(boolean isBinaryRow) {
+        this.isBinaryRow = isBinaryRow;
     }
 }

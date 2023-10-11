@@ -304,8 +304,8 @@ public:
 
     std::string debug_string() const;
 
-    size_t mem_usage() const {
-        size_t mem_usage = sizeof(TabletSchema);
+    int64_t mem_usage() const {
+        int64_t mem_usage = sizeof(TabletSchema);
         for (const auto& col : _cols) {
             mem_usage += col.mem_usage();
         }

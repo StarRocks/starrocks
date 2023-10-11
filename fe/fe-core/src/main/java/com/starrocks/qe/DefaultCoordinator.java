@@ -53,6 +53,7 @@ import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
+import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
@@ -146,6 +147,10 @@ public class DefaultCoordinator extends Coordinator {
     private boolean thriftServerHighLoad;
 
     private LogicalSlot slot = null;
+
+    private ShortCircuitExecutor shortCircuitExecutor = null;
+    private boolean isShortCircuit = false;
+    private boolean isBinaryRow = false;
 
     public static class Factory implements Coordinator.Factory {
 
@@ -255,6 +260,20 @@ public class DefaultCoordinator extends Coordinator {
         this.executionDAG = coordinatorPreprocessor.getExecutionDAG();
 
         this.queryProfile = new QueryRuntimeProfile(connectContext, jobSpec, executionDAG.getFragmentsInCreatedOrder().size());
+        List<PlanFragment> fragments = jobSpec.getFragments();
+        List<ScanNode> scanNodes = jobSpec.getScanNodes();
+        TDescriptorTable descTable = jobSpec.getDescTable();
+
+        if (connectContext.getCommand() == MysqlCommand.COM_STMT_EXECUTE) {
+            isBinaryRow = true;
+        }
+
+        shortCircuitExecutor = ShortCircuitExecutor.create(context, fragments, scanNodes, descTable,
+                isBinaryRow, jobSpec.isNeedReport());
+
+        if (null != shortCircuitExecutor) {
+            isShortCircuit = true;
+        }
     }
 
     @Override
@@ -455,6 +474,11 @@ public class DefaultCoordinator extends Coordinator {
             QueryQueueManager.getInstance().maybeWait(connectContext, this);
         }
 
+        if (isShortCircuit) {
+            execShortCircuit();
+            return;
+        }
+
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Prepare")) {
             prepareExec();
         }
@@ -516,6 +540,9 @@ public class DefaultCoordinator extends Coordinator {
 
         // set the broker address for OUTFILE sink
         ResultSink resultSink = (ResultSink) rootExecFragment.getPlanFragment().getSink();
+        if (isBinaryRow) {
+            resultSink.setBinaryRow(true);
+        }
         if (resultSink.isOutputFileSink() && resultSink.needBroker()) {
             FsBroker broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(resultSink.getBrokerName(),
                     execBeAddr.getHostname());
@@ -693,6 +720,9 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public RowBatch getNext() throws Exception {
+        if (isShortCircuit) {
+            return shortCircuitExecutor.getNext();
+        }
         if (receiver == null) {
             throw new UserException("There is no receiver.");
         }
@@ -1036,5 +1066,14 @@ public class DefaultCoordinator extends Coordinator {
     @Override
     public boolean isProfileAlreadyReported() {
         return this.queryProfile.isProfileAlreadyReported();
+    }
+
+    private void execShortCircuit() throws UserException {
+        shortCircuitExecutor.exec();
+        if (jobSpec.isNeedReport() && shortCircuitExecutor.getRuntimeProfile().isPresent()) {
+            RuntimeProfile profile = shortCircuitExecutor.getRuntimeProfile().get();
+            profile.setName("Short Circuit Executor");
+            queryProfile.getQueryProfile().addChild(profile);
+        }
     }
 }

@@ -197,7 +197,6 @@ Status DeltaWriter::_init() {
     }();
 
     // build tablet schema in request level
-    auto tablet_schema_ptr = _tablet->tablet_schema();
     RETURN_IF_ERROR(_build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, _tablet->tablet_schema()));
     size_t real_num_columns = _tablet_schema->num_columns();
     if (_tablet->is_column_with_row_store()) {

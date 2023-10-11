@@ -57,6 +57,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.mysql.MysqlCommand.COM_STMT_EXECUTE;
+
 public final class QeProcessorImpl implements QeProcessor {
 
     private static final Logger LOG = LogManager.getLogger(QeProcessorImpl.class);
@@ -95,7 +97,10 @@ public final class QeProcessorImpl implements QeProcessor {
 
     @Override
     public void registerQuery(TUniqueId queryId, QueryInfo info) throws UserException {
-        LOG.info("register query id = {}", DebugUtil.printId(queryId));
+        if (info.getConnectContext().getCommand() != COM_STMT_EXECUTE ||
+                info.getConnectContext().getSessionVariable().isAuditExecuteStmt()) {
+            LOG.info("register query id = {}", DebugUtil.printId(queryId));
+        }
         final QueryInfo result = coordinatorMap.putIfAbsent(queryId, info);
         if (result != null) {
             throw new UserException("queryId " + queryId + " already exists");
@@ -109,7 +114,10 @@ public final class QeProcessorImpl implements QeProcessor {
             if (info.getCoord() != null) {
                 info.getCoord().onFinished();
             }
-            LOG.info("deregister query id {}", DebugUtil.printId(queryId));
+            if (info.getConnectContext().getCommand() != COM_STMT_EXECUTE ||
+                    info.getConnectContext().getSessionVariable().isAuditExecuteStmt()) {
+                LOG.info("deregister query id = {}", DebugUtil.printId(queryId));
+            }
         }
     }
 
