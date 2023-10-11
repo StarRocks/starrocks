@@ -49,8 +49,6 @@ public:
         using ResultCppType = RunTimeCppType<ResultType>;
         using ResultColumnType = RunTimeColumnType<ResultType>;
 
-        auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
-        auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
         const int s = std::min(v1->size(), v2->size());
 
         auto result = ResultColumnType::create();
@@ -58,12 +56,14 @@ public:
         auto* data3 = result->get_data().data();
 
         if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
+            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
+            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
             for (int i = 0; i < s; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[i], r2[i]);
             }
         } else {
-            auto* data1 = r1.data();
-            auto* data2 = r2.data();
+            auto* data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data().data();
+            auto* data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data().data();
             for (int i = 0; i < s; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1[i], data2[i]);
             }
@@ -79,20 +79,20 @@ public:
         using ResultCppType = RunTimeCppType<ResultType>;
         using ResultColumnType = RunTimeColumnType<ResultType>;
 
-        auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data()[0];
-        auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
         int size = v2->size();
-
         auto result = ResultColumnType::create();
         result->resize_uninitialized(size);
         auto* data3 = result->get_data().data();
 
         if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
+            auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data()[0];
+            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1, r2[i]);
             }
         } else {
-            auto* data2 = r2.data();
+            auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data()[0];
+            auto* data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data().data();
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1, data2[i]);
             }
@@ -108,21 +108,21 @@ public:
         using ResultCppType = RunTimeCppType<ResultType>;
         using ResultColumnType = RunTimeColumnType<ResultType>;
 
-        auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
-        auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data()[0];
         int size = v1->size();
-
         auto result = ResultColumnType::create();
         result->resize_uninitialized(size);
         auto& r3 = result->get_data();
         auto* data3 = r3.data();
 
         if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
+            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
+            auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data()[0];
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[i], data2);
             }
         } else {
-            auto* data1 = r1.data();
+            auto* data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data().data();
+            auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data()[0];
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1[i], data2);
             }
@@ -138,14 +138,19 @@ public:
         using ResultCppType = RunTimeCppType<ResultType>;
         using ResultColumnType = RunTimeColumnType<ResultType>;
 
-        auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
-        auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
-
         auto result = ResultColumnType::create();
         result->resize_uninitialized(1);
         auto& r3 = result->get_data();
 
-        r3[0] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[0], r2[0]);
+        if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
+            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
+            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
+            r3[0] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[0], r2[0]);
+        } else {
+            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
+            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
+            r3[0] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[0], r2[0]);
+        }
 
         return result;
     }

@@ -168,17 +168,7 @@ public:
         return _cache;
     }
 
-    Buffer<T*>& get_proxy_data() {
-        _build_cache();
-        return _cache;
-    }
-
     const Buffer<T*>& get_data() const {
-        _build_cache();
-        return _cache;
-    }
-
-    const Buffer<T*>& get_proxy_data() const {
         _build_cache();
         return _cache;
     }
