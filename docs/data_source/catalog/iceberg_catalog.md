@@ -4,7 +4,7 @@ An Iceberg catalog is a type of external catalog that is supported by StarRocks 
 
 - Directly query data stored in Iceberg without the need to manually create tables.
 - Use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Iceberg and load the data into StarRocks.
-- Perform operations on StarRocks to create or drop Iceberg databases and tables, or sink data from StarRocks tables to Parquet-formatted Iceberg tables by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) (this feature is supported from v3.1 onwards).
+- Perform operations on StarRocks to create or drop Iceberg databases and tables, or sink data from StarRocks tables to Parquet-formatted Iceberg tables by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) (this feature is supported from v3.1 onwards).
 
 To ensure successful SQL workloads on your Iceberg cluster, your StarRocks cluster needs to integrate with two important components:
 

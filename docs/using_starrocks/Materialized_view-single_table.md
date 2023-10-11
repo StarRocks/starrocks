@@ -155,7 +155,7 @@ GROUP BY store_id;
 
 ## Check the building status of a synchronous materialized view
 
-Creating a synchronous materialized view is an asynchronous operation. Executing CREATE MATERIALIZED VIEW successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the synchronous materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md).
+Creating a synchronous materialized view is an asynchronous operation. Executing CREATE MATERIALIZED VIEW successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the synchronous materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md).
 
 ```Plain
 MySQL > SHOW ALTER MATERIALIZED VIEW\G
