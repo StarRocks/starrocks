@@ -80,7 +80,7 @@ OrdinalIndexReader::OrdinalIndexReader() {
 }
 
 OrdinalIndexReader::~OrdinalIndexReader() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(), mem_usage());
 }
 
 StatusOr<bool> OrdinalIndexReader::load(const IndexReadOptions& opts, const OrdinalIndexPB& meta,
@@ -89,7 +89,7 @@ StatusOr<bool> OrdinalIndexReader::load(const IndexReadOptions& opts, const Ordi
         Status st = _do_load(opts, meta, num_values);
         if (st.ok()) {
             MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
-                                     _mem_usage() - sizeof(OrdinalIndexReader))
+                                     mem_usage() - sizeof(OrdinalIndexReader))
         } else {
             _reset();
         }
