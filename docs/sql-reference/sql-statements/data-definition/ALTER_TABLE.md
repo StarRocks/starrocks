@@ -28,7 +28,7 @@ alter_clause1[, alter_clause2, ...]
 > **NOTE**
 >
 > - Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
-> - Schema change and rollup are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md) command to check the progress.
+> - Schema change and rollup are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
 > - Partition, rename, swap, and index are synchronous operations, and a command return indicates that the execution is finished.
 
 ### Modify partition
@@ -56,7 +56,7 @@ Note:
 2. partition is the left-closed-right-open interval. If the user only specifies the right boundary, the system will automatically determine the left boundary.
 3. If the bucket mode is not specified, the bucket method used by the built-in table is automatically used.
 4. If the bucket mode is specified, only the bucket number can be modified, and the bucket mode or bucket column cannot be modified.
-5. User can set some properties of the partition in ["key"="value"]. See [CREATE TABLE](CREATE%20TABLE.md) for details.
+5. User can set some properties of the partition in ["key"="value"]. See [CREATE TABLE](CREATE_TABLE.md) for details.
 
 #### Drop a partition
 
@@ -435,7 +435,7 @@ ALTER TABLE [database.]table COMMENT = "<new table comment>";
     SET ("replicated_storage" = "false");
     ```
 
-   This example sets the data writing and replication mode among replicas to "leaderless replication", which means data is written to multiple replicas at the same time without differentiating primary and secondary replicas. For more information, see the `replicated_storage` parameter in [CREATE TABLE](CREATE%20TABLE.md).
+   This example sets the data writing and replication mode among replicas to "leaderless replication", which means data is written to multiple replicas at the same time without differentiating primary and secondary replicas. For more information, see the `replicated_storage` parameter in [CREATE TABLE](CREATE_TABLE.md).
 
 ### Partition
 
@@ -705,6 +705,6 @@ ALTER TABLE [database.]table COMMENT = "<new table comment>";
 
 ## References
 
-- [CREATE TABLE](CREATE%20TABLE.md)
-- [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)
-- [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md)
+- [CREATE TABLE](CREATE_TABLE.md)
+- [SHOW CREATE TABLE](../data-manipulation/SHOW_CREATE_TABLE.md)
+- [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md)

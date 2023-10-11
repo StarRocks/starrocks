@@ -55,8 +55,8 @@ The database's default data quota and the default replica quota are 2^63-1.
 
 ## References
 
-- [CREATE DATABASE](CREATE%20DATABASE.md)
+- [CREATE DATABASE](CREATE_DATABASE.md)
 - [USE](../data-definition/USE.md)
-- [SHOW DATABASES](../data-manipulation/SHOW%20DATABASES.md)
+- [SHOW DATABASES](../data-manipulation/SHOW_DATABASES.md)
 - [DESC](../Utility/DESCRIBE.md)
-- [DROP DATABASE](../data-definition/DROP%20DATABASE.md)
+- [DROP DATABASE](../data-definition/DROP_DATABASE.md)

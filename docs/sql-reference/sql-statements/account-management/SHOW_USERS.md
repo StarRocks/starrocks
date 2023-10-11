@@ -2,9 +2,9 @@
 
 ## Description
 
-Displays all users in the system. Users mentioned here are user identities, not user names. For more information about user identities, see [CREATE USER](CREATE%20USER.md). This command is supported from v3.0.
+Displays all users in the system. Users mentioned here are user identities, not user names. For more information about user identities, see [CREATE USER](CREATE_USER.md). This command is supported from v3.0.
 
-You can use `SHOW GRANTS FOR <user_identity>;` to view the privileges of a specific user. For more information, see [SHOW GRANTS](SHOW%20GRANTS.md).
+You can use `SHOW GRANTS FOR <user_identity>;` to view the privileges of a specific user. For more information, see [SHOW GRANTS](SHOW_GRANTS.md).
 
 > Note: Only the `user_admin` role can execute this statement.
 
@@ -42,4 +42,4 @@ mysql> SHOW USERS;
 
 ## References
 
-[CREATE USER](CREATE%20USER.md), [ALTER USER](ALTER%20USER.md), [DROP USER](DROP%20USER.md)
+[CREATE USER](CREATE_USER.md), [ALTER USER](ALTER_USER.md), [DROP USER](DROP_USER.md)

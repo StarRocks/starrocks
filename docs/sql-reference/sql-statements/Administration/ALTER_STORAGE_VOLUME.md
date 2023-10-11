@@ -2,7 +2,7 @@
 
 ## Description
 
-Alters the credential properties, comment, or status (`enabled`) of a storage volume. For more about the properties of a storage volume, see [CREATE STORAGE VOLUME](./CREATE%20STORAGE%20VOLUME.md). This feature is supported from v3.1.
+Alters the credential properties, comment, or status (`enabled`) of a storage volume. For more about the properties of a storage volume, see [CREATE STORAGE VOLUME](./CREATE_STORAGE_VOLUME.md). This feature is supported from v3.1.
 
 > **CAUTION**
 >
@@ -25,7 +25,7 @@ ALTER STORAGE VOLUME [ IF EXISTS ] <storage_volume_name>
 | storage_volume_name | The name of the storage volume to alter. |
 | COMMENT             | The comment on the storage volume.       |
 
-For detailed information on the properties that can be altered or added, see [CREATE STORAGE VOLUME - PROPERTIES](./CREATE%20STORAGE%20VOLUME.md#properties).
+For detailed information on the properties that can be altered or added, see [CREATE STORAGE VOLUME - PROPERTIES](./CREATE_STORAGE_VOLUME.md#properties).
 
 ## Examples
 
@@ -49,8 +49,8 @@ Query OK, 0 rows affected (0.00 sec)
 
 ## Relevant SQL statements
 
-- [CREATE STORAGE VOLUME](./CREATE%20STORAGE%20VOLUME.md)
-- [DROP STORAGE VOLUME](./DROP%20STORAGE%20VOLUME.md)
-- [SET DEFAULT STORAGE VOLUME](./SET%20DEFAULT%20STORAGE%20VOLUME.md)
-- [DESC STORAGE VOLUME](./DESC%20STORAGE%20VOLUME.md)
-- [SHOW STORAGE VOLUMES](./SHOW%20STORAGE%20VOLUMES.md)
+- [CREATE STORAGE VOLUME](./CREATE_STORAGE_VOLUME.md)
+- [DROP STORAGE VOLUME](./DROP_STORAGE_VOLUME.md)
+- [SET DEFAULT STORAGE VOLUME](./SET_DEFAULT_STORAGE_VOLUME.md)
+- [DESC STORAGE VOLUME](./DESC_STORAGE_VOLUME.md)
+- [SHOW STORAGE VOLUMES](./SHOW_STORAGE_VOLUMES.md)

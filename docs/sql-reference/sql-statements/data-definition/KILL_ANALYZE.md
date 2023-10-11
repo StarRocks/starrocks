@@ -16,8 +16,8 @@ The task ID for a manual collection task can be obtained from SHOW ANALYZE STATU
 
 ## References
 
-[SHOW ANALYZE STATUS](../data-definition/SHOW%20ANALYZE%20STATUS.md)
+[SHOW ANALYZE STATUS](../data-definition/SHOW_ANALYZE_STATUS.md)
 
-[SHOW ANALYZE JOB](../data-definition/SHOW%20ANALYZE%20JOB.md)
+[SHOW ANALYZE JOB](../data-definition/SHOW_ANALYZE_JOB.md)
 
 For more information about collecting statistics for CBO, see [Gather statistics for CBO](../../../using_starrocks/Cost_based_optimizer.md).

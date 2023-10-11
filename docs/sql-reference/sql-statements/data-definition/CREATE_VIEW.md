@@ -70,6 +70,6 @@ WHERE k1 = 20160112 GROUP BY k1,k2,k3;
 
 ## Relevant SQLs
 
-- [SHOW CREATE VIEW](../data-manipulation/SHOW%20CREATE%20VIEW.md)
-- [ALTER VIEW](./ALTER%20VIEW.md)
-- [DROP VIEW](./DROP%20VIEW.md)
+- [SHOW CREATE VIEW](../data-manipulation/SHOW_CREATE_VIEW.md)
+- [ALTER VIEW](./ALTER_VIEW.md)
+- [DROP VIEW](./DROP_VIEW.md)

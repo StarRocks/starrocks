@@ -7,7 +7,7 @@ Drops a storage volume. Dropped storage volumes cannot be referenced anymore. Th
 > **CAUTION**
 >
 > - Only users with the DROP privilege on a specific storage volume can perform this operation.
-> - The default storage volume and the built-in storage volume `builtin_storage_volume` cannot be dropped. You can use [DESC STORAGE VOLUME](./DESC%20STORAGE%20VOLUME.md) to check whether a storage volume is the default storage volume.
+> - The default storage volume and the built-in storage volume `builtin_storage_volume` cannot be dropped. You can use [DESC STORAGE VOLUME](./DESC_STORAGE_VOLUME.md) to check whether a storage volume is the default storage volume.
 > - Storage volumes that are referenced by existing databases or cloud-native tables cannot be dropped.
 
 ## Syntax
@@ -33,8 +33,8 @@ Query OK, 0 rows affected (0.01 sec)
 
 ## Relevant SQL statements
 
-- [CREATE STORAGE VOLUME](./CREATE%20STORAGE%20VOLUME.md)
-- [ALTER STORAGE VOLUME](./ALTER%20STORAGE%20VOLUME.md)
-- [SET DEFAULT STORAGE VOLUME](./SET%20DEFAULT%20STORAGE%20VOLUME.md)
-- [DESC STORAGE VOLUME](./DESC%20STORAGE%20VOLUME.md)
-- [SHOW STORAGE VOLUMES](./SHOW%20STORAGE%20VOLUMES.md)
+- [CREATE STORAGE VOLUME](./CREATE_STORAGE_VOLUME.md)
+- [ALTER STORAGE VOLUME](./ALTER_STORAGE_VOLUME.md)
+- [SET DEFAULT STORAGE VOLUME](./SET_DEFAULT_STORAGE_VOLUME.md)
+- [DESC STORAGE VOLUME](./DESC_STORAGE_VOLUME.md)
+- [SHOW STORAGE VOLUMES](./SHOW_STORAGE_VOLUMES.md)

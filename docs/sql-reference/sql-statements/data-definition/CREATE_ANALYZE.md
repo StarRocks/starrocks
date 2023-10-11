@@ -75,10 +75,10 @@ CREATE ANALYZE SAMPLE TABLE tbl_name(c1, c2, c3) PROPERTIES(
 
 ## References
 
-[SHOW ANALYZE JOB](../data-definition/SHOW%20ANALYZE%20JOB.md): view the status of a custom collection task.
+[SHOW ANALYZE JOB](../data-definition/SHOW_ANALYZE_JOB.md): view the status of a custom collection task.
 
-[DROP ANALYZE](../data-definition/DROP%20ANALYZE.md): delete a custom collection task.
+[DROP ANALYZE](../data-definition/DROP_ANALYZE.md): delete a custom collection task.
 
-[KILL ANALYZE](../data-definition/KILL%20ANALYZE.md): cancel a custom collection task that is running.
+[KILL ANALYZE](../data-definition/KILL_ANALYZE.md): cancel a custom collection task that is running.
 
 For more information about collecting statistics for CBO, see [Gather statistics for CBO](../../../using_starrocks/Cost_based_optimizer.md).

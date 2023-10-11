@@ -382,7 +382,7 @@ Since version 3.0, the primary key and sort key are decoupled in the Primary Key
 
 If the engine type is `OLAP`, you can specify initial storage medium (`storage_medium`), automatic storage cooldown time (`storage_cooldown_time`) or time interval (`storage_cooldown_ttl`), and replica number (`replication_num`) when you create a table.
 
-The scope where the properties take effect: If the table has only one partition, the properties belong to the table. If the table is divided into multiple partitions, the properties belong to each partition. And when you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](../data-definition/ALTER%20TABLE.md) after table creation.
+The scope where the properties take effect: If the table has only one partition, the properties belong to the table. If the table is divided into multiple partitions, the properties belong to each partition. And when you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](../data-definition/ALTER_TABLE.md) after table creation.
 
 **Set initial storage medium and automatic storage cooldown time**
 
@@ -420,7 +420,7 @@ PROPERTIES (
 
   For example, you specify the value as `"storage_cooldown_ttl"="1 DAY"` when creating the table, and the partition `p20230801` with a range of `[2023-08-01 00:00:00,2023-08-02 00:00:00)` exists. The automatic storage cooldown time for this partition is `2023-08-03 00:00:00`, which is `2023-08-02 00:00:00 + 1 DAY`. If you specify the value as `"storage_cooldown_ttl"="0 DAY"` when creating the table, the automatic storage cooldown time for this partition is `2023-08-02 00:00:00`.
 
-  - `storage_cooldown_time`: the automatic storage cooldown time (**absolute time**) when the table is cooled down from SSD to HDD. The specified time needs to be later than the current time. Format: "yyyy-MM-dd HH:mm:ss". When you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](../data-definition/ALTER%20TABLE.md).
+  - `storage_cooldown_time`: the automatic storage cooldown time (**absolute time**) when the table is cooled down from SSD to HDD. The specified time needs to be later than the current time. Format: "yyyy-MM-dd HH:mm:ss". When you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](../data-definition/ALTER_TABLE.md).
 
 **Usages**
 
@@ -963,8 +963,8 @@ PROPERTIES(
 
 ## References
 
-- [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)
-- [SHOW TABLES](../data-manipulation/SHOW%20TABLES.md)
+- [SHOW CREATE TABLE](../data-manipulation/SHOW_CREATE_TABLE.md)
+- [SHOW TABLES](../data-manipulation/SHOW_TABLES.md)
 - [USE](USE.md)
-- [ALTER TABLE](ALTER%20TABLE.md)
-- [DROP TABLE](DROP%20TABLE.md)
+- [ALTER TABLE](ALTER_TABLE.md)
+- [DROP TABLE](DROP_TABLE.md)

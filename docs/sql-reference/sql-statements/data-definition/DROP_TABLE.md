@@ -37,8 +37,8 @@ Note:
 
 ## References
 
-- [CREATE TABLE](CREATE%20TABLE.md)
-- [SHOW TABLES](../data-manipulation/SHOW%20TABLES.md)
-- [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)
-- [ALTER TABLE](ALTER%20TABLE.md)
-- [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md)
+- [CREATE TABLE](CREATE_TABLE.md)
+- [SHOW TABLES](../data-manipulation/SHOW_TABLES.md)
+- [SHOW CREATE TABLE](../data-manipulation/SHOW_CREATE_TABLE.md)
+- [ALTER TABLE](ALTER_TABLE.md)
+- [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md)

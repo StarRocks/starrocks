@@ -31,8 +31,8 @@ mysql > show create database zj_test;
 
 ## References
 
-- [CREATE DATABASE](../data-definition/CREATE%20DATABASE.md)
-- [SHOW DATABASES](SHOW%20DATABASES.md)
+- [CREATE DATABASE](../data-definition/CREATE_DATABASE.md)
+- [SHOW DATABASES](SHOW_DATABASES.md)
 - [USE](../data-definition/USE.md)
 - [DESC](../Utility/DESCRIBE.md)
-- [DROP DATABASE](../data-definition/DROP%20DATABASE.md)
+- [DROP DATABASE](../data-definition/DROP_DATABASE.md)

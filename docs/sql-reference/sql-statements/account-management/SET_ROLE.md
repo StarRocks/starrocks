@@ -25,7 +25,7 @@ SET ROLE ALL;
 
 Users can only activate roles that have been assigned to them.
 
-You can query the roles of a user using [SHOW GRANTS](./SHOW%20GRANTS.md).
+You can query the roles of a user using [SHOW GRANTS](./SHOW_GRANTS.md).
 
 You can query the active roles of the current user using `SELECT CURRENT_ROLE()`. For more information, see [current_role](../../sql-functions/utility-functions/current_role.md).
 
@@ -61,9 +61,9 @@ SELECT CURRENT_ROLE();
 
 ## References
 
-- [CREATE ROLE](CREATE%20ROLE.md): creates a role.
+- [CREATE ROLE](CREATE_ROLE.md): creates a role.
 - [GRANT](GRANT.md): assigns roles to users or other roles.
-- [ALTER USER](ALTER%20USER.md): modifies roles.
-- [SHOW ROLES](SHOW%20ROLES.md): show all roles in the system.
+- [ALTER USER](ALTER_USER.md): modifies roles.
+- [SHOW ROLES](SHOW_ROLES.md): show all roles in the system.
 - [current_role](../../sql-functions/utility-functions/current_role.md): show roles of the current user.
-- [DROP ROLE](DROP%20ROLE.md): drops a role.
+- [DROP ROLE](DROP_ROLE.md): drops a role.

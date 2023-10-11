@@ -20,8 +20,8 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
 
 ## References
 
-- [SHOW CREATE DATABASE](../data-manipulation/SHOW%20CREATE%20DATABASE.md)
+- [SHOW CREATE DATABASE](../data-manipulation/SHOW_CREATE_DATABASE.md)
 - [USE](../data-definition/USE.md)
-- [SHOW DATABASES](../data-manipulation/SHOW%20DATABASES.md)
+- [SHOW DATABASES](../data-manipulation/SHOW_DATABASES.md)
 - [DESC](../Utility/DESCRIBE.md)
-- [DROP DATABASE](../data-definition/DROP%20DATABASE.md)
+- [DROP DATABASE](../data-definition/DROP_DATABASE.md)

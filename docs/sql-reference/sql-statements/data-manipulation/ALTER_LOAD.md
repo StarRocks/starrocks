@@ -22,8 +22,8 @@ properties
 
 | **Parameter** | **Required** | Description                                                  |
 | ------------- | ------------ | ------------------------------------------------------------ |
-| label_name    | Yes          | The label of the load job. Format: `[<database_name>.]<label_name>`. See [BROKER LOAD](../data-manipulation/BROKER%20LOAD.md#label). |
-| priority      | Yes          | The new priority that you want to specify for the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. See [BROKER LOAD](../data-manipulation/BROKER%20LOAD.md). |
+| label_name    | Yes          | The label of the load job. Format: `[<database_name>.]<label_name>`. See [BROKER LOAD](../data-manipulation/BROKER_LOAD.md#label). |
+| priority      | Yes          | The new priority that you want to specify for the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. See [BROKER LOAD](../data-manipulation/BROKER_LOAD.md). |
 
 ## Examples
 

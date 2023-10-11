@@ -11,7 +11,7 @@ Since v3.0, you can use the SHOW CREATE TABLE statement to view the CREATE TABLE
 Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 - If you specified the number of buckets when creating a table, the output of SHOW CREATE TABLE will display the number of buckets.
-- If you did not specify the number of buckets when creating a table, the output of SHOW CREATE TABLE will not display the number of buckets. You can run [SHOW PARTITIONS](SHOW%20PARTITIONS.md) to view the number of buckets for each partition.
+- If you did not specify the number of buckets when creating a table, the output of SHOW CREATE TABLE will not display the number of buckets. You can run [SHOW PARTITIONS](SHOW_PARTITIONS.md) to view the number of buckets for each partition.
 
 In versions earlier than v2.5.7, you are required to set the number of buckets when creating a table. Therefore, SHOW CREATE TABLE displays the number of buckets by default.
 
@@ -131,7 +131,7 @@ PROPERTIES (
 
 ## References
 
-- [CREATE TABLE](../data-definition/CREATE%20TABLE.md)
-- [SHOW TABLES](../data-manipulation/SHOW%20TABLES.md)
-- [ALTER TABLE](ALTER%20TABLE.md)
-- [DROP TABLE](DROP%20TABLE.md)
+- [CREATE TABLE](../data-definition/CREATE_TABLE.md)
+- [SHOW TABLES](../data-manipulation/SHOW_TABLES.md)
+- [ALTER TABLE](ALTER_TABLE.md)
+- [DROP TABLE](DROP_TABLE.md)

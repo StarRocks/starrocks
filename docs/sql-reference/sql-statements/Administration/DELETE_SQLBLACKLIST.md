@@ -14,7 +14,7 @@ DELETE SQLBLACKLIST <sql_index_number>
 
 ## Parameter
 
-`sql_index_number`: the index number of the SQL regular expression in the blacklist. Separate multiple index numbers with a comma (,) and a space. You can obtain the index number using [SHOW SQLBLACKLIST](../Administration/SHOW%20SQLBLACKLIST.md).
+`sql_index_number`: the index number of the SQL regular expression in the blacklist. Separate multiple index numbers with a comma (,) and a space. You can obtain the index number using [SHOW SQLBLACKLIST](../Administration/SHOW_SQLBLACKLIST.md).
 
 ## Examples
 

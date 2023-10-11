@@ -32,5 +32,5 @@ Note that the created role name cannot be the same as [system-defined roles](../
 ## References
 
 - [GRANT](GRANT.md)
-- [SHOW ROLES](SHOW%20ROLES.md)
-- [DROP ROLE](DROP%20ROLE.md)
+- [SHOW ROLES](SHOW_ROLES.md)
+- [DROP ROLE](DROP_ROLE.md)
