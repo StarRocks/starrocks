@@ -430,16 +430,6 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
-        /*
-         * Reduce the compute node when input data decreases, example:
-         *                      Agg(1 rows)                      5 be
-         *                         |                              ^
-         *                    Join(50 rows)                      10 be
-         *                   /             \                      ^
-         *      Join(200 rows)            Scan(100 rows)         10 be
-         *     /              \                                   ^
-         *  Scan(200 rows)    Scan(100 rows)                     10 be
-         */
         private void computeFragmentCost(ExecPlan context, PlanFragment fragment) {
             for (PlanFragment child : fragment.getChildren()) {
                 computeFragmentCost(context, child);
