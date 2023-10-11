@@ -511,7 +511,7 @@ public class PartitionUtil {
         PartitionKey lastPartitionKey = null;
         String lastPartitionName = null;
 
-        boolean isConvertToDate = isConvertToDate(partitionExpr);
+        boolean isConvertToDate = isConvertToDate(partitionExpr, partitionColumn);
         Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
         for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
             if (index == 0) {
@@ -542,9 +542,20 @@ public class PartitionUtil {
         return mvPartitionRangeMap;
     }
 
-    private static boolean isConvertToDate(Expr partitionExpr) {
-        return partitionExpr != null && partitionExpr instanceof FunctionCallExpr
-                && ((FunctionCallExpr) partitionExpr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
+    /**
+     * If base table column type is string but partition type is date, we need to convert the string to date
+     *
+     * @param partitionExpr   PARTITION BY expr
+     * @param partitionColumn PARTITION BY referenced column
+     * @return
+     */
+    private static boolean isConvertToDate(Expr partitionExpr, Column partitionColumn) {
+        if (!(partitionExpr instanceof FunctionCallExpr)) {
+            return false;
+        }
+        PrimitiveType columnType = partitionColumn.getPrimitiveType();
+        PrimitiveType partitionType = partitionExpr.getType().getPrimitiveType();
+        return partitionType.isDateType() && !columnType.isDateType();
     }
 
     private static PartitionKey  convertToDate(PartitionKey partitionKey) {
