@@ -484,14 +484,37 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         } else if (desc.isSmallint()) {
             return ConstantOperator.createSmallInt(Short.parseShort(childString.trim()));
         } else if (desc.isInt()) {
+            if (Type.DATE.equals(type)) {
+                childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+            }
             return ConstantOperator.createInt(Integer.parseInt(childString.trim()));
         } else if (desc.isBigint()) {
+            if (Type.DATE.equals(type)) {
+                childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+            } else if (Type.DATETIME.equals(type)) {
+                childString = DateUtils.convertDateTimeFormaterToSecondFormater(childString);
+            }
             return ConstantOperator.createBigint(Long.parseLong(childString.trim()));
         } else if (desc.isLargeint()) {
+            if (Type.DATE.equals(type)) {
+                childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+            } else if (Type.DATETIME.equals(type)) {
+                childString = DateUtils.convertDateTimeFormaterToSecondFormater(childString);
+            }
             return ConstantOperator.createLargeInt(new BigInteger(childString.trim()));
         } else if (desc.isFloat()) {
+            if (Type.DATE.equals(type)) {
+                childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+            } else if (Type.DATETIME.equals(type)) {
+                childString = DateUtils.convertDateTimeFormaterToSecondFormater(childString);
+            }
             return ConstantOperator.createFloat(Double.parseDouble(childString));
         } else if (desc.isDouble()) {
+            if (Type.DATE.equals(type)) {
+                childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+            } else if (Type.DATETIME.equals(type)) {
+                childString = DateUtils.convertDateTimeFormaterToSecondFormater(childString);
+            }
             return ConstantOperator.createDouble(Double.parseDouble(childString));
         } else if (desc.isDate() || desc.isDatetime()) {
             String dateStr = StringUtils.strip(childString, "\r\n\t ");
