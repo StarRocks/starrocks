@@ -41,6 +41,7 @@ DIAGNOSTIC_POP
 #include "io/throttled_seekable_input_stream.h"
 #include "service/staros_worker.h"
 #include "storage/olap_common.h"
+#include "util/stack_util.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {
@@ -322,6 +323,7 @@ public:
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
+        LOG(WARNING) << "fs_starlet delete_file: " << path << ", " << get_stack_trace();
         auto st = (*fs_st)->delete_file(pair.first);
         return to_status(st);
     }
@@ -532,11 +534,14 @@ public:
             }
             parsed_paths.emplace_back(std::move(pair.first));
         }
+        LOG(WARNING) << "fs_starlet delete_files: ";
         std::vector<std::string_view> parsed_path_views;
         parsed_path_views.reserve(parsed_paths.size());
         for (auto& parsed_path : parsed_paths) {
             parsed_path_views.emplace_back(parsed_path);
+            LOG(WARNING) << "fs_starlet delete_file: " << parsed_path;
         }
+        LOG(WARNING) << get_stack_trace();
         return to_status(fs->delete_files(parsed_path_views));
     }
 
