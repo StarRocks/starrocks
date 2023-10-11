@@ -21,19 +21,14 @@
 
 #include "common/config.h"
 #include "fs/fs.h"
-#include "fs/fs_util.h"
 #include "json2pb/json_to_pb.h"
-#include "storage/del_vector.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/meta_file.h"
-#include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "test_util.h"
 #include "testutil/assert.h"
-#include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
 #include "util/uid_util.h"
 
@@ -92,6 +87,13 @@ TEST_F(LakeVacuumTest, test_vacuum_1) {
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
         "id": 500,
+        "version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 500,
         "version": 2,
         "rowsets": [
             {
@@ -125,7 +127,7 @@ TEST_F(LakeVacuumTest, test_vacuum_1) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(2, response.vacuumed_files());
+        EXPECT_EQ(3, response.vacuumed_files());
         EXPECT_GT(response.vacuumed_file_size(), 0);
 
         EXPECT_TRUE(file_exist(tablet_metadata_filename(500, 2)));
@@ -183,19 +185,13 @@ TEST_F(LakeVacuumTest, test_vacuum_2) {
 
     int64_t grace_timestamp = 1687331159;
 
-    SyncPoint::GetInstance()->SetCallBack("vacuum_tablet_metadata:iterate_metadata", [=](void* arg) {
-        auto* entry = static_cast<DirEntry*>(arg);
-        if (entry->name == tablet_metadata_filename(600, 1)) {
-            entry->mtime.emplace(grace_timestamp - 2);
-        } else if (entry->name == tablet_metadata_filename(600, 2)) {
-            entry->mtime.emplace(grace_timestamp - 1);
-        } else if (entry->name == tablet_metadata_filename(600, 3)) {
-            entry->mtime.emplace(grace_timestamp);
-        }
+    SyncPoint::GetInstance()->SetCallBack("collect_files_to_vacuum:get_file_modified_time", [=](void* arg) {
+        *(uint64_t*)arg = grace_timestamp; // modification time of version 3 tablet metadata
     });
 
     SyncPoint::GetInstance()->EnableProcessing();
 
+    // No file will be deleted
     {
         VacuumRequest request;
         VacuumResponse response;
@@ -206,10 +202,11 @@ TEST_F(LakeVacuumTest, test_vacuum_2) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(1, response.vacuumed_files());
-        EXPECT_GT(response.vacuumed_file_size(), 0);
+        EXPECT_EQ(0, response.vacuumed_files());
+        // The size of deleted metadata files is not counted in vacuumed_file_size.
+        EXPECT_EQ(0, response.vacuumed_file_size());
 
-        EXPECT_FALSE(file_exist(tablet_metadata_filename(600, 1)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(600, 1)));
         // version 2 is the last version created before "grace_timestamp", should be retained
         EXPECT_TRUE(file_exist(tablet_metadata_filename(600, 2)));
         EXPECT_TRUE(file_exist(tablet_metadata_filename(600, 3)));
@@ -218,21 +215,23 @@ TEST_F(LakeVacuumTest, test_vacuum_2) {
         EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     }
 
+    // tablet metadata of version 1, 2 will be deleted.
     {
         VacuumRequest request;
         VacuumResponse response;
         request.add_tablet_ids(600);
         request.set_min_retain_version(3);
-        // Now version 3 becomes the last version created before/at grace_timestamp, version 2 can be
+        // Now version 3 becomes the last version created before grace_timestamp, version 1/2 can be
         // deleted
         request.set_grace_timestamp(grace_timestamp + 1);
         request.set_min_active_txn_id(12345);
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(1, response.vacuumed_files());
-        EXPECT_GT(response.vacuumed_file_size(), 0);
+        EXPECT_EQ(2, response.vacuumed_files());
+        EXPECT_EQ(0, response.vacuumed_file_size());
 
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(600, 1)));
         EXPECT_FALSE(file_exist(tablet_metadata_filename(600, 2)));
         EXPECT_TRUE(file_exist(tablet_metadata_filename(600, 3)));
 
@@ -548,11 +547,11 @@ TEST_F(LakeVacuumTest, test_vacuum_3) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        // 4 tablet metadata files: tablet 100 of versions 2,3,4 and tablet 101 of version 4
+        // 4 tablet metadata files: tablet 100 of versions [1],2,3,4 and tablet 101 of version [1],[2],[3],4
         // 3 compaction input files
         // 2 orphan files
         // 1 txn log file
-        EXPECT_EQ(10, response.vacuumed_files());
+        EXPECT_EQ(14, response.vacuumed_files());
         EXPECT_GT(response.vacuumed_file_size(), 0);
 
         EXPECT_FALSE(file_exist(tablet_metadata_filename(100, 2)));
@@ -850,4 +849,57 @@ TEST_F(LakeVacuumTest, test_delete_tablets_03) {
     }
 }
 
+// NOLINTNEXTLINE
+TEST_F(LakeVacuumTest, test_delete_file_failed) {
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 500,
+        "version": 2,
+        "orphan_files": [
+            {
+                "name": "00000000000359e3_3ea06130-ccac-4110-9de8-4813512c60d4.delvec",
+                "size": 128
+            },
+            {
+                "name": "00000000000359e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec",
+                "size": 128
+            }
+        ]
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 500,
+        "version": 3,
+        "prev_garbage_version": 2
+        }
+        )DEL")));
+
+    SyncPoint::GetInstance()->SetCallBack("vacuum.delete_files", [](void* arg) {
+        auto st = (Status*)arg;
+        EXPECT_TRUE(st->ok()) << *st;
+        st->update(Status::IOError("injected error"));
+    });
+
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.add_tablet_ids(500);
+    request.set_min_retain_version(3);
+    request.set_grace_timestamp(::time(nullptr) + 3600);
+    request.set_min_active_txn_id(12345);
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_TRUE(MatchPattern(response.status().error_msgs(0), "injected error")) << response.status().error_msgs(0);
+    ASSERT_NE(0, response.status().status_code());
+    EXPECT_EQ(0, response.vacuumed_files());
+    EXPECT_EQ(0, response.vacuumed_file_size());
+
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(500, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(500, 3)));
+
+    SyncPoint::GetInstance()->DisableProcessing();
+}
 } // namespace starrocks::lake
