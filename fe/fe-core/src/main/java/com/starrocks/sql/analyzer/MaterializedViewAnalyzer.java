@@ -43,6 +43,7 @@ import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -655,26 +656,36 @@ public class MaterializedViewAnalyzer {
 
         private void checkPartitionColumnWithBaseOlapTable(SlotRef slotRef, OlapTable table) {
             PartitionInfo partitionInfo = table.getPartitionInfo();
+            PartitionType partitionType = partitionInfo.getType();
             if (partitionInfo instanceof SinglePartitionInfo) {
                 throw new SemanticException("Materialized view partition column in partition exp " +
                         "must be base table partition column");
-            } else if (partitionInfo instanceof RangePartitionInfo) {
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-                if (partitionColumns.size() != 1) {
+            }
+            if (!(partitionType == PartitionType.RANGE || partitionType == PartitionType.LIST)) {
+                throw new SemanticException(
+                        String.format("Materialized view does not supported base table of [%s] partition type",
+                                partitionType.name()));
+            }
+
+            List<Column> partitionColumns = null;
+            try {
+                partitionColumns = partitionInfo.getPartitionColumns();
+            } catch (Exception e) {
+                LOG.error(e);
+                Preconditions.checkState(false, "unreachable");
+            }
+
+            if (partitionColumns.size() != 1) {
                     throw new SemanticException("Materialized view related base table partition columns " +
                             "only supports single column");
-                }
-                String partitionColumn = partitionColumns.get(0).getName();
-                if (!partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
-                    throw new SemanticException("Materialized view partition column in partition exp " +
-                            "must be base table partition column");
-                }
-                partitionColumns.forEach(partitionColumn1 -> checkPartitionColumnType(partitionColumn1));
-            } else {
-                throw new SemanticException("Materialized view related base table partition type: " +
-                        partitionInfo.getType().name() + " not supports");
             }
+
+            String partitionColumn = partitionColumns.get(0).getName();
+            if (!partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                throw new SemanticException("Materialized view partition column in partition exp " +
+                        "must be base table partition column");
+            }
+            partitionColumns.forEach(this::checkPartitionColumnType);
         }
 
         private void checkPartitionColumnWithBaseTable(SlotRef slotRef, List<Column> partitionColumns, boolean unPartitioned) {

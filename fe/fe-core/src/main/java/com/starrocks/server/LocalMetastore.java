@@ -257,6 +257,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -3322,12 +3323,32 @@ public class LocalMetastore implements ConnectorMetadata {
         if (expressionPartitionDesc != null) {
             Expr expr = expressionPartitionDesc.getExpr();
             if (expr instanceof SlotRef) {
-                SlotRef slotRef = (SlotRef) expr;
-                if (slotRef.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
+                SlotRef slotRef = stmt.getPartitionRefTableExpr().unwrapSlotRef();
+                boolean useListPartition = slotRef.getType().getPrimitiveType() == PrimitiveType.VARCHAR;
+
+                // FIXME: refactor the table type check code
+                TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+                Optional<Table>
+                        table = stmt.getBaseTableInfos().stream()
+                        .filter(base -> base.getTable().getName().equalsIgnoreCase(tableName.getTbl()))
+                        .findFirst()
+                        .flatMap(x -> Optional.ofNullable(x.getTable()));
+                Preconditions.checkState(table.isPresent(), "table not exists: " + tableName.getTbl());
+
+                if (table.isPresent() && table.get().isOlapOrCloudNativeTable()) {
+                    OlapTable olap = (OlapTable) table.get();
+                    PartitionInfo partitionInfo = olap.getPartitionInfo();
+                    if (partitionInfo instanceof ListPartitionInfo) {
+                        useListPartition = true;
+                    }
+                }
+
+                if (useListPartition) {
                     return new ListPartitionInfo(PartitionType.LIST,
                             Collections.singletonList(stmt.getPartitionColumn()));
                 }
             }
+
             if ((expr instanceof FunctionCallExpr)) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
                 if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
