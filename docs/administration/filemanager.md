@@ -10,7 +10,7 @@ With file manager, you can create, view, and delete files, such as the files tha
 
 - Configure the following parameters for each FE.
   - `small_file_dir`: the path in which the uploaded files are stored. The default path is `small_files/`, which is in the runtime directory of the FE. You need to specify this parameter in the **fe.conf** file and then restart the FE to allow the change to take effect.
-  - `max_small_file_size_bytes`: the maximum size of a single file. The default value of this parameter is 1 MB. If the size of a file exceeds the value of this parameter, the file cannot be created. You can specify this parameter by using the [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) statement.
+  - `max_small_file_size_bytes`: the maximum size of a single file. The default value of this parameter is 1 MB. If the size of a file exceeds the value of this parameter, the file cannot be created. You can specify this parameter by using the [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) statement.
   - `max_small_file_number`: the maximum number of files that can be created within a cluster. The default value of this parameter is 100. If the number of files that you have created reaches the value of this parameter, you cannot continue creating files. You can specify this parameter by using the ADMIN SET CONFIG statement.
 
 > Note: Increasing the values of the two parameters causes an increase in the memory usage of the FE. Therefore, we recommend that you do not increase the values of the two parameters unless necessary.
@@ -21,15 +21,15 @@ With file manager, you can create, view, and delete files, such as the files tha
 
 ## Create a file
 
-You can execute the CREATE FILE statement to create a file. For more information, see [CREATE FILE](../sql-reference/sql-statements/Administration/CREATE%20FILE.md). After a file is created, the file is uploaded and persisted in StarRocks.
+You can execute the CREATE FILE statement to create a file. For more information, see [CREATE FILE](../sql-reference/sql-statements/Administration/CREATE_FILE.md). After a file is created, the file is uploaded and persisted in StarRocks.
 
 ## View a file
 
-You can execute the SHOW FILE statement to view the information about a file stored in a database. For more information, see [SHOW FILE](../sql-reference/sql-statements/Administration/SHOW%20FILE.md).
+You can execute the SHOW FILE statement to view the information about a file stored in a database. For more information, see [SHOW FILE](../sql-reference/sql-statements/Administration/SHOW_FILE.md).
 
 ## Delete a file
 
-You can execute the DROP FILE statement to delete a file. For more information, see [DROP FILE](../sql-reference/sql-statements/Administration/DROP%20FILE.md).
+You can execute the DROP FILE statement to delete a file. For more information, see [DROP FILE](../sql-reference/sql-statements/Administration/DROP_FILE.md).
 
 ## How an FE and a BE use a file
 

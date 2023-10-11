@@ -279,7 +279,7 @@ You need to specify the primary key during partial updates. Therefore, if the `A
     1,1,99
     ```
 
-3. Run a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md) job and use the CSV file to update table `test_tbl4`.
+3. Run a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) job and use the CSV file to update table `test_tbl4`.
 
     ```Bash
     curl --location-trusted -u <username>:<password> -H "label:1" \
@@ -350,7 +350,7 @@ This feature can be used to build a dictionary table for quickly computing disti
     2,2,99
     ```
 
-3. Run a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md) job to load data from the CSV file into table `test_tbl5`.
+3. Run a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) job to load data from the CSV file into table `test_tbl5`.
 
     ```Bash
     curl --location-trusted -u <username>:<password> -H "label:2" \
