@@ -259,15 +259,24 @@ ZoneMapIndexReader::ZoneMapIndexReader() {
 }
 
 ZoneMapIndexReader::~ZoneMapIndexReader() {
+<<<<<<< HEAD
     MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(), _mem_usage());
+=======
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(), mem_usage());
+>>>>>>> 85556e1b10 ([BugFix] Fix segment size in metadata cache (#31978))
 }
 
 StatusOr<bool> ZoneMapIndexReader::load(const IndexReadOptions& opts, const ZoneMapIndexPB& meta) {
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta);
         if (st.ok()) {
+<<<<<<< HEAD
             MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                      _mem_usage() - sizeof(ZoneMapIndexReader));
+=======
+            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+                                     mem_usage() - sizeof(ZoneMapIndexReader))
+>>>>>>> 85556e1b10 ([BugFix] Fix segment size in metadata cache (#31978))
         } else {
             _reset();
         }
@@ -313,7 +322,7 @@ Status ZoneMapIndexReader::_do_load(const IndexReadOptions& opts, const ZoneMapI
     return Status::OK();
 }
 
-size_t ZoneMapIndexReader::_mem_usage() const {
+size_t ZoneMapIndexReader::mem_usage() const {
     size_t size = sizeof(ZoneMapIndexReader);
     for (const auto& zone_map : _page_zone_maps) {
         size += zone_map.SpaceUsedLong();

@@ -64,14 +64,19 @@
 
 namespace starrocks {
 
-StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta, const Segment* segment) {
+StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta, Segment* segment) {
     auto r = std::make_unique<ColumnReader>(private_type(0), segment);
     RETURN_IF_ERROR(r->_init(meta));
     return std::move(r);
 }
 
+<<<<<<< HEAD
 ColumnReader::ColumnReader(const private_type&, const Segment* segment) : _segment(segment) {
     MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
+=======
+ColumnReader::ColumnReader(const private_type&, Segment* segment) : _segment(segment) {
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
+>>>>>>> 85556e1b10 ([BugFix] Fix segment size in metadata cache (#31978))
 }
 
 ColumnReader::~ColumnReader() {
@@ -361,6 +366,7 @@ Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {
         MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->ordinal_index_mem_tracker(),
                                  _ordinal_index_meta->SpaceUsedLong());
         _ordinal_index_meta.reset();
+        _segment->update_cache_size();
     }
     return Status::OK();
 }
@@ -374,6 +380,7 @@ Status ColumnReader::_load_zonemap_index(const IndexReadOptions& opts) {
         MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                  _zonemap_index_meta->SpaceUsedLong());
         _zonemap_index_meta.reset();
+        _segment->update_cache_size();
     }
     return Status::OK();
 }
@@ -387,6 +394,7 @@ Status ColumnReader::_load_bitmap_index(const IndexReadOptions& opts) {
         MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bitmap_index_mem_tracker(),
                                  _bitmap_index_meta->SpaceUsedLong());
         _bitmap_index_meta.reset();
+        _segment->update_cache_size();
     }
     return Status::OK();
 }
@@ -400,6 +408,7 @@ Status ColumnReader::_load_bloom_filter_index(const IndexReadOptions& opts) {
         MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                  _bloom_filter_index_meta->SpaceUsedLong());
         _bloom_filter_index_meta.reset();
+        _segment->update_cache_size();
     }
     return Status::OK();
 }
@@ -551,6 +560,29 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
     } else {
         return Status::NotSupported("unsupported type to create iterator: " + std::to_string(_column_type));
     }
+}
+
+size_t ColumnReader::mem_usage() {
+    size_t size = sizeof(ColumnReader);
+
+    size += _segment_zone_map != nullptr ? _segment_zone_map->SpaceUsedLong() : 0;
+    size += _ordinal_index_meta != nullptr ? _ordinal_index_meta->SpaceUsedLong() : 0;
+    size += _zonemap_index_meta != nullptr ? _zonemap_index_meta->SpaceUsedLong() : 0;
+    size += _bitmap_index_meta != nullptr ? _bitmap_index_meta->SpaceUsedLong() : 0;
+    size += _bloom_filter_index_meta != nullptr ? _bloom_filter_index_meta->SpaceUsedLong() : 0;
+
+    size += _zonemap_index != nullptr ? _zonemap_index->mem_usage() : 0;
+    size += _ordinal_index != nullptr ? _ordinal_index->mem_usage() : 0;
+    size += _bitmap_index != nullptr ? _bitmap_index->mem_usage() : 0;
+    size += _bloom_filter_index != nullptr ? _bloom_filter_index->mem_usage() : 0;
+
+    if (_sub_readers != nullptr) {
+        for (auto& reader : *_sub_readers) {
+            size += reader->mem_usage();
+        }
+    }
+
+    return size;
 }
 
 } // namespace starrocks

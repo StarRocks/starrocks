@@ -48,7 +48,11 @@ protected:
     void TearDown() override {}
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
+<<<<<<< HEAD
         return std::make_shared<Segment>(Segment::private_type(0), fs, fname, 1, _dummy_segment_schema.get());
+=======
+        return std::make_shared<Segment>(Segment::private_type(0), fs, fname, 1, _dummy_segment_schema, nullptr);
+>>>>>>> 85556e1b10 ([BugFix] Fix segment size in metadata cache (#31978))
     }
 
     void test_int_map() {

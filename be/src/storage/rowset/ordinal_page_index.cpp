@@ -80,7 +80,11 @@ OrdinalIndexReader::OrdinalIndexReader() {
 }
 
 OrdinalIndexReader::~OrdinalIndexReader() {
+<<<<<<< HEAD
     MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->ordinal_index_mem_tracker(), _mem_usage());
+=======
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(), mem_usage());
+>>>>>>> 85556e1b10 ([BugFix] Fix segment size in metadata cache (#31978))
 }
 
 StatusOr<bool> OrdinalIndexReader::load(const IndexReadOptions& opts, const OrdinalIndexPB& meta,
@@ -88,8 +92,13 @@ StatusOr<bool> OrdinalIndexReader::load(const IndexReadOptions& opts, const Ordi
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta, num_values);
         if (st.ok()) {
+<<<<<<< HEAD
             MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->ordinal_index_mem_tracker(),
                                      _mem_usage() - sizeof(OrdinalIndexReader))
+=======
+            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
+                                     mem_usage() - sizeof(OrdinalIndexReader))
+>>>>>>> 85556e1b10 ([BugFix] Fix segment size in metadata cache (#31978))
         } else {
             _reset();
         }

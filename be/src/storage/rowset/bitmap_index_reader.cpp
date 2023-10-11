@@ -53,15 +53,24 @@ BitmapIndexReader::BitmapIndexReader() {
 }
 
 BitmapIndexReader::~BitmapIndexReader() {
+<<<<<<< HEAD
     MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bitmap_index_mem_tracker(), _mem_usage());
+=======
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), mem_usage());
+>>>>>>> 85556e1b10 ([BugFix] Fix segment size in metadata cache (#31978))
 }
 
 StatusOr<bool> BitmapIndexReader::load(const IndexReadOptions& opts, const BitmapIndexPB& meta) {
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta);
         if (st.ok()) {
+<<<<<<< HEAD
             MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bitmap_index_mem_tracker(),
                                      _mem_usage() - sizeof(BitmapIndexReader));
+=======
+            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
+                                     mem_usage() - sizeof(BitmapIndexReader));
+>>>>>>> 85556e1b10 ([BugFix] Fix segment size in metadata cache (#31978))
         } else {
             _reset();
         }

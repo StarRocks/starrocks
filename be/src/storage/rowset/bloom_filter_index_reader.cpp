@@ -51,15 +51,24 @@ BloomFilterIndexReader::BloomFilterIndexReader() {
 }
 
 BloomFilterIndexReader::~BloomFilterIndexReader() {
+<<<<<<< HEAD
     MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(), _mem_usage());
+=======
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(), mem_usage());
+>>>>>>> 85556e1b10 ([BugFix] Fix segment size in metadata cache (#31978))
 }
 
 StatusOr<bool> BloomFilterIndexReader::load(const IndexReadOptions& opts, const BloomFilterIndexPB& meta) {
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta);
         if (st.ok()) {
+<<<<<<< HEAD
             MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                      _mem_usage() - sizeof(BloomFilterIndexReader));
+=======
+            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+                                     mem_usage() - sizeof(BloomFilterIndexReader));
+>>>>>>> 85556e1b10 ([BugFix] Fix segment size in metadata cache (#31978))
         } else {
             _reset();
         }
