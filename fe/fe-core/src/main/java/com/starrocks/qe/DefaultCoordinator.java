@@ -35,7 +35,6 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -264,15 +263,16 @@ public class DefaultCoordinator extends Coordinator {
         List<PlanFragment> fragments = jobSpec.getFragments();
         List<ScanNode> scanNodes = jobSpec.getScanNodes();
         TDescriptorTable descTable = jobSpec.getDescTable();
-        if (jobSpec.getFragments().size() == 1 && jobSpec.getFragments().get(0).isShortCircuit()) {
-            if (connectContext.getCommand() == MysqlCommand.COM_STMT_EXECUTE) {
-                isBinaryRow = true;
-            }
+
+        if (connectContext.getCommand() == MysqlCommand.COM_STMT_EXECUTE) {
+            isBinaryRow = true;
+        }
+
+        shortCircuitExecutor = ShortCircuitExecutor.create(context, fragments, scanNodes, descTable,
+                isBinaryRow, jobSpec.isNeedReport());
+
+        if (null != shortCircuitExecutor) {
             isShortCircuit = true;
-            shortCircuitExecutor = new ShortCircuitExecutor(
-                    connectContext, fragments.get(0),
-                    scanNodes.isEmpty() ? ImmutableList.of() : scanNodes.get(0).getScanRangeLocations(0),
-                    descTable, isBinaryRow, jobSpec.isNeedReport(), coordinatorPreprocessor);
         }
     }
 

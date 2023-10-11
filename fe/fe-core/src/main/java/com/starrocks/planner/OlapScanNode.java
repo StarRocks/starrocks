@@ -72,10 +72,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rowstore.RowStoreKeyTuple;
 import com.starrocks.rowstore.RowStoreUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -166,7 +164,6 @@ public class OlapScanNode extends ScanNode {
     // The dict id int column ids to dict string column ids
     private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
 
-    private List<RowStoreKeyTuple> rowStoreKeyTuples;
     private List<List<LiteralExpr>> rowStoreKeyLiterals = Lists.newArrayList();
 
     private boolean usePkIndex = false;
@@ -1217,10 +1214,6 @@ public class OlapScanNode extends ScanNode {
         LOG.debug("mapTabletsToPartitions. tabletToPartitionMap: {}, partitionToTabletMap: {}",
                 tabletToPartitionMap, partitionToTabletMap);
         return partitionToTabletMap;
-    }
-
-    public List<RowStoreKeyTuple> getRowStoreKeyTuples() {
-        return rowStoreKeyTuples;
     }
 
     public List<List<LiteralExpr>> getRowStoreKeyLiterals() {

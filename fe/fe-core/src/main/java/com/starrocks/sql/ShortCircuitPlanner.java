@@ -21,21 +21,14 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.UserException;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
-import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -43,17 +36,12 @@ import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rowstore.RowStoreUtils;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.DeleteStmt;
-import com.starrocks.sql.ast.DmlStmt;
-import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
-import com.starrocks.sql.ast.UpdateStmt;
-import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -61,30 +49,56 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
-import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.ScalarOperatorToExpr;
-import com.starrocks.thrift.TResultSinkType;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
-
-import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
 public class ShortCircuitPlanner {
 
     public static final long MAX_RETURN_ROWS = 1024;
+
+    public static BaseLogicalPlanChecker createLogicalPlanChecker(OptExpression root, boolean allowFilter,
+                                                                  boolean allowLimit, boolean allowProject,
+                                                                  boolean allowSort, ScalarOperator predicate,
+                                                                  List<String> orderByColumns, long limit) {
+        if (root.getOp() instanceof LogicalOlapScanOperator) {
+            return new ShortCircuitPlannerHybrid.LogicalPlanChecker(allowFilter, allowLimit, allowProject,
+                    allowSort, predicate, orderByColumns, limit);
+        } else {
+            return new BaseLogicalPlanChecker();
+        }
+    }
+
+    public static BaseExecPlanNodeBuilder createExecPlanNodeBuilder(OptExpression root,
+                                                                    LogicalProjectOperator projection,
+                                                                    ScalarOperator predicate,
+                                                                    long limit,
+                                                                    ColumnRefSet requiredOutputColumns) {
+        if (root.getOp() instanceof LogicalOlapScanOperator) {
+            return new ShortCircuitPlannerHybrid.ExecPlanNodeBuilder(projection, predicate, limit, requiredOutputColumns);
+        } else {
+            return new BaseExecPlanNodeBuilder(requiredOutputColumns);
+        }
+    }
+
+    public static boolean maySupportShortCircuit(StatementBase statement) {
+        if (statement instanceof QueryStatement) {
+            return true;
+        }
+
+        return false;
+    }
 
     public static boolean supportShortCircuitRead(OptExpression root, ConnectContext connectContext) {
         if (!connectContext.getSessionVariable().isEnableShortCircuit()) {
@@ -95,13 +109,14 @@ public class ShortCircuitPlanner {
 
     public ExecPlan planSelect(LogicalPlan logicalPlan, QueryRelation relation, ConnectContext connectContext) {
         OptExpression root = logicalPlan.getRoot();
-        ExecPlan execPlan =
-                new ExecPlan(connectContext, relation.getColumnOutputNames(), root, logicalPlan.getOutputColumn());
-        PlanNode planNodeRoot = root.getOp().accept(new ExecPlanNodeBuilder(), root, execPlan);
+        ExecPlan execPlan = new ExecPlan(connectContext, relation.getColumnOutputNames(), root,
+                logicalPlan.getOutputColumn());
+        ColumnRefSet requiredOutputColumns = new ColumnRefSet(logicalPlan.getOutputColumn());
+        PlanNode planNodeRoot =
+                root.getOp().accept(new BaseExecPlanNodeBuilder(requiredOutputColumns), root, execPlan);
 
         List<Expr> outputExprs = logicalPlan.getOutputColumn().stream().map(variable -> ScalarOperatorToExpr
-                .buildExecExpression(variable,
-                        new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr()))
+                .buildExecExpression(variable, new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr()))
         ).collect(Collectors.toList());
 
         PlanFragment planFragment = new PlanFragment(new PlanFragmentId(0), planNodeRoot, DataPartition.UNPARTITIONED);
@@ -109,30 +124,10 @@ public class ShortCircuitPlanner {
         planFragment.setOutputExprs(outputExprs);
         execPlan.getFragments().add(planFragment);
         execPlan.getOutputExprs().addAll(outputExprs);
-
-        // mysql result sink
-        planFragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
-
         return execPlan;
     }
 
-    private static Table getTargetTable(DmlStmt dmlStmt) {
-        if (dmlStmt instanceof InsertStmt) {
-            return ((InsertStmt) dmlStmt).getTargetTable();
-        } else if (dmlStmt instanceof UpdateStmt) {
-            return ((UpdateStmt) dmlStmt).getTable();
-        } else if (dmlStmt instanceof DeleteStmt) {
-            return ((DeleteStmt) dmlStmt).getTable();
-        } else {
-            throw new UnsupportedOperationException("Unsupported DML statement: " + dmlStmt.getClass().getName());
-        }
-    }
-
-    /**
-     * @param projections a=a not need compute
-     * @return
-     */
-    private static boolean isRedundant(Map<ColumnRefOperator, ScalarOperator> projections) {
+    protected static boolean isRedundant(Map<ColumnRefOperator, ScalarOperator> projections) {
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projections.entrySet()) {
             if (!entry.getKey().equals(entry.getValue())) {
                 return false;
@@ -141,18 +136,7 @@ public class ShortCircuitPlanner {
         return true;
     }
 
-    private static boolean hasNonDeterministicFunctions(ScalarOperator expr) {
-        if (expr instanceof CallOperator) {
-            CallOperator callExpr = (CallOperator) expr;
-            if (FunctionSet.nonDeterministicFunctions.contains(callExpr.getFnName())) {
-                return true;
-            }
-        }
-        return expr.getChildren().stream().anyMatch(ShortCircuitPlanner::hasNonDeterministicFunctions);
-    }
-
-    private abstract static class BaseLogicalPlanChecker extends OptExpressionVisitor<Boolean, Void> {
-
+    public static class BaseLogicalPlanChecker extends OptExpressionVisitor<Boolean, Void> {
         @Override
         public Boolean visit(OptExpression optExpression, Void context) {
             return false;
@@ -175,19 +159,30 @@ public class ShortCircuitPlanner {
      * 3. Filter: contains all keys in table primary keys.
      * 4. Limit: no offset.
      */
-    private static class LogicalPlanChecker extends BaseLogicalPlanChecker {
-        private boolean allowFilter = true;
-        private boolean allowLimit = true;
+    public static class LogicalPlanChecker extends BaseLogicalPlanChecker {
+        protected boolean allowFilter = true;
+        protected boolean allowLimit = true;
+        protected boolean allowProject = true;
+        protected boolean allowSort = true;
 
-        private boolean allowProject = true;
+        protected ScalarOperator predicate = null;
+        protected List<String> orderByColumns = null;
 
-        private boolean allowSort = true;
+        protected long limit = Operator.DEFAULT_LIMIT;
 
-        private ScalarOperator predicate = null;
+        public LogicalPlanChecker() {
+        }
 
-        private List<String> orderByColumns = null;
-
-        private long limit = Operator.DEFAULT_LIMIT;
+        public LogicalPlanChecker(boolean allowFilter, boolean allowLimit, boolean allowProject, boolean allowSort,
+                                  ScalarOperator predicate, List<String> orderByColumns, long limit) {
+            this.allowFilter = allowFilter;
+            this.allowLimit = allowLimit;
+            this.allowProject = allowProject;
+            this.allowSort = allowSort;
+            this.predicate = predicate;
+            this.orderByColumns = orderByColumns;
+            this.limit = limit;
+        }
 
         @Override
         public Boolean visitLogicalFilter(OptExpression optExpression, Void context) {
@@ -214,11 +209,6 @@ public class ShortCircuitPlanner {
             if (!allowProject) {
                 return false;
             }
-
-            if (projectOp.getColumnRefMap().values().stream()
-                    .anyMatch(ShortCircuitPlanner::hasNonDeterministicFunctions)) {
-                return false;
-            }
             return visitChild(optExpression, context);
         }
 
@@ -236,7 +226,10 @@ public class ShortCircuitPlanner {
                 return false;
             }
             orderByColumns = orderings.stream()
-                    .map(Ordering::getColumnRef).map(ColumnRefOperator::getName).collect(Collectors.toList());
+                    .map(Ordering::getColumnRef)
+                    .map(ColumnRefOperator::getName)
+                    .map(String::toLowerCase)
+                    .collect(Collectors.toList());
             if (topNOp.getOffset() != Operator.DEFAULT_OFFSET) {
                 return false;
             }
@@ -263,37 +256,14 @@ public class ShortCircuitPlanner {
 
         @Override
         public Boolean visitLogicalTableScan(OptExpression optExpression, Void context) {
-            LogicalScanOperator scanOp = optExpression.getOp().cast();
-            Table table = scanOp.getTable();
-            if (!(table instanceof OlapTable) || !((OlapTable) table).hasRowStorageType()) {
-                return false;
-            }
-
-            for (Column column : table.getFullSchema()) {
-                if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getName())) {
-                    return false;
-                }
-            }
-
-            List<String> keyColumns = ((OlapTable) table).getKeyColumns().stream().map(Column::getName).collect(
-                    Collectors.toList());
-            List<String> sortingColumns = keyColumns;
-            return checkPredicate(table, keyColumns, sortingColumns, predicate, limit)
-                    && checkOrderBy(sortingColumns, orderByColumns);
+            return createLogicalPlanChecker(optExpression, allowFilter, allowLimit, allowProject,
+                    allowSort, predicate, orderByColumns, limit).visitLogicalTableScan(optExpression, context);
         }
 
-        private static boolean checkPredicate(Table table, List<String> keyColumns, List<String> sortingColumns,
-                                              ScalarOperator predicate, long limit) {
-            List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
-            return isPointScan(table, keyColumns, conjuncts);
-        }
-
-        private static boolean isPointScan(Table table, List<String> keyColumns, List<ScalarOperator> conjuncts) {
-            Map<String, PartitionColumnFilter> filters = ColumnFilterConverter.convertColumnFilter(conjuncts, table);
+        protected static boolean isPointScan(Table table, List<String> keyColumns, List<ScalarOperator> conjuncts) {
+            Map<String, PartitionColumnFilter> filters = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            filters.putAll(ColumnFilterConverter.convertColumnFilter(conjuncts, table));
             if (keyColumns == null || keyColumns.isEmpty()) {
-                return false;
-            }
-            if (!filters.keySet().equals(new HashSet<>(keyColumns))) {
                 return false;
             }
             long cardinality = 1;
@@ -313,39 +283,42 @@ public class ShortCircuitPlanner {
             }
             return true;
         }
+    }
 
-        /**
-         * // TODO (no supported)
-         * As row store is ordering, the query is short circuit query if filter is prefix scan.
-         * eg, `select * from usertable where ycsb_key >= 'user995139035672819231' limit 1;`
-         */
-        private static boolean isPrefixRangeScan(
-                List<ScalarOperator> conjuncts, long limit, List<String> sortingColumns) {
-            if (limit == Operator.DEFAULT_LIMIT || limit > MAX_RETURN_ROWS
-                    || sortingColumns == null || sortingColumns.isEmpty()) {
-                return false;
-            }
-            return RowStoreUtils.isPrefixRangeScan(sortingColumns, conjuncts);
+    private static class ValuesPlanChecker extends BaseLogicalPlanChecker {
+        @Override
+        public Boolean visitLogicalValues(OptExpression optExpression, Void context) {
+            LogicalValuesOperator valuesOp = optExpression.getOp().cast();
+            return valuesOp.getRows().size() <= MAX_RETURN_ROWS;
         }
 
-        private boolean checkOrderBy(List<String> sortingColumns, List<String> orderByColumns) {
-            if (orderByColumns == null || orderByColumns.isEmpty()) {
-                return true;
-            }
-            if (sortingColumns.size() < orderByColumns.size()) {
-                return false;
-            }
-            return sortingColumns.subList(0, orderByColumns.size()).equals(orderByColumns);
+        @Override
+        public Boolean visitLogicalProject(OptExpression optExpression, Void context) {
+            return visitChild(optExpression, context);
         }
     }
 
-    private static class ExecPlanNodeBuilder extends OptExpressionVisitor<PlanNode, ExecPlan> {
+    protected static class BaseExecPlanNodeBuilder extends OptExpressionVisitor<PlanNode, ExecPlan> {
 
-        private final List<LogicalProjectOperator> projectOperators = new ArrayList<>();
+        protected LogicalProjectOperator projection = null;
 
-        private ScalarOperator predicate = null;
+        protected ScalarOperator predicate = null;
 
-        private long limit = Operator.DEFAULT_LIMIT;
+        protected long limit = Operator.DEFAULT_LIMIT;
+
+        protected ColumnRefSet requiredOutputColumns;
+
+        public BaseExecPlanNodeBuilder(ColumnRefSet requiredOutputColumns) {
+            this.requiredOutputColumns = requiredOutputColumns;
+        }
+
+        public BaseExecPlanNodeBuilder(LogicalProjectOperator projection, ScalarOperator predicate, long limit,
+                                       ColumnRefSet requiredOutputColumns) {
+            this.projection = projection;
+            this.predicate = predicate;
+            this.limit = limit;
+            this.requiredOutputColumns = requiredOutputColumns;
+        }
 
         @Override
         public PlanNode visit(OptExpression optExpression, ExecPlan context) {
@@ -358,6 +331,10 @@ public class ShortCircuitPlanner {
 
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             for (ColumnRefOperator columnRefOperator : valuesOperator.getColumnRefSet()) {
+                if (!requiredOutputColumns.contains(columnRefOperator)) {
+                    continue;
+                }
+
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(columnRefOperator.getId()));
                 slotDescriptor.setIsNullable(columnRefOperator.isNullable());
@@ -393,76 +370,35 @@ public class ShortCircuitPlanner {
 
         @Override
         public PlanNode visitLogicalTableScan(OptExpression optExpression, ExecPlan context) {
-            LogicalScanOperator scan = optExpression.getOp().cast();
-
-            if (scan instanceof LogicalOlapScanOperator) {
-                Table referenceTable = scan.getTable();
-                context.getDescTbl().addReferencedTable(referenceTable);
-                TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
-                tupleDescriptor.setTable(referenceTable);
-
-                for (Map.Entry<ColumnRefOperator, Column> entry : scan.getColRefToColumnMetaMap().entrySet()) {
-                    SlotDescriptor slotDescriptor =
-                            context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
-                    slotDescriptor.setColumn(entry.getValue());
-                    slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
-                    slotDescriptor.setIsMaterialized(true);
-                    context.getColRefToExpr()
-                            .put(entry.getKey(), new SlotRef(entry.getKey().getName(), slotDescriptor));
-                }
-                tupleDescriptor.computeMemLayout();
-
-                //set tablet
-                Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), context.getConnectContext());
-                analyzer.setDescTbl(context.getDescTbl());
-                OlapScanNode scanNode =
-                        new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "COLUMN_WITH_ROW");
-                scanNode.selectBestRollupByRollupSelector();
-                context.getScanNodes().add(scanNode);
-                try {
-                    LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) optExpression.getOp();
-                    List<Long> selectedPartitionIds = olapScanOperator.getTable().getPartitions().stream()
-                            .filter(Partition::hasData).map(Partition::getId).collect(
-                                    Collectors.toList());
-                    LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
-                    builder.withOperator(olapScanOperator)
-                            .setSelectedPartitionId(selectedPartitionIds).setPredicate(predicate);
-                    olapScanOperator.buildColumnFilters(predicate);
-                    olapScanOperator = builder.build();
-                    scanNode.setColumnFilters(olapScanOperator.getColumnFilters());
-                    scanNode.setSelectedPartitionIds(selectedPartitionIds);
-                    scanNode.finalizeStats(analyzer);
-                } catch (UserException e) {
-                    throw new StarRocksPlannerException(
-                            "Build Exec FileScanNode fail, scan info is invalid," + e.getMessage(),
-                            INTERNAL_ERROR);
-                }
-
-                // set predicate
-                if (predicate != null) {
-                    List<ScalarOperator> predicates = Utils.extractConjuncts(predicate);
-                    ScalarOperatorToExpr.FormatterContext formatterContext =
-                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
-                    for (ScalarOperator predicate : predicates) {
-                        scanNode.getConjuncts()
-                                .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
-                    }
-                }
-
-                // set limit
-                scanNode.setLimit(limit);
-                scanNode.computePointScanRangeLocations();
-                return addProject(scanNode, context);
-            }
-            return visit(optExpression, context);
+            return createExecPlanNodeBuilder(optExpression, projection, predicate, limit,
+                    requiredOutputColumns).visitLogicalTableScan(optExpression, context);
         }
 
         @Override
         public PlanNode visitLogicalProject(OptExpression optExpression, ExecPlan context) {
             LogicalProjectOperator projectOp = (LogicalProjectOperator) optExpression.getOp();
-            if (!isRedundant(projectOp.getColumnRefMap())) {
-                projectOperators.add(projectOp);
+            if (projection == null) {
+                Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOp.getColumnRefMap().entrySet()) {
+                    if (requiredOutputColumns.contains(entry.getKey())) {
+                        resultMap.put(entry.getKey(), entry.getValue());
+                    }
+                }
+                projection = new LogicalProjectOperator(resultMap);
+            } else {
+                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectOp.getColumnRefMap());
+                Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
+                    resultMap.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
+                }
+                projection = new LogicalProjectOperator(resultMap);
             }
+            ColumnRefSet requiredColumns = new ColumnRefSet();
+            projection.getColumnRefMap().values().forEach(s -> requiredColumns.union(s.getUsedColumns()));
+            if (predicate != null) {
+                requiredColumns.union(predicate.getUsedColumns());
+            }
+            requiredOutputColumns = requiredColumns;
             return visitChild(optExpression, context);
         }
 
@@ -470,6 +406,7 @@ public class ShortCircuitPlanner {
         public PlanNode visitLogicalFilter(OptExpression optExpression, ExecPlan context) {
             LogicalFilterOperator filterOp = optExpression.getOp().cast();
             predicate = filterOp.getPredicate();
+            requiredOutputColumns.union(predicate.getUsedColumns());
             return visitChild(optExpression, context);
         }
 
@@ -491,20 +428,17 @@ public class ShortCircuitPlanner {
             return child.getOp().accept(this, child, context);
         }
 
-        private PlanNode addProject(PlanNode child, ExecPlan context) {
-            if (projectOperators.isEmpty()) {
+        protected PlanNode addProject(PlanNode child, ExecPlan context) {
+            if (projection == null || isRedundant(projection.getColumnRefMap())) {
                 return child;
             }
-            LogicalProjectOperator projectOp =
-                    projectOperators.stream().reduce(ExecPlanNodeBuilder::mergeProject).get();
-
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
 
             Map<SlotId, Expr> projectMap = Maps.newHashMap();
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOp.getColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
                 Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
-                                projectOp.getColumnRefMap()));
+                        new ScalarOperatorToExpr.FormatterContext(
+                                context.getColRefToExpr(), projection.getColumnRefMap()));
 
                 projectMap.put(new SlotId(entry.getKey().getId()), expr);
 
@@ -525,16 +459,6 @@ public class ShortCircuitPlanner {
 
             projectNode.setHasNullableGenerateChild();
             return projectNode;
-        }
-
-        private static LogicalProjectOperator mergeProject(
-                LogicalProjectOperator parent, LogicalProjectOperator child) {
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(child.getColumnRefMap());
-            Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : parent.getColumnRefMap().entrySet()) {
-                resultMap.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
-            }
-            return new LogicalProjectOperator(resultMap);
         }
     }
 }

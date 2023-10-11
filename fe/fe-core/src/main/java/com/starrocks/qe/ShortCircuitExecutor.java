@@ -17,205 +17,76 @@
 
 package com.starrocks.qe;
 
-import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Stopwatch;
-import com.google.common.collect.HashMultimap;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.SetMultimap;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.common.UserException;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
-import com.starrocks.proto.PExecShortCircuitResult;
-import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.PBackendService;
-import com.starrocks.rpc.PExecShortCircuitRequest;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.planner.ScanNode;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TDescriptorTable;
-import com.starrocks.thrift.TExecShortCircuitParams;
-import com.starrocks.thrift.TInternalScanRange;
-import com.starrocks.thrift.TKeyLiteralExpr;
-import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TResultBatch;
-import com.starrocks.thrift.TRuntimeProfileTree;
 import com.starrocks.thrift.TScanRangeLocations;
-import com.starrocks.thrift.TStatusCode;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
-import org.apache.thrift.TDeserializer;
 
-import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Random;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
 public class ShortCircuitExecutor {
 
-    private static final Logger LOG = LogManager.getLogger(ShortCircuitExecutor.class);
+    protected final ConnectContext context;
 
-    private final ConnectContext context;
+    protected final PlanFragment planFragment;
 
-    private final PlanFragment planFragment;
+    protected final List<TScanRangeLocations> scanRangeLocations;
 
-    private final List<TScanRangeLocations> scanRangeLocations;
+    protected final TDescriptorTable tDescriptorTable;
 
-    private final TDescriptorTable tDescriptorTable;
+    protected final boolean isBinaryRow;
 
-    private final boolean isBinaryRow;
+    protected final boolean enableProfile;
 
-    private final boolean enableProfile;
+    protected ShortCircuitResult result = null;
 
-    private ShortCircuitResult result = null;
-
-    private CoordinatorPreprocessor coordinatorPreprocessor = null;
-
-    public ShortCircuitExecutor(ConnectContext context, PlanFragment planFragment,
-                                List<TScanRangeLocations> scanRangeLocations, TDescriptorTable tDescriptorTable,
-                                boolean isBinaryRow, boolean enableProfile,
-                                CoordinatorPreprocessor coordinatorPreprocessor) {
+    protected ShortCircuitExecutor(ConnectContext context, PlanFragment planFragment,
+                                   List<TScanRangeLocations> scanRangeLocations, TDescriptorTable tDescriptorTable,
+                                   boolean isBinaryRow, boolean enableProfile) {
         this.context = context;
         this.planFragment = planFragment;
         this.scanRangeLocations = scanRangeLocations;
         this.tDescriptorTable = tDescriptorTable;
         this.isBinaryRow = isBinaryRow;
         this.enableProfile = enableProfile;
-        this.coordinatorPreprocessor = coordinatorPreprocessor;
     }
 
-    public void exec() throws UserException {
-        if (result != null) {
-            return;
+    public static ShortCircuitExecutor create(ConnectContext context, List<PlanFragment> fragments,
+                                              List<ScanNode> scanNodes, TDescriptorTable tDescriptorTable,
+                                              boolean isBinaryRow, boolean enableProfile) {
+        boolean isEmpty = scanNodes.isEmpty();
+        List<TScanRangeLocations> scanRangeLocations = isEmpty ?
+                ImmutableList.of() : scanNodes.get(0).getScanRangeLocations(0);
+        if (fragments.size() != 1 || !fragments.get(0).isShortCircuit()) {
+            return null;
         }
-        Stopwatch watch = Stopwatch.createUnstarted();
-        SetMultimap<TNetworkAddress, TExecShortCircuitParams> be2ShortCircuitRequests = createRequests();
-        Queue<RowBatch> rowBatchQueue = new LinkedList<>();
-        AtomicReference<RuntimeProfile> runtimeProfile = null;
-        AtomicLong affectedRows = new AtomicLong();
-        be2ShortCircuitRequests.forEach((beAddress, tRequest) -> {
-            PBackendService service = BrpcProxy.getBackendService(beAddress);
-            try {
-                PExecShortCircuitRequest pRequest = new PExecShortCircuitRequest();
-                pRequest.setRequest(tRequest);
-                watch.start();
-                Future<PExecShortCircuitResult> future = service.execShortCircuit(pRequest);
-                PExecShortCircuitResult shortCircuitResult = future.get(
-                        context.getSessionVariable().getQueryTimeoutS(), TimeUnit.SECONDS);
-                watch.stop();
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("exec short circuit time: " + watch.elapsed().toMillis() + "ms.");
-                }
 
-                TStatusCode code = TStatusCode.findByValue(shortCircuitResult.status.statusCode);
-                if (shortCircuitResult.status.errorMsgs != null && !shortCircuitResult.status.errorMsgs.isEmpty()) {
-                    throw new RuntimeException(shortCircuitResult.status.errorMsgs.get(0) + "code: " + code +
-                                    " backend: " + beAddress.getHostname() + ", port:" + beAddress.getPort());
-                }
-
-                if (null != shortCircuitResult.affectedRows) {
-                    affectedRows.set(result.getAffectedRows() + shortCircuitResult.affectedRows);
-                }
-
-                byte[] serialResult = pRequest.getSerializedResult();
-                RowBatch rowBatch = new RowBatch();
-                rowBatch.setEos(true);
-                if (serialResult != null && serialResult.length > 0) {
-                    TDeserializer deserializer = new TDeserializer();
-                    TResultBatch resultBatch = new TResultBatch();
-                    deserializer.deserialize(resultBatch, serialResult);
-                    rowBatch.setBatch(resultBatch);
-                }
-                rowBatchQueue.offer(rowBatch);
-
-                if (shortCircuitResult.profile != null) {
-                    TDeserializer deserializer = new TDeserializer();
-                    TRuntimeProfileTree runtimeProfileTree = new TRuntimeProfileTree();
-                    deserializer.deserialize(runtimeProfileTree, shortCircuitResult.profile);
-                    runtimeProfile.set(new RuntimeProfile());
-                    runtimeProfile.get().update(runtimeProfileTree);
-                }
-            } catch (Throwable e) {
-                throw new RuntimeException("Execute short circuit failed, reason: "
-                        + e.getMessage() + " backend: " + beAddress.getHostname() + ", port:" + beAddress.getPort(), e);
-            }
-
-        });
-
-        result = new ShortCircuitResult(rowBatchQueue, affectedRows.get(),
-                runtimeProfile == null ? null : runtimeProfile.get());
+        if (!isEmpty && scanNodes.get(0) instanceof OlapScanNode) {
+            return new ShortCircuitExecutorHybrid(context, fragments.get(0), scanRangeLocations,
+                    tDescriptorTable, isBinaryRow, enableProfile);
+        }
+        return null;
     }
 
-    public class TabletWithVersion {
-        final long tabletId;
-        final String version;
-
-        public TabletWithVersion(long tabletId, String version) {
-            this.tabletId = tabletId;
-            this.version = version;
-        }
-
-        public long getTabletId() {
-            return tabletId;
-        }
-
-        public String getVersion() {
-            return version;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-            TabletWithVersion that = (TabletWithVersion) o;
-            return tabletId == that.tabletId && Objects.equal(version, that.version);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hashCode(tabletId, version);
-        }
+    public void exec() {
+        throw new StarRocksPlannerException("Not implement ShortCircuit Executor class", ErrorType.INTERNAL_ERROR);
     }
 
-    private SetMultimap<TNetworkAddress, TabletWithVersion> assignTablet2Backends() {
-        SetMultimap<TNetworkAddress, TabletWithVersion> backend2Tablets = HashMultimap.create();
-        scanRangeLocations.forEach(range -> {
-            ImmutableMap<Long, Backend> idToBackend = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
-
-            TInternalScanRange internalScanRange = range.getScan_range().getInternal_scan_range();
-            TabletWithVersion tabletWithVersion = new TabletWithVersion(internalScanRange.getTablet_id(),
-                    internalScanRange.getVersion());
-
-            //TODO
-            TNetworkAddress be = pick(internalScanRange.getHosts());
-            idToBackend.forEach((id, backend) -> {
-                if (backend.getAddress().equals(be)) {
-                    backend2Tablets.put(backend.getBrpcAddress(), tabletWithVersion);
-                }
-            });
-        });
-        return backend2Tablets;
-    }
-
-    private static <T> T pick(List<T> collections) {
+    protected static <T> T pick(List<T> collections) {
         Preconditions.checkArgument(!collections.isEmpty());
         if (collections.size() == 1) {
             return collections.get(0);
         } else {
-            return collections.get(new Random().nextInt(collections.size()));
+            return  collections.get(new Random().nextInt(collections.size()));
         }
     }
 
@@ -234,63 +105,30 @@ public class ShortCircuitExecutor {
         return result.getRuntimeProfile();
     }
 
-    private SetMultimap<TNetworkAddress, TExecShortCircuitParams> createRequests() {
-        SetMultimap<TNetworkAddress, TExecShortCircuitParams> toSendRequests = HashMultimap.create();
-
-        TExecShortCircuitParams commonRequest = new TExecShortCircuitParams();
-        commonRequest.setDesc_tbl(tDescriptorTable);
-        commonRequest.setOutput_exprs(planFragment.getOutputExprs().stream()
-                .map(Expr::treeToThrift).collect(Collectors.toList()));
-        commonRequest.setIs_binary_row(isBinaryRow);
-        commonRequest.setEnable_profile(enableProfile);
-        if (planFragment.getSink() != null) {
-            commonRequest.setData_sink(planFragment.sinkToThrift());
-        }
-        if (planFragment.getPlanRoot() != null) {
-            if (planFragment.getPlanRoot() instanceof OlapScanNode) {
-                OlapScanNode olapScanNode = (OlapScanNode) planFragment.getPlanRoot();
-                // set literal exprs
-                List<List<LiteralExpr>> keyTuples = olapScanNode.getRowStoreKeyLiterals();
-                List<TKeyLiteralExpr> keyLiteralExprs = new ArrayList<>();
-                keyTuples.forEach(keyTuple -> {
-                    TKeyLiteralExpr keyLiteralExpr = new TKeyLiteralExpr();
-                    keyLiteralExpr.setLiteral_exprs(keyTuple.stream()
-                            .map(Expr::treeToThrift)
-                            .collect(Collectors.toList()));
-                    keyLiteralExprs.add(keyLiteralExpr);
-
-                });
-                commonRequest.setKey_literal_exprs(keyLiteralExprs);
-
-                // fill tablet id and version , then bind be network
-                SetMultimap<TNetworkAddress, TabletWithVersion> be2Tablets = assignTablet2Backends();
-                olapScanNode.clearScanNodeForThriftBuild();
-                be2Tablets.forEach((addr, tableVersion) -> {
-                    List<Long> tabletIds = be2Tablets.get(addr).stream().map(TabletWithVersion::getTabletId)
-                                    .collect(Collectors.toList());
-                    commonRequest.setTablet_ids(tabletIds);
-                    List<String> versions = be2Tablets.get(addr).stream().map(TabletWithVersion::getVersion)
-                                    .collect(Collectors.toList());
-                    commonRequest.setVersions(versions);
-                    commonRequest.setPlan(olapScanNode.treeToThrift());
-                    toSendRequests.put(addr, commonRequest);
-                });
-            }
-        }
-
-        return toSendRequests;
+    public String getResultInfo() {
+        Preconditions.checkNotNull(result);
+        return result.getResultInfo();
     }
 
     public static class ShortCircuitResult {
         private final Queue<RowBatch> rowBatches;
         private final long affectedRows;
-
         private final RuntimeProfile runtimeProfile;
+        private final String resultInfo;
 
         public ShortCircuitResult(Queue<RowBatch> rowBatches, long affectedRows, RuntimeProfile runtimeProfile) {
             this.rowBatches = rowBatches;
             this.affectedRows = affectedRows;
             this.runtimeProfile = runtimeProfile;
+            this.resultInfo = null;
+        }
+
+        public ShortCircuitResult(Queue<RowBatch> rowBatches, long affectedRows, RuntimeProfile runtimeProfile,
+                                  String resultInfo) {
+            this.rowBatches = rowBatches;
+            this.affectedRows = affectedRows;
+            this.runtimeProfile = runtimeProfile;
+            this.resultInfo = resultInfo;
         }
 
         public Queue<RowBatch> getRowBatches() {
@@ -303,6 +141,10 @@ public class ShortCircuitExecutor {
 
         public Optional<RuntimeProfile> getRuntimeProfile() {
             return Optional.ofNullable(runtimeProfile);
+        }
+
+        public String getResultInfo() {
+            return resultInfo;
         }
     }
 }

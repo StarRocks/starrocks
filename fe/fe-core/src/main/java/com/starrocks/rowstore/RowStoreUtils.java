@@ -31,25 +31,26 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 public class RowStoreUtils {
 
     /**
-     * Columns from predicate is prefix of key columns, and all columns is eq filter 
+     * Columns from predicate is prefix of key columns, and all columns is eq filter
      * except the last of columns support range filter.
-     * 
+     *
      * <p>PrefixScan with filter can only use a single scanner. This method is used for short circuit executor.
      */
     public static boolean isPrefixRangeScan(List<String> keyColumns, List<ScalarOperator> predicates) {
-        Set<String> keyColumnSet = ImmutableSet.copyOf(keyColumns);
-        Set<String> eqKeys = new HashSet<>();
-        Set<String> rangeKeys = new HashSet<>();
+        Set<String> keyColumnSet = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        keyColumnSet.addAll(keyColumns);
+        Set<String> eqKeys = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        Set<String> rangeKeys = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         for (ScalarOperator conjunct : predicates) {
             ScalarOperator column = conjunct.getChild(0);
             if (!column.isColumnRef()) {
@@ -85,11 +86,11 @@ public class RowStoreUtils {
         return isPrefixScan(keyColumns, eqKeys, rangeKeys);
     }
 
-
     public static boolean isPrefixScan(List<String> keyColumns, List<Expr> predicates) {
-        Set<String> keyColumnSet = ImmutableSet.copyOf(keyColumns);
-        Set<String> eqKeys = new HashSet<>();
-        Set<String> rangeKeys = new HashSet<>();
+        Set<String> keyColumnSet = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        keyColumnSet.addAll(keyColumns);
+        Set<String> eqKeys = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        Set<String> rangeKeys = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         for (Expr conjunct : predicates) {
             Expr column = conjunct.getChild(0);
             if (!(column instanceof SlotRef)) {
@@ -134,71 +135,30 @@ public class RowStoreUtils {
             break;
         }
         if (rangeKeys.size() == 1) {
-            if (!keyColumns.get(i++).equals(rangeKeys.iterator().next())) {
+            if (!keyColumns.get(i++).equalsIgnoreCase(rangeKeys.iterator().next())) {
                 return false;
             }
-            
+
         }
         return keyColumns.stream().skip(i).noneMatch(c -> eqKeys.contains(c) || rangeKeys.contains(c));
     }
 
-    public static Optional<List<RowStoreKeyTuple>> extractPoints(List<Expr> conjuncts, List<String> keyColumns) {
-        Set<String> keyColumnSet = ImmutableSet.copyOf(keyColumns);
-        Map<String, List<LiteralExpr>> keyToValues = new HashMap<>();
-
-        for (Expr expr : conjuncts) {
-            Expr column = expr.getChild(0);
-            if (!(column instanceof SlotRef)) {
-                continue;
-            }
-            String columnName = ((SlotRef) column).getDesc().getColumn().getName();
-            if (!keyColumnSet.contains(columnName)) {
-                continue;
-            }
-            if (expr instanceof BinaryPredicate) {
-                Expr literal = expr.getChild(1);
-                if (!(literal instanceof LiteralExpr)) {
-                    continue;
-                }
-                if (!BinaryPredicate.IS_EQ_PREDICATE.apply((BinaryPredicate) expr)) {
-                    continue;
-                }
-                if (keyToValues.containsKey(columnName)) {
-                    return Optional.empty(); // don't deal with it here
-                }
-                keyToValues.put(columnName, ImmutableList.of((LiteralExpr) literal));
-            } else if (expr instanceof InPredicate) {
-                List<LiteralExpr> literalExprs = new ArrayList<>();
-                for (Expr literal : expr.getChildren().subList(1, expr.getChildren().size())) {
-                    if (!(literal instanceof LiteralExpr)) {
-                        continue;
-                    }
-                    literalExprs.add((LiteralExpr) literal);
-                }
-                if (keyToValues.containsKey(columnName)) {
-                    return Optional.empty();
-                }
-                keyToValues.put(columnName, literalExprs);
-            }
+    public static Optional<List<RowStoreKeyTuple>> extractPoints(
+            List<Expr> conjuncts, List<String> keyColumns) {
+        Optional<List<List<LiteralExpr>>> cartesianProduct = extractPointsUsingOriginLiteral(conjuncts, keyColumns);
+        List<RowStoreKeyTuple> rows = new ArrayList<>();
+        if (cartesianProduct.isPresent()) {
+            cartesianProduct.get().stream()
+                    .map(e -> new RowStoreKeyTuple(e.stream().map(ColumnValue::new).collect(Collectors.toList())))
+                    .collect(Collectors.toList());
         }
-
-        if (keyToValues.size() != keyColumns.size()) {
-            return Optional.empty();
-        }
-
-        List<List<LiteralExpr>> values = keyColumns.stream().map(keyToValues::get).collect(Collectors.toList());
-        List<List<LiteralExpr>> cartesianProduct = Lists.cartesianProduct(values);
-        List<RowStoreKeyTuple> rows = cartesianProduct.stream()
-                .map(e -> new RowStoreKeyTuple(e.stream().map(ColumnValue::new).collect(Collectors.toList())))
-                .collect(Collectors.toList());
-        return Optional.of(rows);
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows);
     }
 
     public static Optional<List<List<LiteralExpr>>> extractPointsUsingOriginLiteral(List<Expr> conjuncts,
-                                                                              List<String> keyColumns) {
+                                                                                    List<String> keyColumns) {
         Set<String> keyColumnSet = ImmutableSet.copyOf(keyColumns);
         Map<String, List<LiteralExpr>> keyToValues = new HashMap<>();
-
         for (Expr expr : conjuncts) {
             Expr column = expr.getChild(0);
             if (!(column instanceof SlotRef)) {
@@ -244,4 +204,3 @@ public class RowStoreUtils {
         return Optional.of(cartesianProduct);
     }
 }
-
