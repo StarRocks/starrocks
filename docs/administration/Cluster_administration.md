@@ -407,7 +407,7 @@ Q: I have recently upgraded StarRocks v2.0 to v2.1 or later versions. When I loa
 
 A: StarRocks v2.0 parses all columns as strings and then performs type conversion for loading. When you load BOOLEAN type data (`true` and `false`) in JSON format into an integer column, StarRocks v2.0 converts the data into `0` and `1` for loading. StarRocks v2.1 refactored its JSON Paerser, which directly extracts the JSON fields according to the target column type, resulting in this problem.
 
-You can solve this problem by adding the expression `tmp, target=if(tmp,1,0)` to the `columns` parameter of the [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md) command. The complete command is as follows:
+You can solve this problem by adding the expression `tmp, target=if(tmp,1,0)` to the `columns` parameter of the [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) command. The complete command is as follows:
 
 ```shell
 curl --location-trusted -u <username>:<password> \

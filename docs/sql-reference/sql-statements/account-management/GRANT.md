@@ -8,9 +8,9 @@ Grants roles to users or other roles.
 
 For more information about the privileges that can be granted, see [Privilege items](../../../administration/privilege_item.md).
 
-After a GRANT operation is performed, you can run [SHOW GRANTS](./SHOW%20GRANTS.md) to view detailed privilege information or run [REVOKE](REVOKE.md) to revoke a privilege or role.
+After a GRANT operation is performed, you can run [SHOW GRANTS](./SHOW_GRANTS.md) to view detailed privilege information or run [REVOKE](REVOKE.md) to revoke a privilege or role.
 
-Before a GRANT operation is performed, make sure that the related user or role has been created. For more information, see [CREATE USER](./CREATE%20USER.md) and [CREATE ROLE](./CREATE%20ROLE.md).
+Before a GRANT operation is performed, make sure that the related user or role has been created. For more information, see [CREATE USER](./CREATE_USER.md) and [CREATE ROLE](./CREATE_ROLE.md).
 
 > **NOTE**
 >

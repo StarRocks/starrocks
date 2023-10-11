@@ -2,9 +2,9 @@
 
 ## Why is the error message "no permission" still reported even after the required role has been assigned to a user?
 
-This error may happen if the role is not activated. You can run `select current_role();` to query the roles that have been activated for the user in the current session. If the required role is not activated, run [SET ROLE](../sql-reference/sql-statements/account-management/SET%20ROLE.md) to activate this role and perform operations using this role.
+This error may happen if the role is not activated. You can run `select current_role();` to query the roles that have been activated for the user in the current session. If the required role is not activated, run [SET ROLE](../sql-reference/sql-statements/account-management/SET_ROLE.md) to activate this role and perform operations using this role.
 
-If you want roles to be automatically activated upon login, the `user_admin` role can run [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) or [ALTER USER DEFAULT ROLE](../sql-reference/sql-statements/account-management/ALTER%20USER.md) to set a default role for each user. After the default role is set, it will be automatically activated when the user logs in.
+If you want roles to be automatically activated upon login, the `user_admin` role can run [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) or [ALTER USER DEFAULT ROLE](../sql-reference/sql-statements/account-management/ALTER_USER.md) to set a default role for each user. After the default role is set, it will be automatically activated when the user logs in.
 
 If you want all the assigned roles of all users to be automatically activated upon login, you can run the following command. This operation requires the OPERATE permission at the System level.
 
