@@ -76,18 +76,18 @@ public:
 
     bool loaded() const { return invoked(_load_once); }
 
-private:
-    Status _do_load(const IndexReadOptions& opts, const BloomFilterIndexPB& meta);
-
-    void _reset();
-
-    size_t _mem_usage() const {
+    size_t mem_usage() const {
         size_t size = sizeof(BloomFilterIndexReader);
         if (_bloom_filter_reader != nullptr) {
             size += _bloom_filter_reader->mem_usage();
         }
         return size;
     }
+
+private:
+    Status _do_load(const IndexReadOptions& opts, const BloomFilterIndexPB& meta);
+
+    void _reset();
 
     OnceFlag _load_once;
     TypeInfoPtr _typeinfo;
