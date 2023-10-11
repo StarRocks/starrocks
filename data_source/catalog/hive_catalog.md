@@ -781,13 +781,13 @@ PROPERTIES
 
 ## 查看 Hive Catalog
 
-您可以通过 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Hive Catalog `hive_catalog_glue` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Hive Catalog `hive_catalog_glue` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG hive_catalog_glue;
@@ -797,7 +797,7 @@ SHOW CREATE CATALOG hive_catalog_glue;
 
 您可以通过如下方法切换至目标 Hive Catalog 和数据库：
 
-- 先通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 指定当前会话生效的 Hive Catalog，然后再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定数据库：
+- 先通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 指定当前会话生效的 Hive Catalog，然后再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定数据库：
 
   ```SQL
   -- 切换当前会话生效的 Catalog：
@@ -814,7 +814,7 @@ SHOW CREATE CATALOG hive_catalog_glue;
 
 ## 删除 Hive Catalog
 
-您可以通过 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) 删除某个 External Catalog。
+您可以通过 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
 
 例如，通过如下命令删除 Hive Catalog `hive_catalog_glue`：
 
@@ -840,7 +840,7 @@ DROP Catalog hive_catalog_glue;
 
 ## 查询 Hive 表数据
 
-1. 通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) 查看指定 Catalog 所属的 Hive 集群中的数据库：
+1. 通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Hive 集群中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -898,7 +898,7 @@ GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE hive_role_table;
 
 ### 手动更新
 
-默认情况下，StarRocks 会缓存 Hive 的元数据、并以异步模式自动更新缓存的元数据，从而提高查询性能。此外，在对 Hive 表做了表结构变更或其他表更新后，您也可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) 手动更新该表的元数据，从而确保 StarRocks 第一时间生成合理的查询计划：
+默认情况下，StarRocks 会缓存 Hive 的元数据、并以异步模式自动更新缓存的元数据，从而提高查询性能。此外，在对 Hive 表做了表结构变更或其他表更新后，您也可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) 手动更新该表的元数据，从而确保 StarRocks 第一时间生成合理的查询计划：
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name>
@@ -995,9 +995,9 @@ HMS 2.x 和 3.x 版本均支持配置事件侦听器。这里以配套 HMS 3.1.2
 
 | 配置名称                                                      | 默认值                        | 说明                                  |
 | ------------------------------------------------------------ | ---------------------------- | ------------------------------------ |
-| enable_background_refresh_connector_metadata                 | v3.0 为 true，v2.5 为 false   | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) 命令设置。 |
-| background_refresh_metadata_interval_millis                  | 600000（10 分钟）             | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) 命令设置。 |
-| background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）              | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) 命令设置。 |
+| enable_background_refresh_connector_metadata                 | v3.0 为 true，v2.5 为 false   | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
+| background_refresh_metadata_interval_millis                  | 600000（10 分钟）             | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
+| background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）              | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
 
 元数据缓存周期性刷新与元数据自动异步更新策略配合使用，可以进一步加快数据访问速度，降低从外部数据源读取数据的压力，提升查询性能。
 

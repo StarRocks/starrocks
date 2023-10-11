@@ -1,6 +1,6 @@
 # 系统变量
 
-StarRocks 提供多个系统变量（system variables），方便您根据业务情况进行调整。本文介绍 StarRocks 支持的变量。您可以在 MySQL 客户端通过命令 [SHOW VARIABLES](../sql-reference/sql-statements/Administration/SHOW%20VARIABLES.md) 查看当前变量。也可以通过 [SET](../sql-reference/sql-statements/Administration/SET.md) 命令动态设置或者修改变量。您可以设置变量在系统全局 (global) 范围内生效、仅在当前会话 (session) 中生效、或者仅在单个查询语句中生效。
+StarRocks 提供多个系统变量（system variables），方便您根据业务情况进行调整。本文介绍 StarRocks 支持的变量。您可以在 MySQL 客户端通过命令 [SHOW VARIABLES](../sql-reference/sql-statements/Administration/SHOW_VARIABLES.md) 查看当前变量。也可以通过 [SET](../sql-reference/sql-statements/Administration/SET.md) 命令动态设置或者修改变量。您可以设置变量在系统全局 (global) 范围内生效、仅在当前会话 (session) 中生效、或者仅在单个查询语句中生效。
 
 StarRocks 中的变量参考 MySQL 中的变量设置，但**部分变量仅用于兼容 MySQL 客户端协议，并不产生其在 MySQL 数据库中的实际意义**。
 
@@ -119,7 +119,7 @@ SELECT /*+ SET_VAR
 
 默认值：false，表示不开启。
 
-如果要在当前会话中激活一个角色，可以使用 [SET ROLE](../sql-reference/sql-statements/account-management/SET%20ROLE.md)。
+如果要在当前会话中激活一个角色，可以使用 [SET ROLE](../sql-reference/sql-statements/account-management/SET_ROLE.md)。
 
 ### auto_increment_increment
 

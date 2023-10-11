@@ -25,7 +25,7 @@ SET DEFAULT ROLE NONE TO <user_identity>;
 
 普通用户可以设置自己的默认角色，`user_admin` 可以为其他用户设置默认角色。设定时，请确认用户已经拥有对应角色。
 
-可以通过 [SHOW GRANTS](SHOW%20GRANTS.md) 查看拥有的角色。
+可以通过 [SHOW GRANTS](SHOW_GRANTS.md) 查看拥有的角色。
 
 ## 示例
 

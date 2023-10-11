@@ -1,6 +1,6 @@
 # 从云存储导入
 
-StarRocks 支持通过两种方式从云存储系统导入大批量数据：[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 和 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。
+StarRocks 支持通过两种方式从云存储系统导入大批量数据：[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 和 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。
 
 在 3.0 及以前版本，StarRocks 只支持 Broker Load 导入方式。Broker Load 是一种异步导入方式，即您提交导入作业以后，StarRocks 会异步地执行导入作业。您可以使用 `SELECT * FROM information_schema.loads` 来查看 Broker Load 作业的结果，该功能自 3.1 版本起支持，具体请参见本文“[查看导入作业](#查看导入作业)”小节。
 
@@ -14,7 +14,7 @@ Broker Load 能够保证单次导入事务的原子性，即单次导入的多�
 
 从 3.1 版本起，StarRocks 新增支持使用 INSERT 语句和 `FILES` 关键字直接从 AWS S3 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [INSERT > 通过 FILES 关键字直接导入外部数据文件](../loading/InsertInto.md#通过-table-关键字直接导入外部数据文件)。
 
-本文主要介绍如何使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 从云存储系统导入数据。
+本文主要介绍如何使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 从云存储系统导入数据。
 
 ## 背景信息
 
@@ -24,7 +24,7 @@ Broker Load 能够保证单次导入事务的原子性，即单次导入的多�
 
 > **说明**
 >
-> 您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/deployment/deploy_broker.md)完成 Broker 部署。
+> 您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/deployment/deploy_broker.md)完成 Broker 部署。
 
 ## 支持的数据文件格式
 
@@ -103,7 +103,7 @@ Broker Load 支持如下数据文件格式：
 
 注意，Broker Load 支持通过 S3 或 S3A 协议访问 AWS S3，因此从 AWS S3 导入数据时，您在文件路径 (`DATA INFILE`) 中传入的目标文件的 S3 URI 可以使用 `s3://` 或 `s3a://` 作为前缀。
 
-另外注意，下述命令以 CSV 格式和基于 Instance Profile 的认证方式为例。有关如何导入其他格式的数据、以及使用其他认证方式时需要配置的参数，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+另外注意，下述命令以 CSV 格式和基于 Instance Profile 的认证方式为例。有关如何导入其他格式的数据、以及使用其他认证方式时需要配置的参数，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 ### 导入单个数据文件到单表
 
@@ -267,7 +267,7 @@ PROPERTIES
 
 注意，由于 Broker Load 只支持通过 gs 协议访问 Google GCS，因此从 Google GCS 导入数据时，必须确保您在文件路径 (`DATA INFILE`) 中传入的目标文件的 GCS URI 使用 `gs://` 作为前缀。
 
-另外注意，下述命令以 CSV 格式和基于 VM 的认证方式为例。有关如何导入其他格式的数据、以及使用其他认证方式时需要配置的参数，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+另外注意，下述命令以 CSV 格式和基于 VM 的认证方式为例。有关如何导入其他格式的数据、以及使用其他认证方式时需要配置的参数，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 ### 导入单个数据文件到单表
 
@@ -436,7 +436,7 @@ PROPERTIES
   - 如果使用 HTTP 协议进行访问，请使用 `abfs://` 作为前缀，例如，`abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
   - 如果使用 HTTPS 协议进行访问，请使用 `abfss://` 作为前缀，例如，`abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
 
-另外注意，下述命令以 CSV 格式、Azure Blob Storage 和基于 Shared Key 的认证方式为例。有关如何导入其他格式的数据、以及使用其他 Azure 对象存储服务和其他认证方式时需要配置的参数，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+另外注意，下述命令以 CSV 格式、Azure Blob Storage 和基于 Shared Key 的认证方式为例。有关如何导入其他格式的数据、以及使用其他 Azure 对象存储服务和其他认证方式时需要配置的参数，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 ### 导入单个数据文件到单表
 
@@ -598,7 +598,7 @@ PROPERTIES
 
 ## 从阿里云 OSS 导入
 
-下述命令以 CSV 格式为例。有关如何导入其他格式的数据，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+下述命令以 CSV 格式为例。有关如何导入其他格式的数据，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 ### 导入单个数据文件到单表
 
@@ -763,7 +763,7 @@ PROPERTIES
 
 ## 从腾讯云 COS 导入
 
-下述命令以 CSV 格式为例。有关如何导入其他格式的数据，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+下述命令以 CSV 格式为例。有关如何导入其他格式的数据，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 ### 导入单个数据文件到单表
 
@@ -928,7 +928,7 @@ PROPERTIES
 
 ## 从华为云 OBS 导入
 
-下述命令以 CSV 格式为例。有关如何导入其他格式的数据，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+下述命令以 CSV 格式为例。有关如何导入其他格式的数据，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 ### 导入单个数据文件到单表
 
@@ -1093,7 +1093,7 @@ PROPERTIES
 
 ## 从其他兼容 S3 协议的对象存储导入
 
-下述命令以 CSV 格式和 MinIO 存储为例。有关如何导入其他格式的数据，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+下述命令以 CSV 格式和 MinIO 存储为例。有关如何导入其他格式的数据，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 ### 导入单个数据文件到单表
 
@@ -1368,7 +1368,7 @@ REJECTED_RECORD_PATH: 172.26.95.92:/home/disk1/sr/be/storage/rejected_record/tes
 
 ## 取消导入作业
 
-当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](/sql-reference/sql-statements/data-manipulation/CANCEL%20LOAD.md) 语句来取消该导入作业。
+当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](/sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) 语句来取消该导入作业。
 
 例如，可以通过以下语句，撤销 `db1` 数据库中标签为 `label1` 的导入作业：
 

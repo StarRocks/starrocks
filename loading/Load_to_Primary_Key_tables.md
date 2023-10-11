@@ -1,6 +1,6 @@
 # 通过导入实现数据变更
 
-StarRocks 的[主键模型](/table_design/table_types/primary_key_table.md)支持通过 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 或 [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../loading/SparkLoad.md) 导入作业或 [INSERT](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) 语句对 StarRocks 表进行数据变更。
+StarRocks 的[主键模型](/table_design/table_types/primary_key_table.md)支持通过 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 或 [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../loading/SparkLoad.md) 导入作业或 [INSERT](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 语句对 StarRocks 表进行数据变更。
 
 StarRocks 还支持部分更新 (Partial Update) 和条件更新 (Conditional Update)。
 
@@ -58,7 +58,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
 
 ## 基本操作
 
-下面通过几个示例来展示具体的导入操作。有关使用 Stream Load、Broker Load 和 Routine Load 导入数据的详细语法和参数介绍，请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 和 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)。
+下面通过几个示例来展示具体的导入操作。有关使用 Stream Load、Broker Load 和 Routine Load 导入数据的详细语法和参数介绍，请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 和 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
 
 ### UPSERT
 

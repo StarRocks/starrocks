@@ -12,7 +12,7 @@ StarRocks 同时采用了基于角色的访问控制 (RBAC) 和基于身份的�
 
 ### 查看权限信息
 
-您可以使用 [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW%20GRANTS.md) 查看授予用户或角色的权限。
+您可以使用 [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW_GRANTS.md) 查看授予用户或角色的权限。
 
 - 查看当前用户的权限。
 
@@ -42,7 +42,7 @@ StarRocks 同时采用了基于角色的访问控制 (RBAC) 和基于身份的�
 
 ### 查看用户属性
 
-您可以使用 [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SET%20PROPERTY.md) 查看用户的属性。
+您可以使用 [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SET_PROPERTY.md) 查看用户的属性。
 
 以下示例查看用户 `jack` 的属性：
 
@@ -52,7 +52,7 @@ SHOW PROPERTY FOR jack@'172.10.1.10';
 
 ### 查看角色
 
-您可以使用 [SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW%20ROLES.md) 查看 StarRocks 集群中的所有角色。
+您可以使用 [SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW_ROLES.md) 查看 StarRocks 集群中的所有角色。
 
 ```SQL
 SHOW ROLES;
@@ -74,7 +74,7 @@ SHOW USERS;
 
 您可以通过指定用户身份（user identity）、认证方式和默认角色来创建用户。
 
-StarRocks 支持使用用户密码登录或 LDAP 认证作为用户认证方式。有关 StarRocks 认证方式的更多信息，请参阅 [用户认证](../administration/Authentication.md)。有关创建用户的更多操作说明，请参阅 [CREATE USER](../sql-reference/sql-statements/account-management/CREATE%20USER.md)。
+StarRocks 支持使用用户密码登录或 LDAP 认证作为用户认证方式。有关 StarRocks 认证方式的更多信息，请参阅 [用户认证](../administration/Authentication.md)。有关创建用户的更多操作说明，请参阅 [CREATE USER](../sql-reference/sql-statements/account-management/CREATE_USER.md)。
 
 以下示例创建用户 `jack`，仅允许其从 IP 地址 `172.10.1.10` 进行连接，为其设置密码为 `12345`，并将角色 `example_role` 分配给它作为其默认角色：
 
@@ -95,7 +95,7 @@ CREATE USER jack@'172.10.1.10' IDENTIFIED BY '12345' DEFAULT ROLE 'example_role'
 
 #### 修改用户默认角色
 
-您可以使用 [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) 或 [ALTER USER](../sql-reference/sql-statements/account-management/ALTER%20USER.md) 设置用户的默认角色。
+您可以使用 [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) 或 [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md) 设置用户的默认角色。
 
 以下两个示例都将 `jack` 的默认角色设置为 `db1_admin`。设置前需要确保 `db1_admin` 角色已经赋予给了 `jack`。
 
@@ -113,7 +113,7 @@ CREATE USER jack@'172.10.1.10' IDENTIFIED BY '12345' DEFAULT ROLE 'example_role'
 
 #### 修改用户属性
 
-您可以使用 [SET PROPERTY](../sql-reference/sql-statements/account-management/SET%20PROPERTY.md) 设置用户的属性。
+您可以使用 [SET PROPERTY](../sql-reference/sql-statements/account-management/SET_PROPERTY.md) 设置用户的属性。
 
 相同用户名的用户标识共享一个属性。在以下示例中，只需将属性配置给 `jack`，那么该属性配置会对所有含用户名 `jack` 的用户标识生效。
 
@@ -125,7 +125,7 @@ SET PROPERTY FOR jack 'max_user_connections' = '1000';
 
 #### 重置用户密码
 
-您可以使用 [SET PASSWORD](../sql-reference/sql-statements/account-management/SET%20PASSWORD.md) 或 [ALTER USER](../sql-reference/sql-statements/account-management/ALTER%20USER.md) 为用户重置密码。
+您可以使用 [SET PASSWORD](../sql-reference/sql-statements/account-management/SET_PASSWORD.md) 或 [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md) 为用户重置密码。
 
 > **说明**
 >
@@ -196,7 +196,7 @@ SET PROPERTY FOR jack 'max_user_connections' = '1000';
 
 ### 删除用户
 
-您可以使用 [DROP USER](../sql-reference/sql-statements/account-management/DROP%20USER.md) 删除用户。
+您可以使用 [DROP USER](../sql-reference/sql-statements/account-management/DROP_USER.md) 删除用户。
 
 以下示例删除用户 `jack`：
 
@@ -210,7 +210,7 @@ DROP USER jack@'172.10.1.10';
 
 ### 创建角色
 
-您可以使用 [CREATE ROLE](../sql-reference/sql-statements/account-management/CREATE%20ROLE.md) 创建角色。
+您可以使用 [CREATE ROLE](../sql-reference/sql-statements/account-management/CREATE_ROLE.md) 创建角色。
 
 以下示例创建角色 `example_role`：
 
@@ -264,7 +264,7 @@ CREATE ROLE example_role;
 
 ### 删除角色
 
-您可以使用 [DROP ROLE](../sql-reference/sql-statements/account-management/DROP%20ROLE.md) 删除角色。
+您可以使用 [DROP ROLE](../sql-reference/sql-statements/account-management/DROP_ROLE.md) 删除角色。
 
 以下示例删除角色 `example_role`：
 

@@ -84,13 +84,13 @@ PROPERTIES
 
 ## 查看 JDBC Catalog
 
-您可以通过 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 JDBC Catalog `jdbc0` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 JDBC Catalog `jdbc0` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG jdbc0;
@@ -98,7 +98,7 @@ SHOW CREATE CATALOG jdbc0;
 
 ## 删除 JDBC Catalog
 
-您可以通过 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) 删除一个 JDBC Catalog。
+您可以通过 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除一个 JDBC Catalog。
 
 例如，通过如下命令删除 JDBC Catalog `jdbc0`：
 
@@ -108,13 +108,13 @@ DROP Catalog jdbc0;
 
 ## 查询 JDBC Catalog 中的表数据
 
-1. 通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) 查看指定 Catalog 所属的集群中的数据库：
+1. 通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的集群中的数据库：
 
    ```SQL
    SHOW DATABASES from <catalog_name>;
    ```
 
-2. 通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 切换当前会话生效的 Catalog：
+2. 通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 切换当前会话生效的 Catalog：
 
     ```SQL
     SET CATALOG <catalog_name>;

@@ -108,11 +108,11 @@ Flink connector JAR 文件的命名格式如下：
 | sink.wait-for-continue.timeout-ms | No       | 10000         | 此参数自 Flink connector 1.2.7 开始支持。等待 FE HTTP 100-continue 应答的超时时间。取值范围：[3000, 600000]。 |
 | sink.ignore.update-before         | No       | TRUE          | 此参数自 Flink connector 1.2.8 开始支持。将数据导入到主键模型表时，是否忽略来自 Flink 的 UPDATE_BEFORE 记录。如果将此参数设置为 false，则将该记录在主键模型表中视为DELETE 操作。 |
 | sink.parallelism                  | No       | NONE          | 写入的并行度。仅适用于Flink SQL。如果未设置， Flink planner 将决定并行度。**在多并行度的场景中，用户需要确保数据按正确顺序写入。** |
-| sink.properties.*                 | No       | NONE          | Stream Load 的参数，控制 Stream Load 导入行为。例如 参数 sink.properties.format 表示 Stream Load 所导入的数据格式，如 CSV 或者 JSON。全部参数和解释，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。 |
+| sink.properties.*                 | No       | NONE          | Stream Load 的参数，控制 Stream Load 导入行为。例如 参数 sink.properties.format 表示 Stream Load 所导入的数据格式，如 CSV 或者 JSON。全部参数和解释，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。 |
 | sink.properties.format            | No       | csv           | Stream Load 导入时的数据格式。Flink connector 会将内存的数据转换为对应格式，然后通过 Stream Load 导入至 StarRocks。取值为 CSV 或者 JSON。 |
 | sink.properties.column_separator  | No       | \t            | CSV 数据的列分隔符。                                         |
 | sink.properties.row_delimiter     | No       | \n            | CSV 数据的行分隔符。                                         |
-| sink.properties.max_filter_ratio  | No       | 0             | 导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：0~1。默认值：0 。详细信息，请参见  [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。 |
+| sink.properties.max_filter_ratio  | No       | 0             | 导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：0~1。默认值：0 。详细信息，请参见  [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。 |
 
 ## 数据类型映射
 

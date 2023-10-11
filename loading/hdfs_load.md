@@ -1,6 +1,6 @@
 # 从 HDFS 导入
 
-StarRocks 支持通过两种方式从 HDFS 导入大批量数据：[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 和 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。
+StarRocks 支持通过两种方式从 HDFS 导入大批量数据：[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 和 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。
 
 在 3.0 及以前版本，StarRocks 只支持 Broker Load 导入方式。Broker Load 是一种异步导入方式，即您提交导入作业以后，StarRocks 会异步地执行导入作业。您可以使用 `SELECT * FROM information_schema.loads` 来查看 Broker Load 作业的结果，该功能自 3.1 版本起支持，具体请参见本文“[查看导入作业](#查看导入作业)”小节。
 
@@ -14,7 +14,7 @@ Broker Load 能够保证单次导入事务的原子性，即单次导入的多�
 
 从 3.1 版本起，StarRocks 新增支持使用 INSERT 语句和 `FILES` 关键字直接从 HDFS 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [INSERT > 通过 FILES 关键字直接导入外部数据文件](../loading/InsertInto.md#通过-table-关键字直接导入外部数据文件)。
 
-本文主要介绍如何使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 从 HDFS 导入数据。
+本文主要介绍如何使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 从 HDFS 导入数据。
 
 ## 背景信息
 
@@ -22,11 +22,11 @@ Broker Load 能够保证单次导入事务的原子性，即单次导入的多�
 
 自 v2.5 起，StarRocks 在执行 Broker Load 时不需要借助 Broker 即可访问外部存储系统，称为“无 Broker 的导入”。导入语句中也不再需要指定 `broker_name`，但继续保留 `WITH BROKER` 关键字。
 
-需要注意的是，无 Broker 的导入在数据源为 HDFS 的某些场景下会受限，例如，在多 HDFS 集群或者多 Kerberos 用户的场景。在这些场景下，可以继续采用有 Broker 的导入，需要确保至少部署了一组独立的 Broker。有关各种场景下如何指定认证方式和 HA 配置，参见 [HDFS](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#hdfs)。
+需要注意的是，无 Broker 的导入在数据源为 HDFS 的某些场景下会受限，例如，在多 HDFS 集群或者多 Kerberos 用户的场景。在这些场景下，可以继续采用有 Broker 的导入，需要确保至少部署了一组独立的 Broker。有关各种场景下如何指定认证方式和 HA 配置，参见 [HDFS](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#hdfs)。
 
 > **说明**
 >
-> 您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/deployment/deploy_broker.md)完成 Broker 部署。
+> 您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/deployment/deploy_broker.md)完成 Broker 部署。
 
 ## 支持的数据文件格式
 
@@ -101,7 +101,7 @@ Broker Load 支持如下数据文件格式：
 
 ## 创建导入作业
 
-注意，下述命令以 CSV 格式和简单认证方式为例。有关如何导入其他格式的数据、使用 Kerberos 认证方式时需要配置的参数、以及 HA 配置相关内容，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+注意，下述命令以 CSV 格式和简单认证方式为例。有关如何导入其他格式的数据、使用 Kerberos 认证方式时需要配置的参数、以及 HA 配置相关内容，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 ### 导入单个数据文件到单表
 
@@ -367,7 +367,7 @@ REJECTED_RECORD_PATH: 172.26.95.92:/home/disk1/sr/be/storage/rejected_record/tes
 
 ## 取消导入作业
 
-当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](/sql-reference/sql-statements/data-manipulation/CANCEL%20LOAD.md) 语句来取消该导入作业。
+当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](/sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) 语句来取消该导入作业。
 
 例如，可以通过以下语句，撤销 `db1` 数据库中标签为 `label1` 的导入作业：
 

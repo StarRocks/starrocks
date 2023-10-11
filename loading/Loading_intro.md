@@ -102,7 +102,7 @@ Routine Load 导入作业的执行流程描述如下：
 
 ## 导入方式
 
-StarRocks 提供 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)、 [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)、[Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) 和 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md) 多种导入方式，满足您在不同业务场景下的数据导入需求。
+StarRocks 提供 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、 [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)、[Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 和 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md) 多种导入方式，满足您在不同业务场景下的数据导入需求。
 
 | 导入方式            | 数据源                                                                                          | 业务场景                                                                                                     | 数据量（单作业）      | 数据格式                                            | 同步模式    | 协议   |
 | ------------------ | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------- | ---------- | ------ |
@@ -149,7 +149,7 @@ StarRocks 提供 [Stream Load](../sql-reference/sql-statements/data-manipulation
 
 - 如果您在创建 StarRocks 表时使用 `DEFAULT` 关键字给该字段对应的目标列指定了默认值，则 StarRocks 在导入时该行数据时会自动往该列填充 `DEFAULT` 中指定的默认值。
 
-  [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)、[Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) 和 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md) 四种导入方式当前支持 `DEFAULT current_timestamp`、`DEFAULT <默认值>` 和 `DEFAULT (<表达式>)`。[Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) 导入方式当前仅支持 `DEFAULT current_timestamp` 和 `DEFAULT <默认值>`，不支持 `DEFAULT (<表达式>)`。
+  [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、[Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 和 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md) 四种导入方式当前支持 `DEFAULT current_timestamp`、`DEFAULT <默认值>` 和 `DEFAULT (<表达式>)`。[Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 导入方式当前仅支持 `DEFAULT current_timestamp` 和 `DEFAULT <默认值>`，不支持 `DEFAULT (<表达式>)`。
 
   > **说明**
   >
@@ -161,13 +161,13 @@ StarRocks 提供 [Stream Load](../sql-reference/sql-statements/data-manipulation
   >
   > 如果该列在建表时定义该列为 `NOT NULL`，则导入会报错，作业失败。
 
-  对于 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)、[Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) 和 [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md)，您还可以在指定待导入列的参数里通过函数来给该列指定要填充的值。
+  对于 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、[Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)，您还可以在指定待导入列的参数里通过函数来给该列指定要填充的值。
 
-有关 `NOT NULL` 和 `DEFAULT` 的用法，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。
+有关 `NOT NULL` 和 `DEFAULT` 的用法，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
 
 ### 设置数据导入安全等级
 
-如果您的 StarRocks 集群有多数据副本，您可以根据业务需求为 Table 设置不同导入数据安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。您可在 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md) 时通过增加属性（PROPERTIES） `write_quorum` 指定导入数据安全等级，或通过 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md) 语句为已有 Table 添加该属性。该属性从 2.5 版本开始支持。
+如果您的 StarRocks 集群有多数据副本，您可以根据业务需求为 Table 设置不同导入数据安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。您可在 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 时通过增加属性（PROPERTIES） `write_quorum` 指定导入数据安全等级，或通过 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 语句为已有 Table 添加该属性。该属性从 2.5 版本开始支持。
 
 ## 系统配置
 
