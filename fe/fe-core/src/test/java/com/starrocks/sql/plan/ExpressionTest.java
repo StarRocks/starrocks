@@ -389,7 +389,7 @@ public class ExpressionTest extends PlanTestBase {
         starRocksAssert.query(sql).explainContains("if(CAST(3 AS BOOLEAN), 4, 5)");
 
         sql = "select ifnull(date('2021-01-12'), 123);";
-        starRocksAssert.query(sql).explainContains("ifnull(CAST('2021-01-12' AS INT), 123)");
+        starRocksAssert.query(sql).explainContains("20210112");
 
         sql = "select ifnull(date('2021-01-12'), 'kks');";
         starRocksAssert.query(sql).explainContains("'2021-01-12'");
