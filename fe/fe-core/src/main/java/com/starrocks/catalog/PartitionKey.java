@@ -105,6 +105,16 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         return partitionKey;
     }
 
+    public static PartitionKey createInfinityPartitionKeyWithType(List<PrimitiveType> types, boolean isMax)
+            throws AnalysisException {
+        PartitionKey partitionKey = new PartitionKey();
+        for (PrimitiveType type : types) {
+            partitionKey.keys.add(LiteralExpr.createInfinity(Type.fromPrimitiveType(type), isMax));
+            partitionKey.types.add(type);
+        }
+        return partitionKey;
+    }
+
     public static PartitionKey createShadowPartitionKey(List<Column> columns)
             throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
