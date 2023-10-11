@@ -330,22 +330,22 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // we don't need to eval conjunct ctxs at outside any more
     // we evaluate conjunct ctxs in `do_get_next`.
     _scanner_params.eval_conjunct_ctxs = false;
-    for (const auto& it : _scanner_params.materialize_slots) {
-        auto col_name = OrcChunkReader::format_column_name(it->col_name(), _scanner_params.case_sensitive);
+    for (const auto& column : _scanner_ctx.materialized_columns) {
+        auto col_name = OrcChunkReader::format_column_name(column.col_name, _scanner_params.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
-        bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(it->id());
+        bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(column.slot_id);
         if (is_lazy_slot) {
-            _lazy_load_ctx.lazy_load_slots.emplace_back(it);
+            _lazy_load_ctx.lazy_load_slots.emplace_back(column.slot_desc);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
             // reserve room for later set in `OrcChunkReader`
             _lazy_load_ctx.lazy_load_orc_positions.emplace_back(0);
         } else {
-            _lazy_load_ctx.active_load_slots.emplace_back(it);
+            _lazy_load_ctx.active_load_slots.emplace_back(column.slot_desc);
             _lazy_load_ctx.active_load_indices.emplace_back(src_slot_index);
             // reserve room for later set in `OrcChunkReader`
             _lazy_load_ctx.active_load_orc_positions.emplace_back(0);
         }
-        _src_slot_descriptors.emplace_back(it);
+        _src_slot_descriptors.emplace_back(column.slot_desc);
         src_slot_index++;
     }
 
@@ -411,6 +411,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         size_t chunk_size = 0;
         size_t chunk_size_ori = 0;
         if (_orc_reader->get_cvb_size() != 0) {
+            chunk_size = _orc_reader->get_cvb_size();
             {
                 StatusOr<ChunkPtr> ret;
                 SCOPED_RAW_TIMER(&_stats.column_convert_ns);
@@ -422,12 +423,12 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                 RETURN_IF_ERROR(ret);
                 *chunk = std::move(ret.value());
             }
+            // VLOG_FILE << "[XXX] chunk_size = " << chunk_size;
 
             // important to add columns before evaluation
             // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
-            _scanner_ctx.append_not_existed_columns_to_chunk(chunk, ck->num_rows());
-            _scanner_ctx.append_partition_column_to_chunk(chunk, ck->num_rows());
-            chunk_size = ck->num_rows();
+            _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
+            _scanner_ctx.append_partition_column_to_chunk(chunk, chunk_size);
             chunk_size_ori = chunk_size;
             // do stats before we filter rows which does not match.
             _stats.raw_rows_read += chunk_size;

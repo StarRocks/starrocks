@@ -102,8 +102,7 @@ public:
 
 class IcebergMetaHelper : public MetaHelper {
 public:
-    IcebergMetaHelper(FileMetaData* file_metadata, bool case_sensitive,
-                      const TIcebergSchema* t_iceberg_schema) {
+    IcebergMetaHelper(FileMetaData* file_metadata, bool case_sensitive, const TIcebergSchema* t_iceberg_schema) {
         _file_metadata = file_metadata;
         _case_sensitive = case_sensitive;
         _t_iceberg_schema = t_iceberg_schema;

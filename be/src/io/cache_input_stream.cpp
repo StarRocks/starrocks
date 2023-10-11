@@ -120,7 +120,7 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
     }
 
     if (!res.is_not_found() && !res.is_resource_busy()) return res;
-    
+
     // read remote
     char* src = nullptr;
     if (sb) {
@@ -153,7 +153,7 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
             _stats.write_cache_bytes += load_size;
             _stats.write_mem_cache_bytes += options.stats.write_mem_bytes;
             _stats.write_disk_cache_bytes += options.stats.write_disk_bytes;
-        } else if (!r.is_already_exist()){
+        } else if (!r.is_already_exist()) {
             _stats.write_cache_fail_count += 1;
             _stats.write_cache_fail_bytes += load_size;
             LOG(WARNING) << "write block cache failed, errmsg: " << r.get_error_msg();

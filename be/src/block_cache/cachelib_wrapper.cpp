@@ -71,7 +71,7 @@ Status CacheLibWrapper::write_buffer(const std::string& key, const IOBuffer& buf
 }
 
 Status CacheLibWrapper::read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
-                                   ReadCacheOptions* options) {
+                                    ReadCacheOptions* options) {
     // TODO:
     // 1. check chain item
     // 2. replace with async methods

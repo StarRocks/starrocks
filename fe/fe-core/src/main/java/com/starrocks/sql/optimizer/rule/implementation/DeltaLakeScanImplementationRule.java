@@ -44,7 +44,7 @@ public class DeltaLakeScanImplementationRule extends ImplementationRule {
                     scan.getLimit(),
                     scan.getPredicate(),
                     scan.getProjection());
-
+            physicalDeltaLakeScan.canUseAnyColumn = scan.canUseAnyColumn;
             result = new OptExpression(physicalDeltaLakeScan);
         }
         return Lists.newArrayList(result);

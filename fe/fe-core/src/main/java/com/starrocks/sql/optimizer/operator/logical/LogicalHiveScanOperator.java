@@ -59,6 +59,7 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
                 builder.getPredicate(),
                 builder.getProjection());
 
+        this.canUseAnyColumn = builder.canUseAnyColumn;
         this.predicates = builder.predicates;
         this.partitionColumns = builder.partitionColumns;
     }

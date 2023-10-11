@@ -42,6 +42,8 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
      * The ColumnRefMap contains Scan output columns and predicate used columns
      */
     protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
+    public boolean canUseAnyColumn;
+    public boolean canUseMinMaxCountOpt;
 
     public PhysicalScanOperator(OperatorType type, Table table,
                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -90,6 +92,22 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
     public Map<ColumnRefOperator, Column> getColRefToColumnMetaMap() {
         return colRefToColumnMetaMap;
+    }
+
+    public boolean getCanUseAnyColumn() {
+        return canUseAnyColumn;
+    }
+
+    public void setCanUseAnyColumn(boolean canUseAnyColumn) {
+        this.canUseAnyColumn = canUseAnyColumn;
+    }
+
+    public boolean getCanUseMinMaxCountOpt() {
+        return canUseMinMaxCountOpt;
+    }
+
+    public void setCanUseMinMaxCountOpt(boolean canUseMinMaxCountOpt) {
+        this.canUseMinMaxCountOpt = canUseMinMaxCountOpt;
     }
 
     public Table getTable() {

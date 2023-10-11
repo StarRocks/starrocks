@@ -28,7 +28,7 @@ static const size_t block_size = 1024 * 1024;
 
 class BlockCacheTest : public ::testing::Test {
 protected:
-    static void SetUpTestCase() {ASSERT_TRUE(fs::create_directories("./ut_dir/block_disk_cache").ok()); }
+    static void SetUpTestCase() { ASSERT_TRUE(fs::create_directories("./ut_dir/block_disk_cache").ok()); }
     static void TearDownTestCase() { ASSERT_TRUE(fs::remove_all("./ut_dir").ok()); }
 
     void SetUp() override {}

@@ -53,6 +53,8 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected final ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap;
     protected ImmutableMap<String, PartitionColumnFilter> columnFilters;
     protected Set<String> partitionColumns = Sets.newHashSet();
+    public boolean canUseAnyColumn;
+    public boolean canUseMinMaxCountOpt;
 
     public LogicalScanOperator(
             OperatorType type,
@@ -83,6 +85,22 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
     public Map<Column, ColumnRefOperator> getColumnMetaToColRefMap() {
         return columnMetaToColRefMap;
+    }
+
+    public void setCanUseAnyColumn(boolean canUseAnyColumn) {
+        this.canUseAnyColumn = canUseAnyColumn;
+    }
+
+    public boolean getCanUseAnyColumn() {
+        return canUseAnyColumn;
+    }
+
+    public void setCanUseMinMaxCountOpt(boolean canUseMinMaxCountOpt) {
+        this.canUseMinMaxCountOpt = canUseMinMaxCountOpt;
+    }
+
+    public boolean getCanUseMinMaxCountOpt() {
+        return canUseMinMaxCountOpt;
     }
 
     @Override
@@ -166,6 +184,8 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         protected ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
         protected ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap;
         protected ImmutableMap<String, PartitionColumnFilter> columnFilters;
+        protected boolean canUseAnyColumn;
+        protected boolean canUseMinMaxCountOpt;
 
         @Override
         public B withOperator(O scanOperator) {
@@ -175,6 +195,8 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             this.colRefToColumnMetaMap = scanOperator.colRefToColumnMetaMap;
             this.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
             this.columnFilters = scanOperator.columnFilters;
+            this.canUseAnyColumn = scanOperator.canUseAnyColumn;
+            this.canUseMinMaxCountOpt = scanOperator.canUseMinMaxCountOpt;
             return (B) this;
         }
 
