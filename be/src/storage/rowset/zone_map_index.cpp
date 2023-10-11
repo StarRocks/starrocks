@@ -287,7 +287,7 @@ ZoneMapIndexReader::ZoneMapIndexReader() {
 }
 
 ZoneMapIndexReader::~ZoneMapIndexReader() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(), mem_usage());
 }
 
 StatusOr<bool> ZoneMapIndexReader::load(const IndexReadOptions& opts, const ZoneMapIndexPB& meta) {
@@ -295,7 +295,7 @@ StatusOr<bool> ZoneMapIndexReader::load(const IndexReadOptions& opts, const Zone
         Status st = _do_load(opts, meta);
         if (st.ok()) {
             MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
-                                     _mem_usage() - sizeof(ZoneMapIndexReader))
+                                     mem_usage() - sizeof(ZoneMapIndexReader))
         } else {
             _reset();
         }
@@ -341,7 +341,7 @@ Status ZoneMapIndexReader::_do_load(const IndexReadOptions& opts, const ZoneMapI
     return Status::OK();
 }
 
-size_t ZoneMapIndexReader::_mem_usage() const {
+size_t ZoneMapIndexReader::mem_usage() const {
     size_t size = sizeof(ZoneMapIndexReader);
     for (const auto& zone_map : _page_zone_maps) {
         size += zone_map.SpaceUsedLong();
