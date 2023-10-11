@@ -310,6 +310,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
     public static final String GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE = "global_runtime_filter_build_max_size";
+
+    public static final String GLOBAL_RUNTIME_FILTER_BUILD_MIN_SIZE = "global_runtime_filter_build_min_size";
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE = "global_runtime_filter_probe_min_size";
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY =
             "global_runtime_filter_probe_min_selectivity";
@@ -364,8 +366,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
 
-    public static final String ENABLE_SCAN_DATACACHE = "enable_scan_block_cache";
+    public static final String ENABLE_SCAN_DATACACHE = "enable_scan_datacache";
+    public static final String ENABLE_POPULATE_DATACACHE = "enable_populate_datacache";
+    // The following configurations will be deprecated, and we use the `datacache` suffix instead.
+    // But it is temporarily necessary to keep them for a period of time to be compatible with
+    // the old session variable names.
+    public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
+
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
     public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
@@ -977,6 +985,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // otherwise would decide based on the cardinality
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE, flag = VariableMgr.INVISIBLE)
     private long globalRuntimeFilterBuildMaxSize = 64L * 1024L * 1024L;
+
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_BUILD_MIN_SIZE, flag = VariableMgr.INVISIBLE)
+    private long globalRuntimeFilterBuildMinSize = 128L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE, flag = VariableMgr.INVISIBLE)
     private long globalRuntimeFilterProbeMinSize = 100L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
@@ -1145,8 +1156,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableParallelMerge = enableParallelMerge;
     }
 
-    @VariableMgr.VarAttr(name = ENABLE_SCAN_DATACACHE)
+    @VariableMgr.VarAttr(name = ENABLE_SCAN_DATACACHE, alias = ENABLE_SCAN_BLOCK_CACHE)
     private boolean enableScanDataCache = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_POPULATE_DATACACHE, alias = ENABLE_POPULATE_BLOCK_CACHE)
+    private boolean enablePopulateDataCache = true;
 
     @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
     private int ioTasksPerScanOperator = 4;
@@ -1165,9 +1179,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CONNECTOR_SCAN_USE_QUERY_MEM_RATIO)
     private double connectorScanUseQueryMemRatio = 0.3;
-
-    @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
-    private boolean enablePopulateBlockCache = true;
 
     @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
     private boolean hudiMORForceJNIReader = false;
@@ -1915,6 +1926,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getGlobalRuntimeFilterBuildMaxSize() {
         return globalRuntimeFilterBuildMaxSize;
+    }
+
+    public void setGlobalRuntimeFilterBuildMinSize(long value) {
+        this.globalRuntimeFilterBuildMinSize = value;
+    }
+
+    public long getGlobalRuntimeFilterBuildMinSize() {
+        return globalRuntimeFilterBuildMinSize;
     }
 
     public long getGlobalRuntimeFilterProbeMinSize() {
@@ -2670,8 +2689,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setAllow_throw_exception((sqlMode & SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION) != 0);
 
-        tResult.setUse_scan_block_cache(enableScanDataCache);
-        tResult.setEnable_populate_block_cache(enablePopulateBlockCache);
+        tResult.setEnable_scan_datacache(enableScanDataCache);
+        tResult.setEnable_populate_datacache(enablePopulateDataCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);

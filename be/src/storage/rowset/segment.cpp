@@ -400,9 +400,15 @@ Status Segment::new_bitmap_index_iterator(uint32_t cid, const IndexReadOptions& 
     return Status::OK();
 }
 
-StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx) {
-    return Segment::open(_fs, dcg.column_files(parent_name(_fname))[idx], 0,
-                         TabletSchema::create_with_uid(_tablet_schema.schema(), dcg.column_ids()[idx]), nullptr);
+StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
+                                                            const TabletSchemaCSPtr& read_tablet_schema) {
+    if (read_tablet_schema != nullptr) {
+        return Segment::open(_fs, dcg.column_files(parent_name(_fname))[idx], 0,
+                             TabletSchema::create_with_uid(read_tablet_schema, dcg.column_ids()[idx]), nullptr);
+    } else {
+        return Segment::open(_fs, dcg.column_files(parent_name(_fname))[idx], 0,
+                             TabletSchema::create_with_uid(_tablet_schema.schema(), dcg.column_ids()[idx]), nullptr);
+    }
 }
 
 Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {

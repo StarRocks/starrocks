@@ -150,7 +150,7 @@ public class DDLStmtExecutor {
             } else if (re.getCause() instanceof IOException) {
                 throw (IOException) re.getCause();
             } else if (re.getCause() != null) {
-                throw new DdlException(re.getCause().getMessage());
+                throw new DdlException(re.getCause().getMessage(), re);
             } else {
                 throw re;
             }

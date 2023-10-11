@@ -1075,9 +1075,6 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_udf = false;
 
-    @ConfField
-    public static boolean enable_remote_script = false;
-
     @ConfField(mutable = true)
     public static boolean enable_decimal_v3 = true;
 
@@ -2512,7 +2509,7 @@ public class Config extends ConfigBase {
     public static int external_table_commit_timeout_ms = 10000; // 10s
 
     @ConfField(mutable = true)
-    public static boolean allow_default_light_schema_change = false;
+    public static boolean allow_default_light_schema_change = true;
   
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
