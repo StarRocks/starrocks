@@ -827,6 +827,7 @@ TEST_F(LakeServiceTest, test_delete_tablet_no_thread_pool) {
     _lake_service.delete_tablet(&cntl, &request, &response, nullptr);
     ASSERT_TRUE(cntl.Failed());
     ASSERT_EQ("no thread pool to run task", cntl.ErrorText());
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
 } // namespace starrocks
