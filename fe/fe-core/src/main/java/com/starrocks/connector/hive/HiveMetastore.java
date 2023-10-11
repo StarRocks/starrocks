@@ -22,6 +22,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.connector.ConnectorTableId;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
@@ -43,6 +44,7 @@ import java.util.stream.Collectors;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.collect.Iterables.getOnlyElement;
+import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toHiveCommonStats;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toMetastoreApiPartition;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toMetastoreApiTable;
@@ -56,10 +58,12 @@ public class HiveMetastore implements IHiveMetastore {
     private static final Logger LOG = LogManager.getLogger(CachingHiveMetastore.class);
     private final HiveMetaClient client;
     private final String catalogName;
+    private final MetastoreType metastoreType;
 
-    public HiveMetastore(HiveMetaClient client, String catalogName) {
+    public HiveMetastore(HiveMetaClient client, String catalogName, MetastoreType metastoreType) {
         this.client = client;
         this.catalogName = catalogName;
+        this.metastoreType = metastoreType;
     }
 
     @Override
@@ -133,8 +137,17 @@ public class HiveMetastore implements IHiveMetastore {
     }
 
     @Override
-    public boolean partitionExists(String dbName, String tableName, List<String> partitionValues) {
-        return !client.getPartitionKeysByValue(dbName, tableName, partitionValues).isEmpty();
+    public boolean partitionExists(Table table, List<String> partitionValues) {
+        HiveTable hiveTable = (HiveTable) table;
+        String dbName = hiveTable.getDbName();
+        String tableName = hiveTable.getTableName();
+        if (metastoreType == MetastoreType.GLUE && hiveTable.hasBooleanTypePartitionColumn()) {
+            List<String> allPartitionNames = client.getPartitionKeys(dbName, tableName);
+            String hivePartitionName = toHivePartitionName(hiveTable.getPartitionColumnNames(), partitionValues);
+            return allPartitionNames.contains(hivePartitionName);
+        } else {
+            return !client.getPartitionKeysByValue(dbName, tableName, partitionValues).isEmpty();
+        }
     }
 
     @Override

@@ -21,6 +21,7 @@ import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import mockit.Expectations;
@@ -49,7 +50,7 @@ public class CachingHiveMetastoreTest {
     @Before
     public void setUp() throws Exception {
         client = new HiveMetastoreTest.MockedHiveMetaClient();
-        metastore = new HiveMetastore(client, "hive_catalog");
+        metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         executor = Executors.newFixedThreadPool(5);
     }
 
@@ -257,7 +258,7 @@ public class CachingHiveMetastoreTest {
     public void testPartitionExist() {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
-        Assert.assertTrue(cachingHiveMetastore.partitionExists("db", "tbl", Lists.newArrayList()));
+        Assert.assertTrue(cachingHiveMetastore.partitionExists(metastore.getTable("db", "table"), Lists.newArrayList()));
     }
 
     @Test

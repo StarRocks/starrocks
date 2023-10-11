@@ -103,7 +103,7 @@ public class HiveMetadataTest {
         executorForPullFiles = Executors.newFixedThreadPool(5);
 
         client = new HiveMetastoreTest.MockedHiveMetaClient();
-        metastore = new HiveMetastore(client, "hive_catalog");
+        metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
                 metastore, executorForHmsRefresh, 100, 10, 1000, false);
         hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
@@ -178,7 +178,7 @@ public class HiveMetadataTest {
         FeConstants.runningUnitTest = true;
         String tableLocation = "hdfs://127.0.0.1:10000/hive.db/hive_tbl";
         HiveMetaClient client = new HiveMetastoreTest.MockedHiveMetaClient();
-        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", null);
         List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
         Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
         HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
