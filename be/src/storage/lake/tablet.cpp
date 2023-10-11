@@ -151,7 +151,7 @@ StatusOr<SegmentPtr> Tablet::load_segment(std::string_view segment_name, int seg
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
     ASSIGN_OR_RETURN(segment, Segment::open(fs, location, seg_id, std::move(tablet_schema), footer_size_hint, nullptr,
-                                            !fill_data_cache));
+                                            !fill_data_cache, _mgr));
     if (fill_metadata_cache) {
         _mgr->cache_segment(location, segment);
     }
