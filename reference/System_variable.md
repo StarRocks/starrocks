@@ -382,7 +382,7 @@ Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数�
 
 查询优化器的超时时间。一般查询中 Join 过多时容易出现超时。超时后会报错并停止查询，影响查询性能。您可以根据查询的具体情况调大该参数配置，也可以将问题上报给 StarRocks 技术支持进行排查。
 
-单位：秒。默认值：3000。
+单位：毫秒。默认值：3000。
 
 ### parallel_exchange_instance_num
 
