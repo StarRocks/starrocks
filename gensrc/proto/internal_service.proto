@@ -573,6 +573,15 @@ message PListFailPointResponse {
     repeated PFailPointInfo fail_points = 2;
 }
 
+message PExecShortCircuitResult {
+    optional StatusPB status = 1;
+    optional int64 affected_rows = 2;
+    optional bytes profile = 3;
+}
+
+message PExecShortCircuitRequest {
+}
+
 
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
@@ -612,4 +621,5 @@ service PInternalService {
     
     rpc update_fail_point_status(PUpdateFailPointStatusRequest) returns (PUpdateFailPointStatusResponse);
     rpc list_fail_point(PListFailPointRequest) returns (PListFailPointResponse);
+    rpc exec_short_circuit(PExecShortCircuitRequest) returns (PExecShortCircuitResult);
 };
