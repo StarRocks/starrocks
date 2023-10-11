@@ -15,9 +15,15 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.qe.ConnectContext;
+import org.junit.Before;
 import org.junit.Test;
 
 public class PushDownTopnNTest extends PlanTestBase {
+    @Before
+    public void before() {
+        connectContext.getSessionVariable().setCboPushDownTopNLimit(1000);
+    }
+    
     @Test
     public void testPushDownTopBelowUnionAll1() throws Exception {
         String sql = "select * from (" +

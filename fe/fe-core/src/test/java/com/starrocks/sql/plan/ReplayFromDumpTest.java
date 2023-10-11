@@ -932,6 +932,8 @@ public class ReplayFromDumpTest {
         sessionVariable.setScanOrToUnionThreshold(-1);
         sessionVariable.setScanOrToUnionLimit(10);
         sessionVariable.setSelectRatioThreshold(20.0);
+        sessionVariable.setCboPushDownTopNLimit(1000);
+
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/union_all_with_topn_runtime_filter"),
                         sessionVariable, TExplainLevel.VERBOSE);
