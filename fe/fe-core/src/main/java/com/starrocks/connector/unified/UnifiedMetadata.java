@@ -24,6 +24,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -50,13 +51,19 @@ public class UnifiedMetadata implements ConnectorMetadata {
     public static final String ICEBERG_TABLE_TYPE_VALUE = "iceberg";
     public static final String SPARK_TABLE_PROVIDER_KEY = "spark.sql.sources.provider";
     public static final String DELTA_LAKE_PROVIDER = "delta";
+    public static final String PAIMON_STORAGE_HANDLER_KEY = "storage_handler";
+    public static final String PAIMON_STORAGE_HANDLER_VALUE = "org.apache.paimon.hive.PaimonStorageHandler";
 
-    static boolean isIcebergTable(Map<String, String> properties) {
+    public static boolean isIcebergTable(Map<String, String> properties) {
         return ICEBERG_TABLE_TYPE_VALUE.equalsIgnoreCase(properties.get(ICEBERG_TABLE_TYPE_NAME));
     }
 
-    static boolean isDeltaLakeTable(Map<String, String> properties) {
+    public static boolean isDeltaLakeTable(Map<String, String> properties) {
         return DELTA_LAKE_PROVIDER.equalsIgnoreCase(properties.get(SPARK_TABLE_PROVIDER_KEY));
+    }
+
+    public static boolean isPaimonTable(Map<String, String> properties) {
+        return PAIMON_STORAGE_HANDLER_VALUE.equalsIgnoreCase(properties.get(PAIMON_STORAGE_HANDLER_KEY));
     }
 
     private final Map<Table.TableType, ConnectorMetadata> metadataMap;
