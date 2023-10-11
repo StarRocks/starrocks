@@ -109,7 +109,8 @@ public class PushDownTopNBelowUnionRule extends TransformationRule {
                         .setOrderByElements(newOrderings)
                         .setLimit(topn.getLimit())
                         .setTopNType(topn.getTopNType())
-                        .setSortPhase(SortPhase.PARTIAL)
+                        .setSortPhase(topn.getSortPhase())
+                        .setIsSplit(false)
                         .build(), unionChild);
                 newUnionChildren.add(newTopNOperator);
             } else {
