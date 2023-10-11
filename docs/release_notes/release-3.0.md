@@ -95,7 +95,7 @@ Release date: June 28, 2023
 ### Improvements
 
 - Metadata synchronization of StarRocks external tables has been changed to occur during data loading. [#24739](https://github.com/StarRocks/starrocks/pull/24739)
-- Users can specify partitions when they run INSERT OVERWRITE on tables whose partitions are automatically created. For more information, see [Automatic partitioning](https://docs.starrocks.io/en-us/3.0/table_design/automatic_partitioning). [#25005](https://github.com/StarRocks/starrocks/pull/25005)
+- Users can specify partitions when they run INSERT OVERWRITE on tables whose partitions are automatically created. For more information, see [Automatic partitioning](https://docs.starrocks.io/en-us/3.0/table_design/dynamic_partitioning). [#25005](https://github.com/StarRocks/starrocks/pull/25005)
 - Optimized the error message reported when partitions are added to a non-partitioned table. [#25266](https://github.com/StarRocks/starrocks/pull/25266)
 
 ### Bug Fixes
@@ -174,7 +174,7 @@ Release date: April 28, 2023
 #### Storage engine and data ingestion
 
 - The [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md) attribute is supported to provide globally unique IDs, which simplifies data management.
-- [Automatic partitioning and partitioning expressions](../table_design/automatic_partitioning.md) are supported, which makes partition creation easier to use and more flexible.
+- [Automatic partitioning and partitioning expressions](../table_design/dynamic_partitioning.md) are supported, which makes partition creation easier to use and more flexible.
 - Primary Key tables support more complete [UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md) and [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md#primary-key-tables) syntax, including the use of CTEs and references to multiple tables.
 - Added Load Profile for Broker Load and INSERT INTO jobs. You can view the details of a load job by querying the load profile. The usage is the same as [Analyze query profile](../administration/query_profile.md).
 

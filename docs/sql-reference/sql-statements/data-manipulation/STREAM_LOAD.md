@@ -60,7 +60,7 @@ The following table describes the parameters in the URL.
 
 > **NOTE**
 >
-> You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
+> You can use [SHOW FRONTENDS](../Administration/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
 
 ### data_desc
 
