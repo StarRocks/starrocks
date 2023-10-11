@@ -14,8 +14,6 @@
 
 #include "formats/parquet/file_reader.h"
 
-#include <parquet/metadata.h>
-
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
@@ -302,9 +300,11 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
                                           ColumnPtr* max_column, bool* decode_ok) const {
     DCHECK_EQ(field.physical_type, column_meta.type);
     *decode_ok = true;
+
     // We need to make sure min_max column append value succeed
     bool ret = true;
-    if (!_can_use_min_max_stats(column_meta, column_order)) {
+    auto sort_order = sort_order_of_logical_type(type.type);
+    if (!_has_correct_min_max_stats(column_meta, sort_order)) {
         *decode_ok = false;
         return Status::OK();
     }
@@ -403,63 +403,9 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
     return Status::OK();
 }
 
-// Reference: arrow/cpp/src/parquet/metadata.cc
-bool FileReader::_can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
-                                        const tparquet::ColumnOrder* column_order) const {
-    // created_by is not populated, which could have been caused by
-    // parquet-mr during the same time as PARQUET-251, see PARQUET-297
-    if (!_file_metadata->t_metadata().__isset.created_by) {
-        return true;
-    }
-
-    auto application_version = ::parquet::ApplicationVersion(_file_metadata->t_metadata().created_by);
-    auto min_equals_max = (column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.max_value &&
-                           column_meta.statistics.min_value == column_meta.statistics.max_value) ||
-                          (column_meta.statistics.__isset.min && column_meta.statistics.__isset.max &&
-                           column_meta.statistics.min == column_meta.statistics.max);
-
-    // disregard column sort order if statistics max/min are equal
-    if (min_equals_max) {
-        if (column_meta.type != tparquet::Type::BYTE_ARRAY &&
-            column_meta.type != tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
-            return true;
-        }
-        // PARQUET-251: stats are incorrect for binary columns
-        return !application_version.VersionLt(::parquet::ApplicationVersion::PARQUET_251_FIXED_VERSION());
-    }
-
-    if (column_meta.statistics.__isset.min_value && _can_use_stats(column_meta.type, column_order)) {
-        return true;
-    }
-    if (column_meta.statistics.__isset.min && _can_use_deprecated_stats(column_meta.type, column_order)) {
-        return true;
-    }
-    return false;
-}
-
-bool FileReader::_can_use_stats(const tparquet::Type::type& type, const tparquet::ColumnOrder* column_order) {
-    // If column order is not set, only statistics for numeric types can be trusted.
-    if (column_order == nullptr) {
-        // is boolean | is interger | is floating
-        return type == tparquet::Type::type::BOOLEAN || _is_integer_type(type) || type == tparquet::Type::type::DOUBLE;
-    }
-    // Stats can be used if the column order is TypeDefinedOrder (see parquet.thrift).
-    return column_order->__isset.TYPE_ORDER;
-}
-
-bool FileReader::_can_use_deprecated_stats(const tparquet::Type::type& type,
-                                           const tparquet::ColumnOrder* column_order) {
-    // If column order is set to something other than TypeDefinedOrder, we shall not use the
-    // stats (see parquet.thrift).
-    if (column_order != nullptr && !column_order->__isset.TYPE_ORDER) {
-        return false;
-    }
-    return type == tparquet::Type::type::BOOLEAN || _is_integer_type(type) || type == tparquet::Type::type::DOUBLE;
-}
-
-bool FileReader::_is_integer_type(const tparquet::Type::type& type) {
-    return type == tparquet::Type::type::INT32 || type == tparquet::Type::type::INT64 ||
-           type == tparquet::Type::type::INT96;
+bool FileReader::_has_correct_min_max_stats(const tparquet::ColumnMetaData& column_meta,
+                                            const SortOrder& sort_order) const {
+    return _file_metadata->writer_version().HasCorrectStatistics(column_meta, sort_order);
 }
 
 void FileReader::_prepare_read_columns() {
