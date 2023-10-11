@@ -119,13 +119,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         }
 
         stmt = "alter table testTable1 distributed by random";
-        try {
-            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-            Assert.fail();
-        } catch (Exception e) {
-            LOG.warn("Alter fail:", e);
-            Assert.assertTrue(e.getMessage().contains("not support change default distribution type"));
-        }
+        UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
     }
 
     @Test
