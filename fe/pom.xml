@@ -434,7 +434,7 @@ under the License.
             <dependency>
                 <groupId>org.jboss.xnio</groupId>
                 <artifactId>xnio-nio</artifactId>
-                <version>3.7.9.Final</version>
+                <version>3.8.10.Final</version>
             </dependency>
 
             <!-- support jdk9 -->
