@@ -57,6 +57,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/stream_epoch_manager.h"
+#include "exec/short_circuit.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/InternalService_types.h"
@@ -82,7 +83,6 @@
 #include "util/thrift_util.h"
 #include "util/time.h"
 #include "util/uid_util.h"
-#include "exec/short_circuit.h"
 
 namespace starrocks {
 
@@ -1130,7 +1130,7 @@ Status PInternalServiceImplBase<T>::_exec_short_circuit(brpc::Controller* cntl, 
     auto ser_request = cntl->request_attachment().to_string();
     std::shared_ptr<TExecShortCircuitParams> t_requests = std::make_shared<TExecShortCircuitParams>();
     {
-        const auto *buf = (const uint8_t *) ser_request.data();
+        const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_requests.get()));
     }
@@ -1142,8 +1142,10 @@ Status PInternalServiceImplBase<T>::_exec_short_circuit(brpc::Controller* cntl, 
 }
 
 template <typename T>
-void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcController* cntl_base, const PExecShortCircuitRequest* request,
-                        PExecShortCircuitResult* response, google::protobuf::Closure* done) {
+void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcController* cntl_base,
+                                                     const PExecShortCircuitRequest* request,
+                                                     PExecShortCircuitResult* response,
+                                                     google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
 
     StarRocksMetrics::instance()->short_circuit_request_total.increment(1);

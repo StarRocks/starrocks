@@ -32,180 +32,6 @@
 #include "util/thrift_util.h"
 
 namespace starrocks {
-// scan use current thread instead of io thread pool asynchronously
-class ShortCircuitScanNode : public starrocks::ScanNode {
-public:
-    ShortCircuitScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs,
-                         const TScanRange& scan_range, RuntimeProfile* runtime_profile,
-                         const std::vector<TKeyLiteralExpr>& key_literal_exprs, 
-                         const std::vector<TabletSharedPtr>& tablets,
-                         const std::vector<std::string> versions)
-            : ScanNode(pool, tnode, descs),
-              _scan_range(scan_range),
-              _runtime_profile(runtime_profile),
-              _key_literal_exprs(key_literal_exprs),
-              _tablets(tablets),
-              _tuple_id(tnode.olap_scan_node.tuple_id),
-              _versions(versions) {}
-
-    Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override { return Status::OK(); }
-
-    Status open(RuntimeState* state) {
-        SCOPED_TIMER(_runtime_profile->total_time_counter());
-
-        _num_rows = _key_literal_exprs.size();
-        //init tuple
-        _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
-        DCHECK(_tuple_desc != nullptr);
-
-        // skips runtime filters in ScanNode::open
-        RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
-        return Status::OK();
-    }
-
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-        SCOPED_TIMER(_runtime_profile->total_time_counter());
-        std::vector<bool> found(_num_rows, false);
-        Buffer<uint8_t> selections;
-
-        RETURN_IF_ERROR(_process_key_chunk());
-        RETURN_IF_ERROR(_process_value_chunk(found));
-        size_t result_size = 0;
-        for (int i = 0; i < found.size(); ++i) {
-            if (found[i]) {
-                result_size ++ ;
-                selections.emplace_back(1);
-            } else {
-                selections.emplace_back(0);
-            }
-        }
-
-        auto tablet_schema = _tablets[0]->tablet_schema()->schema();
-        auto column_ids = tablet_schema->field_column_ids();
-        auto tablet_schema_without_rowstore = std::make_unique<Schema>(tablet_schema, column_ids);
-        auto result_chunk = ChunkHelper::new_chunk(*_tuple_desc, result_size);
-
-        //idx is column id, value is slot id
-        if (result_size > 0) {
-            std::map<std::string, SlotId> column_name_to_slot_id;
-
-            _key_chunk->filter(selections);
-            for (auto slot_desc : _tuple_desc->slots()) {
-                auto field = tablet_schema_without_rowstore->get_field_by_name(slot_desc->col_name());
-                if (field->is_key()) {
-                    result_chunk->get_column_by_slot_id(slot_desc->id())->append(*(_key_chunk->get_column_by_name(field->name().data()).get()));
-                }
-            }
-
-            for (auto slot_desc : _tuple_desc->slots()) {
-                auto field = tablet_schema_without_rowstore->get_field_by_name(slot_desc->col_name());
-                if (!field->is_key()) {
-                    result_chunk->get_column_by_slot_id(slot_desc->id())->append(*(_value_chunk->get_column_by_name(field->name().data()).get()));
-                }
-            }
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, result_chunk.get()));
-        }
-        *eos = true;
-        *chunk = std::move(result_chunk);
-        return Status::OK();
-    }
-
-    Status _process_key_chunk() {
-        DCHECK(_tablets.size() > 0);
-        _tablet_schema = _tablets[0]->tablet_schema();
-        auto& key_column_cids = _tablet_schema->sort_key_idxes();
-        auto key_schema = ChunkHelper::convert_schema(_tablet_schema, key_column_cids);
-
-        _key_chunk = ChunkHelper::new_chunk(key_schema, _num_rows);
-        _key_chunk->reset();
-
-        for (int i = 0; i < _num_rows; ++i) {
-            // TODO (jkj) if expr is k1=1 and k2 in (3, 4), we need bind tablet with expr, 
-            // tablet 1  <---> k1 =1, k2 =3
-            // tablet 2  <---> k1 =1, k2 =4
-            // this prune need happen in fe
-            auto keys_literal_expr = _key_literal_exprs[i].literal_exprs;
-            size_t num_pk_filters = keys_literal_expr.size();
-            // must all columns
-            if (UNLIKELY(num_pk_filters != _tablet_schema->num_key_columns())) {
-                return Status::Corruption("short circuit only support all key predicate");
-            }
-            for (int j = 0; j < num_pk_filters; ++j) {
-                // init expr context
-                std::vector<ExprContext*> expr_ctxs;
-                std::vector<TExpr> key_literal_expr{keys_literal_expr[j]};
-                // prepare
-                Expr::create_expr_trees(runtime_state()->obj_pool(), key_literal_expr, &expr_ctxs, runtime_state());
-                Expr::prepare(expr_ctxs, runtime_state());
-                Expr::open(expr_ctxs, runtime_state());
-                auto& iteral_expr_ctx = expr_ctxs[0];
-                ASSIGN_OR_RETURN(ColumnPtr value, iteral_expr_ctx->root()->evaluate_const(iteral_expr_ctx));
-                // add const column to chunk
-                auto const_column = ColumnHelper::get_data_column(value.get());
-                _key_chunk->get_column_by_index(j)->append(*const_column);
-            }
-        }
-
-        return Status::OK();
-    }
-
-    Status _process_value_chunk(std::vector<bool>& found) {
-        std::vector<string> value_field_names;
-        auto value_schema = std::make_unique<Schema>(_tablet_schema->schema(), _tablet_schema->schema()->value_field_column_ids());
-
-        for (auto slot_desc : _tuple_desc->slots()) {
-            auto field = value_schema->get_field_by_name(slot_desc->col_name());
-            if (field != nullptr && !field->is_key()) {
-                value_field_names.emplace_back(std::move(field->name()));
-            }
-        }
-
-        _value_chunk = ChunkHelper::new_chunk(*(value_schema), _num_rows);
-
-        for (int i = 0; i < _tablets.size(); ++i) {
-            LocalTableReaderParams params;
-            params.version = std::stoi(_versions[i]);
-            params.tablet_id = _tablets[i]->get_tablet_info().tablet_id;
-            _table_reader = std::make_shared<TableReader>();
-            RETURN_IF_ERROR(_table_reader->init(params));
-
-            auto current_chunk = ChunkHelper::new_chunk(*(value_schema), _num_rows);
-            std::vector<bool> curent_found;
-            Status status = _table_reader->multi_get(*(_key_chunk.get()), value_field_names, curent_found, *(current_chunk.get()));
-            if (!status.ok()) {
-                // todo retry
-                LOG(WARNING) << "fail to execute multi get: " << status.detailed_message();
-            }
-
-            // merge all tablet result
-            for (int i = 0; i < curent_found.size(); ++i) {
-                if (curent_found[i]) {
-                    found[i] = true;
-                }
-            }
-            _value_chunk->append(*(current_chunk.get()));
-        }
-
-        return Status::OK();
-    }
-
-private:
-    int64_t _read_limit = -1; // no limit
-    std::vector<ExprContext*> _conjunct_ctxs;
-    const TScanRange& _scan_range;
-    TableReaderPtr _table_reader;
-    RuntimeProfile* _runtime_profile;
-    ChunkUniquePtr _key_chunk;
-    ChunkUniquePtr _value_chunk;
-    const std::vector<TKeyLiteralExpr> _key_literal_exprs;
-    TupleDescriptor* _tuple_desc;
-    std::vector<TabletSharedPtr> _tablets;
-    TabletSchemaCSPtr _tablet_schema;
-    TupleId _tuple_id;
-    std::vector<string> _versions;
-    int64_t _num_rows;
-};
-
 class MysqlResultMemorySink : public DataSink {
 public:
     MysqlResultMemorySink(const vector<TExpr>& t_exprs, bool is_binary_format,
@@ -292,21 +118,11 @@ Status ShortCircuitExecutor::prepare(TExecShortCircuitParams& common_request) {
     auto* timer = ADD_TIMER(_runtime_profile, "PrepareTime");
     SCOPED_TIMER(timer);
 
-    _t_desc_tbl = &common_request.desc_tbl;
-    const std::vector<TExpr>& output_exprs = common_request.output_exprs;
-    const TScanRange& scan_range = common_request.scan_range;
-    _enable_profile = common_request.enable_profile;
-    _key_literal_exprs = &common_request.key_literal_exprs;
-    _versions.swap(common_request.versions);
-
-    // get tablet
-    for (auto tablet_id : common_request.tablet_ids) {
-        auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
-        if (tablet == nullptr) {
-            return Status::NotFound(fmt::format("tablet {} not exist", tablet_id));
-        }
-        _tablets.emplace_back(std::move(tablet));
-    }
+    _common_request = &common_request;
+    const TDescriptorTable& t_desc_tbl = _common_request->desc_tbl;
+    const std::vector<TExpr>& output_exprs = _common_request->output_exprs;
+    const TScanRange& scan_range = _common_request->scan_range;
+    _enable_profile = _common_request->enable_profile;
 
     // build descs
     DescriptorTbl* desc_tbl = nullptr;
@@ -319,8 +135,17 @@ Status ShortCircuitExecutor::prepare(TExecShortCircuitParams& common_request) {
                                              *desc_tbl, scan_range, &_source));
 
     // build sink
-    bool is_binary_format = common_request.is_binary_row;
-    _sink = std::make_unique<MysqlResultMemorySink>(output_exprs, is_binary_format, _results);
+    if (_common_request->__isset.data_sink &&
+        !(_common_request->data_sink.type == TDataSinkType::RESULT_SINK &&
+          _common_request->data_sink.result_sink.type == TResultSinkType::type::MYSQL_PROTOCAL)) {
+        // sink is not mysql result sink
+        TPlanFragmentExecParams t_params;
+        RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state(), _common_request->data_sink, output_exprs, t_params,
+                                                   0, _source->row_desc(), &_sink));
+    } else {
+        bool is_binary_format = _common_request->is_binary_row;
+        _sink = std::make_unique<MysqlResultMemorySink>(output_exprs, is_binary_format, _results);
+    }
 
     // prepare
     RETURN_IF_ERROR(_source->prepare(runtime_state()));
@@ -346,9 +171,14 @@ Status ShortCircuitExecutor::execute() {
         if (eos) {
             break;
         }
+        if (!_results.empty()) {
+            return Status::NotSupported("Not support multi result set yet");
+        }
     }
     _source->close(runtime_state());
-    RETURN_IF_ERROR(_sink->close(runtime_state(), Status::OK()));
+    _finish = true;
+    RETURN_IF_ERROR(close());
+
     return Status::OK();
 }
 
@@ -376,7 +206,8 @@ Status ShortCircuitExecutor::build_source_exec_node(starrocks::ObjectPool* pool,
                                                     starrocks::ExecNode** node) {
     switch (t_node.node_type) {
     case TPlanNodeType::OLAP_SCAN_NODE: {
-        *node = pool->add(new ShortCircuitScanNode(pool, t_node, descs, scan_range, _runtime_profile, *_key_literal_exprs, _tablets, _versions));
+        *node = pool->add(
+                new ShortCircuitHybridScanNode(pool, t_node, descs, scan_range, _runtime_profile, *_common_request));
         break;
     }
     default:

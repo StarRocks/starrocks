@@ -17,64 +17,58 @@
 
 #pragma once
 
-#include "common/status.h"
 #include "common/object_pool.h"
-#include "exec/exec_node.h"
+#include "common/status.h"
 #include "exec/data_sink.h"
+#include "exec/exec_node.h"
 #include "gen_cpp/ShortCircuit_types.h"
-#include "runtime/exec_env.h"
 #include "runtime/descriptors.h"
-#include "storage/table_reader.h"
+#include "runtime/exec_env.h"
 #include "service/brpc.h"
+#include "storage/table_reader.h"
 #include "util/stopwatch.hpp"
 
 namespace starrocks {
 
-using TableReaderPtr = std::shared_ptr<TableReader>;
-class TabletManager;
 class ShortCircuitExecutor {
 public:
-    ShortCircuitExecutor(ExecEnv *exec_env);
+    ShortCircuitExecutor(ExecEnv* exec_env);
 
-    Status prepare(TExecShortCircuitParams &common_request);
+    Status prepare(TExecShortCircuitParams& common_request);
 
     Status execute();
 
-    Status fetch_data(brpc::Controller *cntl, PExecShortCircuitResult &response);
+    Status fetch_data(brpc::Controller* cntl, PExecShortCircuitResult& response);
 
-    RuntimeState *runtime_state();
+    RuntimeState* runtime_state();
 
 private:
+    Status build_source_exec_helper(starrocks::ObjectPool* pool, std::vector<TPlanNode>& tnodes, int* index,
+                                    DescriptorTbl& descs, const TScanRange& scan_range, starrocks::ExecNode** node);
+    Status build_source_exec_node(starrocks::ObjectPool* pool, TPlanNode& t_node, DescriptorTbl& descs,
+                                  const TScanRange& scan_range, starrocks::ExecNode** node);
 
-    Status build_source_exec_helper(
-            starrocks::ObjectPool *pool, std::vector<TPlanNode> &tnodes, int* index,
-            DescriptorTbl &descs, const TScanRange &scan_range, starrocks::ExecNode **node);
-    Status build_source_exec_node(
-            starrocks::ObjectPool *pool, TPlanNode &t_node, DescriptorTbl &descs,
-            const TScanRange &scan_range,
-            starrocks::ExecNode **node);
+    // for scan node
+    TExecShortCircuitParams* _common_request = nullptr;
 
     // used for identity and fetch data
     TUniqueId _query_id;
     TUniqueId _fragment_instance_id;
+    bool _closed = false;
+    bool _finish = false;
 
     // env
-    ExecEnv *_exec_env;
+    ExecEnv* _exec_env;
     std::shared_ptr<RuntimeState> _runtime_state;
     RuntimeProfile* _runtime_profile;
     bool _enable_profile;
 
     // exec
-    ExecNode *_source = nullptr;
+    ExecNode* _source = nullptr;
     TDescriptorTable* _t_desc_tbl;
     std::unique_ptr<DataSink> _sink;
     std::vector<std::unique_ptr<TFetchDataResult>> _results;
-    std::vector<TKeyLiteralExpr>* _key_literal_exprs;
-    
-    std::vector<TabletSharedPtr> _tablets;
-    std::vector<string> _versions;
 };
 
-class ShortCircuitScanNode;
 class MysqlResultMemorySink;
-}
+} // namespace starrocks
