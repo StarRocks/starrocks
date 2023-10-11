@@ -23,6 +23,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IsNullPredicate;
@@ -49,6 +50,7 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -624,7 +626,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     private void syncPartitionsForExpr(TaskRunContext context) {
-        Expr partitionExpr = MaterializedView.getPartitionExpr(materializedView);
+        Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
         Pair<Table, Column> partitionTableAndColumn = materializedView.getBaseTableAndPartitionColumn();
         Table refBaseTable = partitionTableAndColumn.first;
         Preconditions.checkNotNull(refBaseTable);
@@ -1025,9 +1027,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 break;
             } else if (outputExpressions.get(i) instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) outputExpressions.get(i);
-                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
-                    outputPartitionSlot = outputExpressions.get(i).getChild(0);
-                    break;
+                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)
+                        && functionCallExpr.getChild(0) instanceof SlotRef) {
+                    SlotRef slot = functionCallExpr.getChild(0).cast();
+                    if (slot.getColumnName().equalsIgnoreCase(partitionSlot.getColumnName())) {
+                        outputPartitionSlot = slot;
+                        break;
+                    }
                 }
             } else {
                 // alias name.
@@ -1045,12 +1051,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             return null;
         }
 
-        Expr mvPartitionExpr = MaterializedView.getPartitionExpr(materializedView);
-        if (mvPartitionExpr != null && !(mvPartitionExpr instanceof SlotRef)) {
-            mvPartitionExpr = MaterializedView.getPartitionExpr(materializedView);
-        } else {
-            mvPartitionExpr = outputPartitionSlot;
+        Pair<Table, Column> partitionInfo = materializedView.getBaseTableAndPartitionColumn();
+        boolean isConvertToDate =
+                PartitionUtil.isConvertToDate(materializedView.getFirstPartitionRefTableExpr(), partitionInfo.second);
+        if (isConvertToDate) {
+            outputPartitionSlot = new CastExpr(Type.DATE, outputPartitionSlot);
         }
+
         if (mvPartitionInfo.isRangePartition()) {
             List<Range<PartitionKey>> sourceTablePartitionRange = Lists.newArrayList();
             Map<String, Range<PartitionKey>> refBaseTableRangePartitionMap = mvContext.getRefBaseTableRangePartitionMap();
@@ -1059,12 +1066,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
             sourceTablePartitionRange = MvUtils.mergeRanges(sourceTablePartitionRange);
             List<Expr> partitionPredicates =
-                    MvUtils.convertRange(mvPartitionExpr, sourceTablePartitionRange);
+                    MvUtils.convertRange(outputPartitionSlot, sourceTablePartitionRange);
             // range contains the min value could be null value
             Optional<Range<PartitionKey>> nullRange = sourceTablePartitionRange.stream().
                     filter(range -> range.lowerEndpoint().isMinValue()).findAny();
             if (nullRange.isPresent()) {
-                Expr isNullPredicate = new IsNullPredicate(mvPartitionExpr, false);
+                Expr isNullPredicate = new IsNullPredicate(outputPartitionSlot, false);
                 partitionPredicates.add(isNullPredicate);
             }
 
