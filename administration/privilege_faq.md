@@ -25,3 +25,13 @@ SET GLOBAL activate_all_roles_on_login = TRUE;
 ```SQL
 GRANT CREATE TABLE ON DATABASE db TO user;
 ```
+
+## 为什么赋予了用户数据库的所有权限，`GRANT ALL ON DATABASE <db_name> db TO user;`，在数据库下 `SHOW TABLES;` 什么也不返回？
+
+`SHOW TABLES;` 只会返回当前用户有任意权限的表。以 SELECT 权限为例，您可以进行如下赋权：
+
+```SQL
+GRANT SELECT ON ALL TABLES IN DATABASE <db_name> TO user;
+```
+
+这个语句与 3.0 之前版本的 `GRANT select_priv ON db.* TO user;` 是等价的。
