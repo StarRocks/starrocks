@@ -2,7 +2,7 @@
 
 ## Description
 
-This command is used to modify a Routine Load job that has been created. The job to be modified must be in the **PAUSED** state. You can run the [PASUME](./PAUSE%20ROUTINE%20LOAD.md)(PAUSE ROUTINE LOAD) command to pause a loading job and then perform the `ALTER ROUTINE LOAD` operation on the job.
+This command is used to modify a Routine Load job that has been created. The job to be modified must be in the **PAUSED** state. You can run the [PASUME](./PAUSE_ROUTINE_LOAD.md)(PAUSE ROUTINE LOAD) command to pause a loading job and then perform the `ALTER ROUTINE LOAD` operation on the job.
 
 ## Syntax
 
