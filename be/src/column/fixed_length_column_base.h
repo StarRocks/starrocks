@@ -211,8 +211,10 @@ public:
     std::string get_name() const override;
 
     Container& get_data() { return _data; }
+    Container& get_proxy_data() { return _data; }
 
     const Container& get_data() const { return _data; }
+    const Container& get_proxy_data() const { return _data; }
 
     Datum get(size_t n) const override { return Datum(_data[n]); }
 
