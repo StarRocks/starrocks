@@ -106,6 +106,8 @@ public class PushDownTopNBelowOuterJoinRule extends TransformationRule {
                 .setLimit(topn.getLimit())
                 .setTopNType(topn.getTopNType())
                 .setSortPhase(SortPhase.PARTIAL)
+                .setSortPhase(topn.getSortPhase())
+                .setIsSplit(false)
                 .build(), joinChildWithSort);
 
         OptExpression newJoinOperator;
