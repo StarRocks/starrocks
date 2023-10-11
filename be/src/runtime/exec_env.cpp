@@ -219,7 +219,9 @@ Status GlobalEnv::_init_mem_tracker() {
     _compaction_mem_tracker = regist_tracker(compaction_mem_limit, "compaction", _process_mem_tracker.get());
     _schema_change_mem_tracker = regist_tracker(-1, "schema_change", _process_mem_tracker.get());
     _column_pool_mem_tracker = regist_tracker(-1, "column_pool", _process_mem_tracker.get());
-    _page_cache_mem_tracker = regist_tracker(-1, "page_cache", _process_mem_tracker.get());
+    int64_t storage_cache_limit = get_storage_page_cache_size();
+    storage_cache_limit = check_storage_page_cache_size(storage_cache_limit);
+    _page_cache_mem_tracker = regist_tracker(storage_cache_limit, "page_cache", _process_mem_tracker.get());
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _update_mem_tracker = regist_tracker(bytes_limit * update_mem_percent / 100, "update", nullptr);
     _chunk_allocator_mem_tracker = regist_tracker(-1, "chunk_allocator", _process_mem_tracker.get());
@@ -231,7 +233,8 @@ Status GlobalEnv::_init_mem_tracker() {
 
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     ForEach<ColumnPoolList>(op);
-    _init_storage_page_cache(); // TODO: move to StorageEngine
+    // TODO: move to StorageEngine
+    StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), storage_cache_limit);
     return Status::OK();
 }
 
@@ -239,12 +242,6 @@ void GlobalEnv::_reset_tracker() {
     for (auto iter = _mem_trackers.rbegin(); iter != _mem_trackers.rend(); ++iter) {
         iter->reset();
     }
-}
-
-void GlobalEnv::_init_storage_page_cache() {
-    int64_t storage_cache_limit = get_storage_page_cache_size();
-    storage_cache_limit = check_storage_page_cache_size(storage_cache_limit);
-    StoragePageCache::create_global_cache(page_cache_mem_tracker(), storage_cache_limit);
 }
 
 int64_t GlobalEnv::get_storage_page_cache_size() {

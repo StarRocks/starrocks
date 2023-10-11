@@ -78,6 +78,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("storage_page_cache_limit", [&]() {
             int64_t cache_limit = GlobalEnv::GetInstance()->get_storage_page_cache_size();
             cache_limit = GlobalEnv::GetInstance()->check_storage_page_cache_size(cache_limit);
+            GlobalEnv::GetInstance()->page_cache_mem_tracker()->set_limit(cache_limit);
             StoragePageCache::instance()->set_capacity(cache_limit);
         });
         _config_callback.emplace("disable_storage_page_cache", [&]() {
@@ -86,6 +87,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             } else {
                 int64_t cache_limit = GlobalEnv::GetInstance()->get_storage_page_cache_size();
                 cache_limit = GlobalEnv::GetInstance()->check_storage_page_cache_size(cache_limit);
+                GlobalEnv::GetInstance()->page_cache_mem_tracker()->set_limit(cache_limit);
                 StoragePageCache::instance()->set_capacity(cache_limit);
             }
         });
