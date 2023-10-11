@@ -10,7 +10,7 @@ StarRocks 2.3 and later provide an internal catalog to manage the internal data 
    - If you use the MySQL client to connect the StarRocks cluster, you go to `default_catalog` by default after connecting.
    - If you use JDBC to connect the StarRocks cluster, you can go directly to the destination database in the default catalog by specifying `default_catalog.db_name` when connecting.
 
-2. (Optional) Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) to view databases:
+2. (Optional) Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view databases:
 
       ```SQL
       SHOW DATABASES;
@@ -22,7 +22,7 @@ StarRocks 2.3 and later provide an internal catalog to manage the internal data 
       SHOW DATABASES FROM <catalog_name>;
       ```
 
-3. (Optional) Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to switch to the destination catalog in the current session:
+3. (Optional) Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to switch to the destination catalog in the current session:
 
     ```SQL
     SET CATALOG <catalog_name>;
