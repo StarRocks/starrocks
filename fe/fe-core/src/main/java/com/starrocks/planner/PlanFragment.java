@@ -499,7 +499,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
         str.append(outputBuilder);
         str.append("\n");
-        str.append("  Fragment cost: ").append(fragmentCost).append("\n");
         str.append("  Input Partition: ").append(dataPartition.getExplainString(TExplainLevel.NORMAL));
         if (sink != null) {
             str.append(sink.getVerboseExplain("  ")).append("\n");
