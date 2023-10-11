@@ -39,10 +39,11 @@ private:
     Status _build_hive_column_name_2_index();
 
     using ConverterPtr = std::unique_ptr<csv::Converter>;
-    std::string _record_delimiter;
+    std::string _line_delimiter;
     std::string _field_delimiter;
     char _collection_delimiter;
     char _mapkey_delimiter;
+    bool _need_probe_line_delimiter = false;
     // Always set true in data lake now.
     // TODO(SmithCruise) use a hive catalog property to control this behavior
     bool _invalid_field_as_null = true;

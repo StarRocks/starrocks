@@ -108,6 +108,10 @@ Status CSVScanner::ScannerCSVReader::_fill_buffer() {
     return Status::OK();
 }
 
+char* CSVScanner::ScannerCSVReader::_find_line_delimiter(CSVBuffer& buffer, size_t pos) {
+    return buffer.find(_parse_options.row_delimiter, pos);
+}
+
 CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                        ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter), _scan_range(scan_range) {

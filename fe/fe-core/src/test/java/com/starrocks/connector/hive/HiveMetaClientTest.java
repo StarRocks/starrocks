@@ -156,10 +156,10 @@ public class HiveMetaClientTest {
     public void testGetTextFileFormatDesc() {
         // Check is using default delimiter
         TextFileFormatDesc emptyDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(new HashMap<>());
-        Assert.assertEquals("\001", emptyDesc.getFieldDelim());
-        Assert.assertEquals("\n", emptyDesc.getLineDelim());
-        Assert.assertEquals("\002", emptyDesc.getCollectionDelim());
-        Assert.assertEquals("\003", emptyDesc.getMapkeyDelim());
+        Assert.assertNull(emptyDesc.getFieldDelim());
+        Assert.assertNull(emptyDesc.getLineDelim());
+        Assert.assertNull(emptyDesc.getCollectionDelim());
+        Assert.assertNull(emptyDesc.getMapkeyDelim());
 
         // Check blank delimiter
         Map<String, String> blankParameters = new HashMap<>();
@@ -168,19 +168,19 @@ public class HiveMetaClientTest {
         blankParameters.put("collection.delim", "");
         blankParameters.put("mapkey.delim", "");
         TextFileFormatDesc blankDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(blankParameters);
-        Assert.assertEquals("\001", blankDesc.getFieldDelim());
-        Assert.assertEquals("\n", blankDesc.getLineDelim());
-        Assert.assertEquals("\002", blankDesc.getCollectionDelim());
-        Assert.assertEquals("\003", blankDesc.getMapkeyDelim());
+        Assert.assertNull(blankDesc.getFieldDelim());
+        Assert.assertNull(blankDesc.getLineDelim());
+        Assert.assertNull(blankDesc.getCollectionDelim());
+        Assert.assertNull(blankDesc.getMapkeyDelim());
 
         // Check is using OpenCSVSerde
         Map<String, String> openCSVParameters = new HashMap<>();
         openCSVParameters.put("separatorChar", ",");
         TextFileFormatDesc openCSVDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(openCSVParameters);
         Assert.assertEquals(",", openCSVDesc.getFieldDelim());
-        Assert.assertEquals("\n", openCSVDesc.getLineDelim());
-        Assert.assertEquals("\002", openCSVDesc.getCollectionDelim());
-        Assert.assertEquals("\003", openCSVDesc.getMapkeyDelim());
+        Assert.assertNull(openCSVDesc.getLineDelim());
+        Assert.assertNull(openCSVDesc.getCollectionDelim());
+        Assert.assertNull(openCSVDesc.getMapkeyDelim());
 
         // Check is using custom delimiter
         Map<String, String> parameters = new HashMap<>();
