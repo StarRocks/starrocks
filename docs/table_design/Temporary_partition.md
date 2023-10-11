@@ -121,7 +121,7 @@ curl --location-trusted -u root: -H "label:123" -H "Expect:100-continue" -H "tem
     http://host:port/api/example_db/site_access/_stream_load    
 ```
 
-For detailed syntax and parameter descriptions, see [STREAM LOAD](..sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
+For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
 
 ### Load data by using BROKER LOAD
 

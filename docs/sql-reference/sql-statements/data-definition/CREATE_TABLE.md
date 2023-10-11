@@ -103,7 +103,7 @@ Default value: `olap`. If this parameter is not specified, an OLAP table (StarRo
 
 Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc` (2.3 and later), `iceberg`, and `hudi` (2.2 and later). If you want to create an external table to query external data sources, specify `CREATE EXTERNAL TABLE` and set `ENGINE` to any of these values. You can refer to [External table](../../../data_source/External_table.md) for more information.
 
-**From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, Hudi, and JDBC data sources. External tables are deprecated. For more information, see [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../data_source/catalog/hudi_catalog.md), and [JDBC catalog](../data_source/catalog/jdbc_catalog.md).**
+**From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, Hudi, and JDBC data sources. External tables are deprecated. For more information, see [Hive catalog](../../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../../../data_source/catalog/hudi_catalog.md), and [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md).**
 
 **From v3.1 onwards, StarRocks supports creating Parquet-formatted tables in Iceberg catalogs, and you can insert data to these Parquet-formatted Iceberg tables by using [INSERT INTO](../data-manipulation/insert.md). See [Create an Iceberg table](../../../data_source/catalog/iceberg_catalog.md#create-an-iceberg-table).**
 
