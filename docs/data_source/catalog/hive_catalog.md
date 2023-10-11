@@ -1,6 +1,10 @@
 # Hive catalog
 
+<<<<<<< HEAD
 A Hive catalog is a kind of external catalog that enables you to query data from Apache Hive™ without ingestion.
+=======
+A Hive catalog is a kind of external catalog that enables you to query data from Apache Hive™ without ingestion. Also, you can directly transform and load data from Hive by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) based on Hive catalogs.
+>>>>>>> 273c0ad72f ([Doc] fix broken links (#32532))
 
 Also, you can directly transform and load data from Hive by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Hive catalogs. StarRocks supports Hive catalogs from v2.4 onwards.
 
