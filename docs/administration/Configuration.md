@@ -10,7 +10,7 @@ FE parameters are classified into dynamic parameters and static parameters.
 
 - Static parameters can only be configured and adjusted in the FE configuration file **fe.conf**. **After you modify this file, you must restart your FE for the changes to take effect.**
 
-Whether a parameter is a dynamic parameter is indicated by the `IsMutable` column in the output of [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SHOW%20CONFIG.md). `TRUE` indicates a dynamic parameter.
+Whether a parameter is a dynamic parameter is indicated by the `IsMutable` column in the output of [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md). `TRUE` indicates a dynamic parameter.
 
 Note that both dynamic and static FE parameters can be configured in the **fe.conf** file.
 
@@ -22,7 +22,7 @@ After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on 
  ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
  ```
 
- For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SHOW%20CONFIG.md).
+ For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md).
 
 > **NOTE**
 >
@@ -30,7 +30,7 @@ After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on 
 
 ### Configure FE dynamic parameters
 
-You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md).
+You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md).
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");
