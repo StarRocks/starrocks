@@ -95,10 +95,4 @@ public class FeConstants {
     public static String getNodeNotFoundError(boolean chooseComputeNode) {
         return chooseComputeNode ? COMPUTE_NODE_NOT_FOUND_ERROR : BACKEND_NODE_NOT_FOUND_ERROR;
     }
-
-    // The following two parameters are mainly used to speed up MySQL queries by using STR2DATE as the partitioning function for materialized views
-    public static final String MYSQL_PARTITION_MAXVALUE = "MAXVALUE";
-    public static final String PARTITION_USE_STR2DATE_MINVALUE = "0000-01-01";
-    public static final String PARTITION_USE_STR2DATE_MAXVALUE = "9999-12-31";
-
 }

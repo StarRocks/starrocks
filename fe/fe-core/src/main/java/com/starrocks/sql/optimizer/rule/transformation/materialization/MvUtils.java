@@ -1167,7 +1167,7 @@ public class MvUtils {
         Set<String> refBaseTableUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable, true);
         // ref base table latest partition ranges except to-refresh partitions
         List<Range<PartitionKey>> refBaseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
-                refBaseTableUpdatedPartitionNames);
+                refBaseTableUpdatedPartitionNames, MaterializedView.getPartitionExpr(mv));
 
         // materialized view latest partition ranges except to-refresh partitions
         List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
@@ -1198,14 +1198,14 @@ public class MvUtils {
         return rangePartitionInfo.getRangeList(filteredIds, false);
     }
 
-    private static List<Range<PartitionKey>> getLatestPartitionRange(Table table, Column partitionColumn,
-                                                                     Set<String> modifiedPartitionNames) {
+    private static List<Range<PartitionKey>> getLatestPartitionRange(
+            Table table, Column partitionColumn, Set<String> modifiedPartitionNames, Expr partitionExpr) {
         if (table.isNativeTableOrMaterializedView()) {
             return getLatestPartitionRangeForNativeTable((OlapTable) table, modifiedPartitionNames);
         } else {
             Map<String, Range<PartitionKey>> partitionMap;
             try {
-                partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn);
+                partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn, partitionExpr);
             } catch (UserException e) {
                 LOG.warn("Materialized view Optimizer compute partition range failed.", e);
                 return Lists.newArrayList();
@@ -1269,5 +1269,12 @@ public class MvUtils {
 
     public static boolean isSupportViewDelta(JoinOperator joinOperator) {
         return  joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin();
+    }
+
+    public static SlotRef extractPartitionSlotRef(Expr paritionExpr) {
+        List<SlotRef> slotRefs = Lists.newArrayList();
+        paritionExpr.collect(SlotRef.class, slotRefs);
+        Preconditions.checkState(slotRefs.size() == 1);
+        return slotRefs.get(0);
     }
 }
