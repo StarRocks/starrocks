@@ -40,37 +40,6 @@ Query Cache 支持全部数据分区策略，包括 Unpartitioned、Multi-Column
   - 查询的输出列含多个 DISTINCT 聚合函数。
 - Query Cache 的存储占用 BE 的少量内存，默认缓存大小为 512 MB，因此不宜缓存较大的数据项。此外，在启用 Query Cache 的情况下，如果缓存的命中率低，则会带来性能惩罚。因此，在查询的计算过程中，如果某一个 Tablet 上的计算结果大小超过了 `query_cache_entry_max_bytes` 或 `query_cache_entry_max_rows` 参数指定的阈值，则该查询接下来的计算不再开启 Query Cache，转而触发使用 Passthrough 机制来执行。
 
-<<<<<<< HEAD
-=======
-## 原理介绍
-
-启用 Query Cache 时，BE 会把查询的本地聚合拆分为以下两个阶段：
-
-1. Per-tablet 聚合
-
-   BE 逐个处理查询所涉及的每个 Tablet。在处理某一个 Tablet 时，BE 首先会检查 Query Cache 中是否存在该 Tablet 的中间计算结果。如果存在（缓存命中），则 BE 直接取用该结果；如果不存在（缓存未命中），则 BE 从磁盘上读取该 Tablet 的数据并进行本地聚合，然后将聚合得到的中间计算结果填充到 Query Cache，以供后续类似查询使用。
-
-2. Inter-tablet 聚合
-
-   BE 收集查询所涉及的所有 Tablet 的中间计算结果，并将这些结果合并成最终结果。
-
-   ![Query cache - How it works - 1](../assets/query_cache_principle-1.png)
-
-后续发起的类似查询，就可以复用之前缓存的查询结果。比如下图所示的查询，一共涉及三个 Tablet（编号 0 到 2），Query Cache 中缓存了第一个Tablet（即 Tablet 0）的中间结果。此时，BE 可以从 Query Cache 直接获取 Tablet 0 的中间计算结果，而不必访问磁盘上的数据。如果 Query Cache 完全预热，就会包含所有三个 Tablet 的中间计算结果，此时，BE 不需要访问磁盘上的任何数据。
-
-![Query cache - How it works - 2](../assets/query_cache_principle-2.png)
-
-为释放额外占用的内存，Query Cache 采用基于“最近最少使用” (Least Recently Used，简称 LRU) 算法的移出策略对缓存条目进行管理。当 Query Cache 占用的内存超过 `query_cache_capacity` 参数中设置的缓存大小时，最近最少使用的缓存条目会移出 Query Cache。
-
-> **说明**
->
-> 未来 Query Cache 还将支持基于 Time to Live (TTL) 的移出策略。
-
-FE 判定各个查询是否需要通过 Query Cache 进行加速，并对查询进行规范化处理，以消除对查询语义没有影响的一些细微的文字细节。
-
-为了防止在某些不适用的场景下由于开启 Query Cache 而导致性能损失，BE 会采用自适应策略在运行时绕过 Query Cache。
-
->>>>>>> 14719b2e (use relative path (#6757))
 ## 开启 Query Cache
 
 本小节介绍用于开启和配置 Query Cache 的参数和会话变量。
