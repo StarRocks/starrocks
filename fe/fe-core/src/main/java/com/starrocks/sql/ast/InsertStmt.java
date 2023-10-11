@@ -279,7 +279,12 @@ public class InsertStmt extends DmlStmt {
 
         // parse table function properties
         Map<String, String> props = getTableFunctionProperties();
-        boolean writeSingleFile = Boolean.parseBoolean(props.get("single"));
+        String single = props.get("single");
+        boolean writeSingleFile = Boolean.parseBoolean(single);
+        if (!writeSingleFile && single != null && !single.equalsIgnoreCase("false")) {
+            throw new SemanticException("got invalid parameter \"single\" = \"%s\", expect a boolean value (true or false).", single);
+        }
+
         String path = props.get("path");
         String format = props.get("format");
         String partitionBy = props.get("partition_by");
