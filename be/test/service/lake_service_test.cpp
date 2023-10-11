@@ -369,7 +369,7 @@ TEST_F(LakeServiceTest, test_delete_tablet) {
     lake::DeleteTabletResponse response;
     request.add_tablet_ids(_tablet_id);
     _lake_service.delete_tablet(&cntl, &request, &response, nullptr);
-    ASSERT_FALSE(cntl.Failed());
+    ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
     ASSERT_EQ(0, response.failed_tablets_size());
     EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
 }
@@ -382,7 +382,7 @@ TEST_F(LakeServiceTest, test_delete_tablet_dir_not_exit) {
     lake::DeleteTabletResponse response;
     request.add_tablet_ids(_tablet_id);
     _lake_service.delete_tablet(&cntl, &request, &response, nullptr);
-    ASSERT_FALSE(cntl.Failed());
+    ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
     ASSERT_EQ(0, response.failed_tablets_size());
     EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
     // restore test directory
@@ -794,6 +794,39 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
     ASSERT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
     ASSERT_EQ(0, response.tablet_stats(0).num_rows());
     ASSERT_EQ(0, response.tablet_stats(0).data_size());
+}
+
+// NOLINTNEXTLINE
+TEST_F(LakeServiceTest, test_drop_table_no_thread_pool) {
+    ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
+
+    SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
+                                          [](void* arg) { *(ThreadPool**)arg = nullptr; });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    lake::DropTableRequest request;
+    lake::DropTableResponse response;
+    request.set_tablet_id(100);
+    brpc::Controller cntl;
+    _lake_service.drop_table(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("no thread pool to run task", cntl.ErrorText());
+
+    SyncPoint::GetInstance()->DisableProcessing();
+}
+
+// NOLINTNEXTLINE
+TEST_F(LakeServiceTest, test_delete_tablet_no_thread_pool) {
+    SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
+                                          [](void* arg) { *(ThreadPool**)arg = nullptr; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    brpc::Controller cntl;
+    lake::DeleteTabletRequest request;
+    lake::DeleteTabletResponse response;
+    request.add_tablet_ids(_tablet_id);
+    _lake_service.delete_tablet(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("no thread pool to run task", cntl.ErrorText());
 }
 
 } // namespace starrocks
