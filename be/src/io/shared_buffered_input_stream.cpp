@@ -99,7 +99,7 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
 }
 
 StatusOr<SharedBufferedInputStream::SharedBuffer*> SharedBufferedInputStream::find_shared_buffer(size_t offset,
-                                                                                                  size_t count) {
+                                                                                                 size_t count) {
     auto iter = _map.upper_bound(offset);
     if (iter == _map.end()) {
         return Status::RuntimeError("failed to find shared buffer based on offset");

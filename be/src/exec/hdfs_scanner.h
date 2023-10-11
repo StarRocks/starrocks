@@ -190,6 +190,8 @@ struct HdfsScannerParams {
     bool use_block_cache = false;
     bool enable_populate_block_cache = false;
     bool use_filemeta_cache = false;
+    bool can_use_any_column = false;
+    bool can_use_min_max_count_opt = false;
 };
 
 struct HdfsScannerContext {
@@ -233,6 +235,8 @@ struct HdfsScannerContext {
     bool case_sensitive = false;
 
     bool use_filemeta_cache = false;
+    bool can_use_any_column = false;
+    bool can_use_min_max_count_opt = false;
 
     std::string timezone;
 

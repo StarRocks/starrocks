@@ -33,9 +33,9 @@
 
 namespace starrocks::parquet {
 
-FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
-                       int64_t file_mtime, io::SharedBufferedInputStream* sb_stream)
-    : _chunk_size(chunk_size), _file(file), _file_size(file_size), _file_mtime(file_mtime), _sb_stream(sb_stream) {}
+FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
+                       io::SharedBufferedInputStream* sb_stream)
+        : _chunk_size(chunk_size), _file(file), _file_size(file_size), _file_mtime(file_mtime), _sb_stream(sb_stream) {}
 
 FileReader::~FileReader() {
     if (!_is_metadata_cached && _file_metadata) {

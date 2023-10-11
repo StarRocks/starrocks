@@ -44,7 +44,7 @@ public class HiveScanImplementationRule extends ImplementationRule {
                     scan.getLimit(),
                     scan.getPredicate(),
                     scan.getProjection());
-
+            physicalHiveScan.canUseAnyColumn = scan.canUseAnyColumn;
             result = new OptExpression(physicalHiveScan);
         }
         return Lists.newArrayList(result);

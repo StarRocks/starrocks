@@ -44,7 +44,7 @@ public class FileScanImplementationRule extends ImplementationRule {
                     scan.getLimit(),
                     scan.getPredicate(),
                     scan.getProjection());
-
+            physicalFileScan.canUseAnyColumn = scan.canUseAnyColumn;
             result = new OptExpression(physicalFileScan);
         }
         return Lists.newArrayList(result);

@@ -54,7 +54,8 @@ public class LogicalFileScanOperator extends LogicalScanOperator {
                 builder.getLimit(),
                 builder.getPredicate(),
                 builder.getProjection());
-
+                
+        this.canUseAnyColumn = builder.canUseAnyColumn;        
         this.predicates = builder.predicates;
     }
 

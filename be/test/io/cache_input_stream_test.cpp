@@ -105,8 +105,8 @@ TEST_F(CacheInputStreamTest, test_aligned_read) {
 
     const std::string file_name = "test_file1";
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(new io::SharedBufferedInputStream(
-                stream, file_name, data_size));
+    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
+            new io::SharedBufferedInputStream(stream, file_name, data_size));
     io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
     cache_stream.set_enable_populate_cache(true);
     auto& stats = cache_stream.stats();
@@ -138,8 +138,8 @@ TEST_F(CacheInputStreamTest, test_random_read) {
 
     const std::string file_name = "test_file2";
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(new io::SharedBufferedInputStream(
-                stream, file_name, data_size));
+    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
+            new io::SharedBufferedInputStream(stream, file_name, data_size));
     io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
     cache_stream.set_enable_populate_cache(true);
     auto& stats = cache_stream.stats();
@@ -177,8 +177,8 @@ TEST_F(CacheInputStreamTest, test_file_overwrite) {
 
     const std::string file_name = "test_file3";
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(new io::SharedBufferedInputStream(
-                stream, file_name, data_size));
+    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
+            new io::SharedBufferedInputStream(stream, file_name, data_size));
     io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
     cache_stream.set_enable_populate_cache(true);
     auto& stats = cache_stream.stats();
@@ -221,8 +221,8 @@ TEST_F(CacheInputStreamTest, test_read_from_io_buffer) {
 
     const std::string file_name = "test_file3";
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(new io::SharedBufferedInputStream(
-                stream, file_name, data_size));
+    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
+            new io::SharedBufferedInputStream(stream, file_name, data_size));
     io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000);
     cache_stream.set_enable_populate_cache(true);
     auto& stats = cache_stream.stats();

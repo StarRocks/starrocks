@@ -45,7 +45,7 @@ public class IcebergScanImplementationRule extends ImplementationRule {
                     scan.getLimit(),
                     scan.getPredicate(),
                     scan.getProjection());
-
+            physicalIcebergScan.canUseAnyColumn = scan.canUseAnyColumn;
             result = new OptExpression(physicalIcebergScan);
         }
         return Lists.newArrayList(result);

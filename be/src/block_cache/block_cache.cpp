@@ -122,7 +122,7 @@ Status BlockCache::write_object(const CacheKey& cache_key, const void* ptr, size
 }
 
 Status BlockCache::read_buffer(const CacheKey& cache_key, off_t offset, size_t size, IOBuffer* buffer,
-                              ReadCacheOptions* options) {
+                               ReadCacheOptions* options) {
     if (size == 0) {
         return Status::OK();
     }
@@ -133,7 +133,7 @@ Status BlockCache::read_buffer(const CacheKey& cache_key, off_t offset, size_t s
 }
 
 StatusOr<size_t> BlockCache::read_buffer(const CacheKey& cache_key, off_t offset, size_t size, char* data,
-                                        ReadCacheOptions* options) {
+                                         ReadCacheOptions* options) {
     IOBuffer buffer;
     RETURN_IF_ERROR(read_buffer(cache_key, offset, size, &buffer, options));
     buffer.copy_to(data);

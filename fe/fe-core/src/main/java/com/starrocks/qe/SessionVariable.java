@@ -430,6 +430,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SIMPLIFY_CASE_WHEN = "enable_simplify_case_when";
 
+    public static final String ENABLE_COUNT_STAR_OPTIMIZATION = "enable_count_star_optimization";
+
     public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
 
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
@@ -1141,6 +1143,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SIMPLIFY_CASE_WHEN, flag = VariableMgr.INVISIBLE)
     private boolean enableSimplifyCaseWhen = true;
+
+    @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
+    private boolean enableCountStarOptimization = true;
 
     private int exprChildrenLimit = -1;
 
@@ -2182,7 +2187,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableSimplifyCaseWhen(boolean enableSimplifyCaseWhen) {
         this.enableSimplifyCaseWhen = enableSimplifyCaseWhen;
     }
+    public boolean isEnableCountStarOptimization() {
+        return enableCountStarOptimization;
+    }
 
+    public void setEnableCountStarOptimization(boolean v) {
+        enableCountStarOptimization = v;
+    }
     public void setLargeDecimalUnderlyingType(String type) {
         if (type.equalsIgnoreCase(SessionVariableConstants.PANIC) ||
                 type.equalsIgnoreCase(SessionVariableConstants.DECIMAL) ||

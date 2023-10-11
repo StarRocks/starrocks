@@ -1888,8 +1888,8 @@ TEST_F(FileReaderTest, TestTwoNestedLevelArray) {
     // id: INT, b: ARRAY<ARRAY<INT>>
     const std::string filepath = "./be/test/exec/test_data/parquet_data/two_level_nested_array.parquet";
     auto file = _create_file(filepath);
-    auto file_reader =
-            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath), 100000);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(filepath), 100000);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -2231,9 +2231,8 @@ TEST_F(FileReaderTest, TestComplexTypeNotNull) {
 
     std::string filepath = "./be/test/exec/test_data/parquet_data/complex_subfield_not_null.parquet";
     auto file = _create_file(filepath);
-    auto file_reader =
-            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath),
-                                         100000);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(filepath), 100000);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -2307,9 +2306,8 @@ TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
     // c: ARRAY<ARRAY<INT>>
     const std::string filepath = "./be/test/exec/test_data/parquet_data/hudi_mor_two_level_nested_array.parquet";
     auto file = _create_file(filepath);
-    auto file_reader =
-            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath), 
-                                         100000);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(filepath), 100000);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -2383,9 +2381,8 @@ TEST_F(FileReaderTest, TestLateMaterializationAboutRequiredComplexType) {
     //  }
     const std::string filepath = "./be/test/formats/parquet/test_data/map_struct_subfield_required.parquet";
     auto file = _create_file(filepath);
-    auto file_reader =
-            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath),
-                                         100000);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(filepath), 100000);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -2465,9 +2462,8 @@ TEST_F(FileReaderTest, TestLateMaterializationAboutOptionalComplexType) {
     // }
     const std::string filepath = "./be/test/formats/parquet/test_data/map_struct_subfield_optional.parquet";
     auto file = _create_file(filepath);
-    auto file_reader =
-            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath),
-                                        100000);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(filepath), 100000);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -2529,9 +2525,8 @@ TEST_F(FileReaderTest, TestLateMaterializationAboutOptionalComplexType) {
 TEST_F(FileReaderTest, CheckDictOutofBouds) {
     const std::string filepath = "./be/test/exec/test_data/parquet_scanner/type_mismatch_decode_min_max.parquet";
     auto file = _create_file(filepath);
-    auto file_reader =
-            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath),
-                                         100000);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(filepath), 100000);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -2619,9 +2614,8 @@ TEST_F(FileReaderTest, CheckDictOutofBouds) {
 TEST_F(FileReaderTest, CheckLargeParquetHeader) {
     const std::string filepath = "./be/test/formats/parquet/test_data/large_page_header.parquet";
     auto file = _create_file(filepath);
-    auto file_reader =
-            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath),
-                                         100000);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(filepath), 100000);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -2675,9 +2669,8 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
     const std::string filepath =
             "./be/test/formats/parquet/test_data/iceberg_schema_evolution/iceberg_string_map_string.parquet";
     auto file = _create_file(filepath);
-    auto file_reader =
-            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath),
-                                         100000);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(filepath), 100000);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -2789,14 +2782,14 @@ TEST_F(FileReaderTest, TestReadFooterCache) {
     ASSERT_EQ(ctx->stats->footer_cache_write_count, 1);
 
     auto file_reader2 = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(_file1_path), 100000);
+                                                     std::filesystem::file_size(_file1_path), 100000);
     file_reader2->_cache = cache.get();
 
     // second init, read footer cache
     auto* ctx2 = _create_file1_base_context();
     ctx2->stats->footer_cache_read_count = 0;
     ctx2->stats->footer_cache_write_count = 0;
-    ctx2->stats->footer_cache_read_ns=0;
+    ctx2->stats->footer_cache_read_ns = 0;
     Status status2 = file_reader2->init(ctx2);
     ASSERT_TRUE(status2.ok());
     ASSERT_EQ(ctx2->stats->footer_cache_read_count, 1);

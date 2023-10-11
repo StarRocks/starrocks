@@ -43,8 +43,8 @@ class FileMetaData;
 
 class FileReader {
 public:
-    FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
-               int64_t file_mtime, io::SharedBufferedInputStream* sb_stream = nullptr);
+    FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
+               io::SharedBufferedInputStream* sb_stream = nullptr);
     ~FileReader();
 
     Status init(HdfsScannerContext* scanner_ctx);

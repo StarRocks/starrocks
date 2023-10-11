@@ -68,7 +68,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
         scanColumns.addAll(Utils.extractColumnRef(scanOperator.getPredicate()));
 
         checkPartitionColumnType(scanOperator, scanColumns, context);
-
+        boolean canUseAnyColumn = false;
         // make sure there is at least one materialized column in new output columns.
         // if not, we have to choose one materialized column from scan operator output columns
         // with the minimal cost.
@@ -100,9 +100,15 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
             }
             Preconditions.checkArgument(smallestIndex != -1);
             scanColumns.add(outputColumns.get(smallestIndex));
+            canUseAnyColumn = true;
+        }
+
+        if (!context.getSessionVariable().isEnableCountStarOptimization()) {
+            canUseAnyColumn = false;
         }
 
         if (scanOperator.getOutputColumns().equals(new ArrayList<>(scanColumns))) {
+            scanOperator.setCanUseAnyColumn(canUseAnyColumn);
             return Collections.emptyList();
         } else {
             try {
@@ -117,7 +123,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                                 scanOperator.getColumnMetaToColRefMap(),
                                 scanOperator.getLimit(),
                                 scanOperator.getPredicate());
-
+                newScanOperator.setCanUseAnyColumn(canUseAnyColumn);
                 newScanOperator.setScanOperatorPredicates(scanOperator.getScanOperatorPredicates());
 
                 return Lists.newArrayList(new OptExpression(newScanOperator));

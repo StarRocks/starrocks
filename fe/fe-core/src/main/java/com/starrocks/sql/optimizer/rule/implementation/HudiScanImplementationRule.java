@@ -43,6 +43,7 @@ public class HudiScanImplementationRule extends ImplementationRule {
                     scan.getLimit(),
                     scan.getPredicate(),
                     scan.getProjection());
+            physicalHudiScan.canUseAnyColumn = scan.canUseAnyColumn;
 
             result = new OptExpression(physicalHudiScan);
         }
