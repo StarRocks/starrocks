@@ -41,7 +41,10 @@ import java.util.Map;
 
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
+import static org.apache.iceberg.TableProperties.AVRO_COMPRESSION;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
+import static org.apache.iceberg.TableProperties.ORC_COMPRESSION;
+import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
 
 public class IcebergApiConverterTest {
 
@@ -194,5 +197,17 @@ public class IcebergApiConverterTest {
         Map<String, String> source = ImmutableMap.of("file_format", "orc");
         Map<String, String> target = IcebergApiConverter.rebuildCreateTableProperties(source);
         Assert.assertEquals("orc", target.get(DEFAULT_FILE_FORMAT));
+
+        source = ImmutableMap.of("file_format", "orc", "compression_codec", "snappy");
+        target = IcebergApiConverter.rebuildCreateTableProperties(source);
+        Assert.assertEquals("snappy", target.get(ORC_COMPRESSION));
+
+        source = ImmutableMap.of("file_format", "parquet", "compression_codec", "snappy");
+        target = IcebergApiConverter.rebuildCreateTableProperties(source);
+        Assert.assertEquals("snappy", target.get(PARQUET_COMPRESSION));
+
+        source = ImmutableMap.of("file_format", "avro", "compression_codec", "zstd");
+        target = IcebergApiConverter.rebuildCreateTableProperties(source);
+        Assert.assertEquals("zstd", target.get(AVRO_COMPRESSION));
     }
 }
