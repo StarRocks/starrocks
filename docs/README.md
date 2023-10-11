@@ -31,5 +31,11 @@ Before contributing, please read this article carefully to quickly understand th
 
 ## Documentation template
 
+<<<<<<< HEAD
 [Functions](https://github.com/StarRocks/docs/blob/main/sql-reference/sql-functions/How%20to%20Write%20Functions%20Documentation.md)
 [SQL command template](https://github.com/StarRocks/docs/blob/main/sql-reference/sql-statements/SQL%20command%20template.md)
+=======
+- [Functions](https://github.com/StarRocks/docs/blob/main/sql-reference/sql-functions/How_to_Write_Functions_Documentation.md)
+- [SQL command template](https://github.com/StarRocks/docs/blob/main/sql-reference/sql-statements/SQL_command_template.md)
+- [Loading data template](https://github.com/StarRocks/starrocks/blob/main/docs/loading/Loading_data_template.md)
+>>>>>>> ad1d16540e ([Doc] Fix filename spaces (#32525))
