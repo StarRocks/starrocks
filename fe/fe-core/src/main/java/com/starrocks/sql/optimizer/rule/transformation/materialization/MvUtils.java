@@ -34,6 +34,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
@@ -42,6 +43,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -60,6 +62,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerConfig;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -70,6 +73,7 @@ import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -84,11 +88,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.ParsingException;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -101,6 +108,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.statistics.StatisticsCalcUtils.getStatistics;
+import static com.starrocks.sql.optimizer.statistics.StatisticsCalcUtils.replaceColRef;
 
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
@@ -796,6 +806,58 @@ public class MvUtils {
         return true;
     }
 
+    public static List<ScalarOperator> compensatePartitionPredicateForIceberg(Statistics icebergStatics,
+                                                                              LogicalIcebergScanOperator scanOperator) {
+        List<ScalarOperator> partitionPredicates = Lists.newArrayList();
+        if (icebergStatics == null) {
+            return partitionPredicates;
+        }
+
+        Preconditions.checkState(scanOperator.getTable().isIcebergTable());
+        IcebergTable icebergTable = (IcebergTable) scanOperator.getTable();
+        if (icebergTable.isUnPartitioned()) {
+            return partitionPredicates;
+        }
+
+        // generate range predicate
+        Map<String, ColumnRefOperator> columnRefOperatorMap = scanOperator.getColumnNameToColRefMap();
+        List<Column> partitionColumns = icebergTable.getPartitionColumns();
+        for (Column partCol : partitionColumns) {
+            if (!columnRefOperatorMap.containsKey(partCol.getName())) {
+                continue;
+            }
+
+            if (!partCol.getType().isStringType()) {
+                continue;
+            }
+
+            ColumnRefOperator partColRef = columnRefOperatorMap.get(partCol.getName());
+            ColumnStatistic partColStatics = icebergStatics.getColumnStatistic(partColRef);
+
+            if (StringUtils.isEmpty(partColStatics.getMinString()) ||
+                    StringUtils.isEmpty(partColStatics.getMaxString())) {
+                LOG.debug("column minString value: {}, maxString value: {}",
+                        partColStatics.getMinString(),
+                        partColStatics.getMaxValue());
+                continue;
+            }
+
+            ScalarOperator lower = new ConstantOperator(partColStatics.getMinString(), Type.STRING);
+            ScalarOperator upper = new ConstantOperator(partColStatics.getMaxString(), Type.STRING);
+            ScalarOperator upperPred = new BinaryPredicateOperator(BinaryType.LE,
+                    replaceColRef(partColRef, scanOperator), upper);
+            upperPred.setIsPushdown(true);
+
+            ScalarOperator lowerPred = new BinaryPredicateOperator(BinaryType.GE,
+                    replaceColRef(partColRef, scanOperator), lower);
+            lowerPred.setIsPushdown(true);
+
+            partitionPredicates.add(upperPred);
+            partitionPredicates.add(lowerPred);
+        }
+        return partitionPredicates;
+    }
+
     public static List<ScalarOperator> compensatePartitionPredicateForHiveScan(LogicalHiveScanOperator scanOperator) {
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
         Preconditions.checkState(scanOperator.getTable().isHiveTable());
@@ -838,12 +900,17 @@ public class MvUtils {
         return partitionPredicates;
     }
 
-    public static ScalarOperator compensatePartitionPredicate(OptExpression plan,
+    public static ScalarOperator compensatePartitionPredicate(OptimizerContext context,
+                                                              OptExpression plan,
                                                               ColumnRefFactory columnRefFactory,
                                                               boolean isCompensate) {
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(plan);
         if (scanOperators.isEmpty()) {
             return ConstantOperator.createBoolean(true);
+        }
+        Statistics icebergStatics = null;
+        if (scanOperators.stream().anyMatch(x -> x instanceof LogicalIcebergScanOperator)) {
+            icebergStatics = getStatistics(plan, context);
         }
 
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
@@ -877,6 +944,9 @@ public class MvUtils {
                 }
             } else if (scanOperator instanceof LogicalHiveScanOperator) {
                 partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator);
+            } else if (scanOperator instanceof LogicalIcebergScanOperator) {
+                partitionPredicate = compensatePartitionPredicateForIceberg(icebergStatics,
+                        (LogicalIcebergScanOperator) scanOperator);
             } else {
                 continue;
             }
