@@ -178,4 +178,20 @@ public class EmptyValueTest extends PlanTestBase {
                 "  |  \n" +
                 "  1:EMPTYSET");
     }
+
+    @Test
+    public void testUnionSlot() throws Exception {
+        String sql = "select L_ORDERKEY " +
+                "from t0 left outer join lineitem_partition on L_ORDERKEY = t0.v2 and L_SHIPDATE = '2000-01-01' " +
+                "union all " +
+                "select L_ORDERKEY " +
+                "from t0 left outer join lineitem_partition on L_ORDERKEY = t0.v2 and L_SHIPDATE = '2000-01-01' ";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [41, INT, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [4: L_ORDERKEY, INT, true]\n" +
+                "  |      [24: L_ORDERKEY, INT, true]");
+    }
 }
