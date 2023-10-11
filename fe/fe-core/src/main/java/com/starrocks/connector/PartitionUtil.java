@@ -549,7 +549,7 @@ public class PartitionUtil {
      * @param partitionColumn PARTITION BY referenced column
      * @return
      */
-    private static boolean isConvertToDate(Expr partitionExpr, Column partitionColumn) {
+    public static boolean isConvertToDate(Expr partitionExpr, Column partitionColumn) {
         if (!(partitionExpr instanceof FunctionCallExpr)) {
             return false;
         }
