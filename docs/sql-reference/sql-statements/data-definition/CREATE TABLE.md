@@ -505,7 +505,7 @@ PROPERTIES (
 
 #### Specify the bucket size for tables configured with random bucketing
 
-Since v3.2, for tables configured with random bucketing, you can specify the bucket size in the `PROPERTIES` using the `bucket_size` parameter during table creation. The default size is `1024 * 1024 * 1024 B` (1 GB), and the maximum size is 4 GB.
+Since v3.2, for tables configured with random bucketing, you can specify the bucket size by using the `bucket_size` parameter in `PROPERTIES` at table creation. The default size is `1024 * 1024 * 1024 B` (1 GB), and the maximum size is 4 GB.
 
 ```sql
 PROPERTIES (
