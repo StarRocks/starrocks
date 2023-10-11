@@ -15,7 +15,7 @@ KILL [ CONNECTION | QUERY ] <processlist_id>
 | **Parameter**            | **Description**                                              |
 | ------------------------ | ------------------------------------------------------------ |
 | Modifier:<ul><li>CONNECTION</li><li>QUERY</li></ul> | <ul><li>With a `CONNECTION` modifier, the KILL statement terminates the connection associated with the given `processlist_id`, after terminating any statement the connection is executing.</li><li>With a `QUERY` modifier, the KILL statement terminates the statement the connection is currently executing, but leaves the connection itself intact.</li><li>If no modifier is present, the default is `CONNECTION`.</li></ul> |
-| processlist_id           | The ID of the thread you want to terminate. You can get the IDs of the threads that are being executed using [SHOW PROCESSLIST](../Administration/SHOW%20PROCESSLIST.md). |
+| processlist_id           | The ID of the thread you want to terminate. You can get the IDs of the threads that are being executed using [SHOW PROCESSLIST](../Administration/SHOW_PROCESSLIST.md). |
 
 ## Examples
 

@@ -8,7 +8,7 @@ For Duplicate Key tables, Aggregate tables, and Unique Key tables, you can delet
 
 - You must have privileges on the table and database you want to perform DELETE.
 - Frequent DELETE operations are not recommended. If needed, perform such operations during off-peak hours.
-- The DELETE operation only deletes data in the table. The table remains. To drop the table, run [DROP TABLE](../data-definition/DROP%20TABLE.md).
+- The DELETE operation only deletes data in the table. The table remains. To drop the table, run [DROP TABLE](../data-definition/DROP_TABLE.md).
 - To prevent misoperations from deleting data in the entire table, you must specify the WHERE clause in the DELETE statement.
 - The deleted rows are not immediately cleaned. They are marked as "deleted" and will be temporarily saved in Segment. Physically, the rows are removed only after data version merge (compaction) is completed.
 - This operation also deletes data of the materialized views that reference this table.

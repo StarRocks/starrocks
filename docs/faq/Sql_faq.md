@@ -180,7 +180,7 @@ No, use functions to change "2021-10" to "2021-10-01" and then use "2021-10-01" 
 
 ## Where can I query the size of a StarRocks database or table?
 
-You can use the [SHOW DATA](../sql-reference/sql-statements/data-manipulation/SHOW%20DATA.md) command.
+You can use the [SHOW DATA](../sql-reference/sql-statements/data-manipulation/SHOW_DATA.md) command.
 
 `SHOW DATA;` displays the data size and replicas of all tables in the current database.
 
