@@ -173,6 +173,7 @@ You can partition a table in threes ways by using `PARTITION BY RANGE` clause:
 
 - Partition a table with the LESS THAN clause. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
+<<<<<<< HEAD
   ```SQL
   PARTITION BY RANGE (k1, k2, ...)
   (
@@ -181,6 +182,9 @@ You can partition a table in threes ways by using `PARTITION BY RANGE` clause:
       PARTITION partition_name3 VALUES LESS THAN (MAXVALUE)
   )
   ```
+=======
+    To enable this feature, make sure that the FE dynamic parameter `enable_auto_tablet_distribution` is set to `TRUE`. After a table is created, you can execute [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_VIEW.md) to view the bucket number automatically set by StarRocks.
+>>>>>>> ad1d16540e ([Doc] Fix filename spaces (#32525))
 
 - Partition a table by specifying values of a fixed range. For more information, see CREATE TABLE.
 

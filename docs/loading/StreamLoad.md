@@ -59,7 +59,7 @@ The following figure shows the workflow of a Stream Load job.
 
 ### Create a load job
 
-This section uses curl as an example to describe how to load the data of a CSV or JSON file from your local file system into StarRocks. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+This section uses curl as an example to describe how to load the data of a CSV or JSON file from your local file system into StarRocks. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
 
 Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../sql-reference/sql-statements/keywords.md).
 
@@ -107,6 +107,14 @@ curl --location-trusted -u <username>:<password> -H "label:123" \
     http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
 ```
 
+<<<<<<< HEAD
+=======
+> **NOTE**
+>
+> - If you use an account for which no password is set, you need to input only `<username>:`.
+> - You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
+
+>>>>>>> ad1d16540e ([Doc] Fix filename spaces (#32525))
 `example1.csv` consists of three columns, which are separated by commas (,) and can be mapped in sequence onto the `id`, `name`, and `score` columns of `table1`. Therefore, you need to use the `column_separator` parameter to specify the comma (,) as the column separator. You also need to use the `columns` parameter to temporarily name the three columns of `example1.csv` as `id`, `name`, and `score`, which are mapped in sequence onto the three columns of `table1`.
 
 ##### Query data
@@ -166,6 +174,13 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
     http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
 ```
 
+<<<<<<< HEAD
+=======
+> **NOTE**
+>
+> You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
+
+>>>>>>> ad1d16540e ([Doc] Fix filename spaces (#32525))
 `example2.json` consists of two keys, `name` and `code`, which are mapped onto the `id` and `city` columns of `table2`, as shown in the following figure.
 
 ![JSON - Column Mapping](../assets/4.2-2.png)
@@ -182,7 +197,7 @@ The mappings shown in the preceding figure are described as follows:
 >
 > In the preceding example, the value of `code` in `example2.json` is multiplied by 100 before it is loaded into the `id` column of `table2`.
 
-For detailed mappings between `jsonpaths`, `columns`, and the columns of the StarRocks table, see the "Column mappings" section in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+For detailed mappings between `jsonpaths`, `columns`, and the columns of the StarRocks table, see the "Column mappings" section in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
 
 ##### Query data
 
@@ -200,7 +215,7 @@ MySQL [test_db]> SELECT * FROM table2;
 
 ### View a load job
 
-After a load job is complete, StarRocks returns the result of the job in JSON format. For more information, see the "Return value" section in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+After a load job is complete, StarRocks returns the result of the job in JSON format. For more information, see the "Return value" section in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
 
 Stream Load does not allow you to query the result of a load job by using the SHOW LOAD statement.
 
@@ -238,7 +253,7 @@ This section describes some system parameters that you need to configure if you 
   >
   > **Average loading speed** in the preceding formula is the average loading speed of your StarRocks cluster. It varies depending on the disk I/O and the number of BEs in your StarRocks cluster.
 
-  Stream Load also provides the `timeout` parameter, which allows you to specify the timeout period of an individual load job. For more information, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+  Stream Load also provides the `timeout` parameter, which allows you to specify the timeout period of an individual load job. For more information, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
 
 ## Usage notes
 

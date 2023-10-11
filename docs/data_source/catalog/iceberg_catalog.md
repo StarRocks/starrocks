@@ -370,6 +370,223 @@ PROPERTIES
 );
 ```
 
+<<<<<<< HEAD
+=======
+#### Microsoft Azure Storage
+
+##### Azure Blob Storage
+
+- If you choose the Shared Key authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  PROPERTIES
+  (
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  );
+  ```
+
+- If you choose the SAS Token authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  PROPERTIES
+  (
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.blob.account_name" = "<blob_storage_account_name>",
+      "azure.blob.container_name" = "<blob_container_name>",
+      "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  );
+  ```
+
+##### Azure Data Lake Storage Gen1
+
+- If you choose the Managed Service Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  PROPERTIES
+  (
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls1.use_managed_service_identity" = "true"    
+  );
+  ```
+
+- If you choose the Service Principal authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  PROPERTIES
+  (
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls1.oauth2_client_id" = "<application_client_id>",
+      "azure.adls1.oauth2_credential" = "<application_client_credential>",
+      "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
+  );
+  ```
+
+##### Azure Data Lake Storage Gen2
+
+- If you choose the Managed Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  PROPERTIES
+  (
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls2.oauth2_use_managed_identity" = "true",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
+- If you choose the Shared Key authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  PROPERTIES
+  (
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls2.storage_account" = "<storage_account_name>",
+      "azure.adls2.shared_key" = "<shared_key>"     
+  );
+  ```
+
+- If you choose the Service Principal authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  PROPERTIES
+  (
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>",
+      "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+      "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  );
+  ```
+
+#### Google GCS
+
+- If you choose the VM-based authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  PROPERTIES
+  (
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "gcp.gcs.use_compute_engine_service_account" = "true"    
+  );
+  ```
+
+- If you choose the service account-based authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  PROPERTIES
+  (
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "gcp.gcs.service_account_email" = "<google_service_account_email>",
+      "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+      "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
+  );
+  ```
+
+- If you choose the impersonation-based authentication method:
+
+  - If you make a VM instance impersonate a service account, run a command like below:
+
+    ```SQL
+    CREATE EXTERNAL CATALOG iceberg_catalog_hms
+    PROPERTIES
+    (
+        "type" = "iceberg",
+        "iceberg.catalog.type" = "hive",
+        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+        "gcp.gcs.use_compute_engine_service_account" = "true",
+        "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
+    );
+    ```
+
+  - If you make a service account impersonate another service account, run a command like below:
+
+    ```SQL
+    CREATE EXTERNAL CATALOG iceberg_catalog_hms
+    PROPERTIES
+    (
+        "type" = "iceberg",
+        "iceberg.catalog.type" = "hive",
+        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+        "gcp.gcs.service_account_email" = "<google_service_account_email>",
+        "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+        "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
+        "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
+    );
+    ```
+
+## View Iceberg catalogs
+
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+
+```SQL
+SHOW CATALOGS;
+```
+
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of an Iceberg catalog named `iceberg_catalog_glue`:
+
+```SQL
+SHOW CREATE CATALOG iceberg_catalog_glue;
+```
+
+## Switch to an Iceberg Catalog and a database in it
+
+You can use one of the following methods to switch to an Iceberg catalog and a database in it:
+
+- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to specify an Iceberg catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+
+  ```SQL
+  -- Switch to a specified catalog in the current session:
+  SET CATALOG <catalog_name>
+  -- Specify the active database in the current session:
+  USE <db_name>
+  ```
+
+- Directly use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to switch to an Iceberg catalog and a database in it:
+
+  ```SQL
+  USE <catalog_name>.<db_name>
+  ```
+
+## Drop an Iceberg catalog
+
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
+
+The following example drops an Iceberg catalog named `iceberg_catalog_glue`:
+
+```SQL
+DROP Catalog iceberg_catalog_glue;
+```
+
+>>>>>>> ad1d16540e ([Doc] Fix filename spaces (#32525))
 ## View the schema of an Iceberg table
 
 You can use one of the following syntaxes to view the schema of an Iceberg table:
@@ -388,7 +605,11 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
 
 ## Query an Iceberg table
 
+<<<<<<< HEAD
 1. Use the following syntax to view the databases in your Iceberg cluster:
+=======
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your Iceberg cluster:
+>>>>>>> ad1d16540e ([Doc] Fix filename spaces (#32525))
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -408,8 +629,278 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
 
 ## Load data from Iceberg
 
+<<<<<<< HEAD
 Suppose you have an OLAP table named `olap_tbl`, you can transform and load data like below:
+=======
+Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/privilege_item.md#catalog) privilege on an Iceberg catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) statement to create databases in that Iceberg catalog. This feature is supported from v3.1 onwards.
+
+> **NOTE**
+>
+> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+[Switch to an Iceberg catalog](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to create an Iceberg database in that catalog:
+>>>>>>> ad1d16540e ([Doc] Fix filename spaces (#32525))
 
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM iceberg_table
 ```
+<<<<<<< HEAD
+=======
+
+You can use the `location` parameter to specify the file path in which you want to create the database. Both HDFS and cloud storage are supported. If you do not specify the `location` parameter, StarRocks creates the database in the default file path of the Iceberg catalog.
+
+The `prefix` varies based on the storage system you use:
+
+| **Storage system**                                         | **`Prefix` value**                                       |
+| ---------------------------------------------------------- | ------------------------------------------------------------ |
+| HDFS                                                       | `hdfs`                                                       |
+| Google GCS                                                 | `gs`                                                         |
+| Azure Blob Storage                                         | <ul><li>If your storage account allows access over HTTP, the `prefix` is `wasb`.</li><li>If your storage account allows access over HTTPS, the `prefix` is `wasbs`.</li></ul> |
+| Azure Data Lake Storage Gen1                               | `adl`                                                        |
+| Azure Data Lake Storage Gen2                               | <ul><li>If your storage account allows access over HTTP, the`prefix` is `abfs`.</li><li>If your storage account allows access over HTTPS, the `prefix` is `abfss`.</li></ul> |
+| AWS S3 or other S3-compatible storage (for example, MinIO) | `s3`                                                         |
+
+## Drop an Iceberg database
+
+Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/privilege_item.md#database) privilege on an Iceberg database, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) statement to drop that Iceberg database. This feature is supported from v3.1 onwards. You can only drop empty databases.
+
+> **NOTE**
+>
+> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+When you drop an Iceberg database, the database's file path on your HDFS cluster or cloud storage will not be dropped along with the database.
+
+[Switch to an Iceberg catalog](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to drop an Iceberg database in that catalog:
+
+```SQL
+DROP DATABASE <database_name>;
+```
+
+## Create an Iceberg table
+
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) or [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
+
+> **NOTE**
+>
+> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+[Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to create an Iceberg table in that database.
+
+### Syntax
+
+```SQL
+CREATE TABLE [IF NOT EXISTS] [database.]table_name
+(column_definition1[, column_definition2, ...
+partition_column_definition1,partition_column_definition2...])
+[partition_desc]
+[PROPERTIES ("key" = "value", ...)]
+[AS SELECT query]
+```
+
+### Parameters
+
+#### column_definition
+
+The syntax of `column_definition` is as follows:
+
+```SQL
+col_name col_type [COMMENT 'comment']
+```
+
+The following table describes the parameters.
+
+| **Parameter**     | **Description**                                              |
+| ----------------- |------------------------------------------------------ |
+| col_name          | The name of the column.                                                |
+| col_type          | The data type of the column. The following data types are supported: TINYINT, SMALLINT, INT, BIGINT, FLOAT, DOUBLE, DECIMAL, DATE, DATETIME, CHAR, VARCHAR[(length)], ARRAY, MAP, and STRUCT. The LARGEINT, HLL, and BITMAP data types are not supported. |
+
+> **NOTICE**
+>
+> All non-partition columns must use `NULL` as the default value. This means that you must specify `DEFAULT "NULL"` for each of the non-partition columns in the table creation statement. Additionally, partition columns must be defined following non-partition columns and cannot use `NULL` as the default value.
+
+#### partition_desc
+
+The syntax of `partition_desc` is as follows:
+
+```SQL
+PARTITION BY (par_col1[, par_col2...])
+```
+
+Currently StarRocks only supports [identity transforms](https://iceberg.apache.org/spec/#partitioning), which means that StarRocks creates a partition for each unique partition value.
+
+> **NOTICE**
+>
+> Partition columns must be defined following non-partition columns. Partition columns support all data types excluding FLOAT, DOUBLE, DECIMAL, and DATETIME and cannot use `NULL` as the default value.
+
+#### properties
+
+You can specify the table attributes in the `"key" = "value"` format in `properties`. See [Iceberg table attributes](https://iceberg.apache.org/docs/latest/configuration/).
+
+The following table describes a few key properties.
+
+| **Property**      | **Description**                                              |
+| ----------------- | ------------------------------------------------------------ |
+| location          | The file path in which you want to create the Iceberg table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Iceberg catalog. When you use AWS Glue as metastore:<ul><li>If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs. </li><li>If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.</li></ul> |
+| file_format       | The file format of the Iceberg table. Only the Parquet format is supported. Default value: `parquet`. |
+| compression_codec | The compression algorithm used for the Iceberg table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. |
+
+### Examples
+
+1. Create a non-partitioned table named `unpartition_tbl`. The table consists of two columns, `id` and `score`, as shown below:
+
+   ```SQL
+   CREATE TABLE unpartition_tbl
+   (
+       id int,
+       score double
+   );
+   ```
+
+2. Create a partitioned table named `partition_tbl_1`. The table consists of three columns, `action`, `id`, and `dt`, of which `id` and `dt` are defined as partition columns, as shown below:
+
+   ```SQL
+   CREATE TABLE partition_tbl_1
+   (
+       action varchar(20),
+       id int,
+       dt date
+   )
+   PARTITION BY (id,dt);
+   ```
+
+3. Query an existing table named `partition_tbl_1`, and create a partitioned table named `partition_tbl_2` based on the query result of `partition_tbl_1`. For `partition_tbl_2`, `id` and `dt` are defined as partition columns, as shown below:
+
+   ```SQL
+   CREATE TABLE partition_tbl_2
+   PARTITION BY (id, dt)
+   AS SELECT * from employee;
+   ```
+
+## Sink data to an Iceberg table
+
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/privilege_item.md#table) privilege on an Iceberg table, you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) statement to sink the data of a StarRocks table to that Iceberg table (currently only Parquet-formatted Iceberg tables are supported). This feature is supported from v3.1 onwards.
+
+> **NOTE**
+>
+> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+[Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to sink the data of StarRocks table to a Parquet-formatted Iceberg table in that database.
+
+### Syntax
+
+```SQL
+INSERT {INTO | OVERWRITE} <table_name>
+[ (column_name [, ...]) ]
+{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
+
+-- If you want to sink data to specified partitions, use the following syntax:
+INSERT {INTO | OVERWRITE} <table_name>
+PARTITION (par_col1=<value> [, par_col2=<value>...])
+{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
+```
+
+> **NOTICE**
+>
+> Partition columns do not allow `NULL` values. Therefore, you must make sure that no empty values are loaded into the partition columns of the Iceberg table.
+
+### Parameters
+
+| Parameter   | Description                                                         |
+| ----------- | ------------------------------------------------------------ |
+| INTO        | To append the data of the StarRocks table to the Iceberg table.                                       |
+| OVERWRITE   | To overwrite the existing data of the Iceberg table with the data of the StarRocks table.                                       |
+| column_name | The name of the destination column to which you want to load data. You can specify one or more columns. If you specify multiple columns, separate them with commas (`,`). You can only specify columns that actually exist in the Iceberg table, and the destination columns that you specify must include the partition columns of the Iceberg table. The destination columns you specify are mapped one on one in sequence to the columns of the StarRocks table, regardless of what the destination column names are. If no destination columns are specified, the data is loaded into all columns of the Iceberg table. If a non-partition column of the StarRocks table cannot be mapped to any column of the Iceberg table, StarRocks writes the default value `NULL` to the Iceberg table column. If the INSERT statement contains a query statement whose returned column types differ from the data types of the destination columns, StarRocks performs an implicit conversion on the mismatched columns. If the conversion fails, a syntax parsing error will be returned. |
+| expression  | Expression that assigns values to the destination column.                                   |
+| DEFAULT     | Assigns a default value to the destination column.                                         |
+| query       | Query statement whose result will be loaded into the Iceberg table. It can be any SQL statement supported by StarRocks. |
+| PARTITION   | The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If you specify this property, you cannot specify the `column_name` property. |
+
+### Examples
+
+1. Insert three data rows into the `partition_tbl_1` table:
+
+   ```SQL
+   INSERT INTO partition_tbl_1
+   VALUES
+       ("buy", 1, "2023-09-01"),
+       ("sell", 2, "2023-09-02"),
+       ("buy", 3, "2023-09-03");
+   ```
+
+2. Insert the result of a SELECT query, which contains simple computations, into the `partition_tbl_1` table:
+
+   ```SQL
+   INSERT INTO partition_tbl_1 (id, action, dt) SELECT 1+1, 'buy', '2023-09-03';
+   ```
+
+3. Insert the result of a SELECT query, which reads data from the `partition_tbl_1` table, into the same table:
+
+   ```SQL
+   INSERT INTO partition_tbl_1 SELECT 'buy', 1, date_add(dt, INTERVAL 2 DAY)
+   FROM partition_tbl_1
+   WHERE id=1;
+   ```
+
+4. Insert the result of a SELECT query into the partitions that meet two conditions, `dt='2023-09-01'` and `id=1`, of the `partition_tbl_2` table:
+
+   ```SQL
+   INSERT INTO partition_tbl_2 SELECT 'order', 1, '2023-09-01';
+   ```
+
+   Or
+
+   ```SQL
+   INSERT INTO partition_tbl_2 partition(dt='2023-09-01',id=1) SELECT 'order';
+   ```
+
+5. Overwrite all `action` column values in the partitions that meet two conditions, `dt='2023-09-01'` and `id=1`, of the `partition_tbl_1` table with `close`:
+
+   ```SQL
+   INSERT OVERWRITE partition_tbl_1 SELECT 'close', 1, '2023-09-01';
+   ```
+
+   Or
+
+   ```SQL
+   INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
+   ```
+
+## Drop an Iceberg table
+
+Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/privilege_item.md#table) privilege on an Iceberg table, you can use the [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) statement to drop that Iceberg table. This feature is supported from v3.1 onwards.
+
+> **NOTE**
+>
+> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+When you drop an Iceberg table, the table's file path and data on your HDFS cluster or cloud storage will not be dropped along with the table.
+
+When you forcibly drop an Iceberg table (namely, with the `FORCE` keyword specified in the DROP TABLE statement), the table's data on your HDFS cluster or cloud storage will be dropped along with the table, but the table's file path is retained.
+
+[Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to drop an Iceberg table in that database.
+
+```SQL
+DROP TABLE <table_name> [FORCE];
+```
+
+## Configure metadata caching
+
+The metadata files of your Iceberg cluster may be stored in remote storage such as AWS S3 or HDFS. By default, StarRocks caches Iceberg metadata in memory. To accelerate queries, StarRocks adopts a two-level metadata caching mechanism, with which it can cache metadata both in memory and on disk. For each initial query, StarRocks caches their computation results. If any subsequent query that is semantically equivalent to a previous query is issued, StarRocks first attempts to retrieve the requested metadata from its caches, and it retrieves the metadata from the remote storage only when the metadata cannot be hit in its caches.
+
+StarRocks uses the Least Recently Used (LRU) algorithm to cache and evict data. The basic rules are as follows:
+
+- StarRocks first attempts to retrieve the requested metadata from the memory. If the metadata cannot be hit in the memory, StarRock attempts to retrieve the metadata from the disks. The metadata that StarRocks has retrieved from the disks will be loaded into the memory. If the metadata cannot be hit in the disks either, StarRock retrieves the metadata from the remote storage and caches the retrieved metadata in the memory.
+- StarRocks writes the metadata evicted out of the memory into the disks, but it directly discards the metadata evicted out of the disks.
+
+The following table describes the FE configuration items that you can use to configure your Iceberg metadata caching mechanism.
+
+| **Configuration item**                           | **Unit** | **Default value**                                    | **Description**                                              |
+| ------------------------------------------------ | -------- | ---------------------------------------------------- | ------------------------------------------------------------ |
+| enable_iceberg_metadata_disk_cache               | N/A      | `false`                                              | Specifies whether to enable the disk cache.                  |
+| iceberg_metadata_cache_disk_path                 | N/A      | `StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg"` | The save path of cached metadata files on disk.              |
+| iceberg_metadata_disk_cache_capacity             | Bytes    | `2147483648`, equivalent to 2 GB                     | The maximum size of cached metadata allowed on disk.         |
+| iceberg_metadata_memory_cache_capacity           | Bytes    | `536870912`, equivalent to 512 MB                    | The maximum size of cached metadata allowed in memory.       |
+| iceberg_metadata_memory_cache_expiration_seconds | Seconds  | `86500`                                              | The amount of time after which a cache entry in memory expires counting from its last access. |
+| iceberg_metadata_disk_cache_expiration_seconds   | Seconds  | `604800`, equivalent to one week                     | The amount of time after which a cache entry on disk expires counting from its last access. |
+| iceberg_metadata_cache_max_entry_size            | Bytes    | `8388608`, equivalent to 8 MB                        | The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage. |
+>>>>>>> ad1d16540e ([Doc] Fix filename spaces (#32525))

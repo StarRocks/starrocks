@@ -10,7 +10,11 @@ StarRocks 2.3 and later provide an internal catalog to manage the internal data 
    - If you use the MySQL client to connect the StarRocks cluster, you go to `default_catalog` by default after connecting.
    - If you use JDBC to connect the StarRocks cluster, you can go directly to the destination database in the default catalog by specifying `default_catalog.db_name` when connecting.
 
+<<<<<<< HEAD
 2. (Optional) Execute the following statement to view all databases in StarRocks. See [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) to view the output of this statement.
+=======
+2. (Optional) Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view databases:
+>>>>>>> ad1d16540e ([Doc] Fix filename spaces (#32525))
 
       ```SQL
       SHOW DATABASES;
@@ -22,7 +26,29 @@ StarRocks 2.3 and later provide an internal catalog to manage the internal data 
       SHOW DATABASES FROM catalog_name;
       ```
 
+<<<<<<< HEAD
 3. (Optional) Execute the following statement to go to the destination database.
+=======
+3. (Optional) Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to switch to the destination catalog in the current session:
+
+    ```SQL
+    SET CATALOG <catalog_name>;
+    ```
+
+    Then, use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify the active database in the current session:
+
+    ```SQL
+    USE <db_name>;
+    ```
+
+    Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly go to the active database in the destination catalog:
+
+    ```SQL
+    USE <catalog_name>.<db_name>;
+    ```
+
+4. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query internal data:
+>>>>>>> ad1d16540e ([Doc] Fix filename spaces (#32525))
 
       ```SQL
       USE db_name;

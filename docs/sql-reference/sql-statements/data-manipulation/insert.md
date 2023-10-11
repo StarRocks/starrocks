@@ -2,7 +2,13 @@
 
 ## Description
 
+<<<<<<< HEAD
 Inserts data into a specific table or overwrites a specific table with data. For detailed information about the application scenarios, see [Load data with INSERT](../loading/InsertInto.md).
+=======
+Inserts data into a specific table or overwrites a specific table with data. For detailed information about the application scenarios, see [Load data with INSERT](../../../loading/InsertInto.md).
+
+You can submit an asynchronous INSERT task using [SUBMIT TASK](../data-manipulation/SUBMIT_TASK.md).
+>>>>>>> ad1d16540e ([Doc] Fix filename spaces (#32525))
 
 ## Syntax
 

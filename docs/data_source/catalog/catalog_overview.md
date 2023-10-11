@@ -29,6 +29,13 @@ Currently, StarRocks provides two types of catalogs: internal catalog and extern
   - **Data storage system**: used to store external data. Both distributed file systems and object
   storage systems can be used as data storage systems to store data files in various formats. After the FEs distribute the query execution plan to all BEs, all BEs scan the target external data in parallel, perform calculations, and then return the query result.
 
+<<<<<<< HEAD
+=======
+## Access catalog
+
+You can use the [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) statement to switch to a specified catalog in the current session. Then, you can query data by using that catalog.
+
+>>>>>>> ad1d16540e ([Doc] Fix filename spaces (#32525))
 ## Query data
 
 ### Query internal data

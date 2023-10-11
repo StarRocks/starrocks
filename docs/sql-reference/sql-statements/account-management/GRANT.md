@@ -4,9 +4,24 @@
 
 You can use the GRANT statement to perform the following operations:
 
+<<<<<<< HEAD
 - Grant specific privileges to a user or a role.
 - Grant a role to a user. This feature is supported only in StarRock 2.4 and later versions.
 - Grant user `a` the privilege to impersonate user `b`. Then user `a` can perform operations as user `b` by using the [EXECUTE AS](../account-management/EXECUTE%20AS.md) statement. This feature is supported only in StarRock 2.4 and later versions.
+=======
+Grants roles to users or other roles.
+
+For more information about the privileges that can be granted, see [Privilege items](../../../administration/privilege_item.md).
+
+After a GRANT operation is performed, you can run [SHOW GRANTS](./SHOW_GRANTS.md) to view detailed privilege information or run [REVOKE](REVOKE.md) to revoke a privilege or role.
+
+Before a GRANT operation is performed, make sure that the related user or role has been created. For more information, see [CREATE USER](./CREATE_USER.md) and [CREATE ROLE](./CREATE_ROLE.md).
+
+> **NOTE**
+>
+> Only users with the `user_admin` role can grant any privilege to other users and roles.
+> Other users can only grant privileges with the WITH GRANT OPTION keyword to other users and roles.
+>>>>>>> ad1d16540e ([Doc] Fix filename spaces (#32525))
 
 ## Syntax
 

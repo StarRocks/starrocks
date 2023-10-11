@@ -10,7 +10,7 @@ FE parameters are classified into dynamic parameters and static parameters.
 
 - Static parameters can only be configured and adjusted in the FE configuration file **fe.conf**. **After you modify this file, you must restart your FE for the changes to take effect.**
 
-Whether a parameter is a dynamic parameter is indicated by the `IsMutable` column in the output of [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SHOW%20CONFIG.md). `TRUE` indicates a dynamic parameter.
+Whether a parameter is a dynamic parameter is indicated by the `IsMutable` column in the output of [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md). `TRUE` indicates a dynamic parameter.
 
 Note that both dynamic and static FE parameters can be configured in the **fe.conf** file.
 
@@ -22,7 +22,7 @@ After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on 
  ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
  ```
 
- For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SHOW%20CONFIG.md).
+ For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md).
 
 > **NOTE**
 >
@@ -30,7 +30,7 @@ After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on 
 
 ### Configure FE dynamic parameters
 
-You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md).
+You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md).
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");
@@ -100,6 +100,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### Loading and unloading
 
+<<<<<<< HEAD
 | Parameter                               | Unit | Default                                         | Description                                                  |
 | --------------------------------------- | ---- | ----------------------------------------------- | ------------------------------------------------------------ |
 | max_broker_load_job_concurrency         | -    | 5                                               | The maximum number of concurrent Broker Load jobs allowed within the StarRocks cluster. This parameter is valid only for Broker Load. The value of this parameter must be less than the value of `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from `10` to `5`. The alias of this parameter is `async_load_task_pool_size`.|
@@ -134,6 +135,201 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | export_task_default_timeout_second      | s    | 7200                                            | The timeout duration for a data exporting task, in seconds.  |
 | empty_load_as_error                     | -    | TRUE                                            | Whether to return an error message "all partitions have no load data" if no data is loaded. Values:<br/> - TRUE: If no data is loaded, the system displays a failure message and returns an error "all partitions have no load data". <br/> - FALSE: If no data is loaded, the system displays a success message and returns OK, instead of an error. |
 | external_table_commit_timeout_ms        | ms    | 10000                                          | The timeout duration for committing (publishing) a write transaction to a StarRocks external table. The default value `10000` indicates a 10-second timeout duration. |
+=======
+##### max_broker_load_job_concurrency
+
+- **Unit**: -
+- **Default**: 5
+- **Description**: The maximum number of concurrent Broker Load jobs allowed within the StarRocks cluster. This parameter is valid only for Broker Load. The value of this parameter must be less than the value of `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from `10` to `5`. The alias of this parameter is `async_load_task_pool_size`.
+
+##### load_straggler_wait_second
+
+- **Unit**: s
+- **Default**: 300
+- **Description**: The maximum loading lag that can be tolerated by a BE replica. If this value is exceeded, cloning is performed to clone data from other replicas. Unit: seconds.
+
+##### desired_max_waiting_jobs
+
+- **Unit**: -
+- **Default**: 1024
+- **Description**: The maximum number of pending jobs in an FE. The number refers to all jobs, such as table creation, loading, and schema change jobs. If the number of pending jobs in an FE reaches this value, the FE will reject new load requests. This parameter takes effect only for asynchronous loading. From v2.5 onwards, the default value is changed from 100 to 1024.
+
+##### max_load_timeout_second
+
+- **Unit**: s
+- **Default**: 259200
+- **Description**: The maximum timeout duration allowed for a load job. The load job fails if this limit is exceeded. This limit applies to all types of load jobs.
+
+##### min_load_timeout_second
+
+- **Unit**: s
+- **Default**: 1
+- **Description**: The minimum timeout duration allowed for a load job. This limit applies to all types of load jobs. Unit: seconds.
+
+##### max_running_txn_num_per_db
+
+- **Unit**: -
+- **Default**: 100
+- **Description**: The maximum number of load transactions allowed to be running for each database within a StarRocks cluster. The default value is `100`. When the actual number of load transactions running for a database exceeds the value of this parameter, new load requests will not be processed. New requests for synchronous load jobs will be denied, and new requests for asynchronous load jobs will be placed in queue. We do not recommend you increase the value of this parameter because this will increase system load.
+
+##### load_parallel_instance_num
+
+- **Unit**: -
+- **Default**: 1
+- **Description**: The maximum number of concurrent loading instances for each load job on a BE.
+
+##### disable_load_job
+
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether to disable loading when the cluster encounters an error. This prevents any loss caused by cluster errors. The default value is `FALSE`, indicating that loading is not disabled.
+
+##### history_job_keep_max_second
+
+- **Unit**: s
+- **Default**: 604800
+- **Description**: The maximum duration a historical job can be retained, such as schema change jobs, in seconds.
+
+##### label_keep_max_num
+
+- **Unit**: -
+- **Default**: 1000
+- **Description**: The maximum number of load jobs that can be retained within a period of time. If this number is exceeded, the information of historical jobs will be deleted.
+
+##### label_keep_max_second
+
+- **Unit**: s
+- **Default**: 259200
+- **Description**: The maximum duration in seconds to keep the labels of load jobs that have been completed and are in the FINISHED or CANCELLED state. The default value is 3 days. After this duration expires, the labels will be deleted. This parameter applies to all types of load jobs. A value too large consumes a lot of memory.
+
+##### max_routine_load_job_num
+
+- **Unit**: -
+- **Default**: 100
+- **Description**: The maximum number of Routine Load jobs in a StarRocks cluster. This parameter is deprecated since v3.1.0.
+
+##### max_routine_load_task_concurrent_num
+
+- **Unit**: -
+- **Default**: 5
+- **Description**: The maximum number of concurrent tasks for each Routine Load job.
+
+##### max_routine_load_task_num_per_be
+
+- **Unit**: -
+- **Default**: 16
+- **Description**: The maximum number of concurrent Routine Load tasks on each BE. Since v3.1.0, the default value for this parameter is increased to 16 from 5, and no longer needs to be less than or equal to the value of BE static parameter `routine_load_thread_pool_size` (deprecated).
+
+##### max_routine_load_batch_size
+
+- **Unit**: Byte
+- **Default**: 4294967296
+- **Description**: The maximum amount of data that can be loaded by a Routine Load task, in bytes.
+
+##### routine_load_task_consume_second
+
+- **Unit**: s
+- **Default**: 15
+- **Description**: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+
+##### routine_load_task_timeout_second
+
+- **Unit**: s
+- **Default**: 60
+- **Description**: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+
+##### max_tolerable_backend_down_num
+
+- **Unit**: -
+- **Default**: 0
+- **Description**: The maximum number of faulty BE nodes allowed. If this number is exceeded, Routine Load jobs cannot be automatically recovered.
+
+##### period_of_auto_resume_min
+
+- **Unit**: Min
+- **Default**: 5
+- **Description**: The interval at which Routine Load jobs are automatically recovered.
+
+##### spark_load_default_timeout_second
+
+- **Unit**: s
+- **Default**: 86400
+- **Description**: The timeout duration for each Spark Load job, in seconds.
+
+##### spark_home_default_dir
+
+- **Unit**: -
+- **Default**: StarRocksFE.STARROCKS_HOME_DIR + "/lib/spark2x"
+- **Description**: The root directory of a Spark client.
+
+##### stream_load_default_timeout_second
+
+- **Unit**: s
+- **Default**: 600
+- **Description**: The default timeout duration for each Stream Load job, in seconds.
+
+##### max_stream_load_timeout_second
+
+- **Unit**: s
+- **Default**: 259200
+- **Description**: The maximum allowed timeout duration for a Stream Load job, in seconds.
+
+##### insert_load_default_timeout_second
+
+- **Unit**: s
+- **Default**: 3600
+- **Description**: The timeout duration for the INSERT INTO statement that is used to load data, in seconds.
+
+##### broker_load_default_timeout_second
+
+- **Unit**: s
+- **Default**: 14400
+- **Description**: The timeout duration for a Broker Load job, in seconds.
+
+##### min_bytes_per_broker_scanner
+
+- **Unit**: Byte
+- **Default**: 67108864
+- **Description**: The minimum allowed amount of data that can be processed by a Broker Load instance, in bytes.
+
+##### max_broker_concurrency
+
+- **Unit**: -
+- **Default**: 100
+- **Description**: The maximum number of concurrent instances for a Broker Load task. This parameter is deprecated from v3.1 onwards.
+
+##### export_max_bytes_per_be_per_task
+
+- **Unit**: Byte
+- **Default**: 268435456
+- **Description**: The maximum amount of data that can be exported from a single BE by a single data unload task, in bytes.
+
+##### export_running_job_num_limit
+
+- **Unit**: -
+- **Default**: 5
+- **Description**: The maximum number of data exporting tasks that can run in parallel.
+
+##### export_task_default_timeout_second
+
+- **Unit**: s
+- **Default**: 7200
+- **Description**: The timeout duration for a data exporting task, in seconds.
+
+##### empty_load_as_error
+
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: Whether to return an error message "all partitions have no load data" if no data is loaded. Values:
+  - TRUE: If no data is loaded, the system displays a failure message and returns an error "all partitions have no load data".
+  - FALSE: If no data is loaded, the system displays a success message and returns OK, instead of an error.
+
+##### external_table_commit_timeout_ms
+
+- **Unit**: ms
+- **Default**: 10000
+- **Description**: The timeout duration for committing (publishing) a write transaction to a StarRocks external table. The default value `10000` indicates a 10-second timeout duration.
+>>>>>>> ad1d16540e ([Doc] Fix filename spaces (#32525))
 
 #### Storage
 
