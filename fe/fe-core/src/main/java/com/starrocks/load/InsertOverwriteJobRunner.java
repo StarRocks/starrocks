@@ -294,7 +294,11 @@ public class InsertOverwriteJobRunner {
             db.readUnlock();
         }
         PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
+<<<<<<< HEAD
                 job.getSourcePartitionIds(), job.getTmpPartitionIds());
+=======
+                job.getSourcePartitionIds(), job.getTmpPartitionIds(), null);
+>>>>>>> 430edaa6a0 ([Enhancement] Support optimize table change distribution method (#31794))
         createPartitionElapse = System.currentTimeMillis() - createPartitionStartTimestamp;
     }
 
