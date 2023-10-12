@@ -19,6 +19,7 @@
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
+#include "exec/hdfs_scanner_partition.h"
 #include "exec/hdfs_scanner_text.h"
 #include "exec/jni_scanner.h"
 #include "exprs/expr.h"
@@ -252,6 +253,30 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     }
     if (hdfs_scan_node.__isset.can_use_min_max_count_opt) {
         _can_use_min_max_count_opt = hdfs_scan_node.can_use_min_max_count_opt;
+    }
+    if (hdfs_scan_node.__isset.use_partition_column_value_only) {
+        _use_partition_column_value_only = hdfs_scan_node.use_partition_column_value_only;
+
+        // The reason why we need double check here is for iceberg table.
+        // for some partitions, partition column maybe is not constant value.
+        // If partition column is not constant value, we can not use this optimization,
+        // and have to fallback to normal workflow.
+        auto double_check = [&]() {
+            if (!_can_use_any_column) {
+                return false;
+            }
+            if ((_partition_slots.size() + 1) != slots.size()) {
+                return false;
+            }
+            if (_materialize_slots.size() != 1) {
+                return false;
+            }
+            return true;
+        };
+
+        if (!double_check()) {
+            _use_partition_column_value_only = false;
+        }
     }
 }
 
@@ -586,7 +611,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         use_paimon_jni_reader = scan_range.use_paimon_jni_reader;
     }
 
-    if (use_paimon_jni_reader) {
+    if (_use_partition_column_value_only) {
+        DCHECK(_can_use_any_column);
+        scanner = _pool.add(new HdfsPartitionScanner());
+    } else if (use_paimon_jni_reader) {
         scanner = _create_paimon_jni_scanner(fsOptions);
     } else if (use_hudi_jni_reader) {
         scanner = _create_hudi_jni_scanner();
