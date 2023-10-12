@@ -308,6 +308,14 @@ public class AnalyzeInsertTest {
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
                 "\t\"format\"=\"parquet\", \n" +
                 "\t\"compression\" = \"uncompressed\", \n" +
+                "\t\"single\"=\"false-false\" ) \n" +
+                "select \"abc\" as k1, 123 as k2",
+                "got invalid parameter \"single\" = \"false-false\", expect a boolean value (true or false).");
+
+        analyzeFail("insert into files ( \n" +
+                "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                "\t\"format\"=\"parquet\", \n" +
+                "\t\"compression\" = \"uncompressed\", \n" +
                 "\t\"partition_by\"=\"k1\" ) \n" +
                 "select 1.23 as k1", "partition column does not support type of DECIMAL32(3,2).");
     }
