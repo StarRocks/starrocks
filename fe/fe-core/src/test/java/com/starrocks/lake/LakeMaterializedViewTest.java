@@ -233,9 +233,14 @@ public class LakeMaterializedViewTest {
         starRocksAssert.withMaterializedView("create materialized view mv1\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "PROPERTIES(\n" +
+<<<<<<< HEAD
                         "   'enable_storage_cache' = 'true',\n" +
                         "   'storage_cache_ttl' = '3600',\n" +
                         "   'enable_async_write_back' = 'true'\n" +
+=======
+                        "   'datacache.enable' = 'true',\n" +
+                        "   'enable_async_write_back' = 'false'\n" +
+>>>>>>> 2441e16192 ([Enhancement] Disable enable_async_write_back property (#32495))
                         ")\n" +
                         "refresh async\n" +
                         "as select k2, sum(k3) as total from base_table group by k2;");
@@ -251,8 +256,13 @@ public class LakeMaterializedViewTest {
         // check table default cache info
         FileCacheInfo cacheInfo = lakeMv.getPartitionFileCacheInfo(0L);
         Assert.assertTrue(cacheInfo.getEnableCache());
+<<<<<<< HEAD
         Assert.assertEquals(3600, cacheInfo.getTtlSeconds());
         Assert.assertTrue(cacheInfo.getAsyncWriteBack());
+=======
+        Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
+        Assert.assertFalse(cacheInfo.getAsyncWriteBack());
+>>>>>>> 2441e16192 ([Enhancement] Disable enable_async_write_back property (#32495))
 
         // replication num
         Assert.assertEquals(1L, lakeMv.getDefaultReplicationNum().longValue());
@@ -261,9 +271,15 @@ public class LakeMaterializedViewTest {
         String ddlStmt = lakeMv.getMaterializedViewDdlStmt(true);
         System.out.println(ddlStmt);
         Assert.assertTrue(ddlStmt.contains("\"replication_num\" = \"1\""));
+<<<<<<< HEAD
         Assert.assertTrue(ddlStmt.contains("\"enable_storage_cache\" = \"true\""));
         Assert.assertTrue(ddlStmt.contains("\"storage_cache_ttl\" = \"3600\""));
         Assert.assertTrue(ddlStmt.contains("\"enable_async_write_back\" = \"true\""));
+=======
+        Assert.assertTrue(ddlStmt.contains("\"datacache.enable\" = \"true\""));
+        Assert.assertTrue(ddlStmt.contains("\"enable_async_write_back\" = \"false\""));
+        Assert.assertTrue(ddlStmt.contains("\"storage_volume\" = \"builtin_storage_volume\""));
+>>>>>>> 2441e16192 ([Enhancement] Disable enable_async_write_back property (#32495))
 
         // check task
         String mvTaskName = "mv-" + mv.getId();

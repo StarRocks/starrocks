@@ -970,6 +970,42 @@ public class PropertyAnalyzer {
         return foreignKeyConstraints;
     }
 
+<<<<<<< HEAD
+=======
+    public static DataCacheInfo analyzeDataCacheInfo(Map<String, String> properties) throws AnalysisException {
+        boolean enableDataCache = analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
+
+        boolean enableAsyncWriteBack =
+                analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK, false);
+        if (enableAsyncWriteBack) {
+            throw new AnalysisException("enable_async_write_back is disabled since version 3.1.4");
+        }
+        return new DataCacheInfo(enableDataCache, enableAsyncWriteBack);
+    }
+
+    public static PeriodDuration analyzeDataCachePartitionDuration(Map<String, String> properties) throws AnalysisException {
+        String text = properties.get(PROPERTIES_DATACACHE_PARTITION_DURATION);
+        if (text == null) {
+            return null;
+        }
+        properties.remove(PROPERTIES_DATACACHE_PARTITION_DURATION);
+        return TimeUtils.parseHumanReadablePeriodOrDuration(text);
+    }
+
+    public static TPersistentIndexType analyzePersistentIndexType(Map<String, String> properties) throws AnalysisException {
+        if (properties != null && properties.containsKey(PROPERTIES_PERSISTENT_INDEX_TYPE)) {
+            String type = properties.get(PROPERTIES_PERSISTENT_INDEX_TYPE);
+            properties.remove(PROPERTIES_PERSISTENT_INDEX_TYPE);
+            if (type.equalsIgnoreCase("LOCAL")) {
+                return TPersistentIndexType.LOCAL;
+            } else {
+                throw new AnalysisException("Invalid persistent index type: " + type);
+            }
+        }
+        return TPersistentIndexType.LOCAL;
+    }
+
+>>>>>>> 2441e16192 ([Enhancement] Disable enable_async_write_back property (#32495))
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,
                                                            boolean removeProperties) throws AnalysisException {
         String text = properties.get(PROPERTIES_STORAGE_COOLDOWN_TTL);
