@@ -4,9 +4,9 @@
 
 有可能是因为用户没有激活该角色。每个用户都可以通过 `select current_role();` 命令来查看当前会话下已经激活的角色。
 
-如果想要手动激活角色，可以在当前会话下使用 [SET ROLE](../sql-reference/sql-statements/account-management/SET%20ROLE.md) 命令，激活该角色进行相关操作。
+如果想要手动激活角色，可以在当前会话下使用 [SET ROLE](../sql-reference/sql-statements/account-management/SET_ROLE.md) 命令，激活该角色进行相关操作。
 
-如果希望登录时自动激活角色，user_admin 管理员可以通过 [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) 或者 [ALTER USER DEFAULT ROLE](../sql-reference/sql-statements/account-management/ALTER%20USER.md) 为每个用户设置默认角色。设置成功后，用户重新登录即可自动激活默认角色。
+如果希望登录时自动激活角色，user_admin 管理员可以通过 [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) 或者 [ALTER USER DEFAULT ROLE](../sql-reference/sql-statements/account-management/ALTER_USER.md) 为每个用户设置默认角色。设置成功后，用户重新登录即可自动激活默认角色。
 
 如果希望系统内部所有用户都能够在登录时默认激活所有拥有的角色，可以执行如下操作。该操作需要 System 层的 OPERATE 权限。
 

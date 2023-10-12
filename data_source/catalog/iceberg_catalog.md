@@ -790,13 +790,13 @@ PROPERTIES
 
 ## 查看 Iceberg Catalog
 
-您可以通过 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Iceberg Catalog `iceberg_catalog_glue` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Iceberg Catalog `iceberg_catalog_glue` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG iceberg_catalog_glue;
@@ -806,7 +806,7 @@ SHOW CREATE CATALOG iceberg_catalog_glue;
 
 您可以通过如下方法切换至目标 Iceberg Catalog 和数据库：
 
-- 先通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 指定当前会话生效的 Iceberg Catalog，然后再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定数据库：
+- 先通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 指定当前会话生效的 Iceberg Catalog，然后再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定数据库：
 
   ```SQL
   -- 切换当前会话生效的 Catalog：
@@ -823,7 +823,7 @@ SHOW CREATE CATALOG iceberg_catalog_glue;
 
 ## 删除 Iceberg Catalog
 
-您可以通过 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) 删除某个 External Catalog。
+您可以通过 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
 
 例如，通过如下命令删除 Iceberg Catalog `iceberg_catalog_glue`：
 
@@ -849,7 +849,7 @@ DROP Catalog iceberg_catalog_glue;
 
 ## 查询 Iceberg 表数据
 
-1. 通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) 查看指定 Catalog 所属的 Iceberg 集群中的数据库：
+1. 通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Iceberg 集群中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -865,7 +865,7 @@ DROP Catalog iceberg_catalog_glue;
 
 ## 创建 Iceberg 数据库
 
-同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Iceberg Catalog 的 [CREATE DATABASE](../../administration/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE%20DATABASE.md) 在该 Iceberg Catalog 内创建数据库。本功能自 3.1 版本起开始支持。
+同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Iceberg Catalog 的 [CREATE DATABASE](../../administration/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) 在该 Iceberg Catalog 内创建数据库。本功能自 3.1 版本起开始支持。
 
 > **说明**
 >
@@ -896,7 +896,7 @@ CREATE DATABASE <database_name>
 
 ## 删除 Iceberg 数据库
 
-同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [DROP](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP%20DATABASE.md) 来删除该 Iceberg 数据库。本功能自 3.1 版本起开始支持。仅支持删除空数据库。
+同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [DROP](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) 来删除该 Iceberg 数据库。本功能自 3.1 版本起开始支持。仅支持删除空数据库。
 
 > **说明**
 >
@@ -912,7 +912,7 @@ DROP DATABASE <database_name>;
 
 ## 创建 Iceberg 表
 
-同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [CREATE TABLE](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20AS%20SELECT.md) 在该 Iceberg 数据库下创建表。本功能自 3.1 版本起开始支持。
+同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [CREATE TABLE](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 在该 Iceberg 数据库下创建表。本功能自 3.1 版本起开始支持。
 
 > **说明**
 >
@@ -1101,7 +1101,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ## 删除 Iceberg 表
 
-同 StarRocks 内表一致，在拥有 Iceberg 表的 [DROP](../../administration/privilege_item.md#表权限-table) 权限的情况下，您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP%20TABLE.md) 来删除该 Iceberg 表。本功能自 3.1 版本起开始支持。
+同 StarRocks 内表一致，在拥有 Iceberg 表的 [DROP](../../administration/privilege_item.md#表权限-table) 权限的情况下，您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除该 Iceberg 表。本功能自 3.1 版本起开始支持。
 
 > **说明**
 >

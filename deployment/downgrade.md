@@ -113,7 +113,7 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
    >
    > 如需将 StarRocks v3.0 降级至 v2.5，则必须在降级完成后执行以下步骤：
    >
-   > 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md) 创建新的元数据快照文件。
+   > 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 创建新的元数据快照文件。
    > 2. 等待元数据快照文件同步至其他 FE 节点。
    >
    > 如果不运行该命令，部分降级操作可能会失败。ALTER SYSTEM CREATE IMAGE 命令仅在 v2.5.3 及更高版本支持。

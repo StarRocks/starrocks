@@ -30,7 +30,7 @@ StarRocks 自 2.3 版本起支持 Catalog（数据目录）功能，实现在一
 
 ## 访问 Catalog
 
-您可以使用 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 切换当前会话里生效的 Catalog，然后通过该 Catalog 查询数据。
+您可以使用 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 切换当前会话里生效的 Catalog，然后通过该 Catalog 查询数据。
 
 ## 查询数据
 

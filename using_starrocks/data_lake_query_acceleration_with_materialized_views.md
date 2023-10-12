@@ -97,9 +97,9 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog 和
 
   > **说明**
   >
-  > 您仍然可以选择在创建物化视图时通过设置属性 `mv_rewrite_staleness_second` 来容忍一定程度的数据不一致。有关更多信息，请参阅 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md)。
+  > 您仍然可以选择在创建物化视图时通过设置属性 `mv_rewrite_staleness_second` 来容忍一定程度的数据不一致。有关更多信息，请参阅 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md)。
 
-要启用 Hive 元数据缓存刷新功能，您可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) 设置以下 FE 动态配置项：
+要启用 Hive 元数据缓存刷新功能，您可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 设置以下 FE 动态配置项：
 
 | **配置名称**                                                 | **默认值**                      | **说明**                                                     |
 | ------------------------------------------------------------ | ------------------------------- | ------------------------------------------------------------ |

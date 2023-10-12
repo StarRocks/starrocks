@@ -320,7 +320,7 @@ ALTER TABLE test_tbl3 DROP COLUMN newcol1;
       2|[3,4]|{"a": 3, "b": 4} 
       ```
 
-3. 通过 [Stream Load](../sql-statements/data-manipulation/STREAM%20LOAD.md) 使用 CSV 文件 `my_data1.csv` 更新表 `test_tbl5` 的部分列。您需要设置 `"partial_update:true"`，并且必须在 `columns` 中指定生成列引用的所有普通列。
+3. 通过 [Stream Load](../sql-statements/data-manipulation/STREAM_LOAD.md) 使用 CSV 文件 `my_data1.csv` 更新表 `test_tbl5` 的部分列。您需要设置 `"partial_update:true"`，并且必须在 `columns` 中指定生成列引用的所有普通列。
 
       ```Bash
       curl --location-trusted -u <username>:<password> -H "label:1" \
@@ -353,7 +353,7 @@ ALTER TABLE test_tbl3 DROP COLUMN newcol1;
       2|[3,4]
       ```
 
-2. 通过 [Stream Load](../sql-statements/data-manipulation/STREAM%20LOAD.md) 使用 CSV 文件 `my_data2.csv` 进行部分列更新。`my_data2.csv` 中没有提供  `data_json` 列的值，并且 Stream Load 导入作业中 `columns` 参数没有包含 `data_json` 列，即使`data_json` 列允许为空，但是因为生成列 `newcol2` 引用了 `data_json` 列，则 Stream Load 会返回报错。
+2. 通过 [Stream Load](../sql-statements/data-manipulation/STREAM_LOAD.md) 使用 CSV 文件 `my_data2.csv` 进行部分列更新。`my_data2.csv` 中没有提供  `data_json` 列的值，并且 Stream Load 导入作业中 `columns` 参数没有包含 `data_json` 列，即使`data_json` 列允许为空，但是因为生成列 `newcol2` 引用了 `data_json` 列，则 Stream Load 会返回报错。
 
       ```SQL
       $ curl --location-trusted -u root: -H "label:2" \

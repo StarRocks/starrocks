@@ -4,7 +4,7 @@
 
 该语句用于将指定表的数据导出到指定位置。
 
-这是一个异步操作，任务提交成功后返回结果。执行后可使用 [SHOW EXPORT](../../../sql-reference/sql-statements/data-manipulation/SHOW%20EXPORT.md) 命令查看进度。
+这是一个异步操作，任务提交成功后返回结果。执行后可使用 [SHOW EXPORT](../../../sql-reference/sql-statements/data-manipulation/SHOW_EXPORT.md) 命令查看进度。
 
 > **注意**
 >
@@ -66,7 +66,7 @@ WITH BROKER
 
 - `broker_properties`
 
-  用于提供访问数据源的鉴权信息。数据源不同，需要提供的鉴权信息也不同，参考 [BROKER LOAD](../../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+  用于提供访问数据源的鉴权信息。数据源不同，需要提供的鉴权信息也不同，参考 [BROKER LOAD](../../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 ## 示例
 
