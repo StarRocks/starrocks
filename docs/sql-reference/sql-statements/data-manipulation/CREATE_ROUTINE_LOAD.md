@@ -428,9 +428,9 @@ FROM KAFKA
 );
 ```
 
-#### Specify the SSL security protocol and configure the related parameters
+#### Specify the security protocol as SSL and configure the related parameters
 
-If you need to specify the SSL security protocol for BE when accessing Kafka, you should configure "property.security.protocol" = "ssl" and related parameters.
+If you need to specify the security protocol as SSL used by BE to access Kafka, you need to configure `"property.security.protocol" = "ssl"` and related parameters.
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl1_ordertest1 ON example_tbl1
@@ -438,7 +438,7 @@ COLUMNS TERMINATED BY ",",
 COLUMNS (order_id, pay_dt, customer_name, nationality, gender, price)
 PROPERTIES
 (
--- specify the security protocol as SSL.
+-- Specify the security protocol as SSL.
 "property.security.protocol" = "ssl",
 -- The location of the CA certificate.
 "property.ssl.ca.location" = "FILE:ca-cert",
