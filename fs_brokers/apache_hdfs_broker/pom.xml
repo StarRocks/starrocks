@@ -38,7 +38,7 @@ under the License.
         <maven.compiler.target>1.8</maven.compiler.target>
         <hadoop.version>3.3.6</hadoop.version>
         <guava.version>32.0.1-jre</guava.version>
-        <zookeeper.version>3.9.0</zookeeper.version>
+        <zookeeper.version>3.9.1</zookeeper.version>
         <protobuf.version>3.16.3</protobuf.version>
         <thrift.version>0.14.1</thrift.version>
         <tomcat.version>8.5.93</tomcat.version>
