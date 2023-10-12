@@ -1021,8 +1021,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 // set partition names for ref base table
                 Set<String> tablePartitionNames = refTableRefreshPartitions.get(nameTableRelationEntry.getKey());
                 TableRelation tableRelation = nameTableRelationEntry.getValue();
-                tableRelation.setPartitionNames(
-                        new PartitionNames(false, new ArrayList<>(tablePartitionNames)));
+                // external table doesn't support query with partitionNames
+                if (!tableRelation.getTable().isExternalTableWithFileSystem()) {
+                    tableRelation.setPartitionNames(
+                            new PartitionNames(false, new ArrayList<>(tablePartitionNames)));
+                }
 
                 // generate partition predicate for the select relation, so can generate partition predicates
                 // for non-ref base tables.
