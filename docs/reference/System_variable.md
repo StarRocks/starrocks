@@ -397,7 +397,11 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 * prefer_compute_node
 
+<<<<<<< HEAD
   Specifies whether the FEs distribute query execution plans to CN nodes. Valid values:
+=======
+Default value: 3000. Unit: ms.
+>>>>>>> 40595559e9 ([Doc] add privilege faq and update unit in system_variable (#32599))
 
   * true: indicates that the FEs distribute query execution plans to CN nodes.
   * false: indicates that the FEs do not distribute query execution plans to CN nodes.
