@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.google.common.collect.Sets;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;

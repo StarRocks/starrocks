@@ -264,13 +264,13 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
 
     @Test
     public void testHiveEmptyMV_UnPartitioned_NotRewritten() throws Exception {
-                starRocksAssert.withMaterializedView("create materialized view hive_empty_mv " +
-                        " distributed by hash(s_suppkey) " +
-                        " refresh deferred manual  " +
-                        "PROPERTIES (\n" +
-                        "\"force_external_table_query_rewrite\" = \"false\"\n" +
-                        ") " +
-                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
+        starRocksAssert.withMaterializedView("create materialized view hive_empty_mv " +
+                " distributed by hash(s_suppkey) " +
+                " refresh deferred manual  " +
+                "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"false\"\n" +
+                ") " +
+                " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
         // mv is not refreshed, even mv has no partitions, it should not be rewritten.
         String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
         String plan = getFragmentPlan(query1);
@@ -299,18 +299,18 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
     @Test
     public void testHiveEmptyMV_Partitioned_NotRewritten() throws Exception {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `hive_partitioned_mv`\n" +
-                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
-                        "PARTITION BY (`l_shipdate`)\n" +
-                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
-                        "REFRESH DEFERRED MANUAL\n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\",\n" +
-                        "\"force_external_table_query_rewrite\" = \"false\"" +
-                        ")\n" +
-                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
-                        "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
-                        "GROUP BY " +
-                        "`l_orderkey`, `l_suppkey`, `l_shipdate`;");
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`l_shipdate`)\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"false\"" +
+                ")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;");
         // mv is not refreshed, even mv has no partitions, it should not be rewritten.
         String query1 = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
                 "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
