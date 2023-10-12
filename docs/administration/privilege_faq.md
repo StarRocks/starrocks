@@ -21,10 +21,20 @@ This approach helps ensure that users are assigned roles with appropriate permis
 
 You can run [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to assign the required privileges or roles to users.
 
-## I have granted a user the privilege on all tables in a database (`GRANT ALL ON ALL TABLES IN DATABASE db TO user;`), but the user still cannot create tables in the database. Why?
+## I have granted a user the privilege on all tables in a database (`GRANT ALL ON ALL TABLES IN DATABASE <db_name> TO USER <user_identity>;`), but the user still cannot create tables in the database. Why?
 
 Creating tables within a database requires the database-level CREATE TABLE privilege. You need to grant the privilege to the user.
 
 ```SQL
-GRANT CREATE TABLE ON DATABASE db TO user;
+GRANT CREATE TABLE ON DATABASE <db_name> TO USER <user_identity>;;
 ```
+
+## I have granted a user all the privileges on a database using `GRANT ALL ON DATABASE <db_name> TO USER <user_identity>;`, but nothing is returned when the user runs `SHOW TABLES;` in this database. Why?
+
+`SHOW TABLES;` returns only tables on which the user has any privilege. If the user has no privilege on a table, this table will not be returned. You can grant any privilege on all tables in this database (using SELECT for example) to the user:
+
+```SQL
+GRANT SELECT ON ALL TABLES IN DATABASE <db_name> TO USER <user_identity>;
+```
+
+The statement above is equivalent to `GRANT select_priv ON db.* TO <user_identity>;` used in versions earlier than v3.0.
