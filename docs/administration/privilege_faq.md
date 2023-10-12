@@ -28,3 +28,13 @@ Creating tables within a database requires the database-level CREATE TABLE privi
 ```SQL
 GRANT CREATE TABLE ON DATABASE db TO user;
 ```
+
+## Why does `SHOW TABLES;` return nothing even after the user has been granted all the privileges on the database of the table (`GRANT ALL ON DATABASE <db_name> TO USER <user_identity>;`)?
+
+`SHOW TABLES;` returns only tables to which the user has any privilege. If the user has no privilege on a table, this table will not be returned. You can grant any privilege on tables in this database (using SELECT for example):
+
+```SQL
+GRANT SELECT ON ALL TABLES IN DATABASE <db_name> TO USER <user_identity>;
+```
+
+The statement above is equivalent to `GRANT select_priv ON db.* TO user;` used in versions earlier than v3.0.
