@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.alter;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -42,9 +41,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -357,8 +356,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         CreateReplicaTask createReplicaTask = new CreateReplicaTask(nodeId, dbId, tableId, partitionId,
                                 shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0, Partition.PARTITION_INIT_VERSION,
                                 originKeysType, TStorageType.COLUMN, storageMedium, copiedShadowSchema, bfColumns, bfFpp,
-                                countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(), 
-                                table.primaryIndexCacheExpireSec(), TTabletType.TABLET_TYPE_LAKE, table.getCompressionType(), 
+                                countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(),
+                                table.primaryIndexCacheExpireSec(), TTabletType.TABLET_TYPE_LAKE, table.getCompressionType(),
                                 copiedSortKeyIdxes);
                         batchTask.addTask(createReplicaTask);
                     }
@@ -561,7 +560,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             // TODO: what if unusedShards deletion is partially successful?
             StarMgrMetaSyncer.dropTabletAndDeleteShard(shards, GlobalStateMgr.getCurrentStarOSAgent());
         }
-
 
         if (span != null) {
             span.end();

@@ -32,11 +32,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.common;
+package com.starrocks.common.util.concurrent;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
+import com.starrocks.common.Status;
 
 import java.util.List;
 import java.util.Map.Entry;

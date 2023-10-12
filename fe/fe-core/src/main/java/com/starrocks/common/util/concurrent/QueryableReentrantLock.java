@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.common.util;
+package com.starrocks.common.util.concurrent;
 
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -25,10 +25,6 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class QueryableReentrantLock extends ReentrantLock {
     private static final long serialVersionUID = 1L;
-
-    public QueryableReentrantLock() {
-        super();
-    }
 
     public QueryableReentrantLock(boolean fair) {
         super(fair);

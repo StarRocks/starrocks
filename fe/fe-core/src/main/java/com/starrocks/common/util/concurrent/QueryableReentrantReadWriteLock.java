@@ -13,7 +13,7 @@
 // limitations under the License.
 
 
-package com.starrocks.common.util;
+package com.starrocks.common.util.concurrent;
 
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
