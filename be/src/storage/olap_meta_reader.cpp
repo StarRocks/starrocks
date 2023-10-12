@@ -59,11 +59,6 @@ Status OlapMetaReader::init(const OlapMetaReaderParams& read_params) {
 Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_params) {
     _collect_context.seg_collecter_params.max_cid = 0;
     auto tablet_schema = read_params.tablet_schema;
-    uint32_t cid = 0;
-    for (auto col : tablet_schema->columns()) {
-        LOG(INFO) << "column[" << cid << "] name:" << col.name();
-        cid++;
-    }
     for (const auto& it : *(read_params.id_to_names)) {
         std::string col_name = "";
         std::string collect_field = "";
@@ -72,7 +67,7 @@ Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_p
         int32_t index = tablet_schema->field_index(col_name);
         if (index < 0) {
             std::stringstream ss;
-            ss << "invalid column name: " << col_name;
+            ss << "invalid column name: " << it.second;
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
