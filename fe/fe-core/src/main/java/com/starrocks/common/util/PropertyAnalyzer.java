@@ -346,7 +346,7 @@ public class PropertyAnalyzer {
                 throw new AnalysisException("Bucket size: " + e.getMessage());
             }
             if (bucketSize <= 0) {
-                throw new AnalysisException("Illegal Partition Bucket size: " + bucketSize);
+                throw new AnalysisException("Illegal bucket size: " + bucketSize);
             }
             return bucketSize;
         } else {
