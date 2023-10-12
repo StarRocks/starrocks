@@ -16,6 +16,7 @@
 
 #include <bthread/types.h>
 
+#include <shared_mutex>
 #include <variant>
 
 #include "common/statusor.h"
@@ -154,6 +155,8 @@ public:
     // only for TEST purpose
     void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
 
+    void update_segment_cache_size(std::string_view key);
+
 private:
     using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr, DelVectorPtr>;
 
@@ -170,7 +173,7 @@ private:
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
 
     /// Cache operations
-    void fill_metacache(std::string_view key, CacheValue* ptr, int size);
+    void fill_metacache(std::string_view key, CacheValue* ptr, size_t size);
     void erase_metacache(std::string_view key);
 
     TabletMetadataPtr lookup_tablet_metadata(std::string_view key);
@@ -188,6 +191,8 @@ private:
     std::unique_ptr<Cache> _metacache;
     std::unique_ptr<CompactionScheduler> _compaction_scheduler;
     UpdateManager* _update_mgr;
+
+    std::shared_mutex _meta_lock;
 };
 
 } // namespace starrocks::lake

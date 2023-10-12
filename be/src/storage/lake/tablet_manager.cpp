@@ -184,7 +184,7 @@ std::string TabletManager::tablet_latest_metadata_cache_key(int64_t tablet_id) {
     return fmt::format("TL{}", tablet_id);
 }
 
-void TabletManager::fill_metacache(std::string_view key, CacheValue* ptr, int size) {
+void TabletManager::fill_metacache(std::string_view key, CacheValue* ptr, size_t size) {
     Cache::Handle* handle = _metacache->insert(CacheKey(key), ptr, size, cache_value_deleter);
     if (handle == nullptr) {
         delete ptr;
@@ -221,8 +221,7 @@ TabletMetadataPtr TabletManager::lookup_tablet_latest_metadata(std::string_view 
 
 void TabletManager::cache_tablet_latest_metadata(TabletMetadataPtr metadata) {
     auto value_ptr = std::make_unique<CacheValue>(metadata);
-    fill_metacache(tablet_latest_metadata_cache_key(metadata->id()), value_ptr.release(),
-                   static_cast<int>(metadata->SpaceUsedLong()));
+    fill_metacache(tablet_latest_metadata_cache_key(metadata->id()), value_ptr.release(), metadata->SpaceUsedLong());
 }
 
 TabletSchemaPtr TabletManager::lookup_tablet_schema(std::string_view key) {
@@ -267,7 +266,18 @@ SegmentPtr TabletManager::lookup_segment(std::string_view key) {
 void TabletManager::cache_segment(std::string_view key, SegmentPtr segment) {
     auto mem_cost = segment->mem_usage();
     auto value = std::make_unique<CacheValue>(std::move(segment));
-    fill_metacache(key, value.release(), (int)mem_cost);
+    fill_metacache(key, value.release(), mem_cost);
+}
+
+// current lru cache does not support updating value size, so use refill to update.
+void TabletManager::update_segment_cache_size(std::string_view key) {
+    // use write lock to protect parallel segment size update
+    std::unique_lock wrlock(_meta_lock);
+    auto segment = lookup_segment(key);
+    if (segment == nullptr) {
+        return;
+    }
+    cache_segment(key, std::move(segment));
 }
 
 DelVectorPtr TabletManager::lookup_delvec(std::string_view key) {
@@ -286,7 +296,7 @@ DelVectorPtr TabletManager::lookup_delvec(std::string_view key) {
 void TabletManager::cache_delvec(std::string_view key, DelVectorPtr delvec) {
     auto mem_cost = delvec->memory_usage();
     auto value = std::make_unique<CacheValue>(std::move(delvec));
-    fill_metacache(key, value.release(), (int)mem_cost);
+    fill_metacache(key, value.release(), mem_cost);
 }
 
 void TabletManager::erase_metacache(std::string_view key) {
@@ -394,7 +404,7 @@ Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
     // put into metacache
     auto metadata_location = tablet_metadata_location(metadata->id(), metadata->version());
     auto value_ptr = std::make_unique<CacheValue>(metadata);
-    fill_metacache(metadata_location, value_ptr.release(), static_cast<int>(metadata->SpaceUsedLong()));
+    fill_metacache(metadata_location, value_ptr.release(), metadata->SpaceUsedLong());
     cache_tablet_latest_metadata(metadata);
     auto t1 = butil::gettimeofday_us();
     g_put_tablet_metadata_latency << (t1 - t0);
@@ -432,7 +442,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
     ASSIGN_OR_RETURN(auto ptr, load_tablet_metadata(path, fill_cache));
     if (fill_cache) {
         auto value_ptr = std::make_unique<CacheValue>(ptr);
-        fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
+        fill_metacache(path, value_ptr.release(), ptr->SpaceUsedLong());
     }
     TRACE("end read tablet metadata");
     return ptr;
@@ -495,7 +505,7 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fil
     ASSIGN_OR_RETURN(auto ptr, load_txn_log(path, fill_cache));
     if (fill_cache) {
         auto value_ptr = std::make_unique<CacheValue>(ptr);
-        fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
+        fill_metacache(path, value_ptr.release(), ptr->SpaceUsedLong());
     }
     TRACE("end load txn log");
     return ptr;
@@ -526,7 +536,7 @@ Status TabletManager::put_txn_log(TxnLogPtr log) {
 
     // put txnlog into cache
     auto value_ptr = std::make_unique<CacheValue>(log);
-    fill_metacache(txn_log_path, value_ptr.release(), static_cast<int>(log->SpaceUsedLong()));
+    fill_metacache(txn_log_path, value_ptr.release(), log->SpaceUsedLong());
     auto t1 = butil::gettimeofday_us();
     g_put_txn_log_latency << (t1 - t0);
     return Status::OK();
@@ -665,7 +675,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
 
     // Save the schema into the in-memory cache
     auto cache_value = std::make_unique<CacheValue>(schema);
-    auto cache_size = inserted ? (int)schema->mem_usage() : 0;
+    auto cache_size = inserted ? schema->mem_usage() : 0;
     fill_metacache(cache_key, cache_value.release(), cache_size);
     return schema;
 }
@@ -945,7 +955,7 @@ Status TabletManager::create_schema_file(int64_t tablet_id, const TabletSchemaPB
         }
         auto cache_key = global_schema_cache_key(schema_pb.id());
         auto cache_value = std::make_unique<CacheValue>(schema);
-        auto cache_size = inserted ? (int)schema->mem_usage() : 0;
+        auto cache_size = inserted ? schema->mem_usage() : 0;
         fill_metacache(cache_key, cache_value.release(), cache_size);
     }
     return Status::OK();
