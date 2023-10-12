@@ -33,9 +33,7 @@ static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page)
     DelvecCacheKeyPB cache_key_pb;
     cache_key_pb.set_id(tablet_id);
     cache_key_pb.mutable_delvec_page()->CopyFrom(page);
-    std::string cache_key;
-    cache_key_pb.SerializeToString(&cache_key);
-    return cache_key;
+    return cache_key_pb.SerializeAsString();
 }
 
 MetaFileBuilder::MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata)
