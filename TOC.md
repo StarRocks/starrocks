@@ -19,12 +19,10 @@
     + [环境配置](/deployment/environment_configurations.md)
     + [部署文件](/deployment/prepare_deployment_files.md)
   + 部署集群
-    + 经典模式部署
-      + [手动部署](/deployment/deploy_manually.md)
-      + Kubernetes 部署
-        + [使用 Operator 部署](/deployment/sr_operator.md)
-        + [使用 Helm 部署](/deployment/helm.md)
-    + [存算分离模式部署](/deployment/deploy_shared_data.md)
+    + [手动部署](/deployment/deploy_manually.md)
+    + Kubernetes 部署
+      + [使用 Operator 部署](/deployment/sr_operator.md)
+      + [使用 Helm 部署](/deployment/helm.md)
   + 后期管理
     + [部署后设置](/deployment/post_deployment_setup.md)
     + [升级 StarRocks](/deployment/upgrade.md)
