@@ -100,6 +100,15 @@ private:
     // default_value for new column is needed
     static Status init_column_mapping(ColumnMapping* column_mapping, const TabletColumn& column_schema,
                                       const std::string& value);
+
+    static Status parse_request_normal(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
+                                       ChunkChanger* chunk_changer,
+                                       const MaterializedViewParamMap& materialized_view_param_map,
+                                       bool has_delete_predicates, bool* sc_sorting, bool* sc_directly,
+                                       std::unordered_set<int>* materialized_column_idxs);
+
+    static Status parse_request_for_pk(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
+                                       bool* sc_sorting, bool* sc_directly);
 };
 
 } // namespace starrocks

@@ -623,6 +623,19 @@ Status SchemaChangeUtils::parse_request(const TabletSchemaCSPtr& base_schema, co
                                         const MaterializedViewParamMap& materialized_view_param_map,
                                         bool has_delete_predicates, bool* sc_sorting, bool* sc_directly,
                                         std::unordered_set<int>* generated_column_idxs) {
+    RETURN_IF_ERROR(parse_request_normal(base_schema, new_schema, chunk_changer, materialized_view_param_map,
+                                         has_delete_predicates, sc_sorting, sc_directly, generated_column_idxs));
+    if (base_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+        return parse_request_for_pk(base_schema, new_schema, sc_sorting, sc_directly);
+    }
+    return Status::OK();
+}
+
+Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_schema,
+                                               const TabletSchemaCSPtr& new_schema, ChunkChanger* chunk_changer,
+                                               const MaterializedViewParamMap& materialized_view_param_map,
+                                               bool has_delete_predicates, bool* sc_sorting, bool* sc_directly,
+                                               std::unordered_set<int>* generated_column_idxs) {
     std::map<ColumnId, ColumnId> base_to_new;
     bool is_modify_generated_column = false;
     for (int i = 0; i < new_schema->num_columns(); ++i) {
@@ -775,37 +788,40 @@ Status SchemaChangeUtils::parse_request(const TabletSchemaCSPtr& base_schema, co
         *sc_directly = true;
     }
 
-    if (base_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        const auto& base_sort_key_idxes = base_schema->sort_key_idxes();
-        const auto& new_sort_key_idxes = new_schema->sort_key_idxes();
-        std::vector<int32_t> base_sort_key_unique_ids;
-        std::vector<int32_t> new_sort_key_unique_ids;
-        for (auto idx : base_sort_key_idxes) {
-            base_sort_key_unique_ids.emplace_back(base_schema->column(idx).unique_id());
-        }
-        for (auto idx : new_sort_key_idxes) {
-            new_sort_key_unique_ids.emplace_back(new_schema->column(idx).unique_id());
-        }
+    return Status::OK();
+}
 
-        if (new_sort_key_unique_ids.size() > base_sort_key_unique_ids.size()) {
-            // new sort keys' size is greater than base sort keys, must be sc_sorting
-            *sc_sorting = true;
-            *sc_directly = false;
-        } else {
-            auto base_iter = base_sort_key_unique_ids.cbegin();
-            auto new_iter = new_sort_key_unique_ids.cbegin();
-            // check wheather new sort keys are just subset of base sort keys
-            while (new_iter != new_sort_key_unique_ids.cend() && *base_iter == *new_iter) {
-                ++base_iter;
-                ++new_iter;
-            }
-            if (new_iter != new_sort_key_unique_ids.cend()) {
-                *sc_sorting = true;
-                *sc_directly = false;
-            }
-        }
+Status SchemaChangeUtils::parse_request_for_pk(const TabletSchemaCSPtr& base_schema,
+                                               const TabletSchemaCSPtr& new_schema, bool* sc_sorting,
+                                               bool* sc_directly) {
+    const auto& base_sort_key_idxes = base_schema->sort_key_idxes();
+    const auto& new_sort_key_idxes = new_schema->sort_key_idxes();
+    std::vector<int32_t> base_sort_key_unique_ids;
+    std::vector<int32_t> new_sort_key_unique_ids;
+    for (auto idx : base_sort_key_idxes) {
+        base_sort_key_unique_ids.emplace_back(base_schema->column(idx).unique_id());
+    }
+    for (auto idx : new_sort_key_idxes) {
+        new_sort_key_unique_ids.emplace_back(new_schema->column(idx).unique_id());
     }
 
+    if (new_sort_key_unique_ids.size() > base_sort_key_unique_ids.size()) {
+        // new sort keys' size is greater than base sort keys, must be sc_sorting
+        *sc_sorting = true;
+        *sc_directly = false;
+    } else {
+        auto base_iter = base_sort_key_unique_ids.cbegin();
+        auto new_iter = new_sort_key_unique_ids.cbegin();
+        // check wheather new sort keys are just subset of base sort keys
+        while (new_iter != new_sort_key_unique_ids.cend() && *base_iter == *new_iter) {
+            ++base_iter;
+            ++new_iter;
+        }
+        if (new_iter != new_sort_key_unique_ids.cend()) {
+            *sc_sorting = true;
+            *sc_directly = false;
+        }
+    }
     return Status::OK();
 }
 
