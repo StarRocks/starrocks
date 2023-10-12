@@ -425,7 +425,7 @@ public class ScalarOperatorToIcebergExpr {
             if (!(child instanceof ColumnRefOperator)) {
                 return null;
             }
-            ColumnRefOperator columnRefChild = ((ColumnRefOperator) operator.getChild(0));
+            ColumnRefOperator columnRefChild = ((ColumnRefOperator) child);
             List<String> paths = new ImmutableList.Builder<String>()
                     .add(columnRefChild.getName()).addAll(operator.getFieldNames())
                     .build();
