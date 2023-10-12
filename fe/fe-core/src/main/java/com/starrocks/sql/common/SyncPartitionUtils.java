@@ -596,6 +596,10 @@ public class SyncPartitionUtils {
         for (String refBaseTableAssociatedPartition : refBaseTableAssociatedPartitions) {
             baseTableVersionInfoMap.remove(refBaseTableAssociatedPartition);
         }
+
+        // finally remove the dropped materialized view partition
+        mvPartitionNameRefBaseTablePartitionMap.remove(mvPartitionName);
+
         return true;
     }
 
