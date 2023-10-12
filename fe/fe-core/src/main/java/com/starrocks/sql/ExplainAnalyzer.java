@@ -1282,8 +1282,6 @@ public class ExplainAnalyzer {
                 int planNodeId = getPlanNodeId(nextOperator);
                 RuntimeProfile commonMetrics = nextOperator.getChild("CommonMetrics");
                 boolean isSubordinate = commonMetrics != null && commonMetrics.containsInfoString("IsSubordinate");
-                boolean isFinalSink = commonMetrics != null && commonMetrics.containsInfoString("IsFinalSink");
-                Preconditions.checkState(isFinalSink || planNodeId != FINAL_SINK_PSEUDO_PLAN_NODE_ID);
                 if (isSubordinate) {
                     subordinateOperatorProfiles.add(nextOperator);
                 } else {
