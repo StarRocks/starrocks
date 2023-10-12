@@ -142,6 +142,8 @@ public class ScalarOperatorFunctions {
 
     private static final Map<String, TemporalUnit> TIME_SLICE_UNIT_MAPPING;
 
+    private static final String DEFAULT_DATE_TIME = "0000-01-01 00:00:00";
+
     static {
         for (int shiftBy = 0; shiftBy < CONSTANT_128; ++shiftBy) {
             INT_128_MASK1_ARR1[shiftBy] = INT_128_OPENER.subtract(BigInteger.ONE).shiftRight(shiftBy + 1);
@@ -317,12 +319,43 @@ public class ScalarOperatorFunctions {
                 // If parsing fails, it can be re-parsed from the position of the successful prefix string.
                 // This way datetime string can use incomplete format
                 // eg. str_to_date('2022-10-18 00:00:00','%Y-%m-%d %H:%s');
-                ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT)
-                        .parse(dateStr.substring(0, e.getErrorIndex())));
+                if (dateStr.length() > e.getErrorIndex()) {
+                    ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT)
+                            .parse(dateStr.substring(0, e.getErrorIndex())));
+                } else {   // eg. str_to_date('2022-10-18 00:00','%Y-%m-%d %H:%s:%i');
+                    int length = dateStr.length();
+                    //Since the length of the actual format cannot be obtained, it needs to be filled first. If it fails again,
+                    //the length of the actual format can be obtained, and the format can be converted.
+                    try {
+                        ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT)
+                                .parse(dateStr + DEFAULT_DATE_TIME.substring(length)));
+                    } catch (DateTimeParseException pe) {
+                        ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT)
+                                .parse(dateStr + DEFAULT_DATE_TIME.substring(length, pe.getErrorIndex())));
+                    }
+                }
             }
             return ConstantOperator.createDatetime(ldt, Type.DATETIME);
         } else {
-            LocalDate ld = LocalDate.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
+            LocalDate ld;
+            try {
+                ld = LocalDate.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
+            } catch (DateTimeParseException e) {
+                // eg. str_to_date('2022-10-18 00:00:00','%Y-%m-%d');
+                if (dateStr.length() > e.getErrorIndex()) {
+                    ld = LocalDate.from(builder.withResolverStyle(ResolverStyle.STRICT)
+                            .parse(dateStr.substring(0, e.getErrorIndex())));
+                } else {   // eg. str_to_date('2022-10','%Y-%m-%d');
+                    int length = dateStr.length();
+                    try {
+                        ld = LocalDate.from(builder.withResolverStyle(ResolverStyle.STRICT)
+                                .parse(dateStr + DEFAULT_DATE_TIME.substring(length)));
+                    } catch (DateTimeParseException pe) {
+                        ld = LocalDate.from(builder.withResolverStyle(ResolverStyle.STRICT)
+                                .parse(dateStr + DEFAULT_DATE_TIME.substring(length, pe.getErrorIndex())));
+                    }
+                }
+            }
             return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATETIME);
         }
     }

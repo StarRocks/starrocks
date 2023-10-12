@@ -448,6 +448,21 @@ public class ScalarOperatorFunctionsTest {
                 () -> ScalarOperatorFunctions.dateParse(
                         ConstantOperator.createVarchar("2022-10-18 01:02:03"),
                         ConstantOperator.createVarchar("%Y-%m-%d %H:%s")).getDatetime());
+
+        assertEquals("2022-10-18T01:02:03", ScalarOperatorFunctions.dateParse(
+                        ConstantOperator.createVarchar("2022-10-18 01:02:03"),
+                        ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s")).
+                getDatetime().toString());
+
+        assertEquals("2022-10-18T01:02", ScalarOperatorFunctions.dateParse(
+                        ConstantOperator.createVarchar("2022-10-18 01:02:03"),
+                        ConstantOperator.createVarchar("%Y-%m-%d %H:%i")).
+                getDatetime().toString());
+
+        Assert.assertThrows("Unable to obtain LocalDateTime", DateTimeException.class,
+                () -> ScalarOperatorFunctions.dateParse(
+                        ConstantOperator.createVarchar("2022-10-18 01:02:03"),
+                        ConstantOperator.createVarchar("%Y-%m-%d %H:%s")).getDatetime());
     }
 
     @Test
