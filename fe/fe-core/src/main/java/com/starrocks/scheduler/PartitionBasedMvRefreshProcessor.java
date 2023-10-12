@@ -667,23 +667,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     new PartitionDiffer(rangeToInclude, partitionTTLNumber, materializedView.getPartitionInfo());
             rangePartitionDiff = PartitionUtil.getPartitionDiff(
                     partitionExpr, partitionColumn, refBaseTablePartitionMap, mvPartitionMap, differ);
-
-            //            if (partitionExpr instanceof SlotRef) {
-            //                rangePartitionDiff = SyncPartitionUtils.getRangePartitionDiffOfSlotRef(refBaseTablePartitionMap,
-            //                        mvPartitionMap, differ);
-            //            } else if (partitionExpr instanceof FunctionCallExpr) {
-            //                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-            //                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC) ||
-            //                        functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
-            //
-            //                    rangePartitionDiff = SyncPartitionUtils.getRangePartitionDiffOfExpr(refBaseTablePartitionMap,
-            //                            mvRangePartitionMap, functionCallExpr, differ);
-            //                } else {
-            //                    throw new SemanticException("Materialized view partition function " +
-            //                            functionCallExpr.getFnName().getFunction() +
-            //                            " is not supported yet.", functionCallExpr.getPos());
-            //                }
-            //            }
         } catch (UserException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return;
