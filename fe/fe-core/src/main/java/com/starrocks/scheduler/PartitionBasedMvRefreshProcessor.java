@@ -669,8 +669,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     if (start != null || end != null) {
                         rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
                     }
+                    SyncPartitionUtils.PartitionDiffer differ =
+                            new SyncPartitionUtils.PartitionDiffer(rangeToInclude, partitionTTLNumber);
                     rangePartitionDiff = SyncPartitionUtils.getRangePartitionDiffOfExpr(refBaseTablePartitionMap,
-                            mvRangePartitionMap, functionCallExpr, rangeToInclude);
+                            mvRangePartitionMap, functionCallExpr, differ);
                 } else {
                     throw new SemanticException("Materialized view partition function " +
                             functionCallExpr.getFnName().getFunction() +
@@ -1208,7 +1210,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                 snapshotTable, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
                         Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.getPartitionKeyRange(
                                 table, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
-                        return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
+                        return SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
                     }
                 }
             } catch (UserException e) {
