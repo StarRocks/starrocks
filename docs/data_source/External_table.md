@@ -5,7 +5,6 @@ StarRocks supports access to other data sources by using external tables. Extern
 > **NOTICE**
 >
 > * From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, and Hudi. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
-> * From v3.1 onwards, we recommend that you use [JDBC catalog](../data_source/catalog/jdbc_catalog.md) to query data from MySQL and PostgreSQL and use [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) to query data from Elasticsearch.
 
 From 2.5 onwards, StarRocks provides the Data Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Data Cache](data_cache.md).
 
