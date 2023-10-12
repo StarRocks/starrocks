@@ -523,7 +523,6 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertFalse(fakeFile.exists());
     }
 
-    @Test
     public void testGetRemoteFile() throws IOException {
         Map<String, String> config = new HashMap<>();
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");

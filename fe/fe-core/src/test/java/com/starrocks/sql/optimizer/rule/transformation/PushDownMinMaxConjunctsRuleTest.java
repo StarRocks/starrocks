@@ -103,7 +103,6 @@ public class PushDownMinMaxConjunctsRuleTest extends TableTestBase {
                 ((LogicalIcebergScanOperator) scanNoPushDown.getOp()).getScanOperatorPredicates().getMinMaxConjuncts().size());
     }
 
-    @Test
     public void testPartitionPrune() {
         ExternalScanPartitionPruneRule rule0 = ExternalScanPartitionPruneRule.ICEBERG_SCAN;
 

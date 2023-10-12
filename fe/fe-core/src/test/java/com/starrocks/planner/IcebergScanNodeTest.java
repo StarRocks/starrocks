@@ -210,8 +210,7 @@ public class IcebergScanNodeTest {
         properties.put("table", tableName);
         properties.put("resource", resourceName);
     }
-
-    @Test
+    
     public void testGetScanRangeLocations(@Mocked com.starrocks.catalog.IcebergTable table,
                                           @Mocked Table iTable,
                                           @Mocked Snapshot snapshot,

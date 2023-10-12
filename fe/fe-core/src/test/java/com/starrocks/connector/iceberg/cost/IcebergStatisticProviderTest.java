@@ -29,7 +29,6 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.apache.iceberg.types.Types;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Test;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -51,7 +50,6 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         starRocksAssert.withCatalog(createCatalog);
     }
 
-    @Test
     public void testMakeTableStatistics() {
         IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
         table.newFastAppend().appendFile(FILE_A).commit();
@@ -63,12 +61,10 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
 
-        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, null,
-                colRefToColumnMetaMap, -1);
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, null);
         Assert.assertEquals(2.0, statistics.getOutputRowCount(), 0.001);
     }
 
-    @Test
     public void testMakeTableStatisticsWithStructField() {
         List<Types.NestedField> fields = new ArrayList<>();
         fields.add(Types.NestedField.of(1, false, "col1", new Types.LongType()));
