@@ -123,7 +123,7 @@ void ParquetBuildHelper::build_compression_type(::parquet::WriterProperties::Bui
         break;
     }
     case TCompressionType::LZ4: {
-        builder.compression(::parquet::Compression::LZ4);
+        builder.compression(::parquet::Compression::LZ4_HADOOP);
         break;
     }
     case TCompressionType::LZO: {
