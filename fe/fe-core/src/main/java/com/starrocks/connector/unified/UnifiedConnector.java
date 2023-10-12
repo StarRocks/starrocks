@@ -40,24 +40,18 @@ import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_T
 
 public class UnifiedConnector implements Connector {
     public static final String UNIFIED_METASTORE_TYPE = "unified.metastore.type";
-    public static final List<String> SUPPORTED_METASTORE_TYPE = ImmutableList.of("hms", "hive", "glue");
+    public static final List<String> SUPPORTED_METASTORE_TYPE = ImmutableList.of("hive", "glue");
     private final Map<Table.TableType, Connector> connectorMap;
 
     public UnifiedConnector(ConnectorContext context) {
         if (!context.getProperties().containsKey(UNIFIED_METASTORE_TYPE)) {
             throw new StarRocksConnectorException("Please specify a metastore type of unified connector. " +
-                    "Only supports hms and glue now.");
+                    "Only supports hive and glue now.");
         }
 
         String metastoreType = context.getProperties().get(UNIFIED_METASTORE_TYPE).toLowerCase();
         if (!SUPPORTED_METASTORE_TYPE.contains(metastoreType)) {
-            throw new StarRocksConnectorException("Unified catalog only supports hms and glue as metastore.");
-        }
-
-        // set for compatibility, as sub-connectors may not recognize `hms`.
-        // TODO(letian-jiang): remove this once all connectors accept `hms` as metastore type
-        if (metastoreType.equals("hms")) {
-            metastoreType = "hive";
+            throw new StarRocksConnectorException("Unified catalog only supports hive and glue as metastore.");
         }
 
         ImmutableMap<String, String> derivedProperties = new ImmutableMap.Builder<String, String>()

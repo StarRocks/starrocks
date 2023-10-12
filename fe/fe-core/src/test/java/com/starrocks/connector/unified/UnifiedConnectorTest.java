@@ -61,19 +61,6 @@ public class UnifiedConnectorTest {
     }
 
     @Test
-    public void testCreateUnifiedConnectorHMS() {
-        ConnectorContext context = new ConnectorContext("unified_catalog", "unified", ImmutableMap.of(
-                "type", "unified",
-                "unified.metastore.type", "hms",
-                "hive.metastore.uris", "thrift://127.0.0.1:9083"
-        ));
-        UnifiedConnector unifiedConnector = new UnifiedConnector(context);
-        ConnectorMetadata metadata = unifiedConnector.getMetadata();
-        assertTrue(metadata instanceof UnifiedMetadata);
-        unifiedConnector.shutdown();
-    }
-
-    @Test
     public void testCreateUnifiedConnectorGlue(@Mocked GlueClient glueClient) {
         ConnectorContext context = new ConnectorContext("unified_catalog", "unified", ImmutableMap.of(
                 "type", "unified",
@@ -95,7 +82,7 @@ public class UnifiedConnectorTest {
         ));
 
         StarRocksConnectorException e = assertThrows(StarRocksConnectorException.class, () -> new UnifiedConnector(context));
-        assertEquals(e.getMessage(), "Unified catalog only supports hms and glue as metastore.");
+        assertEquals(e.getMessage(), "Unified catalog only supports hive and glue as metastore.");
     }
 
     @Test
@@ -106,6 +93,6 @@ public class UnifiedConnectorTest {
 
         StarRocksConnectorException e = assertThrows(StarRocksConnectorException.class, () -> new UnifiedConnector(context));
         assertEquals(e.getMessage(), "Please specify a metastore type of unified connector. " +
-                "Only supports hms and glue now.");
+                "Only supports hive and glue now.");
     }
 }
