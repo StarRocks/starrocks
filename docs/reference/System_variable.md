@@ -389,7 +389,7 @@ Used for MySQL client compatibility. No practical usage.
 
 The timeout duration of the query optimizer. When the optimizer times out, an error is returned and the query is stopped, which affects the query performance. You can set this variable to a larger value based on your query or contact StarRocks technical support for troubleshooting. A timeout often occurs when a query has too many joins.
 
-Default value: 3000. Unit: seconds.
+Default value: 3000. Unit: ms.
 
 ### parallel_exchange_instance_num
 
