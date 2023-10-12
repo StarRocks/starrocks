@@ -550,10 +550,6 @@ TEST_P(PartialUpdateTest, test_partial_update_publish_retry) {
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
 
-    SyncPoint::GetInstance()->EnableProcessing();
-
-    SyncPoint::GetInstance()->SetCallBack("put_tablet_metadata.1",
-                                          [](void* arg) { ((Status*)arg)->update(Status::InternalError("inject")); });
     // partial update
     auto txn_id = next_id();
     {
@@ -564,11 +560,12 @@ TEST_P(PartialUpdateTest, test_partial_update_publish_retry) {
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        // Publish version
+
+        SyncPoint::GetInstance()->SetCallBack("ProtobufFile::save:serialize", [](void* arg) { *(bool*)arg = false; });
+        SyncPoint::GetInstance()->EnableProcessing();
         ASSERT_ERROR(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        SyncPoint::GetInstance()->DisableProcessing();
     }
-    SyncPoint::GetInstance()->ClearCallBack("put_tablet_metadata:1");
-    SyncPoint::GetInstance()->DisableProcessing();
     // retry publish again
     ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
     _tablet_mgr->prune_metacache();
