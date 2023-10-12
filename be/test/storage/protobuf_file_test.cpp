@@ -21,6 +21,8 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "gutil/strings/util.h"
+#include "testutil/assert.h"
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
 
@@ -91,14 +93,16 @@ TYPED_TEST(ProtobufFileTest, test_serialize_failed) {
 
     Status st = file.save(tablet_meta, true);
     ASSERT_FALSE(st.ok());
-    ASSERT_EQ("failed to serialize protobuf to string, maybe the protobuf is too large", st.message());
+    ASSERT_TRUE(MatchPattern(std::string(st.message()),
+                             "*failed to serialize protobuf to string, maybe the protobuf is too large*"))
+            << st.message();
 
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
-TYPED_TEST(ProtobufFileTest, test_corrupted_file) {
-    typename TestFixture::ProtobufFileType file("ProtobufFileTest_test_corruption.bin");
-    DeferOp defer([&]() { std::filesystem::remove("ProtobufFileTest_test_corruption.bin"); });
+TYPED_TEST(ProtobufFileTest, test_corrupted_file0) {
+    const std::string kFileName = "ProtobufFileTest_test_corruption.bin";
+    DeferOp defer([&]() { std::filesystem::remove(kFileName); });
 
     TabletMetaPB tablet_meta;
     tablet_meta.set_table_id(10001);
@@ -108,17 +112,26 @@ TYPED_TEST(ProtobufFileTest, test_corrupted_file) {
     tablet_meta.set_schema_hash(54321);
     tablet_meta.set_shard_id(0);
 
-    Status st = file.save(tablet_meta, true);
-    ASSERT_TRUE(st.ok()) << st;
+    {
+        typename TestFixture::ProtobufFileType file(kFileName);
+        auto st = file.save(tablet_meta, true);
+        ASSERT_TRUE(st.ok()) << st;
+    }
 
-    std::unique_ptr<WritableFile> f;
-    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN};
-    f = *FileSystem::Default()->new_writable_file(opts, "ProtobufFileTest_test_corruption.bin");
+    {
+        std::unique_ptr<WritableFile> f;
+        WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN};
+        f = *FileSystem::Default()->new_writable_file(opts, "ProtobufFileTest_test_corruption.bin");
+        EXPECT_TRUE(f->append("xx").ok());
+        EXPECT_TRUE(f->close().ok());
+    }
 
-    f->append("xx");
-    TabletMetaPB tablet_meta_2;
-    st = file.load(&tablet_meta_2);
-    ASSERT_FALSE(st.ok());
+    {
+        typename TestFixture::ProtobufFileType file(kFileName);
+        TabletMetaPB tablet_meta_2;
+        auto st = file.load(&tablet_meta_2);
+        ASSERT_FALSE(st.ok());
+    }
 }
 
 } // namespace starrocks

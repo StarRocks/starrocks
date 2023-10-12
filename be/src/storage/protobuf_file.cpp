@@ -18,7 +18,6 @@
 #include <google/protobuf/message.h>
 
 #include "fs/fs.h"
-#include "gutil/strings/substitute.h"
 #include "storage/olap_define.h"
 #include "storage/utils.h"
 #include "testutil/sync_point.h"
@@ -46,7 +45,8 @@ Status ProtobufFileWithHeader::save(const ::google::protobuf::Message& message, 
     bool r = message.SerializeToString(&serialized_message);
     TEST_SYNC_POINT_CALLBACK("ProtobufFileWithHeader::save:serialize", &r);
     if (UNLIKELY(!r)) {
-        return Status::InternalError("failed to serialize protobuf to string, maybe the protobuf is too large");
+        return Status::InternalError(
+                fmt::format("failed to serialize protobuf to string, maybe the protobuf is too large. path={}", _path));
     }
     header.protobuf_checksum = olap_adler32(ADLER32_INIT, serialized_message.c_str(), serialized_message.size());
     header.checksum = 0;
@@ -73,16 +73,16 @@ Status ProtobufFileWithHeader::load(::google::protobuf::Message* message, bool f
     FixedFileHeader header;
     ASSIGN_OR_RETURN(auto nread, input_file->read(&header, sizeof(header)));
     if (nread != sizeof(header)) {
-        return Status::Corruption("fail to read header");
+        return Status::Corruption(fmt::format("failed to read header of protobuf file {}", _path));
     }
     if (header.magic_number != OLAP_FIX_HEADER_MAGIC_NUMBER) {
-        return Status::Corruption(strings::Substitute("invalid magic number $0", header.magic_number));
+        return Status::Corruption(fmt::format("invalid magic number of protobuf file {}", _path));
     }
 
-    uint32_t unused_flag;
+    uint32_t unused_flag; // unused, read for compatibility
     ASSIGN_OR_RETURN(nread, input_file->read(&unused_flag, sizeof(unused_flag)));
     if (UNLIKELY(nread != sizeof(unused_flag))) {
-        return Status::Corruption("fail to read flag");
+        return Status::Corruption(fmt::format("fail to read flag of protobuf file {}", _path));
     }
 
     std::string str;
@@ -90,13 +90,14 @@ Status ProtobufFileWithHeader::load(::google::protobuf::Message* message, bool f
     ASSIGN_OR_RETURN(nread, input_file->read(str.data(), str.size()));
     str.resize(nread);
     if (str.size() != header.protobuf_length) {
-        return Status::Corruption("mismatched serialized size");
+        return Status::Corruption(fmt::format("mismatched message size of protobuf file {}. real={} expect={}", _path,
+                                              nread, (int64_t)header.protobuf_length));
     }
     if (olap_adler32(ADLER32_INIT, str.data(), str.size()) != header.protobuf_checksum) {
-        return Status::Corruption("mismatched checksum");
+        return Status::Corruption(fmt::format("mismatched checksum of protobuf file {}", _path));
     }
     if (!message->ParseFromString(str)) {
-        return Status::Corruption("parse protobuf message failed");
+        return Status::Corruption(fmt::format("failed to parse protobuf file {}", _path));
     }
     return Status::OK();
 }
@@ -106,7 +107,8 @@ Status ProtobufFile::save(const ::google::protobuf::Message& message, bool sync)
     bool r = message.SerializeToString(&serialized_message);
     TEST_SYNC_POINT_CALLBACK("ProtobufFile::save:serialize", &r);
     if (UNLIKELY(!r)) {
-        return Status::InternalError("failed to serialize protobuf to string, maybe the protobuf is too large");
+        return Status::InternalError(
+                fmt::format("failed to serialize protobuf to string, maybe the protobuf is too large. path={}", _path));
     }
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_path));
     WritableFileOptions opts{.sync_on_close = sync, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
