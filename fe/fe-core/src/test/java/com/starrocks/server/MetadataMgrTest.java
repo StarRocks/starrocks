@@ -287,4 +287,10 @@ public class MetadataMgrTest {
         };
         metadataMgr.dropDb("hive_catalog", "hive_db", false);
     }
+
+    @Test(expected = StarRocksConnectorException.class)
+    public void testGetPrunedPartition() {
+        MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        metadataMgr.getPrunedPartitions("hive_catalog", null, null, -1);
+    }
 }

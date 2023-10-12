@@ -341,6 +341,19 @@ public class MetadataMgr {
         return ImmutableList.copyOf(partitionNames.build());
     }
 
+    public List<PartitionKey> getPrunedPartitions(String catalogName, Table table, ScalarOperator predicate, long limit) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getPrunedPartitions(table, predicate, limit);
+            } catch (Exception e) {
+                LOG.error("Failed to getPrunedPartitions on [{}.{}]", catalogName, table, e);
+                throw e;
+            }
+        }
+        return new ArrayList<>();
+    }
+
     public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {
         List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(columns.keySet());
         List<String> columnNames = requiredColumnRefs.stream().map(col -> columns.get(col).getName()).collect(
