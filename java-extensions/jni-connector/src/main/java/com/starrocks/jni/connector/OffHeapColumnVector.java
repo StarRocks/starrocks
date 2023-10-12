@@ -325,15 +325,22 @@ public class OffHeapColumnVector {
 
     private void putDecimal(int rowId, BigDecimal value) {
         int typeSize = type.getPrimitiveTypeValueSize();
-        byte[] bytes = convertDecimalToBytes(value, type.getScale(), typeSize);
-        Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, null, data + (long) rowId * typeSize, typeSize);
+        BigInteger dataValue = value.setScale(type.getScale(), RoundingMode.UNNECESSARY).unscaledValue();
+        byte[] bytes = changeByteOrder(dataValue.toByteArray());
+        byte[] newValue = new byte[typeSize];
+        if (dataValue.signum() == -1) {
+            Arrays.fill(newValue, (byte) -1);
+        }
+        System.arraycopy(bytes, 0, newValue, 0, Math.min(bytes.length, newValue.length));
+        Platform.copyMemory(newValue, Platform.BYTE_ARRAY_OFFSET, null, data + rowId * typeSize, typeSize);
     }
 
     public BigDecimal getDecimal(int rowId) {
         int typeSize = type.getPrimitiveTypeValueSize();
         byte[] bytes = new byte[typeSize];
         Platform.copyMemory(null, data + (long) rowId * typeSize, bytes, Platform.BYTE_ARRAY_OFFSET, typeSize);
-        return getDecimal(bytes, type.getScale());
+        BigInteger value = new BigInteger(changeByteOrder(bytes));
+        return new BigDecimal(value, type.getScale());
     }
 
     private void putBytes(int rowId, int count, byte[] src, int srcIndex) {
@@ -688,22 +695,5 @@ public class OffHeapColumnVector {
             bytes[length - 1 - i] = temp;
         }
         return bytes;
-    }
-
-    public byte[] convertDecimalToBytes(BigDecimal value, int scale, int size) {
-        BigInteger data = value.setScale(scale, RoundingMode.UNNECESSARY).unscaledValue();
-        byte[] bytes = changeByteOrder(data.toByteArray());
-        byte[] newValue = new byte[size];
-        if (data.signum() == -1) {
-            Arrays.fill(newValue, (byte) -1);
-        }
-
-        System.arraycopy(bytes, 0, newValue, 0, Math.min(bytes.length, newValue.length));
-        return newValue;
-    }
-
-    public BigDecimal getDecimal(byte[] bytes, int scale) {
-        BigInteger value = new BigInteger(changeByteOrder(bytes));
-        return new BigDecimal(value, scale);
     }
 }
