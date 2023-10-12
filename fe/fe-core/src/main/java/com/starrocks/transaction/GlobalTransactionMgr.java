@@ -121,9 +121,7 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public void addDatabaseTransactionMgr(Long dbId) {
-        if (dbIdToDatabaseTransactionMgrs.putIfAbsent(dbId,
-                new DatabaseTransactionMgr(dbId, globalStateMgr, idGenerator)) ==
-                null) {
+        if (dbIdToDatabaseTransactionMgrs.putIfAbsent(dbId, new DatabaseTransactionMgr(dbId, globalStateMgr)) == null) {
             LOG.debug("add database transaction manager for db {}", dbId);
         }
     }

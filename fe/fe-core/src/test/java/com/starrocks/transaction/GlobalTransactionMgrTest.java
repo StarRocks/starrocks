@@ -822,8 +822,7 @@ public class GlobalTransactionMgrTest {
             throws UserException {
         Database db = new Database(10, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
-        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState(),
-                globalTransactionMgr.getTransactionIDGenerator()));
+        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
 
         long now = System.currentTimeMillis();
         doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
@@ -839,8 +838,7 @@ public class GlobalTransactionMgrTest {
             throws UserException {
         Database db = new Database(10, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
-        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState(),
-                globalTransactionMgr.getTransactionIDGenerator()));
+        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
 
         long now = System.currentTimeMillis();
         doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
@@ -856,8 +854,7 @@ public class GlobalTransactionMgrTest {
             throws UserException {
         Database db = new Database(10, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
-        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState(),
-                globalTransactionMgr.getTransactionIDGenerator()));
+        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
 
         doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
         doThrow(NullPointerException.class)
