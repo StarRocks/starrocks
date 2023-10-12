@@ -55,13 +55,6 @@ The following table describes the parameters in the URL.
 | database_name | Yes      | The name of the database to which the StarRocks table belongs. |
 | table_name    | Yes      | The name of the StarRocks table.                             |
 
-<<<<<<< HEAD
-=======
-> **NOTE**
->
-> You can use [SHOW FRONTENDS](../Administration/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
-
->>>>>>> 273c0ad72f ([Doc] fix broken links (#32532))
 ### data_desc
 
 Describes the data file that you want to load. The `data_desc` descriptor can include the data file's name, format, column separator, row separator, destination partitions, and column mapping against the StarRocks table. Syntax:
