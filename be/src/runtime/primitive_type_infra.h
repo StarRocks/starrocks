@@ -34,6 +34,11 @@ namespace starrocks {
     M(TYPE_JSON)                     \
     M(TYPE_BOOLEAN)
 
+#define APPLY_FOR_ALL_STRING_TYPE(M) \
+    M(TYPE_VARCHAR)                  \
+    M(TYPE_CHAR)                     \
+    M(TYPE_BINARY)
+
 #define APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(M) \
     APPLY_FOR_ALL_SCALAR_TYPE(M)               \
     M(TYPE_NULL)
