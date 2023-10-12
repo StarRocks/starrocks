@@ -357,6 +357,8 @@ public class OlapTableFactory implements AbstractTableFactory {
                         PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, Config.default_automatic_bucket_size);
                 if (bucketSize > 0) {
                     table.setAutomaticBucketSize(bucketSize);
+                } else {
+                    throw new DdlException("Illegal bucket size: " + bucketSize);
                 }
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());

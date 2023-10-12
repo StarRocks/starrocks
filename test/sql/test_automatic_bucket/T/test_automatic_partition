@@ -4,6 +4,14 @@ show create table t;
 alter table t set('bucket_size'='1024');
 show create table t;
 
+-- name: test_invalid_bucket_size
+create table t(k int) properties('bucket_size'='0');
+create table t(k int) properties('bucket_size'='-1');
+create table t(k int) properties('bucket_size'='1024');
+alter table t set('bucket_size'='0');
+alter table t set('bucket_size'='-1');
+alter table t set('bucket_size'='2048');
+
 -- name: test_automatic_bucket
 create database kkk;
 use kkk;
