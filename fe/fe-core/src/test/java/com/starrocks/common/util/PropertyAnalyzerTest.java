@@ -33,7 +33,7 @@ public class PropertyAnalyzerTest {
             PropertyAnalyzer.analyzeDataCacheInfo(properties);
             Assert.assertTrue(false);
         } catch (AnalysisException e) {
-            Assert.assertEquals("enable_async_write_back is not allowed", e.getMessage());
+            Assert.assertEquals("enable_async_write_back is disabled since version 3.1.4", e.getMessage());
         }
     }
 }

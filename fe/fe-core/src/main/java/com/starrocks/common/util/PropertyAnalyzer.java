@@ -1054,7 +1054,7 @@ public class PropertyAnalyzer {
             throw new AnalysisException("enable_async_write_back can't be turned on when cache is disabled");
         }
         if (enableAsyncWriteBack) {
-            throw new AnalysisException("enable_async_write_back is not allowed");
+            throw new AnalysisException("enable_async_write_back is disabled since version 3.1.4");
         }
         return new DataCacheInfo(enableDataCache, enableAsyncWriteBack);
     }

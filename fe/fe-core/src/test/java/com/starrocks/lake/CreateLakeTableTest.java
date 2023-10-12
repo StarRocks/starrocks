@@ -370,7 +370,7 @@ public class CreateLakeTableTest {
 
         // enable_async_write_back disabled
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "enable_async_write_back is not allowed",
+                "enable_async_write_back is disabled since version 3.1.4",
                 () -> createTable(
                         "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
                                 "distributed by hash(key1) buckets 3\n" +
