@@ -123,41 +123,20 @@ struct FilterIniter {
 
         if (column->is_nullable()) {
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
-            if constexpr (lt_is_string<ltype> || lt_is_binary<ltype>) {
-                const auto& data_array =
-                        ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column())->get_proxy_data();
-                for (size_t j = column_offset; j < data_array.size(); j++) {
-                    if (!nullable_column->is_null(j)) {
-                        filter->insert(data_array[j]);
-                    } else {
-                        if (eq_null) {
-                            filter->insert_null();
-                        }
-                    }
-                }
-            } else {
-                auto& data_array = ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column())->get_data();
-                for (size_t j = column_offset; j < data_array.size(); j++) {
-                    if (!nullable_column->is_null(j)) {
-                        filter->insert(data_array[j]);
-                    } else {
-                        if (eq_null) {
-                            filter->insert_null();
-                        }
+            const auto& data_array = GetContainer<ltype>().get_data(nullable_column->data_column().get());
+            for (size_t j = column_offset; j < data_array.size(); j++) {
+                if (!nullable_column->is_null(j)) {
+                    filter->insert(data_array[j]);
+                } else {
+                    if (eq_null) {
+                        filter->insert_null();
                     }
                 }
             }
         } else {
-            if constexpr (lt_is_string<ltype> || lt_is_binary<ltype>) {
-                const auto& data_ptr = ColumnHelper::as_raw_column<ColumnType>(column)->get_proxy_data();
-                for (size_t j = column_offset; j < data_ptr.size(); j++) {
-                    filter->insert(data_ptr[j]);
-                }
-            } else {
-                auto& data_ptr = ColumnHelper::as_raw_column<ColumnType>(column)->get_data();
-                for (size_t j = column_offset; j < data_ptr.size(); j++) {
-                    filter->insert(data_ptr[j]);
-                }
+            const auto& data_array = GetContainer<ltype>().get_data(column.get());
+            for (size_t j = column_offset; j < data_array.size(); j++) {
+                filter->insert(data_array[j]);
             }
         }
         return nullptr;
