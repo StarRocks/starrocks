@@ -158,10 +158,9 @@ public class PartitionDiffer {
 
     public static RangePartitionDiff simpleDiff(Map<String, Range<PartitionKey>> srcRangeMap,
                                                 Map<String, Range<PartitionKey>> dstRangeMap) {
-        PartitionDiffer differ = new PartitionDiffer();
         RangePartitionDiff res = new RangePartitionDiff();
-        res.setAdds(differ.diffRange(srcRangeMap, dstRangeMap));
-        res.setDeletes(differ.diffRange(dstRangeMap, srcRangeMap));
+        res.setAdds(diffRange(srcRangeMap, dstRangeMap));
+        res.setDeletes(diffRange(dstRangeMap, srcRangeMap));
         return res;
     }
 

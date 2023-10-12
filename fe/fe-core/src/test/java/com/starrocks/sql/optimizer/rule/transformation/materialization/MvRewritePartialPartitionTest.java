@@ -317,18 +317,18 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                 " DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                 " REFRESH ASYNC\n" +
                 " PROPERTIES(\n" +
-                " \"partition_ttl_number\"=\"1\"\n" +
+                " \"partition_ttl_number\"=\"2\"\n" +
                 " )\n" +
                 " AS SELECT k1, sum(v1) as sum_v1 FROM ttl_base_table group by k1;");
         MaterializedView mv = getMv("test", mvName);
 
         // initial mv should create only 1 partition
-        Assert.assertEquals(1, mv.getPartitions().size());
+        Assert.assertEquals(2, mv.getPartitions().size());
 
         // refresh multiple times, should not change the live partition number
         for (int i = 0; i < 10; i++) {
             refreshMaterializedView("test", mvName);
-            Assert.assertEquals("refresh " + i, 1, mv.getPartitions().size());
+            Assert.assertEquals("refresh " + i, 2, mv.getPartitions().size());
         }
 
         // increase the ttl number, and add more ttl partitions
