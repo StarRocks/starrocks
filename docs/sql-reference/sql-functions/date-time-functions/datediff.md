@@ -8,6 +8,16 @@ Calculates the date from `expr1` to `expr2` and returns a result in days.
 
 Note: Only the date parts of the values are used in the calculation.
 
+<<<<<<< HEAD
+=======
+Difference between datediff and [days_diff](./days_diff.md):
+
+|Function|Behavior|Example|
+|---|---|---|
+|datediff|Accurate to the day|The difference between '2020-12-25 23:00:00' and '2020-12-24 23:00:01' is 1.|
+|days_diff|Accurate to the second and rounded down to the nearest lower integer|The difference between '2020-12-25 23:00:00' and '2020-12-24 23:00:01' is 0.|
+
+>>>>>>> e1f3ccef8 ([Doc] broken links (#32660))
 ## Syntax
 
 ```Haskell
