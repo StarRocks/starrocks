@@ -15,9 +15,15 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.qe.ConnectContext;
+import org.junit.Before;
 import org.junit.Test;
 
 public class PushDownTopnNTest extends PlanTestBase {
+    @Before
+    public void before() {
+        connectContext.getSessionVariable().setCboPushDownTopNLimit(1000);
+    }
+    
     @Test
     public void testPushDownTopBelowUnionAll1() throws Exception {
         String sql = "select * from (" +
@@ -27,13 +33,13 @@ public class PushDownTopnNTest extends PlanTestBase {
                 "ORDER BY t.b desc limit 20";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        assertContains(plan, "5:TOP-N\n" +
+        assertContains(plan, "6:TOP-N\n" +
                 "  |  order by: <slot 5> 5: v5 DESC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 20\n" +
                 "  |  \n" +
-                "  4:OlapScanNode\n" +
-                "     TABLE: t");
+                "  5:OlapScanNode\n" +
+                "     TABLE: t1");
         assertContains(plan, "2:TOP-N\n" +
                 "  |  order by: <slot 2> 2: v2 DESC\n" +
                 "  |  offset: 0\n" +
@@ -99,12 +105,12 @@ public class PushDownTopnNTest extends PlanTestBase {
                 "ORDER BY t.b desc limit 20";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        assertContains(plan, "5:TOP-N\n" +
+        assertContains(plan, "6:TOP-N\n" +
                 "  |  order by: <slot 5> 5: v5 DESC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 20\n" +
                 "  |  \n" +
-                "  4:OlapScanNode\n" +
+                "  5:OlapScanNode\n" +
                 "     TABLE: t1");
         assertContains(plan, "2:TOP-N\n" +
                 "  |  order by: <slot 2> 2: v2 DESC\n" +
