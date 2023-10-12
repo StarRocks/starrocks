@@ -166,7 +166,7 @@ inline void make_room(std::vector<T>* v, size_t n) {
 }
 
 inline void make_room(std::string* s, size_t n) {
-    RawStringPad16 rs;
+    RawString rs;
     rs.resize(n);
     s->swap(reinterpret_cast<std::string&>(rs));
 }
