@@ -616,6 +616,18 @@ public class PartitionUtil {
         return sb.substring(0, sb.length() - 1);
     }
 
+    public static List<String> getIcebergPartitionValues(PartitionSpec spec, StructLike partitionData) {
+        List<String> partitionValues = new ArrayList<>();
+        for (int i = 0; i < partitionData.size(); ++i) {
+            PartitionField partitionField = spec.fields().get(i);
+            Class<?> clazz = spec.javaClasses()[i];
+            String value = partitionField.transform().toHumanString(getPartitionValue(partitionData, i, clazz));
+            partitionValues.add(value);
+        }
+
+        return partitionValues;
+    }
+
     public static <T> T getPartitionValue(StructLike partition, int position, Class<?> javaClass) {
         return partition.get(position, (Class<T>) javaClass);
     }
