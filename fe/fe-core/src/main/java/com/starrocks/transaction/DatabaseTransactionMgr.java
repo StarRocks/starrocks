@@ -133,15 +133,13 @@ public class DatabaseTransactionMgr {
     private int runningRoutineLoadTxnNums = 0;
     private GlobalStateMgr globalStateMgr;
     private EditLog editLog;
-    private TransactionIdGenerator idGenerator;
     // not realtime usedQuota value to make a fast check for database data quota
     private volatile long usedQuotaDataBytes = -1;
     private long maxCommitTs = 0;
 
-    public DatabaseTransactionMgr(long dbId, GlobalStateMgr globalStateMgr, TransactionIdGenerator idGenerator) {
+    public DatabaseTransactionMgr(long dbId, GlobalStateMgr globalStateMgr) {
         this.dbId = dbId;
         this.globalStateMgr = globalStateMgr;
-        this.idGenerator = idGenerator;
         this.editLog = globalStateMgr.getEditLog();
     }
 
@@ -303,7 +301,7 @@ public class DatabaseTransactionMgr {
 
             checkRunningTxnExceedLimit(sourceType);
 
-            long tid = idGenerator.getNextTransactionId();
+            long tid = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
             LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
                     tid, label, coordinator, listenerId);
             TransactionState transactionState =
