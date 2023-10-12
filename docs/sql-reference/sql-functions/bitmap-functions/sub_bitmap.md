@@ -6,8 +6,6 @@ Intercepts `len` elements from a BITMAP value `src` starting from the position s
 
 This function is mainly used for scenarios such as paginated queries. It is supported from v2.5.
 
-This function is similar to [bitmap_subset_limit](./bitmap_subset_limit.md). The difference is that this function intercepts elements starting from an offset whereas bitmap_subset_limit intercepts elements starting from an element value (`start_range`).
-
 ## Syntax
 
 ```Haskell
