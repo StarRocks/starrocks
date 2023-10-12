@@ -2785,4 +2785,14 @@ public class JoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 7: concat = 8: concat");
     }
+
+    @Test
+    public void testPushdownJoinOnCondition() throws Exception {
+        String sql = "select * from t0 left join t1 on concat(t0.v1, t0.v2) = concat(t1.v4, 'a')";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "5:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 7: concat = 8: concat");
+    }
 }
