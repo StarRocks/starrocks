@@ -120,7 +120,7 @@ public class PartitionDiffer {
             Type partitionType = partitionColumns.get(0).getType();
             Predicate<PartitionRange> isShadowKey = Predicates.alwaysFalse();
             Predicate<PartitionRange> isInFuture = Predicates.alwaysFalse();
-            if (partitionType.isDatetime()) {
+            if (partitionType.isDateType()) {
                 PartitionKey currentPartitionKey;
                 PartitionKey shadowPartitionKey;
                 shadowPartitionKey = PartitionKey.createShadowPartitionKey(partitionColumns);
