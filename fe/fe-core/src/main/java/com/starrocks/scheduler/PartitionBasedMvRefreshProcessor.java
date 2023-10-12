@@ -482,15 +482,17 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             // update materialized view partition to ref base table partition names meta
             Map<String, Set<String>> mvToBaseNameRef = mvContext.getMvRefBaseTableIntersectedPartitions();
-            for (String mvRefreshedPartition : mvRefreshedPartitions) {
-                if (mvToBaseNameRef.containsKey(mvRefreshedPartition)) {
-                    Set<String> refBaseTableAssociatedPartitions = mvToBaseNameRef.get(mvRefreshedPartition);
-                    refreshContext.getMvPartitionNameRefBaseTablePartitionMap()
-                            .put(mvRefreshedPartition, refBaseTableAssociatedPartitions);
-                } else {
-                    LOG.warn("MV task run context not contains the associated ref base table partitions of" +
-                            " the refreshed mv partition {} in materialized view{}", mvRefreshedPartition,
-                            materializedView.getName());
+            if (mvToBaseNameRef != null) {
+                for (String mvRefreshedPartition : mvRefreshedPartitions) {
+                    if (mvToBaseNameRef.containsKey(mvRefreshedPartition)) {
+                        Set<String> refBaseTableAssociatedPartitions = mvToBaseNameRef.get(mvRefreshedPartition);
+                        refreshContext.getMvPartitionNameRefBaseTablePartitionMap()
+                                .put(mvRefreshedPartition, refBaseTableAssociatedPartitions);
+                    } else {
+                        LOG.warn("MV task run context not contains the associated ref base table partitions of" +
+                                        " the refreshed mv partition {} in materialized view{}", mvRefreshedPartition,
+                                materializedView.getName());
+                    }
                 }
             }
 

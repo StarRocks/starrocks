@@ -647,9 +647,6 @@ public class SyncPartitionUtils {
                 refBaseTable, Joiner.on(",").join(refBaseTableAssociatedPartitions),
                 mv.getName(), mvPartitionName);
         for (String refBaseTableAssociatedPartition : refBaseTableAssociatedPartitions) {
-            if (refBaseTableAssociatedPartition.equals(ICEBERG_ALL_PARTITION)) {
-                continue;
-            }
             baseTableVersionInfoMap.remove(refBaseTableAssociatedPartition);
         }
         return true;
