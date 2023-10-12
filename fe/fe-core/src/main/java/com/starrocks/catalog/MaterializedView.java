@@ -730,11 +730,24 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
                 continue;
             }
-            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName());
-            Snapshot snapshot = baseTable.getNativeTable().currentSnapshot();
-            long currentVersion = snapshot != null ? snapshot.timestampMillis() : -1;
 
+            Snapshot snapshot = baseTable.getNativeTable().currentSnapshot();
+            // snapshot is null means the table is empty
+            if (snapshot == null) {
+                continue;
+            }
+
+            List<String> partitionNames;
+            if (snapshot.snapshotId() != baseTable.getSnapshotId()) {
+                partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                        baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName());
+                baseTable.setCachedPartitionNames(partitionNames);
+                baseTable.setSnapshotId(snapshot.snapshotId());
+            } else {
+                partitionNames = baseTable.getCachedPartitionNames();
+            }
+
+            long currentVersion = snapshot.timestampMillis();
             Map<String, BasePartitionInfo> baseTableInfoVisibleVersionMap = getBaseTableRefreshInfo(baseTableInfo);
             BasePartitionInfo basePartitionInfo = baseTableInfoVisibleVersionMap.get(ICEBERG_ALL_PARTITION);
             if (basePartitionInfo == null) {

@@ -84,6 +84,10 @@ public class IcebergTable extends Table {
 
     // used for recording the last snapshot time when refresh mv based on mv.
     private long refreshSnapshotTime = -1L;
+
+    // only used for cache iceberg table partition names
+    private long snapshotId = -1;
+    private List<String> cachedPartitionNames = Lists.newArrayList();
     public IcebergTable() {
         super(TableType.ICEBERG);
     }
@@ -123,6 +127,22 @@ public class IcebergTable extends Table {
             snapshot = Optional.ofNullable(getNativeTable().currentSnapshot());
             return snapshot;
         }
+    }
+
+    public long getSnapshotId() {
+        return snapshotId;
+    }
+
+    public void setSnapshotId(long snapshotId) {
+        this.snapshotId = snapshotId;
+    }
+
+    public List<String> getCachedPartitionNames() {
+        return cachedPartitionNames;
+    }
+
+    public void setCachedPartitionNames(List<String> cachedPartitionNames) {
+        this.cachedPartitionNames = cachedPartitionNames;
     }
 
     @Override
