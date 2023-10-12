@@ -170,42 +170,41 @@ If `property.group.id` is not specified, StarRocks generates a random value base
 
 - **Specify the security protocol and relevant parameters used by BE to access Kafka**
 
-The security protocol can be specified as `plaintext` (default), `ssl`, `sasl_plaintext`, or `sasl_ssl`. And you need to configure the related parameters according to the specified security protocol.
+  The security protocol can be specified as `plaintext` (default), `ssl`, `sasl_plaintext`, or `sasl_ssl`. And you need to configure the related parameters according to the specified security protocol.
 
-When the security protocol is set to `sasl_plaintext` or `sasl_ssl`, the following SASL authentication mechanisms are supported:
+  When the security protocol is set to `sasl_plaintext` or `sasl_ssl`, the following SASL authentication mechanisms are supported:
 
-- PLAIN
-- SCRAM-SHA-256 and SCRAM-SHA-512
-- OAUTHBEARER
+  - PLAIN
+  - SCRAM-SHA-256 and SCRAM-SHA-512
+  - OAUTHBEARER
 
   - Access Kafka using the SSL security protocol:
 
     ```SQL
     -- Specify the security protocol as SSL.
     "property.security.protocol" = "ssl"
-    -- File or directory path to CA certificate(s) for verifying the kafka broker's key. 
-    "property.ssl.ca.location" = "FILE:ca-cert"
+    -- File or directory path to CA certificate(s) for verifying the kafka broker's key.
     -- If the Kafka server enables client authentication, the following three parameters are also required:
     -- Path to the client's public key used for authentication.
     "property.ssl.certificate.location" = "FILE:client.pem"
     -- Path to the client's private key used for authentication.
     "property.ssl.key.location" = "FILE:client.key"
     -- Password for the client's private key.
-    "property.ssl.key.password" = "xxxxxx" 
+    "property.ssl.key.password" = "xxxxxx"
     ```
 
-- Access Kafka using the SASL_PLAINTEXT security protocol and SASL/PLAIN authentication mechanism:
+  - Access Kafka using the SASL_PLAINTEXT security protocol and SASL/PLAIN authentication mechanism:
 
-  ```SQL
-  -- Specify the security protocol as SASL_PLAINTEXT.
-  "property.security.protocol" = "SASL_PLAINTEXT"
-  -- specify the SASL mechanism as PLAIN which is a simple username/password authentication mechanism
-  "property.sasl.mechanism" = "PLAIN" 
-  -- SASL username
-  "property.sasl.username" = "admin"
-  -- SASL password
-  "property.sasl.password" = "xxxxxx"
-  ```
+    ```SQL
+    -- Specify the security protocol as SASL_PLAINTEXT
+    "property.security.protocol" = "SASL_PLAINTEXT"
+    -- specify the SASL mechanism as PLAIN which is a simple username/password authentication mechanism
+    "property.sasl.mechanism" = "PLAIN" 
+    -- SASL username
+    "property.sasl.username" = "admin"
+    -- SASL password
+    "property.sasl.password" = "xxxxxx"
+    ```
 
 ### FE and BE configuration items
 
@@ -429,9 +428,9 @@ FROM KAFKA
 );
 ```
 
-#### Configure SSL encryption
+#### Specify the SSL security protocol and configure the related parameters
 
-If you need to specify the security protocol used by BEs to access Kafka brokers, such as SSL encryption, you need to configure custom parameters `property.security.protocol` and `property.ssl.ca.location` to enable SSL encryption and specify the location of the CA certificate.
+If you need to specify the SSL security protocol for BE when accessing Kafka, you should configure "property.security.protocol" = "ssl" and related parameters.
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl1_ordertest1 ON example_tbl1
@@ -439,7 +438,7 @@ COLUMNS TERMINATED BY ",",
 COLUMNS (order_id, pay_dt, customer_name, nationality, gender, price)
 PROPERTIES
 (
--- Enable SSL.
+-- specify the security protocol as SSL.
 "property.security.protocol" = "ssl",
 -- The location of the CA certificate.
 "property.ssl.ca.location" = "FILE:ca-cert",
