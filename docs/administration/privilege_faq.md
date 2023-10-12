@@ -31,7 +31,7 @@ GRANT CREATE TABLE ON DATABASE <db_name> TO USER <user_identity>;;
 
 ## I have granted a user all the privileges on a database using `GRANT ALL ON DATABASE <db_name> TO USER <user_identity>;`, but nothing is returned when the user runs `SHOW TABLES;` in this database. Why?
 
-`SHOW TABLES;` returns only tables to which the user has any privilege. If the user has no privilege on a table, this table will not be returned. You can grant any privilege on tables in this database (using SELECT for example) to the user:
+`SHOW TABLES;` returns only tables on which the user has any privilege. If the user has no privilege on a table, this table will not be returned. You can grant any privilege on all tables in this database (using SELECT for example) to the user:
 
 ```SQL
 GRANT SELECT ON ALL TABLES IN DATABASE <db_name> TO USER <user_identity>;
