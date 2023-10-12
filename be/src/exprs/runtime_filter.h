@@ -375,18 +375,15 @@ public:
         }
     }
 
-    void insert(CppType* value) {
-        if (value == nullptr) {
-            _has_null = true;
-            return;
-        }
-
-        size_t hash = compute_hash(*value);
+    void insert(const CppType& value) {
+        size_t hash = compute_hash(value);
         _bf.insert_hash(hash);
 
-        _min = std::min(*value, _min);
-        _max = std::max(*value, _max);
+        _min = std::min(value, _min);
+        _max = std::max(value, _max);
     }
+
+    void insert_null() { _has_null = true; }
 
     CppType min_value() const { return _min; }
 
