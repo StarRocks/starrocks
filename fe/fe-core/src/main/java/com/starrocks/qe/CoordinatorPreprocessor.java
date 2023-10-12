@@ -647,7 +647,7 @@ public class CoordinatorPreprocessor {
 
                         for (PlanFragment child : fragment.getChildren()) {
                             FragmentExecParams childParams = fragmentExecParamsMap.get(child.getFragmentId());
-                            childParams.instanceExecParams.stream().map(e -> e.host).forEach(childHosts::add);
+                            childParams.instanceExecParams.stream().map(e -> e.host).forEach(hostSet::add);
                         }
                         //make olapScan maxParallelism equals prefer compute node number
                         maxParallelism = hostSet.size() * fragment.getParallelExecNum();
@@ -1477,6 +1477,7 @@ public class CoordinatorPreprocessor {
 
         long nodeNums = Math.min(amplifyFactor * baseNodeNums, candidates.size());
 
+        // only increase nodes when enable_adaptive_execute_node_num = true
         if (connectContext.getSessionVariable().enableAdaptiveExecuteNodeNum() && nodeNums > childUsedHosts.size()) {
             for (Map.Entry<Long, ComputeNode> entry : candidates.entrySet()) {
                 TNetworkAddress address = new TNetworkAddress(entry.getValue().getHost(), entry.getValue().getBePort());
@@ -1489,6 +1490,7 @@ public class CoordinatorPreprocessor {
             }
             return childHosts;
         } else if (nodeNums < childUsedHosts.size() && candidates.size() >= Config.adaptive_choose_nodes_threshold) {
+            // only decrease nodes when be nodes > = adaptive_choose_nodes_threshold
             Collections.shuffle(childHosts, random);
             return childHosts.stream().limit(nodeNums).collect(Collectors.toList());
         } else {
