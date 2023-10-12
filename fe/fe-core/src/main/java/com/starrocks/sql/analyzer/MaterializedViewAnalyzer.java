@@ -22,6 +22,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -35,6 +36,7 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedView;
@@ -101,6 +103,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
@@ -247,6 +250,10 @@ public class MaterializedViewAnalyzer {
             // set the columns into createMaterializedViewStatement
             List<Column> mvColumns = genMaterializedViewColumns(statement);
             statement.setMvColumnItems(mvColumns);
+
+            // set the Indexes into createMaterializedViewStatement
+            List<Index> mvIndexes = genMaterializedViewIndexes(statement);
+            statement.setMvIndexes(mvIndexes);
 
             Map<TableName, Table> aliasTableMap = getNormalizedBaseTables(queryStatement, context);
             Map<Column, Expr> columnExprMap = Maps.newHashMap();
@@ -472,6 +479,47 @@ public class MaterializedViewAnalyzer {
                 }
             }
             return reorderedColumns;
+        }
+
+        private List<Index> genMaterializedViewIndexes(CreateMaterializedViewStatement statement) {
+            List<IndexDef> indexDefs = statement.getIndexDefs();
+            List<Index> indexes = statement.getMvIndexes();
+            List<Column> columns = statement.getMvColumnItems();
+
+            if (CollectionUtils.isNotEmpty(indexDefs)) {
+                Set<String> distinct = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+                Set<List<String>> distinctCol = new HashSet<>();
+
+                for (IndexDef indexDef : indexDefs) {
+                    indexDef.analyze();
+                    for (String indexColName : indexDef.getColumns()) {
+                        boolean found = false;
+                        for (Column column : columns) {
+                            if (column.getName().equalsIgnoreCase(indexColName)) {
+                                indexDef.checkColumn(column, statement.getKeysType());
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            throw new SemanticException("BITMAP column does not exist in table. invalid column: " + indexColName,
+                                    indexDef.getPos());
+                        }
+                    }
+                    indexes.add(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
+                            indexDef.getComment()));
+                    distinct.add(indexDef.getIndexName());
+                    distinctCol.add(indexDef.getColumns().stream().map(String::toUpperCase).collect(Collectors.toList()));
+                }
+                if (distinct.size() != indexes.size()) {
+                    throw new SemanticException("index name must be unique", indexDefs.get(0).getPos());
+                }
+                if (distinctCol.size() != indexes.size()) {
+                    throw new SemanticException("same index columns have multiple index name is not allowed",
+                            indexDefs.get(0).getPos());
+                }
+            }
+            return indexes;
         }
 
         private void checkExpInColumn(CreateMaterializedViewStatement statement) {
