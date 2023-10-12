@@ -19,13 +19,11 @@
     + [Check environment configurations](./deployment/environment_configurations.md)
     + [Prepare deployment files](./deployment/prepare_deployment_files.md)
   + Deploy
-    + Deploy classic StarRocks
-      + [Deploy StarRocks manually](./deployment/deploy_manually.md)
-      + Deploy on Kubernetes
-        + [Deploy StarRocks with Operator](./deployment/sr_operator.md)
-        + [Deploy StarRocks with Helm](./deployment/helm.md)
-      + [Deploy StarRocks on AWS](./deployment/starrocks_on_aws.md)
-    + [Deploy and use shared-data StarRocks](./deployment/deploy_shared_data.md)
+    + [Deploy StarRocks manually](./deployment/deploy_manually.md)
+    + Deploy on Kubernetes
+      + [Deploy StarRocks with Operator](./deployment/sr_operator.md)
+      + [Deploy StarRocks with Helm](./deployment/helm.md)
+    + [Deploy StarRocks on AWS](./deployment/starrocks_on_aws.md)
   + Manage
     + [Post-deployment setup](./deployment/post_deployment_setup.md)
     + [Upgrade StarRocks](./deployment/upgrade.md)
