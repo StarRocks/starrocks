@@ -373,7 +373,7 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
   The timeout duration of the query optimizer. When the optimizer times out, an error is returned and the query is stopped, which affects the query performance. You can set this variable to a larger value based on your query or contact StarRocks technical support for troubleshooting. A timeout often occurs when a query has too many joins.
 
-  Default value: 3000. Unit: seconds.
+  Default value: 3000. Unit: ms.
 
 * parallel_exchange_instance_num
 
@@ -397,11 +397,7 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 * prefer_compute_node
 
-<<<<<<< HEAD
   Specifies whether the FEs distribute query execution plans to CN nodes. Valid values:
-=======
-Default value: 3000. Unit: ms.
->>>>>>> 40595559e9 ([Doc] add privilege faq and update unit in system_variable (#32599))
 
   * true: indicates that the FEs distribute query execution plans to CN nodes.
   * false: indicates that the FEs do not distribute query execution plans to CN nodes.
