@@ -239,13 +239,13 @@ void DeltaColumnGroupListHelper::garbage_collection(DeltaColumnGroupList& dcg_li
 Status DeltaColumnGroupListHelper::save_snapshot(const std::string& file_path,
                                                  DeltaColumnGroupSnapshotPB& dcg_snapshot_pb) {
     DCHECK(!file_path.empty());
-    ProtobufFile file(file_path);
+    ProtobufFileWithHeader file(file_path);
     return file.save(dcg_snapshot_pb, true);
 }
 
 Status DeltaColumnGroupListHelper::parse_snapshot(const std::string& file_path,
                                                   DeltaColumnGroupSnapshotPB& dcg_snapshot_pb) {
-    ProtobufFile file(file_path);
+    ProtobufFileWithHeader file(file_path);
     Status st = file.load(&dcg_snapshot_pb);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to load dcg meta file: " << st;

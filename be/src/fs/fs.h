@@ -82,8 +82,6 @@ public:
 };
 
 struct SequentialFileOptions {
-    SequentialFileOptions() = default;
-
     // Don't cache remote file locally on read requests.
     // This options can be ignored if the underlying filesystem does not support local cache.
     bool skip_fill_local_cache = false;
