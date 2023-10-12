@@ -152,6 +152,12 @@ under the License.
     <dependencyManagement>
         <dependencies>
             <dependency>
+                <groupId>com.aliyun.odps</groupId>
+                <artifactId>odps-jdbc</artifactId>
+                <version>3.5.0</version>
+            </dependency>
+
+            <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>fe-common</artifactId>
                 <version>1.0.0</version>

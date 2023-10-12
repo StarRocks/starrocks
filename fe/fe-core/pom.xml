@@ -97,6 +97,11 @@ under the License.
 
     <dependencies>
         <dependency>
+            <groupId>com.aliyun.odps</groupId>
+            <artifactId>odps-jdbc</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>spark-dpp</artifactId>
         </dependency>
