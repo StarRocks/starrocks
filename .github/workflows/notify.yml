@@ -10,11 +10,9 @@ on:
       - opened
 
 jobs:
-  sync-checker:
+  notification-checker:
     runs-on: [self-hosted, normal]
     name: RUN
-    env:
-      GH_TOKEN: ${{ github.token }}
 
     steps:
       - name: run
