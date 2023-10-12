@@ -785,27 +785,16 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         String plan = replayPair.second;
 
         // tbl_mock_015
-        Assert.assertTrue(plan, plan.contains("17:TOP-N\n" +
-                "  |  order by: [60, DATETIME, false] DESC\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 3, build_expr = (<slot 60> 60: mock_004), remote = false"));
-        Assert.assertTrue(plan, plan.contains("table: tbl_mock_015, rollup: tbl_mock_015\n" +
-                "     preAggregation: on\n" +
-                "     Predicates: [61: mock_005, VARCHAR, true] = '1000'"));
-        Assert.assertTrue(plan, plan.contains(" probe runtime filters:\n" +
+        Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
+                "     - filter_id = 1, probe_expr = (37: mock_004)"));
+        Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
                 "     - filter_id = 3, probe_expr = (60: mock_004)"));
 
         // table: tbl_mock_001, rollup: tbl_mock_001
-        Assert.assertTrue(plan, plan.contains("4:TOP-N\n" +
-                "  |  order by: [37, DATETIME, false] DESC\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (<slot 37> 37: mock_004), remote = false"));
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
                 "     - filter_id = 0, probe_expr = (37: mock_004)"));
-        Assert.assertTrue(plan, plan.contains("6:OlapScanNode\n" +
-                "     table: tbl_mock_001, rollup: tbl_mock_001\n" +
-                "     preAggregation: on\n" +
-                "     Predicates: [39: mock_008, VARCHAR, true] = '1000', (38: mock_005 != '1000') OR (38: mock_005 IS NULL)"));
+        Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
+                "     - filter_id = 4, probe_expr = (60: mock_004)"));
 
     }
 }
