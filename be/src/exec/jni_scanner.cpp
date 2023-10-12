@@ -180,37 +180,6 @@ Status JniScanner::_append_string_data(const FillColumnArgs& args) {
     return Status::OK();
 }
 
-template <LogicalType type>
-Status JniScanner::_append_decimal_data(const FillColumnArgs& args) {
-    int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
-    char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
-
-    using ColumnType = typename starrocks::RunTimeColumnType<type>;
-    using CppType = typename starrocks::RunTimeCppType<type>;
-    auto* runtime_column = down_cast<ColumnType*>(args.column);
-    runtime_column->resize_uninitialized(args.num_rows);
-    CppType* runtime_data = runtime_column->get_data().data();
-
-    int precision = args.slot_type.precision;
-    int scale = args.slot_type.scale;
-
-    for (int i = 0; i < args.num_rows; i++) {
-        if (args.nulls && args.nulls[i]) {
-            // NULL
-        } else {
-            std::string decimal_str(column_ptr + offset_ptr[i], column_ptr + offset_ptr[i + 1]);
-            CppType cpp_val;
-            if (DecimalV3Cast::from_string<CppType>(&cpp_val, precision, scale, decimal_str.data(),
-                                                    decimal_str.size())) {
-                return Status::DataQualityError(
-                        fmt::format("Invalid value occurs in column[{}], value is [{}]", args.slot_name, decimal_str));
-            }
-            runtime_data[i] = cpp_val;
-        }
-    }
-    return Status::OK();
-}
-
 Status JniScanner::_append_date_data(const FillColumnArgs& args) {
     int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
     char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
@@ -407,11 +376,11 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
     } else if (column_type == LogicalType::TYPE_DATETIME) {
         RETURN_IF_ERROR((_append_datetime_data(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL32) {
-        RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL32>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_DECIMAL32>(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL64) {
-        RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL64>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_DECIMAL64>(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL128) {
-        RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL128>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_DECIMAL128>(args)));
     } else if (column_type == LogicalType::TYPE_ARRAY) {
         RETURN_IF_ERROR((_append_array_data(args)));
     } else if (column_type == LogicalType::TYPE_MAP) {
