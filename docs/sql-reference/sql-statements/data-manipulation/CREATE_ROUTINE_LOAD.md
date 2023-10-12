@@ -2,7 +2,7 @@
 
 ## Description
 
-Routine Load can continuously consume messages from Apache Kafka® and load data into StarRocks. Routine Load can consume CSV, JSON, and Avro (supported since v3.0.1) data from a Kafka cluster and access Kafka via SSL encryption, SASL authentication, or unsecured authentication.
+Routine Load can continuously consume messages from Apache Kafka® and load data into StarRocks. Routine Load can consume CSV, JSON, and Avro (supported since v3.0.1) data from a Kafka cluster and access Kafka via multiple security protocols, including `plaintext`, `ssl`, `sasl_plaintext`, and `sasl_ssl`.
 
 This topic describes the syntax, parameters, and examples of the CREATE ROUTINE LOAD statement.
 
@@ -168,27 +168,36 @@ You can specify additional data source (Kafka) related properties, which are equ
 
 If `property.group.id` is not specified, StarRocks generates a random value based on the name of the Routine Load job, in the format of `{job_name}_{random uuid}`, such as `simple_job_0a64fe25-3983-44b2-a4d8-f52d3af4c3e8`.
 
-- **Specify the authentication mechanism used by** **BEs** **when accessing Kafka.**
-  - Access Kafka with SSL encryption and authentication:
+- **Specify the security protocol and relevant parameters used by BE to access Kafka**
+
+The security protocol can be specified as `plaintext` (default), `ssl`, `sasl_plaintext`, or `sasl_ssl`. And you need to configure the related parameters according to the specified security protocol.
+
+When the security protocol is set to `sasl_plaintext` or `sasl_ssl`, the following SASL authentication mechanisms are supported:
+
+- PLAIN
+- SCRAM-SHA-256 and SCRAM-SHA-512
+- OAUTHBEARER
+
+  - Access Kafka using the SSL security protocol:
+
+    ```SQL
+    -- Specify the security protocol as SSL.
+    "property.security.protocol" = "ssl"
+    -- File or directory path to CA certificate(s) for verifying the kafka broker's key. 
+    "property.ssl.ca.location" = "FILE:ca-cert"
+    -- If the Kafka server enables client authentication, the following three parameters are also required:
+    -- Path to the client's public key used for authentication.
+    "property.ssl.certificate.location" = "FILE:client.pem"
+    -- Path to the client's private key used for authentication.
+    "property.ssl.key.location" = "FILE:client.key"
+    -- Password for the client's private key.
+    "property.ssl.key.password" = "xxxxxx" 
+    ```
+
+- Access Kafka using the SASL_PLAINTEXT security protocol and SASL/PLAIN authentication mechanism:
 
   ```SQL
-  -- Enable SSL.
-  "property.security.protocol" = "ssl"
-  -- File or directory path to CA certificate(s) for verifying the kafka broker's key. 
-  "property.ssl.ca.location" = "FILE:ca-cert"
-  -- If the Kafka server enables client authentication, the following three parameters are also required:
-  -- Path to the client's public key used for authentication.
-  "property.ssl.certificate.location" = "FILE:client.pem"
-  -- Path to the client's private key used for authentication.
-  "property.ssl.key.location" = "FILE:client.key"
-  -- Password for the client's private key.
-  "property.ssl.key.password" = "xxxxxx" 
-  ```
-
-- Access Kafka with SASL authentication:
-
-  ```SQL
-  -- enable SASL mechanism and non-encrypted channel
+  -- Specify the security protocol as SASL_PLAINTEXT.
   "property.security.protocol" = "SASL_PLAINTEXT"
   -- specify the SASL mechanism as PLAIN which is a simple username/password authentication mechanism
   "property.sasl.mechanism" = "PLAIN" 
