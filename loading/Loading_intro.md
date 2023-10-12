@@ -159,11 +159,11 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
 
   对于 [Stream Load](../loading/StreamLoad.md)、[Broker Loa](../loading/BrokerLoad.md)、[Routine Load](../loading/RoutineLoad.md) 和 [Spark Load](../loading/SparkLoad.md)，您还可以在指定待导入列的参数里通过函数来给该列指定要填充的值。
 
-有关 `NOT NULL` 和 `DEFAULT` 的用法，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。
+有关 `NOT NULL` 和 `DEFAULT` 的用法，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
 
 ### 设置数据导入安全等级
 
-如果您的 StarRocks 集群有多数据副本，您可以根据业务需求为 Table 设置不同导入数据安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。您可在 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md) 时通过增加属性（PROPERTIES） `write_quorum` 指定导入数据安全等级，或通过 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md) 语句为已有 Table 添加该属性。该属性从 2.5 版本开始支持。
+如果您的 StarRocks 集群有多数据副本，您可以根据业务需求为 Table 设置不同导入数据安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。您可在 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 时通过增加属性（PROPERTIES） `write_quorum` 指定导入数据安全等级，或通过 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 语句为已有 Table 添加该属性。该属性从 2.5 版本开始支持。
 
 ## 系统配置
 

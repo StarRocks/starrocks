@@ -340,7 +340,7 @@ PROPERTIES
 
 ### 数据导入
 
-您可以从 AWS S3 导入数据。 以下示例将存储在 `s3a://test-bucket/test_brokerload_ingestion` 路径下的所有 Parquet 格式数据文件都导入到了现有数据库 `test_s3_db` 中一个名为 `test_ingestion_2` 的表中。有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+您可以从 AWS S3 导入数据。 以下示例将存储在 `s3a://test-bucket/test_brokerload_ingestion` 路径下的所有 Parquet 格式数据文件都导入到了现有数据库 `test_s3_db` 中一个名为 `test_ingestion_2` 的表中。有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 #### 基于 Instance Profile 鉴权认证
 

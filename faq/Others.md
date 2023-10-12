@@ -16,14 +16,14 @@ VARCHAR(32) 和 STRING 都是变长数据类型。当储存相同长度的数据
 
 1. 例如，一个名为 **origin** 的文件乱码，用以下命令查看到其字符集为 ISO-8859-1。
 
-    ```Plain%20Text
+    ```Plain_Text
     file --mime-encoding origin.txt
     origin.txt：iso-8859-1
     ```
 
 2. 使用`iconv`命令将文件的字符集转换为 UTF-8。
 
-    ```Plain%20Text
+    ```Plain_Text
     iconv -f iso-8859-1 -t utf-8 origin.txt > origin_utf-8.txt
     ```
 
@@ -109,7 +109,7 @@ StarRocks 2.2 及以上版本可以通过主键 (Primary Key) 模型实现部分
 
 ### **问题描述**
 
-```Plain%20Text
+```Plain_Text
 msg:Broker list path exception
 
 path=hdfs://172.31.3.136:9000/user/hive/warehouse/zltest.db/student_info/*, broker=TNetworkAddress(hostname:172.31.4.233, port:8000)
@@ -123,7 +123,7 @@ path=hdfs://172.31.3.136:9000/user/hive/warehouse/zltest.db/student_info/*, brok
 
 ### **问题描述**
 
-```Plain%20Text
+```Plain_Text
 msg:get hive partition meta data failed: java.net.UnknownHostException: emr-header-1.cluster-242
 ```
 
@@ -137,7 +137,7 @@ msg:get hive partition meta data failed: java.net.UnknownHostException: emr-head
 
 Apache Hive™ 的元数据会缓存在 StarRocks 的 FE 中，但是 StarRocks 更新元数据有两个小时的时间差。在 StarRocks 完成更新之前，如果在 Apache Hive™ 表中插入新数据或更新数据，那么 BE 扫描的 HDFS 中的数据和 FE 获得的数据不一致就会发生这个错误。
 
-```Plain%20Text
+```Plain_Text
 MySQL [bdp_dim]> select * from dim_page_func_s limit 1;
 
 ERROR 1064 (HY000): HdfsOrcScanner::do_open failed. reason = Invalid ORC postscript length
@@ -162,13 +162,13 @@ MySQL 5.7 版本默认的认证方式为 mysql_native_password，如使用 MySQL
 
 - 设置 root 用户
 
-    ```Plain%20Text
+    ```Plain_Text
     ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'yourpassword';
     ```
 
 - 修改 **my.cnf** 文件
 
-    ```Plain%20Text
+    ```Plain_Text
     vim my.cnf
 
     [mysqld]

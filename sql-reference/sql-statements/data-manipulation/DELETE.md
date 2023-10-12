@@ -8,7 +8,7 @@
 
 - 执行 DELETE 操作需要有对应数据库和表的操作权限。
 - 不建议您执行高频的 DELETE 操作。如需要，请在业务低峰期进行。
-- DELETE 删除的是表中数据，表依然存在。如果要删除表，参见 [DROP TABLE](../data-definition/DROP%20TABLE.md)。
+- DELETE 删除的是表中数据，表依然存在。如果要删除表，参见 [DROP TABLE](../data-definition/DROP_TABLE.md)。
 - 为防止误删整表，必须在 DELETE 语句中指定 WHERE 子句。
 - 删除的数据会标记为“Deleted”，暂时保留在 Segment 中，不会立即进行物理删除。Compaction（数据版本合并）完成之后会被回收。
 - 该操作会同时删除和表相关的物化视图的数据。

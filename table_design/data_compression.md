@@ -14,7 +14,7 @@ StarRocks 支持四种数据压缩算法：LZ4、Zstandard（或 zstd）、zlib 
 
 您只能在创建表时为其设置数据压缩算法，且后续无法修改。
 
-以下示例基于 Zstandard 算法创建表 `data_compression`。 详细说明请参阅 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。
+以下示例基于 Zstandard 算法创建表 `data_compression`。 详细说明请参阅 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
 
 ```SQL
 CREATE TABLE `data_compression` (
@@ -34,4 +34,4 @@ PROPERTIES (
 >
 > 如不指定数据压缩算法，StarRocks 默认使用 LZ4。
 
-您可以通过 [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md) 命令查看指定表采用的压缩算法。
+您可以通过 [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE.md) 命令查看指定表采用的压缩算法。

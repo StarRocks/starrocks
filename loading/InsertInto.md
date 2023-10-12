@@ -17,7 +17,7 @@
 - 您只能在 MySQL 客户端通过 `Ctrl` + `C` 按键强制取消同步 INSERT 导入任务。
 - 当前版本中，StarRocks 在执行 INSERT 语句时，如果有数据不符合目标表格式（例如字符串超长等情况），INSERT 操作默认执行失败。您可以通过设置会话变量 `enable_insert_strict` 为 `false` 以确保 INSERT 操作过滤不符合目标表格式的数据，并继续执行。
 - 频繁使用 INSERT 语句导入小批量数据会产生过多的数据版本，从而影响查询性能，因此不建议您频繁使用 INSERT 语句导入数据或将其作为生产环境的日常例行导入作业。如果您的业务场景需要流式导入或者小批量多次导入数据，建议使用 Apache Kafka® 作为数据源并通过 [Routine Load](../loading/RoutineLoad.md) 方式进行导入作业。
-- 执行 INSERT OVERWRITE 语句后，系统将为目标分区创建相应的临时分区，并将数据写入临时分区，最后使用临时分区[原子替换](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md#使用临时分区替换原分区)目标分区来实现覆盖写入。其所有过程均在 Leader FE 节点执行。因此，如果 Leader FE 节点在覆盖写入过程中发生宕机，将会导致该次 INSERT OVERWRITE 导入失败，其过程中所创建的临时分区也会被删除。
+- 执行 INSERT OVERWRITE 语句后，系统将为目标分区创建相应的临时分区，并将数据写入临时分区，最后使用临时分区[原子替换](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#使用临时分区替换原分区)目标分区来实现覆盖写入。其所有过程均在 Leader FE 节点执行。因此，如果 Leader FE 节点在覆盖写入过程中发生宕机，将会导致该次 INSERT OVERWRITE 导入失败，其过程中所创建的临时分区也会被删除。
 
 ## 准备工作
 
@@ -313,7 +313,7 @@ ERROR 1064 (HY000): Insert has filtered data in strict mode, tracking_url=http:/
 
 ### 通过 SHOW LOAD 语句查看
 
-您可以通过 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句查看 INSERT 导入作业状态。
+您可以通过 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句查看 INSERT 导入作业状态。
 
 以下示例通过 SHOW LOAD 语句查看 Label 为 `insert_load_wikipedia` 的导入作业状态。
 

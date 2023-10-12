@@ -386,7 +386,7 @@ DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 10;
     ```
 
     如果需要开启该功能，则您需要确保 FE 动态参数 `enable_auto_tablet_distribution` 为 `true`。
-    建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) 来查看 StarRock 为分区自动设置的分桶数量。
+    建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRock 为分区自动设置的分桶数量。
 
     > 如您的表单个分区原始数据规模预计超过100GB，建议您使用下述方式手动设置分桶数量。
 

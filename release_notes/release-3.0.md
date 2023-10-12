@@ -7,7 +7,7 @@
 ### 功能优化
 
 - 更新 3.0 版本的 Docker 镜像和相关[部署文档](../quick_start/deploy_with_docker.md)。 ([#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021))
-- 提供异步 ETL 命令接口，支持创建异步 INSERT 任务。更多信息，参考[INSERT](../loading/InsertInto.md) 和 [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md)。 ([#20609](https://github.com/StarRocks/starrocks/issues/20609))
+- 提供异步 ETL 命令接口，支持创建异步 INSERT 任务。更多信息，参考[INSERT](../loading/InsertInto.md) 和 [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md)。 ([#20609](https://github.com/StarRocks/starrocks/issues/20609))
 - 物化视图支持批量创建分区，提升物化视图构建时的分区创建效率。([#21167](https://github.com/StarRocks/starrocks/pull/21167))
 
 ### 问题修复
@@ -39,7 +39,7 @@
 
 - [Preview] 支持 Presto/Trino 兼容模式，可以自动改写 Presto/Trino 的 SQL。参见[系统变量](../reference/System_variable.md) 中的 `sql_dialect`。
 - [Preview] 支持 [JDBC Catalog](../data_source/catalog/jdbc_catalog.md)。
-- 支持使用 [SET CATALOG](../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 命令来手动选择 Catalog。
+- 支持使用 [SET CATALOG](../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 命令来手动选择 Catalog。
 
 **权限与安全**
 
@@ -64,7 +64,7 @@
 
 **存储与导入**
 
-- 数据导入提供了更丰富的 CSV 格式参数，包括 `skip_header`、`trim_space`、`enclose` 和 `escape`。参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 和 [ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)。
+- 数据导入提供了更丰富的 CSV 格式参数，包括 `skip_header`、`trim_space`、`enclose` 和 `escape`。参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 和 [ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
 - [Primary Key 模型表](../table_design/table_types/primary_key_table.md)解耦了主键和排序键，支持通过 `ORDER BY` 单独指定排序键。
 - 优化 Primary Key 模型表在大数据导入、部分列更新、以及开启持久化索引等场景的内存占用。 [#12068](https://github.com/StarRocks/starrocks/pull/12068) [#14187](https://github.com/StarRocks/starrocks/pull/14187) [#15729](https://github.com/StarRocks/starrocks/pull/15729)
 
@@ -75,19 +75,19 @@
   - 支持对 Outer Join 和 Cross Join 的改写。
   - 优化带分区时 UNION 的 SQL rewrite。
 - 完善物化视图的构建能力：支持 CTE、SELECT * 、UNION。
-- 优化 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md) 命令的返回信息。
+- 优化 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md) 命令的返回信息。
 
 **查询**
 
 - 完善算子对 Pipeline 的支持，所有算子都支持 Pipeline。
-- 完善[大查询定位](../administration/monitor_manage_big_queries.md)。[SHOW PROCESSLIST](../sql-reference/sql-statements/Administration/SHOW%20PROCESSLIST.md) 支持查看 CPU 内存信息，增加大查询日志。
+- 完善[大查询定位](../administration/monitor_manage_big_queries.md)。[SHOW PROCESSLIST](../sql-reference/sql-statements/Administration/SHOW_PROCESSLIST.md) 支持查看 CPU 内存信息，增加大查询日志。
 - 优化 Outer Join Reorder 能力。
 - 优化 SQL 解析阶段的报错信息，查询的报错位置更明确，信息更清晰。
 
 **数据湖分析**
 
 - 优化元数据统计信息收集。
-- Hive Catalog、Iceberg Catalog、Hudi Catalog 和 Delta Catalog 支持通过 [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md) 查看外表 Schema 信息，支持通过 [SHOW CREATE CATALOG](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) 查看 Catalog 的创建信息。
+- Hive Catalog、Iceberg Catalog、Hudi Catalog 和 Delta Catalog 支持通过 [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE.md) 查看外表 Schema 信息，支持通过 [SHOW CREATE CATALOG](../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查看 Catalog 的创建信息。
 
 **函数**
 
@@ -106,7 +106,7 @@
 ### 行为变更
 
 - RBAC 升级以后会兼容之前的用户和权限，但是 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) 等相关语法有大幅改动。
-- SHOW MATERIALIZED VIEW 更名为 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md)。
+- SHOW MATERIALIZED VIEW 更名为 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md)。
 
 ### 升级注意事项
 
@@ -123,4 +123,4 @@
 
 升级到 3.0 会默认采用新的 RBAC 权限管理系统，升级后只支持回滚到 2.5。
 
-回滚后需要手动执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md) 命令，触发创建新的 image 并等待该 image 同步给所有的 follower 节点。如不执行该命令，可能会导致部分回滚失败。ALTER SYSTEM CREATE IMAGE 在 2.5.3 版本及以后支持。
+回滚后需要手动执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 命令，触发创建新的 image 并等待该 image 同步给所有的 follower 节点。如不执行该命令，可能会导致部分回滚失败。ALTER SYSTEM CREATE IMAGE 在 2.5.3 版本及以后支持。

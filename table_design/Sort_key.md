@@ -73,7 +73,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 >**注意**
 >
-> 聚合模型表中，如果某列未指定 `agg_type`，则该列为 Key 列；如果某列指定了 `agg_type`，则该列为 Value 列。参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。上述示例指定排序列为 `site_id` 和 `city_code`，因此必须给 `user_id` 和 `pv` 列分别指定 `agg_type`。
+> 聚合模型表中，如果某列未指定 `agg_type`，则该列为 Key 列；如果某列指定了 `agg_type`，则该列为 Value 列。参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。上述示例指定排序列为 `site_id` 和 `city_code`，因此必须给 `user_id` 和 `pv` 列分别指定 `agg_type`。
 
 ### 更新模型
 

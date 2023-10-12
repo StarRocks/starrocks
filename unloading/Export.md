@@ -15,7 +15,7 @@
 
 > **说明**
 >
-> 您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/deployment/deploy_broker.md)完成 Broker 部署。
+> 您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/deployment/deploy_broker.md)完成 Broker 部署。
 
 ## 支持的外部存储系统
 
@@ -30,7 +30,7 @@
 
 - 在导出作业运行过程中，如果 FE 发生重启或切主，会导致导出作业失败，您需要重新提交导出作业。
 
-- 导出作业运行完成后（成功或失败），若 FE 发生重启或切主，则 [SHOW EXPORT](../sql-reference/sql-statements/data-manipulation/SHOW%20EXPORT.md) 语句返回的导出作业信息会发生部分丢失，无法查看。
+- 导出作业运行完成后（成功或失败），若 FE 发生重启或切主，则 [SHOW EXPORT](../sql-reference/sql-statements/data-manipulation/SHOW_EXPORT.md) 语句返回的导出作业信息会发生部分丢失，无法查看。
 
 - 导出作业只会导出原始表 (Base Table) 的数据，不会导出物化视图的数据。
 
@@ -112,7 +112,7 @@ SHOW EXPORT WHERE queryid = "edee47f0-abe1-11ec-b9d1-00163e1e238f";
 
 系统返回如下导出结果：
 
-```Plain%20Text
+```Plain_Text
 JobId: 14008
 State: FINISHED
 Progress: 100%
@@ -125,7 +125,7 @@ Timeout: 3600
 ErrorMsg: N/A
 ```
 
-有关 SHOW EXPORT 语句的详细语法和参数说明，请参见 [SHOW EXPORT](/sql-reference/sql-statements/data-manipulation/SHOW%20EXPORT.md)。
+有关 SHOW EXPORT 语句的详细语法和参数说明，请参见 [SHOW EXPORT](/sql-reference/sql-statements/data-manipulation/SHOW_EXPORT.md)。
 
 ### 取消导出作业
 
@@ -139,7 +139,7 @@ CANCEL EXPORT WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122";
 >
 > 上述示例中，`queryid` 为导出作业的 ID。
 
-有关 CANCEL EXPORT 语句的详细语法和参数说明，请参见 [CANCEL EXPORT](/sql-reference/sql-statements/data-manipulation/CANCEL%20EXPORT.md)。
+有关 CANCEL EXPORT 语句的详细语法和参数说明，请参见 [CANCEL EXPORT](/sql-reference/sql-statements/data-manipulation/CANCEL_EXPORT.md)。
 
 ## 最佳实践
 

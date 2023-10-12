@@ -104,7 +104,7 @@ PROPERTIES (
 
    > - 自 2.3.0 版本起，StarRocks 支持配置该参数。
    > - 如果磁盘为固态硬盘 SSD，则建议设置为 `true`。如果磁盘为机械硬盘 HDD，并且导入频率不高，则也可以设置为 `true`。
-   > - 建表后，如果您需要修改该参数，请参见 ALTER TABLE [修改表的属性](../../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md#修改-table-的属性) 。
+   > - 建表后，如果您需要修改该参数，请参见 ALTER TABLE [修改表的属性](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#修改-table-的属性) 。
 
 - 如果未开启持久化索引，导入时主键索引存在内存中，可能会导致占用内存较多。因此建议您遵循如下建议：
   - 合理设置主键的列数和长度。建议主键为占用内存空间较少的数据类型，例如 INT、BIGINT 等，暂时不建议为 VARCHAR。
@@ -119,7 +119,7 @@ PROPERTIES (
 
 - 自 2.4 版本起，支持基于主键模型的表创建[异步物化视图](../../using_starrocks/Materialized_view.md)。
 
-- 使用 [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md) 时暂不支持修改主键的列类型，不支持调整指标列的顺序。
+- 使用 [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 时暂不支持修改主键的列类型，不支持调整指标列的顺序。
 
 ## 下一步
 

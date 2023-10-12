@@ -430,7 +430,7 @@ INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
 
 ### 手动更新
 
-默认情况下，StarRocks 会缓存 Delta Lake 的元数据、并以异步模式自动更新缓存的元数据，从而提高查询性能。此外，在对 Delta Lake 表做了表结构变更、或其他表更新后，您也可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) 手动更新该表的元数据，从而确保 StarRocks 第一时间生成合理的查询计划：
+默认情况下，StarRocks 会缓存 Delta Lake 的元数据、并以异步模式自动更新缓存的元数据，从而提高查询性能。此外，在对 Delta Lake 表做了表结构变更、或其他表更新后，您也可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) 手动更新该表的元数据，从而确保 StarRocks 第一时间生成合理的查询计划：
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name>

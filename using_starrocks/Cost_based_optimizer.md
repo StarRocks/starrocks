@@ -92,7 +92,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 
 - 当收集的最大分区大小大于 100G 时，触发抽样采集，通过 `statistic_max_full_collect_data_size` 配置。
 
-自动全量采集任务由系统自动执行，默认配置如下。您可以通过 [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) 命令修改。
+自动全量采集任务由系统自动执行，默认配置如下。您可以通过 [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令修改。
 
 配置项:
 
@@ -453,6 +453,6 @@ KILL ANALYZE <ID>;
 
 ## 更多信息
 
-- 如需查询 FE 配置项的取值，执行 [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SHOW%20CONFIG.md)。
+- 如需查询 FE 配置项的取值，执行 [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md)。
 
-- 如需修改 FE 配置项的取值，执行 [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md)。
+- 如需修改 FE 配置项的取值，执行 [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md)。

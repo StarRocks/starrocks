@@ -8,7 +8,7 @@
 
 - 原子覆盖写操作
 
-  如果您需要重写某一正式分区的数据，同时保证重写过程中可以查看数据，您可以先创建一个对应的临时分区，将新的数据导入到临时分区后，通过替换操作，原子地替换原有正式分区，生成新正式分区。对于非分区表的原子覆盖写操作，请参考 [ALTER TABLE - SWAP](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md#swap)。
+  如果您需要重写某一正式分区的数据，同时保证重写过程中可以查看数据，您可以先创建一个对应的临时分区，将新的数据导入到临时分区后，通过替换操作，原子地替换原有正式分区，生成新正式分区。对于非分区表的原子覆盖写操作，请参考 [ALTER TABLE - SWAP](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#swap)。
 - 调整分区数据的查询并发
 
   如果您需要修改某一正式分区的分桶数，您可以先创建一个对应分区范围的临时分区，并指定新的分桶数，然后通过 `INSERT INTO` 命令将原有正式分区的数据导入到临时分区中，通过替换操作，原子地替换原有正式分区，生成新正式分区。
@@ -91,7 +91,7 @@ ADD TEMPORARY PARTITIONS START ("2020-04-01") END ("2021-01-01") EVERY (INTERVAL
 
 ## 查看临时分区
 
-您可以通过如下 [SHOW TEMPORARY PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS) 命令，查看表的临时分区。
+您可以通过如下 [SHOW TEMPORARY PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS) 命令，查看表的临时分区。
 
 ```SQL
 SHOW TEMPORARY PARTITIONS FROM site_access;
@@ -120,7 +120,7 @@ curl --location-trusted -u <username>:<password> -H "label:label1" -H "temporary
     http://host:port/api/example_db/site_access/_stream_load    
 ```
 
-有关语法和参数等更多信息，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。
+有关语法和参数等更多信息，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
 
 ### 通过 BROKER LOAD 方式导入
 
@@ -140,7 +140,7 @@ WITH BROKER
 );
 ```
 
-有关语法和参数等更多信息，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+有关语法和参数等更多信息，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 ### 通过 ROUTINE LOAD 方式导入
 
@@ -157,7 +157,7 @@ FROM KAFKA
 );
 ```
 
-有关语法和参数等更多信息，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)。
+有关语法和参数等更多信息，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
 
 ## 查询临时分区的数据
 

@@ -384,7 +384,7 @@ prefer_compute_node = true;` 和 `SET use_compute_nodes = -1;`。系统变量的
    > **说明**
    >
    > - 您只能通过一条 SQL 添加一个 Follower FE 节点。
-   > - 如需添加更多的 Observer FE 节点，请执行 `ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"`。有关详细说明，请参考 [ALTER SYSTEM - FE](../sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md)。
+   > - 如需添加更多的 Observer FE 节点，请执行 `ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"`。有关详细说明，请参考 [ALTER SYSTEM - FE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md)。
 
 3. 在新的 FE 示例上启动终端，创建元数据存储路径，进入 StarRocks 部署目录，并修改 FE 配置文件 **fe/conf/fe.conf**。详细信息，请参考 [第一步：启动 Leader FE 节点](#第一步启动-leader-fe-节点)。
 
