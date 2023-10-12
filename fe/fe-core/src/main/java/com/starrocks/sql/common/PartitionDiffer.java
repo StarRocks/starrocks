@@ -19,6 +19,7 @@ import com.google.common.base.Predicates;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
@@ -27,6 +28,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.TaskRunContext;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -63,6 +66,20 @@ public class PartitionDiffer {
     }
 
     public PartitionDiffer() {
+    }
+
+    public static PartitionDiffer build(MaterializedView materializedView, TaskRunContext context)
+            throws AnalysisException {
+        Range<PartitionKey> rangeToInclude = null;
+        Column partitionColumn =
+                ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
+        String start = context.getProperties().get(TaskRun.PARTITION_START);
+        String end = context.getProperties().get(TaskRun.PARTITION_END);
+        if (start != null || end != null) {
+            rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
+        }
+        int partitionTTLNumber = materializedView.getTableProperty().getPartitionTTLNumber();
+        return new PartitionDiffer(rangeToInclude, partitionTTLNumber, materializedView.getPartitionInfo());
     }
 
     /**

@@ -655,16 +655,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         refBaseTablePartitionColumn, PartitionUtil.getPartitionNames(refBaseTable));
             }
 
-            Range<PartitionKey> rangeToInclude = null;
             Column partitionColumn =
                     ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
-            String start = context.getProperties().get(TaskRun.PARTITION_START);
-            String end = context.getProperties().get(TaskRun.PARTITION_END);
-            if (start != null || end != null) {
-                rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
-            }
-            PartitionDiffer differ =
-                    new PartitionDiffer(rangeToInclude, partitionTTLNumber, materializedView.getPartitionInfo());
+            PartitionDiffer differ = PartitionDiffer.build(materializedView, context);
             rangePartitionDiff = PartitionUtil.getPartitionDiff(
                     partitionExpr, partitionColumn, refBaseTablePartitionMap, mvPartitionMap, differ);
         } catch (UserException e) {
