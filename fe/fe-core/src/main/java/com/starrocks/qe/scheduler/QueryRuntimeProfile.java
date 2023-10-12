@@ -434,13 +434,18 @@ public class QueryRuntimeProfile {
                     }
 
                     if (commonMetrics.containsInfoString("IsFinalSink")) {
+                        long resultDeliverTime = 0;
                         Counter outputFullTime = pipelineProfile.getMaxCounter("OutputFullTime");
                         if (outputFullTime != null) {
-                            long resultDeliverTime = outputFullTime.getValue();
-                            Counter resultDeliverTimer =
-                                    newQueryProfile.addCounter("ResultDeliverTime", TUnit.TIME_NS, null);
-                            resultDeliverTimer.setValue(resultDeliverTime);
+                            resultDeliverTime += outputFullTime.getValue();
                         }
+                        Counter pendingFinishTime = pipelineProfile.getMaxCounter("PendingFinishTime");
+                        if (pendingFinishTime != null) {
+                            resultDeliverTime += pendingFinishTime.getValue();
+                        }
+                        Counter resultDeliverTimer =
+                                newQueryProfile.addCounter("ResultDeliverTime", TUnit.TIME_NS, null);
+                        resultDeliverTimer.setValue(resultDeliverTime);
                     }
 
                     Counter operatorTotalTime = commonMetrics.getMaxCounter("OperatorTotalTime");
