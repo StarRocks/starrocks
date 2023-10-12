@@ -213,9 +213,9 @@ public class ScalarOperatorToIcebergExpr {
 
             List<Object> literalValues = operator.getListChildren().stream()
                     .map(childoperator -> {
-                        Object literalValue = ScalarOperatorToIcebergExpr.getLiteralValue(childoperator,
-                                getResultTypeID(columnName, context));
-                        if (context != null && context.getSchema().fieldType(columnName).typeId() == Type.TypeID.BOOLEAN) {
+                        Type.TypeID typeID = getResultTypeID(columnName, context);
+                        Object literalValue = ScalarOperatorToIcebergExpr.getLiteralValue(childoperator, typeID);
+                        if (typeID == Type.TypeID.BOOLEAN) {
                             literalValue = convertBoolLiteralValue(literalValue);
                         }
                         return literalValue;
