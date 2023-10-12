@@ -18,20 +18,20 @@ SET GLOBAL activate_all_roles_on_login = TRUE;
 
 您可以执行 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 命令进行授权。
 
-## 为什么赋予了用户数据库下所有表的权限，`GRANT ALL ON ALL TABLES IN DATABASE db TO user;`，用户仍旧不能在数据库里创建表？
+## 为什么赋予了用户数据库下所有表的权限，`GRANT ALL ON ALL TABLES IN DATABASE <db_name> TO USER <user_identity>;`，用户仍旧不能在数据库里创建表？
 
 在数据库下创建表是数据库级别的权限，您需要赋权：
 
 ```SQL
-GRANT CREATE TABLE ON DATABASE db TO user;
+GRANT CREATE TABLE ON DATABASE <db_name> TO USER <user_identity>;;
 ```
 
-## 为什么赋予了用户数据库的所有权限，`GRANT ALL ON DATABASE <db_name> db TO user;`，在数据库下 `SHOW TABLES;` 什么也不返回？
+## 为什么赋予了用户数据库的所有权限，`GRANT ALL ON DATABASE <db_name> TO USER <user_identity>;`，在数据库下 `SHOW TABLES;` 什么也不返回？
 
 `SHOW TABLES;` 只会返回当前用户有任意权限的表。以 SELECT 权限为例，您可以进行如下赋权：
 
 ```SQL
-GRANT SELECT ON ALL TABLES IN DATABASE <db_name> TO user;
+GRANT SELECT ON ALL TABLES IN DATABASE <db_name> TO USER <user_identity>;
 ```
 
-这个语句与 3.0 之前版本的 `GRANT select_priv ON db.* TO user;` 是等价的。
+这个语句与 3.0 之前版本的 `GRANT select_priv ON db.* TO <user_identity>;` 是等价的。
