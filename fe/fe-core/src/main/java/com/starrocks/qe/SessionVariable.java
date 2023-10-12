@@ -1115,7 +1115,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
-    private long cboPushDownTopNLimit = 1000;
+    private long cboPushDownTopNLimit = 0;
 
     public long getCboPushDownTopNLimit() {
         return cboPushDownTopNLimit;
