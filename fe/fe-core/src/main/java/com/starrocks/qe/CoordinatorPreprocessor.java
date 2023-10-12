@@ -1477,7 +1477,7 @@ public class CoordinatorPreprocessor {
 
         long nodeNums = Math.min(amplifyFactor * baseNodeNums, candidates.size());
 
-        // only increase nodes when enable_adaptive_execute_node_num = true
+        // only increase nodes when enable_adaptive_increase_execute_nodes = true
         if (connectContext.getSessionVariable().enableAdaptiveIncreaseExecuteNodes() && nodeNums > childUsedHosts.size()) {
             for (Map.Entry<Long, ComputeNode> entry : candidates.entrySet()) {
                 TNetworkAddress address = new TNetworkAddress(entry.getValue().getHost(), entry.getValue().getBePort());
