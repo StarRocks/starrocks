@@ -125,6 +125,7 @@
     + [FineBI](./integrations/BI_integrations/FineBI.md)
     + [Hex](./integrations/BI_integrations/Hex.md)
     + [Querybook](./integrations/BI_integrations/Querybook.md)
+    + [QuickBI](./integrations/BI_integrations/QuickBI.md)
     + [Tableau Desktop](./integrations/BI_integrations/Tableau_Desktop.md)
   + IDE tools
     + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
