@@ -34,6 +34,20 @@ namespace starrocks {
     M(TYPE_JSON)                     \
     M(TYPE_BOOLEAN)
 
+<<<<<<< HEAD:be/src/runtime/primitive_type_infra.h
+=======
+#define APPLY_FOR_COMPLEX_TYPE(M) \
+    M(TYPE_STRUCT)                \
+    M(TYPE_MAP)                   \
+    M(TYPE_ARRAY)
+
+#define APPLY_FOR_ALL_STRING_TYPE(M) \
+    M(TYPE_VARCHAR)                  \
+    M(TYPE_CHAR)                     \
+    M(TYPE_BINARY)                   \
+    M(TYPE_VARBINARY)
+
+>>>>>>> e8b9828ece ([Enhancement] Avoid build slice when building GlobalRuntimeFilter (#32557)):be/src/types/logical_type_infra.h
 #define APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(M) \
     APPLY_FOR_ALL_SCALAR_TYPE(M)               \
     M(TYPE_NULL)

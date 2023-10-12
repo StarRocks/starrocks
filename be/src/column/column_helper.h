@@ -17,7 +17,13 @@
 #include "column/type_traits.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
+<<<<<<< HEAD
 #include "runtime/primitive_type.h"
+=======
+#include "gutil/cpu.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
+>>>>>>> e8b9828ece ([Enhancement] Avoid build slice when building GlobalRuntimeFilter (#32557))
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -435,4 +441,27 @@ struct ChunkSlice {
     void reset(vectorized::ChunkUniquePtr input);
 };
 
+<<<<<<< HEAD
 } // namespace starrocks::vectorized
+=======
+template <LogicalType ltype>
+struct GetContainer {
+    using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
+    const auto& get_data(Column* column) { return ColumnHelper::as_raw_column<ColumnType>(column)->get_data(); }
+};
+
+#define GET_CONTAINER(ltype)                                                            \
+    template <>                                                                         \
+    struct GetContainer<ltype> {                                                        \
+        const auto& get_data(Column* column) {                                          \
+            return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data(); \
+        }                                                                               \
+    };
+APPLY_FOR_ALL_STRING_TYPE(GET_CONTAINER)
+#undef GET_CONTAINER
+
+using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
+using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
+
+} // namespace starrocks
+>>>>>>> e8b9828ece ([Enhancement] Avoid build slice when building GlobalRuntimeFilter (#32557))
