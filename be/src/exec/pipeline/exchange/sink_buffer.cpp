@@ -286,15 +286,10 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         TransmitChunkInfo& request = buffer.front();
         bool need_wait = false;
-        DeferOp pop_defer([&need_wait, &buffer, mem_tracker = _mem_tracker]() {
+        DeferOp pop_defer([&need_wait, &buffer]() {
             if (need_wait) {
                 return;
             }
-
-            // The request memory is acquired by ExchangeSinkOperator,
-            // so use the instance_mem_tracker passed from ExchangeSinkOperator to release memory.
-            // This must be invoked before decrease_defer desctructed to avoid sink_buffer and fragment_ctx released.
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
             buffer.pop();
         });
 
@@ -407,17 +402,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
 
-        Status st;
-        if (bthread_self()) {
-            st = _send_rpc(closure, request);
-        } else {
-            // When the driver worker thread sends request and creates the protobuf request,
-            // also use process_mem_tracker to record the memory of the protobuf request.
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-            // must in the same scope following the above
-            st = _send_rpc(closure, request);
-        }
-        return st;
+        return _send_rpc(closure, request);
     }
     return Status::OK();
 }
