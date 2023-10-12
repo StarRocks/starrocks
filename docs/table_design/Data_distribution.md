@@ -174,7 +174,7 @@ Buckets reflect how data files are organized in StarRocks.
     DISTRIBUTED BY HASH(site_id,city_code); -- do not need to set the number of buckets
     ```
 
-    To enable this feature, make sure that the FE dynamic parameter `enable_auto_tablet_distribution` is set to `TRUE`. After a table is created, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) to view the bucket number automatically set by StarRocks for each partition.
+    To enable this feature, make sure that the FE dynamic parameter `enable_auto_tablet_distribution` is set to `TRUE`. After a table is created, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) to view the bucket number automatically set by StarRocks for each partition.
 
   - Method 2: manually set the number of buckets
 
@@ -197,7 +197,7 @@ Buckets reflect how data files are organized in StarRocks.
     Since v2.5.7, StarRocks supports automatically setting the number of buckets based on machine resources and data volume for a partition.
     To enable this feature, make sure that the FE dynamic parameter `enable_auto_tablet_distribution` retains the default value `TRUE`.
 
-    To disable this feature, run the `ADMIN SET FRONTEND CONFIG ('enable_auto_tablet_distribution' = 'false');` statement. And when a new partition is added without specifying the number of buckets, the new partition inherits the the number of buckets set at the creation of the table. After a new partition is added successfully, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) to view the number of buckets automatically set by StarRocks for the new partition.
+    To disable this feature, run the `ADMIN SET FRONTEND CONFIG ('enable_auto_tablet_distribution' = 'false');` statement. And when a new partition is added without specifying the number of buckets, the new partition inherits the the number of buckets set at the creation of the table. After a new partition is added successfully, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) to view the number of buckets automatically set by StarRocks for the new partition.
 
   - Method 2: manually set the number of buckets
 
@@ -235,7 +235,7 @@ If you need to create partitions in advance, you can use other partition creatio
 
 - Manually create partitions
 
-  - Partition a table with the LESS THAN clause. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
+  - Partition a table with the LESS THAN clause. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
 
     ```SQL
     PARTITION BY RANGE (k1, k2, ...)
@@ -246,7 +246,7 @@ If you need to create partitions in advance, you can use other partition creatio
     )
     ```
 
-  - Partition a table by specifying values of a fixed range. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
+  - Partition a table by specifying values of a fixed range. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
 
     ```SQL
     PARTITION BY RANGE (k1, k2, k3, ...)
@@ -258,7 +258,7 @@ If you need to create partitions in advance, you can use other partition creatio
 
   - Create multiple partitions at a time.
 
-    Partition a table by specifying START, END, and EVERY. You can create multiple partitions at a time by using this method. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
+    Partition a table by specifying START, END, and EVERY. You can create multiple partitions at a time by using this method. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
 
     ```SQL
     PARTITION BY RANGE (k1, k2, ...) 
@@ -377,7 +377,7 @@ If you need to create partitions in advance, you can use other partition creatio
       )
       ```
 
-    - After a table is created, you can use the [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md) statement to add partitions for the table.
+    - After a table is created, you can use the [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) statement to add partitions for the table.
 
       ```SQL
       ALTER TABLE site_access 

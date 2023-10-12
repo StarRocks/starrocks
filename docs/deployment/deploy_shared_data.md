@@ -255,7 +255,7 @@ In addition to the regular table PROPERTIES, you need to specify the following P
 
 ### View table information
 
-You can view the information of tables in a specific database using `SHOW PROC "/dbs/<db_id>"`. See [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW%20PROC.md) for more information.
+You can view the information of tables in a specific database using `SHOW PROC "/dbs/<db_id>"`. See [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW_PROC.md) for more information.
 
 Example:
 
