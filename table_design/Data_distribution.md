@@ -390,7 +390,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
     ```
 
     如果需要开启该功能，则您需要确保 FE 动态参数 `enable_auto_tablet_distribution` 为 `true`。
-    建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) 来查看 StarRock 为分区自动设置的分桶数量。
+    建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRock 为分区自动设置的分桶数量。
 
     > 如您的表单个分区原始数据规模预计超过100GB，建议您使用下述方式手动设置分桶数量。
 
@@ -417,7 +417,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
     自 2.5.7 版本起， StarRocks 支持根据机器资源和数据量自动设置分区的分桶数量。
 
     如果需要启用该功能，则您需要确保 FE 动态参数 `enable_auto_tablet_distribution` 保持默认值 `true`。如果需要关闭该功能，则您可以执行`ADMIN SET FRONTEND CONFIG ("enable_auto_tablet_distribution" = "false");`，并且新增分区的时候未指定分桶数量，则新增分区的分桶数量会继承建表时的分桶数量。
-    新增分区后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) 来查看 StarRocks 为新增分区自动设置的分桶数量。
+    新增分区后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRocks 为新增分区自动设置的分桶数量。
 
   - 方式二：手动设置分桶数量
 

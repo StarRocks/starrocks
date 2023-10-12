@@ -792,7 +792,7 @@ mysql> EXPLAIN SELECT
 
 StarRocks 默认开启基于 Default Catalog 创建的异步物化视图查询改写。您可以通过将 Session 变量 `enable_materialized_view_rewrite` 设置为 `false` 禁用该功能。
 
-对于基于 External Catalog 创建的异步物化视图，你可以通过 [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER%20MATERIALIZED%20VIEW.md) 将物化视图 Property `force_external_table_query_rewrite` 设置为 `false` 来禁用此功能。
+对于基于 External Catalog 创建的异步物化视图，你可以通过 [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md) 将物化视图 Property `force_external_table_query_rewrite` 设置为 `false` 来禁用此功能。
 
 ## 限制
 

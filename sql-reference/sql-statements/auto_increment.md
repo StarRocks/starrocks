@@ -279,7 +279,7 @@ mysql > SELECT * FROM test_tbl3 ORDER BY id;
     1,1,99
     ```
 
-3. 通过 [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md) 将 CSV 文件数据更新至表 `test_tbl4`。
+3. 通过 [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) 将 CSV 文件数据更新至表 `test_tbl4`。
 
     ```Bash
     curl --location-trusted -u <username>:<password> -H "label:1" \
@@ -349,7 +349,7 @@ mysql > SELECT * FROM test_tbl3 ORDER BY id;
     2,2,99
     ```
 
-3. 通过 [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md) 将 CSV 文件数据导入至表 `test_tbl5`。
+3. 通过 [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) 将 CSV 文件数据导入至表 `test_tbl5`。
 
     ```Bash
     curl --location-trusted -u <username>:<password> -H "label:2" \

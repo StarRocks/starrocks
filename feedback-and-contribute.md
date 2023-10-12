@@ -55,5 +55,5 @@
 
 ## 文档模板
 
-[函数文档模板](./sql-reference/sql-functions/How%20to%20Write%20Functions%20Documentation.md)<br />
-[SQL命令模板](./sql-reference/How%20to%20write%20SQL%20command%20doc.md)
+[函数文档模板](./sql-reference/sql-functions/How_to_Write_Functions_Documentation.md)<br />
+[SQL命令模板](./sql-reference/How_to_write_SQL_command_doc.md)

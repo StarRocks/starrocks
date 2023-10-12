@@ -51,4 +51,4 @@ select catalog();
 
 ## 相关 SQL
 
-[SET CATALOG](../../sql-statements/data-definition/SET%20CATALOG.md)：切换到指定 Catalog。
+[SET CATALOG](../../sql-statements/data-definition/SET_CATALOG.md)：切换到指定 Catalog。

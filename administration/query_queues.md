@@ -55,7 +55,7 @@ SET GLOBAL enable_query_queue_statistic = true;
 
 您可以通过以下方式查看查询队列的统计信息：
 
-- 通过 [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW%20PROC.md) 查看 BE 节点运行查询的数量、内存和 CPU 使用情况：
+- 通过 [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW_PROC.md) 查看 BE 节点运行查询的数量、内存和 CPU 使用情况：
 
 ```Plain
 mysql> SHOW PROC '/backends'\G
@@ -66,7 +66,7 @@ mysql> SHOW PROC '/backends'\G
            CpuUsedPct: 0.0 %
 ```
 
-- 通过 [SHOW PROCESSLIST](../sql-reference/sql-statements/Administration/SHOW%20PROCESSLIST.md) 查看查询是否在队列中（即 `IsPending` 为 `true` 时）：
+- 通过 [SHOW PROCESSLIST](../sql-reference/sql-statements/Administration/SHOW_PROCESSLIST.md) 查看查询是否在队列中（即 `IsPending` 为 `true` 时）：
 
 ```Plain
 MySQL [(none)]> SHOW PROCESSLIST;

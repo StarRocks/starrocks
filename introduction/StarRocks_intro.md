@@ -114,7 +114,7 @@
 <NavBoxPart title="参考​">
 <NavBoxPartItem>
 
-- [SQL参考](../sql-reference/sql-statements/account-management/ALTER%20USER.md)
+- [SQL参考](../sql-reference/sql-statements/account-management/ALTER_USER.md)
 - [函数参考](../sql-reference/sql-functions/date-time-functions/convert_tz.md)
 - [数据类型](../sql-reference/sql-statements/data-types/TINYINT.md)
 

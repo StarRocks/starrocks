@@ -103,7 +103,7 @@ SET GLOBAL enable_query_queue_select = true;
   SET GLOBAL query_queue_pending_timeout_second = 480;
   ```
 
-您可以使用 [SHOW PROCESSLIST](../sql-reference/sql-statements/Administration/SHOW%20PROCESSLIST.md) 查看查询是否为待处理（Pending）状态。
+您可以使用 [SHOW PROCESSLIST](../sql-reference/sql-statements/Administration/SHOW_PROCESSLIST.md) 查看查询是否为待处理（Pending）状态。
 
 ```Plain
 mysql> SHOW PROCESSLIST;
@@ -122,7 +122,7 @@ mysql> SHOW PROCESSLIST;
 
 ### 通过 MySQL 客户端监控
 
-1. 您可以使用 [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW%20PROC.md) 查看当前正在处理的查询 `current_queries`。
+1. 您可以使用 [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW_PROC.md) 查看当前正在处理的查询 `current_queries`。
 
    ```SQL
    SHOW PROC '/current_queries';
@@ -243,7 +243,7 @@ SET GLOBAL enable_big_query_log = true;
 ADMIN SET FRONTEND CONFIG ("enable_sql_blacklist" = "true");
 ```
 
-然后，您可以使用 [ADD SQLBLACKLIST](../sql-reference/sql-statements/Administration/ADD%20SQLBLACKLIST.md) 语句将代表这种 SQL 模式的正则表达式添加到 SQL 黑名单。
+然后，您可以使用 [ADD SQLBLACKLIST](../sql-reference/sql-statements/Administration/ADD_SQLBLACKLIST.md) 语句将代表这种 SQL 模式的正则表达式添加到 SQL 黑名单。
 
 以下示例将 `COUNT(DISTINCT)` 添加到 SQL 黑名单：
 

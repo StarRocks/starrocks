@@ -104,7 +104,7 @@ StarRocks 提供了几类预置角色（system-defined roles）：
 
 #### 手动激活角色
 
-除了默认角色，用户也可以在会话内手动选择激活一个或多个已拥有的角色。您可以通过 [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW%20GRANTS.md) 命令查看当前用户拥有的权限和可以激活的角色，并通过 [SET ROLE](../sql-reference/sql-statements/account-management/SET%20ROLE.md) 命令来设置当前的激活角色，生效范围为当前会话。
+除了默认角色，用户也可以在会话内手动选择激活一个或多个已拥有的角色。您可以通过 [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW_GRANTS.md) 命令查看当前用户拥有的权限和可以激活的角色，并通过 [SET ROLE](../sql-reference/sql-statements/account-management/SET_ROLE.md) 命令来设置当前的激活角色，生效范围为当前会话。
 
 SET ROLE 命令是覆盖的。例如，用户登录时是默认激活了 default_role，执行 `SET ROLE role_s`之后，用户此时拥有的是 role_s 的权限和自身权限。
 

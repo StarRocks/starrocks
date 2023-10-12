@@ -748,13 +748,13 @@ PROPERTIES
 
 ## 查看 Hudi Catalog
 
-您可以通过 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Hudi Catalog `hudi_catalog_glue` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Hudi Catalog `hudi_catalog_glue` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG hudi_catalog_glue;
@@ -764,7 +764,7 @@ SHOW CREATE CATALOG hudi_catalog_glue;
 
 您可以通过如下方法切换至目标 Hudi Catalog 和数据库：
 
-- 先通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 指定当前会话生效的 Hudi Catalog，然后再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定数据库：
+- 先通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 指定当前会话生效的 Hudi Catalog，然后再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定数据库：
 
   ```SQL
   -- 切换当前会话生效的 Catalog：
@@ -781,7 +781,7 @@ SHOW CREATE CATALOG hudi_catalog_glue;
 
 ## 删除 Hudi Catalog
 
-您可以通过 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) 删除某个 External Catalog。
+您可以通过 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
 
 例如，通过如下命令删除 Hudi Catalog `hudi_catalog_glue`：
 
@@ -807,7 +807,7 @@ DROP Catalog hudi_catalog_glue;
 
 ## 查询 Hudi 表数据
 
-1. 通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) 查看指定 Catalog 所属的 Hudi 集群中的数据库：
+1. 通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Hudi 集群中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -833,7 +833,7 @@ INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hudi_table
 
 ### 手动更新
 
-默认情况下，StarRocks 会缓存 Hudi 的元数据、并以异步模式自动更新缓存的元数据，从而提高查询性能。此外，在对 Hudi 表做了表结构变更或其他表更新后，您也可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) 手动更新该表的元数据，从而确保 StarRocks 第一时间生成合理的查询计划：
+默认情况下，StarRocks 会缓存 Hudi 的元数据、并以异步模式自动更新缓存的元数据，从而提高查询性能。此外，在对 Hudi 表做了表结构变更或其他表更新后，您也可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) 手动更新该表的元数据，从而确保 StarRocks 第一时间生成合理的查询计划：
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name>

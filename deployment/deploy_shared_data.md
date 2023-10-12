@@ -376,7 +376,7 @@ PROPERTIES (
 
 ### 查看表信息
 
-您可以通过 `SHOW PROC "/dbs/<db_id>"` 查看特定数据库中的表的信息。详细信息，请参阅 [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW%20PROC.md)。
+您可以通过 `SHOW PROC "/dbs/<db_id>"` 查看特定数据库中的表的信息。详细信息，请参阅 [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW_PROC.md)。
 
 示例：
 

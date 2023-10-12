@@ -59,7 +59,7 @@ Stream Load 当前不支持导入某一列为 JSON 的 CSV 文件的数据。
 
 ### 创建导入作业
 
-本文以 curl 工具为例，介绍如何使用 Stream Load 从本地文件系统导入 CSV 或 JSON 格式的数据。有关创建导入作业的详细语法和参数说明，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。
+本文以 curl 工具为例，介绍如何使用 Stream Load 从本地文件系统导入 CSV 或 JSON 格式的数据。有关创建导入作业的详细语法和参数说明，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
 
 注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
 
@@ -69,7 +69,7 @@ Stream Load 当前不支持导入某一列为 JSON 的 CSV 文件的数据。
 
 1. 在本地文件系统中创建一个 CSV 格式的数据文件 `example1.csv`。文件一共包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
 
-   ```Plain%20Text
+   ```Plain_Text
    1,Lily,23
    2,Rose,23
    3,Alice,24
@@ -109,7 +109,7 @@ curl --location-trusted -u <username>:<password> -H "label:123" \
 
 > **说明**
 >
-> 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
+> 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
 
 `example1.csv` 文件中包含三列，跟 `table1` 表的 `id`、`name`、`score` 三列一一对应，并用逗号 (,) 作为列分隔符。因此，需要通过 `column_separator` 参数指定列分隔符为逗号 (,)，并且在 `columns` 参数中按顺序把 `example1.csv` 文件中的三列临时命名为 `id`、`name`、`score`。`columns` 参数中声明的三列，按名称对应 `table1` 表中的三列。
 
@@ -174,7 +174,7 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
 
 > **说明**
 >
-> 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
+> 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
 
 `example2.json` 文件中包含 `name` 和 `code` 两个键，跟 `table2` 表中的列之间的对应关系如下图所示。
 
@@ -190,7 +190,7 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
 >
 > 上述示例中，在导入过程中先将 `example2.json` 文件中 `code` 字段对应的值乘以 100，然后再落入到 `table2` 表的 `id` 中。
 
-有关导入 JSON 数据时 `jsonpaths`、`columns` 和 StarRocks 表中的字段之间的对应关系，请参见 STREAM LOAD 文档中“[列映射](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md#列映射)”章节。
+有关导入 JSON 数据时 `jsonpaths`、`columns` 和 StarRocks 表中的字段之间的对应关系，请参见 STREAM LOAD 文档中“[列映射](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#列映射)”章节。
 
 ##### 查询数据
 
@@ -208,7 +208,7 @@ SELECT * FROM table2;
 
 ### 查看导入作业
 
-导入作业结束后，StarRocks 会以 JSON 格式返回本次导入作业的结果信息，具体请参见 STREAM LOAD 文档中“[返回值](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md#返回值)”章节。
+导入作业结束后，StarRocks 会以 JSON 格式返回本次导入作业的结果信息，具体请参见 STREAM LOAD 文档中“[返回值](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#返回值)”章节。
 
 Stream Load 不支持通过 SHOW LOAD 语句查看导入作业执行情况。
 
@@ -245,7 +245,7 @@ Stream Load 不支持手动取消导入作业。如果导入作业发生超时�
   >
   > “平均导入速度”是指目前 StarRocks 集群的平均导入速度。导入速度主要受限于集群的磁盘 I/O 及 BE 个数。
 
-  Stream Load 还提供 `timeout` 参数来设置当前导入作业的超时时间。具体请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。
+  Stream Load 还提供 `timeout` 参数来设置当前导入作业的超时时间。具体请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
 
 ## 常见问题
 
