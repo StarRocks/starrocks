@@ -42,8 +42,9 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
         new MockUp<MaterializedView>() {
             @Mock
-            Set<String> getPartitionNamesToRefreshForMv(boolean isQueryRewrite) {
-                return Sets.newHashSet();
+            public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
+                                                           boolean isQueryRewrite) {
+                return true;
             }
         };
 
