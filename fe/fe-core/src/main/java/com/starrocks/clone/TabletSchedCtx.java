@@ -941,7 +941,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         // We should discard the clone replica with stale version.
         TTabletInfo reportedTablet = request.getFinish_tablet_infos().get(0);
         if (reportedTablet.getVersion() < visibleVersion) {
-            String msg = String.format("the clone replica's version is stale. %d-%d, task visible version: %d",
+            String msg = String.format("the clone replica's version is stale. %d, task visible version: %d",
                     reportedTablet.getVersion(),
                     visibleVersion);
             throw new SchedException(Status.RUNNING_FAILED, msg);
