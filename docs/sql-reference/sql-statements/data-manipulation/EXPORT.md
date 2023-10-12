@@ -4,7 +4,7 @@
 
 Exports the data of a table to a specified location.
 
-This is an asynchronous operation. The export result is returned after you submit the export task. You can use [SHOW EXPORT](../../../sql-reference/sql-statements/data-manipulation/SHOW%20EXPORT.md) to view the progress of the export task.
+This is an asynchronous operation. The export result is returned after you submit the export task. You can use [SHOW EXPORT](../../../sql-reference/sql-statements/data-manipulation/SHOW_EXPORT.md) to view the progress of the export task.
 
 > **NOTICE**
 >
@@ -64,7 +64,7 @@ WITH BROKER
 
 - `broker_properties`
 
-  The information that is used to authenticate the source data. The authentication information varies depending on the data source. For more information, see [BROKER LOAD](../../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+  The information that is used to authenticate the source data. The authentication information varies depending on the data source. For more information, see [BROKER LOAD](../../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 ## Examples
 

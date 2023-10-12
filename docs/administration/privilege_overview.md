@@ -97,7 +97,7 @@ Active roles allow users to apply the privileges of the role under the current s
 
 #### Default roles
 
-Default roles are automatically activated when the user logs in to the cluster. It can be a role owned by one or more users. The administrator can set default roles using the `DEFAULT ROLE` keyword in [CREATE USER](../sql-reference/sql-statements/account-management/CREATE%20USER.md) and can change default roles using [ALTER USER](../sql-reference/sql-statements/account-management/ALTER%20USER.md).
+Default roles are automatically activated when the user logs in to the cluster. It can be a role owned by one or more users. The administrator can set default roles using the `DEFAULT ROLE` keyword in [CREATE USER](../sql-reference/sql-statements/account-management/CREATE_USER.md) and can change default roles using [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md).
 
 Users can also change their default roles using [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md).
 
@@ -107,7 +107,7 @@ A user who does not have a default role still has the `public` role, which is au
 
 #### Manually activate roles
 
-In addition to default roles, users can also manually activate one or more existing roles within a session. You can use [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW%20GRANTS.md) to view the privileges and roles that can be activated, and use [SET ROLE](../sql-reference/sql-statements/account-management/SET%20ROLE.md) to configure active roles that are effective in the current session.
+In addition to default roles, users can also manually activate one or more existing roles within a session. You can use [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW_GRANTS.md) to view the privileges and roles that can be activated, and use [SET ROLE](../sql-reference/sql-statements/account-management/SET_ROLE.md) to configure active roles that are effective in the current session.
 
 Note that the SET ROLE command overwrites each other. For example, after a user logs in, the `default_role` is activated by default. Then the user runs `SET ROLE role_s`. At this time, the user has only the privileges of `role_s` and their own privileges. `default_role` is overwritten.
 
