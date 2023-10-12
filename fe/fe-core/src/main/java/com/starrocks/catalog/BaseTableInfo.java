@@ -15,7 +15,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.api.client.util.Lists;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
@@ -23,8 +22,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import java.util.List;
 
 import static com.starrocks.server.CatalogMgr.isInternalCatalog;
 
@@ -48,12 +45,6 @@ public class BaseTableInfo {
 
     @SerializedName(value = "tableName")
     private String tableName;
-
-    // only used for cache iceberg table partition names
-    @SerializedName(value = "snapshotId")
-    private long snapshotId = -1;
-    @SerializedName(value = "cachedPartitionNames")
-    private List<String> cachedPartitionNames = Lists.newArrayList();
 
     public BaseTableInfo(long dbId, String dbName, long tableId) {
         this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
@@ -165,22 +156,6 @@ public class BaseTableInfo {
         } else {
             return GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
         }
-    }
-
-    public long getSnapshotId() {
-        return snapshotId;
-    }
-
-    public void setSnapshotId(long snapshotId) {
-        this.snapshotId = snapshotId;
-    }
-
-    public List<String> getCachedPartitionNames() {
-        return cachedPartitionNames;
-    }
-
-    public void setCachedPartitionNames(List<String> cachedPartitionNames) {
-        this.cachedPartitionNames = cachedPartitionNames;
     }
 
     public String toString() {
