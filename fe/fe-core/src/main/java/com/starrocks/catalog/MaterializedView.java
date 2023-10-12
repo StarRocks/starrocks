@@ -177,14 +177,22 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public static class AsyncRefreshContext {
+        // Olap base table refreshed meta infos
         // base table id -> (partition name -> partition info (id, version))
         // partition id maybe changed after insert overwrite, so use partition name as key.
         // partition id which in BasePartitionInfo can be used to check partition is changed
         @SerializedName("baseTableVisibleVersionMap")
         private final Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap;
 
+        // External base table refreshed meta infos
         @SerializedName("baseTableInfoVisibleVersionMap")
         private final Map<BaseTableInfo, Map<String, BasePartitionInfo>> baseTableInfoVisibleVersionMap;
+
+        // Materialized view partition is updated/added associated with ref-base-table. This meta
+        // is kept to track materialized view's partition change and update associated ref-base-table
+        // at the same time.
+        @SerializedName("mvPartitionNameRefBaseTablePartitionMap")
+        private final Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap;
 
         @SerializedName(value = "defineStartTime")
         private boolean defineStartTime;
@@ -201,6 +209,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         public AsyncRefreshContext() {
             this.baseTableVisibleVersionMap = Maps.newConcurrentMap();
             this.baseTableInfoVisibleVersionMap = Maps.newConcurrentMap();
+            this.mvPartitionNameRefBaseTablePartitionMap = Maps.newConcurrentMap();
             this.defineStartTime = false;
             this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
             this.step = 0;
@@ -215,9 +224,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return baseTableInfoVisibleVersionMap;
         }
 
+        public Map<String, Set<String>> getMvPartitionNameRefBaseTablePartitionMap() {
+            return mvPartitionNameRefBaseTablePartitionMap;
+        }
+
         public void clearVisibleVersionMap() {
             this.baseTableInfoVisibleVersionMap.clear();
             this.baseTableVisibleVersionMap.clear();
+            this.mvPartitionNameRefBaseTablePartitionMap.clear();
         }
 
         public boolean isDefineStartTime() {
