@@ -392,7 +392,11 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 * pipeline_dop
 
+<<<<<<< HEAD
   The parallelism of a pipeline instance, which is used to adjust the query concurrency. Default value: 0, indicating the system automatically adjusts the parallelism of each pipeline instance. You can also set this variable to a value greater than 0. Generally, set the value to half the number of physical CPU cores.
+=======
+Default value: 3000. Unit: ms.
+>>>>>>> 40595559e9 ([Doc] add privilege faq and update unit in system_variable (#32599))
 
 * query_cache_entry_max_bytes (2.5 and later)
 
