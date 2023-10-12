@@ -317,7 +317,8 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                 " DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                 " REFRESH ASYNC\n" +
                 " PROPERTIES(\n" +
-                " \"partition_ttl_number\"=\"2\"\n" +
+                " 'partition_refresh_number'='1',\n" +
+                " 'partition_ttl_number'='2' \n" +
                 " )\n" +
                 " AS SELECT k1, sum(v1) as sum_v1 FROM ttl_base_table group by k1;");
         MaterializedView mv = getMv("test", mvName);

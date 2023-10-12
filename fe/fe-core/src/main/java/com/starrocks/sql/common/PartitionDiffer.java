@@ -37,6 +37,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -104,8 +105,9 @@ public class PartitionDiffer {
      */
     private Map<String, Range<PartitionKey>> pruneAddedPartitions(Map<String, Range<PartitionKey>> addPartitions)
             throws NotImplementedException, AnalysisException {
+        Map<String, Range<PartitionKey>> res = new HashMap<>(addPartitions);
         if (rangeToInclude != null) {
-            addPartitions.entrySet().removeIf(entry -> !isRangeIncluded(entry.getValue(), rangeToInclude));
+            res.entrySet().removeIf(entry -> !isRangeIncluded(entry.getValue(), rangeToInclude));
         }
         if (partitionTTLNumber > 0 && partitionInfo instanceof RangePartitionInfo) {
             List<PartitionRange> sorted =
@@ -150,10 +152,10 @@ public class PartitionDiffer {
             Set<String> prunedPartitions =
                     ttlCandidate.stream().map(PartitionRange::getPartitionName)
                             .collect(Collectors.toSet());
-            addPartitions.keySet().removeIf(prunedPartitions::contains);
+            res.keySet().removeIf(prunedPartitions::contains);
         }
 
-        return addPartitions;
+        return res;
     }
 
     public static RangePartitionDiff simpleDiff(Map<String, Range<PartitionKey>> srcRangeMap,
