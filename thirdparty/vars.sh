@@ -169,10 +169,10 @@ SIMDJSON_SOURCE=simdjson-2.2.0
 SIMDJSON_MD5SUM="9bd0ced53281484d8842a9429065943d"
 
 # curl
-CURL_DOWNLOAD="https://curl.se/download/curl-7.79.0.tar.gz"
-CURL_NAME=curl-7.79.0.tar.gz
-CURL_SOURCE=curl-7.79.0
-CURL_MD5SUM="b40e4dc4bbc9e109c330556cd58c8ec8"
+CURL_DOWNLOAD="https://curl.se/download/curl-8.4.0.tar.gz"
+CURL_NAME=curl-8.4.0.tar.gz
+CURL_SOURCE=curl-8.4.0
+CURL_MD5SUM="533e8a3b1228d5945a6a512537bea4c7"
 
 # RE2
 RE2_DOWNLOAD="https://github.com/google/re2/archive/refs/tags/2022-12-01.tar.gz"
