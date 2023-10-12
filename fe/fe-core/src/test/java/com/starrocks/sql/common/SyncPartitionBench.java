@@ -142,6 +142,6 @@ public class SyncPartitionBench {
 
     @Benchmark
     public void diffRangeBench() {
-        SyncPartitionUtils.PartitionDiffer.diffRange(srcRangeMap, dstRangeMap);
+        PartitionDiffer.diffRange(srcRangeMap, dstRangeMap);
     }
 }

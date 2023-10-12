@@ -75,7 +75,6 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Scope;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropPartitionClause;
@@ -94,6 +93,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -655,30 +655,35 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         refBaseTablePartitionColumn, PartitionUtil.getPartitionNames(refBaseTable));
             }
 
-            if (partitionExpr instanceof SlotRef) {
-                rangePartitionDiff = SyncPartitionUtils.getRangePartitionDiffOfSlotRef(refBaseTablePartitionMap, mvPartitionMap);
-            } else if (partitionExpr instanceof FunctionCallExpr) {
-                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC) ||
-                        functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
-                    Range<PartitionKey> rangeToInclude = null;
-                    Column partitionColumn =
-                            ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
-                    String start = context.getProperties().get(TaskRun.PARTITION_START);
-                    String end = context.getProperties().get(TaskRun.PARTITION_END);
-                    if (start != null || end != null) {
-                        rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
-                    }
-                    SyncPartitionUtils.PartitionDiffer differ =
-                            new SyncPartitionUtils.PartitionDiffer(rangeToInclude, partitionTTLNumber);
-                    rangePartitionDiff = SyncPartitionUtils.getRangePartitionDiffOfExpr(refBaseTablePartitionMap,
-                            mvRangePartitionMap, functionCallExpr, differ);
-                } else {
-                    throw new SemanticException("Materialized view partition function " +
-                            functionCallExpr.getFnName().getFunction() +
-                            " is not supported yet.", functionCallExpr.getPos());
-                }
+            Range<PartitionKey> rangeToInclude = null;
+            Column partitionColumn =
+                    ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
+            String start = context.getProperties().get(TaskRun.PARTITION_START);
+            String end = context.getProperties().get(TaskRun.PARTITION_END);
+            if (start != null || end != null) {
+                rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
             }
+            PartitionDiffer differ =
+                    new PartitionDiffer(rangeToInclude, partitionTTLNumber, materializedView.getPartitionInfo());
+            rangePartitionDiff = PartitionUtil.getPartitionDiff(
+                    partitionExpr, partitionColumn, refBaseTablePartitionMap, mvPartitionMap, differ);
+
+            //            if (partitionExpr instanceof SlotRef) {
+            //                rangePartitionDiff = SyncPartitionUtils.getRangePartitionDiffOfSlotRef(refBaseTablePartitionMap,
+            //                        mvPartitionMap, differ);
+            //            } else if (partitionExpr instanceof FunctionCallExpr) {
+            //                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
+            //                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC) ||
+            //                        functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+            //
+            //                    rangePartitionDiff = SyncPartitionUtils.getRangePartitionDiffOfExpr(refBaseTablePartitionMap,
+            //                            mvRangePartitionMap, functionCallExpr, differ);
+            //                } else {
+            //                    throw new SemanticException("Materialized view partition function " +
+            //                            functionCallExpr.getFnName().getFunction() +
+            //                            " is not supported yet.", functionCallExpr.getPos());
+            //                }
+            //            }
         } catch (UserException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return;

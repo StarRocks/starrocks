@@ -53,13 +53,6 @@ public class PartitionRange implements Comparable<PartitionRange> {
         return this.partitionKeyRange.lowerEndpoint().compareTo(o.partitionKeyRange.lowerEndpoint());
     }
 
-    public static int compareRangePartition(Range<PartitionKey> left, Range<PartitionKey> right) {
-        if (left.isConnected(right)) {
-            return 0;
-        }
-        return left.lowerEndpoint().compareTo(right.lowerEndpoint());
-    }
-
     /**
      * Check two partition range is `interact` which is a bit different from Range's `isConnected` method, eg:
      * [2, 4) and [4, 6) are not interact;

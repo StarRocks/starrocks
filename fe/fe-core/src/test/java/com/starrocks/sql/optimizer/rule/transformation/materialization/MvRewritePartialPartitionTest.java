@@ -332,10 +332,14 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         }
 
         // increase the ttl number, and add more ttl partitions
+        cluster.runSql("test", String.format("alter materialized view %s set('partition_ttl_number'='5')", mvName));
+        refreshMaterializedView("test", mvName);
         GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
-        Assert.assertEquals(1, mv.getPartitions().size());
+        Assert.assertEquals(5, mv.getPartitions().size());
 
         // decrease the ttl number, and drop some ttl partitions
+        cluster.runSql("test", String.format("alter materialized view %s set('partition_ttl_number'='1')", mvName));
+        refreshMaterializedView("test", mvName);
         GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
         Assert.assertEquals(1, mv.getPartitions().size());
 
