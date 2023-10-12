@@ -649,13 +649,6 @@ public class CoordinatorPreprocessor {
                             FragmentExecParams childParams = fragmentExecParamsMap.get(child.getFragmentId());
                             childParams.instanceExecParams.stream().map(e -> e.host).forEach(childHosts::add);
                         }
-                        List<Pair<Long, TNetworkAddress>> chosenNodes = adaptiveChooseNodes(fragment,
-                                getAliveNodes(idToBackend), childHosts);
-
-                        chosenNodes.stream().forEach(e -> {
-                            hostSet.add(e.second);
-                            recordUsedBackend(e.second, e.first);
-                        });
                         //make olapScan maxParallelism equals prefer compute node number
                         maxParallelism = hostSet.size() * fragment.getParallelExecNum();
                     } else {
@@ -1469,10 +1462,6 @@ public class CoordinatorPreprocessor {
             }
         }
 
-        if (!connectContext.getSessionVariable().enableAdaptiveExecuteNodeNum()) {
-            return childHosts;
-        }
-
         long maxOutputOfRightChild = fragment.getChildren().stream()
                 .sorted(Comparator.comparing(e -> e.getPlanRoot().getId().asInt())).skip(1)
                 .map(e -> e.getPlanRoot().getCardinality()).reduce(Long::max)
@@ -1488,7 +1477,7 @@ public class CoordinatorPreprocessor {
 
         long nodeNums = Math.min(amplifyFactor * baseNodeNums, candidates.size());
 
-        if (nodeNums > childUsedHosts.size()) {
+        if (connectContext.getSessionVariable().enableAdaptiveExecuteNodeNum() && nodeNums > childUsedHosts.size()) {
             for (Map.Entry<Long, ComputeNode> entry : candidates.entrySet()) {
                 TNetworkAddress address = new TNetworkAddress(entry.getValue().getHost(), entry.getValue().getBePort());
                 if (!childUsedHosts.contains(address)) {
