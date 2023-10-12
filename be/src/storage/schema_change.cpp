@@ -695,9 +695,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
                                      strings::Substitute("tablet $0 is doing disk balance", new_tablet->tablet_id()));
     }
 
-    // Create a new tablet schema, should merge with dropped columns in light weight schema change
-    // auto base_tablet_schema = std::make_shared<TabletSchema>();
-    // base_tablet_schema->copy_from(base_tablet->tablet_schema());
     // Create a new tablet schema, should merge with dropped columns in light schema change
     TabletSchemaSPtr base_tablet_schema = std::make_shared<TabletSchema>();
     base_tablet_schema->copy_from(base_tablet->tablet_schema());
