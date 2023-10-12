@@ -26,7 +26,6 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveConnector;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.iceberg.IcebergConnector;
-import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.HashMap;
 import java.util.List;
