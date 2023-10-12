@@ -264,12 +264,28 @@ public class MvUtils {
         return scanOperators;
     }
 
-    public static void getScanOperator(OptExpression root, List<LogicalScanOperator> scanOperators) {
+    private static void getScanOperator(OptExpression root, List<LogicalScanOperator> scanOperators) {
         if (root.getOp() instanceof LogicalScanOperator) {
             scanOperators.add((LogicalScanOperator) root.getOp());
         } else {
             for (OptExpression child : root.getInputs()) {
                 getScanOperator(child, scanOperators);
+            }
+        }
+    }
+
+    public static List<OptExpression> getScanOptExpression(OptExpression root) {
+        List<OptExpression> scanOperators = Lists.newArrayList();
+        getScanOptExpression(root, scanOperators);
+        return scanOperators;
+    }
+
+    private static void getScanOptExpression(OptExpression root, List<OptExpression> scanOperators) {
+        if (root.getOp() instanceof LogicalScanOperator) {
+            scanOperators.add(root);
+        } else {
+            for (OptExpression child : root.getInputs()) {
+                getScanOptExpression(child, scanOperators);
             }
         }
     }
@@ -904,17 +920,15 @@ public class MvUtils {
                                                               OptExpression plan,
                                                               ColumnRefFactory columnRefFactory,
                                                               boolean isCompensate) {
-        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(plan);
-        if (scanOperators.isEmpty()) {
+        List<OptExpression> scanOptExpressions = MvUtils.getScanOptExpression(plan);
+        if (scanOptExpressions.isEmpty()) {
             return ConstantOperator.createBoolean(true);
-        }
-        Statistics icebergStatics = null;
-        if (scanOperators.stream().anyMatch(x -> x instanceof LogicalIcebergScanOperator)) {
-            icebergStatics = getStatistics(plan, context);
         }
 
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
-        for (LogicalScanOperator scanOperator : scanOperators) {
+        for (OptExpression scanOptExpression : scanOptExpressions) {
+            Preconditions.checkState(scanOptExpression.getOp() instanceof LogicalScanOperator);
+            LogicalScanOperator scanOperator = (LogicalScanOperator) scanOptExpression.getOp();
             List<ScalarOperator> partitionPredicate = null;
             if (scanOperator instanceof LogicalOlapScanOperator) {
                 if (!isCompensate) {
@@ -945,6 +959,7 @@ public class MvUtils {
             } else if (scanOperator instanceof LogicalHiveScanOperator) {
                 partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator);
             } else if (scanOperator instanceof LogicalIcebergScanOperator) {
+                Statistics icebergStatics = getStatistics(scanOptExpression, context);
                 partitionPredicate = compensatePartitionPredicateForIceberg(icebergStatics,
                         (LogicalIcebergScanOperator) scanOperator);
             } else {
