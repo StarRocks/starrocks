@@ -24,7 +24,7 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "fs/fs_util.h"
-#include "gutil/macros.h"
+#include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "runtime/lake_snapshot_loader.h"
 #include "storage/lake/compaction_policy.h"
@@ -115,6 +115,25 @@ LakeServiceImpl::LakeServiceImpl(ExecEnv* env) : _env(env) {}
 
 LakeServiceImpl::~LakeServiceImpl() = default;
 
+static void delete_files_async(std::vector<std::string> files_to_delete) {
+    if (files_to_delete.empty()) {
+        return;
+    }
+
+    auto clear_task = [files_to_delete = std::move(files_to_delete)]() {
+        auto st = lake::delete_files(files_to_delete);
+        TEST_SYNC_POINT_CALLBACK("publish_version:delete_txn_log", &st);
+    };
+
+    // Note: |files_to_delete| has been `std::move`ed since here.
+
+    auto tp = ExecEnv::GetInstance()->vacuum_thread_pool();
+    CHECK(tp != nullptr) << "vacuum thread pool is null";
+
+    auto st = tp->submit_func(std::move(clear_task));
+    LOG_IF(WARNING, !st.ok()) << "Fail to submit file deletion task: " << st;
+}
+
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
                                       const ::starrocks::lake::PublishVersionRequest* request,
                                       ::starrocks::lake::PublishVersionResponse* response,
@@ -147,6 +166,9 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     Trace* trace = nullptr;
     scoped_refptr<Trace> trace_gurad;
 
+    // protected by the |response_mtx|
+    std::vector<std::string> files_to_delete;
+
     if (enable_trace) {
         trace_gurad = scoped_refptr<Trace>(new Trace());
         trace = trace_gurad.get();
@@ -173,18 +195,26 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             auto txns = request->txn_ids().data();
             auto txns_size = request->txn_ids().size();
             auto tablet_manager = _env->lake_tablet_manager();
+
             g_publish_tablet_version_queuing_latency << (run_ts - start_ts);
 
-            auto res = tablet_manager->publish_version(tablet_id, base_version, new_version, txns, txns_size);
+            std::vector<std::string> tmp_files_to_delete;
+            auto res = tablet_manager->publish_version(tablet_id, base_version, new_version, txns, txns_size,
+                                                       &tmp_files_to_delete);
             if (res.ok()) {
                 auto metadata = std::move(res).value();
                 auto score = compaction_score(metadata);
+
                 std::lock_guard l(response_mtx);
                 response->mutable_compaction_scores()->insert({tablet_id, score});
+                files_to_delete.insert(files_to_delete.end(), tmp_files_to_delete.begin(), tmp_files_to_delete.end());
             } else {
+                DCHECK(tmp_files_to_delete.empty());
                 g_publish_version_failed_tasks << 1;
                 LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                             << " txn_id=" << txns[0] << " version=" << new_version;
+                             << " txn_ids=" << JoinInts(request->txn_ids(), ",") << " base_version=" << base_version
+                             << " new_version=" << new_version;
+
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
             }
@@ -205,6 +235,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
 
     latch.wait();
     auto cost = butil::gettimeofday_us() - start_ts;
+
+    // Print slow log if needed
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
     if (enable_trace && is_slow) {
         LOG(INFO) << "Published txn " << request->txn_ids(0) << ". cost=" << cost << "us\n" << trace->DumpToString();
@@ -212,6 +244,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         LOG(INFO) << "Published txn " << request->txn_ids(0) << ". #tablets=" << request->tablet_ids_size()
                   << " cost=" << cost << "us";
     }
+
+    // Clear unused files
+    delete_files_async(std::move(files_to_delete));
+
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
 }
 
@@ -274,19 +310,17 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     (void)controller;
 
     auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
-    auto latch = BThreadCountDownLatch(request->tablet_ids_size());
-    for (auto tablet_id : request->tablet_ids()) {
-        auto task = [&, tablet_id]() {
-            DeferOp defer([&] { latch.count_down(); });
-            auto* txn_ids = request->txn_ids().data();
-            auto txn_ids_size = request->txn_ids_size();
-            _env->lake_tablet_manager()->abort_txn(tablet_id, txn_ids, txn_ids_size);
-        };
-        auto st = thread_pool->submit_func(task);
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to submit abort txn  task: " << st;
-            latch.count_down();
-        }
+    auto latch = BThreadCountDownLatch(1);
+    auto task = [&]() {
+        DeferOp defer([&] { latch.count_down(); });
+        auto tablet_ids = std::span(request->tablet_ids().data(), request->tablet_ids_size());
+        auto txn_ids = std::span(request->txn_ids().data(), request->txn_ids_size());
+        _env->lake_tablet_manager()->abort_txn(tablet_ids, txn_ids);
+    };
+    auto st = thread_pool->submit_func(task);
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to submit abort txn  task: " << st;
+        latch.count_down();
     }
 
     latch.wait();

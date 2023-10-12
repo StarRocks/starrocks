@@ -17,6 +17,7 @@
 #include <bthread/types.h>
 
 #include <shared_mutex>
+#include <span>
 #include <variant>
 
 #include "common/statusor.h"
@@ -68,9 +69,10 @@ public:
 
     // Returns the the newly created tablet metadata
     StatusOr<TabletMetadataPtr> publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
-                                                const int64_t* txns, int txns_size);
+                                                const int64_t* txns, int txns_size,
+                                                std::vector<std::string>* files_to_delete);
 
-    void abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size);
+    void abort_txn(std::span<const int64_t> tablet_ids, std::span<const int64_t> txn_ids);
 
     StatusOr<CompactionTaskPtr> compact(int64_t tablet_id, int64_t version, int64_t txn_id);
 
@@ -97,6 +99,10 @@ public:
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t tablet_id, int64_t version);
 
     StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
+
+    StatusOr<TxnLogPtr> get_txn_vlog(const std::string& path, bool fill_cache = true) {
+        return get_txn_log(path, fill_cache);
+    }
 
     StatusOr<TxnLogIter> list_txn_log(int64_t tablet_id, bool filter_tablet);
 

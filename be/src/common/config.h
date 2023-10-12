@@ -1082,6 +1082,6 @@ CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 // 0 means no limit
 CONF_Int32(lake_service_max_concurrency, "0");
 
-CONF_mInt64(lake_vacuum_max_batch_delete_size, "10000");
+CONF_mInt64(lake_vacuum_max_batch_delete_size, "100000");
 
 } // namespace starrocks::config

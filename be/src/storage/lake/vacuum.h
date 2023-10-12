@@ -14,7 +14,15 @@
 
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "gen_cpp/lake_service.pb.h"
+
+namespace starrocks {
+class FileSystem;
+class Status;
+} // namespace starrocks
 
 namespace starrocks::lake {
 
@@ -29,5 +37,12 @@ void vacuum_full(TabletManager* tablet_mgr, const VacuumFullRequest& request, Va
 //  - request.tablet_ids_size() > 0
 //  - response != NULL
 void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& request, DeleteTabletResponse* response);
+
+// Batch deletion with bvar statistics.
+//
+// REQUIRES:
+//  - All path in |paths| must have the same filesystem scheme and have a common parent directory.
+//  This usually means that all files should be in the same table partition directory on the object store.
+Status delete_files(const std::vector<std::string>& paths);
 
 } // namespace starrocks::lake

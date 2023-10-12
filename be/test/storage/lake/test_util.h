@@ -30,6 +30,18 @@
 
 namespace starrocks::lake {
 
+static StatusOr<TabletMetadataPtr> TEST_simple_publish_version(TabletManager* tablet_mgr, int64_t tablet_id,
+                                                               int64_t new_version, int64_t txn_id) {
+    std::vector<std::string> files_to_delete;
+    auto ret = tablet_mgr->publish_version(tablet_id, new_version - 1, new_version, &txn_id, 1, &files_to_delete);
+    if (!files_to_delete.empty()) {
+        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(files_to_delete[0]));
+        auto st = fs->delete_files(files_to_delete);
+        LOG_IF(WARNING, !st.ok()) << st;
+    }
+    return ret;
+}
+
 class TestBase : public ::testing::Test {
 public:
     ~TestBase() override {
@@ -64,6 +76,10 @@ protected:
         DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store();
         CHECK_OK(TabletMetaManager::get_persistent_index_meta(data_dir, tablet_id, &index_meta));
         ASSERT_TRUE(index_meta.version().major_number() == expected_version);
+    }
+
+    StatusOr<TabletMetadataPtr> simple_publish_version(int64_t tablet_id, int64_t new_version, int64_t txn_id) {
+        return TEST_simple_publish_version(_tablet_mgr.get(), tablet_id, new_version, txn_id);
     }
 
     std::string _test_dir;
