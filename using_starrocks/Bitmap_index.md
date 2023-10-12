@@ -47,9 +47,9 @@ Bitmap 索引能够提高指定列的查询效率。如果一个查询条件命�
     | COMMENT     | 否       | 索引备注。                                                   |
 
     您可以指定多条 `INDEX index_name (column_name) [USING BITMAP] [COMMENT '']` 命令同时为多个列创建 bitmap 索引，且多条命令之间用逗号（,）隔开。
-    关于建表的其他参数说明，参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。
+    关于建表的其他参数说明，参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
 
-- 建表后使用 CREATE INDEX 创建 Bitmap 索引。详细参数说明和示例，参见 [CREATE INDEX](../sql-reference/sql-statements/data-definition/CREATE%20INDEX.md)。
+- 建表后使用 CREATE INDEX 创建 Bitmap 索引。详细参数说明和示例，参见 [CREATE INDEX](../sql-reference/sql-statements/data-definition/CREATE_INDEX.md)。
 
     ```SQL
     CREATE INDEX index_name ON table_name (column_name) [USING BITMAP] [COMMENT ''];
@@ -57,7 +57,7 @@ Bitmap 索引能够提高指定列的查询效率。如果一个查询条件命�
 
 ## 创建进度
 
-创建 Bitmap 索引为**异步**过程，执行索引创建语句后可通过 [SHOW ALTER TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20ALTER.md) 命令查看索引创建进度，当返回值中 `State` 字段显示为 `FINISHED` 时，即为创建成功。
+创建 Bitmap 索引为**异步**过程，执行索引创建语句后可通过 [SHOW ALTER TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md) 命令查看索引创建进度，当返回值中 `State` 字段显示为 `FINISHED` 时，即为创建成功。
 
 ```SQL
 SHOW ALTER TABLE COLUMN [FROM db_name];
@@ -67,7 +67,7 @@ SHOW ALTER TABLE COLUMN [FROM db_name];
 
 ## 查看索引
 
-查看指定表的所有 Bitmap 索引。详细参数和返回结果说明，参见 [SHOW INDEX](../sql-reference/sql-statements/Administration/SHOW%20INDEX.md)。
+查看指定表的所有 Bitmap 索引。详细参数和返回结果说明，参见 [SHOW INDEX](../sql-reference/sql-statements/Administration/SHOW_INDEX.md)。
 
 ```SQL
 SHOW { INDEX[ES] | KEY[S] } FROM [db_name.]table_name [FROM db_name];
@@ -79,7 +79,7 @@ SHOW { INDEX[ES] | KEY[S] } FROM [db_name.]table_name [FROM db_name];
 
 ## 删除索引
 
-删除指定表的 Bitmap 索引。详细参数说明和示例，参见 [DROP INDEX](../sql-reference/sql-statements/data-definition/DROP%20INDEX.md)。
+删除指定表的 Bitmap 索引。详细参数说明和示例，参见 [DROP INDEX](../sql-reference/sql-statements/data-definition/DROP_INDEX.md)。
 
 ```SQL
 DROP INDEX index_name ON [db_name.]table_name;

@@ -47,7 +47,7 @@ mysql> select array_agg(c2) from test where c1>4;
 
 下面的示例使用如下数据表进行介绍：
 
-```Plain%20Text
+```Plain_Text
 mysql> select * from t;
 +------+------+------+
 | a    | name | pv   |
@@ -62,7 +62,7 @@ mysql> select * from t;
 
 示例一: 根据 `a` 列分组，将 `pv` 列的值串联成数组，数组元素基于 `name` 的升序进行排序，null 值排在最前。
 
-```Plain%20Text
+```Plain_Text
 mysql> select a, array_agg(pv order by name nulls first) from t group by a;
 +------+---------------------------------+
 | a    | array_agg(pv ORDER BY name ASC) |
@@ -86,7 +86,7 @@ mysql> select a, array_agg(pv) from t group by a;
 
 示例二: 将 `pv` 列的值串联成数组，数组元素基于 `name` 的降序进行排序，null 值排在最后。
 
-```Plain%20Text
+```Plain_Text
 mysql> select array_agg(pv order by name desc nulls last) from t;
 +----------------------------------+
 | array_agg(pv ORDER BY name DESC) |
@@ -107,7 +107,7 @@ mysql> select array_agg(pv) from t;
 
 示例三: 将 `pv` 列的值串联成数组，使用 where 子句对 `pv` 值进行过滤。没有满足条件的值，返回 NULL。
 
-```Plain%20Text
+```Plain_Text
 mysql> select array_agg(pv order by name desc nulls last) from t where a < 0;
 +----------------------------------+
 | array_agg(pv ORDER BY name DESC) |

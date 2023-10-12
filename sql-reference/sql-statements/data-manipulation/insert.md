@@ -4,7 +4,7 @@
 
 向 StarRocks 表中插入或覆盖写入数据。关于该种导入数据方式适用的场景请参考 [INSERT INTO 导入](/loading/InsertInto.md)。
 
-您可以通过 [SUBMIT TASK](../data-manipulation/SUBMIT%20TASK.md) 创建异步 INSERT 任务。
+您可以通过 [SUBMIT TASK](../data-manipulation/SUBMIT_TASK.md) 创建异步 INSERT 任务。
 
 ## 语法
 

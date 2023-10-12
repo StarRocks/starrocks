@@ -4,7 +4,7 @@
 
 恢复指定数据库、表或分区的数据。当前 StarRocks 仅支持恢复 OLAP 类型表。更多信息，请见 [备份和恢复](../../../administration/Backup_and_restore.md)。
 
-数据恢复为异步操作。您可以通过 [SHOW RESTORE](../data-manipulation/SHOW%20RESTORE.md) 语句查看恢复作业状态，或通过 [CANCEL RESTORE](../data-definition/CANCEL%20RESTORE.md) 语句取消恢复作业。
+数据恢复为异步操作。您可以通过 [SHOW RESTORE](../data-manipulation/SHOW_RESTORE.md) 语句查看恢复作业状态，或通过 [CANCEL RESTORE](../data-definition/CANCEL_RESTORE.md) 语句取消恢复作业。
 
 > **注意**
 >
@@ -53,8 +53,8 @@ PROPERTIES ("key"="value", ...)
 | snapshot_name   | 数据快照名。                                                 |
 | repository_name | 仓库名。                                                    |
 | ON              | 需要恢复的表名。如不指定则恢复整个数据库。                   |
-| PARTITION       | 需要恢复的分区名。如不指定则恢复对应表的所有分区。您可以通过 [SHOW PARTITIONS](../data-manipulation/SHOW%20PARTITIONS.md) 语句查看分区名。 |
-| PROPERTIES      | 恢复操作属性。现支持以下属性：<ul><li>`backup_timestamp`：备份时间戳，**必填**。您可以通过 [SHOW SNAPSHOT](../data-manipulation/SHOW%20SNAPSHOT.md) 查看备份时间戳。</li><li>`replication_num`：指定恢复的表或分区的副本数。默认：`3`。</li><li>`meta_version`：该参数作为临时方案，仅用于恢复旧版本 StarRocks 备份的数据。最新版本的备份数据中已经包含 `meta version`，无需再指定。</li><li>`timeout`：任务超时时间。单位：秒。默认：`86400`。</li></ul> |
+| PARTITION       | 需要恢复的分区名。如不指定则恢复对应表的所有分区。您可以通过 [SHOW PARTITIONS](../data-manipulation/SHOW_PARTITIONS.md) 语句查看分区名。 |
+| PROPERTIES      | 恢复操作属性。现支持以下属性：<ul><li>`backup_timestamp`：备份时间戳，**必填**。您可以通过 [SHOW SNAPSHOT](../data-manipulation/SHOW_SNAPSHOT.md) 查看备份时间戳。</li><li>`replication_num`：指定恢复的表或分区的副本数。默认：`3`。</li><li>`meta_version`：该参数作为临时方案，仅用于恢复旧版本 StarRocks 备份的数据。最新版本的备份数据中已经包含 `meta version`，无需再指定。</li><li>`timeout`：任务超时时间。单位：秒。默认：`86400`。</li></ul> |
 
 ## 示例
 

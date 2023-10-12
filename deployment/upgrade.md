@@ -189,7 +189,7 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
   >
   > 如果您从 v2.5 升级至 v3.0 之后，进行了回滚，然后再次升级至 v3.0，为了避免部分 Follower FE 节点元数据升级失败，则必须在升级完成后执行以下步骤：
   >
-  > 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md) 创建新的元数据快照文件。
+  > 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 创建新的元数据快照文件。
   > 2. 等待元数据快照文件同步至其他 FE 节点。
   >
   > 您可以通过查看 Leader FE 节点的日志文件 **fe.log** 确认元数据快照文件是否推送完成。如果日志打印以下内容，则说明快照文件推送完成："push image.* from subdir [] to other nodes. totally xx nodes, push successed xx nodes"。
