@@ -21,6 +21,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -34,6 +35,7 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 public class SecurityPolicyRewriteRule {
     public static QueryStatement buildView(ConnectContext context, Relation relation, TableName tableName) {
@@ -60,13 +62,19 @@ public class SecurityPolicyRewriteRule {
 
         boolean hasPolicy = false;
         List<SelectListItem> selectListItemList = new ArrayList<>();
+        Map<TableName, Relation> allTablesRelations;
         for (Column column : columns) {
+            if (column.getType().isUnknown()) {
+                continue;
+            }
             Expr maskingExpr = Authorizer.getColumnMaskingPolicy(
                     context, tableName, column.getName(), column.getType());
 
             if (maskingExpr != null) {
                 hasPolicy = true;
                 selectListItemList.add(new SelectListItem(maskingExpr, column.getName(), NodePosition.ZERO));
+                allTablesRelations = AnalyzerUtils.collectAllTableAndViewRelations(maskingExpr);
+                allTablesRelations.values().forEach(r -> r.setCreateByPolicyRewritten(true));
             } else {
                 selectListItemList.add(new SelectListItem(new SlotRef(tableName, column.getName()), column.getName(),
                         NodePosition.ZERO));
@@ -76,6 +84,8 @@ public class SecurityPolicyRewriteRule {
         Expr rowAccessExpr = Authorizer.getRowAccessPolicy(context, tableName);
         if (rowAccessExpr != null) {
             hasPolicy = true;
+            allTablesRelations = AnalyzerUtils.collectAllTableAndViewRelations(rowAccessExpr);
+            allTablesRelations.values().forEach(r -> r.setCreateByPolicyRewritten(true));
         }
 
         if (!hasPolicy) {

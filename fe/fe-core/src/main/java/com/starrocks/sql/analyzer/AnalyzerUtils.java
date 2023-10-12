@@ -445,6 +445,12 @@ public class AnalyzerUtils {
         return viewRelations;
     }
 
+    public static Map<TableName, Relation> collectAllTableAndViewRelations(ParseNode parseNode) {
+        Map<TableName, Relation>  allTableAndViewRelations = Maps.newHashMap();
+        new TableAndViewRelationsCollector(allTableAndViewRelations).visit(parseNode);
+        return allTableAndViewRelations;
+    }
+
     public static boolean isOnlyHasOlapTables(StatementBase statementBase) {
         Map<TableName, Table> nonOlapTables = Maps.newHashMap();
         new AnalyzerUtils.NonOlapTableCollector(nonOlapTables).visit(statementBase);
@@ -657,6 +663,33 @@ public class AnalyzerUtils {
         @Override
         public Void visitTable(TableRelation node, Void context) {
             tableRelations.add(node);
+            return null;
+        }
+    }
+
+    private static class TableAndViewRelationsCollector extends AstTraverser<Void, Void> {
+
+        private final Map<TableName, Relation> allTableAndViewRelations;
+
+        public TableAndViewRelationsCollector(Map<TableName, Relation> tableRelations) {
+            this.allTableAndViewRelations = tableRelations;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            if (node.isCreateByPolicyRewritten()) {
+                return null;
+            }
+            allTableAndViewRelations.put(node.getName(), node);
+            return null;
+        }
+
+        @Override
+        public Void visitView(ViewRelation node, Void context) {
+            if (node.isCreateByPolicyRewritten()) {
+                return null;
+            }
+            allTableAndViewRelations.put(node.getName(), node);
             return null;
         }
     }

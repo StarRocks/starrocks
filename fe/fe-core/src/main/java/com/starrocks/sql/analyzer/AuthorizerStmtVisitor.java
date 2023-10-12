@@ -132,6 +132,7 @@ import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
@@ -188,12 +189,14 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.ViewRelation;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -213,9 +216,8 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitQueryStatement(QueryStatement statement, ConnectContext context) {
-        Map<TableName, Table> allTouchedTables = AnalyzerUtils.collectAllTableAndView(statement);
-        checkSelectTableAction(context, allTouchedTables);
-
+        Map<TableName, Relation> allTablesRelations = AnalyzerUtils.collectAllTableAndViewRelations(statement);
+        checkSelectTableAction(context, allTablesRelations);
         return null;
     }
 
@@ -237,7 +239,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitDeleteStatement(DeleteStmt statement, ConnectContext context) {
         Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getTableName(), PrivilegeType.DELETE);
-        Map<TableName, Table> allTouchedTables = AnalyzerUtils.collectAllTableAndView(statement);
+        Map<TableName, Relation> allTouchedTables = AnalyzerUtils.collectAllTableAndViewRelations(statement);
         allTouchedTables.remove(statement.getTableName());
         checkSelectTableAction(context, allTouchedTables);
         return null;
@@ -247,16 +249,21 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitUpdateStatement(UpdateStmt statement, ConnectContext context) {
         Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getTableName(), PrivilegeType.UPDATE);
-        Map<TableName, Table> allTouchedTables = AnalyzerUtils.collectAllTableAndView(statement);
+        Map<TableName, Relation> allTouchedTables = AnalyzerUtils.collectAllTableAndViewRelations(statement);
         allTouchedTables.remove(statement.getTableName());
         checkSelectTableAction(context, allTouchedTables);
         return null;
     }
 
-    void checkSelectTableAction(ConnectContext context, Map<TableName, Table> allTouchedTables) {
-        for (Map.Entry<TableName, Table> tableToBeChecked : allTouchedTables.entrySet()) {
+    void checkSelectTableAction(ConnectContext context, Map<TableName, Relation> allTouchedTables) {
+        for (Map.Entry<TableName, Relation> tableToBeChecked : allTouchedTables.entrySet()) {
             TableName tableName = tableToBeChecked.getKey();
-            Table table = tableToBeChecked.getValue();
+            Table table;
+            if (tableToBeChecked.getValue() instanceof TableRelation) {
+                table = ((TableRelation) tableToBeChecked.getValue()).getTable();
+            } else {
+                table = ((ViewRelation) tableToBeChecked.getValue()).getView();
+            }
 
             if (table instanceof View) {
                 Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
