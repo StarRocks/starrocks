@@ -248,7 +248,7 @@ public class CreateLakeTableTest {
                         "(partition p1 values less than (\"2022-03-01\"),\n" +
                         " partition p2 values less than (\"2022-04-01\"))\n" +
                         "distributed by hash(key2) buckets 2\n" +
-                        "properties('datacache.enable' = 'true','enable_async_write_back' = 'true');"));
+                        "properties('datacache.enable' = 'true','enable_async_write_back' = 'false');"));
         {
             LakeTable lakeTable = getLakeTable("lake_test", "multi_partition_aggregate_key_cache");
             // check table property
@@ -263,7 +263,7 @@ public class CreateLakeTableTest {
             DataCacheInfo partition2DataCacheInfo =
                     lakeTable.getPartitionInfo().getDataCacheInfo(partition2Id);
             Assert.assertTrue(partition2DataCacheInfo.isEnabled());
-            Assert.assertEquals(true, partition2DataCacheInfo.isAsyncWriteBack());
+            Assert.assertEquals(false, partition2DataCacheInfo.isAsyncWriteBack());
         }
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -362,11 +362,19 @@ public class CreateLakeTableTest {
 
         // storage_cache disabled but enable_async_write_back = true
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "enable_async_write_back can't be turned on when cache is disabled",
+                "enable_async_write_back is disabled since version 3.1.4",
                 () -> createTable(
                         "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
                                 "distributed by hash(key1) buckets 3\n" +
                                 " properties('datacache.enable' = 'false', 'enable_async_write_back' = 'true');"));
+
+        // enable_async_write_back disabled
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "enable_async_write_back is disabled since version 3.1.4",
+                () -> createTable(
+                        "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
+                                "distributed by hash(key1) buckets 3\n" +
+                                " properties('datacache.enable' = 'true', 'enable_async_write_back' = 'true');"));
     }
 
     @Test

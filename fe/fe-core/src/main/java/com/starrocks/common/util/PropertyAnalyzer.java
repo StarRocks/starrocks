@@ -977,10 +977,9 @@ public class PropertyAnalyzer {
 
         boolean enableAsyncWriteBack =
                 analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK, false);
-        if (!enableDataCache && enableAsyncWriteBack) {
-            throw new AnalysisException("enable_async_write_back can't be turned on when cache is disabled");
+        if (enableAsyncWriteBack) {
+            throw new AnalysisException("enable_async_write_back is disabled since version 3.1.4");
         }
-
         return new DataCacheInfo(enableDataCache, enableAsyncWriteBack);
     }
 
