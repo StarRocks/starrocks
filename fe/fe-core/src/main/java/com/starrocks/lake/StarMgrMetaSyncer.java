@@ -102,6 +102,9 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
             // 1. drop tablet
             ComputeNode node = GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getBackendOrComputeNode(backendId);
+            if (node == null) {
+                continue;
+            }
             DeleteTabletRequest request = new DeleteTabletRequest();
             request.tabletIds = Lists.newArrayList(shards);
 
