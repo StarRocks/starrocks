@@ -30,7 +30,10 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.hadoop.HadoopFileIO;
@@ -40,6 +43,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 public class InsertPlanTest extends PlanTestBase {
@@ -792,6 +796,12 @@ public class InsertPlanTest extends PlanTestBase {
                 "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
         starRocksAssert.withCatalog(createIcebergCatalogStmt);
         MetadataMgr metadata = starRocksAssert.getCtx().getGlobalStateMgr().getMetadataMgr();
+        new MockUp<IcebergTable>() {
+            @Mock
+            public Optional<Snapshot> getSnapshot() {
+                return Optional.empty();
+            }
+        };
 
         Table nativeTable = new BaseTable(null, null);
 

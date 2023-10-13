@@ -15,6 +15,9 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Strings;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Config;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
@@ -27,12 +30,15 @@ import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.util.ThreadPools;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.Properties;
+
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class IcebergConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(IcebergConnector.class);
@@ -47,12 +53,16 @@ public class IcebergConnector implements Connector {
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
     private IcebergCatalog icebergNativeCatalog;
+    private final Cache<TableIdentifier, IcebergTable> icebergTableCache;
 
     public IcebergConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
+        this.icebergTableCache = CacheBuilder.newBuilder().
+                expireAfterWrite(Config.hive_meta_cache_ttl_s, SECONDS).
+                maximumSize(1000000).build();
     }
 
     private IcebergCatalog buildIcebergNativeCatalog() {
@@ -91,7 +101,7 @@ public class IcebergConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog());
+        return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog(), icebergTableCache);
     }
 
     // In order to be compatible with the catalog created with the wrong configuration,

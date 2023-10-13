@@ -61,7 +61,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
-import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -255,21 +254,8 @@ public class PartitionUtil {
                 // return table name if table is unpartitioned
                 return Lists.newArrayList(icebergTable.getRemoteTableName());
             }
-
-            Optional<Snapshot> snapshot = icebergTable.getSnapshot();
-            // snapshot is null means the table is empty
-            if (!snapshot.isPresent()) {
-                return Lists.newArrayList();
-            }
-
-            if (snapshot.get().snapshotId() != icebergTable.getSnapshotId()) {
-                partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                        icebergTable.getCatalogName(), icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
-                icebergTable.setCachedPartitionNames(partitionNames);
-                icebergTable.setSnapshotId(snapshot.get().snapshotId());
-            } else {
-                partitionNames = icebergTable.getCachedPartitionNames();
-            }
+            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    icebergTable.getCatalogName(), icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
         } else if (table.isJDBCTable()) {
             JDBCTable jdbcTable = (JDBCTable) table;
             partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(

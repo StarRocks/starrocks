@@ -51,6 +51,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
@@ -84,10 +85,10 @@ public class IcebergTable extends Table {
 
     // used for recording the last snapshot time when refresh mv based on mv.
     private long refreshSnapshotTime = -1L;
-
     // only used for cache iceberg table partition names
-    private long snapshotId = -1;
+    private long cachedSnapshotId = -1;
     private List<String> cachedPartitionNames = Lists.newArrayList();
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     public IcebergTable() {
         super(TableType.ICEBERG);
     }
@@ -102,6 +103,8 @@ public class IcebergTable extends Table {
         this.remoteTableName = remoteTableName;
         this.nativeTable = nativeTable;
         this.icebergProperties = icebergProperties;
+        Optional<Snapshot> snapshot = getSnapshot();
+        this.cachedSnapshotId = snapshot.map(Snapshot::snapshotId).orElse(-1L);
     }
 
     public String getCatalogName() {
@@ -129,20 +132,26 @@ public class IcebergTable extends Table {
         }
     }
 
-    public long getSnapshotId() {
-        return snapshotId;
-    }
-
-    public void setSnapshotId(long snapshotId) {
-        this.snapshotId = snapshotId;
+    public long getCachedSnapshotId() {
+        return cachedSnapshotId;
     }
 
     public List<String> getCachedPartitionNames() {
-        return cachedPartitionNames;
+        readLock();
+        try {
+            return cachedPartitionNames;
+        } finally {
+            readUnlock();
+        }
     }
 
     public void setCachedPartitionNames(List<String> cachedPartitionNames) {
-        this.cachedPartitionNames = cachedPartitionNames;
+        writeLock();
+        try {
+            this.cachedPartitionNames = cachedPartitionNames;
+        } finally {
+            writeUnlock();
+        }
     }
 
     @Override
@@ -337,6 +346,7 @@ public class IcebergTable extends Table {
         private List<Column> fullSchema;
         private Map<String, String> icebergProperties;
         private org.apache.iceberg.Table nativeTable;
+        private long snapshotId;
 
         public Builder() {
         }
@@ -386,9 +396,30 @@ public class IcebergTable extends Table {
             return this;
         }
 
+        public Builder setSnapshotId(long snapshotId) {
+            this.snapshotId = snapshotId;
+            return this;
+        }
+
         public IcebergTable build() {
             return new IcebergTable(id, srTableName, catalogName, resourceName, remoteDbName, remoteTableName,
                     fullSchema, nativeTable, icebergProperties);
         }
+    }
+
+    private void writeLock() {
+        lock.writeLock().lock();
+    }
+
+    private void writeUnlock() {
+        lock.writeLock().unlock();
+    }
+
+    private void readLock() {
+        lock.readLock().lock();
+    }
+
+    private void readUnlock() {
+        lock.readLock().unlock();
     }
 }
