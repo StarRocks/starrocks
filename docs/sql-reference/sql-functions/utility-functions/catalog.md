@@ -48,7 +48,3 @@ select catalog();
 | hudi_catalog |
 +--------------+
 ```
-
-## See also
-
-[SET CATALOG](../../sql-statements/data-definition/SET_CATALOG.md): Switches to a destination catalog.
