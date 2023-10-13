@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -61,6 +62,7 @@ import org.junit.BeforeClass;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Set;
 
 public class MvRewriteTestBase {
     private static final Logger LOG = LogManager.getLogger(MvRewriteTestBase.class);
@@ -387,5 +389,11 @@ public class MvRewriteTestBase {
         for (OptExpression child : root.getInputs()) {
             getScanOperators(child, name, results);
         }
+    }
+
+    public static Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
+        Set<String> toRefreshPartitions = Sets.newHashSet();
+        mv.getPartitionNamesToRefreshForMv(toRefreshPartitions, true);
+        return toRefreshPartitions;
     }
 }
