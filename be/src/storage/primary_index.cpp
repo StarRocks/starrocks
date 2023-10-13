@@ -1017,7 +1017,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     MonotonicStopWatch timer;
     timer.start();
 
-    const TabletSchemaCSPtr tablet_schema_ptr = tablet->thread_safe_get_tablet_schema();
+    const TabletSchemaCSPtr tablet_schema_ptr = tablet->tablet_schema();
     vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
     for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
@@ -1080,7 +1080,8 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     auto chunk = chunk_shared_ptr.get();
     for (auto& rowset : rowsets) {
         RowsetReleaseGuard guard(rowset);
-        auto res = rowset->get_segment_iterators2(pkey_schema, tablet->data_dir()->get_meta(), apply_version, &stats);
+        auto res = rowset->get_segment_iterators2(pkey_schema, tablet->tablet_schema(), tablet->data_dir()->get_meta(),
+                                                  apply_version, &stats);
         if (!res.ok()) {
             return res.status();
         }
@@ -1383,12 +1384,6 @@ std::string PrimaryIndex::to_string() const {
 
 std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema) {
     return std::make_unique<PrimaryIndex>(pk_schema);
-}
-
-void PrimaryIndex::get_persistent_index_meta_lock_guard(PersistentIndexMetaLockGuard* guard) {
-    if (_persistent_index != nullptr) {
-        guard->acquire_meta_lock(_persistent_index.get());
-    }
 }
 
 double PrimaryIndex::get_write_amp_score() {

@@ -1,6 +1,6 @@
 # Load data using Spark connector (recommended)
 
-StarRocks provides a self-developed connector named StarRocks Connector for Apache Spark™ (Spark connector for short) to help you load data into a StarRocks table by using Spark. The basic principle is to accumulate the data and then load it all at a time into StarRocks through [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md). The Spark connector is implemented based on Spark DataSource V2. A DataSource can be created by using Spark DataFrames or Spark SQL. And both batch and structured streaming modes are supported.
+StarRocks provides a self-developed connector named StarRocks Connector for Apache Spark™ (Spark connector for short) to help you load data into a StarRocks table by using Spark. The basic principle is to accumulate the data and then load it all at a time into StarRocks through [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md). The Spark connector is implemented based on Spark DataSource V2. A DataSource can be created by using Spark DataFrames or Spark SQL. And both batch and structured streaming modes are supported.
 
 ## Version requirements
 
@@ -85,7 +85,7 @@ Directly download the corresponding version of the Spark connector JAR from the 
 | starrocks.write.buffer.size                    | NO       | 104857600     | The maximum size of data that can be accumulated in memory before being sent to StarRocks at a time. Setting this parameter to a larger value can improve loading performance but may increase loading latency. |
 | starrocks.write.flush.interval.ms              | NO       | 300000        | The interval at which data is sent to StarRocks. This parameter is used to control the loading latency. |
 | starrocks.columns                              | NO       | None          | The StarRocks table column into which you want to load data. You can specify multiple columns, which must be separated by commas (,), for example, `"c0,c1,c2"`. |
-| starrocks.write.properties.*                   | NO       | None          | The parameters that are used to control Stream Load behavior.  For example, the parameter `starrocks.write.properties.format` specifies the format of the data to be loaded, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md). |
+| starrocks.write.properties.*                   | NO       | None          | The parameters that are used to control Stream Load behavior.  For example, the parameter `starrocks.write.properties.format` specifies the format of the data to be loaded, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md). |
 | starrocks.write.properties.format              | NO       | CSV           | The file format based on which the Spark connector transforms each batch of data before the data is sent to StarRocks. Valid values: CSV and JSON. |
 | starrocks.write.properties.row_delimiter       | NO       | \n            | The row delimiter for CSV-formatted data.                    |
 | starrocks.write.properties.column_separator    | NO       | \t            | The column separator for CSV-formatted data.                 |

@@ -124,7 +124,7 @@ TabletMeta::~TabletMeta() {
 
 Status TabletMeta::create_from_file(const string& file_path) {
     TabletMetaPB tablet_meta_pb;
-    ProtobufFile file(file_path);
+    ProtobufFileWithHeader file(file_path);
     Status st = file.load(&tablet_meta_pb);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to load tablet meta file: " << st;
@@ -165,13 +165,19 @@ Status TabletMeta::save(const string& file_path) {
 
 Status TabletMeta::save(const string& file_path, const TabletMetaPB& tablet_meta_pb) {
     DCHECK(!file_path.empty());
-    ProtobufFile file(file_path);
+    ProtobufFileWithHeader file(file_path);
     return file.save(tablet_meta_pb, true);
 }
 
 Status TabletMeta::save_meta(DataDir* data_dir) {
     std::unique_lock wrlock(_meta_lock);
     return _save_meta(data_dir);
+}
+
+void TabletMeta::save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, DataDir* data_dir) {
+    std::unique_lock wrlock(_meta_lock);
+    _schema = tablet_schema;
+    _save_meta(data_dir);
 }
 
 Status TabletMeta::_save_meta(DataDir* data_dir) {

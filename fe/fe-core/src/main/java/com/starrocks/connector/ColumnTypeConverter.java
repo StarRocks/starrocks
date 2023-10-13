@@ -322,6 +322,7 @@ public class ColumnTypeConverter {
                 if (!isConvertedFailed) {
                     return new StructType(structFields);
                 }
+                break;
             case MAP:
                 Schema value = avroSchema.getValueType();
                 Type valueType = fromHudiType(value);
@@ -334,6 +335,7 @@ public class ColumnTypeConverter {
                     // Hudi map's key must be string
                     return new MapType(ScalarType.createDefaultExternalTableString(), valueType);
                 }
+                break;
             case UNION:
                 List<Schema> nonNullMembers = avroSchema.getTypes().stream()
                         .filter(schema -> !Schema.Type.NULL.equals(schema.getType()))

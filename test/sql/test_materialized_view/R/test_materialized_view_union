@@ -55,7 +55,7 @@ select k1, v1, v2 from t2;
 insert into t1 values ("202301",1,1),("202305",1,2);
 -- result:
 -- !result
-select sleep(2);
+select sleep(15);
 -- result:
 1
 -- !result
@@ -115,7 +115,7 @@ select k1, v1, v2 from t2;
 insert into t1 values (202301,1,1),(202305,1,2);
 -- result:
 -- !result
-select sleep(2);
+select sleep(15);
 -- result:
 1
 -- !result

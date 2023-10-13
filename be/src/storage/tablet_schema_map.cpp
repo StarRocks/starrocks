@@ -43,6 +43,20 @@ bool TabletSchemaMap::check_schema_unique_id(const TabletSchemaPB& schema_pb, co
     return true;
 }
 
+bool TabletSchemaMap::check_schema_unique_id(const TabletSchemaCSPtr& in_schema, const TabletSchemaCSPtr& ori_schema) {
+    if (in_schema->keys_type() != ori_schema->keys_type() || in_schema->num_columns() != ori_schema->num_columns() ||
+        in_schema->id() != ori_schema->id() || in_schema->schema_version() != ori_schema->schema_version()) {
+        return false;
+    }
+
+    for (auto i = 0; i < in_schema->num_columns(); i++) {
+        if (in_schema->column(i).unique_id() != ori_schema->column(i).unique_id()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const TabletSchemaPB& schema_pb) {
     SchemaId id = schema_pb.id();
     DCHECK_NE(TabletSchema::invalid_id(), id);
@@ -83,6 +97,40 @@ std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const
         }
     }
 
+    return std::make_pair(result, insert);
+}
+
+std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const TabletSchemaPtr& tablet_schema) {
+    DCHECK(tablet_schema != nullptr);
+    SchemaId id = tablet_schema->id();
+    DCHECK_NE(id, TabletSchema::invalid_id());
+    MapShard* shard = get_shard(id);
+    bool insert = false;
+    TabletSchemaPtr result = nullptr;
+    TabletSchemaPtr ptr = nullptr;
+    {
+        std::unique_lock l(shard->mtx);
+        auto it = shard->map.find(id);
+        if (it == shard->map.end()) {
+            result = tablet_schema;
+            shard->map.emplace(id, result);
+            insert = true;
+        } else {
+            ptr = it->second.lock();
+            if (UNLIKELY(!ptr)) {
+                result = tablet_schema;
+                it->second = std::weak_ptr<const TabletSchema>(result);
+                insert = true;
+            } else {
+                if (check_schema_unique_id(tablet_schema, ptr)) {
+                    result = ptr;
+                } else {
+                    result = tablet_schema;
+                }
+                insert = false;
+            }
+        }
+    }
     return std::make_pair(result, insert);
 }
 

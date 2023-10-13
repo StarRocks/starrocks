@@ -17,10 +17,10 @@ StarRocks v2.4 further supports overwriting data into a table by using INSERT OV
 ## Precautions
 
 - You can cancel a synchronous INSERT transaction only by pressing the **Ctrl** and **C** keys from your MySQL client.
-- You can submit an asynchronous INSERT task using [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md).
+- You can submit an asynchronous INSERT task using [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md).
 - As for the current version of StarRocks, the INSERT transaction fails by default if the data of any rows does not comply with the schema of the table. For example, the INSERT transaction fails if the length of a field in any row exceeds the length limit for the mapping field in the table. You can set the session variable `enable_insert_strict` to `false` to allow the transaction to continue by filtering out the rows that mismatch the table.
 - If you execute the INSERT statement frequently to load small batches of data into StarRocks, excessive data versions are generated. It severely affects query performance. We recommend that, in production, you should not load data with the INSERT command too often or use it as a routine for data loading on a daily basis. If your application or analytic scenario demand solutions to loading streaming data or small data batches separately, we recommend you use Apache Kafka® as your data source and load the data via [Routine Load](../loading/RoutineLoad.md).
-- If you execute the INSERT OVERWRITE statement, StarRocks creates temporary partitions for the partitions which store the original data, inserts new data into the temporary partitions, and [swaps the original partitions with the temporary partitions](../sql-statements/data-definition/ALTER%20TABLE.md#use-a-temporary-partition-to-replace-current-partition). All these operations are executed in the FE Leader node. Hence, if the FE Leader node crashes while executing INSERT OVERWRITE command, the whole load transaction will fail, and the temporary partitions will be truncated.
+- If you execute the INSERT OVERWRITE statement, StarRocks creates temporary partitions for the partitions which store the original data, inserts new data into the temporary partitions, and [swaps the original partitions with the temporary partitions](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#use-a-temporary-partition-to-replace-current-partition). All these operations are executed in the FE Leader node. Hence, if the FE Leader node crashes while executing INSERT OVERWRITE command, the whole load transaction will fail, and the temporary partitions will be truncated.
 
 ## Preparation
 
@@ -361,7 +361,7 @@ mysql> SELECT * FROM insert_generated_columns;
 
 ## Load data asynchronously using INSERT
 
-Loading data with INSERT submits a synchronous transaction, which may fail because of session interruption or timeout. You can submit an asynchronous INSERT transaction using [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md). This feature is supported since StarRocks v2.5.
+Loading data with INSERT submits a synchronous transaction, which may fail because of session interruption or timeout. You can submit an asynchronous INSERT transaction using [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md). This feature is supported since StarRocks v2.5.
 
 - The following example asynchronously inserts the data from the source table to the target table `insert_wiki_edit`.
 

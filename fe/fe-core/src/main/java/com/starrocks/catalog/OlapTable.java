@@ -59,6 +59,9 @@ import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Partition.PartitionState;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
@@ -111,6 +114,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -119,8 +123,10 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -490,6 +496,13 @@ public class OlapTable extends Table {
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
             int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
             OriginStatement origStmt, List<Integer> sortColumns) {
+        setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
+                origStmt, sortColumns, null);
+    }
+
+    public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
+            int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
+            OriginStatement origStmt, List<Integer> sortColumns, List<Integer> sortColumnUniqueIds) {
         // Nullable when meta comes from schema change log replay.
         // The replay log only save the index id, so we need to get name by id.
         if (indexName == null) {
@@ -512,7 +525,8 @@ public class OlapTable extends Table {
         }
 
         MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema, schemaVersion,
-                schemaHash, shortKeyColumnCount, storageType, keysType, origStmt, sortColumns);
+                schemaHash, shortKeyColumnCount, storageType, keysType, origStmt, sortColumns,
+                sortColumnUniqueIds);
         indexIdToMeta.put(indexId, indexMeta);
         indexNameToId.put(indexName, indexId);
     }
@@ -529,20 +543,21 @@ public class OlapTable extends Table {
     // rebuild the full schema of table
     // the order of columns in fullSchema is meaningless
     public void rebuildFullSchema() {
-        fullSchema.clear();
+        List<Column> newFullSchema = new CopyOnWriteArrayList<>();
         nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Column baseColumn : indexIdToMeta.get(baseIndexId).getSchema()) {
-            fullSchema.add(baseColumn);
+            newFullSchema.add(baseColumn);
             nameToColumn.put(baseColumn.getName(), baseColumn);
         }
         for (MaterializedIndexMeta indexMeta : indexIdToMeta.values()) {
             for (Column column : indexMeta.getSchema()) {
                 if (!nameToColumn.containsKey(column.getName())) {
-                    fullSchema.add(column);
+                    newFullSchema.add(column);
                     nameToColumn.put(column.getName(), column);
                 }
             }
         }
+        fullSchema = newFullSchema;
         LOG.debug("after rebuild full schema. table {}, schema: {}", id, fullSchema);
     }
 
@@ -2855,6 +2870,54 @@ public class OlapTable extends Table {
 
     public void setStorageInfo(FilePathInfo pathInfo, DataCacheInfo dataCacheInfo) {
         throw new SemanticException("setStorageInfo is not supported");
+    }
+
+    /**
+     * Check if data cache is allowed for the specified partition's data:
+     *  - If the partition is NOT partitioned by DATE or DATETIME, data cache is allowed
+     *  - If the partition is partitioned by DATE or DATETIME:
+     *    - if the partition's end value (of type DATE/DATETIME) is within the last "datacache.partition_duration"
+     *      duration, allow data cache for the partition.
+     *    - otherwise, disallow the data cache for the partition
+     *
+     * @param partition the partition to check. the partition must belong to this table.
+     * @return true if the partition is enabled for the data cache, false otherwise
+     */
+    public boolean isEnableFillDataCache(Partition partition) {
+        try {
+            return isEnableFillDataCacheImpl(Objects.requireNonNull(partition, "partition is null"));
+        } catch (AnalysisException ignored) {
+            return true;
+        }
+    }
+
+    private boolean isEnableFillDataCacheImpl(Partition partition) throws AnalysisException {
+        if (tableProperty == null) {
+            return true;
+        }
+
+        PeriodDuration cacheDuration = tableProperty.getDataCachePartitionDuration();
+        if (cacheDuration != null && getPartitionInfo().isRangePartition()) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) getPartitionInfo();
+            Range<PartitionKey> partitionRange = rangePartitionInfo.getRange(partition.getId());
+            Range<PartitionKey> dataCacheRange;
+            if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATETIME)) {
+                LocalDateTime upper = LocalDateTime.now();
+                LocalDateTime lower = upper.minus(cacheDuration);
+                dataCacheRange = Range.openClosed(PartitionKey.ofDateTime(lower), PartitionKey.ofDateTime(upper));
+                return partitionRange.isConnected(dataCacheRange);
+            } else if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATE)) {
+                LocalDate upper = LocalDate.now();
+                LocalDate lower = upper.minus(cacheDuration);
+                dataCacheRange = Range.openClosed(PartitionKey.ofDate(lower), PartitionKey.ofDate(upper));
+                return partitionRange.isConnected(dataCacheRange);
+            } else {
+                // If the table was not partitioned by DATE/DATETIME, ignore the property "datacache.partition_duration" and
+                // enable data cache by default.
+                return true;
+            }
+        }
+        return true;
     }
     // ------ for lake table and lake materialized view end ------
 }

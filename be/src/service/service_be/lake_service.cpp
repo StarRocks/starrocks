@@ -309,9 +309,9 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
         cntl->SetFailed("tablet manager is null");
         return;
     }
-    auto thread_pool = _env->vacuum_thread_pool();
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::CLONE);
     if (UNLIKELY(thread_pool == nullptr)) {
-        cntl->SetFailed("no vacuum thread pool");
+        cntl->SetFailed("no thread pool to run task");
         return;
     }
     auto latch = BThreadCountDownLatch(1);
@@ -344,9 +344,9 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
         return;
     }
 
-    auto thread_pool = _env->vacuum_thread_pool();
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::CLONE);
     if (UNLIKELY(thread_pool == nullptr)) {
-        cntl->SetFailed("no vacuum thread pool");
+        cntl->SetFailed("no thread pool to run task");
         return;
     }
     auto latch = BThreadCountDownLatch(1);

@@ -82,6 +82,7 @@ import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExprNode;
+import com.starrocks.thrift.TOlapTableColumnParam;
 import com.starrocks.thrift.TOlapTableIndexSchema;
 import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTableLocationParam;
@@ -279,18 +280,26 @@ public class OlapTableSink extends DataSink {
             MaterializedIndexMeta indexMeta = pair.getValue();
             List<String> columns = Lists.newArrayList();
             List<TColumn> columnsDesc = Lists.newArrayList();
+            List<Integer> columnSortKeyUids = Lists.newArrayList();
             columns.addAll(indexMeta.getSchema().stream().map(Column::getName).collect(Collectors.toList()));
             for (Column column : indexMeta.getSchema()) {
                 TColumn tColumn = column.toThrift();
                 column.setIndexFlag(tColumn, table.getIndexes());
                 columnsDesc.add(tColumn);
             }
+            if (indexMeta.getSortKeyUniqueIds() != null) {
+                columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
+            }
+
             if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
                 columns.add(Load.LOAD_OP_COLUMN);
             }
+
+            TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids, 
+                                                                          indexMeta.getShortKeyColumnCount());
             TOlapTableIndexSchema indexSchema = new TOlapTableIndexSchema(pair.getKey(), columns,
                     indexMeta.getSchemaHash());
-            indexSchema.setColumns_desc(columnsDesc);
+            indexSchema.setColumn_param(columnParam);
             schemaParam.addToIndexes(indexSchema);
         }
         return schemaParam;

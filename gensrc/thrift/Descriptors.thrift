@@ -254,11 +254,17 @@ struct TOlapTablePartitionParam {
     9: optional bool enable_automatic_partition
 }
 
+struct TOlapTableColumnParam {
+    1: required list<TColumn> columns
+    2: required list<i32> sort_key_uid
+    3: required i32 short_key_column_count
+}
+
 struct TOlapTableIndexSchema {
     1: required i64 id
     2: required list<string> columns
     3: required i32 schema_hash
-    4: optional list<TColumn> columns_desc
+    4: optional TOlapTableColumnParam column_param
 }
 
 struct TOlapTableSchemaParam {
@@ -379,6 +385,18 @@ struct TTableFunctionTable {
 
     // Schema columns
     2: optional list<TColumn> columns
+
+    // File format
+    3: optional string file_format;
+
+    // Compression type
+    4: optional Types.TCompressionType compression_type
+
+    // Partition column ids, set if partition_by used in table function
+    5: optional list<i32> partition_column_ids
+
+    // Write single file
+    6: optional bool write_single_file
 }
 
 struct TIcebergSchema {

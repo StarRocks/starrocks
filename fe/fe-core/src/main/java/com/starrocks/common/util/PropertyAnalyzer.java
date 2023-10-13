@@ -346,7 +346,7 @@ public class PropertyAnalyzer {
                 throw new AnalysisException("Bucket size: " + e.getMessage());
             }
             if (bucketSize <= 0) {
-                throw new AnalysisException("Illegal Partition Bucket size: " + bucketSize);
+                throw new AnalysisException("Illegal bucket size: " + bucketSize);
             }
             return bucketSize;
         } else {
@@ -573,16 +573,11 @@ public class PropertyAnalyzer {
 
     public static Boolean analyzeUseLightSchemaChange(Map<String, String> properties) throws AnalysisException {
         if (properties == null || properties.isEmpty()) {
-            return false;
+            return Config.allow_default_light_schema_change;
         }
         String value = properties.get(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
-        // set light schema change false by default
-        if (Config.allow_default_light_schema_change) {
-            properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
-            return true;
-        }
         if (null == value) {
-            return false;
+            return Config.allow_default_light_schema_change;
         }
         properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
         if (Boolean.TRUE.toString().equalsIgnoreCase(value)) {
@@ -1055,10 +1050,9 @@ public class PropertyAnalyzer {
 
         boolean enableAsyncWriteBack =
                 analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK, false);
-        if (!enableDataCache && enableAsyncWriteBack) {
-            throw new AnalysisException("enable_async_write_back can't be turned on when cache is disabled");
+        if (enableAsyncWriteBack) {
+            throw new AnalysisException("enable_async_write_back is disabled since version 3.1.4");
         }
-
         return new DataCacheInfo(enableDataCache, enableAsyncWriteBack);
     }
 

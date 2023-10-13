@@ -21,12 +21,56 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "gutil/strings/util.h"
+#include "testutil/assert.h"
+#include "testutil/sync_point.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
 
-TEST(ProtobufFileTest, test_save_load_tablet_meta) {
-    ProtobufFile file("ProtobufFileTest_test_save_load_tablet_meta.bin");
+template <class T>
+class ProtobufFileTest : public ::testing::Test {
+public:
+    using ProtobufFileType = T;
+};
+
+using MyTypes = ::testing::Types<ProtobufFile, ProtobufFileWithHeader>;
+TYPED_TEST_SUITE(ProtobufFileTest, MyTypes);
+
+TYPED_TEST(ProtobufFileTest, test_save_load_tablet_meta) {
+    const std::string kFileName = "ProtobufFileTest_test_save_load_tablet_meta.bin";
+    DeferOp defer([&]() { std::filesystem::remove(kFileName); });
+
+    TabletMetaPB tablet_meta;
+    tablet_meta.set_table_id(10001);
+    tablet_meta.set_tablet_id(10002);
+    tablet_meta.set_creation_time(87654);
+    tablet_meta.set_partition_id(10);
+    tablet_meta.set_schema_hash(54321);
+    tablet_meta.set_shard_id(0);
+
+    {
+        typename TestFixture::ProtobufFileType file(kFileName);
+        Status st = file.save(tablet_meta, true);
+        ASSERT_TRUE(st.ok()) << st;
+    }
+
+    {
+        typename TestFixture::ProtobufFileType file(kFileName);
+        TabletMetaPB tablet_meta_2;
+        auto st = file.load(&tablet_meta_2);
+        ASSERT_TRUE(st.ok()) << st;
+        ASSERT_EQ(tablet_meta.table_id(), tablet_meta_2.table_id());
+        ASSERT_EQ(tablet_meta.tablet_id(), tablet_meta_2.tablet_id());
+        ASSERT_EQ(tablet_meta.creation_time(), tablet_meta_2.creation_time());
+        ASSERT_EQ(tablet_meta.partition_id(), tablet_meta_2.partition_id());
+        ASSERT_EQ(tablet_meta.schema_hash(), tablet_meta_2.schema_hash());
+        ASSERT_EQ(tablet_meta.shard_id(), tablet_meta_2.shard_id());
+    }
+}
+
+TYPED_TEST(ProtobufFileTest, test_serialize_failed) {
+    typename TestFixture::ProtobufFileType file("ProtobufFileTest_test_save_load_tablet_meta.bin");
     DeferOp defer([&]() { std::filesystem::remove("ProtobufFileTest_test_save_load_tablet_meta.bin"); });
 
     TabletMetaPB tablet_meta;
@@ -37,23 +81,34 @@ TEST(ProtobufFileTest, test_save_load_tablet_meta) {
     tablet_meta.set_schema_hash(54321);
     tablet_meta.set_shard_id(0);
 
-    Status st = file.save(tablet_meta, true);
-    ASSERT_TRUE(st.ok()) << st;
+    if constexpr (std::is_same_v<typename TestFixture::ProtobufFileType, ProtobufFile>) {
+        SyncPoint::GetInstance()->SetCallBack("ProtobufFile::save:serialize", [](void* arg) { *(bool*)arg = false; });
+    }
+    if constexpr (std::is_same_v<typename TestFixture::ProtobufFileType, ProtobufFileWithHeader>) {
+        SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::save:serialize",
+                                              [](void* arg) { *(bool*)arg = false; });
+    }
 
-    TabletMetaPB tablet_meta_2;
-    st = file.load(&tablet_meta_2);
-    ASSERT_TRUE(st.ok()) << st;
-    ASSERT_EQ(tablet_meta.table_id(), tablet_meta_2.table_id());
-    ASSERT_EQ(tablet_meta.tablet_id(), tablet_meta_2.tablet_id());
-    ASSERT_EQ(tablet_meta.creation_time(), tablet_meta_2.creation_time());
-    ASSERT_EQ(tablet_meta.partition_id(), tablet_meta_2.partition_id());
-    ASSERT_EQ(tablet_meta.schema_hash(), tablet_meta_2.schema_hash());
-    ASSERT_EQ(tablet_meta.shard_id(), tablet_meta_2.shard_id());
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    Status st = file.save(tablet_meta, true);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(MatchPattern(std::string(st.message()),
+                             "*failed to serialize protobuf to string, maybe the protobuf is too large*"))
+            << st.message();
+
+    if constexpr (std::is_same_v<typename TestFixture::ProtobufFileType, ProtobufFile>) {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::save:serialize");
+    }
+    if constexpr (std::is_same_v<typename TestFixture::ProtobufFileType, ProtobufFileWithHeader>) {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::save:serialize");
+    }
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
-TEST(ProtobufFileTest, test_corruption) {
-    ProtobufFile file("ProtobufFileTest_test_corruption.bin");
-    DeferOp defer([&]() { std::filesystem::remove("ProtobufFileTest_test_corruption.bin"); });
+TYPED_TEST(ProtobufFileTest, test_corrupted_file0) {
+    const std::string kFileName = "ProtobufFileTest_test_corruption.bin";
+    DeferOp defer([&]() { std::filesystem::remove(kFileName); });
 
     TabletMetaPB tablet_meta;
     tablet_meta.set_table_id(10001);
@@ -63,17 +118,26 @@ TEST(ProtobufFileTest, test_corruption) {
     tablet_meta.set_schema_hash(54321);
     tablet_meta.set_shard_id(0);
 
-    Status st = file.save(tablet_meta, true);
-    ASSERT_TRUE(st.ok()) << st;
+    {
+        typename TestFixture::ProtobufFileType file(kFileName);
+        auto st = file.save(tablet_meta, true);
+        ASSERT_TRUE(st.ok()) << st;
+    }
 
-    std::unique_ptr<WritableFile> f;
-    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN};
-    f = *FileSystem::Default()->new_writable_file(opts, "ProtobufFileTest_test_corruption.bin");
+    {
+        std::unique_ptr<WritableFile> f;
+        WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN};
+        f = *FileSystem::Default()->new_writable_file(opts, "ProtobufFileTest_test_corruption.bin");
+        EXPECT_TRUE(f->append("xx").ok());
+        EXPECT_TRUE(f->close().ok());
+    }
 
-    f->append("xx");
-    TabletMetaPB tablet_meta_2;
-    st = file.load(&tablet_meta_2);
-    ASSERT_FALSE(st.ok());
+    {
+        typename TestFixture::ProtobufFileType file(kFileName);
+        TabletMetaPB tablet_meta_2;
+        auto st = file.load(&tablet_meta_2);
+        ASSERT_FALSE(st.ok());
+    }
 }
 
 } // namespace starrocks

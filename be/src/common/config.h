@@ -49,6 +49,10 @@ CONF_Int32(brpc_port, "8060");
 // The number of bthreads for brpc, the default value is set to -1, which means the number of bthreads is #cpu-cores.
 CONF_Int32(brpc_num_threads, "-1");
 
+// The max number of single connections maintained by the brpc client and each server.
+// Theses connections are created during the first few access and will be used thereafter
+CONF_Int32(brpc_max_connections_per_server, "1");
+
 // Declare a selection strategy for those servers have many ips.
 // Note that there should at most one ip match this list.
 // this is a list in semicolon-delimited format, in CIDR notation, e.g. 10.10.10.0/24
@@ -362,6 +366,14 @@ CONF_Int32(be_exit_after_disk_write_hang_second, "60");
 CONF_Double(dictionary_encoding_ratio, "0.7");
 // The minimum chunk size for dictionary encoding speculation
 CONF_Int32(dictionary_speculate_min_chunk_size, "10000");
+
+// Whether to use special thread pool for streaming load to avoid deadlock for
+// concurrent streaming loads. The maximum number of threads and queue size are
+// set INT32_MAX which indicate there is no limit for the thread pool. Note you
+// don't need to change these configurations in general.
+CONF_mBool(enable_streaming_load_thread_pool, "true");
+CONF_Int32(streaming_load_thread_pool_num_min, "0");
+CONF_Int32(streaming_load_thread_pool_idle_time_ms, "2000");
 
 // The maximum amount of data that can be processed by a stream load
 CONF_mInt64(streaming_load_max_mb, "102400");
@@ -1059,5 +1071,7 @@ CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 
 // 0 means no limit
 CONF_Int32(lake_service_max_concurrency, "0");
+
+CONF_mInt64(lake_vacuum_max_batch_delete_size, "10000");
 
 } // namespace starrocks::config

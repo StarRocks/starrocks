@@ -814,6 +814,45 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testPartitionWithFunctionInUseStr2Date() {
+        String sql = "create materialized view mv1 " +
+                "partition by ss " +
+                "distributed by hash(a) buckets 10 " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select str2date(d,'%Y%m%d') ss, a, b, c from jdbc0.partitioned_db0.tbl1;";
+        try {
+            CreateMaterializedViewStatement createMaterializedViewStatement =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            ExpressionPartitionDesc partitionExpDesc = createMaterializedViewStatement.getPartitionExpDesc();
+            Assert.assertFalse(partitionExpDesc.isFunction());
+            Assert.assertTrue(partitionExpDesc.getExpr() instanceof SlotRef);
+            Assert.assertEquals("ss", partitionExpDesc.getSlotRef().getColumnName());
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testPartitionWithFunctionInUseStr2DateForError() {
+        String sql = "create materialized view mv_error " +
+                "partition by ss " +
+                "distributed by hash(a) buckets 10 " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select str2date(d,'%Y%m%d') ss, a, b, c from jdbc0.partitioned_db0.tbl0;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Materialized view partition function str2date check failed"));
+        }
+    }
+
+    @Test
     public void testPartitionWithFunction() {
         String sql = "create materialized view mv1 " +
                 "partition by date_trunc('month',ss) " +
@@ -833,6 +872,54 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals("ss", partitionExpDesc.getSlotRef().getColumnName());
         } catch (Exception e) {
             Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testPartitionWithFunctionUseStr2Date() throws Exception {
+        // basic
+        {
+            String sql = "create materialized view mv1 " +
+                    "partition by str2date(d,'%Y%m%d') " +
+                    "distributed by hash(a) buckets 10 " +
+                    "REFRESH DEFERRED MANUAL " +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ") " +
+                    "as select a, b, c, d from jdbc0.partitioned_db0.tbl1;";
+            CreateMaterializedViewStatement createMaterializedViewStatement =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            ExpressionPartitionDesc partitionExpDesc = createMaterializedViewStatement.getPartitionExpDesc();
+            Assert.assertTrue(partitionExpDesc.isFunction());
+            Assert.assertTrue(partitionExpDesc.getExpr() instanceof FunctionCallExpr);
+            Assert.assertEquals(partitionExpDesc.getExpr().getChild(0), partitionExpDesc.getSlotRef());
+            Assert.assertEquals("d", partitionExpDesc.getSlotRef().getColumnName());
+        }
+
+        // slot
+        {
+            String sql = "create materialized view mv_str2date " +
+                    "partition by p " +
+                    "distributed by hash(a) buckets 10 " +
+                    "REFRESH DEFERRED MANUAL " +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ") " +
+                    "as select str2date(d,'%Y%m%d') as p,  a, b, c, d from jdbc0.partitioned_db0.tbl1;";
+            starRocksAssert.withMaterializedView(sql);
+        }
+
+        // rollup
+        {
+            String sql = "create materialized view mv_date_trunc_str2date " +
+                    "partition by date_trunc('month', p) " +
+                    "distributed by hash(a) buckets 10 " +
+                    "REFRESH DEFERRED MANUAL " +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ") " +
+                    "as select str2date(d,'%Y%m%d') as p,  a, b, c, d from jdbc0.partitioned_db0.tbl1;";
+            starRocksAssert.withMaterializedView(sql);
         }
     }
 
@@ -2431,7 +2518,7 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testUseSubQueryWithPartition() throws Exception {
-        String sql = "create materialized view mv1 " +
+        String sql1 = "create materialized view mv1 " +
                 "partition by k1 " +
                 "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
@@ -2439,6 +2526,33 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, k2 from (select * from tbl1) tbl";
+
+        String sql2 = "create materialized view mv2 " +
+                "partition by kk " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select date_trunc('day', k1) as kk, k2 from (select * from tbl1) tbl";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
+            UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testJoinWithPartition() throws Exception {
+        String sql = "create materialized view mv1 " +
+                "partition by date_trunc('day', k1) " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select tb1.kk as k1, tb2.k2 as k2 from (select k1 as kk, k2 from tbl1) tb1 join (select * from tbl2) tb2 on tb1.kk = tb2.k1";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {

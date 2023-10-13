@@ -17,6 +17,7 @@ package com.starrocks.common.util;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.Expr;
@@ -51,7 +52,6 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
-import org.glassfish.jersey.internal.guava.Sets;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -59,6 +59,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -93,7 +94,7 @@ public class ProfilingExecPlan {
         private final Class<?> clazz;
         private final List<ProfilingElement> children = Lists.newArrayList();
         private final List<Integer> multiSinkIds = Lists.newArrayList();
-        private final List<String> titleAttributes = Lists.newArrayList();
+        private final TreeSet<String> titleAttributes = Sets.newTreeSet();
         private final Map<String, String> uniqueInfos = Maps.newLinkedHashMap();
 
         private String displayName;
@@ -118,6 +119,10 @@ public class ProfilingExecPlan {
             return parent.isAssignableFrom(clazz);
         }
 
+        public boolean isFinalSink() {
+            return !instanceOf(DataStreamSink.class) && !instanceOf(MultiCastDataSink.class);
+        }
+
         public boolean hasChild(int i) {
             return i < children.size();
         }
@@ -134,8 +139,12 @@ public class ProfilingExecPlan {
             return multiSinkIds;
         }
 
-        public List<String> getTitleAttributes() {
+        public Set<String> getTitleAttributes() {
             return titleAttributes;
+        }
+
+        public void addTitleAttribute(String attribute) {
+            titleAttributes.add(attribute);
         }
 
         public Map<String, String> getUniqueInfos() {
@@ -174,10 +183,6 @@ public class ProfilingExecPlan {
 
         private void addMultiSinkIds(List<Integer> ids) {
             multiSinkIds.addAll(ids);
-        }
-
-        private void addTitleAttribute(String attribute) {
-            titleAttributes.add(attribute);
         }
 
         private void addInfo(String name, String content) {

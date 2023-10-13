@@ -592,10 +592,13 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select * from (select v1 from t0 union all select v4 from t1 union all select v3 from t0) tt order by v1 " +
                 "limit 2;";
-        assertPlanContains(sql, "0:UNION", "7:TOP-N\n" +
-                "  |  order by: <slot 10> 10: v1 ASC\n" +
-                "  |  offset: 0\n" +
-                "  |  limit: 2");
+        assertPlanContains(sql, "0:UNION\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:EXCHANGE");
 
         sql = "select * from (select v1 from t0 intersect select v4 from t1 intersect select v3 from t0 limit 10) tt " +
                 "order by v1 limit 2;";

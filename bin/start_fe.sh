@@ -128,6 +128,11 @@ if [[ "$JAVA_VERSION" -gt 8 ]]; then
     fi
 fi
 
+# detect xmx
+# if detect_jvm_xmx failed to detect xmx, xmx will be empty
+xmx=$(detect_jvm_xmx)
+final_java_opt="${final_java_opt} ${xmx}"
+
 if [[ "$JAVA_VERSION" -lt 11 ]]; then
     echo "Tips: current JDK version is $JAVA_VERSION, JDK 11 or 17 is highly recommended for better GC performance(lower version JDK may not be supported in the future)"
 fi
@@ -151,7 +156,7 @@ fi
 for f in $STARROCKS_HOME/lib/*.jar; do
   CLASSPATH=$f:${CLASSPATH};
 done
-export CLASSPATH=${CLASSPATH}:${STARROCKS_HOME}/lib:${STARROCKS_HOME}/conf
+export CLASSPATH=${STARROCKS_HOME}/lib/starrocks-hadoop-ext.jar:${CLASSPATH}:${STARROCKS_HOME}/lib:${STARROCKS_HOME}/conf
 
 pidfile=$PID_DIR/fe.pid
 

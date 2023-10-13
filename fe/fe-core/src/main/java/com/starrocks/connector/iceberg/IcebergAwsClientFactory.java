@@ -14,10 +14,9 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.google.common.base.Preconditions;
+import com.starrocks.credential.aws.AWSCloudConfigurationProvider;
 import org.apache.iceberg.aws.AwsClientFactory;
 import org.apache.iceberg.aws.AwsProperties;
-import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
@@ -94,7 +93,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         s3SessionToken = properties.getOrDefault(AWS_S3_SESSION_TOKEN, "");
         s3IamRoleArn = properties.getOrDefault(AWS_S3_IAM_ROLE_ARN, "");
         s3ExternalId = properties.getOrDefault(AWS_S3_EXTERNAL_ID, "");
-        s3Region = properties.getOrDefault(AWS_S3_REGION, "");
+        s3Region = properties.getOrDefault(AWS_S3_REGION, AWSCloudConfigurationProvider.DEFAULT_AWS_REGION);
         s3Endpoint = properties.getOrDefault(AWS_S3_ENDPOINT, "");
 
         glueUseAWSSDKDefaultBehavior = Boolean.parseBoolean(
@@ -105,7 +104,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         glueSessionToken = properties.getOrDefault(AWS_GLUE_SESSION_TOKEN, "");
         glueIamRoleArn = properties.getOrDefault(AWS_GLUE_IAM_ROLE_ARN, "");
         glueExternalId = properties.getOrDefault(AWS_GLUE_EXTERNAL_ID, "");
-        glueRegion = properties.getOrDefault(AWS_GLUE_REGION, "");
+        glueRegion = properties.getOrDefault(AWS_GLUE_REGION, AWSCloudConfigurationProvider.DEFAULT_AWS_REGION);
         glueEndpoint = properties.getOrDefault(AWS_GLUE_ENDPOINT, "");
     }
 
@@ -196,8 +195,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
                 return StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey));
             }
         } else {
-            Preconditions.checkArgument(false, "Unreachable");
-            return AnonymousCredentialsProvider.create();
+            throw new IllegalArgumentException("Please configure the correct aws authentication parameters");
         }
     }
 

@@ -51,4 +51,4 @@ select catalog();
 
 ## See also
 
-[SET CATALOG](../../sql-statements/data-definition/SET%20CATALOG.md): Switches to a destination catalog.
+[SET CATALOG](../../sql-statements/data-definition/SET_CATALOG.md): Switches to a destination catalog.

@@ -727,6 +727,12 @@ under the License.
         </dependency>
 
         <dependency>
+            <groupId>org.xerial.snappy</groupId>
+            <artifactId>snappy-java</artifactId>
+            <version>1.1.10.5</version>
+        </dependency>
+
+        <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starclient</artifactId>
             <version>3.2-rc1</version>

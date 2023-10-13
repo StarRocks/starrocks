@@ -387,6 +387,8 @@ if [ ${FE_MODULES}x != ""x ]; then
         ${MVN_CMD} clean
     fi
     ${MVN_CMD} package -am -pl ${FE_MODULES} -DskipTests
+    cd ${STARROCKS_HOME}/java-extensions
+    ${MVN_CMD} package -am -pl hadoop-ext -DskipTests
     cd ${STARROCKS_HOME}
 fi
 
@@ -411,6 +413,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         rm -rf ${STARROCKS_OUTPUT}/fe/lib/*
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/fe/lib/
@@ -471,6 +474,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/paimon-reader-lib ${STARROCKS_OUTPUT}/be/lib/
     cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib
+    cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/hadoop-azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs

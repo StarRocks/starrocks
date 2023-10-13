@@ -50,6 +50,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             _network_times[instance_id.lo] = TimeTrace{};
             _eos_query_stats[instance_id.lo] = std::make_shared<QueryStatistics>();
             _mutexes[instance_id.lo] = std::make_unique<Mutex>();
+            _dest_addrs[instance_id.lo] = dest.brpc_server;
 
             PUniqueId finst_id;
             finst_id.set_hi(instance_id.hi);
@@ -157,12 +158,10 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     COUNTER_SET(bytes_sent_counter, _bytes_sent);
     COUNTER_SET(request_sent_counter, _request_sent);
 
-    if (_bytes_enqueued - _bytes_sent > 0) {
-        auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
-        auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
-        COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
-        COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
-    }
+    auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
+    auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
+    COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
+    COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
 
     profile->add_derived_counter(
             "NetworkBandwidth", TUnit::BYTES_PER_SECOND,
@@ -365,8 +364,12 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                 --_num_in_flight_rpcs[ctx.instance_id.lo];
             }
             --_total_in_flight_rpc;
-            std::string err_msg = fmt::format("transmit chunk rpc failed:{}", print_id(ctx.instance_id));
-            _fragment_ctx->cancel(Status::InternalError(err_msg));
+
+            const auto& dest_addr = _dest_addrs[ctx.instance_id.lo];
+            std::string err_msg = fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}]",
+                                              print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port);
+
+            _fragment_ctx->cancel(Status::ThriftRpcError(err_msg));
             LOG(WARNING) << err_msg;
         });
         closure->addSuccessHandler([this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
@@ -379,7 +382,10 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             if (!status.ok()) {
                 _is_finishing = true;
                 _fragment_ctx->cancel(status);
-                LOG(WARNING) << fmt::format("transmit chunk rpc failed:{}, msg:{}", print_id(ctx.instance_id),
+
+                const auto& dest_addr = _dest_addrs[ctx.instance_id.lo];
+                LOG(WARNING) << fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] [msg={}]",
+                                            print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port,
                                             status.message());
             } else {
                 _try_to_send_rpc(ctx.instance_id, [&]() {

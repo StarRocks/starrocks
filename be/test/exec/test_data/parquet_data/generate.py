@@ -35,6 +35,7 @@ data = [
     pa.array([1, 2, 3], type=pa.uint64()),
     
     pa.array([1659962123000, 1659962124000, 1659962125000], type=pa.timestamp('ms', tz='America/New_York')),
+    pa.array([1659962123000, 1659962124000, 1659962125000], type=pa.timestamp('ms')),
 
     pa.array([1.1, 2.1, 3.1], type=pa.float32()),
     pa.array([1.1, 2.1, 3.1], type=pa.float64()),
@@ -126,6 +127,7 @@ columns = [
     "col_json_uint64",
     
     "col_json_timestamp",
+    "col_json_timestamp_not_normalized",
 
     "col_json_float32",
     "col_json_float64",
