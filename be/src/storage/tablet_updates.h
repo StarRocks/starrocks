@@ -221,13 +221,15 @@ public:
 
     // Used for schema change, migrate another tablet's version&rowsets to this tablet
     Status link_from(Tablet* base_tablet, int64_t request_version, ChunkChanger* chunk_changer,
-                     const std::string& err_msg_header = "");
+                     const TabletSchemaCSPtr& base_tablet_schema, const std::string& err_msg_header = "");
 
     Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
-                        ChunkChanger* chunk_changer, const std::string& err_msg_header = "");
+                        ChunkChanger* chunk_changer, const TabletSchemaCSPtr& base_tablet_schema,
+                        const std::string& err_msg_header = "");
 
     Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
-                        ChunkChanger* chunk_changer, const std::string& err_msg_header = "");
+                        ChunkChanger* chunk_changer, const TabletSchemaCSPtr& base_tablet_schema,
+                        const std::string& err_msg_header = "");
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false);
 

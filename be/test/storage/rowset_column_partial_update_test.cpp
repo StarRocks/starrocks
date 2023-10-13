@@ -673,7 +673,9 @@ TEST_P(RowsetColumnPartialUpdateTest, test_schema_change) {
         auto new_tablet = create_tablet(rand(), rand(), true);
         new_tablet->set_tablet_state(TABLET_NOTREADY);
         auto chunk_changer = std::make_unique<ChunkChanger>(new_tablet->tablet_schema());
-        ASSERT_TRUE(new_tablet->updates()->link_from(tablet.get(), version, chunk_changer.get()).ok());
+        ASSERT_TRUE(new_tablet->updates()
+                            ->link_from(tablet.get(), version, chunk_changer.get(), tablet->tablet_schema())
+                            .ok());
         // check data
         ASSERT_TRUE(check_tablet(new_tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
             return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;

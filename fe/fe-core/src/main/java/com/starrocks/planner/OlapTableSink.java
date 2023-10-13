@@ -40,6 +40,7 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -284,6 +285,7 @@ public class OlapTableSink extends DataSink {
             columns.addAll(indexMeta.getSchema().stream().map(Column::getName).collect(Collectors.toList()));
             for (Column column : indexMeta.getSchema()) {
                 TColumn tColumn = column.toThrift();
+                tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
                 column.setIndexFlag(tColumn, table.getIndexes());
                 columnsDesc.add(tColumn);
             }
