@@ -215,6 +215,8 @@ struct HashTableProbeState {
               probe_match_filter(rhs.probe_match_filter),
               count(rhs.count),
               probe_row_count(rhs.probe_row_count),
+              probe_selector(rhs.probe_selector),
+              submap_idx(rhs.submap_idx),
               match_flag(rhs.match_flag),
               has_null_build_tuple(rhs.has_null_build_tuple),
               has_remain(rhs.has_remain),
@@ -824,6 +826,8 @@ public:
     void build_prepare(RuntimeState* state);
     void probe_prepare(RuntimeState* state);
 
+    void part_build_prepare(RuntimeState* state);
+
     void build(RuntimeState* state);
     void probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
                bool* has_remain);
@@ -892,6 +896,7 @@ public:
     void close();
 
     Status build(RuntimeState* state);
+    Status part_build(RuntimeState* state);
     Status reset_probe_state(RuntimeState* state);
     Status probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos);
     Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
@@ -906,6 +911,9 @@ public:
     size_t get_probe_column_count() const { return _table_items->probe_column_count; }
     size_t get_build_column_count() const { return _table_items->build_column_count; }
     size_t get_bucket_size() const { return _table_items->bucket_size; }
+
+    auto probe_state() { return _probe_state.get(); }
+
     size_t get_used_bucket_count() const;
 
     void remove_duplicate_index(Filter* filter);

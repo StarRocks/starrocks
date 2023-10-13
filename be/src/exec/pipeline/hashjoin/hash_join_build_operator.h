@@ -82,12 +82,16 @@ public:
 
     const auto& hash_joiner_factory() { return _hash_joiner_factory; }
 
+    void finished_build(int32_t driver_sequence);
+
 protected:
     HashJoinerFactoryPtr _hash_joiner_factory;
     std::unique_ptr<PartialRuntimeFilterMerger> _partial_rf_merger;
     std::vector<Columns> _string_key_columns;
     const TJoinDistributionMode::type _distribution_mode;
     SpillProcessChannelFactoryPtr _spill_channel_factory;
+    std::vector<HashJoinerPtr> _joiners;
+    std::atomic_int64_t _inc{};
 };
 
 } // namespace starrocks::pipeline

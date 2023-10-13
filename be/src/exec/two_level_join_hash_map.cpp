@@ -11,16 +11,17 @@
 #include "exprs/expr.h"
 #include "serde/column_array_serde.h"
 #include "types/logical_type.h"
+#include "util/hash_util.hpp"
 #include "util/orlp/pdqsort.h"
 
 namespace starrocks {
 void TwoLevelSortedSerializeJoinBuildFunc::prepare(RuntimeState* state, JoinHashTableItems* table_items) {
-    table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
-    table_items->build_slice.resize(table_items->row_count + 1);
-    table_items->build_pool = std::make_unique<MemPool>();
+    // table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
+    // table_items->build_slice.resize(table_items->row_count + 1);
+    // table_items->build_pool = std::make_unique<MemPool>();
     // call prepare for each submap
     for (size_t i = 0; i < table_items->sub_table_size; ++i) {
-        SerializedJoinBuildFunc::prepare(state, table_items->sub_items[i]);
+        // SerializedJoinBuildFunc::prepare(state, table_items->sub_items[i]);
     }
 }
 
@@ -28,7 +29,7 @@ void TwoLevelSortedSerializeJoinBuildFunc::construct_hash_table(RuntimeState* st
                                                                 HashTableProbeState* probe_state) {
     // call construct for each submap
     for (size_t i = 0; i < table_items->sub_table_size; ++i) {
-        SerializedJoinBuildFunc::construct_hash_table(state, table_items->sub_items[i], probe_state);
+        // SerializedJoinBuildFunc::construct_hash_table(state, table_items->sub_items[i], probe_state);
     }
     // LOG(WARNING) << "TRACE1:" << this << ":" << &table_items;
     // for (size_t i = 0; i < table_items->sub_table_size; ++i) {
@@ -86,12 +87,19 @@ void TwoLevelSerializeJoinProbeFunc::_probe_column(const JoinHashTableItems& tab
                                                    HashTableProbeState* probe_state, const Columns& data_columns,
                                                    uint8_t* ptr) {
     uint32_t row_count = probe_state->probe_row_count;
+    std::vector<uint32_t> hash_values;
+    hash_values.resize(row_count);
+    hash_values.assign(row_count, HashUtil::FNV_SEED);
+
+    for (const ColumnPtr& column : data_columns) {
+        column->fnv_hash(&hash_values[0], 0, row_count);
+    }
 
     // serialize key
     for (uint32_t i = 0; i < row_count; i++) {
         probe_state->probe_slice[i] = JoinHashMapHelper::get_hash_key(data_columns, i, ptr);
-        probe_state->submap_idx[i] =
-                JoinHashMapHelper::calc_bucket_num<Slice>(probe_state->probe_slice[i], table_items.sub_table_size);
+        probe_state->submap_idx[i] = ReduceOp()(HashUtil::xorshift32(hash_values[i]), table_items.sub_table_size);
+        // JoinHashMapHelper::calc_bucket_num<Slice>(probe_state->probe_slice[i], table_items.sub_table_size);
         ptr += probe_state->probe_slice[i].size;
         probe_state->probe_selector[i] = i;
     }
@@ -103,8 +111,8 @@ void TwoLevelSerializeJoinProbeFunc::_probe_column(const JoinHashTableItems& tab
     //
     for (uint32_t i = 0; i < row_count; i++) {
         auto idx = probe_selector[i];
-        probe_state->buckets[idx] =
-                JoinHashMapHelper::calc_bucket_num<Slice>(probe_state->probe_slice[idx], table_items.bucket_size);
+        probe_state->buckets[idx] = JoinHashMapHelper::calc_bucket_num<Slice>(
+                probe_state->probe_slice[idx], table_items.sub_items[probe_state->submap_idx[idx]]->bucket_size);
     }
 
     for (uint32_t i = 0; i < row_count; i++) {
@@ -155,8 +163,8 @@ void TwoLevelSerializeJoinProbeFunc::_probe_nullable_column(const JoinHashTableI
     //
     for (uint32_t i = 0; i < row_count; i++) {
         auto idx = probe_selector[i];
-        probe_state->buckets[idx] =
-                JoinHashMapHelper::calc_bucket_num<Slice>(probe_state->probe_slice[idx], table_items.bucket_size);
+        probe_state->buckets[idx] = JoinHashMapHelper::calc_bucket_num<Slice>(
+                probe_state->probe_slice[idx], table_items.sub_items[probe_state->submap_idx[idx]]->bucket_size);
     }
 
     for (uint32_t i = 0; i < row_count; i++) {
@@ -172,6 +180,11 @@ void TwoLevelSerializeJoinProbeFunc::_probe_nullable_column(const JoinHashTableI
 
 void TwoLevelJoinHashMap::build_prepare(RuntimeState* state) {
     _builder.prepare(state, _table_items);
+}
+
+void TwoLevelJoinHashMap::part_build_prepare(RuntimeState* state) {
+    SerializedJoinBuildFunc::prepare(state, _table_items);
+    SerializedJoinBuildFunc::construct_hash_table(state, _table_items, _probe_state);
 }
 
 void TwoLevelJoinHashMap::probe_prepare(RuntimeState* state) {

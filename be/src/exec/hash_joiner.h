@@ -172,6 +172,9 @@ public:
     }
 
     Status prepare_builder(RuntimeState* state, RuntimeProfile* runtime_profile);
+
+    Status part_build(RuntimeState* state);
+
     Status prepare_prober(RuntimeState* state, RuntimeProfile* runtime_profile);
     void close(RuntimeState* state) override;
 
@@ -218,7 +221,8 @@ public:
 
     size_t get_ht_row_count() { return _hash_join_builder->hash_table_row_count(); }
 
-    HashJoinBuilder* hash_join_builder() { return _hash_join_builder; }
+    HashJoinBuilder*& hash_join_builder() { return _hash_join_builder; }
+    HashJoinBuilder*& shared_builder() { return _shared_builder; }
 
     Status create_runtime_filters(RuntimeState* state);
 
@@ -435,6 +439,7 @@ private:
 
     HashJoinProber* _hash_join_prober;
     HashJoinBuilder* _hash_join_builder;
+    HashJoinBuilder* _shared_builder;
     std::vector<HashJoinBuilder*> _sub_builders;
 
     HashTableParam _hash_table_param;

@@ -472,6 +472,33 @@ Status JoinHashTable::build(RuntimeState* state) {
     return Status::OK();
 }
 
+Status JoinHashTable::part_build(RuntimeState* state) {
+    for (size_t idx = 0; idx < _table_items->sub_table_size; ++idx) {
+        size_t join_key_count = _table_items->join_keys.size();
+        auto table_item = _table_items->sub_items[idx];
+        for (size_t i = 0; i < join_key_count; i++) {
+            if (table_item->join_keys[i].col_ref != nullptr) {
+                SlotId slot_id = table_item->join_keys[i].col_ref->slot_id();
+                table_item->key_columns[i] = table_item->build_chunk->get_column_by_slot_id(slot_id);
+            }
+        }
+    }
+
+    // If the join key is column ref of build chunk, fetch from build chunk directly
+    size_t join_key_count = _table_items->join_keys.size();
+    for (size_t i = 0; i < join_key_count; i++) {
+        if (_table_items->join_keys[i].col_ref != nullptr) {
+            SlotId slot_id = _table_items->join_keys[i].col_ref->slot_id();
+            _table_items->key_columns[i] = _table_items->build_chunk->get_column_by_slot_id(slot_id);
+        }
+    }
+
+    _two_level_slice = std::make_unique<TwoLevelJoinHashMap>(_table_items.get(), _probe_state.get());
+    _two_level_slice->part_build_prepare(state);
+
+    return Status::OK();
+}
+
 Status JoinHashTable::reset_probe_state(starrocks::RuntimeState* state) {
     _hash_map_type = _choose_join_hash_map();
     switch (_hash_map_type) {

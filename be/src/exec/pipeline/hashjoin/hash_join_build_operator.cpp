@@ -118,7 +118,9 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
                                                                    std::move(in_filters), std::move(bloom_filters)));
     }
 
-    _join_builder->enter_probe_phase();
+    RETURN_IF_ERROR(_join_builder->part_build(state));
+
+    ((HashJoinBuildOperatorFactory*)_factory)->finished_build(_driver_sequence);
 
     return Status::OK();
 }
@@ -146,14 +148,37 @@ void HashJoinBuildOperatorFactory::close(RuntimeState* state) {
 OperatorPtr HashJoinBuildOperatorFactory::create(int32_t dop, int32_t driver_sequence) {
     if (_string_key_columns.empty()) {
         _string_key_columns.resize(dop);
+        _joiners.resize(dop);
+        _inc = dop;
     }
 
+    _joiners[driver_sequence] = _hash_joiner_factory->create_builder(dop, driver_sequence);
+    _joiners[driver_sequence]->ref();
     return std::make_shared<HashJoinBuildOperator>(this, _id, _name, _plan_node_id, driver_sequence,
-                                                   _hash_joiner_factory->create_builder(dop, driver_sequence),
-                                                   _partial_rf_merger.get(), _distribution_mode);
+                                                   _joiners[driver_sequence], _partial_rf_merger.get(),
+                                                   _distribution_mode);
 }
 
 void HashJoinBuildOperatorFactory::retain_string_key_columns(int32_t driver_sequence, Columns&& columns) {
     _string_key_columns[driver_sequence] = std::move(columns);
 }
+
+void HashJoinBuildOperatorFactory::finished_build(int32_t driver_sequence) {
+    if (--_inc == 0) {
+        auto builder = _joiners[0]->hash_join_builder();
+        for (auto& joiner : _joiners) {
+            builder->hash_table().add_subtable(joiner->hash_join_builder()->hash_table());
+        }
+
+        builder->build(runtime_state());
+
+        for (auto& joiner : _joiners) {
+            joiner->shared_builder() = builder;
+        }
+        for (auto& joiner : _joiners) {
+            joiner->enter_probe_phase();
+        }
+    }
+}
+
 } // namespace starrocks::pipeline

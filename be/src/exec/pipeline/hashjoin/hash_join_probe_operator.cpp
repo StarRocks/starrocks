@@ -27,7 +27,7 @@ HashJoinProbeOperator::HashJoinProbeOperator(OperatorFactory* factory, int32_t i
 
 void HashJoinProbeOperator::close(RuntimeState* state) {
     if (_join_prober != _join_builder) {
-        _join_prober->unref(state);
+        // _join_prober->unref(state);
     }
 
     _join_builder->decr_prober(state);
@@ -97,7 +97,7 @@ Status HashJoinProbeOperator::set_finished(RuntimeState* state) {
 Status HashJoinProbeOperator::_reference_builder_hash_table_once() {
     // non-broadcast join directly return as _join_prober == _join_builder,
     // but broadcast should refer to the shared join builder
-    if (_join_prober == _join_builder) {
+    if (_driver_sequence == 0) {
         return Status::OK();
     }
 
@@ -108,6 +108,8 @@ Status HashJoinProbeOperator::_reference_builder_hash_table_once() {
     if (_join_prober->has_referenced_hash_table()) {
         return Status::OK();
     }
+
+    _join_prober->hash_join_builder()->hash_table().reset_probe_state(runtime_state());
 
     TRY_CATCH_ALLOC_SCOPE_START()
     _join_prober->reference_hash_table(_join_builder.get());

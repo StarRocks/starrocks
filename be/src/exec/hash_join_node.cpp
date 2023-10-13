@@ -442,7 +442,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
             _join_type != TJoinOp::RIGHT_ANTI_JOIN;
 
     auto rhs_operators = child(1)->decompose_to_pipeline(context);
-    if (_distribution_mode == TJoinDistributionMode::BROADCAST || use_intra_instance_broadcast_join) {
+    if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
         // Broadcast join need only create one hash table, because all the HashJoinProbeOperators
         // use the same hash table with their own different probe states.
         rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), rhs_operators);
