@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -33,9 +34,11 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -43,9 +46,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-
-import static com.starrocks.sql.optimizer.statistics.StatisticsCalcUtils.getStatistics;
-import static com.starrocks.sql.optimizer.statistics.StatisticsCalcUtils.replaceColRef;
 
 public class DeriveRangeJoinPredicateRule extends TransformationRule {
 
@@ -223,5 +223,40 @@ public class DeriveRangeJoinPredicateRule extends TransformationRule {
         }
 
         return null;
+    }
+
+    private Statistics getStatistics(OptExpression input, OptimizerContext context) {
+        deriveStatistics(input, context);
+        return input.getStatistics();
+    }
+
+
+    private void deriveStatistics(OptExpression optExpression, OptimizerContext context) {
+        if (optExpression.getStatistics() != null) {
+            return;
+        }
+
+        for (OptExpression child : optExpression.getInputs()) {
+            deriveStatistics(child, context);
+        }
+        ExpressionContext ec = new ExpressionContext(optExpression);
+        StatisticsCalculator sc = new StatisticsCalculator(ec, context.getColumnRefFactory(),
+                context.getTaskContext().getOptimizerContext());
+        sc.estimatorStats();
+        optExpression.setStatistics(ec.getStatistics());
+    }
+
+    private ScalarOperator replaceColRef(ScalarOperator scalarOperator, LogicalOperator op) {
+        if (op.getProjection() != null) {
+            ColumnRefSet outputCols = new ColumnRefSet(op.getProjection().getOutputColumns());
+            if (outputCols.isIntersect(scalarOperator.getUsedColumns())) {
+                // need use the original output cols from the operator to rewrite the scalarOperator
+                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(
+                        op.getProjection().getColumnRefMap(), false);
+                return rewriter.rewrite(scalarOperator);
+            }
+        }
+
+        return scalarOperator;
     }
 }

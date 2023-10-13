@@ -19,18 +19,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.ExpressionContext;
-import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
@@ -162,37 +156,4 @@ public class StatisticsCalcUtils {
         return 1;
     }
 
-    public static Statistics getStatistics(OptExpression input, OptimizerContext context) {
-        deriveStatistics(input, context);
-        return input.getStatistics();
-    }
-
-    public static void deriveStatistics(OptExpression optExpression, OptimizerContext context) {
-        if (optExpression.getStatistics() != null) {
-            return;
-        }
-
-        for (OptExpression child : optExpression.getInputs()) {
-            deriveStatistics(child, context);
-        }
-        ExpressionContext ec = new ExpressionContext(optExpression);
-        StatisticsCalculator sc = new StatisticsCalculator(ec, context.getColumnRefFactory(),
-                context.getTaskContext().getOptimizerContext());
-        sc.estimatorStats();
-        optExpression.setStatistics(ec.getStatistics());
-    }
-
-    public static ScalarOperator replaceColRef(ScalarOperator scalarOperator, LogicalOperator op) {
-        if (op.getProjection() != null) {
-            ColumnRefSet outputCols = new ColumnRefSet(op.getProjection().getOutputColumns());
-            if (outputCols.isIntersect(scalarOperator.getUsedColumns())) {
-                // need use the original output cols from the operator to rewrite the scalarOperator
-                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(
-                        op.getProjection().getColumnRefMap(), false);
-                return rewriter.rewrite(scalarOperator);
-            }
-        }
-
-        return scalarOperator;
-    }
 }

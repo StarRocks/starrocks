@@ -1344,7 +1344,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private Set<String> getPartitionedMVRefreshPartitions(boolean isQueryRewrite) {
         Preconditions.checkState(partitionInfo instanceof ExpressionRangePartitionInfo);
         // If non-partition-by table has changed, should refresh all mv partitions
-        Expr partitionExpr = getPartitionRefTableExprs().get(0);
+        Expr partitionExpr = getFirstPartitionRefTableExpr();
         Pair<Table, Column> partitionInfo = getBaseTableAndPartitionColumn();
         // if non-partition-by table has changed, should refresh all mv partitions
         if (partitionInfo == null) {
