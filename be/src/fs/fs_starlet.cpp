@@ -515,19 +515,17 @@ public:
         std::vector<std::string> parsed_paths;
         parsed_paths.reserve(paths.size());
         std::shared_ptr<staros::starlet::fslib::FileSystem> fs = nullptr;
-        int64_t shard_id;
         for (auto&& path : paths) {
             ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
-            auto fs_st = get_shard_filesystem(pair.second);
-            if (!fs_st.ok()) {
-                return to_status(fs_st.status());
-            }
+            // It is the caller's responsibility to ensure that all files to be deleted
+            // can share the same FileSystem instance, i.e, have the same parent directory
+            // on the object storage, otherwise some files cannot be deleted.
             if (fs == nullptr) {
-                shard_id = pair.second;
+                auto fs_st = get_shard_filesystem(pair.second);
+                if (!fs_st.ok()) {
+                    return to_status(fs_st.status());
+                }
                 fs = *fs_st;
-            }
-            if (shard_id != pair.second) {
-                return Status::InternalError("Not all paths have the same scheme");
             }
             parsed_paths.emplace_back(std::move(pair.first));
         }
