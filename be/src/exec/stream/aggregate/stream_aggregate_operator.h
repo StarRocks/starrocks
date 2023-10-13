@@ -42,17 +42,17 @@ public:
     bool has_output() const override;
     bool need_input() const override { return !is_finished(); }
     bool is_finished() const override;
-    Status set_finishing(RuntimeState* state) override;
-    Status set_finished(RuntimeState* state) override;
+    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
+    [[nodiscard]] Status set_finished(RuntimeState* state) override;
 
     bool is_epoch_finished() const override;
-    Status set_epoch_finishing(RuntimeState* state) override;
-    Status set_epoch_finished(RuntimeState* state) override;
-    Status reset_epoch(RuntimeState* state) override;
+    [[nodiscard]] Status set_epoch_finishing(RuntimeState* state) override;
+    [[nodiscard]] Status set_epoch_finished(RuntimeState* state) override;
+    [[nodiscard]] Status reset_epoch(RuntimeState* state) override;
 
-    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
-    Status prepare(RuntimeState* state) override;
+    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    [[nodiscard]] Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
 private:
