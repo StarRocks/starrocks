@@ -119,7 +119,6 @@ public:
     bool pending_finish() const override { return _aggregator->has_pending_restore(); }
 
 private:
-private:
     [[nodiscard]] StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);
 
     bool _is_finished = false;
