@@ -29,8 +29,10 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.InternalRowUtils;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 public class PaimonColumnValue implements ColumnValue {
@@ -147,6 +149,17 @@ public class PaimonColumnValue implements ColumnValue {
 
     public BigDecimal getDecimal() {
         return ((Decimal) fieldData).toBigDecimal();
+    }
+
+    @Override
+    public LocalDate getDate() {
+        return LocalDate.ofEpochDay((int) fieldData);
+    }
+
+    @Override
+    public LocalDateTime getDateTime() {
+        return Instant.ofEpochMilli(((Timestamp) fieldData)
+                .getMillisecond()).atZone(ZoneOffset.ofHours(0)).toLocalDateTime();
     }
 
     private void toPaimonColumnValue(List<ColumnValue> values, InternalArray array, DataType dataType) {

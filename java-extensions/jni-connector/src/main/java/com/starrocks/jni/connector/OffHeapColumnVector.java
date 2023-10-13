@@ -20,6 +20,8 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -343,6 +345,29 @@ public class OffHeapColumnVector {
         return new BigDecimal(value, type.getScale());
     }
 
+    public int appendDate(LocalDate v) {
+        reserve(elementsAppended + 1);
+        putDate(elementsAppended, v);
+        return elementsAppended++;
+    }
+
+    private void putDate(int rowId, LocalDate v) {
+        long date = convertToDateTimeV2(v.getYear(), v.getMonthValue(), v.getDayOfMonth(), 0, 0, 0, 0);
+        Platform.putLong(null, data + 16L * rowId, date);
+    }
+
+    public int appendDateTime(LocalDateTime v) {
+        reserve(elementsAppended + 1);
+        putDateTime(elementsAppended, v);
+        return elementsAppended++;
+    }
+
+    private void putDateTime(int rowId, LocalDateTime v) {
+        long time = convertToDateTimeV2(v.getYear(), v.getMonthValue(), v.getDayOfMonth(), v.getHour(),
+                v.getMinute(), v.getSecond(), v.getNano() / 1000);
+        Platform.putLong(null, data + rowId * 16L, time);
+    }
+
     private void putBytes(int rowId, int count, byte[] src, int srcIndex) {
         Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, null, data + rowId, count);
     }
@@ -502,7 +527,7 @@ public class OffHeapColumnVector {
                 break;
             case STRING:
             case DATE:
-                appendString(o.getString(typeValue));
+                appendDate(o.getDate());
                 break;
             case DECIMALV2:
             case DECIMAL32:
@@ -511,9 +536,7 @@ public class OffHeapColumnVector {
                 appendDecimal(o.getDecimal());
                 break;
             case DATETIME:
-            case DATETIME_MICROS:
-            case DATETIME_MILLIS:
-                appendString(o.getTimestamp(typeValue));
+                appendDateTime(o.getDateTime());
                 break;
             case ARRAY: {
                 List<ColumnValue> values = new ArrayList<>();
@@ -695,5 +718,12 @@ public class OffHeapColumnVector {
             bytes[length - 1 - i] = temp;
         }
         return bytes;
+    }
+
+    public static long convertToDateTimeV2(int year, int month, int day, int hour, int minute, int second,
+                                           int microsecond) {
+        long ymd = ((year * 13 + month) << 5) | day;
+        long hms = (hour << 12) | (minute << 6) | second;
+        return ((ymd << 17) | hms) << 24 + microsecond;
     }
 }

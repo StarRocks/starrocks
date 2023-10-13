@@ -372,9 +372,9 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
     } else if (column_type == LogicalType::TYPE_VARBINARY) {
         RETURN_IF_ERROR((_append_string_data<TYPE_VARBINARY>(args)));
     } else if (column_type == LogicalType::TYPE_DATE) {
-        RETURN_IF_ERROR((_append_date_data(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_DATE>(args)));
     } else if (column_type == LogicalType::TYPE_DATETIME) {
-        RETURN_IF_ERROR((_append_datetime_data(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_DATETIME>(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL32) {
         RETURN_IF_ERROR((_append_primitive_data<TYPE_DECIMAL32>(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL64) {

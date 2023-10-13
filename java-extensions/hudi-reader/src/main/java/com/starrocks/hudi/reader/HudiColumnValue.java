@@ -26,6 +26,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.io.LongWritable;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -158,5 +159,15 @@ public class HudiColumnValue implements ColumnValue {
     @Override
     public BigDecimal getDecimal() {
         return ((HiveDecimal) inspectObject()).bigDecimalValue();
+    }
+
+    @Override
+    public LocalDate getDate() {
+        return null;
+    }
+
+    @Override
+    public LocalDateTime getDateTime() {
+        return null;
     }
 }

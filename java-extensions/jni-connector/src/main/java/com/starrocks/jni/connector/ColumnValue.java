@@ -15,6 +15,8 @@
 package com.starrocks.jni.connector;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface ColumnValue {
@@ -43,4 +45,8 @@ public interface ColumnValue {
     byte getByte();
 
     BigDecimal getDecimal();
+
+    LocalDate getDate();
+
+    LocalDateTime getDateTime();
 }
