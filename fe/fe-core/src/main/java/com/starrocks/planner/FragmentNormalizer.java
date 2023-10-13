@@ -57,6 +57,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -812,6 +813,7 @@ public class FragmentNormalizer {
         fragment.getPlanRoot().collect(ExchangeNode.class, exchangeNodes);
         List<PlanFragment> fragments = exchangeNodes.stream()
                 .flatMap(ex -> ex.getChildren().stream().map(PlanNode::getFragment))
+                .sorted(Comparator.comparingInt(frag -> frag.getFragmentId().asInt()))
                 .distinct().collect(Collectors.toList());
         fragments.add(fragment);
         return fragments;
