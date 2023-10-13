@@ -360,6 +360,7 @@ public class AlterJobMgr {
         }
         try {
             if (AlterMaterializedViewStmt.ACTIVE.equalsIgnoreCase(status)) {
+                materializedView.fixRelationship();
                 if (materializedView.isActive()) {
                     return;
                 }
