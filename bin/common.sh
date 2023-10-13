@@ -171,6 +171,7 @@ export_cachelib_lib_path() {
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CACHELIB_DIR/lib64
 }
 
+<<<<<<< HEAD
 update_submodules()
 {
     pushd ${STARROCKS_HOME} &>/dev/null
@@ -178,6 +179,8 @@ update_submodules()
     popd
 }
 
+=======
+>>>>>>> 55821e6ff ([Enhancement] auto detect and set jvm xmx parameter (#32593))
 # if $FE_ENABLE_AUTO_JVM_XMX_DETECT=true, auto detect the memory limit MEM_LIMIT of the container
 # get $FE_JVM_XMX_PERCENTAGE, if not set, assume it is 70.
 # the xmx value will be $MEM_LIMIT * $FE_JVM_XMX_PERCENTAGE / 100 / 1024 / 1024
