@@ -233,7 +233,12 @@ public class MvRewritePreprocessor {
             return;
         }
 
-        Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv(true);
+        Set<String> partitionNamesToRefresh = Sets.newHashSet();
+        if (!mv.getPartitionNamesToRefreshForMv(partitionNamesToRefresh, true)) {
+            logMVPrepare(connectContext, mv, "[SYNC={}] MV {} cannot be used for rewrite, " +
+                    "stale partitions {}", isSyncMV, mv.getName(), partitionNamesToRefresh);
+            return;
+        }
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             if (!partitionNamesToRefresh.isEmpty()) {
