@@ -314,6 +314,8 @@ public:
 
     void update_max_continuous_version() { _timestamped_version_tracker.update_max_continuous_version(); }
 
+    void set_will_be_force_replaced() { _will_be_force_replaced = true; }
+
 protected:
     void on_shutdown() override;
 
@@ -425,6 +427,11 @@ private:
     std::unique_ptr<BinlogManager> _binlog_manager;
 
     std::unordered_map<int64_t, int64_t> _in_writing_txn_size;
+
+    // this variable indicate tablet will be replaced in TabletManger by
+    // another tablet with the same tablet id
+    // currently, it will be used in Restore process
+    bool _will_be_force_replaced = false;
 };
 
 inline bool Tablet::init_succeeded() {
