@@ -77,7 +77,6 @@ public class OutFileClause implements ParseNode {
         PARQUET_COMPRESSION_TYPE_MAP.put("brotli", TCompressionType.BROTLI);
         PARQUET_COMPRESSION_TYPE_MAP.put("zstd", TCompressionType.ZSTD);
         PARQUET_COMPRESSION_TYPE_MAP.put("lz4", TCompressionType.LZ4);
-        PARQUET_COMPRESSION_TYPE_MAP.put("bz2", TCompressionType.BZIP2);
         PARQUET_COMPRESSION_TYPE_MAP.put("zlib", TCompressionType.ZLIB);
         PARQUET_COMPRESSION_TYPE_MAP.put("uncompressed", TCompressionType.NO_COMPRESSION);
     }
