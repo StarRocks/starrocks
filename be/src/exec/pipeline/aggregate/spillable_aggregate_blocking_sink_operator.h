@@ -34,12 +34,12 @@ public:
 
     bool need_input() const override;
     bool is_finished() const override;
-    Status set_finishing(RuntimeState* state) override;
+    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 
-    Status prepare(RuntimeState* state) override;
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     bool spillable() const override { return true; }
     void set_execute_mode(int performance_level) override {
@@ -57,17 +57,17 @@ public:
         return 0;
     }
 
-    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+    [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 private:
     bool spilled() const { return _aggregator->spiller()->spilled(); }
 
 private:
-    Status _try_to_spill_by_force(RuntimeState* state, const ChunkPtr& chunk);
+    [[nodiscard]] Status _try_to_spill_by_force(RuntimeState* state, const ChunkPtr& chunk);
 
-    Status _try_to_spill_by_auto(RuntimeState* state, const ChunkPtr& chunk);
+    [[nodiscard]] Status _try_to_spill_by_auto(RuntimeState* state, const ChunkPtr& chunk);
 
-    Status _spill_all_data(RuntimeState* state, bool should_spill_hash_table);
+    [[nodiscard]] Status _spill_all_data(RuntimeState* state, bool should_spill_hash_table);
 
     void _add_streaming_chunk(ChunkPtr chunk);
 
@@ -99,7 +99,7 @@ public:
 
     ~SpillableAggregateBlockingSinkOperatorFactory() override = default;
 
-    Status prepare(RuntimeState* state) override;
+    [[nodiscard]] Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
