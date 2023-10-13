@@ -678,7 +678,8 @@ public class SyncPartitionUtils {
                     tableId.toString(), mvPartitionName);
         } else {
             long refreshedRefBaseTablePartitionSize = baseTableVersionInfoMap.size();
-            long refreshAssociatedRefTablePartitionSize = mvPartitionNameRefBaseTablePartitionMap.values().size();
+            long refreshAssociatedRefTablePartitionSize = mvPartitionNameRefBaseTablePartitionMap.values()
+                    .stream().map(x -> x.size()).reduce(0, (x, y) -> x + y);
             if (refreshedRefBaseTablePartitionSize == refreshAssociatedRefTablePartitionSize) {
                 // It's safe here that only log warning rather than remove all the ref base table info from version map,
                 // because mvPartitionNameRefBaseTablePartitionMap should track all the changed materialized view
@@ -720,9 +721,10 @@ public class SyncPartitionUtils {
             dropRefBaseTableFromVersionMap(mv, baseTableVersionInfoMap,
                     mvPartitionNameRefBaseTablePartitionMap, baseTableInfo.getTableName(), mvPartitionName);
         } else {
-            long refreshedRefBaseTablePartitionSize = baseTableVersionInfoMap.keySet()
-                    .stream().filter(x -> !x.equals(ICEBERG_ALL_PARTITION)).count();
-            long refreshAssociatedRefTablePartitionSize = mvPartitionNameRefBaseTablePartitionMap.values().size();
+            long refreshedRefBaseTablePartitionSize = baseTableVersionInfoMap.keySet().size();
+            //.stream().filter(x -> !x.equals(ICEBERG_ALL_PARTITION)).count();
+            long refreshAssociatedRefTablePartitionSize = mvPartitionNameRefBaseTablePartitionMap.values()
+                    .stream().map(x -> x.size()).reduce(0, (x, y) -> x + y);
             if (refreshedRefBaseTablePartitionSize == refreshAssociatedRefTablePartitionSize) {
                 // It's safe here that only log warning rather than remove all the ref base table info from version map,
                 // because mvPartitionNameRefBaseTablePartitionMap should track all the changed materialized view
