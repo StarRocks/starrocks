@@ -15,9 +15,11 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
@@ -103,7 +105,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
@@ -483,12 +484,12 @@ public class MaterializedViewAnalyzer {
 
         private List<Index> genMaterializedViewIndexes(CreateMaterializedViewStatement statement) {
             List<IndexDef> indexDefs = statement.getIndexDefs();
-            List<Index> indexes = statement.getMvIndexes();
+            List<Index> indexes = new ArrayList<>();
             List<Column> columns = statement.getMvColumnItems();
 
             if (CollectionUtils.isNotEmpty(indexDefs)) {
-                Set<String> distinct = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-                Set<List<String>> distinctCol = new HashSet<>();
+                Multimap<String, Integer> indexMultiMap = ArrayListMultimap.create();
+                Multimap<String, Integer> colMultiMap = ArrayListMultimap.create();
 
                 for (IndexDef indexDef : indexDefs) {
                     indexDef.analyze();
@@ -508,15 +509,18 @@ public class MaterializedViewAnalyzer {
                     }
                     indexes.add(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
                             indexDef.getComment()));
-                    distinct.add(indexDef.getIndexName());
-                    distinctCol.add(indexDef.getColumns().stream().map(String::toUpperCase).collect(Collectors.toList()));
+                    indexMultiMap.put(indexDef.getIndexName().toLowerCase(), 1);
+                    colMultiMap.put(String.join(",", indexDef.getColumns()), 1);
                 }
-                if (distinct.size() != indexes.size()) {
-                    throw new SemanticException("index name must be unique", indexDefs.get(0).getPos());
+                for (String indexName : indexMultiMap.asMap().keySet()) {
+                    if (indexMultiMap.get(indexName).size() > 1) {
+                        throw new SemanticException("Duplicate index name '%s'", indexName);
+                    }
                 }
-                if (distinctCol.size() != indexes.size()) {
-                    throw new SemanticException("same index columns have multiple index name is not allowed",
-                            indexDefs.get(0).getPos());
+                for (String colName : colMultiMap.asMap().keySet()) {
+                    if (colMultiMap.get(colName).size() > 1) {
+                        throw new SemanticException("Duplicate column name '%s' in index", colName);
+                    }
                 }
             }
             return indexes;
