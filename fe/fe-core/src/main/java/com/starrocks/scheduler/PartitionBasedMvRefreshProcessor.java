@@ -573,11 +573,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (!changedTablePartitionInfos.isEmpty()) {
             ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
                     new ChangeMaterializedViewRefreshSchemeLog(materializedView);
-            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
-
             long maxChangedTableRefreshTime =
                     MvUtils.getMaxTablePartitionInfoRefreshTime(changedTablePartitionInfos.values());
             materializedView.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
+            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
         }
     }
 
@@ -616,10 +615,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (!changedTablePartitionInfos.isEmpty()) {
             ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
                     new ChangeMaterializedViewRefreshSchemeLog(materializedView);
-            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
             long maxChangedTableRefreshTime =
                     MvUtils.getMaxTablePartitionInfoRefreshTime(changedTablePartitionInfos.values());
             materializedView.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
+            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
         }
     }
 
