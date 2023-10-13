@@ -446,20 +446,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             MaterializedView.AsyncRefreshContext refreshContext = mvRefreshScheme.getAsyncRefreshContext();
 
             // update materialized view partition to ref base table partition names meta
-            Map<String, Set<String>> mvToBaseNameRef = mvContext.getMvRefBaseTableIntersectedPartitions();
-            if (mvToBaseNameRef != null) {
-                for (String mvRefreshedPartition : mvRefreshedPartitions) {
-                    if (mvToBaseNameRef.containsKey(mvRefreshedPartition)) {
-                        Set<String> refBaseTableAssociatedPartitions = mvToBaseNameRef.get(mvRefreshedPartition);
-                        refreshContext.getMvPartitionNameRefBaseTablePartitionMap()
-                                .put(mvRefreshedPartition, refBaseTableAssociatedPartitions);
-                    } else {
-                        LOG.warn("MV task run context not contains the associated ref base table partitions of" +
-                                        " the refreshed mv partition {} in materialized view{}", mvRefreshedPartition,
-                                materializedView.getName());
-                    }
-                }
-            }
+            updateAssociatedPartitionMeta(refreshContext, mvRefreshedPartitions, refTableAndPartitionNames);
 
             Map<Long, Map<String, MaterializedView.BasePartitionInfo>> changedOlapTablePartitionInfos =
                     getSelectedPartitionInfosOfOlapTable(baseTableAndPartitionNames);
@@ -487,6 +474,32 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw e;
         } finally {
             database.writeUnlock();
+        }
+    }
+
+    private void updateAssociatedPartitionMeta(MaterializedView.AsyncRefreshContext refreshContext,
+                                               Set<String> mvRefreshedPartitions,
+                                               Map<Table, Set<String>> refTableAndPartitionNames) {
+        Map<String, Set<String>> mvToBaseNameRef = mvContext.getMvRefBaseTableIntersectedPartitions();
+        if (mvToBaseNameRef != null) {
+            try {
+                Table refBaseTable = refTableAndPartitionNames.keySet().iterator().next();
+                Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
+                        refreshContext.getMvPartitionNameRefBaseTablePartitionMap();
+                for (String mvRefreshedPartition : mvRefreshedPartitions) {
+                    Set<String> realBaseTableAssociatedPartitions = Sets.newHashSet();
+                    for (String refBaseTableAssociatedPartition : mvToBaseNameRef.get(mvRefreshedPartition)) {
+                        realBaseTableAssociatedPartitions.addAll(
+                                convertMVPartitionNameToRealPartitionName(refBaseTable, refBaseTableAssociatedPartition));
+                    }
+                    mvPartitionNameRefBaseTablePartitionMap
+                            .put(mvRefreshedPartition, realBaseTableAssociatedPartitions);
+                }
+
+            } catch (Exception e) {
+                LOG.warn("Update materialized view {} with the associated ref base table partitions failed: ",
+                        materializedView.getName(), e);
+            }
         }
     }
 
@@ -525,11 +538,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (!changedTablePartitionInfos.isEmpty()) {
             ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
                     new ChangeMaterializedViewRefreshSchemeLog(materializedView);
-            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
-
             long maxChangedTableRefreshTime =
                     MvUtils.getMaxTablePartitionInfoRefreshTime(changedTablePartitionInfos.values());
             materializedView.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
+            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
         }
     }
 
@@ -567,10 +579,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (!changedTablePartitionInfos.isEmpty()) {
             ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
                     new ChangeMaterializedViewRefreshSchemeLog(materializedView);
-            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
             long maxChangedTableRefreshTime =
                     MvUtils.getMaxTablePartitionInfoRefreshTime(changedTablePartitionInfos.values());
             materializedView.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
+            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
         }
     }
 
