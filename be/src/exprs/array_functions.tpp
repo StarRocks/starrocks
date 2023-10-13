@@ -803,7 +803,8 @@ private:
                 res.set_null(i);
                 continue;
             }
-            const auto& datum_array = src_column->get(i).get_array();
+            auto tmp_datum = src_column->get(i);
+            const auto& datum_array = tmp_datum.get_array();
             bool append = false;
             Slice sep_slice = sep_column->get(i).get_slice();
             Slice null_slice = null_replace_column->get(i).get_slice();
@@ -839,7 +840,8 @@ private:
                 continue;
             }
 
-            const auto& datum_array = src_column->get(i).get_array();
+            auto tmp_datum = src_column->get(i);
+            const auto& datum_array = tmp_datum.get_array();
             bool append = false;
             Slice sep_slice = sep_column->get(i).get_slice();
             for (const auto& datum : datum_array) {
