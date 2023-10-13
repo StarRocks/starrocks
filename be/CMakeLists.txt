@@ -274,7 +274,7 @@ set_target_properties(parquet PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib
 add_library(brpc STATIC IMPORTED GLOBAL)
 set_target_properties(brpc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrpc.a)
 
-add_library(rocksdb STATIC IMPORTED)
+add_library(rocksdb STATIC IMPORTED GLOBAL)
 set_target_properties(rocksdb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/librocksdb.a)
 
 add_library(sasl STATIC IMPORTED GLOBAL)
@@ -463,6 +463,7 @@ if ("${USE_STAROS}" STREQUAL "ON")
     set(starcache_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake/starcache" CACHE PATH "starcachelib search path")
     find_package(starcache CONFIG REQUIRED)
     set_target_properties(starcache::starcache PROPERTIES IMPORTED_GLOBAL TRUE)
+    add_library(rocksdb::rocksdb ALIAS rocksdb)
     add_library(starcachelib ALIAS starcache::starcache)
 
     set(starlet_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake" CACHE PATH "starlet search path")
