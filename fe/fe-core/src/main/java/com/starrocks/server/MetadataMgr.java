@@ -16,6 +16,11 @@
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+import com.google.common.cache.RemovalCause;
+import com.google.common.cache.RemovalListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.TableName;
@@ -26,6 +31,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -54,7 +60,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 public class MetadataMgr {
     private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
@@ -62,7 +68,30 @@ public class MetadataMgr {
     private final LocalMetastore localMetastore;
     private final ConnectorMgr connectorMgr;
     private final ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
-    private final Map<String, QueryMetadatas> metadataByQueryId = new ConcurrentHashMap<>();
+    private static final RemovalListener<String, QueryMetadatas> CACHE_REMOVAL_LISTENER = (notification) -> {
+        String queryId = notification.getKey();
+        QueryMetadatas meta = notification.getValue();
+        if (meta != null) {
+            meta.metadatas.values().forEach(ConnectorMetadata::clear);
+            if (notification.getCause() != RemovalCause.EXPLICIT) {
+                LOG.info("Evict cache due to {} and deregister query-level " +
+                        "connector metadata on query id: {}", notification.getCause(), queryId);
+            }
+        }
+    };
+
+    private final LoadingCache<String, QueryMetadatas> metadataCacheByQueryId =
+            CacheBuilder.newBuilder()
+                    .maximumSize(Config.catalog_metadata_cache_size)
+                    .expireAfterAccess(300, TimeUnit.SECONDS)
+                    .removalListener(CACHE_REMOVAL_LISTENER)
+                    .build(new CacheLoader<String, QueryMetadatas>() {
+
+                        @Override
+                        public QueryMetadatas load(String key) throws Exception {
+                            return new QueryMetadatas();
+                        }
+                    });
 
     public MetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr,
                        ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr) {
@@ -87,7 +116,7 @@ public class MetadataMgr {
             String queryId = ConnectContext.get() != null && ConnectContext.get().getQueryId() != null ?
                     ConnectContext.get().getQueryId().toString() : null;
             if (queryId != null) {
-                QueryMetadatas queryMetadatas = metadataByQueryId.computeIfAbsent(queryId, ignored -> new QueryMetadatas());
+                QueryMetadatas queryMetadatas = metadataCacheByQueryId.getUnchecked(queryId);
                 return Optional.ofNullable(queryMetadatas.getConnectorMetadata(catalogName, queryId));
             } else {
                 Connector connector = connectorMgr.getConnector(catalogName);
@@ -105,10 +134,10 @@ public class MetadataMgr {
         String queryId = ConnectContext.get() != null && ConnectContext.get().getQueryId() != null ?
                 ConnectContext.get().getQueryId().toString() : null;
         if (queryId != null) {
-            QueryMetadatas queryMetadatas = metadataByQueryId.get(queryId);
+            QueryMetadatas queryMetadatas = metadataCacheByQueryId.getIfPresent(queryId);
             if (queryMetadatas != null) {
                 queryMetadatas.metadatas.values().forEach(ConnectorMetadata::clear);
-                metadataByQueryId.remove(queryId);
+                metadataCacheByQueryId.invalidate(queryId);
                 LOG.info("Succeed to deregister query level connector metadata on query id: {}", queryId);
             }
         }

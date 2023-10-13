@@ -16,8 +16,12 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
@@ -34,7 +38,11 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 public class MetadataMgrTest {
     @BeforeClass
@@ -230,5 +238,27 @@ public class MetadataMgrTest {
 
         createTableStmt.setIfNotExists();
         Assert.assertFalse(metadataMgr.createTable(createTableStmt));
+    }
+
+    @Test
+    public void testRemoveCache() {
+        MetadataMgr mgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+
+        Map<UUID, ConnectorMetadata> queryIdSet = new HashMap<>();
+        for (int i = 0; i < Config.catalog_metadata_cache_size; i++) {
+            UUID queryId = UUIDUtil.genUUID();
+            ConnectContext.get().setQueryId(queryId);
+            Optional<ConnectorMetadata> metadata = mgr.getOptionalMetadata("hive_catalog");
+            Assert.assertTrue(metadata.isPresent());
+            queryIdSet.put(queryId, metadata.get());
+        }
+
+        // cache evicted
+        UUID queryId = UUIDUtil.genUUID();
+        ConnectContext.get().setQueryId(queryId);
+        Optional<ConnectorMetadata> metadata = mgr.getOptionalMetadata("hive_catalog");
+        Assert.assertTrue(metadata.isPresent());
+        Assert.assertFalse(queryIdSet.containsValue(metadata.get()));
+        mgr.removeQueryMetadata();
     }
 }
