@@ -115,9 +115,11 @@
   + [配置 GCS 认证信息](/integrations/authenticate_to_gcs.md)
   + BI 集成
     + [Apache Superset](/integrations/BI_integrations/Superset.md)
+    = [Dataphin](/integrations/BI_integrations/Dataphin.md)
     + [FineBI](/integrations/BI_integrations/FineBI.md)
     + [Hex](/integrations/BI_integrations/Hex.md)
     + [Querybook](/integrations/BI_integrations/Querybook.md)
+    + [QuickBI](/integrations/BI_integrations/QuickBI.md)
     + [Tableau Desktop](/integrations/BI_integrations/Tableau_Desktop.md)
   + IDE 集成
     + [DataGrip](/integrations/IDE_integrations/DataGrip.md)
