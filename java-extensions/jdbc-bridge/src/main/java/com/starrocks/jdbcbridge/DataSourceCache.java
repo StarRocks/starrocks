@@ -21,7 +21,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 // a cache for get datasource
-// the following code was genereated by chatgpt: https://github.com/StarRocks/starrocks/pull/32702/files#r1357812002
 public class DataSourceCache {
     public static final class DataSourceCacheItem {
         private final HikariDataSource hikariDataSource;
