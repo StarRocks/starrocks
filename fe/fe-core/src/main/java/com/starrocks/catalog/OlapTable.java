@@ -60,9 +60,6 @@ import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Partition.PartitionState;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
@@ -136,7 +133,6 @@ import javax.annotation.Nullable;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN;
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW;
-import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_ROW;
 
 /**
  * Internal representation of tableFamilyGroup-related metadata. A
@@ -759,8 +755,9 @@ public class OlapTable extends Table {
             List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
                     .seqChooseBackendIds(replicationNum, true, true);
             if (CollectionUtils.isEmpty(beIds)) {
-                return new Status(ErrCode.COMMON_ERROR,
-                        "failed to find " + replicationNum + " different hosts to create table: " + name);
+                return new Status(ErrCode.COMMON_ERROR, "failed to find "
+                        + replicationNum
+                        + " different hosts to create table: " + name);
             }
             for (Long beId : beIds) {
                 long newReplicaId = globalStateMgr.getNextId();
@@ -1981,11 +1978,10 @@ public class OlapTable extends Table {
         long unhealthyTabletId = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
                 GlobalStateMgr.getCurrentState().getTabletScheduler());
         if (unhealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
-            throw new DdlException(
-                    "Table [" + name + "] is not stable. " + "Unhealthy (or doing balance) tablet id: " + unhealthyTabletId +
-                            ". " +
-                            "Some tablets of this table may not be healthy or are being scheduled. " +
-                            "You need to repair the table first or stop cluster balance.");
+            throw new DdlException("Table [" + name + "] is not stable. "
+                    + "Unhealthy (or doing balance) tablet id: " + unhealthyTabletId + ". "
+                    + "Some tablets of this table may not be healthy or are being scheduled. "
+                    + "You need to repair the table first or stop cluster balance.");
         }
     }
 
@@ -2209,8 +2205,6 @@ public class OlapTable extends Table {
                 return TStorageType.COLUMN;
             case PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW:
                 return TStorageType.COLUMN_WITH_ROW;
-            case PROPERTIES_STORAGE_TYPE_ROW:
-                return TStorageType.ROW;
             default:
                 throw new SemanticException("getStorageType type not support: " + storageType());
         }

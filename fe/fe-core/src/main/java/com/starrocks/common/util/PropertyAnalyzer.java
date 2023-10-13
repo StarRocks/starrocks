@@ -1107,19 +1107,4 @@ public class PropertyAnalyzer {
         }
         return periodDuration;
     }
-
-
-    public static String analyzeTableStoreType(Map<String, String> properties) throws AnalysisException {
-        String text = properties.get(PROPERTIES_STORAGE_TYPE);
-        if (text == null) {
-            return null;
-        }
-        if (!text.equalsIgnoreCase(PROPERTIES_STORAGE_TYPE_COLUMN) &&
-                !text.equalsIgnoreCase(PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW) &&
-                !text.equalsIgnoreCase(PROPERTIES_STORAGE_TYPE_ROW)) {
-            throw new AnalysisException("storage_type set error, please check");
-        }
-        properties.remove(PROPERTIES_STORAGE_TYPE);
-        return text;
-    }
 }
