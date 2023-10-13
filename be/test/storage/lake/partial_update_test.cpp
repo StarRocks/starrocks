@@ -564,6 +564,7 @@ TEST_P(PartialUpdateTest, test_partial_update_publish_retry) {
         SyncPoint::GetInstance()->SetCallBack("ProtobufFile::save:serialize", [](void* arg) { *(bool*)arg = false; });
         SyncPoint::GetInstance()->EnableProcessing();
         ASSERT_ERROR(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::save:serialize");
         SyncPoint::GetInstance()->DisableProcessing();
     }
     // retry publish again
