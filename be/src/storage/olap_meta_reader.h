@@ -57,7 +57,6 @@ private:
     TabletSchemaSPtr _tablet_schema;
     std::vector<RowsetSharedPtr> _rowsets;
 
-
     Status _init_params(const OlapMetaReaderParams& read_params);
 
     Status _build_collect_context(const OlapMetaReaderParams& read_params);
