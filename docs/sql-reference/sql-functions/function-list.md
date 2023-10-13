@@ -65,11 +65,6 @@ You can find a function based on the following categories:
 
 ## Array functions
 
-<<<<<<< HEAD
-=======
-- [all_match](../sql-functions/array-functions/all_match.md)
-- [any_match](../sql-functions/array-functions/any_match.md)
->>>>>>> e1f3ccef8 ([Doc] broken links (#32660))
 - [array_agg](../sql-functions/array-functions/array_agg.md)
 - [array_append](../sql-functions/array-functions/array_append.md)
 - [array_avg](../sql-functions/array-functions/array_avg.md)
@@ -80,7 +75,6 @@ You can find a function based on the following categories:
 - [array_difference](../sql-functions/array-functions/array_difference.md)
 - [array_distinct](../sql-functions/array-functions/array_distinct.md)
 - [array_filter](../sql-functions/array-functions/array_filter.md)
-- [array_generate](../sql-functions/array-functions/array_generate.md)
 - [array_intersect](../sql-functions/array-functions/array_intersect.md)
 - [array_join](../sql-functions/array-functions/array_join.md)
 - [array_length](../sql-functions/array-functions/array_length.md)
@@ -185,11 +179,6 @@ You can find a function based on the following categories:
 - [hours_add](../sql-functions/date-time-functions/hours_add.md)
 - [hours_diff](../sql-functions/date-time-functions/hours_diff.md)
 - [hours_sub](../sql-functions/date-time-functions/hours_sub.md)
-<<<<<<< HEAD
-- [makedate](../sql-functions/date-time-functions/makedate.md)
-=======
-- [last_day](../sql-functions/date-time-functions/last_day.md)
->>>>>>> e1f3ccef8 ([Doc] broken links (#32660))
 - [microseconds_add](../sql-functions/date-time-functions/microseconds_add.md)
 - [microseconds_sub](../sql-functions/date-time-functions/microseconds_sub.md)
 - [minute](../sql-functions/date-time-functions/minute.md)
@@ -202,11 +191,6 @@ You can find a function based on the following categories:
 - [months_diff](../sql-functions/date-time-functions/months_diff.md)
 - [months_sub](../sql-functions/date-time-functions/months_sub.md)
 - [now](../sql-functions/date-time-functions/now.md)
-<<<<<<< HEAD
-- [previous_day](../sql-functions/date-time-functions/previous_day.md)
-- [last_day](../sql-functions/date-time-functions/last_day.md)
-=======
->>>>>>> e1f3ccef8 ([Doc] broken links (#32660))
 - [quarter](../sql-functions/date-time-functions/quarter.md)
 - [second](../sql-functions/date-time-functions/second.md)
 - [seconds_add](../sql-functions/date-time-functions/seconds_add.md)
@@ -217,7 +201,7 @@ You can find a function based on the following categories:
 - [time_slice](../sql-functions/date-time-functions/time_slice.md)
 - [time_to_sec](../sql-functions/date-time-functions/time_to_sec.md)
 - [timediff](../sql-functions/date-time-functions/timediff.md)
-- [date_diff](../sql-functions/date-time-functions/date_diff.md)
+- [days_diff](../sql-functions/date-time-functions/days_diff.md)
 - [timestamp](../sql-functions/date-time-functions/timestamp.md)
 - [timestampadd](../sql-functions/date-time-functions/timestampadd.md)
 - [timestampdiff](../sql-functions/date-time-functions/timestampdiff.md)
@@ -226,10 +210,8 @@ You can find a function based on the following categories:
 - [unix_timestamp](../sql-functions/date-time-functions/unix_timestamp.md)
 - [utc_timestamp](../sql-functions/date-time-functions/utc_timestamp.md)
 - [week](../sql-functions/date-time-functions/week.md)
-- [week_iso](../sql-functions/date-time-functions/week_iso.md)
 - [weekofyear](../sql-functions/date-time-functions/weekofyear.md)
 - [weeks_add](../sql-functions/date-time-functions/weeks_add.md)
-- [day_of_week_iso](../sql-functions/date-time-functions/day_of_week_iso.md)
 - [weeks_diff](../sql-functions/date-time-functions/weeks_diff.md)
 - [weeks_sub](../sql-functions/date-time-functions/weeks_sub.md)
 - [year](../sql-functions/date-time-functions/year.md)
@@ -311,25 +293,13 @@ You can find a function based on the following categories:
 - [ucase](../sql-functions/string-functions/ucase.md)
 - [unhex](../sql-functions/string-functions/unhex.md)
 - [upper](../sql-functions/string-functions/upper.md)
-- [url_decode](../sql-functions/string-functions/url_decode.md)
-- [url_encode](../sql-functions/string-functions/url_encode.md)
 
 ## Map functions
 
-<<<<<<< HEAD
 - [map_keys](../sql-functions/map-functions/map_keys.md)
 - [map_size](../sql-functions/map-functions/map_size.md)
 - [map_values](../sql-functions/map-functions/map_values.md)
   
-=======
-- [cardinality](../sql-functions/map-functions/cardinality.md)
-- [element_at](../sql-functions/map-functions/element_at.md)
-- [map_apply](../sql-functions/map-functions/map_apply.md)
-- [map_keys](../sql-functions/map-functions/map_keys.md)
-- [map_size](../sql-functions/map-functions/map_size.md)
-- [map_values](../sql-functions/map-functions/map_values.md)
-
->>>>>>> e1f3ccef8 ([Doc] broken links (#32660))
 ## Math functions
 
 - [abs](../sql-functions/math-functions/abs.md)
@@ -395,7 +365,6 @@ You can find a function based on the following categories:
 ## Utility functions
 
 - [catalog](../sql-functions/utility-functions/catalog.md)
-- [current_role](../sql-functions/utility-functions/current_role.md)
 - [current_version](../sql-functions/utility-functions/current_version.md)
 - [database](../sql-functions/utility-functions/database.md)
 - [host_name](../sql-functions/utility-functions/host_name.md)

@@ -150,11 +150,7 @@ ERROR 1064 (HY000): HdfsOrcScanner::do_open failed. reason = Invalid ORC postscr
 To solve this problem, perform one of the following operations:
 
 - Upgrade your current version to StarRocks 2.2 or later.
-<<<<<<< HEAD
 - Manually refresh your Apache Hive table. For more information, see [Metadata caching strategy](../data_source/External_table.md).
-=======
-- Manually refresh your Apache Hive table. For more information, see [Metadata caching strategy](../data_source/External_table.md#metadata-caching-strategy).
->>>>>>> e1f3ccef8 ([Doc] broken links (#32660))
 
 ## This error "caching_sha2_password cannot be loaded" occurs when I connect external tables of MySQL
 
