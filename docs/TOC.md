@@ -85,6 +85,7 @@
     + [JDBC catalog](./data_source/catalog/jdbc_catalog.md)
     + [Elasticsearch catalog](./data_source/catalog/elasticsearch_catalog.md)
     + [Paimon catalog](./data_source/catalog/paimon_catalog.md)
+    + [Unified catalog](./data_source/catalog/unified_catalog.md)
     + [Query external data](./data_source/catalog/query_external_data.md)
   + [External table](./data_source/External_table.md)
   + [File external table](./data_source/file_external_table.md)
