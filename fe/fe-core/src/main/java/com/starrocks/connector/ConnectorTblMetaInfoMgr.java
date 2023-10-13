@@ -18,6 +18,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Table;
+import com.google.gson.JsonObject;
+import com.starrocks.analysis.TableName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -100,6 +102,22 @@ public class ConnectorTblMetaInfoMgr {
         if (tableInfo != null) {
             tableInfo.seTableInfoForConnectorTable(table);
         }
+    }
+
+    /**
+     * A debugging interface for dump the content as JSON
+     */
+    public String inspect() {
+        JsonObject res = new JsonObject();
+        connectorTableMetaInfos.cellSet().forEach(cell -> {
+            String catalog = cell.getRowKey();
+            String db = cell.getColumnKey();
+            cell.getValue().forEach((tableName, tableInfo) -> {
+                TableName key = new TableName(catalog, db, tableName);
+                res.addProperty(key.toString(), tableInfo.inspect());
+            });
+        });
+        return res.toString();
     }
 
     private void writeLock() {

@@ -59,6 +59,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -1189,6 +1191,24 @@ public class ScalarOperatorFunctions {
         } finally {
             mayDb.ifPresent(Database::readUnlock);
         }
+    }
+
+    /**
+     * Return the content in ConnectorTblMetaInfoMgr, which contains mapping information from base table to mv
+     */
+    @ConstantFunction(name = "inspect_mv_relationships", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspect_mv_relationships() throws AccessDeniedException {
+        ConnectContext context = ConnectContext.get();
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    "ANY", ObjectType.SYSTEM, "inspect_mv_relationships");
+        }
+
+        String json = GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().inspect();
+        return ConstantOperator.createVarchar(json);
     }
 
     /**
