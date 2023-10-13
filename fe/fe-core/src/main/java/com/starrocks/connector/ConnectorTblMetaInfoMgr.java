@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Table;
+import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -100,6 +101,13 @@ public class ConnectorTblMetaInfoMgr {
         if (tableInfo != null) {
             tableInfo.seTableInfoForConnectorTable(table);
         }
+    }
+
+    /**
+     * A debugging interface for dump the content as JSON
+     */
+    public String inspect() {
+        return GsonUtils.GSON.toJson(this);
     }
 
     private void writeLock() {
