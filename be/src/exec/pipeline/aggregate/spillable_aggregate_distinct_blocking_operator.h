@@ -35,12 +35,12 @@ public:
 
     bool need_input() const override;
     bool is_finished() const override;
-    Status set_finishing(RuntimeState* state) override;
+    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
 
-    Status prepare(RuntimeState* state) override;
+    [[nodiscard]] Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     bool spillable() const override { return true; }
     void set_execute_mode(int performance_level) override {
@@ -59,8 +59,8 @@ public:
     }
 
 private:
-    Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
-    Status _spill_aggregated_data(RuntimeState* state);
+    [[nodiscard]] Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
+    [[nodiscard]] Status _spill_aggregated_data(RuntimeState* state);
 
     std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state);
 
@@ -79,7 +79,7 @@ public:
 
     ~SpillableAggregateDistinctBlockingSinkOperatorFactory() override = default;
 
-    Status prepare(RuntimeState* state) override;
+    [[nodiscard]] Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
@@ -106,21 +106,20 @@ public:
 
     ~SpillableAggregateDistinctBlockingSourceOperator() override = default;
 
-    Status prepare(RuntimeState* state) override;
+    [[nodiscard]] Status prepare(RuntimeState* state) override;
 
     bool has_output() const override;
     bool is_finished() const override;
 
-    Status set_finished(RuntimeState* state) override;
+    [[nodiscard]] Status set_finished(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 
-    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
     bool pending_finish() const override { return _aggregator->has_pending_restore(); }
 
 private:
-private:
-    StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);
+    [[nodiscard]] StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);
 
     bool _is_finished = false;
     bool _has_last_chunk = true;
@@ -137,7 +136,7 @@ public:
 
     ~SpillableAggregateDistinctBlockingSourceOperatorFactory() override = default;
 
-    Status prepare(RuntimeState* state) override;
+    [[nodiscard]] Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 

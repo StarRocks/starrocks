@@ -134,12 +134,12 @@ Status StreamAggregator::process_chunk(StreamChunk* chunk) {
 Status StreamAggregator::output_changes(int32_t chunk_size, StreamChunkPtr* result_chunk) {
     ChunkPtr intermediate_chunk = std::make_shared<Chunk>();
     std::vector<ChunkPtr> detail_chunks;
-    RETURN_IF_ERROR(output_changes(chunk_size, result_chunk, &intermediate_chunk, detail_chunks));
+    RETURN_IF_ERROR(output_changes_internal(chunk_size, result_chunk, &intermediate_chunk, detail_chunks));
     return Status::OK();
 }
 
-Status StreamAggregator::output_changes(int32_t chunk_size, StreamChunkPtr* result_chunk, ChunkPtr* intermediate_chunk,
-                                        std::vector<ChunkPtr>& detail_chunks) {
+Status StreamAggregator::output_changes_internal(int32_t chunk_size, StreamChunkPtr* result_chunk,
+                                                 ChunkPtr* intermediate_chunk, std::vector<ChunkPtr>& detail_chunks) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
     RETURN_IF_ERROR(hash_map_variant().visit([&](auto& variant_value) {
         auto& hash_map_with_key = *variant_value;

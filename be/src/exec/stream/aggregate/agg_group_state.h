@@ -32,32 +32,37 @@ public:
 
     const std::vector<AggStateDataUPtr>& agg_states() const { return _agg_states; }
 
-    Status prepare(RuntimeState* state);
-    Status open(RuntimeState* state);
+    [[nodiscard]] Status prepare(RuntimeState* state);
+    [[nodiscard]] Status open(RuntimeState* state);
 
-    Status process_chunk(size_t chunk_size, const Columns& group_by_columns, const Buffer<uint8_t>& keys_not_in_map,
-                         const StreamRowOp* ops, const std::vector<std::vector<ColumnPtr>>& agg_columns,
-                         std::vector<std::vector<const Column*>>& raw_columns,
-                         const Buffer<AggDataPtr>& agg_group_state) const;
+    [[nodiscard]] Status process_chunk(size_t chunk_size, const Columns& group_by_columns,
+                                       const Buffer<uint8_t>& keys_not_in_map, const StreamRowOp* ops,
+                                       const std::vector<std::vector<ColumnPtr>>& agg_columns,
+                                       std::vector<std::vector<const Column*>>& raw_columns,
+                                       const Buffer<AggDataPtr>& agg_group_state) const;
 
-    Status output_results(size_t chunk_size, const Columns& group_by_columns, const Buffer<AggDataPtr>& agg_group_data,
-                          Columns output_columns) const;
+    [[nodiscard]] Status output_results(size_t chunk_size, const Columns& group_by_columns,
+                                        const Buffer<AggDataPtr>& agg_group_data, Columns output_columns) const;
 
-    Status output_changes(size_t chunk_size, const Columns& group_by_columns, const Buffer<AggDataPtr>& agg_group_state,
-                          ChunkPtr* agg_intermediate_chunk, std::vector<ChunkPtr>* detail_chunks) const;
+    [[nodiscard]] Status output_changes(size_t chunk_size, const Columns& group_by_columns,
+                                        const Buffer<AggDataPtr>& agg_group_state, ChunkPtr* agg_intermediate_chunk,
+                                        std::vector<ChunkPtr>* detail_chunks) const;
 
-    Status output_prev_state_results(const Columns& group_by_columns, StateTableResult& prev_state_result);
+    [[nodiscard]] Status output_prev_state_results(const Columns& group_by_columns,
+                                                   StateTableResult& prev_state_result);
 
-    Status write(RuntimeState* state, StreamChunkPtr* result_chunk, ChunkPtr* intermediate_chunk,
-                 std::vector<ChunkPtr>& detail_chunk);
-    Status commit_epoch(RuntimeState* state);
-    Status reset_epoch(RuntimeState* state);
+    [[nodiscard]] Status write(RuntimeState* state, StreamChunkPtr* result_chunk, ChunkPtr* intermediate_chunk,
+                               std::vector<ChunkPtr>& detail_chunk);
+    [[nodiscard]] Status commit_epoch(RuntimeState* state);
+    [[nodiscard]] Status reset_epoch(RuntimeState* state);
 
 private:
-    Status _prepare_mem_state_tables(RuntimeState* state, const std::vector<AggStateData*>& intermediate_agg_states,
-                                     const std::vector<AggStateData*>& detail_agg_states);
-    Status _prepare_imt_state_tables(RuntimeState* state, const std::vector<AggStateData*>& intermediate_agg_states,
-                                     const std::vector<AggStateData*>& detail_agg_states);
+    [[nodiscard]] Status _prepare_mem_state_tables(RuntimeState* state,
+                                                   const std::vector<AggStateData*>& intermediate_agg_states,
+                                                   const std::vector<AggStateData*>& detail_agg_states);
+    [[nodiscard]] Status _prepare_imt_state_tables(RuntimeState* state,
+                                                   const std::vector<AggStateData*>& intermediate_agg_states,
+                                                   const std::vector<AggStateData*>& detail_agg_states);
     StateTable* _find_detail_state_table(const AggStateDataUPtr& agg_state) const;
     ChunkPtr _build_intermediate_chunk(const Columns& group_by_columns, const Columns& agg_intermediate_columns) const;
 
