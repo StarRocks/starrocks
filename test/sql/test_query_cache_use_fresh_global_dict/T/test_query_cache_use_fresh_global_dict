@@ -30,7 +30,7 @@ PROPERTIES (
 insert into t0 values('2023-01-01', 'foo_0001', 'bar_0010', 1);
 insert into t0 values('2023-01-02', 'foo_0001', 'bar_0011', 1);
 insert into t0 values('2023-01-03', 'foo_0001', 'bar_0012', 1);
-analyze full table t0;
+[UC]analyze full table t0;
 select sleep(10);
 select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
 select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
@@ -45,7 +45,7 @@ select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_tr
 insert into t0 values('2023-01-04', 'foo_0002', 'bar_0001', 1);
 insert into t0 values('2023-01-05', 'foo_0002', 'bar_0002', 1);
 insert into t0 values('2023-01-06', 'foo_0002', 'bar_0003', 1);
-analyze full table t0;
+[UC]analyze full table t0;
 select sleep(10);
 select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
 select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;

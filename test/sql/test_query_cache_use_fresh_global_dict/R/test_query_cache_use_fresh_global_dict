@@ -40,9 +40,8 @@ insert into t0 values('2023-01-02', 'foo_0001', 'bar_0011', 1);
 insert into t0 values('2023-01-03', 'foo_0001', 'bar_0012', 1);
 -- result:
 -- !result
-analyze full table t0;
+[UC]analyze full table t0;
 -- result:
-test_db_fcdc8bd6699711ee8bbe00163e04d4c2.t0	analyze	status	OK
 -- !result
 select sleep(10);
 -- result:
@@ -97,9 +96,8 @@ insert into t0 values('2023-01-05', 'foo_0002', 'bar_0002', 1);
 insert into t0 values('2023-01-06', 'foo_0002', 'bar_0003', 1);
 -- result:
 -- !result
-analyze full table t0;
+[UC]analyze full table t0;
 -- result:
-test_db_fcdc8bd6699711ee8bbe00163e04d4c2.t0	analyze	status	OK
 -- !result
 select sleep(10);
 -- result:
