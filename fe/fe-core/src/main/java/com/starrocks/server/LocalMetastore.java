@@ -2947,8 +2947,6 @@ public class LocalMetastore implements ConnectorMetadata {
         List<Column> baseSchema = stmt.getMvColumnItems();
         validateColumns(baseSchema);
 
-        List<Index> mvIndexes = stmt.getMvIndexes();
-
         Map<String, String> properties = stmt.getProperties();
         if (properties == null) {
             properties = Maps.newHashMap();
@@ -3053,6 +3051,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         //bitmap indexes
+        List<Index> mvIndexes = stmt.getMvIndexes();
         materializedView.setIndexes(mvIndexes);
 
         // sort keys
