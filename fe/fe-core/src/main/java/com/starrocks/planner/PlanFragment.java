@@ -458,7 +458,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     // normalize dicts of the fragment, it is different from dictToThrift in three points:
     // 1. SlotIds must be replaced by remapped SlotIds;
     // 2. dict should be sorted according to its corresponding remapped SlotIds;
-    // 3. codes and items of the dict must be in sorted order.
     public List<TGlobalDict> normalizeDicts(List<Pair<Integer, ColumnDict>> dicts, FragmentNormalizer normalizer) {
         List<TGlobalDict> result = Lists.newArrayList();
         // replace slot id with the remapped slot id, sort dicts according to remapped slot ids.
@@ -469,16 +468,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         for (Pair<Integer, ColumnDict> dictPair : sortedDicts) {
             TGlobalDict globalDict = new TGlobalDict();
             globalDict.setColumnId(dictPair.first);
-            // sort dict entries according to dict codes.
-            List<Map.Entry<ByteBuffer, Integer>> itemToCodes =
-                    dictPair.second.getDict().entrySet().stream().sorted(Comparator.comparingInt(Map.Entry::getValue))
-                            .collect(Collectors.toList());
-
-            List<ByteBuffer> strings = itemToCodes.stream().map(Map.Entry::getKey).collect(Collectors.toList());
-            List<Integer> integers = itemToCodes.stream().map(Map.Entry::getValue).collect(Collectors.toList());
             globalDict.setVersion(dictPair.second.getCollectedVersionTime());
-            globalDict.setStrings(strings);
-            globalDict.setIds(integers);
             result.add(globalDict);
         }
         return result;
