@@ -31,6 +31,7 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.io.Text;
+import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.CatalogMgr;
@@ -271,6 +272,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
 
         Configuration conf = new Configuration();
+        if (!Strings.isNullOrEmpty(catalogName)) {
+            CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            connector.getMetadata().getCloudConfiguration().applyToConfiguration(conf);
+        }
+
         HoodieTableMetaClient metaClient =
                 HoodieTableMetaClient.builder().setConf(conf).setBasePath(getTableLocation()).build();
         HoodieTimeline timeline = metaClient.getCommitsAndCompactionTimeline().filterCompletedInstants();
