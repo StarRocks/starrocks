@@ -828,6 +828,7 @@ public class ColocateTableIndex implements Writable {
         this.group2BackendsPerBucketSeq = data.group2BackendsPerBucketSeq;
         this.unstableGroups = data.unstableGroups;
 
+        cleanupInvalidDbOrTable(GlobalStateMgr.getCurrentState());
         constructLakeGroups(GlobalStateMgr.getCurrentState());
         LOG.info("finished replay colocateTableIndex from image");
     }
