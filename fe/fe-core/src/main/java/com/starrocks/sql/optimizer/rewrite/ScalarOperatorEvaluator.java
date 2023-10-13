@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -187,7 +188,7 @@ public enum ScalarOperatorEvaluator {
         } catch (AnalysisException e) {
             LOG.debug("failed to invoke", e);
             if (invoker.isMetaFunction) {
-                throw new StarRocksPlannerException(ErrorType.USER_ERROR, e.getMessage());
+                throw new StarRocksPlannerException(ErrorType.USER_ERROR, ExceptionUtils.getRootCauseMessage(e));
             }
         }
         return root;
