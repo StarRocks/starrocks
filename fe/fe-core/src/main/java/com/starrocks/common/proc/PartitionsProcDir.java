@@ -400,7 +400,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         } else {
             partitionColumns = new ArrayList<>();
         }
-        return partitionColumns.stream().map(Column::getName).collect(Collectors.toList());
+        return partitionColumns.stream().map(Column::getDisplayName).collect(Collectors.toList());
     }
 
     private String findRangeOrListValues(PartitionInfo partitionInfo, long partitionId) {

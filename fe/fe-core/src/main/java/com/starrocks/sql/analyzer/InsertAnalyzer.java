@@ -152,11 +152,11 @@ public class InsertAnalyzer {
                 targetColumns = new ArrayList<>(((OlapTable) table).getBaseSchemaWithoutGeneratedColumn());
                 mentionedColumns =
                         ((OlapTable) table).getBaseSchemaWithoutGeneratedColumn().stream()
-                            .map(Column::getName).collect(Collectors.toSet());
+                            .map(Column::getDisplayName).collect(Collectors.toSet());
             } else {
                 targetColumns = new ArrayList<>(table.getBaseSchema());
                 mentionedColumns =
-                        table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
+                        table.getBaseSchema().stream().map(Column::getDisplayName).collect(Collectors.toSet());
             }
         } else {
             targetColumns = new ArrayList<>();
@@ -179,13 +179,13 @@ public class InsertAnalyzer {
             Column.DefaultValueType defaultValueType = column.getDefaultValueType();
             if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() &&
                     !column.isAutoIncrement() && !column.isGeneratedColumn() &&
-                    !mentionedColumns.contains(column.getName())) {
+                    !mentionedColumns.contains(column.getDisplayName())) {
                 String msg = "";
                 for (String s : mentionedColumns) {
                     msg = msg + " " + s + " ";
                 }
                 throw new SemanticException("'%s' must be explicitly mentioned in column permutation: %s",
-                        column.getName(), msg);
+                        column.getDisplayName(), msg);
             }
         }
 

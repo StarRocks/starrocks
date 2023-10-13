@@ -972,14 +972,14 @@ public class OlapTable extends Table {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
             for (Column column : partitionColumns) {
-                partitionColumnNames.add(column.getName());
+                partitionColumnNames.add(column.getDisplayName());
             }
             return partitionColumnNames;
         } else if (partitionInfo instanceof ListPartitionInfo) {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
             List<Column> partitionColumns = listPartitionInfo.getPartitionColumns();
             for (Column column : partitionColumns) {
-                partitionColumnNames.add(column.getName());
+                partitionColumnNames.add(column.getDisplayName());
             }
             return partitionColumnNames;
         }

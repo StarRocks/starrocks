@@ -1072,7 +1072,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         for (Column column : table.getBaseSchema()) {
             final TColumnDesc desc =
-                    new TColumnDesc(column.getName(), column.getPrimitiveType().toThrift());
+                    new TColumnDesc(column.getDisplayName(), column.getPrimitiveType().toThrift());
             final Integer precision = column.getType().getPrecision();
             if (precision != null) {
                 desc.setColumnPrecision(precision);

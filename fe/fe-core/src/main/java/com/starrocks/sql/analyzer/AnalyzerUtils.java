@@ -42,6 +42,7 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.Function;
@@ -1448,6 +1449,32 @@ public class AnalyzerUtils {
             }
         }
         return false;
+    }
+
+    public static Expr getLogicalPartitionExpr(Expr expr, List<Column> partitionColumns) {
+        if (expr instanceof FunctionCallExpr) {
+            Expr cloneExpr = expr.clone();
+            for (int i = 0; i < cloneExpr.getChildren().size(); i++) {
+                Expr child = cloneExpr.getChildren().get(i);
+                if (child instanceof SlotRef) {
+                    String columnName = ((SlotRef) child).getColumnName();
+                    for (Column partitionColumn : partitionColumns) {
+                        if (partitionColumn.getName().equalsIgnoreCase(columnName)) {
+                            cloneExpr.setChild(i, new SlotRef(null, partitionColumn.getDisplayName()));
+                            break;
+                        }
+                    }
+                }
+            }
+            return cloneExpr;
+        } else if (expr instanceof CastExpr) {
+            CastExpr castExpr = (CastExpr) expr;
+            ArrayList<Expr> children = castExpr.getChildren();
+            for (Expr child : children) {
+                return getLogicalPartitionExpr(child, partitionColumns);
+            }
+        }
+        return expr;
     }
 
 }

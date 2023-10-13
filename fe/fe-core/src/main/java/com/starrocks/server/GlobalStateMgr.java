@@ -2578,7 +2578,7 @@ public class GlobalStateMgr {
             List<String> keysColumnNames = Lists.newArrayList();
             for (Column column : olapTable.getBaseSchema()) {
                 if (column.isKey()) {
-                    keysColumnNames.add("`" + column.getName() + "`");
+                    keysColumnNames.add("`" + column.getDisplayName() + "`");
                 }
             }
             sb.append(Joiner.on(", ").join(keysColumnNames)).append(")");
@@ -3507,7 +3507,7 @@ public class GlobalStateMgr {
     }
 
     public void renameColumn(Database db, OlapTable table, ColumnRenameClause renameClause) throws DdlException {
-        throw new DdlException("not implemented");
+        localMetastore.renameColumn(db, table, renameClause);
     }
 
     public void modifyTableDynamicPartition(Database db, OlapTable table, Map<String, String> properties)

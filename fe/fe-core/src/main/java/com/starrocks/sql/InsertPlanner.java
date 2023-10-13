@@ -396,7 +396,7 @@ public class InsertPlanner {
                 columnRefMap.put(logicalPlan.getOutputColumn().get(columnIdx),
                         logicalPlan.getOutputColumn().get(columnIdx));
             } else {
-                int idx = insertStatement.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
+                int idx = insertStatement.getTargetColumnNames().indexOf(targetColumn.getDisplayName().toLowerCase());
                 if (idx == -1) {
                     ScalarOperator scalarOperator;
                     Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();

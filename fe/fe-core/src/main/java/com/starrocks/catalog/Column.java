@@ -80,6 +80,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     @SerializedName(value = "name")
     private String name;
+
+    // If the logical name exists,
+    // the logical name will be used and converted to the physical name when the user uses it.
+    // Use physical name if not present
+    @SerializedName("logicalName")
+    private String logicalName;
+
     @SerializedName(value = "type")
     private Type type;
     // column is key: aggregate type is null
@@ -242,6 +249,21 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public String getName() {
         return this.name;
+    }
+
+    public String getDisplayName() {
+        if (logicalName == null) {
+            return name;
+        }
+        return logicalName;
+    }
+
+    public void setLogicalName(String logicalName) {
+        if (name.equalsIgnoreCase(logicalName)) {
+            this.logicalName = null;
+            return;
+        }
+        this.logicalName = logicalName;
     }
 
     public String getNameWithoutPrefix(String prefix) {
@@ -528,7 +550,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public String toSql() {
         StringBuilder sb = new StringBuilder();
-        sb.append("`").append(name).append("` ");
+        sb.append("`").append(getDisplayName()).append("` ");
         String typeStr = type.toSql();
         sb.append(typeStr).append(" ");
         if (isAggregated() && !isAggregationTypeImplicit) {
@@ -639,7 +661,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public String toSqlWithoutAggregateTypeName() {
         StringBuilder sb = new StringBuilder();
-        sb.append("`").append(name).append("` ");
+        sb.append("`").append(getDisplayName()).append("` ");
         String typeStr = type.toSql();
         sb.append(typeStr).append(" ");
         if (isAllowNull) {
@@ -689,7 +711,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
         Column other = (Column) obj;
 
-        if (!this.name.equalsIgnoreCase(other.getName())) {
+        if (!this.getName().equalsIgnoreCase(other.getName())) {
             return false;
         }
         if (!this.getType().equals(other.getType())) {

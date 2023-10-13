@@ -45,7 +45,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 
 /**
@@ -167,7 +166,12 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
             sb.append(")");
             return sb.toString();
         }
-        sb.append(Joiner.on(", ").join(partitionExprs.stream().map(Expr::toSql).collect(toList())));
+        List<String> partitionExprList = Lists.newArrayList();
+        for (Expr expr : partitionExprs) {
+            Expr logicalPartitionExpr = AnalyzerUtils.getLogicalPartitionExpr(expr, partitionColumns);
+            partitionExprList.add(logicalPartitionExpr.toSql());
+        }
+        sb.append(Joiner.on(", ").join(partitionExprList));
         return sb.toString();
     }
 

@@ -248,7 +248,7 @@ public class ListPartitionInfo extends PartitionInfo {
         }
         sb.append("(");
         sb.append(partitionColumns.stream()
-                .map(item -> "`" + item.getName() + "`")
+                .map(item -> "`" + item.getDisplayName() + "`")
                 .collect(Collectors.joining(",")));
         sb.append(")");
         if (!automaticPartition) {

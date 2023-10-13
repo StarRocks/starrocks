@@ -42,7 +42,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static java.util.stream.Collectors.toList;
 
 /**
  * ExprRangePartitionInfo is an enhanced version of ExpressionRangePartitionInfo
@@ -153,7 +152,12 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         if (!automaticPartition) {
             sb.append("RANGE(");
         }
-        sb.append(Joiner.on(", ").join(partitionExprs.stream().map(Expr::toSql).collect(toList())));
+        List<String> partitionExprList = Lists.newArrayList();
+        for (Expr expr : partitionExprs) {
+            Expr logicalPartitionExpr = AnalyzerUtils.getLogicalPartitionExpr(expr, partitionColumns);
+            partitionExprList.add(logicalPartitionExpr.toSql());
+        }
+        sb.append(Joiner.on(", ").join(partitionExprList));
         if (!automaticPartition) {
             sb.append(")\n(");
             // sort range

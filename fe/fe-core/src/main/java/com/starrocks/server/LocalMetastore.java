@@ -3733,8 +3733,66 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    public void renameColumn(Database db, OlapTable table, ColumnRenameClause renameClause) throws DdlException {
-        throw new DdlException("not implmented");
+    public void renameColumn(Database db, Table table, ColumnRenameClause renameClause) throws DdlException {
+        if (!(table instanceof OlapTable)) {
+            throw new DdlException("Column rename now only supports olap table.");
+        }
+        OlapTable olapTable = (OlapTable) table;
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            throw new DdlException("Table[" + olapTable.getName() + "] is under " + olapTable.getState());
+        }
+
+        String colName = renameClause.getColName();
+        String newColName = renameClause.getNewColName();
+
+        Column column = olapTable.getColumn(colName);
+        if (column == null) {
+            throw new DdlException("Unknown column '" + colName + "' in '" + table.getName() + "'");
+        }
+        Column currentColumn = olapTable.getColumn(newColName);
+        if (currentColumn != null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, newColName);
+        }
+
+        column.setLogicalName(newColName);
+
+        Map<String, Column> nameToColumn = table.getNameToColumn();
+        nameToColumn.remove(colName);
+        nameToColumn.put(newColName, column);
+
+        DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+        if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
+            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
+            List<Column> distributionColumns = hashDistributionInfo.getDistributionColumns();
+            for (Column distributionColumn : distributionColumns) {
+                if (distributionColumn.getDisplayName().equalsIgnoreCase(colName)) {
+                    distributionColumn.setLogicalName(newColName);
+                }
+            }
+        }
+
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        if (partitionInfo.isRangePartition()) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+            for (Column partitionColumn : partitionColumns) {
+                if (partitionColumn.getDisplayName().equalsIgnoreCase(colName)) {
+                    partitionColumn.setLogicalName(newColName);
+                }
+            }
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            ListPartitionInfo rangePartitionInfo = (ListPartitionInfo) partitionInfo;
+            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+            for (Column partitionColumn : partitionColumns) {
+                if (partitionColumn.getDisplayName().equalsIgnoreCase(colName)) {
+                    partitionColumn.setLogicalName(newColName);
+                }
+            }
+        }
+
+        // TODO: log
+        // GlobalStateMgr.getCurrentState().getEditLog().logColumnRename();
+        LOG.info("rename column {} to {}", colName, newColName);
     }
 
     public void replayRenameColumn(TableInfo tableInfo) throws DdlException {

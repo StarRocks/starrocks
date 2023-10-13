@@ -175,7 +175,7 @@ public class HashDistributionInfo extends DistributionInfo {
 
         List<String> colNames = Lists.newArrayList();
         for (Column column : distributionColumns) {
-            colNames.add("`" + column.getName() + "`");
+            colNames.add("`" + column.getDisplayName() + "`");
         }
         String colList = Joiner.on(", ").join(colNames);
         builder.append(colList);

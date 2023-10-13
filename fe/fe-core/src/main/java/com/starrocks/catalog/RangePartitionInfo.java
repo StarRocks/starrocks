@@ -508,7 +508,7 @@ public class RangePartitionInfo extends PartitionInfo {
             if (idx != 0) {
                 sb.append(", ");
             }
-            sb.append("`").append(column.getName()).append("`");
+            sb.append("`").append(column.getDisplayName()).append("`");
             idx++;
         }
         sb.append(")\n(");

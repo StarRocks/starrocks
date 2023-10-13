@@ -92,7 +92,7 @@ public class IndexSchemaProcNode implements ProcNodeInterface {
             // If you do not follow this specification, it may cause the BI system,
             // such as superset, to fail to recognize the column type.
 
-            List<String> rowList = Arrays.asList(column.getName(),
+            List<String> rowList = Arrays.asList(column.getDisplayName(),
                     column.getType().canonicalName().toLowerCase(),
                     column.isAllowNull() ? "YES" : "NO",
                     ((Boolean) column.isKey()).toString(),
