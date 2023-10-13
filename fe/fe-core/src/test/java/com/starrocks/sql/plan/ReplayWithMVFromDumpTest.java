@@ -14,6 +14,10 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.MaterializedView;
+>>>>>>> 1d53a56055 ([BugFix] Distinguish materialized view refreshed partitions are empty or cannot be rewritten (#32512))
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
@@ -34,6 +38,18 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
+<<<<<<< HEAD
+=======
+        connectContext.getSessionVariable().setEnableQueryDebugTrace(true);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
+                                                           boolean isQueryRewrite) {
+                return true;
+            }
+        };
+>>>>>>> 1d53a56055 ([BugFix] Distinguish materialized view refreshed partitions are empty or cannot be rewritten (#32512))
 
         new MockUp<UtFrameUtils>() {
             @Mock
