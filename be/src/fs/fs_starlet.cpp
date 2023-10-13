@@ -507,8 +507,9 @@ public:
         return to_status((*fs_st)->drop_cache(pair.first));
     }
 
-    // It is the user's responsibility to ensure that all files to be deleted
-    // can share the same FileSystem instance.
+    // It is the caller's responsibility to ensure that all files to be deleted
+    // can share the same FileSystem instance, i.e, have the same parent directory
+    // on the object storage, otherwise some files cannot be deleted.
     Status delete_files(const std::vector<std::string>& paths) override {
         if (paths.empty()) {
             return Status::OK();

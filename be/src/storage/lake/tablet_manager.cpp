@@ -851,16 +851,37 @@ static void collect_files_to_delete(const TxnLogPB& log, const std::string& data
     }
 }
 
+static std::string unique_root_path_identifier(LocationProvider* lp, int64_t tablet_id) {
+#if defined(USE_STAROS) && !defined(BE_TEST)
+    if (!config::lake_enable_abort_txn_batch_delete | g_worker == nullptr) {
+        return lp->root_location(tablet_id);
+    }
+    auto res = g_worker->get_shard_info(tablet_id);
+    if (!res.ok()) {
+        return lp->root_location(tablet_id);
+    }
+    const staros::starlet::ShardInfo& shard_info = res.value();
+    auto it = shard_info.properties.find("PartitionId");
+    if (it == shard_info.properties.end() || it->second.empty()) {
+        return lp->root_location(tablet_id);
+    }
+    return it->second;
+#else
+    return lp->root_location(tablet_id);
+#endif
+}
+
 void TabletManager::abort_txn(std::span<const int64_t> tablet_ids, std::span<const int64_t> txn_ids) {
     // Mapping from the tablet root location to the list of files to be deleted.
     std::unordered_map<std::string, std::vector<std::string>> delete_map;
 
     for (auto tablet_id : tablet_ids) {
-        const auto root_dir = _location_provider->root_location(tablet_id);
+        const auto root_dir = tablet_root_location(tablet_id);
         const auto data_dir = join_path(root_dir, kSegmentDirectoryName);
         const auto log_dir = join_path(root_dir, kTxnLogDirectoryName);
 
-        auto& files_to_delete = delete_map[root_dir];
+        auto root_id = unique_root_path_identifier(_location_provider, tablet_id);
+        auto& files_to_delete = delete_map[root_id];
 
         for (auto txn_id : txn_ids) {
             auto log_path = txn_log_location(tablet_id, txn_id);
@@ -881,7 +902,7 @@ void TabletManager::abort_txn(std::span<const int64_t> tablet_ids, std::span<con
         }
     }
 
-    for (const auto& [root_dir, delete_list] : delete_map) {
+    for (const auto& [_, delete_list] : delete_map) {
         (void)delete_files(delete_list);
     }
 }

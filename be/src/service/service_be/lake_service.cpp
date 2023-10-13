@@ -176,6 +176,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                  request->new_version(), request->tablet_ids_size());
     }
 
+    // Assume all tablets belongs to the same table partition.
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
             DeferOp defer([&] { latch.count_down(); });

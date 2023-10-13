@@ -1084,4 +1084,6 @@ CONF_Int32(lake_service_max_concurrency, "0");
 
 CONF_mInt64(lake_vacuum_max_batch_delete_size, "10000");
 
+CONF_mBool(lake_enable_abort_txn_batch_delete, "true");
+
 } // namespace starrocks::config
