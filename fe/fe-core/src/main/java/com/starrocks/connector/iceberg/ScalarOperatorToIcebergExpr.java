@@ -16,6 +16,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.catalog.PrimitiveType;
@@ -30,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Expression;
@@ -122,7 +124,16 @@ public class ScalarOperatorToIcebergExpr {
 
         private static Type.TypeID getResultTypeID(String columnName, IcebergContext context) {
             Preconditions.checkNotNull(context);
-            return context.getSchema().fieldType(columnName).typeId();
+            return getColumnType(columnName, context).typeId();
+        }
+
+        private static Type getColumnType(String qualifiedName, IcebergContext context) {
+            String[] paths = qualifiedName.split("\\.");
+            Type type = context.getSchema();
+            for (String path : paths) {
+                type = type.asStructType().fieldType(path);
+            }
+            return type;
         }
 
         @Override
@@ -167,11 +178,12 @@ public class ScalarOperatorToIcebergExpr {
                 return null;
             }
 
-            Object literalValue = getLiteralValue(operator.getChild(1), getResultTypeID(columnName, context));
+            Type.TypeID typeID = getResultTypeID(columnName, context);
+            Object literalValue = getLiteralValue(operator.getChild(1), typeID);
             if (literalValue == null) {
                 return null;
             }
-            if (context != null && context.getSchema().fieldType(columnName).typeId() == Type.TypeID.BOOLEAN) {
+            if (typeID == Type.TypeID.BOOLEAN) {
                 literalValue = convertBoolLiteralValue(literalValue);
             }
             switch (operator.getBinaryType()) {
@@ -201,9 +213,9 @@ public class ScalarOperatorToIcebergExpr {
 
             List<Object> literalValues = operator.getListChildren().stream()
                     .map(childoperator -> {
-                        Object literalValue = ScalarOperatorToIcebergExpr.getLiteralValue(childoperator,
-                                getResultTypeID(columnName, context));
-                        if (context != null && context.getSchema().fieldType(columnName).typeId() == Type.TypeID.BOOLEAN) {
+                        Type.TypeID typeID = getResultTypeID(columnName, context);
+                        Object literalValue = ScalarOperatorToIcebergExpr.getLiteralValue(childoperator, typeID);
+                        if (typeID == Type.TypeID.BOOLEAN) {
                             literalValue = convertBoolLiteralValue(literalValue);
                         }
                         return literalValue;
@@ -406,6 +418,18 @@ public class ScalarOperatorToIcebergExpr {
 
         public String visitCastOperator(CastOperator operator, Void context) {
             return operator.getChild(0).accept(this, context);
+        }
+
+        public String visitSubfield(SubfieldOperator operator, Void context) {
+            ScalarOperator child = operator.getChild(0);
+            if (!(child instanceof ColumnRefOperator)) {
+                return null;
+            }
+            ColumnRefOperator columnRefChild = ((ColumnRefOperator) child);
+            List<String> paths = new ImmutableList.Builder<String>()
+                    .add(columnRefChild.getName()).addAll(operator.getFieldNames())
+                    .build();
+            return String.join(".", paths);
         }
     }
 }

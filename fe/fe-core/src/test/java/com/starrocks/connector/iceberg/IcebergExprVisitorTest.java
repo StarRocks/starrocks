@@ -15,6 +15,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
@@ -27,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
@@ -44,15 +46,23 @@ import java.util.stream.Collectors;
 public class IcebergExprVisitorTest {
     private static final Schema SCHEMA =
             new Schema(
-                    Types.NestedField.required(1, "k1", Types.IntegerType.get()),
-                    Types.NestedField.required(2, "k2", Types.IntegerType.get()),
-                    Types.NestedField.required(3, "k3", Types.DateType.get()),
-                    Types.NestedField.required(4, "k4", Types.TimestampType.withoutZone()),
-                    Types.NestedField.required(5, "k5", Types.BooleanType.get()),
-                    Types.NestedField.required(6, "k6", Types.StringType.get()),
-                    Types.NestedField.required(7, "k7", Types.LongType.get()),
-                    Types.NestedField.required(8, "k8", Types.FloatType.get()),
-                    Types.NestedField.required(9, "k9", Types.DoubleType.get()));
+                    Types.NestedField.optional(1, "k1", Types.IntegerType.get()),
+                    Types.NestedField.optional(2, "k2", Types.IntegerType.get()),
+                    Types.NestedField.optional(3, "k3", Types.DateType.get()),
+                    Types.NestedField.optional(4, "k4", Types.TimestampType.withoutZone()),
+                    Types.NestedField.optional(5, "k5", Types.BooleanType.get()),
+                    Types.NestedField.optional(6, "k6", Types.StringType.get()),
+                    Types.NestedField.optional(7, "k7", Types.LongType.get()),
+                    Types.NestedField.optional(8, "k8", Types.FloatType.get()),
+                    Types.NestedField.optional(9, "k9", Types.DoubleType.get()),
+                    Types.NestedField.optional(10, "k10", Types.StructType.of(
+                            Types.NestedField.optional(11, "k11", Types.IntegerType.get()),
+                            Types.NestedField.optional(12, "k12", Types.DateType.get()),
+                            Types.NestedField.optional(13, "k13", Types.TimestampType.withoutZone()),
+                            Types.NestedField.optional(14, "k14", Types.BooleanType.get()),
+                            Types.NestedField.optional(15, "k15", Types.StringType.get()),
+                            Types.NestedField.optional(16, "k16", Types.FloatType.get())
+                    )));
 
     private static final ColumnRefOperator K1 = new ColumnRefOperator(3, Type.INT, "k1", true, false);
     private static final ColumnRefOperator K2 = new ColumnRefOperator(4, Type.INT, "k2", true, false);
@@ -60,12 +70,16 @@ public class IcebergExprVisitorTest {
     private static final ColumnRefOperator K4 = new ColumnRefOperator(6, Type.DATETIME, "k4", true, false);
     private static final ColumnRefOperator K5 = new ColumnRefOperator(7, Type.BOOLEAN, "k5", true, false);
     private static final ColumnRefOperator K6 = new ColumnRefOperator(8, Type.STRING, "k6", true, false);
-
     private static final ColumnRefOperator K7 = new ColumnRefOperator(9, Type.BIGINT, "k7", true, false);
-
     private static final ColumnRefOperator K8 = new ColumnRefOperator(10, Type.FLOAT, "k8", true, false);
-
     private static final ColumnRefOperator K9 = new ColumnRefOperator(11, Type.DOUBLE, "k9", true, false);
+    private static final ColumnRefOperator K10 = new ColumnRefOperator(12, Type.ANY_STRUCT, "k10", true, false);
+    private static final SubfieldOperator K11 = new SubfieldOperator(K10, Type.INT, ImmutableList.of("k11"));
+    private static final SubfieldOperator K12 = new SubfieldOperator(K10, Type.DATE, ImmutableList.of("k12"));
+    private static final SubfieldOperator K13 = new SubfieldOperator(K10, Type.DATETIME, ImmutableList.of("k13"));
+    private static final SubfieldOperator K14 = new SubfieldOperator(K10, Type.BOOLEAN, ImmutableList.of("k14"));
+    private static final SubfieldOperator K15 = new SubfieldOperator(K10, Type.STRING, ImmutableList.of("k15"));
+    private static final SubfieldOperator K16 = new SubfieldOperator(K10, Type.FLOAT, ImmutableList.of("k16"));
 
     @Test
     public void testToIcebergExpression() {
@@ -188,6 +202,137 @@ public class IcebergExprVisitorTest {
                 BinaryType.GT, K1, ConstantOperator.createInt(10));
         BinaryPredicateOperator op2 = new BinaryPredicateOperator(
                 BinaryType.LT, K1, ConstantOperator.createInt(5));
+
+        Expression expression1 = converter.convert(Lists.newArrayList(op1), context);
+        Expression expression2 = converter.convert(Lists.newArrayList(op2), context);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, op1, op2)), context);
+        expectedExpr = Expressions.or(expression1, expression2);
+        Assert.assertEquals("Generated or expression should be correct",
+                expectedExpr.toString(), convertedExpr.toString());
+    }
+
+    @Test
+    public void testToIcebergExpressionStructSubColumn() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        Expression convertedExpr;
+        Expression expectedExpr;
+
+        // isNull
+        convertedExpr = converter.convert(Lists.newArrayList(new IsNullPredicateOperator(false, K11)), context);
+        expectedExpr = Expressions.isNull("k10.k11");
+        Assert.assertEquals(expectedExpr.toString(), convertedExpr.toString());
+
+
+        // notNUll
+        convertedExpr = converter.convert(Lists.newArrayList(new IsNullPredicateOperator(true, K11)), context);
+        expectedExpr = Expressions.notNull("k10.k11");
+        Assert.assertEquals("Generated notNull expression should be correct",
+                expectedExpr.toString(), convertedExpr.toString());
+
+        // equal date
+        ConstantOperator value = ConstantOperator.createDate(LocalDate.parse("2022-11-11").atTime(0, 0, 0, 0));
+        long epochDay = value.getDatetime().toLocalDate().toEpochDay();
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K12, value)), context);
+        expectedExpr = Expressions.equal("k10.k12", epochDay);
+        Assert.assertEquals("Generated equal expression should be correct",
+                expectedExpr.toString(), convertedExpr.toString());
+
+        // equal datetime
+        value = ConstantOperator.createDatetime(LocalDateTime.of(2022, 11, 11, 11, 11, 11));
+        long epochSec = value.getDatetime().toEpochSecond(OffsetDateTime.now().getOffset());
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K13, value)), context);
+        expectedExpr = Expressions.equal("k10.k13", TimeUnit.MICROSECONDS.convert(epochSec, TimeUnit.SECONDS));
+        Assert.assertEquals("Generated equal expression should be correct",
+                expectedExpr.toString(), convertedExpr.toString());
+
+        // equal timestamp
+        value = ConstantOperator.createDatetime(LocalDateTime.of(2023, 8, 18, 15, 13, 12, 634297000));
+        epochSec = 1692342792634297L;
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K13, value)), context);
+        expectedExpr = Expressions.equal("k10.k13", TimeUnit.MICROSECONDS.convert(epochSec, TimeUnit.MICROSECONDS));
+        Assert.assertEquals("Generated equal expression should be correct",
+                expectedExpr.toString(), convertedExpr.toString());
+
+        // notEqual
+        value = ConstantOperator.createBoolean(true);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.NE, K14, value)), context);
+        expectedExpr = Expressions.notEqual("k10.k14", true);
+        Assert.assertEquals("Generated notEqual expression should be correct",
+                expectedExpr.toString(), convertedExpr.toString());
+
+        // lessThan
+        value = ConstantOperator.createInt(5);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.LT, K11, value)), context);
+        expectedExpr = Expressions.lessThan("k10.k11", value.getInt());
+        Assert.assertEquals("Generated lessThan expression should be correct",
+                expectedExpr.toString(), convertedExpr.toString());
+
+        // lessThanOrEqual
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.LE, K11, value)), context);
+        expectedExpr = Expressions.lessThanOrEqual("k10.k11", value.getInt());
+        Assert.assertEquals("Generated lessThanOrEqual expression should be correct",
+                expectedExpr.toString(), convertedExpr.toString());
+
+        // greaterThan
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.GT, K11, value)), context);
+        expectedExpr = Expressions.greaterThan("k10.k11", value.getInt());
+        Assert.assertEquals("Generated greaterThan expression should be correct",
+                expectedExpr.toString(), convertedExpr.toString());
+
+        // greaterThanOrEqual
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.GE, K11, value)), context);
+        expectedExpr = Expressions.greaterThanOrEqual("k10.k11", value.getInt());
+        Assert.assertEquals("Generated greaterThanOrEqual expression should be correct",
+                expectedExpr.toString(), convertedExpr.toString());
+
+        List<ScalarOperator> inOp = Lists.newArrayList();
+        inOp.add(K15);
+        inOp.add(ConstantOperator.createVarchar("123"));
+        inOp.add(ConstantOperator.createVarchar("456"));
+        inOp.add(ConstantOperator.createVarchar("789"));
+        inOp.add(ConstantOperator.createVarchar("jqk"));
+        List<String> inList = inOp.stream()
+                .filter(x -> !(x instanceof ColumnRefOperator || x instanceof SubfieldOperator))
+                .map(x -> (ConstantOperator) x)
+                .map(ConstantOperator::getVarchar)
+                .collect(Collectors.toList());
+
+        InPredicateOperator predicate = new InPredicateOperator(false, inOp);
+        convertedExpr = converter.convert(Lists.newArrayList(predicate), context);
+        expectedExpr = Expressions.in("k10.k15", inList);
+        Assert.assertEquals("Generated in expression should be correct",
+                expectedExpr.toString(), convertedExpr.toString());
+
+        // notIn
+        convertedExpr = converter.convert(Lists.newArrayList(new InPredicateOperator(true, inOp)), context);
+        expectedExpr = Expressions.notIn("k10.k15", inList);
+        Assert.assertEquals("Generated notIn expression should be correct",
+                expectedExpr.toString(), convertedExpr.toString());
+
+        // like
+        value = ConstantOperator.createVarchar("a%");
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new LikePredicateOperator(LikePredicateOperator.LikeType.LIKE, K15, value)), context);
+        expectedExpr = Expressions.startsWith("k10.k15", "a");
+        Assert.assertEquals("Generated like expression should be correct",
+                expectedExpr.toString(), convertedExpr.toString());
+
+        // or
+        BinaryPredicateOperator op1 = new BinaryPredicateOperator(
+                BinaryType.GT, K11, ConstantOperator.createInt(10));
+        BinaryPredicateOperator op2 = new BinaryPredicateOperator(
+                BinaryType.LT, K11, ConstantOperator.createInt(5));
 
         Expression expression1 = converter.convert(Lists.newArrayList(op1), context);
         Expression expression2 = converter.convert(Lists.newArrayList(op2), context);
