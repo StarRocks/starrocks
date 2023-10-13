@@ -57,6 +57,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
@@ -693,15 +694,16 @@ public class PartitionUtil {
 
     public static RangePartitionDiff getPartitionDiff(Expr partitionExpr, Column partitionColumn,
                                                       Map<String, Range<PartitionKey>> basePartitionMap,
-                                                      Map<String, Range<PartitionKey>> mvPartitionMap) {
+                                                      Map<String, Range<PartitionKey>> mvPartitionMap,
+                                                      PartitionDiffer differ) {
         if (partitionExpr instanceof SlotRef) {
-            return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(basePartitionMap, mvPartitionMap);
+            return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(basePartitionMap, mvPartitionMap, differ);
         } else if (partitionExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
             if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC) ||
                     functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
                 return SyncPartitionUtils.getRangePartitionDiffOfExpr(basePartitionMap,
-                        mvPartitionMap, functionCallExpr, null);
+                        mvPartitionMap, functionCallExpr, differ);
             } else {
                 throw new SemanticException("Materialized view partition function " +
                         functionCallExpr.getFnName().getFunction() +

@@ -81,7 +81,6 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Scope;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropPartitionClause;
@@ -102,6 +101,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ListPartitionDiff;
+import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -672,7 +672,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Column refBaseTablePartitionColumn = partitionTableAndColumn.second;
         Preconditions.checkNotNull(refBaseTablePartitionColumn);
 
-        RangePartitionDiff rangePartitionDiff = new RangePartitionDiff();
+        RangePartitionDiff rangePartitionDiff = null;
 
         database.readLock();
         Map<String, Range<PartitionKey>> mvRangePartitionMap = materializedView.getRangePartitionMap();
@@ -690,30 +690,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         refBaseTablePartitionColumn, PartitionUtil.getPartitionNames(refBaseTable));
             }
 
-            // Calculate the range diff between ref base table's partition range map and materialized view's.
-            if (partitionExpr instanceof SlotRef) {
-                rangePartitionDiff = SyncPartitionUtils
-                        .getRangePartitionDiffOfSlotRef(refBaseTablePartitionMap, mvRangePartitionMap);
-            } else if (partitionExpr instanceof FunctionCallExpr) {
-                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC) ||
-                        functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
-                    Range<PartitionKey> rangeToInclude = null;
-                    Column partitionColumn =
-                            ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
-                    String start = context.getProperties().get(TaskRun.PARTITION_START);
-                    String end = context.getProperties().get(TaskRun.PARTITION_END);
-                    if (start != null || end != null) {
-                        rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
-                    }
-                    rangePartitionDiff = SyncPartitionUtils.getRangePartitionDiffOfExpr(refBaseTablePartitionMap,
-                            mvRangePartitionMap, functionCallExpr, rangeToInclude);
-                } else {
-                    throw new SemanticException("Materialized view partition function " +
-                            functionCallExpr.getFnName().getFunction() +
-                            " is not supported yet.", functionCallExpr.getPos());
-                }
-            }
+            Column partitionColumn =
+                    ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
+            PartitionDiffer differ = PartitionDiffer.build(materializedView, context);
+            rangePartitionDiff = PartitionUtil.getPartitionDiff(
+                    partitionExpr, partitionColumn, refBaseTablePartitionMap, mvRangePartitionMap, differ);
         } catch (UserException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return;

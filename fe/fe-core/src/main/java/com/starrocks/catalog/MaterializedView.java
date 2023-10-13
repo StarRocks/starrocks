@@ -1422,11 +1422,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
 
         Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap = getRangePartitionMap();
-        // step1.1: collect ref base table's partition range diff.
-        RangePartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, refBasePartitionCol,
-                basePartitionNameToRangeMap, mvPartitionNameToRangeMap);
-
-        // refresh ref base table's deleted partitions
+        // TODO: prune the partitions based on ttl
+        RangePartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, partitionInfo.second,
+                basePartitionNameToRangeMap, mvPartitionNameToRangeMap, null);
         needRefreshMvPartitionNames.addAll(rangePartitionDiff.getDeletes().keySet());
         // remove ref base table's deleted partitions from `mvPartitionMap`
         for (String deleted : rangePartitionDiff.getDeletes().keySet()) {
