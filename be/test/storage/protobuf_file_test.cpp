@@ -97,6 +97,12 @@ TYPED_TEST(ProtobufFileTest, test_serialize_failed) {
                              "*failed to serialize protobuf to string, maybe the protobuf is too large*"))
             << st.message();
 
+    if constexpr (std::is_same_v<typename TestFixture::ProtobufFileType, ProtobufFile>) {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::save:serialize");
+    }
+    if constexpr (std::is_same_v<typename TestFixture::ProtobufFileType, ProtobufFileWithHeader>) {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::save:serialize");
+    }
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
