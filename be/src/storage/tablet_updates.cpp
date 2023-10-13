@@ -2994,7 +2994,7 @@ struct RowsetLoadInfo {
 };
 
 Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, ChunkChanger* chunk_changer,
-                                const std::string& err_msg_header) {
+                                const TabletSchemaCSPtr& base_tablet_schema, const std::string& err_msg_header) {
     OlapStopWatch watch;
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << err_msg_header << "tablet state is not TABLET_NOTREADY, link_from is not allowed"
@@ -3091,7 +3091,8 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
                                                  : 0);
         }
         RETURN_IF_ERROR(LinkedSchemaChange::generate_delta_column_group_and_cols(
-                &_tablet, base_tablet, rowsets[i], rid, version.major_number(), chunk_changer, dcgs, last_dcg_counts));
+                &_tablet, base_tablet, rowsets[i], rid, version.major_number(), chunk_changer, dcgs, last_dcg_counts,
+                base_tablet_schema));
 
         // merge dcg info if necessary
         if (dcgs.size() != 0) {
@@ -3198,7 +3199,8 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
 }
 
 Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
-                                   ChunkChanger* chunk_changer, const std::string& err_msg_header) {
+                                   ChunkChanger* chunk_changer, const TabletSchemaCSPtr& base_tablet_schema,
+                                   const std::string& err_msg_header) {
     OlapStopWatch watch;
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << err_msg_header << "tablet state is not TABLET_NOTREADY, convert_from is not allowed"
@@ -3242,7 +3244,6 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     uint32_t next_rowset_id = 0;
     std::vector<RowsetLoadInfo> new_rowset_load_infos(src_rowsets.size());
 
-    auto base_tablet_schema = base_tablet->tablet_schema();
     Schema base_schema = ChunkHelper::convert_schema(base_tablet_schema, chunk_changer->get_selected_column_indexes());
 
     OlapReaderStatistics stats;
@@ -3449,7 +3450,8 @@ Status TabletUpdates::_convert_from_base_rowset(const Schema& base_schema, const
 }
 
 Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
-                                   ChunkChanger* chunk_changer, const std::string& err_msg_header) {
+                                   ChunkChanger* chunk_changer, const TabletSchemaCSPtr& base_tablet_schema,
+                                   const std::string& err_msg_header) {
     OlapStopWatch watch;
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << err_msg_header << "tablet state is not TABLET_NOTREADY, reorder_from is not allowed"
@@ -3496,7 +3498,6 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
 
     std::vector<ChunkPtr> chunk_arr;
 
-    auto base_tablet_schema = base_tablet->tablet_schema();
     Schema base_schema = ChunkHelper::convert_schema(base_tablet_schema, chunk_changer->get_selected_column_indexes());
     ChunkSorter chunk_sorter;
 

@@ -2014,6 +2014,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         TTabletType.TABLET_TYPE_LAKE,
                         table.getCompressionType(), indexMeta.getSortKeyIdxes(),
                         indexMeta.getSortKeyUniqueIds());
+                task.setSchemaVersion(indexMeta.getSchemaVersion());
                 tasks.add(task);
             } else {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
@@ -2042,6 +2043,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             table.getPartitionInfo().getTabletType(partition.getParentId()),
                             table.getCompressionType(), indexMeta.getSortKeyIdxes(),
                             indexMeta.getSortKeyUniqueIds());
+                    task.setSchemaVersion(indexMeta.getSchemaVersion());
                     tasks.add(task);
                 }
             }
