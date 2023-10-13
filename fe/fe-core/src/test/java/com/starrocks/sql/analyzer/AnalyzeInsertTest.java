@@ -259,7 +259,7 @@ public class AnalyzeInsertTest {
                         "Use any of (uncompressed, gzip, brotli, zstd, lz4).");
 
         analyzeFail("insert into files ( \n" +
-                        "\t\"path\" = \"oss://starrocks-dla-data-zhangjiakou/jiangletian/unload/test_partby_varchar/\", \n" +
+                        "\t\"path\" = \"s3://path/to/directory/\", \n" +
                         "\t\"format\"=\"parquet\", \n" +
                         "\t\"compression\" = \"uncompressed\", \n" +
                         "\t\"partition_by\"=\"k1\",\n" +
