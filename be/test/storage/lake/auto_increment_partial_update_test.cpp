@@ -313,7 +313,7 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_resolve_conflict) {
     }
     // publish in order
     for (auto txn_id : txn_ids) {
-        ASSERT_OK(simple_publish_version(tablet_id, version+1, txn_id).status());
+        ASSERT_OK(simple_publish_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c1 - 1 == c0) && (c1 - 1 == c2); }));
