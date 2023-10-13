@@ -274,7 +274,9 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
 
     RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_ids, min_retain_version, grace_timestamp,
                                            &vacuumed_files, &vacuumed_file_size));
-    RETURN_IF_ERROR(vacuum_txn_log(root_loc, tablet_ids, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
+    if (request.delete_txn_log()) {
+        RETURN_IF_ERROR(vacuum_txn_log(root_loc, tablet_ids, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
+    }
     response->set_vacuumed_files(vacuumed_files);
     response->set_vacuumed_file_size(vacuumed_file_size);
     return Status::OK();

@@ -148,6 +148,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         boolean hasError = false;
         long vacuumedFiles = 0;
         long vacuumedFileSize = 0;
+        boolean needDeleteTxnLog = true;
         List<Future<VacuumResponse>> responseFutures = Lists.newArrayListWithCapacity(nodeToTablets.size());
         for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
             ComputeNode node = entry.getKey();
@@ -156,6 +157,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.minRetainVersion = minRetainVersion;
             vacuumRequest.graceTimestamp = startTime / MILLISECONDS_PER_SECOND - Config.lake_autovacuum_grace_period_minutes * 60;
             vacuumRequest.minActiveTxnId = minActiveTxnId;
+            vacuumRequest.deleteTxnLog = needDeleteTxnLog;
+            // Perform deletion of txn log on the first node only.
+            needDeleteTxnLog = false;
             try {
                 LakeService service = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                 responseFutures.add(service.vacuum(vacuumRequest));
