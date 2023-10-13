@@ -29,7 +29,3 @@ This topic introduces how to integrate with StarRocks.
 [Kubernetes](https://github.com/StarRocks/starrocks-kubernetes-operator)
 
 [Helm](https://github.com/StarRocks/helm-charts)
-
-## Monitor
-
-[DataDog](./datadog_support.md)
