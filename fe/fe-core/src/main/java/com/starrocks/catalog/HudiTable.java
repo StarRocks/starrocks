@@ -271,6 +271,15 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
 
         Configuration conf = new Configuration();
+        if (!Strings.isNullOrEmpty(catalogName)) {
+            GlobalStateMgr.getCurrentState()
+                    .getConnectorMgr()
+                    .getConnector(catalogName)
+                    .getMetadata()
+                    .getCloudConfiguration()
+                    .applyToConfiguration(conf);
+        }
+
         HoodieTableMetaClient metaClient =
                 HoodieTableMetaClient.builder().setConf(conf).setBasePath(getTableLocation()).build();
         HoodieTimeline timeline = metaClient.getCommitsAndCompactionTimeline().filterCompletedInstants();
