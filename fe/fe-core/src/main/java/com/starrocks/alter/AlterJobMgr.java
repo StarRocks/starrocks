@@ -315,7 +315,7 @@ public class AlterJobMgr {
             } catch (SemanticException e) {
                 throw new SemanticException("Can not active materialized view [" + materializedView.getName() +
                         "] because analyze materialized view define sql: \n\n" + createMvSql +
-                        "\n\nCause an error: " + e.getDetailMsg());
+                        "\n\nCause an error: " + e.getDetailMsg(), e);
             }
 
             // Skip checks to maintain eventual consistency when replay
