@@ -1,0 +1,17 @@
+-- name: testForEmptySetInput
+CREATE TABLE IF NOT EXISTS `lineorder` (
+    `lo_orderkey` int(11) NOT NULL COMMENT "",
+    `lo_shipmode` varchar(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+SELECT GROUP_CONCAT(lo_shipmode) orgs FROM lineorder WHERE 1 = 2;
+-- result:
+None
+-- !result
