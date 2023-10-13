@@ -508,6 +508,25 @@ struct ChunkSliceTemplate {
     void reset(Ptr input);
 };
 
+<<<<<<< HEAD
+=======
+template <LogicalType ltype>
+struct GetContainer {
+    using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
+    const auto& get_data(const Column* column) { return ColumnHelper::as_raw_column<ColumnType>(column)->get_data(); }
+};
+
+#define GET_CONTAINER(ltype)                                                            \
+    template <>                                                                         \
+    struct GetContainer<ltype> {                                                        \
+        const auto& get_data(const Column* column) {                                    \
+            return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data(); \
+        }                                                                               \
+    };
+APPLY_FOR_ALL_STRING_TYPE(GET_CONTAINER)
+#undef GET_CONTAINER
+
+>>>>>>> aa5d5edc74 ([Enhancement] Avoid build slice for array_max and array_min (#32645))
 using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
 using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
 
