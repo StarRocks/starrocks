@@ -239,6 +239,7 @@ TEST_F(LakeVacuumTest, test_vacuum_2) {
         EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     }
 
+    SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_file_modified_time");
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
@@ -900,6 +901,7 @@ TEST_F(LakeVacuumTest, test_delete_file_failed) {
     EXPECT_TRUE(file_exist(tablet_metadata_filename(500, 2)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(500, 3)));
 
+    SyncPoint::GetInstance()->ClearCallBack("vacuum.delete_files");
     SyncPoint::GetInstance()->DisableProcessing();
 }
 } // namespace starrocks::lake
