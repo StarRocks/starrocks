@@ -1337,6 +1337,9 @@ void Tablet::get_compaction_status(std::string* json_result) {
 
 void Tablet::do_tablet_meta_checkpoint() {
     std::unique_lock store_lock(_meta_store_lock);
+    if (_will_be_force_replaced) {
+        return;
+    }
     if (_newly_created_rowset_num == 0) {
         return;
     }
