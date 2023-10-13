@@ -309,6 +309,11 @@ public class UDFHelper {
                     getStringLargeIntResult(numRows, (BigInteger[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof String[]) {
                     getStringBoxedResult(numRows, (String[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof Object[]) {
+                    String[] objStrings =
+                            Arrays.stream((Object[]) boxedResult)
+                                    .map(item -> item == null ? null : item.toString()).toArray(String[]::new);
+                    getStringBoxedResult(numRows, objStrings, columnAddr);
                 } else {
                     throw new UnsupportedOperationException("unsupported type:" + boxedResult);
                 }

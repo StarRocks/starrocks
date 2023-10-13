@@ -22,14 +22,22 @@ import java.util.function.Supplier;
 
 // a cache for get datasource
 public class DataSourceCache {
-    private final Map<String, HikariDataSource> sources = new ConcurrentHashMap<>();
+    public static class DataSourceCacheItem {
+        public HikariDataSource hikariDataSource;
+        public ClassLoader classLoader;
+        public DataSourceCacheItem(HikariDataSource hikariDataSource, ClassLoader classLoader) {
+            this.hikariDataSource = hikariDataSource;
+            this.classLoader = classLoader;
+        }
+    }
+    private final Map<String, DataSourceCacheItem> sources = new ConcurrentHashMap<>();
     private static final DataSourceCache INSTANCE = new DataSourceCache();
 
     public static DataSourceCache getInstance() {
         return INSTANCE;
     }
 
-    public HikariDataSource getSource(String driverId, Supplier<HikariDataSource> provider) {
+    public DataSourceCacheItem getSource(String driverId, Supplier<DataSourceCacheItem> provider) {
         return sources.computeIfAbsent(driverId, k -> provider.get());
     }
 }
