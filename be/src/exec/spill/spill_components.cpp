@@ -151,13 +151,12 @@ Status PartitionedSpillerWriter::acquire_stream(const SpillPartitionInfo* partit
     return Status::OK();
 }
 
-Status PartitionedSpillerWriter::get_spill_partitions(std::vector<const SpillPartitionInfo*>* res) {
+void PartitionedSpillerWriter::get_spill_partitions(std::vector<const SpillPartitionInfo*>* res) {
     for (const auto& [level, partitions] : _level_to_partitions) {
         for (const auto& partition : partitions) {
             res->push_back(partition.get());
         }
     }
-    return Status::OK();
 }
 
 void PartitionedSpillerWriter::reset_partition(const std::vector<const SpillPartitionInfo*>& partitions) {
