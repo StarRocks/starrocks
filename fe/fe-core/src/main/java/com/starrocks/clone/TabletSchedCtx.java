@@ -896,7 +896,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             }
             CreateReplicaTask createReplicaTask = new CreateReplicaTask(destBackendId, dbId,
                     tblId, partitionId, indexId, tabletId, indexMeta.getShortKeyColumnCount(),
-                    indexMeta.getSchemaHash(), visibleVersion,
+                    indexMeta.getSchemaHash(), indexMeta.getSchemaVersion(), visibleVersion,
                     indexMeta.getKeysType(),
                     TStorageType.COLUMN,
                     TStorageMedium.HDD, indexMeta.getSchema(), olapTable.getCopiedBfColumns(), olapTable.getBfFpp(), null,
