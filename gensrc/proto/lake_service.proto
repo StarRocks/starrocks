@@ -196,6 +196,8 @@ message VacuumRequest {
     optional int64 grace_timestamp = 3;
     // Delete txn log files with txn IDs less than min_active_txn_id
     optional int64 min_active_txn_id = 4;
+    // Whether need to delete committed txn logs or not.
+    optional bool delete_txn_log = 5;
 }
 
 message VacuumResponse {
