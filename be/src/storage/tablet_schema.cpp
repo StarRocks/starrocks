@@ -482,7 +482,7 @@ Status TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t versi
     // And we will lost bloom filter when we build new tablet schema according to FE.
     // So we need to set bloom filter column to the new column according to current BE tablet schema.
     std::set<ColumnUID> bf_column_uids;
-    for (auto col : _cols) {
+    for (const auto& col : _cols) {
         if (col.is_bf_column()) {
             bf_column_uids.insert(col.unique_id());
         }
@@ -502,7 +502,7 @@ Status TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t versi
             if (column.is_bf_column()) {
                 has_bf_columns = true;
             }
-            if (bf_column_uids.find(column.unique_id()) != bf_column_uids.end()) {
+            if (bf_column_uids.count(column.unique_id()) > 0) {
                 column.set_is_bf_column(true);
                 has_bf_columns = true;
             }
