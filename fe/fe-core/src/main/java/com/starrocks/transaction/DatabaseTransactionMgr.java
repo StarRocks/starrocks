@@ -1419,6 +1419,10 @@ public class DatabaseTransactionMgr {
                 // 2. if we add routine load txn to runningTxnNums, runningTxnNums will always be occupied by routine load,
                 //    and other txn may not be able to submitted.
                 break;
+            case LAKE_COMPACTION:
+                // no need to check limit for cloud native table compaction.
+                // high frequency and small batch loads may cause compaction execute rarely.
+                break;
             default:
                 if (runningTxnNums >= Config.max_running_txn_num_per_db) {
                     throw new BeginTransactionException("current running txns on db " + dbId + " is "
