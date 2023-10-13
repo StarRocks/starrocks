@@ -1187,7 +1187,7 @@ public class ScalarOperatorFunctions {
             String json = array.toString();
             return ConstantOperator.createVarchar(json);
         } finally {
-            mayDb.ifPresent(Database::readLock);
+            mayDb.ifPresent(Database::readUnlock);
         }
     }
 
