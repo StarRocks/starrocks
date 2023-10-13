@@ -423,7 +423,9 @@ Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
 size_t Segment::_column_index_mem_usage() {
     size_t size = 0;
     for (auto& r : _column_readers) {
-        size += r->mem_usage();
+        if (r != nullptr) {
+            size += r->mem_usage();
+        }
     }
     return size;
 }
