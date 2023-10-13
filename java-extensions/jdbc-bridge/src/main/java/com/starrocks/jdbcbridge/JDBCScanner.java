@@ -75,11 +75,11 @@ public class JDBCScanner {
             HikariDataSource hikariDataSource = new HikariDataSource(config);
             // hikari doesn't support user-provided class loader, we should save them ourselves to ensure that
             // the classes of result data are loaded by the same class loader, otherwise we may encounter
-            // ArrayStoreException in getChunk
+            // ArrayStoreException in getNextChunk
             return new DataSourceCache.DataSourceCacheItem(hikariDataSource, classLoader);
         });
-        dataSource = cacheItem.hikariDataSource;
-        classLoader = cacheItem.classLoader;
+        dataSource = cacheItem.getHikariDataSource();
+        classLoader = cacheItem.getClassLoader();
 
         connection = dataSource.getConnection();
         connection.setAutoCommit(false);

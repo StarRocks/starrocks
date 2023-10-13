@@ -21,23 +21,47 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 // a cache for get datasource
+// the following code was genereated by chatgpt: https://github.com/StarRocks/starrocks/pull/32702/files#r1357812002
 public class DataSourceCache {
-    public static class DataSourceCacheItem {
-        public HikariDataSource hikariDataSource;
-        public ClassLoader classLoader;
+    public static final class DataSourceCacheItem {
+        private final HikariDataSource hikariDataSource;
+        private final ClassLoader classLoader;
+
         public DataSourceCacheItem(HikariDataSource hikariDataSource, ClassLoader classLoader) {
             this.hikariDataSource = hikariDataSource;
             this.classLoader = classLoader;
         }
+
+        public HikariDataSource getHikariDataSource() {
+            return hikariDataSource;
+        }
+
+        public ClassLoader getClassLoader() {
+            return classLoader;
+        }
     }
+
     private final Map<String, DataSourceCacheItem> sources = new ConcurrentHashMap<>();
     private static final DataSourceCache INSTANCE = new DataSourceCache();
+
+    // presumed existing private constructor
+    private DataSourceCache(){}
 
     public static DataSourceCache getInstance() {
         return INSTANCE;
     }
 
     public DataSourceCacheItem getSource(String driverId, Supplier<DataSourceCacheItem> provider) {
-        return sources.computeIfAbsent(driverId, k -> provider.get());
+        if (driverId == null || driverId.isEmpty()) {
+            throw new IllegalArgumentException("Driver ID cannot be null or empty");
+        }
+
+        return sources.computeIfAbsent(driverId, k -> {
+            DataSourceCacheItem item = provider.get();
+            if (item == null) {
+                throw new NullPointerException("DataSourceCacheItem supplier returned null");
+            }
+            return item;
+        });
     }
 }
