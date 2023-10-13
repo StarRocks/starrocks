@@ -1,6 +1,6 @@
 # Deploy StarRocks
 
-This QuickStart tutorial guides you through the procedures to deploy a simple StarRocks cluster. Before getting started, you can read [StarRocks Architecture](../quick_start/Architecture.md) for more conceptual details.
+This QuickStart tutorial guides you through the procedures to deploy a simple StarRocks cluster. Before getting started, you can read [StarRocks Architecture](../introduction/Architecture.md) for more conceptual details.
 
 Following these steps, you can deploy a StarRocks instance with only one frontend (FE) node and one backend (BE) node on your local machine. This instance can help you complete the upcoming QuickStart tutorials on [creating a table](../quick_start/Create_table.md) and [loading and querying data](../quick_start/Import_and_query.md), and thereby acquaints you with the basic operations of StarRocks.
 
@@ -59,7 +59,7 @@ After all the [prerequisites](#prerequisites) are met, you can download the Star
   tar -xzvf StarRocks-2.5.5.tar.gz --strip-components 1
   ```
 
-  The software package includes the working directories of FE (**fe**), BE (**be**), [Broker](../administration/deploy_broker.md) (**apache_hdfs_broker**), User Defined Function (**udf**), and **LICENSE** and **NOTICE** files.
+  The software package includes the working directories of FE (**fe**), BE (**be**), [Broker](../deployment/deploy_broker.md) (**apache_hdfs_broker**), User Defined Function (**udf**), and **LICENSE** and **NOTICE** files.
 
 ## Step 2: Start the FE node
 
@@ -134,7 +134,7 @@ Having installed StarRocks, you need to start the FE node. FE is the front layer
     cat fe/log/fe.log | grep thrift
     ```
 
-  A record of log like "2022-08-10 16:12:29,911 INFO (UNKNOWN x.x.x.x_9010_1660119137253(-1)|1) [FeServer.start():52] thrift server started with port 9020." suggests that the FE node is started properly.
+  A record of log like `2022-08-10 16:12:29,911 INFO (UNKNOWN x.x.x.x_9010_1660119137253(-1)|1) [FeServer.start():52] thrift server started with port 9020.` suggests that the FE node is started properly.
 
 ## Step 3: Start the BE node
 

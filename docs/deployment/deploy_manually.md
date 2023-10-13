@@ -80,7 +80,7 @@ The following procedures are performed on an FE instance.
    cat fe/log/fe.log | grep thrift
    ```
 
-   A record of log like "2022-08-10 16:12:29,911 INFO (UNKNOWN x.x.x.x_9010_1660119137253(-1)|1) [FeServer.start():52] thrift server started with port 9020." suggests that the FE node is started properly.
+   A record of log like `2022-08-10 16:12:29,911 INFO (UNKNOWN x.x.x.x_9010_1660119137253(-1)|1) [FeServer.start():52] thrift server started with port 9020.` suggests that the FE node is started properly.
 
 ## Step 2: Start the BE service
 
@@ -420,7 +420,7 @@ A high-availability FE cluster requires at least THREE Follower FE nodes in the 
    cat fe/log/fe.log | grep thrift
    ```
 
-   A record of log like "2022-08-10 16:12:29,911 INFO (UNKNOWN x.x.x.x_9010_1660119137253(-1)|1) [FeServer.start():52] thrift server started with port 9020." suggests that the FE node is started properly.
+   A record of log like `2022-08-10 16:12:29,911 INFO (UNKNOWN x.x.x.x_9010_1660119137253(-1)|1) [FeServer.start():52] thrift server started with port 9020.` suggests that the FE node is started properly.
 
 5. Repeat the preceding procedure 2, 3, and 4 until you have start all the new Follower FE nodes properly, and then check the status of the FE nodes by executing the following SQL from your MySQL client:
 
