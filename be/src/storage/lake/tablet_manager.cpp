@@ -853,7 +853,7 @@ static void collect_files_to_delete(const TxnLogPB& log, const std::string& data
 
 static std::string unique_root_path_identifier(LocationProvider* lp, int64_t tablet_id) {
 #if defined(USE_STAROS) && !defined(BE_TEST)
-    if (!config::lake_enable_abort_txn_batch_delete | g_worker == nullptr) {
+    if (!config::lake_enable_abort_txn_batch_delete || g_worker == nullptr) {
         return lp->root_location(tablet_id);
     }
     auto res = g_worker->get_shard_info(tablet_id);
