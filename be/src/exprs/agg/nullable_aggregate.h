@@ -518,12 +518,12 @@ public:
 
         for (size_t i = 0; i < column_size; i++) {
             if (columns[i]->is_nullable()) {
-                const auto* column = down_cast<const NullableColumn*>(columns[i]);
-                if (column->is_null(row_num)) {
+                if (columns[i]->is_null(row_num)) {
                     // If at least one column has a null value in the current row,
                     // we don't process this row.
                     return;
                 }
+                const auto* column = down_cast<const NullableColumn*>(columns[i]);
                 data_columns[i] = &column->data_column_ref();
             } else {
                 data_columns[i] = columns[i];
@@ -630,8 +630,18 @@ public:
                 const auto* nullable_column = down_cast<const NullableColumn*>(i.get());
                 data_columns.emplace_back(nullable_column->data_column());
                 if (i->has_null()) {
+                    dst_nullable_column->set_has_null(true);
                     const NullData& src_null_data = nullable_column->immutable_null_column_data();
 
+                    size_t null_size = SIMD::count_nonzero(src_null_data);
+                    // if one column only has null element, set dst_column all null
+                    if (null_size == chunk_size) {
+                        dst_nullable_column->data_column()->resize(chunk_size);
+                        for (int j = 0; j < chunk_size; ++j) {
+                            dst_null_data[j] |= 1;
+                        }
+                        return;
+                    }
                     // for one row, every columns should be probing to obtain null column.
                     for (int j = 0; j < chunk_size; ++j) {
                         dst_null_data[j] |= src_null_data[j];
