@@ -121,6 +121,10 @@ std::string SchemaColumnsScanner::to_mysql_data_type_string(TColumnDesc& desc) {
         return "percentile";
     case TPrimitiveType::JSON:
         return "json";
+    case TPrimitiveType::BINARY:
+        return "binary";
+    case TPrimitiveType::VARBINARY:
+        return "varbinary";
     default:
         return "unknown";
     }
@@ -193,6 +197,10 @@ std::string SchemaColumnsScanner::type_to_string(TColumnDesc& desc) {
         return "percentile";
     case TPrimitiveType::JSON:
         return "json";
+    case TPrimitiveType::BINARY:
+        return "binary";
+    case TPrimitiveType::VARBINARY:
+        return "varbinary";
     default:
         return "unknown";
     }
