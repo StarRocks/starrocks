@@ -28,9 +28,14 @@ namespace starrocks {
 const std::string DEFAULT_FIELD_DELIM = "\001";
 const std::string DEFAULT_COLLECTION_DELIM = "\002";
 const std::string DEFAULT_MAPKEY_DELIM = "\003";
-// TODO not support \r\n line delimiter yet
-const std::string DEFAULT_LINE_DELIM = "\n";
-const std::string ANOTHER_DEFAULT_LINE_DELIM = "\r";
+// LF = Line Feed = '\n'
+const std::string LINE_DELIM_LF = "\n";
+// Most hive TextFile using LF as line delimiter
+const std::string DEFAULT_LINE_DELIM = LINE_DELIM_LF;
+// CR = Carriage Return = '\r'
+const std::string LINE_DELIM_CR = "\r";
+// TODO(SmithCruise) CR + LF, but we don't support it yet, because our code only support single char as line delimiter
+const std::string LINE_DELIM_CR_LF = "\r\n";
 
 static CompressionTypePB return_compression_type_from_filename(const std::string& filename) {
     ssize_t end = filename.size() - 1;
@@ -167,16 +172,16 @@ char* HdfsScannerCSVReader::_find_line_delimiter(starrocks::CSVBuffer& buffer, s
         // TODO(Smith)
         // We didn't support to treat '\r\n' as line.delim,
         // because our code does not support line separator's length larger than one char.
-        char* p = buffer.find(DEFAULT_LINE_DELIM, pos);
+        char* p = buffer.find(LINE_DELIM_LF, pos);
         if (p != nullptr) {
             _need_probe_line_delimiter = false;
-            _parse_options.row_delimiter = DEFAULT_LINE_DELIM;
+            _parse_options.row_delimiter = LINE_DELIM_LF;
             return p;
         }
-        p = buffer.find(ANOTHER_DEFAULT_LINE_DELIM, pos);
+        p = buffer.find(LINE_DELIM_CR, pos);
         if (p != nullptr) {
             _need_probe_line_delimiter = false;
-            _parse_options.row_delimiter = ANOTHER_DEFAULT_LINE_DELIM;
+            _parse_options.row_delimiter = LINE_DELIM_CR;
             return p;
         }
         return nullptr;
