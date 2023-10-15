@@ -224,7 +224,9 @@ class ParquetScannerTest : public ::testing::Test {
                 {"issue_17693_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
                 {"issue_17822_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
                 {"nested_array_c0", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
-                                            TypeDescriptor::from_logical_type(TYPE_VARCHAR)))}};
+                                            TypeDescriptor::from_logical_type(TYPE_VARCHAR)))},
+                {"col_map", TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
+                                                            TypeDescriptor::create_varchar_type(1048576))}};
         SlotTypeDescInfoArray slot_infos;
         slot_infos.reserve(column_names.size());
         for (auto& name : column_names) {
@@ -767,9 +769,26 @@ TEST_F(ParquetScannerTest, datetime) {
 TEST_F(ParquetScannerTest, optional_map_key) {
     const std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/optional_map_key.parquet";
     std::vector<std::tuple<std::string, std::vector<std::string>>> test_cases = {
-            {"col_datetime",
-             {"2006-01-02 15:04:05", "2006-01-02 15:04:05.900000", "2006-01-02 15:04:05.999900",
-              "2006-01-02 15:04:05.999990", "2006-01-02 15:04:05.999999"}}};
+            {"col_int", {"1", "2", "6", "3", "4", "5", "7", "8", "9", "1", "2", "3", "4", "5", "7", "8", "9", "6"}},
+            {"col_map",
+             {R"({" ":" "})",
+              R"({"                                            aAbBcC":"                                            aAbBcC"})",
+              R"("你好，中国！":null})",
+              R"({"aAbBcC                                            ":"aAbBcC                                            "})",
+              R"({"                    aAbBcCdDeE                    ":"                    aAbBcCdDeE                    "})",
+              R"({"null":null})",
+              R"({"                                                  ":"                                                  "})",
+              R"({"Hello, world!你好":"Hello, world!你好"})",
+              R"({"Total MapReduce CPU Time Spent: 2 seconds 120 msec":"Total MapReduce CPU Time Spent: 2 seconds 120 msec"})",
+              R"({" ":" "})",
+              R"({"                                            aAbBcC":"                                            aAbBcC"})",
+              R"({"aAbBcC                                            ":"aAbBcC                                            "})",
+              R"({"                    aAbBcCdDeE                    ":"                    aAbBcCdDeE                    "})",
+              R"({"null":null})",
+              R"({"                                                  ":"                                                  "})",
+              R"({"Hello, world!你好":"Hello, world!你好"})",
+              R"({"Total MapReduce CPU Time Spent: 2 seconds 120 msec":"Total MapReduce CPU Time Spent: 2 seconds 120 msec"})",
+              R"("你好，中国！":null})"}}};
 
     std::vector<std::string> columns_from_path;
     std::vector<std::string> path_values;
@@ -778,7 +797,7 @@ TEST_F(ParquetScannerTest, optional_map_key) {
     for (auto& [column_name, expected] : test_cases) {
         std::vector<std::string> column_names{column_name};
 
-        ChunkPtr chunk = get_chunk<true>(column_names, slot_map, parquet_file_name, 5);
+        ChunkPtr chunk = get_chunk<true>(column_names, slot_map, parquet_file_name, 18);
         ASSERT_EQ(1, chunk->num_columns());
 
         auto col = chunk->columns()[0];
