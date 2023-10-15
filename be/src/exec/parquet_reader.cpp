@@ -91,8 +91,7 @@ Status ParquetReaderWrap::_init_parquet_reader() {
                                                    arrow_reader_properties, &_reader);
         if (!st.ok()) {
             std::ostringstream oss;
-            oss << "Failed to create parquet file reader. error: " << st.ToString()
-                         << ", filename: " << _filename;
+            oss << "Failed to create parquet file reader. error: " << st.ToString() << ", filename: " << _filename;
             LOG(INFO) << oss.str();
             return Status::InternalError(oss.str());
         }
