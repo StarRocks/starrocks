@@ -856,4 +856,47 @@ public class MaterializedViewTest {
                 DdlException.class,
                 () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterViewStmt));
     }
+
+    @Test
+    public void testCreateMVWithIndex() throws Exception {
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.table1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withMaterializedView("create materialized view index_mv_to_check " +
+                        "(k2 ," +
+                        " total ," +
+                        "INDEX index1 (`k2`) USING BITMAP COMMENT 'balabala' " +
+                        ")" +
+                        "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 \n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES " +
+                        "("
+                        + "\"replicated_storage\" = \"true\","
+                        + "\"replication_num\" = \"1\","
+                        + "\"storage_medium\" = \"HDD\","
+                        + "\"bloom_filter_columns\" = \"k2\""
+                        + ")" +
+                        "as select k2, sum(v1) as total from table1 group by k2;");
+
+        String showCreateSql = "show create materialized view test.index_mv_to_check;";
+        ShowCreateTableStmt showCreateTableStmt =
+                (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateSql, connectContext);
+        ShowExecutor showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
+        ShowResultSet showResultSet = showExecutor.execute();
+        System.out.println(showResultSet.getResultRows());
+        Assert.assertEquals(connectContext.getState().getStateType(), QueryState.MysqlStateType.OK);
+    }
 }
