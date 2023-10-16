@@ -2,12 +2,8 @@
 
 #pragma once
 
-<<<<<<< HEAD
-=======
 #include <bthread/bthread.h>
 
-#include <cstdint>
->>>>>>> 430f58225c ([BugFix] Make sure all bthread only has process level memtracker (#32580))
 #include <string>
 
 #include "fmt/format.h"
@@ -84,30 +80,13 @@ public:
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
-<<<<<<< HEAD
-        commit();
-=======
         RETURN_NULL_IF_BTHREAD();
-        release_reserved();
-        mem_tracker_ctx_shift();
->>>>>>> 430f58225c ([BugFix] Make sure all bthread only has process level memtracker (#32580))
+        commit();
         auto* prev = tls_mem_tracker;
         tls_mem_tracker = mem_tracker;
         return prev;
     }
 
-<<<<<<< HEAD
-=======
-    // Return prev memory tracker.
-    starrocks::MemTracker* set_operator_mem_tracker(starrocks::MemTracker* operator_mem_tracker) {
-        RETURN_NULL_IF_BTHREAD();
-        operator_mem_tracker_ctx_shift();
-        auto* prev = tls_operator_mem_tracker;
-        tls_operator_mem_tracker = operator_mem_tracker;
-        return prev;
-    }
-
->>>>>>> 430f58225c ([BugFix] Make sure all bthread only has process level memtracker (#32580))
     bool set_check_mem_limit(bool check) {
         bool prev_check = _check;
         _check = check;
