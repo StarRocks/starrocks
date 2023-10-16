@@ -18,7 +18,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Objects;
-import java.util.StringJoiner;
 
 public class IcebergFilter {
     private final String databaseName;
@@ -60,11 +59,12 @@ public class IcebergFilter {
 
     @Override
     public String toString() {
-        return new StringJoiner(", ", IcebergFilter.class.getSimpleName() + "[", "]")
-                .add("databaseName='" + databaseName + "'")
-                .add("tableName='" + tableName + "'")
-                .add("snapshotId=" + snapshotId)
-                .add("predicate=" + predicate)
-                .toString();
+        final StringBuilder sb = new StringBuilder("IcebergFilter{");
+        sb.append("databaseName='").append(databaseName).append('\'');
+        sb.append(", tableName='").append(tableName).append('\'');
+        sb.append(", snapshotId=").append(snapshotId);
+        sb.append(", predicate=").append(predicate);
+        sb.append('}');
+        return sb.toString();
     }
 }
