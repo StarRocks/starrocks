@@ -28,6 +28,11 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TGlobalDict;
+>>>>>>> 6ec8699260 ([BugFix] Add dicts of offspring fragments of cached fragments into digest computation (#32673))
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TExpr;
 import org.apache.thrift.TException;
@@ -40,6 +45,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -74,6 +80,21 @@ public class FragmentNormalizer {
 
     private Set<SlotId> slotsUseAggColumns;
 
+<<<<<<< HEAD
+=======
+    private boolean processingLeftNode = false;
+
+    private boolean notRemappingSlotId = false;
+
+    private Stack<Boolean> shouldRemovePartColRangePredicates = new Stack<>();
+
+    private Map<SlotId, List<Expr>> slotId2PartColRangePredicates = Maps.newHashMap();
+    private Map<SlotId, Set<String>> slotId2DerivedPredicates = Maps.newHashMap();
+
+    private Set<Integer> cachedPlanNodeIds = Sets.newHashSet();
+    private boolean assignScanRangesAcrossDrivers = false;
+
+>>>>>>> 6ec8699260 ([BugFix] Add dicts of offspring fragments of cached fragments into digest computation (#32673))
     public FragmentNormalizer(ExecPlan execPlan, PlanFragment fragment) {
         this.execPlan = execPlan;
         this.fragment = fragment;
@@ -201,10 +222,18 @@ public class FragmentNormalizer {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
 
             for (TNormalPlanNode node : normalizedPlanNodes) {
-                byte[] data = serializer.serialize(node);
-                digest.update(data);
+                digest.update(serializer.serialize(node));
             }
+<<<<<<< HEAD
             List<SlotId> slotIds = topmostPlanNode.getOutputSlotIds(execPlan.getDescTbl());
+=======
+            List<TGlobalDict> dicts = normalizeDicts(getAllOffspringFragments(fragment));
+            for (TGlobalDict dict : dicts) {
+                digest.update(serializer.serialize(dict));
+            }
+
+            List<SlotId> slotIds = cachePointNode.getOutputSlotIds(execPlan.getDescTbl());
+>>>>>>> 6ec8699260 ([BugFix] Add dicts of offspring fragments of cached fragments into digest computation (#32673))
             List<Integer> remappedSlotIds = remapSlotIds(slotIds);
             Map<Integer, Integer> outputSlotIdRemapping = Maps.newHashMap();
             for (int i = 0; i < slotIds.size(); ++i) {
@@ -501,4 +530,300 @@ public class FragmentNormalizer {
             this.setCanUseMultiVersion(false);
         }
     }
+<<<<<<< HEAD
+=======
+
+    public static boolean isAllowedInLeftMostPath(PlanNode node) {
+        if (node instanceof AggregationNode) {
+            return true;
+        } else if (node instanceof DecodeNode) {
+            return true;
+        } else if (node instanceof ProjectNode) {
+            return true;
+        } else if (node instanceof SelectNode) {
+            return true;
+        } else if (node instanceof TableFunctionNode) {
+            return true;
+        } else if (node instanceof RepeatNode) {
+            return true;
+        } else if (node instanceof HashJoinNode) {
+            return true;
+        } else if (node instanceof NestLoopJoinNode) {
+            return true;
+        } else if (node instanceof OlapScanNode) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public static void collectRightSiblingFragments(PlanNode root, List<PlanFragment> siblings,
+                                                    Set<PlanFragmentId> visitedMultiCastFragments) {
+        if (root.getChildren().isEmpty()) {
+            return;
+        }
+
+        if (root instanceof ExchangeNode) {
+            for (PlanNode child : root.getChildren()) {
+                PlanFragment childFrag = child.getFragment();
+                boolean isMultiCast = child.getFragment() instanceof MultiCastPlanFragment;
+                if (!isMultiCast || !visitedMultiCastFragments.contains(child.getFragmentId())) {
+                    if (isMultiCast) {
+                        visitedMultiCastFragments.add(childFrag.fragmentId);
+                    }
+                    siblings.add(child.getFragment());
+                    collectRightSiblingFragments(child, siblings, visitedMultiCastFragments);
+                }
+            }
+        } else {
+            root.getChildren()
+                    .forEach(child -> collectRightSiblingFragments(child, siblings, visitedMultiCastFragments));
+        }
+    }
+
+    public static boolean isTransformJoin(JoinNode joinNode) {
+        if (joinNode instanceof NestLoopJoinNode) {
+            return true;
+        } else if (joinNode instanceof HashJoinNode) {
+            return joinNode.getJoinOp().isLeftTransform() && !joinNode.getDistrMode().areBothSidesShuffled();
+        } else {
+            return false;
+        }
+    }
+
+    public static boolean canAssignScanRangesAcrossDrivers(List<PlanNode> participateNodes) {
+        for (PlanNode planNode : participateNodes) {
+            if (planNode instanceof HashJoinNode) {
+                HashJoinNode hashJoinNode = (HashJoinNode) planNode;
+                JoinNode.DistributionMode distMode = hashJoinNode.getDistrMode();
+                if (distMode.equals(JoinNode.DistributionMode.COLOCATE) ||
+                        distMode.equals(JoinNode.DistributionMode.LOCAL_HASH_BUCKET)) {
+                    return false;
+                }
+            } else if (planNode instanceof AggregationNode) {
+                AggregationNode aggregationNode = (AggregationNode) planNode;
+                if (aggregationNode.isIdenticallyDistributed()) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    public boolean normalize() {
+        PlanNode root = fragment.getPlanRoot();
+
+        // Get leftmost path
+        List<PlanNode> leftNodesTopDown = Lists.newArrayList();
+        for (PlanNode currNode = root; currNode != null && currNode.getFragment() == fragment;
+             currNode = currNode.getChild(0)) {
+            leftNodesTopDown.add(currNode);
+        }
+
+        Preconditions.checkState(!leftNodesTopDown.isEmpty());
+        // Not cacheable unless the leftmost PlanNode is OlapScanNode
+        if (!(leftNodesTopDown.get(leftNodesTopDown.size() - 1) instanceof OlapScanNode)) {
+            return false;
+        }
+
+        AggregationNode firstAggNode = null;
+        int firstAggNodeIdx = 0;
+        List<JoinNode> joinNodesBottomUp = Lists.newArrayList();
+        PlanNode topMostDigestNode = null;
+        for (int i = leftNodesTopDown.size() - 1; i >= 0; --i) {
+            PlanNode node = leftNodesTopDown.get(i);
+            if (!isAllowedInLeftMostPath(node)) {
+                break;
+            }
+
+            if (firstAggNode == null && (node instanceof AggregationNode)) {
+                firstAggNode = (AggregationNode) node;
+                firstAggNodeIdx = i;
+                continue;
+            }
+
+            if (node instanceof JoinNode) {
+                JoinNode joinNode = (JoinNode) node;
+                joinNodesBottomUp.add(joinNode);
+                // JoinNode below aggNode must be a transform one
+                if (firstAggNode == null && !isTransformJoin(joinNode)) {
+                    return false;
+                }
+                // JoinNode above aggNode that having runtime filters should be packed into digest.
+                if (firstAggNode != null && !joinNode.getBuildRuntimeFilters().isEmpty()) {
+                    topMostDigestNode = joinNode;
+                }
+            }
+        }
+
+        // Not cacheable unless Aggregation node is found
+        if (firstAggNode == null) {
+            return false;
+        }
+
+        // If there exists no JoinNode has runtime filters above cache point(i.e.firstAggNode),
+        // then we just compute digest from the subtree rooted at firstAggNode.
+        if (topMostDigestNode == null) {
+            topMostDigestNode = firstAggNode;
+        }
+
+        // Not cacheable unless alien GRF(s) take effects on this PlanFragment.
+        // The alien GRF(s) mean the GRF(S) that not created by PlanNodes of the subtree rooted at
+        // the PlanFragment.planRoot.
+        Set<Integer> grfBuilders =
+                fragment.getProbeRuntimeFilters().values().stream().filter(RuntimeFilterDescription::isHasRemoteTargets)
+                        .map(RuntimeFilterDescription::getBuildPlanNodeId).collect(Collectors.toSet());
+        if (!grfBuilders.isEmpty()) {
+            List<PlanFragment> rightSiblings = Lists.newArrayList();
+            collectRightSiblingFragments(root, rightSiblings, Sets.newHashSet());
+            Set<Integer> acceptableGrfBuilders = rightSiblings.stream().flatMap(
+                    frag -> frag.getBuildRuntimeFilters().values().stream().map(
+                            RuntimeFilterDescription::getBuildPlanNodeId)).collect(Collectors.toSet());
+            boolean hasAlienGrf = !Sets.difference(grfBuilders, acceptableGrfBuilders).isEmpty();
+            if (hasAlienGrf) {
+                return false;
+            }
+        }
+        if (!joinNodesBottomUp.isEmpty()) {
+            OlapScanNode olapScanNode = (OlapScanNode) leftNodesTopDown.get(leftNodesTopDown.size() - 1);
+            Set<SlotId> slotIds = olapScanNode.getSlotIdsOfPartitionColumns(this);
+            List<Expr> conjuncts = Lists.newArrayList();
+            conjuncts.addAll(olapScanNode.getConjuncts());
+            conjuncts.addAll(olapScanNode.getPrunedPartitionPredicates());
+            List<Expr> rangePredicates = conjuncts.stream()
+                    .filter(e -> isSimpleRegionPredicate(e) && slotIds.contains(((SlotRef) e.getChild(0)).getSlotId()))
+                    .collect(Collectors.toList());
+            setPartColRangePredicates(rangePredicates);
+            for (JoinNode joinNode : joinNodesBottomUp) {
+                collectEquivRelation(joinNode);
+                Map<SlotId, Set<SlotId>> eqSlots = equivRelation.getEquivGroups(slotIds);
+                inferDerivedPartColRangePredicates(eqSlots);
+                extractConjunctsToNormalize(joinNode);
+            }
+        }
+        Set<PlanNodeId> leftNodeIds = leftNodesTopDown.stream().map(PlanNode::getId).collect(Collectors.toSet());
+        normalizeSubTree(leftNodeIds, topMostDigestNode, Sets.newHashSet());
+        List<PlanNode> cachedPlanNodes = leftNodesTopDown.stream().skip(firstAggNodeIdx).collect(Collectors.toList());
+        fragment.setAssignScanRangesPerDriverSeq(canAssignScanRangesAcrossDrivers(cachedPlanNodes));
+        cachedPlanNodeIds = cachedPlanNodes.stream().map(node -> node.getId().asInt()).collect(Collectors.toSet());
+        return computeDigest(firstAggNode);
+    }
+
+    // get All of offspring fragments of the current fragment, the current fragment
+    // is also included. fragments containing MulticastSink are counted once.
+    private List<PlanFragment> getAllOffspringFragments(PlanFragment fragment) {
+        List<ExchangeNode> exchangeNodes = Lists.newArrayList();
+        fragment.getPlanRoot().collect(ExchangeNode.class, exchangeNodes);
+        List<PlanFragment> fragments = exchangeNodes.stream()
+                .flatMap(ex -> ex.getChildren().stream().map(PlanNode::getFragment))
+                .sorted(Comparator.comparingInt(frag -> frag.getFragmentId().asInt()))
+                .distinct().collect(Collectors.toList());
+        fragments.add(fragment);
+        return fragments;
+    }
+
+    // Normalize global dicts of the given fragments
+    private List<TGlobalDict> normalizeDicts(List<PlanFragment> fragments) {
+        List<TGlobalDict> dicts = Lists.newArrayList();
+        for (PlanFragment fragment : fragments) {
+            if (fragment.getQueryGlobalDicts() != null) {
+                dicts.addAll(fragment.normalizeDicts(fragment.getQueryGlobalDicts(), this));
+            }
+            if (fragment.getLoadGlobalDicts() != null) {
+                dicts.addAll(fragment.normalizeDicts(fragment.getLoadGlobalDicts(), this));
+            }
+        }
+        return dicts;
+    }
+
+    private UnionFind<SlotId> equivRelation = new UnionFind<>();
+
+    public UnionFind<SlotId> getEquivRelation() {
+        return equivRelation;
+    }
+
+    private void collectEquivRelation(PlanNode planNode) {
+        for (PlanNode child : planNode.getChildren()) {
+            collectEquivRelation(child);
+        }
+        planNode.collectEquivRelation(this);
+    }
+
+    private void setPartColRangePredicates(List<Expr> exprList) {
+        exprList.stream().map(e -> Pair.create(e, normalizeSimpleRangePredicate(e))).forEach(p -> {
+            Expr expr = p.first;
+            //ByteBuffer norm = p.second;
+            String norm = p.second;
+            SlotId slotId = ((SlotRef) expr.getChild(0)).getSlotId();
+            slotId2PartColRangePredicates.computeIfAbsent(slotId, id -> Lists.newArrayList()).add(expr);
+            slotId2DerivedPredicates.computeIfAbsent(slotId, i -> Sets.newHashSet()).add(norm);
+        });
+    }
+
+    private void inferDerivedPartColRangePredicates(Map<SlotId, Set<SlotId>> partColEqSlots) {
+        if (partColEqSlots.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<SlotId, Set<SlotId>> entry : partColEqSlots.entrySet()) {
+            SlotId partColSlotId = entry.getKey();
+            Set<SlotId> eqSlots = entry.getValue();
+            if (!slotId2PartColRangePredicates.containsKey(partColSlotId)) {
+                continue;
+            }
+            List<Expr> exprList = slotId2PartColRangePredicates.get(partColSlotId);
+            for (SlotId eqSlotId : eqSlots) {
+                if (eqSlotId.equals(partColSlotId)) {
+                    continue;
+                }
+                SlotRef eqSlotRef = new SlotRef(eqSlotId);
+                List<String> derivedExprs = exprList.stream().map(e -> {
+                    Expr newExpr = e.clone();
+                    newExpr.setChild(0, eqSlotRef.clone());
+                    return normalizeSimpleRangePredicate(newExpr);
+                }).collect(Collectors.toList());
+                slotId2DerivedPredicates.computeIfAbsent(eqSlotId, id -> Sets.newHashSet()).addAll(derivedExprs);
+            }
+        }
+    }
+
+    private Map<PlanNodeId, List<Expr>> planNodeId2Conjuncts = Maps.newHashMap();
+
+    public void extractConjunctsToNormalize(PlanNode root) {
+        if (!root.extractConjunctsToNormalize(this)) {
+            return;
+        }
+        for (PlanNode child : root.getChildren()) {
+            extractConjunctsToNormalize(child);
+        }
+    }
+
+    public List<Expr> getConjunctsByPlanNodeId(PlanNode node) {
+        return planNodeId2Conjuncts.getOrDefault(node.getId(), node.getConjuncts());
+    }
+
+    public static Set<SlotId> getSlotIdSet(List<Expr> exprs) {
+        return exprs.stream()
+                .flatMap(e -> e instanceof SlotRef ? Stream.of(((SlotRef) e).getSlotId()) : Stream.empty())
+                .collect(Collectors.toSet());
+    }
+
+    public void filterOutPartColRangePredicates(PlanNodeId planNodeId, List<Expr> conjuncts,
+                                                Set<SlotId> selectedSlotIdSet) {
+        List<Expr> remainConjuncts = conjuncts.stream().filter(e -> {
+            if (!isSimpleRegionPredicate(e)) {
+                return true;
+            }
+            SlotId slotId = ((SlotRef) e.getChild(0)).getSlotId();
+            if (!selectedSlotIdSet.isEmpty() && !selectedSlotIdSet.contains(slotId)) {
+                return true;
+            }
+            if (!slotId2DerivedPredicates.containsKey(slotId)) {
+                return true;
+            }
+            String norm = normalizeSimpleRangePredicate(e);
+            return !slotId2DerivedPredicates.get(slotId).contains(norm);
+        }).collect(Collectors.toList());
+        planNodeId2Conjuncts.put(planNodeId, remainConjuncts);
+    }
+>>>>>>> 6ec8699260 ([BugFix] Add dicts of offspring fragments of cached fragments into digest computation (#32673))
 }
