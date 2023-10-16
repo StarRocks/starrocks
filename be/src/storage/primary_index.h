@@ -15,7 +15,6 @@ namespace starrocks {
 
 class Tablet;
 class HashIndex;
-class PersistentIndexMetaLockGuard;
 
 const uint64_t ROWID_MASK = 0xffffffff;
 
@@ -99,8 +98,6 @@ public:
     Status commit(PersistentIndexMetaPB* index_meta);
 
     Status on_commited();
-
-    void get_persistent_index_meta_lock_guard(PersistentIndexMetaLockGuard* guard);
 
     double get_write_amp_score();
 
