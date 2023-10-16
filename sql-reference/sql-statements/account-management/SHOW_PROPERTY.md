@@ -56,4 +56,4 @@ SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';
 
 ## 相关操作
 
-如要设置用户的最大连接数，请参见 [SET PROPERTY](../account-management/SET_PROPERTY.md)。
+如要设置用户的最大连接数，请参见 [SET PROPERTY](./SET_PROPERTY.md)。

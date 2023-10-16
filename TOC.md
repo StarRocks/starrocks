@@ -151,6 +151,7 @@
       + [SET PROPERTY](/sql-reference/sql-statements/account-management/SET_PROPERTY.md)
       + [SHOW AUTHENTICATION](/sql-reference/sql-statements/account-management/SHOW_AUTHENTICATION.md)
       + [SHOW GRANTS](/sql-reference/sql-statements/account-management/SHOW_GRANTS.md)
+      + [SHOW PROPERTY](/sql-reference/sql-statements/account-management/SHOW_PROPERTY.md)
       + [SHOW ROLES](/sql-reference/sql-statements/account-management/SHOW_ROLES.md)
     + 集群管理
       + [ADD SQLBLACKLIST](/sql-reference/sql-statements/Administration/ADD_SQLBLACKLIST.md)
@@ -268,7 +269,6 @@
       + [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md)
       + [SHOW MATERIALIZED VIEW](/sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md)
       + [SHOW PARTITIONS](/sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md)
-      + [SHOW PROPERTY](/sql-reference/sql-statements/data-manipulation/SHOW_PROPERTY.md)
       + [SHOW REPOSITORIES](/sql-reference/sql-statements/data-manipulation/SHOW_REPOSITORIES.md)
       + [SHOW RESTORE](/sql-reference/sql-statements/data-manipulation/SHOW_RESTORE.md)
       + [SHOW ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md)
@@ -664,7 +664,7 @@
   + [Spark connector](/ecosystem_release/spark_connector.md)
   + [Flink connector](/ecosystem_release/flink_connector.md)
 + Release Notes
-  + [v2.5](/release_notes/release-2.5.md)
+  + [v2.5-stable](/release_notes/release-2.5.md)
   + [v2.4](/release_notes/release-2.4.md)
   + [v2.3](/release_notes/release-2.3.md)
   + [v2.2](/release_notes/release-2.2.md)
