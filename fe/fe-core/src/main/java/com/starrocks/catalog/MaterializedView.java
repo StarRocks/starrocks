@@ -712,6 +712,46 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 .stream().map(BasePartitionInfo::fromExternalTable).collect(Collectors.toList());
     }
 
+<<<<<<< HEAD
+=======
+    private Set<String> getUpdatedPartitionNameOfIcebergTable(IcebergTable baseTable) {
+        Set<String> result = Sets.newHashSet();
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
+                continue;
+            }
+            List<String> partitionNames = PartitionUtil.getPartitionNames(baseTable);
+            Snapshot snapshot = baseTable.getNativeTable().currentSnapshot();
+            long currentVersion = snapshot != null ? snapshot.timestampMillis() : -1;
+
+            Map<String, BasePartitionInfo> baseTableInfoVisibleVersionMap = getBaseTableRefreshInfo(baseTableInfo);
+            BasePartitionInfo basePartitionInfo = baseTableInfoVisibleVersionMap.get(ICEBERG_ALL_PARTITION);
+            if (basePartitionInfo == null) {
+                baseTable.setRefreshSnapshotTime(currentVersion);
+                return new HashSet<>(partitionNames);
+            }
+            // check if there are new partitions which are not in baseTableInfoVisibleVersionMap
+            for (String partitionName : partitionNames) {
+                if (!baseTableInfoVisibleVersionMap.containsKey(partitionName)) {
+                    result.add(partitionName);
+                }
+            }
+
+            if (!result.isEmpty()) {
+                baseTable.setRefreshSnapshotTime(currentVersion);
+            }
+
+            long basePartitionVersion = basePartitionInfo.version;
+            if (basePartitionVersion < currentVersion) {
+                baseTable.setRefreshSnapshotTime(currentVersion);
+                result.addAll(IcebergPartitionUtils.getChangedPartitionNames(baseTable.getNativeTable(),
+                        basePartitionVersion));
+            }
+        }
+        return result;
+    }
+
+>>>>>>> 13c7b682c2 ([BugFix] Fix iceberg mv refresh failed when iceberg table is unpartitioned (#32859))
     private Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable, boolean isQueryRewrite) {
         if (!baseTable.isHiveTable() && !baseTable.isJDBCTable()) {
             // Only support hive table and jdbc table now
