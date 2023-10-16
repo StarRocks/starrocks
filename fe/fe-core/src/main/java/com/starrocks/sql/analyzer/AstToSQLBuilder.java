@@ -20,11 +20,13 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
@@ -201,6 +203,24 @@ public class AstToSQLBuilder {
                         .append(")");
             }
             sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
+            return sqlBuilder.toString();
+        }
+
+        @Override
+        public String visitSubquery(SubqueryRelation node, Void context) {
+            StringBuilder sqlBuilder = new StringBuilder("(" + visit(node.getQueryStatement()) + ")");
+
+            if (node.getAlias() != null) {
+                sqlBuilder.append(" ").append(ParseUtil.backquote(node.getAlias().getTbl()));
+
+                if (node.getExplicitColumnNames() != null) {
+                    List<String> explicitColNames = new ArrayList<>();
+                    node.getExplicitColumnNames().forEach(e -> explicitColNames.add(ParseUtil.backquote(e)));
+                    sqlBuilder.append("(");
+                    sqlBuilder.append(Joiner.on(",").join(explicitColNames));
+                    sqlBuilder.append(")");
+                }
+            }
             return sqlBuilder.toString();
         }
 
