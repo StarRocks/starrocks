@@ -55,10 +55,9 @@ Status CacheLibWrapper::init(const CacheOptions& options) {
     return Status::OK();
 }
 
-Status CacheLibWrapper::write_cache(const std::string& key, const IOBuffer& buffer, size_t ttl_seconds,
-                                    bool overwrite) {
+Status CacheLibWrapper::write_cache(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) {
     //  Simulate the behavior of skipping if exists
-    if (!overwrite && _cache->find(key)) {
+    if (options && !options->overwrite && _cache->find(key)) {
         return Status::AlreadyExist("the cache item already exists");
     }
     // TODO: check size for chain item
@@ -71,7 +70,8 @@ Status CacheLibWrapper::write_cache(const std::string& key, const IOBuffer& buff
     return Status::OK();
 }
 
-Status CacheLibWrapper::read_cache(const std::string& key, size_t off, size_t size, IOBuffer* buffer) {
+Status CacheLibWrapper::read_cache(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                                   ReadCacheOptions* options) {
     // TODO:
     // 1. check chain item
     // 2. replace with async methods
@@ -96,6 +96,10 @@ std::unordered_map<std::string, double> CacheLibWrapper::cache_stats() {
     const auto navy_stats = _cache->getNvmCacheStatsMap().toMap();
     return navy_stats;
 }
+
+void CacheLibWrapper::record_read_remote(size_t size, int64_t lateny_us) {}
+
+void CacheLibWrapper::record_read_cache(size_t size, int64_t lateny_us) {}
 
 Status CacheLibWrapper::shutdown() {
     if (_cache) {
