@@ -42,7 +42,7 @@ StarRocks 同时采用了基于角色的访问控制 (RBAC) 和基于身份的�
 
 ### 查看用户属性
 
-您可以使用 [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SET_PROPERTY.md) 查看用户的属性。
+您可以使用 [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SHOW_PROPERTY.md) 查看用户的属性。
 
 以下示例查看用户 `jack` 的属性：
 
