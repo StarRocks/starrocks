@@ -37,8 +37,6 @@
 #include <sys/file.h>
 #include <unistd.h>
 
-#include "block_cache/block_cache.h"
-
 #if defined(LEAK_SANITIZER)
 #include <sanitizer/lsan_interface.h>
 #endif
@@ -372,6 +370,8 @@ int main(int argc, char** argv) {
         cache_options.max_concurrent_inserts = starrocks::config::datacache_max_concurrent_inserts;
         cache_options.enable_checksum = starrocks::config::datacache_checksum_enable;
         cache_options.enable_direct_io = starrocks::config::datacache_direct_io_enable;
+        cache_options.enable_cache_adaptor = starrocks::config::datacache_adaptor_enable;
+        cache_options.skip_read_factor = starrocks::config::datacache_skip_read_factor;
         cache_options.engine = starrocks::config::datacache_engine;
         EXIT_IF_ERROR(cache->init(cache_options));
     }

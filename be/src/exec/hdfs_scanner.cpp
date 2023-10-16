@@ -302,7 +302,11 @@ void HdfsScanner::update_counter() {
         const io::CacheInputStream::Stats& stats = _cache_input_stream->stats();
         COUNTER_UPDATE(profile->datacache_read_counter, stats.read_cache_count);
         COUNTER_UPDATE(profile->datacache_read_bytes, stats.read_cache_bytes);
+        COUNTER_UPDATE(profile->datacache_read_mem_bytes, stats.read_mem_cache_bytes);
+        COUNTER_UPDATE(profile->datacache_read_disk_bytes, stats.read_disk_cache_bytes);
         COUNTER_UPDATE(profile->datacache_read_timer, stats.read_cache_ns);
+        COUNTER_UPDATE(profile->datacache_skip_read_counter, stats.skip_read_cache_count);
+        COUNTER_UPDATE(profile->datacache_skip_read_bytes, stats.skip_read_cache_bytes);
         COUNTER_UPDATE(profile->datacache_write_counter, stats.write_cache_count);
         COUNTER_UPDATE(profile->datacache_write_bytes, stats.write_cache_bytes);
         COUNTER_UPDATE(profile->datacache_write_timer, stats.write_cache_ns);
