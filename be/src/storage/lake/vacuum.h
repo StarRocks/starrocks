@@ -14,7 +14,15 @@
 
 #pragma once
 
+#include <future>
+#include <string>
+#include <vector>
+
 #include "gen_cpp/lake_service.pb.h"
+
+namespace starrocks {
+class Status;
+}
 
 namespace starrocks::lake {
 
@@ -29,5 +37,7 @@ void vacuum_full(TabletManager* tablet_mgr, const VacuumFullRequest& request, Va
 //  - request.tablet_ids_size() > 0
 //  - response != NULL
 void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& request, DeleteTabletResponse* response);
+
+void delete_files_async(std::vector<std::string> files_to_delete);
 
 } // namespace starrocks::lake

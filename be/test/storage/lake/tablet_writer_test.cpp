@@ -298,6 +298,8 @@ TEST_P(LakeTabletWriterTest, test_close_without_finish) {
     // `close()` directly without calling `finish()`
     writer->close();
 
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+
     // segment file should be deleted
     ASSERT_TRUE(fs->path_exists(seg_path).is_not_found());
 }

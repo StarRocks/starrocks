@@ -35,7 +35,7 @@ public:
     ~TestBase() override {
         // Wait for all vacuum tasks finished processing before destroying
         // _tablet_mgr.
-        ExecEnv::GetInstance()->vacuum_thread_pool()->wait();
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
         (void)fs::remove_all(_test_dir);
     }
 

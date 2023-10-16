@@ -453,4 +453,21 @@ void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& reques
     st.to_protobuf(response->mutable_status());
 }
 
+void delete_files_async(std::vector<std::string> files_to_delete) {
+    if (files_to_delete.empty()) {
+        return;
+    }
+    auto task = [files_to_delete = std::move(files_to_delete)]() {
+        auto fs = FileSystem::CreateSharedFromString(files_to_delete[0]).value_or(nullptr);
+        if (LIKELY(fs != nullptr)) {
+            (void)delete_files(fs.get(), files_to_delete);
+        } else {
+            LOG(ERROR) << "No filesystem for path " << files_to_delete[0];
+        }
+    };
+
+    auto st = delete_file_thread_pool()->submit_func(std::move(task));
+    LOG_IF(ERROR, !st.ok()) << st;
+}
+
 } // namespace starrocks::lake

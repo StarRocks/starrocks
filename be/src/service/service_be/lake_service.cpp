@@ -41,49 +41,51 @@
 
 namespace starrocks {
 
-static ThreadPool* get_thread_pool(TTaskType::type type) {
-#ifndef BE_TEST
-    auto env = ExecEnv::GetInstance();
-    if (UNLIKELY(env == nullptr)) {
-        return nullptr;
-    }
-    auto as = env->agent_server();
-    if (UNLIKELY(as == nullptr)) {
-        return nullptr;
-    }
-    return as->get_thread_pool(type);
-#else
-    return nullptr;
-#endif
+ThreadPool* publish_version_thread_pool(ExecEnv* env) {
+    return env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
 }
 
-static int get_num_queued_tasks(TTaskType::type type) {
-    auto tp = get_thread_pool(type);
-    if (UNLIKELY(tp == nullptr)) {
-        return 0;
-    }
-    return tp->num_queued_tasks();
+ThreadPool* abort_txn_thread_pool(ExecEnv* env) {
+    return env->agent_server()->get_thread_pool(TTaskType::MAKE_SNAPSHOT);
 }
 
-static int get_num_active_tasks(TTaskType::type type) {
-    auto tp = get_thread_pool(type);
-    if (UNLIKELY(tp == nullptr)) {
-        return 0;
-    }
-    return tp->active_threads();
+ThreadPool* delete_tablet_thread_pool(ExecEnv* env) {
+    return env->agent_server()->get_thread_pool(TTaskType::CLONE);
+}
+
+ThreadPool* drop_table_thread_pool(ExecEnv* env) {
+    return env->agent_server()->get_thread_pool(TTaskType::CLONE);
+}
+
+ThreadPool* vacuum_thread_pool(ExecEnv* env) {
+    return env->agent_server()->get_thread_pool(TTaskType::RELEASE_SNAPSHOT);
+}
+
+ThreadPool* get_tablet_stats_thread_pool(ExecEnv* env) {
+    return env->agent_server()->get_thread_pool(TTaskType::UPDATE_TABLET_META_INFO);
 }
 
 static int get_num_publish_queued_tasks(void*) {
-    return get_num_queued_tasks(TTaskType::PUBLISH_VERSION);
+#ifndef BE_TEST
+    auto tp = publish_version_thread_pool(ExecEnv::GetInstance());
+    return tp ? tp->num_queued_tasks() : 0;
+#else
+    return 0;
+#endif
 }
 
 static int get_num_publish_active_tasks(void*) {
-    return get_num_active_tasks(TTaskType::PUBLISH_VERSION);
+#ifndef BE_TEST
+    auto tp = publish_version_thread_pool(ExecEnv::GetInstance());
+    return tp ? tp->num_queued_tasks() : 0;
+#else
+    return 0;
+#endif
 }
 
 static int get_num_vacuum_queued_tasks(void*) {
 #ifndef BE_TEST
-    auto tp = ExecEnv::GetInstance()->vacuum_thread_pool();
+    auto tp = publish_version_thread_pool(ExecEnv::GetInstance());
     return tp ? tp->num_queued_tasks() : 0;
 #else
     return 0;
@@ -92,8 +94,8 @@ static int get_num_vacuum_queued_tasks(void*) {
 
 static int get_num_vacuum_active_tasks(void*) {
 #ifndef BE_TEST
-    auto tp = ExecEnv::GetInstance()->vacuum_thread_pool();
-    return tp ? tp->active_threads() : 0;
+    auto tp = publish_version_thread_pool(ExecEnv::GetInstance());
+    return tp ? tp->num_queued_tasks() : 0;
 #else
     return 0;
 #endif
@@ -141,7 +143,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
 
     auto enable_trace = config::lake_enable_publish_version_trace_log;
     auto start_ts = butil::gettimeofday_us();
-    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+    auto thread_pool = publish_version_thread_pool(_env);
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
     Trace* trace = nullptr;
@@ -237,7 +239,7 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
         return;
     }
 
-    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+    auto thread_pool = publish_version_thread_pool(_env);
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
 
@@ -275,7 +277,7 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard guard(done);
     (void)controller;
 
-    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+    auto thread_pool = abort_txn_thread_pool(_env);
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
@@ -311,7 +313,7 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
         cntl->SetFailed("tablet manager is null");
         return;
     }
-    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::CLONE);
+    auto thread_pool = delete_tablet_thread_pool(_env);
     if (UNLIKELY(thread_pool == nullptr)) {
         cntl->SetFailed("no thread pool to run task");
         return;
@@ -346,7 +348,7 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
         return;
     }
 
-    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::CLONE);
+    auto thread_pool = drop_table_thread_pool(_env);
     if (UNLIKELY(thread_pool == nullptr)) {
         cntl->SetFailed("no thread pool to run task");
         return;
@@ -391,7 +393,7 @@ void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
         return;
     }
 
-    auto thread_pool = _env->vacuum_thread_pool();
+    auto thread_pool = vacuum_thread_pool(_env);
     if (UNLIKELY(thread_pool == nullptr)) {
         cntl->SetFailed("no vacuum thread pool");
         return;
@@ -441,7 +443,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
         return;
     }
 
-    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::UPDATE_TABLET_META_INFO);
+    auto thread_pool = get_tablet_stats_thread_pool(_env);
     auto latch = BThreadCountDownLatch(request->tablet_infos_size());
     bthread::Mutex response_mtx;
     for (const auto& tablet_info : request->tablet_infos()) {
@@ -696,7 +698,7 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller,
                              ::starrocks::lake::VacuumResponse* response, ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
-    auto thread_pool = _env->vacuum_thread_pool();
+    auto thread_pool = vacuum_thread_pool(_env);
     if (UNLIKELY(thread_pool == nullptr)) {
         cntl->SetFailed("vacuum thread pool is null");
         return;
@@ -720,7 +722,7 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
                                   ::starrocks::lake::VacuumFullResponse* response, ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
-    auto thread_pool = _env->vacuum_thread_pool();
+    auto thread_pool = vacuum_thread_pool(_env);
     if (UNLIKELY(thread_pool == nullptr)) {
         cntl->SetFailed("full vacuum thread pool is null");
         return;

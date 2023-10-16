@@ -219,7 +219,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         ASSERT_EQ("2.dat", metadata->rowsets(0).segments(1));
         EXPECT_EQ(987654321, metadata->commit_time());
     }
-    ExecEnv::GetInstance()->vacuum_thread_pool()->wait();
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
     // TxnLog`s should have been deleted
     ASSERT_TRUE(tablet.get_txn_log(1000).status().is_not_found());
     ASSERT_TRUE(tablet.get_txn_log(1001).status().is_not_found());
@@ -365,6 +365,8 @@ TEST_F(LakeServiceTest, test_abort) {
     }
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
 
     // TxnLog`s and segments should have been deleted
     ASSERT_TRUE(tablet.get_txn_log(1000).status().is_not_found());
@@ -572,7 +574,9 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
 
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
         _tablet_mgr->prune_metacache();
+
         ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1001).status().is_not_found())
                 << _tablet_mgr->get_txn_log(_tablet_id, 1001).status();
 
@@ -592,7 +596,9 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
 
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
         _tablet_mgr->prune_metacache();
+
         ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1001).status().is_not_found())
                 << _tablet_mgr->get_txn_log(_tablet_id, 1001).status();
 
@@ -801,7 +807,7 @@ TEST_F(LakeServiceTest, test_publish_version_issue28244) {
         ASSERT_EQ(0, response.failed_tablets_size());
     }
 
-    ExecEnv::GetInstance()->vacuum_thread_pool()->wait();
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
     ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 102301).status().is_not_found());
 
     SyncPoint::GetInstance()->ClearCallBack("publish_version:delete_txn_log");

@@ -94,9 +94,13 @@ public:
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
+    StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
+
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t tablet_id, int64_t version);
 
-    StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
+    StatusOr<TxnLogPtr> get_txn_vlog(const std::string& path, bool fill_cache = true) {
+        return get_txn_log(path, fill_cache);
+    }
 
     StatusOr<TxnLogIter> list_txn_log(int64_t tablet_id, bool filter_tablet);
 
