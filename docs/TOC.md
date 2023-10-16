@@ -125,6 +125,7 @@
     + [Apache Superset](./integrations/BI_integrations/Superset.md)
     + [FineBI](./integrations/BI_integrations/FineBI.md)
     + [Hex](./integrations/BI_integrations/Hex.md)
+    + [Metabase](./integrations/BI_integrations/Metabase.md)
     + [Querybook](./integrations/BI_integrations/Querybook.md)
     + [QuickBI](./integrations/BI_integrations/QuickBI.md)
     + [Tableau Desktop](./integrations/BI_integrations/Tableau_Desktop.md)
