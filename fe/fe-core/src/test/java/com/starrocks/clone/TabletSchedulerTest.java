@@ -288,9 +288,6 @@ public class TabletSchedulerTest {
         Assert.assertEquals(Optional.of(2L).get(),
                 result.get(new ColocateTableIndex.GroupId(200L, 301L)));
     }
-<<<<<<< HEAD
-}
-=======
 
     @Test
     public void testForceRecoverWithEmptyTablet() {
@@ -310,4 +307,3 @@ public class TabletSchedulerTest {
         Config.recover_with_empty_tablet = false;
     }
 }
->>>>>>> 9a45ac902a ([BugFix] Support recover with empty tablet when all backends are lost (#32162))
