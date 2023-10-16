@@ -203,8 +203,8 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
         auto restore_task = [this, guard, trace = TraceInfo(state)]() {
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
             RETURN_IF(!guard.scoped_begin(), Status::OK());
-            auto defer = DeferOp([&]() { _running_restore_tasks--; });
             {
+                auto defer = DeferOp([&]() { _running_restore_tasks--; });
                 Status res;
                 SerdeContext ctx;
                 res = _stream->prefetch(ctx);
