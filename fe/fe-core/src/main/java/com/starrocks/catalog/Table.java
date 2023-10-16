@@ -403,6 +403,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return createTime;
     }
 
+    public Map<String, Column> getNameToColumn() {
+        return nameToColumn;
+    }
+
     public String getTableLocation() {
         String msg = "The getTableLocation() method needs to be implemented.";
         throw new NotImplementedException(msg);

@@ -77,9 +77,18 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     public static final String CAN_NOT_CHANGE_DEFAULT_VALUE = "Can not change default value";
     public static final int COLUMN_UNIQUE_ID_INIT_VALUE = -1;
 
-
+    // logical name
     @SerializedName(value = "name")
     private String name;
+
+    // physicalName is used to represent store the column name in the underlying storage engine.
+    // The name saved in the storage engine remains unchanged after the logical column name is changed.
+    // By default, this value is null, which expresses the same as name (logical name).
+    // If the column name is changed, the value of name (logical name) will be updated to the new column name
+    // and the value of physicalName will be set to the old column name.
+    @SerializedName(value = "physicalName")
+    private String physicalName;
+
     @SerializedName(value = "type")
     private Type type;
     // column is key: aggregate type is null
@@ -373,7 +382,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public TColumn toThrift() {
         TColumn tColumn = new TColumn();
-        tColumn.setColumn_name(this.name);
+        tColumn.setColumn_name(this.getConvertedColumnName());
         tColumn.setIndex_len(this.getOlapColumnIndexSize());
         tColumn.setType_desc(this.type.toThrift());
         if (null != this.aggregationType) {
@@ -760,6 +769,19 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
     }
 
+    public String getConvertedColumnName() {
+        if (physicalName != null) {
+            return physicalName;
+        }
+        return name;
+    }
+
+    public void renameColumn(String newName) {
+        if (physicalName == null) {
+            physicalName = name;
+        }
+        this.name = newName;
+    }
 
     public void setUniqueId(int colUniqueId) {
         this.uniqueId = colUniqueId;
