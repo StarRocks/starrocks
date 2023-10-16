@@ -663,8 +663,7 @@
   + [Spark connector](./ecosystem_release/spark_connector.md)
   + [Flink connector](./ecosystem_release/flink_connector.md)
 + Release Notes
-  + [v3.0](./release_notes/release-3.0.md)
-  + [v2.5-stable](./release_notes/release-2.5.md)
+  + [v2.5](./release_notes/release-2.5.md)
   + [v2.4](./release_notes/release-2.4.md)
   + [v2.3](./release_notes/release-2.3.md)
   + [v2.2](./release_notes/release-2.2.md)
