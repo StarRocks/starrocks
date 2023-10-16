@@ -42,27 +42,33 @@
 namespace starrocks {
 
 ThreadPool* publish_version_thread_pool(ExecEnv* env) {
-    return env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+    auto agent = env ? env->agent_server() : nullptr;
+    return agent->get_thread_pool(TTaskType::PUBLISH_VERSION);
 }
 
 ThreadPool* abort_txn_thread_pool(ExecEnv* env) {
-    return env->agent_server()->get_thread_pool(TTaskType::MAKE_SNAPSHOT);
+    auto agent = env ? env->agent_server() : nullptr;
+    return agent->get_thread_pool(TTaskType::MAKE_SNAPSHOT);
 }
 
 ThreadPool* delete_tablet_thread_pool(ExecEnv* env) {
-    return env->agent_server()->get_thread_pool(TTaskType::CLONE);
+    auto agent = env ? env->agent_server() : nullptr;
+    return agent->get_thread_pool(TTaskType::CLONE);
 }
 
 ThreadPool* drop_table_thread_pool(ExecEnv* env) {
-    return env->agent_server()->get_thread_pool(TTaskType::CLONE);
+    auto agent = env ? env->agent_server() : nullptr;
+    return agent->get_thread_pool(TTaskType::CLONE);
 }
 
 ThreadPool* vacuum_thread_pool(ExecEnv* env) {
-    return env->agent_server()->get_thread_pool(TTaskType::RELEASE_SNAPSHOT);
+    auto agent = env ? env->agent_server() : nullptr;
+    return agent->get_thread_pool(TTaskType::RELEASE_SNAPSHOT);
 }
 
 ThreadPool* get_tablet_stats_thread_pool(ExecEnv* env) {
-    return env->agent_server()->get_thread_pool(TTaskType::UPDATE_TABLET_META_INFO);
+    auto agent = env ? env->agent_server() : nullptr;
+    return agent->get_thread_pool(TTaskType::UPDATE_TABLET_META_INFO);
 }
 
 static int get_num_publish_queued_tasks(void*) {
