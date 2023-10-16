@@ -173,7 +173,7 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DATETIME> result(size);
     TimezoneHsScan timezone_hsscan;
-    timezone_hsscan.compile();
+    RETURN_IF_ERROR(timezone_hsscan.compile());
     for (int row = 0; row < size; ++row) {
         if (time_viewer.is_null(row) || from_str.is_null(row) || to_str.is_null(row)) {
             result.append_null();
