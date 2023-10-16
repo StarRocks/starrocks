@@ -538,14 +538,8 @@ public class TabletInvertedIndex {
 
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db != null) {
-                com.starrocks.catalog.Table tbl = null;
-                db.readLock();
-                try {
-                    tbl = db.getTable(tableId);
-                } finally {
-                    db.readUnlock();
-                }
-
+                // getTable is thread-safe for caller, lock free
+                com.starrocks.catalog.Table tbl = db.getTable(tableId);
                 if (tbl != null && tbl instanceof OlapTable) {
                     OlapTable olapTable = (OlapTable) tbl;
                     if (olapTable.getState() == OlapTable.OlapTableState.RESTORE) {
