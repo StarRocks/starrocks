@@ -36,6 +36,6 @@ SET PROPERTY FOR 'jack' 'max_user_connections' = '1000';
 
 ## 相关操作
 
-- 如要创建一个用户，参见 [CREATE USER](../account-management/CREATE_USER.md)。
+- 如要创建一个用户，参见 [CREATE USER](./CREATE_USER.md)。
 
-- 如要查看一个用户属性，参见 [SHOW PROPERTY](../data-manipulation/SHOW_PROPERTY.md)。
+- 如要查看一个用户属性，参见 [SHOW PROPERTY](./SHOW_PROPERTY.md)。
