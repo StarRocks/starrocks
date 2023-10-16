@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -117,7 +118,7 @@ public class HiveViewTest extends PlanTestBase {
         } catch (Exception e) {
             Assert.fail();
         }
-        HiveMetastore hiveMetastore1 = new HiveMetastore(null, "hive0");
+        HiveMetastore hiveMetastore1 = new HiveMetastore(null, "hive0", MetastoreType.HMS);
         Assert.assertTrue(hiveMetastore1.refreshView("tpch", "customer_view"));
 
         Table table  = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "customer");
