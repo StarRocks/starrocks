@@ -42,6 +42,7 @@ import java.io.File;
 import java.util.Map;
 
 import static org.apache.iceberg.TableMetadata.newTableMetadata;
+import static org.apache.iceberg.TableProperties.FORMAT_VERSION;
 
 public class TestTables {
 
@@ -75,7 +76,8 @@ public class TestTables {
         ops.commit(
                 null,
                 newTableMetadata(
-                        schema, spec, sortOrder, temp.toString(), ImmutableMap.of()));
+                        schema, spec, sortOrder, temp.toString(),
+                        ImmutableMap.of(FORMAT_VERSION, String.valueOf(formatVersion))));
 
         return new TestTable(ops, name);
     }

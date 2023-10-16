@@ -21,13 +21,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.connector.RemoteFileDesc;
-import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.iceberg.TableTestBase;
-import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -37,33 +33,34 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.apache.iceberg.BaseFileScanTask;
-import org.apache.iceberg.DataFile;
-import org.apache.iceberg.DataFiles;
-import org.apache.iceberg.DeleteFile;
-import org.apache.iceberg.FileFormat;
-import org.apache.iceberg.FileScanTask;
-import org.apache.iceberg.Files;
-import org.apache.iceberg.PartitionSpec;
-import org.apache.iceberg.exceptions.RuntimeIOException;
-import org.apache.iceberg.io.FileIO;
-import org.apache.iceberg.io.InputFile;
-import org.apache.iceberg.io.OutputFile;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.catalog.Type.STRING;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 import static org.junit.Assert.assertEquals;
 
 public class PushDownMinMaxConjunctsRuleTest extends TableTestBase {
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+        StarRocksAssert starRocksAssert = getStarRocksAssert();
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        starRocksAssert.withCatalog(createIcebergCatalogStmt);
+    }
+
     @Test
     public void transformIceberg(@Mocked IcebergTable table) {
         ExternalScanPartitionPruneRule rule0 = ExternalScanPartitionPruneRule.ICEBERG_SCAN;
@@ -107,10 +104,10 @@ public class PushDownMinMaxConjunctsRuleTest extends TableTestBase {
     public void testPartitionPrune() {
         ExternalScanPartitionPruneRule rule0 = ExternalScanPartitionPruneRule.ICEBERG_SCAN;
 
-        table.newAppend().appendFile(FILE_A).commit();
-        table.refresh();
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        mockedNativeTableA.refresh();
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
-                "iceberg_table", Lists.newArrayList(), table, Maps.newHashMap());
+                "iceberg_table", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
 
         ColumnRefOperator colRef1 = new ColumnRefOperator(1, Type.INT, "id", true);
         Column col1 = new Column("id", Type.INT, true);
@@ -120,87 +117,21 @@ public class PushDownMinMaxConjunctsRuleTest extends TableTestBase {
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<>();
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = new HashMap<>();
         colRefToColumnMetaMap.put(colRef1, col1);
-        colRefToColumnMetaMap.put(colRef1, col1);
-        columnMetaToColRefMap.put(col2, colRef2);
         columnMetaToColRefMap.put(col2, colRef2);
         OptExpression scan =
                 new OptExpression(new LogicalIcebergScanOperator(icebergTable, colRefToColumnMetaMap, columnMetaToColRefMap,
                         -1, null));
 
-        new MockUp<MetadataMgr>() {
+        new MockUp<IcebergTable>() {
             @Mock
-            public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys,
-                                                           long snapshotId, ScalarOperator predicate, List<String> fieldNames,
-                                                           long limit) {
-                List<FileScanTask> tasks = new ArrayList<>();
-                DataFile data = DataFiles.builder(PartitionSpec.unpartitioned())
-                        .withInputFile(new LocalFileIO().newInputFile("input.orc"))
-                        .withRecordCount(1)
-                        .withFileSizeInBytes(1024)
-                        .withFormat(FileFormat.ORC)
-                        .build();
-
-                FileScanTask scanTask = new TestFileScanTask(data, new DeleteFile[1]);
-                tasks.add(scanTask);
-                return Lists.newArrayList(RemoteFileInfo.builder()
-                        .setFiles(Lists.newArrayList(RemoteFileDesc.createIcebergRemoteFileDesc(tasks)))
-                        .build());
+            public List<Column> getPartitionColumns() {
+                return ImmutableList.of(new Column("data", STRING));
             }
         };
+
         rule0.transform(scan, new OptimizerContext(new Memo(), new ColumnRefFactory()));
         assertEquals(1, ((LogicalIcebergScanOperator) scan.getOp()).getScanOperatorPredicates()
                 .getSelectedPartitionIds().size());
 
-    }
-
-    class TestFileScanTask extends BaseFileScanTask {
-        private DataFile data;
-
-        private DeleteFile[] deletes;
-
-        public TestFileScanTask(DataFile data, DeleteFile[] deletes) {
-            super(data, deletes, null, null, null);
-            this.data = data;
-            this.deletes = deletes;
-        }
-        @Override
-        public DataFile file() {
-            return data;
-        }
-
-        @Override
-        public List<DeleteFile> deletes() {
-            return ImmutableList.copyOf(deletes);
-        }
-
-        @Override
-        public PartitionSpec spec() {
-            return PartitionSpec.unpartitioned();
-        }
-
-        @Override
-        public long start() {
-            return 0;
-        }
-    }
-
-    static class LocalFileIO implements FileIO {
-
-        @Override
-        public InputFile newInputFile(String path) {
-            return Files.localInput(path);
-        }
-
-        @Override
-        public OutputFile newOutputFile(String path) {
-            return Files.localOutput(path);
-        }
-
-        @Override
-        public void deleteFile(String path) {
-            if (!new File(path).delete()) {
-                throw new RuntimeIOException("Failed to delete file: " + path);
-            }
-        }
     }
 }

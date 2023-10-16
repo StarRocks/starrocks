@@ -17,30 +17,27 @@ package com.starrocks.connector.iceberg.cost;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import org.apache.iceberg.StructLike;
 import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 
+import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toSet;
 
-/**
- * Aggregated statistics for a collection of files.
- */
 public class IcebergFileStats {
     private Map<Integer, Type.PrimitiveType> idToTypeMapping;
     private List<Types.NestedField> nonPartitionPrimitiveColumns;
-    private StructLike values;
     private long recordCount;
     private long fileCount;
     private long size;
@@ -54,7 +51,6 @@ public class IcebergFileStats {
     public IcebergFileStats(
             Map<Integer, Type.PrimitiveType> idToTypeMapping,
             List<Types.NestedField> nonPartitionPrimitiveColumns,
-            StructLike values,
             long recordCount,
             long size,
             Map<Integer, Object> minValues,
@@ -64,7 +60,6 @@ public class IcebergFileStats {
         this.idToTypeMapping = ImmutableMap.copyOf(requireNonNull(idToTypeMapping, "idToTypeMapping is null"));
         this.nonPartitionPrimitiveColumns = ImmutableList.copyOf(
                 requireNonNull(nonPartitionPrimitiveColumns, "nonPartitionPrimitiveColumns is null"));
-        this.values = requireNonNull(values, "values is null");
         this.recordCount = recordCount;
         this.fileCount = 1;
         this.size = size;
@@ -101,16 +96,8 @@ public class IcebergFileStats {
         return nonPartitionPrimitiveColumns;
     }
 
-    public StructLike getValues() {
-        return values;
-    }
-
     public long getRecordCount() {
         return recordCount;
-    }
-
-    public long getFileCount() {
-        return fileCount;
     }
 
     public long getSize() {
@@ -119,6 +106,27 @@ public class IcebergFileStats {
 
     public Map<Integer, Object> getMinValues() {
         return minValues;
+    }
+
+    public Optional<Double> getMinValue(Integer fieldId) {
+        return getBoundStatistic(fieldId, minValues);
+    }
+
+    private Optional<Double> getBoundStatistic(Integer fieldId, Map<Integer, Object> boundValues) {
+        if (idToTypeMapping == null || boundValues == null) {
+            return Optional.empty();
+        }
+        if (idToTypeMapping.get(fieldId) == null || boundValues.get(fieldId) == null) {
+            return Optional.empty();
+        }
+        Type.PrimitiveType type = idToTypeMapping.get(fieldId);
+        Object value = boundValues.get(fieldId);
+        return convertObjectToOptionalDouble(type, value);
+    }
+
+
+    public Optional<Double> getMaxValue(Integer fieldId) {
+        return getBoundStatistic(fieldId, maxValues);
     }
 
     public Map<Integer, Object> getMaxValues() {
@@ -220,5 +228,30 @@ public class IcebergFileStats {
             }
         });
         return map.build();
+    }
+
+    public static Optional<Double> convertObjectToOptionalDouble(Type.PrimitiveType type, Object value) {
+        double valueConvert;
+        if (type instanceof Types.BooleanType) {
+            valueConvert = (boolean) value ? 1 : 0;
+        } else if (type instanceof Types.IntegerType) {
+            valueConvert = (int) value;
+        } else if (type instanceof Types.LongType) {
+            valueConvert = (long) value;
+        } else if (type instanceof Types.FloatType) {
+            valueConvert = (float) value;
+        } else if (type instanceof Types.DoubleType) {
+            valueConvert = (double) value;
+        } else if (type instanceof Types.TimestampType) {
+            valueConvert = (double) (long) value / 1000000;
+        } else if (type instanceof Types.DateType) {
+            valueConvert = ((long) ((int) value)) * 86400;
+        } else if (type instanceof Types.DecimalType) {
+            valueConvert = ((BigDecimal) value).doubleValue();
+        } else {
+            return Optional.empty();
+        }
+
+        return Optional.of(valueConvert);
     }
 }
