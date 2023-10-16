@@ -95,7 +95,6 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -861,7 +860,7 @@ public class RestoreJob extends AbstractJob {
                             localTbl.getId(), restorePart.getId(), restoredIdx.getId(),
                             restoreTablet.getId(), indexMeta.getShortKeyColumnCount(),
                             indexMeta.getSchemaHash(), indexMeta.getSchemaVersion(), restoreReplica.getVersion(),
-                            indexMeta.getKeysType(), TStorageType.COLUMN,
+                            indexMeta.getKeysType(), indexMeta.getStorageType(),
                             TStorageMedium.HDD /* all restored replicas will be saved to HDD */,
                             indexMeta.getSchema(), bfColumns, bfFpp, null,
                             localTbl.getCopiedIndexes(),
@@ -1079,7 +1078,7 @@ public class RestoreJob extends AbstractJob {
                             HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
                         } catch (UserException e) {
                             status = new Status(ErrCode.COMMON_ERROR, "Get properties from " + repo.getLocation() + " error.");
-                            return;    
+                            return;
                         }
                     }
                     // allot tasks

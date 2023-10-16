@@ -69,6 +69,8 @@ public:
 
     ChunkPtr get_result_chunk() { return _result_chunk; }
 
+    bool check_supported_column_partial_update(const Chunk& chunk);
+
 private:
     void _merge();
 
