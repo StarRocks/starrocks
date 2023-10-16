@@ -965,6 +965,12 @@ CONF_Int64(datacache_max_concurrent_inserts, "1500000");
 // Total memory limit for in-flight cache jobs.
 // Once this is reached, cache populcation will be rejected until the flying memory usage gets under the limit.
 CONF_Int64(datacache_max_flying_memory_mb, "256");
+// Whether to use datacache adaptor, which will skip reading cache when disk overload is high.
+CONF_Bool(datacache_adaptor_enable, "false");
+// A factor to control the io traffic between cache and network. The larger this parameter,
+// the more requests will be sent to the network.
+// Usually there is no need to modify it.
+CONF_Int64(datacache_skip_read_factor, "1");
 // DataCache engines, alternatives: cachelib, starcache.
 // Set the default value empty to indicate whether it is manully configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
