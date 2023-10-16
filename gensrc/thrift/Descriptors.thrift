@@ -417,6 +417,10 @@ struct TIcebergSchemaField {
     100: optional list<TIcebergSchemaField> children
 }
 
+struct TPartitionMap {
+    1: optional map<i64, THdfsPartition> partitions
+}
+
 struct TCompressedPartitionMap {
     1: optional i32 original_len
     2: optional i32 compressed_len
@@ -436,15 +440,11 @@ struct TIcebergTable {
     // partition column names
     4: optional list<string> partition_column_names
 
-    // Map from partition id to partition metadata.
-    5: optional map<i64, THdfsPartition> partitions
-
     // partition map may be very big, serialize costs too much, just use serialized byte[]
-    6: optional TCompressedPartitionMap compressed_partitions
-}
+    5: optional TCompressedPartitionMap compressed_partitions
 
-struct TPartitionMap {
-    1: optional map<i64, THdfsPartition> partitions
+    // if serialize partition info throws exception, then use unserialized partitions
+    6: optional map<i64, THdfsPartition> partitions
 }
 
 struct THudiTable {

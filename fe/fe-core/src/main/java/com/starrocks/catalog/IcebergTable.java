@@ -228,33 +228,32 @@ public class IcebergTable extends Table {
         tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(nativeTable.schema()));
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
 
-        TPartitionMap tPartitionMap = new TPartitionMap();
-        for (int i = 0; i < partitions.size(); i++) {
-            DescriptorTable.ReferencedPartitionInfo info = partitions.get(i);
-            PartitionKey key = info.getKey();
-            long partitionId = info.getId();
-            THdfsPartition tPartition = new THdfsPartition();
-            List<LiteralExpr> keys = key.getKeys();
-            tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
-            tPartitionMap.putToPartitions(partitionId, tPartition);
-        }
+        if (!partitions.isEmpty()) {
+            TPartitionMap tPartitionMap = new TPartitionMap();
+            for (int i = 0; i < partitions.size(); i++) {
+                DescriptorTable.ReferencedPartitionInfo info = partitions.get(i);
+                PartitionKey key = info.getKey();
+                long partitionId = info.getId();
+                THdfsPartition tPartition = new THdfsPartition();
+                List<LiteralExpr> keys = key.getKeys();
+                tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
+                tPartitionMap.putToPartitions(partitionId, tPartition);
+            }
 
-        // partition info may be very big, and it is the same in plan fragment send to every be.
-        // extract and serialize it as a string, will get better performance(about 3x in test).
-        TSerializer serializer = new TSerializer(TBinaryProtocol::new);
-        try {
-            byte[] bytes = serializer.serialize(tPartitionMap);
-            // tIcebergTable.setPartition_map(new String(bytes));
-            // tIcebergTable.setPartition_map(new String(Util.compress(bytes), StandardCharsets.US_ASCII));
-            byte[] compressedBytes = Util.compress(bytes);
-            TCompressedPartitionMap tCompressedPartitionMap = new TCompressedPartitionMap();
-            tCompressedPartitionMap.setOriginal_len(bytes.length);
-            tCompressedPartitionMap.setCompressed_len(compressedBytes.length);
-            tCompressedPartitionMap.setCompressed_serialized_partitions(Base64.getEncoder().encodeToString(compressedBytes));
-            // tCompressedPartitionMap.setCompressed_serialized_partitions(new String(compressedBytes,
-            //         StandardCharsets.ISO_8859_1));
-            tIcebergTable.setCompressed_partitions(tCompressedPartitionMap);
-        } catch (TException | IOException ignore) {
+            // partition info may be very big, and it is the same in plan fragment send to every be.
+            // extract and serialize it as a string, will get better performance(about 3x in test).
+            try {
+                TSerializer serializer = new TSerializer(TBinaryProtocol::new);
+                byte[] bytes = serializer.serialize(tPartitionMap);
+                byte[] compressedBytes = Util.compress(bytes);
+                TCompressedPartitionMap tCompressedPartitionMap = new TCompressedPartitionMap();
+                tCompressedPartitionMap.setOriginal_len(bytes.length);
+                tCompressedPartitionMap.setCompressed_len(compressedBytes.length);
+                tCompressedPartitionMap.setCompressed_serialized_partitions(Base64.getEncoder().encodeToString(compressedBytes));
+                tIcebergTable.setCompressed_partitions(tCompressedPartitionMap);
+            } catch (TException | IOException ignore) {
+                tIcebergTable.setPartitions(tPartitionMap.getPartitions());
+            }
         }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.ICEBERG_TABLE,
