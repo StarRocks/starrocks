@@ -1130,7 +1130,7 @@ public class StmtExecutor {
             statisticExecutor.collectStatistics(statsConnectCtx,
                     StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
                             analyzeStmt.getTableName().getCatalog(),
-                            db, table,
+                            db, table, null,
                             analyzeStmt.getColumnNames(),
                             analyzeType,
                             StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
