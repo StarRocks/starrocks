@@ -15,6 +15,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
@@ -258,6 +259,13 @@ public class AlterMaterializedViewTest {
         starRocksAssert.withTable(createTableSql);
         checker.runForTest();
         Assert.assertTrue(mv.isActive());
+
+        // manually set to inactive
+        mv.setInactiveAndReason(AlterJobMgr.MANUAL_INACTIVE_MV_REASON);
+        Assert.assertFalse(mv.isActive());
+        checker.runForTest();
+        Assert.assertFalse(mv.isActive());
+        Assert.assertEquals(AlterJobMgr.MANUAL_INACTIVE_MV_REASON, mv.getInactiveReason());
 
         checker.start();
     }
