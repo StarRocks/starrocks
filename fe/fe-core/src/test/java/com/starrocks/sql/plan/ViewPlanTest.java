@@ -1822,4 +1822,14 @@ public class ViewPlanTest extends PlanTestBase {
         sql = "SELECT Map{1:10,2:20,3:30}";
         testView(sql);
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testBackquoteAlias() throws Exception {
+        String sql = "select `select` from (select v1 from t0) `abc.bcd`(`select`);";
+        testView(sql);
+    }
+}
+>>>>>>> 199dfaba89 ([BugFix] fix not back quote subquery alias (#32827))
