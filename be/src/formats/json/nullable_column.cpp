@@ -73,7 +73,7 @@ static Status add_nullable_numeric_column(Column* column, const TypeDescriptor& 
     auto nullable_column = down_cast<NullableColumn*>(column);
     try {
         if (value->is_null()) {
-            nullable_column->append_default();
+            nullable_column->append_nulls(1);
             return Status::OK();
         }
 
