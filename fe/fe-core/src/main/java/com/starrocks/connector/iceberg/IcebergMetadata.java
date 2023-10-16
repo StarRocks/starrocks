@@ -458,8 +458,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         long offset = fileScanTask.start();
         long length = fileScanTask.length();
         DataFile dataFileWithoutStats = fileScanTask.file().copyWithoutStats();
-        DeleteFile[] deleteFiles = new DeleteFile[fileScanTask.deletes().size()];
-        fileScanTask.deletes().toArray(deleteFiles);
+        DeleteFile[] deleteFiles = fileScanTask.deletes().stream()
+                .map(DeleteFile::copyWithoutStats)
+                .toArray(DeleteFile[]::new);
         String schemaString = SchemaParser.toJson(fileScanTask.spec().schema());
         String partitionString = PartitionSpecParser.toJson(fileScanTask.spec());
         ResidualEvaluator residualEvaluator = ResidualEvaluator.of(fileScanTask.spec(), icebergPredicate, true);
