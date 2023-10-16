@@ -19,6 +19,7 @@
 
 #include <utility>
 
+#include "formats/parquet/file_writer.h"
 #include "runtime/exec_env.h"
 #include "util/uid_util.h"
 
@@ -43,13 +44,11 @@ Status RollingAsyncParquetWriter::init() {
     _partition_location = _table_info.partition_location;
 
     ::parquet::WriterProperties::Builder builder;
-    if (_table_info.enable_dictionary) {
-        builder.enable_dictionary();
-    } else {
-        builder.disable_dictionary();
-    }
+    _table_info.enable_dictionary ? builder.enable_dictionary() : builder.disable_dictionary();
+    ASSIGN_OR_RETURN(auto compression_codec,
+                     parquet::ParquetBuildHelper::convert_compression_type(_table_info.compress_type));
+    builder.compression(compression_codec);
     builder.version(::parquet::ParquetVersion::PARQUET_2_0);
-    starrocks::parquet::ParquetBuildHelper::build_compression_type(builder, _table_info.compress_type);
     _properties = builder.build();
 
     return Status::OK();
