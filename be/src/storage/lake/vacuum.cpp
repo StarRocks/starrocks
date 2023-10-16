@@ -38,12 +38,33 @@
 
 namespace starrocks::lake {
 
+static int get_num_delete_file_queued_tasks(void*) {
+#ifndef BE_TEST
+    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
+    return tp ? tp->num_queued_tasks() : 0;
+#else
+    return 0;
+#endif
+}
+
+static int get_num_active_file_queued_tasks(void*) {
+#ifndef BE_TEST
+    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
+    return tp ? tp->active_threads() : 0;
+#else
+    return 0;
+#endif
+}
+
 static bvar::LatencyRecorder g_del_file_latency("lake_vacuum_del_file"); // unit: us
 static bvar::Adder<uint64_t> g_del_fails("lake_vacuum_del_file_fails");
 static bvar::Adder<uint64_t> g_deleted_files("lake_vacuum_deleted_files");
 static bvar::LatencyRecorder g_metadata_travel_latency("lake_vacuum_metadata_travel"); // unit: ms
 static bvar::LatencyRecorder g_vacuum_txnlog_latency("lake_vacuum_delete_txnlog");
-
+static bvar::PassiveStatus<int> g_queued_delete_file_tasks("lake_vacuum_queued_delete_file_tasks",
+                                                           get_num_delete_file_queued_tasks, nullptr);
+static bvar::PassiveStatus<int> g_active_delete_file_tasks("lake_vacuum_active_delete_file_tasks",
+                                                           get_num_active_file_queued_tasks, nullptr);
 namespace {
 
 std::future<Status> completed_future(Status value) {

@@ -77,7 +77,7 @@ static int get_num_publish_queued_tasks(void*) {
 static int get_num_publish_active_tasks(void*) {
 #ifndef BE_TEST
     auto tp = publish_version_thread_pool(ExecEnv::GetInstance());
-    return tp ? tp->num_queued_tasks() : 0;
+    return tp ? tp->active_threads() : 0;
 #else
     return 0;
 #endif
@@ -85,7 +85,7 @@ static int get_num_publish_active_tasks(void*) {
 
 static int get_num_vacuum_queued_tasks(void*) {
 #ifndef BE_TEST
-    auto tp = publish_version_thread_pool(ExecEnv::GetInstance());
+    auto tp = vacuum_thread_pool(ExecEnv::GetInstance());
     return tp ? tp->num_queued_tasks() : 0;
 #else
     return 0;
@@ -94,8 +94,8 @@ static int get_num_vacuum_queued_tasks(void*) {
 
 static int get_num_vacuum_active_tasks(void*) {
 #ifndef BE_TEST
-    auto tp = publish_version_thread_pool(ExecEnv::GetInstance());
-    return tp ? tp->num_queued_tasks() : 0;
+    auto tp = vacuum_thread_pool(ExecEnv::GetInstance());
+    return tp ? tp->active_threads() : 0;
 #else
     return 0;
 #endif
