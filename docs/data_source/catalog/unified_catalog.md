@@ -18,7 +18,7 @@ To ensure successful SQL workloads on your unified data source, your StarRocks c
 
 ## Limits
 
-StarRocks supports integrations with only a single storage system and a single metastore service. Therefore, make sure all the data sources you want to integrate as a unified data source with StarRocks use the same storage system and metastore service.
+One unified catalog supports integrations with only a single storage system and a single metastore service. Therefore, make sure all the data sources you want to integrate as a unified data source with StarRocks use the same storage system and metastore service.
 
 ## Usage notes
 
@@ -34,7 +34,7 @@ Before you create a unified catalog, make sure your StarRocks cluster can integr
 
 ### AWS IAM
 
-If you use AWS S3 as storage or AWS Glue as metastore, choose your suitable authentication method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources. For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparations).
+If you use AWS S3 as storage or AWS Glue as metastore, choose your suitable authentication method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources. For more information, see [Authenticate to AWS resources - Preparations](../../integrations/authenticate_to_aws_resources.md#preparations).
 
 ### HDFS
 
@@ -87,7 +87,7 @@ The description of the unified catalog. This parameter is optional.
 
 #### type
 
-The type of your unified data source. Set the value to `unified`.
+The type of your data source. Set the value to `unified`.
 
 #### MetastoreParams
 
@@ -413,15 +413,11 @@ If you choose Google GCS as storage, take one of the following actions:
 
 #### MetadataUpdateParams
 
-A set of parameters about how StarRocks updates the cached metadata of HHive, Hudi, and Delta Lake. This parameter set is optional. For more information about the policies for updating cached metadata from Hive, Hudi, and Delta Lake, see [Hive catalog](../../data_source/catalog/), [Hudi catalog](../../data_source/catalog/hudi_catalog.md), and [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md).
+A set of parameters about how StarRocks updates the cached metadata of Hive, Hudi, and Delta Lake. This parameter set is optional. For more information about the policies for updating cached metadata from Hive, Hudi, and Delta Lake, see [Hive catalog](../../data_source/catalog/hive_catalog.md), [Hudi catalog](../../data_source/catalog/hudi_catalog.md), and [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md).
 
 In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance.
 
 However, if the frequency of data updates in Hive, Hudi, or Delta Lake is high, you can tune these parameters to further optimize the performance of automatic asynchronous updates.
-
-> NOTE
->
-> In most cases, if your Hive data is updated at a granularity of 1 hour or less, the data update frequency is considered high.
 
 | Parameter                              | Required | Description                                                  |
 | -------------------------------------- | -------- | ------------------------------------------------------------ |
@@ -866,7 +862,7 @@ The `prefix` varies based on the storage system you use:
 
 ## Drop a database from a unified catalog
 
-Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/privilege_item.md#database) privilege on databases in a unified catalog, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) statement to drop a database from that catalog. You can only drop empty databases.
+Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/privilege_item.md#database) privilege on a database created within a unified catalog, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) statement to drop that database. You can only drop empty databases.
 
 > **NOTE**
 >
@@ -884,7 +880,7 @@ DROP DATABASE <database_name>
 
 ## Create a table in a unified catalog
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/privilege_item.md#database) privilege on a unified catalog, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) or [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) statement to create a table in that catalog.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/privilege_item.md#database) privilege on a database created within a unified catalog, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) or [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) statement to create a table in that database.
 
 > **NOTE**
 >
@@ -918,7 +914,7 @@ PARTITION BY (id,dt);
 
 ## Sink data to a table in a unified catalog
 
-Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/privilege_item.md#table) privilege on tables in a unified catalog, you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) statement to sink the data of a StarRocks table to a Parquet-formatted Hive or Iceberg table in that catalog.
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/privilege_item.md#table) privilege on a table created within a unified catalog, you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) statement to sink the data of a StarRocks table to that Unified Catalog table (currently only Parquet-formatted Unified Catalog tables are supported).
 
 > **NOTE**
 >
@@ -953,7 +949,7 @@ VALUES
 
 ## Drop a table from a unified catalog
 
-Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/privilege_item.md#table) privilege on tables in a unified catalog, you can use the [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) statement to drop a Hive table from that catalog.
+Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/privilege_item.md#table) privilege on a table created within a unified catalog, you can use the [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) statement to drop that table.
 
 > **NOTE**
 >

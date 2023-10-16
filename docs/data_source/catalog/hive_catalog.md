@@ -985,7 +985,7 @@ The syntax of `partition_desc` is as follows:
 PARTITION BY (par_col1[, par_col2...])
 ```
 
-Currently StarRocks only supports [identity transforms](https://iceberg.apache.org/spec/#partitioning), which means that StarRocks creates a partition for each unique partition value.
+Currently StarRocks only supports identity transforms, which means that StarRocks creates a partition for each unique partition value.
 
 > **NOTICE**
 >
@@ -999,9 +999,9 @@ The following table describes a few key properties.
 
 | **Property**      | **Description**                                              |
 | ----------------- | ------------------------------------------------------------ |
-| location          | The file path in which you want to create the Iceberg table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Iceberg catalog. When you use AWS Glue as metadata service:<ul><li>If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs. </li><li>If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.</li></ul> |
-| file_format       | The file format of the Iceberg table. Only the Parquet format is supported. Default value: `parquet`. |
-| compression_codec | The compression algorithm used for the Iceberg table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. |
+| location          | The file path in which you want to create the Hive table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Hive catalog. When you use AWS Glue as metadata service:<ul><li>If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs. </li><li>If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.</li></ul> |
+| file_format       | The file format of the Hive table. Only the Parquet format is supported. Default value: `parquet`. |
+| compression_codec | The compression algorithm used for the Hive table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. |
 
 ### Examples
 
