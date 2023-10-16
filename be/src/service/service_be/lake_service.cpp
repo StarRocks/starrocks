@@ -172,10 +172,12 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             auto new_version = request->new_version();
             auto txns = request->txn_ids().data();
             auto txns_size = request->txn_ids().size();
+            auto commit_time = request->commit_time();
             auto tablet_manager = _env->lake_tablet_manager();
             g_publish_tablet_version_queuing_latency << (run_ts - start_ts);
 
-            auto res = tablet_manager->publish_version(tablet_id, base_version, new_version, txns, txns_size);
+            auto res =
+                    tablet_manager->publish_version(tablet_id, base_version, new_version, txns, txns_size, commit_time);
             if (res.ok()) {
                 auto metadata = std::move(res).value();
                 auto score = compaction_score(*metadata);
