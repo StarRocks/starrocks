@@ -21,6 +21,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.hive.MockedHiveMetadata;
+import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -47,6 +48,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         gsmMgr.setMetadataMgr(metadataMgr);
         mockHiveCatalogImpl(metadataMgr);
         mockJDBCCatalogImpl(metadataMgr);
+        mockIcebergCatalogImpl(metadataMgr);
     }
 
     public static void mockHiveCatalog(ConnectContext ctx) throws DdlException {
@@ -96,5 +98,18 @@ public class ConnectorPlanTestBase extends PlanTestBase {
                 createCatalog("jdbc", MockedJDBCMetadata.MOCKED_JDBC_PG_CATALOG_NAME, "", pgProperties);
         metadataMgr.registerMockedMetadata(MockedJDBCMetadata.MOCKED_JDBC_PG_CATALOG_NAME,
                 new MockedJDBCMetadata(pgProperties));
+    }
+
+    private static void mockIcebergCatalogImpl(MockedMetadataMgr metadataMgr) throws DdlException {
+        Map<String, String> properties = Maps.newHashMap();
+
+        properties.put("type", "iceberg");
+        properties.put("iceberg.catalog.type", "hive");
+        properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
+
+        GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog("iceberg", "iceberg0", "", properties);
+
+        MockIcebergMetadata mockIcebergMetadata = new MockIcebergMetadata();
+        metadataMgr.registerMockedMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME, mockIcebergMetadata);
     }
 }

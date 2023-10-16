@@ -45,6 +45,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -74,6 +75,7 @@ import com.starrocks.thrift.TTableType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.Snapshot;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -85,11 +87,14 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.scheduler.PartitionBasedMvRefreshProcessor.ICEBERG_ALL_PARTITION;
 
 /**
  * meta structure for materialized view
@@ -731,10 +736,51 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 .stream().map(BasePartitionInfo::fromExternalTable).collect(Collectors.toList());
     }
 
+    private Set<String> getUpdatedPartitionNameOfIcebergTable(IcebergTable baseTable) {
+        Set<String> result = Sets.newHashSet();
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
+                continue;
+            }
+            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName());
+            Snapshot snapshot = baseTable.getNativeTable().currentSnapshot();
+            long currentVersion = snapshot != null ? snapshot.timestampMillis() : -1;
+
+            Map<String, BasePartitionInfo> baseTableInfoVisibleVersionMap = getBaseTableRefreshInfo(baseTableInfo);
+            BasePartitionInfo basePartitionInfo = baseTableInfoVisibleVersionMap.get(ICEBERG_ALL_PARTITION);
+            if (basePartitionInfo == null) {
+                baseTable.setRefreshSnapshotTime(currentVersion);
+                return new HashSet<>(partitionNames);
+            }
+            // check if there are new partitions which are not in baseTableInfoVisibleVersionMap
+            for (String partitionName : partitionNames) {
+                if (!baseTableInfoVisibleVersionMap.containsKey(partitionName)) {
+                    result.add(partitionName);
+                }
+            }
+
+            if (!result.isEmpty()) {
+                baseTable.setRefreshSnapshotTime(currentVersion);
+            }
+
+            long basePartitionVersion = basePartitionInfo.version;
+            if (basePartitionVersion < currentVersion) {
+                baseTable.setRefreshSnapshotTime(currentVersion);
+                result.addAll(IcebergPartitionUtils.getChangedPartitionNames(baseTable.getNativeTable(),
+                        basePartitionVersion));
+            }
+        }
+        return result;
+    }
+
     private Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable, boolean isQueryRewrite) {
-        if (!baseTable.isHiveTable() && !baseTable.isJDBCTable()) {
+        if (!baseTable.isHiveTable() && !baseTable.isJDBCTable() && !baseTable.isIcebergTable()) {
             // Only support hive table and jdbc table now
             return null;
+        }
+        if (baseTable.isIcebergTable()) {
+            return getUpdatedPartitionNameOfIcebergTable((IcebergTable) baseTable);
         }
 
         Set<String> result = Sets.newHashSet();
