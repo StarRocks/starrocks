@@ -1485,7 +1485,6 @@ public class CoordinatorPreprocessor {
 
         long nodeNums = Math.min(amplifyFactor * baseNodeNums, candidates.size());
 
-        // only increase nodes when enable_adaptive_increase_execute_nodes = true
         String mode = connectContext.getSessionVariable().getAdaptiveChooseExecuteInstancesMode();
         if ((ADAPTIVE_INCREASE.equalsIgnoreCase(mode) || AUTO.equalsIgnoreCase(mode))
                 && nodeNums > childUsedHosts.size()) {
@@ -1502,7 +1501,6 @@ public class CoordinatorPreprocessor {
         } else if ((ADAPTIVE_DECREASE.equalsIgnoreCase(mode) || AUTO.equalsIgnoreCase(mode))
                 && nodeNums < childUsedHosts.size()
                 && candidates.size() >= Config.adaptive_choose_instances_threshold) {
-            // only decrease nodes when be nodes > = adaptive_choose_nodes_threshold
             Collections.shuffle(childHosts, random);
             return childHosts.stream().limit(nodeNums).collect(Collectors.toList());
         } else {

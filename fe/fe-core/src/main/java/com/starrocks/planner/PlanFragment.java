@@ -98,8 +98,6 @@ import java.util.stream.Stream;
  * fix that
  */
 public class PlanFragment extends TreeNode<PlanFragment> {
-    public static final int HOST_FACTOR_MAX = 1;
-
     // id for this plan fragment
     protected final PlanFragmentId fragmentId;
 
