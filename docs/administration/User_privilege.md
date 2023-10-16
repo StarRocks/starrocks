@@ -58,7 +58,11 @@ Privileges to use resources.
 
 ## Privilege Hierarchy
 
+<<<<<<< HEAD
 StarRocks classifies database and table privileges into three levels.
+=======
+You can view the property of a user using [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SHOW_PROPERTY.md).
+>>>>>>> a9d59e6fc ([Doc] move show property and add label to 3.1/2.5 release notes (#32788))
 
 * GLOBAL LEVEL: Global privileges. This privilege is granted on `.` by the GRANT statement. The privilege granted applies to any table in any database.
 * DATABASE LEVEL: Database level privileges. This  privilege is granted on `db.*` by the `GRANT` statement. The privilege granted applies to any table in a specific  database.
