@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -30,6 +31,7 @@ import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -59,6 +61,11 @@ public class AlterMaterializedViewTest {
                 "                )\n" +
                 "                as  select v1, count(v2) as count_c2, sum(v3) as sum_c3\n" +
                 "                from t0 group by v1;\n");
+    }
+
+    @Before
+    public void before() {
+        connectContext.setThreadLocalInfo();
     }
 
     @Test
@@ -222,5 +229,36 @@ public class AlterMaterializedViewTest {
         connectContext.executeSql(String.format("alter materialized view %s active", mvName));
         Assert.assertTrue(mv.isActive());
         Assert.assertNull(mv.getInactiveReason());
+    }
+
+    @Test
+    public void testActiveChecker() throws Exception {
+        MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
+        checker.setStop();
+
+        String baseTableName = "base_tbl_active";
+        String createTableSql =
+                "create table " + baseTableName + " ( k1 int, k2 int) properties('replication_num'='1')";
+        starRocksAssert.withTable(createTableSql);
+        starRocksAssert.withMaterializedView("create materialized view mv_active " +
+                " refresh async as select * from base_tbl_active");
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "mv_active");
+        Assert.assertTrue(mv.isActive());
+
+        // drop the base table and try to activate it
+        starRocksAssert.dropTable(baseTableName);
+        Assert.assertFalse(mv.isActive());
+        Assert.assertEquals("base-table dropped: base_tbl_active", mv.getInactiveReason());
+        checker.runForTest();
+        Assert.assertFalse(mv.isActive());
+        Assert.assertEquals("base-table dropped: base_tbl_active", mv.getInactiveReason());
+
+        // create the table again, and activate it
+        connectContext.setThreadLocalInfo();
+        starRocksAssert.withTable(createTableSql);
+        checker.runForTest();
+        Assert.assertTrue(mv.isActive());
+
+        checker.start();
     }
 }
