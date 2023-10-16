@@ -466,7 +466,8 @@ void delete_files_async(std::vector<std::string> files_to_delete) {
         }
     };
 
-    auto st = delete_file_thread_pool()->submit_func(std::move(task));
+    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
+    auto st = tp->submit_func(std::move(task));
     LOG_IF(ERROR, !st.ok()) << st;
 }
 

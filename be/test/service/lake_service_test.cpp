@@ -864,4 +864,43 @@ TEST_F(LakeServiceTest, test_delete_tablet_no_thread_pool) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
+// NOLINTNEXTLINE
+TEST_F(LakeServiceTest, test_duplicated_vacuum_request) {
+    SyncPoint::GetInstance()->LoadDependency({{"LakeServiceImpl::vacuum:1", "LakeServiceImpl::vacuum:2"}});
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    auto duplicate = false;
+    auto partition_id = next_id();
+
+    auto t = std::thread([&]() {
+        brpc::Controller cntl;
+        lake::VacuumRequest request;
+        lake::VacuumResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_partition_id(partition_id);
+        _lake_service.vacuum(&cntl, &request, &response, nullptr);
+        if (cntl.ErrorText() == fmt::format("duplicated vacuum request of partition {}", partition_id)) {
+            duplicate = true;
+        }
+    });
+
+    {
+        brpc::Controller cntl;
+        lake::VacuumRequest request;
+        lake::VacuumResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_partition_id(partition_id);
+        _lake_service.vacuum(&cntl, &request, &response, nullptr);
+        if (cntl.ErrorText() == fmt::format("duplicated vacuum request of partition {}", partition_id)) {
+            duplicate = true;
+        }
+    }
+
+    t.join();
+
+    SyncPoint::GetInstance()->DisableProcessing();
+
+    ASSERT_TRUE(duplicate);
+}
+
 } // namespace starrocks

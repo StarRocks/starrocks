@@ -113,7 +113,9 @@ static bvar::PassiveStatus<int> g_vacuum_active_tasks("lake_vacuum_active_tasks"
 
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
-LakeServiceImpl::LakeServiceImpl(ExecEnv* env) : _env(env) {}
+LakeServiceImpl::LakeServiceImpl(ExecEnv* env) : _env(env) {
+
+}
 
 LakeServiceImpl::~LakeServiceImpl() = default;
 
@@ -696,6 +698,9 @@ void LakeServiceImpl::abort_compaction(::google::protobuf::RpcController* contro
 void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller,
                              const ::starrocks::lake::VacuumRequest* request,
                              ::starrocks::lake::VacuumResponse* response, ::google::protobuf::Closure* done) {
+    static bthread::Mutex s_mtx;
+    static std::unordered_set<int64_t> s_vacuuming_partitions;
+
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
     auto thread_pool = vacuum_thread_pool(_env);
@@ -703,6 +708,19 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller,
         cntl->SetFailed("vacuum thread pool is null");
         return;
     }
+
+    if (request->partition_id() > 0) {
+        std::lock_guard l(s_mtx);
+        if (!s_vacuuming_partitions.insert(request->partition_id()).second) {
+            TEST_SYNC_POINT("LakeServiceImpl::vacuum:1");
+            LOG(INFO) << "Ignored duplicate vacuum request of partition " << request->partition_id();
+            cntl->SetFailed(fmt::format("duplicated vacuum request of partition {}", request->partition_id()));
+            return;
+        }
+    }
+
+    TEST_SYNC_POINT("LakeServiceImpl::vacuum:2");
+
     auto latch = BThreadCountDownLatch(1);
     auto st = thread_pool->submit_func([&]() {
         DeferOp defer([&] { latch.count_down(); });
@@ -715,6 +733,11 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller,
     }
 
     latch.wait();
+
+    if (request->partition_id() > 0) {
+        std::lock_guard l(s_mtx);
+        s_vacuuming_partitions.erase(request->partition_id());
+    }
 }
 
 void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
