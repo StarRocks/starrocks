@@ -1031,6 +1031,7 @@ struct TProjectNode {
 struct TMetaScanNode {
     // column id to column name
     1: optional map<i32, string> id_to_names
+    2: optional list<Descriptors.TColumn> columns
 }
 
 struct TDecodeNode {
