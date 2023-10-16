@@ -108,6 +108,8 @@ Status init_datacache(GlobalEnv* global_env) {
         cache_options.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
         cache_options.enable_checksum = config::datacache_checksum_enable;
         cache_options.enable_direct_io = config::datacache_direct_io_enable;
+        cache_options.enable_cache_adaptor = starrocks::config::datacache_adaptor_enable;
+        cache_options.skip_read_factor = starrocks::config::datacache_skip_read_factor;
         cache_options.engine = config::datacache_engine;
         return cache->init(cache_options);
     }

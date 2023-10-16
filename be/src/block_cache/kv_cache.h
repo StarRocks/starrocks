@@ -28,16 +28,21 @@ public:
     virtual Status init(const CacheOptions& options) = 0;
 
     // Write data to cache
-    virtual Status write_cache(const std::string& key, const IOBuffer& buffer, size_t ttl_seconds, bool overwrite) = 0;
+    virtual Status write_cache(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) = 0;
 
     // Read data from cache, it returns the data size if successful; otherwise the error status
     // will be returned.
-    virtual Status read_cache(const std::string& key, size_t off, size_t size, IOBuffer* buffer) = 0;
+    virtual Status read_cache(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                              ReadCacheOptions* options) = 0;
 
     // Remove data from cache. The offset must be aligned by block size
     virtual Status remove_cache(const std::string& key) = 0;
 
     virtual std::unordered_map<std::string, double> cache_stats() = 0;
+
+    virtual void record_read_remote(size_t size, int64_t lateny_us) = 0;
+
+    virtual void record_read_cache(size_t size, int64_t lateny_us) = 0;
 
     virtual Status shutdown() = 0;
 };
