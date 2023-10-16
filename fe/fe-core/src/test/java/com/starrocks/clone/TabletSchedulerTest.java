@@ -9,9 +9,11 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -286,4 +288,26 @@ public class TabletSchedulerTest {
         Assert.assertEquals(Optional.of(2L).get(),
                 result.get(new ColocateTableIndex.GroupId(200L, 301L)));
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testForceRecoverWithEmptyTablet() {
+        Config.recover_with_empty_tablet = true;
+        List<Replica> replicas = new ArrayList<>();
+        replicas.add(new Replica(2, 3001, -1, Replica.ReplicaState.NORMAL));
+        replicas.add(new Replica(3, 3002, -2, Replica.ReplicaState.NORMAL));
+        replicas.add(new Replica(4, 3003, -3, Replica.ReplicaState.NORMAL));
+
+        LocalTablet localTablet = new LocalTablet(5001, replicas);
+        Pair<LocalTablet.TabletStatus, TabletSchedCtx.Priority> result = localTablet.getHealthStatusWithPriority(
+                systemInfoService, 1, 3, Arrays.asList(1001L, 1002L, 1003L));
+        System.out.println(result);
+
+        Assert.assertEquals(LocalTablet.TabletStatus.FORCE_REDUNDANT, result.first);
+
+        Config.recover_with_empty_tablet = false;
+    }
+}
+>>>>>>> 9a45ac902a ([BugFix] Support recover with empty tablet when all backends are lost (#32162))
