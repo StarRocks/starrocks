@@ -183,6 +183,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // the default disable replicated storage
     private boolean enableReplicatedStorage = false;
 
+    private String storageType;
+
     // the default automatic bucket size
     private long bucketSize = 0;
 
@@ -579,6 +581,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildStorageType() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)) {
+            storageType = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE);
+        }
+        return this;
+    }
+
     public void modifyTableProperties(Map<String, String> modifyProperties) {
         properties.putAll(modifyProperties);
     }
@@ -689,6 +698,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TPersistentIndexType getPersistentIndexType() {
         return persistendIndexType;
+    }
+
+    public String storageType() {
+        return storageType;
     }
 
     public TWriteQuorumType writeQuorum() {
