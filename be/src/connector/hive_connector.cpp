@@ -263,10 +263,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     // If partition column is not constant value, we can not use this optimization,
     // and have to fallback to normal workflow.
     // And we can not use `can_use_any_column` either.
-    auto double_check = [&]() {
-        if (!_can_use_any_column) {
-            return false;
-        }
+    auto check_opt_on_iceberg = [&]() {
         if ((_partition_slots.size() + 1) != slots.size()) {
             return false;
         }
@@ -275,7 +272,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         }
         return true;
     };
-    if (!double_check()) {
+    if (!check_opt_on_iceberg()) {
         _use_partition_column_value_only = false;
         _can_use_any_column = false;
     }
