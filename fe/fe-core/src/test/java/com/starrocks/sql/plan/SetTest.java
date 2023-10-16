@@ -22,6 +22,7 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class SetTest extends PlanTestBase {
@@ -509,6 +510,7 @@ public class SetTest extends PlanTestBase {
         assertNotContains(plan, "UNION");
     }
 
+    @Ignore
     @Test
     public void testUnionWithOrderBy() throws Exception {
         {

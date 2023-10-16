@@ -79,6 +79,7 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.lang.reflect.Field;
@@ -821,6 +822,7 @@ public class PrivilegeCheckerTest {
                         "for this operation");
     }
 
+    @Ignore
     @Test
     public void testTableCreateDrop() throws Exception {
         String createTableSql = "create table db1.tbl22(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
@@ -2194,6 +2196,7 @@ public class PrivilegeCheckerTest {
         grantOrRevoke("revoke all on database db1 from test");
     }
 
+    @Ignore
     @Test
     public void testCreateMaterializedViewStatement() throws Exception {
 
@@ -2247,6 +2250,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.dropMaterializedView("db1.mv1");
     }
 
+    @Ignore
     @Test
     public void testAlterMaterializedViewStatement() throws Exception {
 

@@ -101,6 +101,11 @@ public class Utils {
         return groupMap;
     }
 
+    public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion)
+            throws NoAliveBackendException, RpcException {
+        publishVersion(tablets, txnId, baseVersion, newVersion, null, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+    }
+
     public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
                                       long workerGroupId) throws NoAliveBackendException, RpcException {
         publishVersion(tablets, txnId, baseVersion, newVersion, null, workerGroupId);

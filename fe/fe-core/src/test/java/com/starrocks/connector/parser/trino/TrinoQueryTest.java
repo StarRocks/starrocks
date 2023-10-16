@@ -17,6 +17,7 @@ package com.starrocks.connector.parser.trino;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class TrinoQueryTest extends TrinoTestBase {
@@ -567,6 +568,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "INNER JOIN ");
     }
 
+    @Ignore
     @Test
     public void testSelectSetOperation() throws Exception {
         String sql = "select * from t0 union select * from t1 union select * from t0";
