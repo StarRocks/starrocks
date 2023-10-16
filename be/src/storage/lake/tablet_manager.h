@@ -68,7 +68,7 @@ public:
 
     // Returns the the newly created tablet metadata
     StatusOr<TabletMetadataPtr> publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
-                                                const int64_t* txns, int txns_size);
+                                                const int64_t* txns, int txns_size, int64_t commit_time);
 
     void abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size);
 
@@ -150,6 +150,7 @@ public:
 
     void update_metacache_limit(size_t limit);
 
+    // The return value will never be null.
     Cache* metacache() { return _metacache.get(); }
 
     // only for TEST purpose

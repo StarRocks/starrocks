@@ -124,7 +124,8 @@ static bvar::PassiveStatus<size_t> g_metacache_usage("lake", "metacache_usage", 
 #endif
 
 static StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, int64_t base_version,
-                                           int64_t new_version, const int64_t* txns, int txns_size);
+                                           int64_t new_version, const int64_t* txns, int txns_size,
+                                           int64_t commit_time);
 
 TabletManager::TabletManager(LocationProvider* location_provider, UpdateManager* update_mgr, int64_t cache_capacity)
         : _location_provider(location_provider),
@@ -660,13 +661,13 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
-                                                           const int64_t* txns, int txns_size) {
+                                                           const int64_t* txns, int txns_size, int64_t commit_time) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
-    return publish(this, &tablet, base_version, new_version, txns, txns_size);
+    return publish(this, &tablet, base_version, new_version, txns, txns_size, commit_time);
 }
 
 StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, int64_t base_version,
-                                    int64_t new_version, const int64_t* txns, int txns_size) {
+                                    int64_t new_version, const int64_t* txns, int txns_size, int64_t commit_time) {
     if (txns_size != 1) {
         return Status::NotSupported("does not support publish multiple txns yet");
     }
@@ -703,6 +704,8 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
     if (base_metadata->compaction_inputs_size() > 0 || base_metadata->orphan_files_size() > 0) {
         new_metadata->set_prev_garbage_version(base_metadata->version());
     }
+
+    new_metadata->set_commit_time(commit_time);
 
     auto init_st = log_applier->init();
     if (!init_st.ok()) {
