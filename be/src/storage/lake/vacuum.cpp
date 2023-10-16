@@ -125,18 +125,20 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
         } else {
             auto metadata = std::move(res).value();
             if (skip_check_grace_timestamp) {
-                // Reached here means all versions less than |*final_retain_version| were create before
-                // |grace_timestamp| and can be vacuumed.
                 DCHECK_LE(version, final_retain_version);
                 collect_garbage_files(*metadata, data_dir, datafiles_to_vacuum, total_datafile_size);
             } else {
-                // Reached here means that the tablet metadata that has been traversed was created after
-                // |grace_timestamp| and cannot be deleted.
-                // Now check if the current |version| was created before |grace_timestamp|.
-                ASSIGN_OR_RETURN(auto mtime, fs->get_file_modified_time(path));
-                TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_file_modified_time", &mtime);
-                if (mtime < grace_timestamp) {
-                    // |version| is the first version encountered that was created before |grace_timestamp|.
+                int64_t compare_time = 0;
+                if (metadata->has_commit_time() && metadata->commit_time() > 0) {
+                    compare_time = metadata->commit_time();
+                } else {
+                    ASSIGN_OR_RETURN(compare_time, fs->get_file_modified_time(path));
+                    TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_file_modified_time", &compare_time);
+                }
+
+                if (compare_time < grace_timestamp) {
+                    // This is the first metadata we've encountered that was created or committed before
+                    // the |grace_timestamp|, mark it as a version to retain prevents it from being deleted.
                     //
                     // Why not delete this version:
                     // Assuming |grace_timestamp| is the earliest possible initiation time of queries still
@@ -145,19 +147,14 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                     // be kept in case the query fails. And the |version| here is probably the last version
                     // created before grace_timestamp.
                     final_retain_version = version;
+
+                    // From now on, all metadata encountered later will no longer need to be checked for
+                    // |grace_timestamp| and will be considered ready for deletion.
                     skip_check_grace_timestamp = true;
 
-                    // We need to retain metadata files with version |final_retain_version|, but garbage
-                    // files recorded in it can be deleted.
+                    // The metadata will be retained, but garbage files recorded in it can be deleted.
                     collect_garbage_files(*metadata, data_dir, datafiles_to_vacuum, total_datafile_size);
-
-                    // from now on, all versions smaller than |final_retain_version| are versions that can
-                    // be cleaned up, and it is no longer necessary to check the modification time of the
-                    // tablet metadata.
                 } else {
-                    // Although |version| is smaller than |final_retain_version|, since |version| was created after
-                    // the |grace_timestamp|, |version| cannot be deleted either;
-                    // set |version| as the new retain version.
                     DCHECK_LE(version, final_retain_version);
                     final_retain_version = version;
                 }
@@ -179,6 +176,16 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
         metafiles_to_vacuum->emplace_back(join_path(meta_dir, tablet_metadata_filename(tablet_id, v)));
     }
     return Status::OK();
+}
+
+static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, const std::vector<std::string>& metafiles) {
+    auto cache = tablet_mgr->metacache();
+    DCHECK(cache != nullptr);
+    // Assuming the cache key for tablet metadata is the path to tablet metadata.
+    // TODO: Refactor the code to extract a separate function that constructs the tablet metadata cache key
+    for (const auto& path : metafiles) {
+        cache->erase(path);
+    }
 }
 
 static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_dir,
@@ -203,6 +210,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
             (*vacuumed_files) += (datafiles_to_vacuum.size() + metafiles_to_vacuum.size());
             RETURN_IF_ERROR(delete_files(fs.get(), datafiles_to_vacuum));
             RETURN_IF_ERROR(delete_files(fs.get(), metafiles_to_vacuum));
+            erase_tablet_metadata_from_metacache(tablet_mgr, metafiles_to_vacuum);
             datafiles_to_vacuum.clear();
             metafiles_to_vacuum.clear();
         }
@@ -210,6 +218,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     (*vacuumed_files) += (datafiles_to_vacuum.size() + metafiles_to_vacuum.size());
     RETURN_IF_ERROR(delete_files(fs.get(), datafiles_to_vacuum));
     RETURN_IF_ERROR(delete_files(fs.get(), metafiles_to_vacuum));
+    erase_tablet_metadata_from_metacache(tablet_mgr, metafiles_to_vacuum);
     return Status::OK();
 }
 
