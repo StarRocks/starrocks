@@ -56,6 +56,7 @@ import org.apache.commons.collections.CollectionUtils;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
@@ -435,7 +436,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return result;
     }
 
-    private List<TGlobalDict> dictToThrift(List<Pair<Integer, ColumnDict>> dicts) {
+    public List<TGlobalDict> dictToThrift(List<Pair<Integer, ColumnDict>> dicts) {
         List<TGlobalDict> result = Lists.newArrayList();
         for (Pair<Integer, ColumnDict> dictPair : dicts) {
             TGlobalDict globalDict = new TGlobalDict();
@@ -449,6 +450,25 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             globalDict.setVersion(dictPair.second.getCollectedVersionTime());
             globalDict.setStrings(strings);
             globalDict.setIds(integers);
+            result.add(globalDict);
+        }
+        return result;
+    }
+
+    // normalize dicts of the fragment, it is different from dictToThrift in three points:
+    // 1. SlotIds must be replaced by remapped SlotIds;
+    // 2. dict should be sorted according to its corresponding remapped SlotIds;
+    public List<TGlobalDict> normalizeDicts(List<Pair<Integer, ColumnDict>> dicts, FragmentNormalizer normalizer) {
+        List<TGlobalDict> result = Lists.newArrayList();
+        // replace slot id with the remapped slot id, sort dicts according to remapped slot ids.
+        List<Pair<Integer, ColumnDict>> sortedDicts =
+                dicts.stream().map(p -> Pair.create(normalizer.remapSlotId(p.first), p.second))
+                        .sorted(Comparator.comparingInt(p -> p.first)).collect(Collectors.toList());
+
+        for (Pair<Integer, ColumnDict> dictPair : sortedDicts) {
+            TGlobalDict globalDict = new TGlobalDict();
+            globalDict.setColumnId(dictPair.first);
+            globalDict.setVersion(dictPair.second.getCollectedVersionTime());
             result.add(globalDict);
         }
         return result;
