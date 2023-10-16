@@ -84,6 +84,10 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         return catalogName;
     }
 
+    public List<String> getPartitionNames() {
+        return partitionNames;
+    }
+
     @Override
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         long finishedSQLNum = 0;

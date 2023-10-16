@@ -1711,6 +1711,9 @@ public class Config extends ConfigBase {
     public static long statistic_auto_collect_small_table_size = 5L * 1024 * 1024 * 1024; // 5G
 
     @ConfField(mutable = true)
+    public static long statistic_auto_collect_small_table_rows = 10000000; // 10M
+
+    @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_interval = 0; // unit: second, default 0
 
     @ConfField(mutable = true)
