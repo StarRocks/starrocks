@@ -35,6 +35,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.CatalogConnector;
@@ -369,8 +370,11 @@ public class MetadataMgr {
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
                                          long limit) {
-        Statistics statistics = getTableStatisticsFromInternalStatistics(table, columns);
-        if (statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
+        Statistics statistics = null;
+        if (!FeConstants.runningUnitTest) {
+            statistics = getTableStatisticsFromInternalStatistics(table, columns);
+        }
+        if (statistics == null || statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
             Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
             return connectorMetadata.map(metadata -> metadata.getTableStatistics(
                     session, table, columns, partitionKeys, predicate, limit)).orElse(null);

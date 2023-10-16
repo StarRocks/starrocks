@@ -326,5 +326,10 @@ public class TestTables {
                 throw new RuntimeIOException("Failed to delete file: " + path);
             }
         }
+
+        @Override
+        public Map<String, String> properties() {
+            return Maps.newHashMap();
+        }
     }
 }
