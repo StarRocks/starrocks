@@ -7,11 +7,13 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
@@ -185,6 +187,12 @@ public class AstToSQLBuilder {
             }
             sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
             return sqlBuilder.toString();
+        }
+
+        @Override
+        public String visitSubquery(SubqueryRelation subquery, Void context) {
+            return "(" + visit(subquery.getQueryStatement()) + ")"
+                    + " " + (subquery.getAlias() == null ? "" : ParseUtil.backquote(subquery.getAlias().getTbl()));
         }
 
         @Override

@@ -1745,4 +1745,10 @@ public class ViewPlanTest extends PlanTestBase {
                 "      ,lateral json_each(cast (ge.v_json as json) -> '$.') ie(`key`, `value`)";
         testView(sql);
     }
+
+    @Test
+    public void testBackquoteAlias() throws Exception {
+        String sql = "select `select` from (select v1 `select` from t0) `abc.bcd`;";
+        testView(sql);
+    }
 }
