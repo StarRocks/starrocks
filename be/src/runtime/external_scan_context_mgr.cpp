@@ -169,9 +169,9 @@ void ExternalScanContextMgr::gc_expired_context() {
             WARN_IF_ERROR(
                     _exec_env->fragment_mgr()->cancel(expired_context->fragment_instance_id),
                     strings::Substitute("Fail to cancel fragment $0", print_id(expired_context->fragment_instance_id)));
-            WARN_IF_ERROR(
-                    _exec_env->result_queue_mgr()->cancel(expired_context->fragment_instance_id),
-                    strings::Substitute("Fail to cancel fragment $0 in result queue mgr", print_id(expired_context->fragment_instance_id)));
+            WARN_IF_ERROR(_exec_env->result_queue_mgr()->cancel(expired_context->fragment_instance_id),
+                          strings::Substitute("Fail to cancel fragment $0 in result queue mgr",
+                                              print_id(expired_context->fragment_instance_id)));
         }
     }
 #endif

@@ -43,7 +43,8 @@ public:
     ResultQueueMgr();
     ~ResultQueueMgr();
 
-    [[nodiscard]] Status fetch_result(const TUniqueId& fragment_instance_id, std::shared_ptr<arrow::RecordBatch>* result, bool* eos);
+    [[nodiscard]] Status fetch_result(const TUniqueId& fragment_instance_id,
+                                      std::shared_ptr<arrow::RecordBatch>* result, bool* eos);
 
     void create_queue(const TUniqueId& fragment_instance_id, BlockQueueSharedPtr* queue);
 

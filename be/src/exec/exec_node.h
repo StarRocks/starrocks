@@ -116,8 +116,9 @@ public:
 
     // Used by sub nodes to get big chunk.
     // specific_get_next is the subclass's implementation to get datas.
-    [[nodiscard]] static Status get_next_big_chunk(RuntimeState*, ChunkPtr*, bool*, ChunkPtr& pre_output_chunk,
-                                     const std::function<Status(RuntimeState*, ChunkPtr*, bool*)>& specific_get_next);
+    [[nodiscard]] static Status get_next_big_chunk(
+            RuntimeState*, ChunkPtr*, bool*, ChunkPtr& pre_output_chunk,
+            const std::function<Status(RuntimeState*, ChunkPtr*, bool*)>& specific_get_next);
 
     // Resets the stream of row batches to be retrieved by subsequent GetNext() calls.
     // Clears all internal state, returning this node to the state it was in after calling
@@ -154,8 +155,8 @@ public:
     // Creates exec node tree from list of nodes contained in plan via depth-first
     // traversal. All nodes are placed in pool.
     // Returns error if 'plan' is corrupted, otherwise success.
-    [[nodiscard]] static Status create_tree(RuntimeState* state, ObjectPool* pool, const TPlan& plan, const DescriptorTbl& descs,
-                              ExecNode** root);
+    [[nodiscard]] static Status create_tree(RuntimeState* state, ObjectPool* pool, const TPlan& plan,
+                                            const DescriptorTbl& descs, ExecNode** root);
 
     // Collect all nodes of given 'node_type' that are part of this subtree, and return in
     // 'nodes'.
@@ -167,10 +168,10 @@ public:
     // evaluate exprs over chunk to get a filter
     // if filter_ptr is not null, save filter to filter_ptr.
     // then running filter on chunk.
-    [[nodiscard]] static Status eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* chunk, FilterPtr* filter_ptr = nullptr,
-                                 bool apply_filter = true);
-    [[nodiscard]] static StatusOr<size_t> eval_conjuncts_into_filter(const std::vector<ExprContext*>& ctxs, Chunk* chunk,
-                                                       Filter* filter);
+    [[nodiscard]] static Status eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* chunk,
+                                               FilterPtr* filter_ptr = nullptr, bool apply_filter = true);
+    [[nodiscard]] static StatusOr<size_t> eval_conjuncts_into_filter(const std::vector<ExprContext*>& ctxs,
+                                                                     Chunk* chunk, Filter* filter);
 
     static void eval_filter_null_values(Chunk* chunk, const std::vector<SlotId>& filter_null_value_columns);
 
@@ -295,10 +296,11 @@ protected:
     bool is_in_subplan() const { return false; }
 
     [[nodiscard]] static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
-                                         const DescriptorTbl& descs, ExecNode** node);
+                                                       const DescriptorTbl& descs, ExecNode** node);
 
-    [[nodiscard]] static Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vector<TPlanNode>& tnodes,
-                                     const DescriptorTbl& descs, ExecNode* parent, int* node_idx, ExecNode** root);
+    [[nodiscard]] static Status create_tree_helper(RuntimeState* state, ObjectPool* pool,
+                                                   const std::vector<TPlanNode>& tnodes, const DescriptorTbl& descs,
+                                                   ExecNode* parent, int* node_idx, ExecNode** root);
 
     virtual bool is_scan_node() const { return false; }
 

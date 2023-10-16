@@ -80,8 +80,9 @@ public:
     // Creates a new data sink from thrift_sink. A pointer to the
     // new sink is written to *sink, and is owned by the caller.
     [[nodiscard]] static Status create_data_sink(RuntimeState* state, const TDataSink& thrift_sink,
-                                   const std::vector<TExpr>& output_exprs, const TPlanFragmentExecParams& params,
-                                   int32_t sender_id, const RowDescriptor& row_desc, std::unique_ptr<DataSink>* sink);
+                                                 const std::vector<TExpr>& output_exprs,
+                                                 const TPlanFragmentExecParams& params, int32_t sender_id,
+                                                 const RowDescriptor& row_desc, std::unique_ptr<DataSink>* sink);
 
     // Returns the runtime profile for the sink.
     virtual RuntimeProfile* profile() = 0;
