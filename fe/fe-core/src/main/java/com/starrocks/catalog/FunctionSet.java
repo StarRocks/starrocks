@@ -293,6 +293,7 @@ public class FunctionSet {
 
     // Array functions:
     public static final String ARRAY_AGG = "array_agg";
+    public static final String ARRAY_FLATTEN = "array_flatten";
     public static final String ARRAY_AGG_DISTINCT = "array_agg_distinct";
     public static final String ARRAY_CONCAT = "array_concat";
     public static final String ARRAY_DIFFERENCE = "array_difference";
@@ -624,6 +625,7 @@ public class FunctionSet {
             .add(ARRAY_DIFFERENCE)
             .add(ARRAYS_OVERLAP)
             .add(ARRAY_AGG)
+            .add(ARRAY_FLATTEN)
             .add(ARRAY_CONCAT)
             .add(ARRAY_SLICE)
             .build();
@@ -861,6 +863,10 @@ public class FunctionSet {
 
         addBuiltin(AggregateFunction.createBuiltin(ARRAY_AGG,
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.ANY_ARRAY, Type.ANY_STRUCT, true,
+                true, false, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(ARRAY_FLATTEN,
+                Lists.newArrayList(Type.ANY_ARRAY), Type.ANY_ARRAY, Type.ANY_ARRAY, true,
                 true, false, false));
 
         addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
