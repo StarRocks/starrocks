@@ -7,7 +7,6 @@ This topic lists all the SQL commands supported by StarRocks and categorizes the
   - [Cluster management](#cluster-management)
     - [FE, BE, CN, Broker, process](#fe-be-cn-broker-process)
     - [Resource group](#resource-group)
-    - [Storage volume](#storage-volume)
     - [Table, tablet, replica](#table-tablet-replica)
     - [File, index, variable](#file-index-variable)
     - [SQL Blacklist](#sql-blacklist)
@@ -76,15 +75,6 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [ALTER RESOURCE GROUP](./Administration/ALTER_RESOURCE_GROUP.md)
 - [DROP RESOURCE GROUP](./Administration/DROP_RESOURCE_GROUP.md)
 - [SHOW RESOURCE GROUP](./Administration/SHOW_RESOURCE_GROUP.md)
-
-### Storage volume
-
-- [ALTER STORAGE VOLUME](./Administration/ALTER_STORAGE_VOLUME.md)
-- [CREATE STORAGE VOLUME](./Administration/CREATE_STORAGE_VOLUME.md)
-- [DESC STORAGE VOLUME](./Administration/DESC_STORAGE_VOLUME.md)
-- [DROP STORAGE VOLUME](./Administration/DROP_STORAGE_VOLUME.md)
-- [SET DEFAULT STORAGE VOLUME](./Administration/SET_DEFAULT_STORAGE_VOLUME.md)
-- [SHOW STORAGE VOLUMES](./Administration/SHOW_STORAGE_VOLUMES.md)
 
 ### Table, tablet, replica
 
