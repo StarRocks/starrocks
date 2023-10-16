@@ -976,4 +976,128 @@ TEST_F(LakeVacuumTest, test_dont_delete_txn_log) {
     }
 }
 
+// NOLINTNEXTLINE
+TEST_F(LakeVacuumTest, test_commit_time) {
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5000,
+        "version": 1,
+        "commit_time": 1696998530,
+        "prev_garbage_version": 0
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5000,
+        "version": 2,
+        "commit_time": 1696998535,
+        "prev_garbage_version": 0
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5000,
+        "version": 3,
+        "commit_time": 1696998540,
+        "prev_garbage_version": 2
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5000,
+        "version": 4,
+        "commit_time": 1696998545,
+        "prev_garbage_version": 3
+        }
+        )DEL")));
+
+    int invoked = 0;
+    SyncPoint::GetInstance()->SetCallBack("collect_files_to_vacuum:get_file_modified_time",
+                                          [&](void* arg) { invoked++; });
+
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(5000);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(1696998542); // <----- greater than the commit time of version 3
+        request.set_min_active_txn_id(10);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code());
+        EXPECT_EQ(2, response.vacuumed_files());
+        EXPECT_EQ(0, response.vacuumed_file_size());
+
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(5000, 1)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(5000, 2)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(5000, 3)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(5000, 4)));
+        EXPECT_EQ(0, invoked);
+    }
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(5000);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(1696998545); // <----- equals to the commit time of version 4
+        request.set_min_active_txn_id(10);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code());
+        EXPECT_EQ(0, response.vacuumed_files());
+        EXPECT_EQ(0, response.vacuumed_file_size());
+
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(5000, 1)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(5000, 2)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(5000, 3)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(5000, 4)));
+        EXPECT_EQ(0, invoked);
+    }
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(5000);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(1696998550); // <----- greater than the commit time of version 4
+        request.set_min_active_txn_id(10);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code());
+        EXPECT_EQ(1, response.vacuumed_files());
+        EXPECT_EQ(0, response.vacuumed_file_size());
+
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(5000, 1)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(5000, 2)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(5000, 3)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(5000, 4)));
+        EXPECT_EQ(0, invoked);
+    }
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(5000);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(1696998550); // <----- greater than the commit time of version 4
+        request.set_min_active_txn_id(10);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code());
+        EXPECT_EQ(0, response.vacuumed_files());
+        EXPECT_EQ(0, response.vacuumed_file_size());
+
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(5000, 1)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(5000, 2)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(5000, 3)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(5000, 4)));
+        EXPECT_EQ(0, invoked);
+    }
+    SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_file_modified_time");
+    SyncPoint::GetInstance()->DisableProcessing();
+}
+
 } // namespace starrocks::lake
