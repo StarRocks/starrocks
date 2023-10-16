@@ -792,6 +792,8 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
                 return st;
             }
 
+            files_to_delete.emplace_back(vlog_path);
+
             tablet_mgr->metacache()->erase(CacheKey(vlog_path));
         }
     }
