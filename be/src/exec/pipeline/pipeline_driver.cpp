@@ -419,7 +419,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
     }
 }
 
-void PipelineDriver::check_short_circuit() {
+Status PipelineDriver::check_short_circuit() {
     int last_finished = -1;
     for (int i = _first_unfinished; i < _operators.size() - 1; i++) {
         if (_operators[i]->is_finished()) {
@@ -428,12 +428,12 @@ void PipelineDriver::check_short_circuit() {
     }
 
     if (last_finished == -1) {
-        return;
+        return Status::OK();
     }
 
-    _mark_operator_finishing(_operators[last_finished + 1], _runtime_state);
+    RETURN_IF_ERROR(_mark_operator_finishing(_operators[last_finished + 1], _runtime_state));
     for (auto i = _first_unfinished; i <= last_finished; ++i) {
-        _mark_operator_finished(_operators[i], _runtime_state);
+        RETURN_IF_ERROR(_mark_operator_finished(_operators[i], _runtime_state));
     }
     _first_unfinished = last_finished + 1;
 
@@ -441,6 +441,8 @@ void PipelineDriver::check_short_circuit() {
         finish_operators(_runtime_state);
         set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
     }
+
+    return Status::OK();
 }
 
 bool PipelineDriver::need_report_exec_state() {
@@ -513,19 +515,22 @@ void PipelineDriver::submit_operators() {
 
 void PipelineDriver::finish_operators(RuntimeState* runtime_state) {
     for (auto& op : _operators) {
-        _mark_operator_finished(op, runtime_state);
+        WARN_IF_ERROR(_mark_operator_finished(op, runtime_state),
+                      fmt::format("finish pipeline driver error [driver={}]", to_readable_string()));
     }
 }
 
 void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
     for (auto& op : _operators) {
-        _mark_operator_cancelled(op, runtime_state);
+        WARN_IF_ERROR(_mark_operator_cancelled(op, runtime_state),
+                      fmt::format("cancel pipeline driver error [driver={}]", to_readable_string()));
     }
 }
 
 void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
     for (auto& op : _operators) {
-        _mark_operator_closed(op, runtime_state);
+        WARN_IF_ERROR(_mark_operator_closed(op, runtime_state),
+                      fmt::format("close pipeline driver error [driver={}]", to_readable_string()));
     }
 }
 
