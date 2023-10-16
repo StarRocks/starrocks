@@ -1414,12 +1414,9 @@ public class PartitionBasedMvRefreshProcessorTest {
 
         mockedJDBCMetadata.addPartitions();
         refreshMVRange(materializedView.getName(), "20230801", "20230805", false);
-        Collection<Partition> incrementalPartitions = materializedView.getPartitions();
-        Assert.assertEquals(4, incrementalPartitions.size());
-        Assert.assertNotNull(materializedView.getPartition("P20230802"));
-        Assert.assertNotNull(materializedView.getPartition("P20230803"));
-        Assert.assertNotNull(materializedView.getPartition("P20230804"));
-        Assert.assertNotNull(materializedView.getPartition("P20230805"));
+        List<String> partitionNames = materializedView.getPartitions().stream().map(Partition::getName)
+                .collect(Collectors.toList());
+        Assert.assertEquals(ImmutableList.of("p20230802", "p20230803", "p20230804"), partitionNames);
     }
 
     @Test
