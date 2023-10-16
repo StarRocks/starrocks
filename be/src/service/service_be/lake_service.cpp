@@ -113,9 +113,7 @@ static bvar::PassiveStatus<int> g_vacuum_active_tasks("lake_vacuum_active_tasks"
 
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
-LakeServiceImpl::LakeServiceImpl(ExecEnv* env) : _env(env) {
-
-}
+LakeServiceImpl::LakeServiceImpl(ExecEnv* env) : _env(env) {}
 
 LakeServiceImpl::~LakeServiceImpl() = default;
 

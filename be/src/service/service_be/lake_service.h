@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+
 #include "gen_cpp/lake_service.pb.h"
 
 namespace starrocks {
