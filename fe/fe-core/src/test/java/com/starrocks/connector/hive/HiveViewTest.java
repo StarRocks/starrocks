@@ -14,16 +14,25 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.HiveView;
+import com.starrocks.catalog.Table;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
+import mockit.Expectations;
+import mockit.Mocked;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-public class HiveViewPlanTest extends PlanTestBase {
+import java.util.Optional;
+
+public class HiveViewTest extends PlanTestBase {
     @Rule
     public ExpectedException expectedException = ExpectedException.none();
 
@@ -85,5 +94,51 @@ public class HiveViewPlanTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         assertContains(sqlPlan, "0:HdfsScanNode\n" +
                 "     TABLE: customer");
+    }
+
+    @Test
+    public void testRefreshHiveView(@Mocked CachingHiveMetastore hiveMetastore) throws Exception {
+        CacheUpdateProcessor cacheUpdateProcessor = new CacheUpdateProcessor("hive0", hiveMetastore,
+                null, null, true, false);
+        HiveMetadata hiveMetadata = new HiveMetadata("hive0", null, null, null, null,
+                Optional.of(cacheUpdateProcessor), null, null);
+
+        Table hiveView = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "customer_view");
+        new Expectations() {
+            {
+                hiveMetastore.refreshView(anyString, anyString);
+                result = true;
+            }
+        };
+        try {
+            hiveMetadata.refreshTable("tpch", hiveView, null, false);
+            Assert.assertTrue(hiveView.isHiveView());
+            HiveView view = (HiveView) hiveView;
+            Assert.assertEquals("hive0", view.getCatalogName());
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        HiveMetastore hiveMetastore1 = new HiveMetastore(null, "hive0", MetastoreType.HMS);
+        Assert.assertTrue(hiveMetastore1.refreshView("tpch", "customer_view"));
+
+        Table table  = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "customer");
+
+        new Expectations() {
+            {
+                hiveMetastore.getPartition(anyString, anyString, Lists.newArrayList());
+                result = new Partition(Maps.newHashMap(), RemoteFileInputFormat.PARQUET,
+                        new TextFileFormatDesc("", "", "", ""),
+                        "hdfs://emr_host/test_path", false);
+
+                hiveMetastore.refreshTable(anyString, anyString, anyBoolean);
+                result = true;
+            }
+        };
+
+        try {
+            hiveMetadata.refreshTable("tpch", table, null, true);
+        } catch (Exception e) {
+            Assert.fail();
+        }
     }
 }
