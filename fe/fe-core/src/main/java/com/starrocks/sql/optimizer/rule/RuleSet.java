@@ -205,6 +205,7 @@ public class RuleSet {
     static {
         REWRITE_RULES.put(RuleSetType.MERGE_LIMIT, ImmutableList.of(
                 new PushDownProjectLimitRule(),
+                new EliminateLimitZeroRule(), // should before MergeLimitWithSortRule
                 new MergeLimitWithSortRule(),
                 new SplitLimitRule(),
                 new PushDownLimitJoinRule(),
