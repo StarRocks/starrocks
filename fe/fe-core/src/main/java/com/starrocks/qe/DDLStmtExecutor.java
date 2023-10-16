@@ -25,6 +25,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.datacache.DatacacheMgr;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
@@ -76,8 +77,10 @@ import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
+import com.starrocks.sql.ast.ClearDatacacheRulesStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateDatacacheRuleStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -95,6 +98,7 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.DropDatacacheRuleStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
@@ -1083,6 +1087,7 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) context.getGlobalStateMgr().getWarehouseMgr();
                 warehouseMgr.createWarehouse(stmt);
+
             });
             return null;
         }
@@ -1092,9 +1097,11 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) context.getGlobalStateMgr().getWarehouseMgr();
                 warehouseMgr.suspendWarehouse(stmt);
+
             });
             return null;
         }
+        
 
         @Override
         public ShowResultSet visitResumeWarehouseStatement(ResumeWarehouseStmt stmt, ConnectContext context) {
@@ -1114,6 +1121,24 @@ public class DDLStmtExecutor {
             return null;
         }
 
+        
+        // ==========================================Data Cache Management==============================================
+        @Override
+        public ShowResultSet visitCreateDatacacheRuleStatement(CreateDatacacheRuleStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                DatacacheMgr.getInstance().createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(),
+                        stmt.getProperties());
+            });
+            return null;
+        }
+
+        public ShowResultSet visitDropDatacacheRuleStatement(DropDatacacheRuleStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                DatacacheMgr.getInstance().dropCacheRule(stmt.getCacheRuleId());
+            });
+            return null;
+        }
+
         //=========================================== Failover Group Statement ========================================
         @Override
         public ShowResultSet visitCreatePrimaryFailoverGroupStatement(CreatePrimaryFailoverGroupStmt stmt,
@@ -1129,6 +1154,12 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() ->
                     context.getGlobalStateMgr().getFailoverGroupMgr().createFailoverGroup(stmt)
             );
+            return null;
+        }
+        public ShowResultSet visitClearDatacacheRulesStatement(ClearDatacacheRulesStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                DatacacheMgr.getInstance().clearRules();
+            });
             return null;
         }
     }

@@ -17,7 +17,9 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.epack.sql.analyzer.CreateTableAnalyzerEPack;
 import com.starrocks.epack.sql.analyzer.MaterializedViewAnalyzerEPack;
+import com.starrocks.epack.sql.analyzer.SecurityIntegrationStatementAnalyzer;
 import com.starrocks.epack.sql.analyzer.ViewAnalyzerEPack;
+import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
@@ -53,8 +55,10 @@ import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
+import com.starrocks.sql.ast.ClearDatacacheRulesStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateDatacacheRuleStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -73,6 +77,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.DropDatacacheRuleStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
@@ -114,6 +119,7 @@ import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowDatacacheRulesStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -696,6 +702,39 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
         PrivilegeStmtAnalyzer.analyze(stmt, session);
+        return null;
+    }
+
+    @Override
+    public Void visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement,
+                                                        ConnectContext context) {
+        SecurityIntegrationStatementAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    // -------------------------------------- Data Cache Management Statement -----------------------------------------
+
+    @Override
+    public Void visitCreateDatacacheRuleStatement(CreateDatacacheRuleStmt stmt, ConnectContext context) {
+        DatacacheStmtAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitShowDatacacheRulesStatement(ShowDatacacheRulesStmt stmt, ConnectContext context) {
+        DatacacheStmtAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDropDatacacheRuleStatement(DropDatacacheRuleStmt statement, ConnectContext context) {
+        DatacacheStmtAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitClearDatacacheRulesStatement(ClearDatacacheRulesStmt statement, ConnectContext context) {
+        DatacacheStmtAnalyzer.analyze(statement, context);
         return null;
     }
 
