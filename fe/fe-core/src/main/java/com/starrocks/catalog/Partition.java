@@ -127,7 +127,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     @SerializedName(value = "nextVersion")
     private long nextVersion;
 
-    private volatile long nextVacuumTime = 0;
+    private volatile long lastVacuumTime = 0;
 
     private volatile long minRetainVersion = 0;
 
@@ -617,12 +617,12 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return hasChanged;
     }
 
-    public long getNextVacuumTime() {
-        return nextVacuumTime;
+    public long getLastVacuumTime() {
+        return lastVacuumTime;
     }
 
-    public void setNextVacuumTime(long nextVacuumTime) {
-        this.nextVacuumTime = nextVacuumTime;
+    public void setLastVacuumTime(long lastVacuumTime) {
+        this.lastVacuumTime = lastVacuumTime;
     }
 
     public long getMinRetainVersion() {

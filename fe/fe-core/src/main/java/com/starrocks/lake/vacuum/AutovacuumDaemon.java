@@ -97,7 +97,8 @@ public class AutovacuumDaemon extends FrontendDaemon {
             partitions = table.getPartitions().stream()
                     .filter(p -> p.getVisibleVersionTime() > staleTime)
                     .filter(p -> p.getVisibleVersion() > 1) // filter out empty partition
-                    .filter(p -> current >= p.getNextVacuumTime())
+                    .filter(p -> current >=
+                            p.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000)
                     .collect(Collectors.toList());
         } finally {
             db.readUnlock();
@@ -196,7 +197,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             }
         }
 
-        partition.setNextVacuumTime(startTime + Config.lake_autovacuum_partition_naptime_seconds * 1000);
+        partition.setLastVacuumTime(startTime);
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
                         "visibleVersion={} minRetainVersion={} minActiveTxnId={} cost={}ms",
                 db.getFullName(), table.getName(), partition.getName(), hasError, vacuumedFiles, vacuumedFileSize,

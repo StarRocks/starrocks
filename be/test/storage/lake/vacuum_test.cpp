@@ -34,13 +34,23 @@
 
 namespace starrocks::lake {
 
-class LakeVacuumTest : public TestBase {
+struct VacuumTestArg {
+    int64_t min_batch_size;
+};
+
+class LakeVacuumTest : public TestBase, testing::WithParamInterface<VacuumTestArg> {
 public:
     LakeVacuumTest() : TestBase(kTestDir) {}
 
-    void SetUp() override { clear_and_init_test_dir(); }
+    void SetUp() override {
+        clear_and_init_test_dir();
+        config::lake_vacuum_min_batch_delete_size = GetParam().min_batch_size;
+    }
 
-    void TearDown() override { remove_test_dir_ignore_error(); }
+    void TearDown() override {
+        remove_test_dir_ignore_error();
+        _tablet_mgr->prune_metacache();
+    }
 
 protected:
     constexpr static const char* const kTestDir = "./lake_vacuum_test";
@@ -78,7 +88,7 @@ protected:
 };
 
 // NOLINTNEXTLINE
-TEST_F(LakeVacuumTest, test_vacuum_1) {
+TEST_P(LakeVacuumTest, test_vacuum_1) {
     create_data_file("00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60d4.delvec");
     create_data_file("00000000000159e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec");
     create_data_file("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
@@ -141,7 +151,7 @@ TEST_F(LakeVacuumTest, test_vacuum_1) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(LakeVacuumTest, test_vacuum_2) {
+TEST_P(LakeVacuumTest, test_vacuum_2) {
     create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
     create_data_file("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
 
@@ -247,7 +257,7 @@ TEST_F(LakeVacuumTest, test_vacuum_2) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(LakeVacuumTest, test_vacuum_3) {
+TEST_P(LakeVacuumTest, test_vacuum_3) {
     create_data_file("00000000000059e3_3ea06130-ccac-4110-9de8-4813512c60d4.delvec");
     create_data_file("00000000000059e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec");
     create_data_file("00000000000059e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
@@ -589,7 +599,7 @@ TEST_F(LakeVacuumTest, test_vacuum_3) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(LakeVacuumTest, test_delete_tablets_01) {
+TEST_P(LakeVacuumTest, test_delete_tablets_01) {
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
         "id": 700,
@@ -643,7 +653,7 @@ TEST_F(LakeVacuumTest, test_delete_tablets_01) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(LakeVacuumTest, test_delete_tablets_02) {
+TEST_P(LakeVacuumTest, test_delete_tablets_02) {
     create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
     create_data_file("00000000000359e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
     create_data_file("00000000000459e4_3d9c9edb-a69d-4a06-9093-a9f557e4c3b0.dat");
@@ -759,7 +769,7 @@ TEST_F(LakeVacuumTest, test_delete_tablets_02) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(LakeVacuumTest, test_delete_tablets_03) {
+TEST_P(LakeVacuumTest, test_delete_tablets_03) {
     // Referenced in the txn log of tablet id 900 and txn id 2000
     create_data_file("00000000001259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
     create_data_file("00000000001259e4_28dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.del");
@@ -860,7 +870,7 @@ TEST_F(LakeVacuumTest, test_delete_tablets_03) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(LakeVacuumTest, test_delete_file_failed) {
+TEST_P(LakeVacuumTest, test_delete_file_failed) {
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
         "id": 500,
@@ -916,7 +926,7 @@ TEST_F(LakeVacuumTest, test_delete_file_failed) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(LakeVacuumTest, test_dont_delete_txn_log) {
+TEST_P(LakeVacuumTest, test_dont_delete_txn_log) {
     ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
         {
             "tablet_id": 1900,
@@ -985,7 +995,7 @@ TEST_F(LakeVacuumTest, test_dont_delete_txn_log) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(LakeVacuumTest, test_commit_time) {
+TEST_P(LakeVacuumTest, test_commit_time) {
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
         "id": 5000,
@@ -1107,5 +1117,8 @@ TEST_F(LakeVacuumTest, test_commit_time) {
     SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_file_modified_time");
     SyncPoint::GetInstance()->DisableProcessing();
 }
+
+INSTANTIATE_TEST_SUITE_P(LakeVacuumTest, LakeVacuumTest,
+                         ::testing::Values(VacuumTestArg{1}, VacuumTestArg{3}, VacuumTestArg{100}));
 
 } // namespace starrocks::lake

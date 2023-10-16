@@ -40,4 +40,6 @@ void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& reques
 
 void delete_files_async(std::vector<std::string> files_to_delete);
 
+std::future<Status> delete_files_callable(std::vector<std::string> files_to_delete);
+
 } // namespace starrocks::lake

@@ -393,11 +393,7 @@ void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
         return;
     }
 
-    auto thread_pool = vacuum_thread_pool(_env);
-    if (UNLIKELY(thread_pool == nullptr)) {
-        cntl->SetFailed("no vacuum thread pool");
-        return;
-    }
+    auto thread_pool = publish_version_thread_pool(_env);
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
     for (auto tablet_id : request->tablet_ids()) {
