@@ -2,6 +2,17 @@
 
 Updates rows in a Primary Key table.
 
+<<<<<<< HEAD
+=======
+StarRocks supports the UPDATE statement since v2.3, which only supports single-table UPDATE and does not support common table expressions (CTEs). Starting from version 3.0, StarRocks enriches the syntax to support multi-table joins and CTEs. If you need to join the table to be updated with other tables in the database, you can reference these other tables in the FROM clause or CTE. Since version 3.1, the UPDATE statement supports the partial updates in column mode, which is suitable for scenarios involving a small number of columns but a large number of rows, resulting in faster update speeds.
+
+This command requires the UPDATE privilege on the table you want to update.
+
+## Usage notes
+
+When executing the UPDATE statement involving multiple tables, StarRocks converts the table expression in the FROM clause of the UPDATE statement into an equivalent JOIN query statement. Therefore, make sure that the table expression that you specify in the FROM clause of the UPDATE statement supports this conversion. For example, the UPDATE statement is 'UPDATE t0 SET v1=t1.v1 FROM t1 WHERE t0.pk = t1.pk;'. The table expression in the FROM clause can be converted to 't0 JOIN t1 ON t0.pk=t1.pk;'. StarRocks matches the data rows to be updated based on the result set of the JOIN query. It is possible that multiple rows in the result set match a certain row in the table to be updated. In this scenario, that row is updated based on the value of a random row among these multiple rows.
+
+>>>>>>> d9877f2d44 ([Doc] add precise version info for update syntax (#32854))
 ## Syntax
 
 ```SQL
