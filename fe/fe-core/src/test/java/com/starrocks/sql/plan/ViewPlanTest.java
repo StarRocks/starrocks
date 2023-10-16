@@ -1758,4 +1758,26 @@ public class ViewPlanTest extends PlanTestBase {
                 "      ,lateral json_each(cast (ge.v_json as json) -> '$.') ie(`key`, `value`)";
         testView(sql);
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testArrayMapView() throws Exception {
+        String sql = "SELECT [1,2,3]";
+        testView(sql);
+        sql = "SELECT ARRAY<INT>[1,2,3]";
+        testView(sql);
+        sql = "SELECT Map<INT, INT>{1:10,2:20,3:30}";
+        testView(sql);
+        sql = "SELECT Map{1:10,2:20,3:30}";
+        testView(sql);
+    }
+
+    @Test
+    public void testBackquoteAlias() throws Exception {
+        String sql = "select `select` from (select v1 from t0) `abc.bcd`(`select`);";
+        testView(sql);
+    }
+}
+>>>>>>> 199dfaba89 ([BugFix] fix not back quote subquery alias (#32827))
