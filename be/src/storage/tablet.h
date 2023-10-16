@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <boost/algorithm/string.hpp>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -274,6 +275,12 @@ public:
     void reset_compaction_status();
 
     bool enable_compaction();
+
+    std::string get_storage_type() const { return _tablet_meta->get_storage_type(); }
+
+    const bool is_column_with_row_store() const {
+        return boost::algorithm::to_lower_copy(get_storage_type()) == "column_with_row";
+    }
 
     [[nodiscard]] bool get_enable_persistent_index() { return _tablet_meta->get_enable_persistent_index(); }
 

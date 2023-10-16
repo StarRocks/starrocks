@@ -27,6 +27,7 @@
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
 #include "rocksdb/write_batch.h"
+#include "row_store_encoder.h"
 #include "rowset_merger.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -4364,6 +4365,12 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             }
         }
     }
+    std::unique_ptr<BinaryColumn> full_row_column;
+    // if we are getting multiple(>2) columns, and full row column is available,
+    // get values from full row column as an optimization
+    if (_tablet.is_column_with_row_store() && column_ids.size() > 2) {
+        full_row_column = std::make_unique<BinaryColumn>();
+    }
     std::shared_ptr<FileSystem> fs;
     for (const auto& [rssid, rowids] : rowids_by_rssid) {
         auto iter = rssid_to_rowsets.upper_bound(rssid);
@@ -4398,18 +4405,34 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
+        iter_opts.use_page_cache = true;
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file((*segment)->file_name()));
-        for (auto i = 0; i < column_ids.size(); ++i) {
-            // try to build iterator from delta column file first
+        iter_opts.read_file = read_file.get();
+
+        if (full_row_column) {
+            full_row_column->reset_column();
+            full_row_column->reserve(rowids.size());
             ASSIGN_OR_RETURN(auto col_iter,
-                             new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i], read_tablet_schema));
-            if (col_iter == nullptr) {
-                // not found in delta column file, build iterator from main segment
-                ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator(column_ids[i], nullptr, read_tablet_schema));
-                iter_opts.read_file = read_file.get();
-            }
+                             (*segment)->new_column_iterator(_tablet.tablet_schema()->num_columns() - 1));
             RETURN_IF_ERROR(col_iter->init(iter_opts));
-            RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
+            RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), full_row_column.get()));
+            auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);
+            row_encoder->decode_columns_from_full_row_column(*(_tablet.tablet_schema()->schema()), *full_row_column,
+                                                             column_ids, columns);
+        } else {
+            for (auto i = 0; i < column_ids.size(); ++i) {
+                // try to build iterator from delta column file first
+                ASSIGN_OR_RETURN(auto col_iter,
+                                 new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i], read_tablet_schema));
+                if (col_iter == nullptr) {
+                    // not found in delta column file, build iterator from main segment
+                    ASSIGN_OR_RETURN(col_iter,
+                                     (*segment)->new_column_iterator(column_ids[i], nullptr, read_tablet_schema));
+                    iter_opts.read_file = read_file.get();
+                }
+                RETURN_IF_ERROR(col_iter->init(iter_opts));
+                RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
+            }
         }
     }
     if (state != nullptr && with_default) {
