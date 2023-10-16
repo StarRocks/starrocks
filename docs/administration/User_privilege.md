@@ -42,7 +42,7 @@ You can view the privileges granted to a user or a role using [SHOW GRANTS](../s
 
 ### View user property
 
-You can view the property of a user using [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SET_PROPERTY.md).
+You can view the property of a user using [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SHOW_PROPERTY.md).
 
 The following example shows the property of the user `jack`:
 
