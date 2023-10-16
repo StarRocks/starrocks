@@ -76,7 +76,8 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
     private static final int PUSH_DOWN_HIGH_CARDINALITY_AGG = 3;
 
     private static final List<String> WHITE_FNS = ImmutableList.of(FunctionSet.MAX, FunctionSet.MIN,
-            FunctionSet.SUM, FunctionSet.HLL_UNION, FunctionSet.BITMAP_UNION, FunctionSet.PERCENTILE_UNION);
+            FunctionSet.SUM, FunctionSet.HLL_UNION, FunctionSet.BITMAP_UNION, FunctionSet.PERCENTILE_UNION,
+            FunctionSet.ARRAY_AGG);
 
     private final TaskContext taskContext;
     private final OptimizerContext optimizerContext;
