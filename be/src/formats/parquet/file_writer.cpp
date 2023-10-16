@@ -103,40 +103,53 @@ arrow::Status ParquetOutputStream::Close() {
     return arrow::Status::OK();
 }
 
-void ParquetBuildHelper::build_compression_type(::parquet::WriterProperties::Builder& builder,
-                                                const TCompressionType::type& compression_type) {
+StatusOr<::parquet::Compression::type> ParquetBuildHelper::convert_compression_type(
+        const TCompressionType::type& compression_type) {
+    auto codec = ::parquet::Compression::UNCOMPRESSED;
     switch (compression_type) {
+    case TCompressionType::NO_COMPRESSION: {
+        codec = ::parquet::Compression::UNCOMPRESSED;
+        break;
+    }
     case TCompressionType::SNAPPY: {
-        builder.compression(::parquet::Compression::SNAPPY);
+        codec = ::parquet::Compression::SNAPPY;
         break;
     }
     case TCompressionType::GZIP: {
-        builder.compression(::parquet::Compression::GZIP);
+        codec = ::parquet::Compression::GZIP;
         break;
     }
     case TCompressionType::BROTLI: {
-        builder.compression(::parquet::Compression::BROTLI);
+        codec = ::parquet::Compression::BROTLI;
         break;
     }
     case TCompressionType::ZSTD: {
-        builder.compression(::parquet::Compression::ZSTD);
+        codec = ::parquet::Compression::ZSTD;
         break;
     }
     case TCompressionType::LZ4: {
-        builder.compression(::parquet::Compression::LZ4_HADOOP);
+        codec = ::parquet::Compression::LZ4_HADOOP;
         break;
     }
     case TCompressionType::LZO: {
-        builder.compression(::parquet::Compression::LZO);
+        codec = ::parquet::Compression::LZO;
         break;
     }
     case TCompressionType::BZIP2: {
-        builder.compression(::parquet::Compression::BZ2);
+        codec = ::parquet::Compression::BZ2;
         break;
     }
-    default:
-        builder.compression(::parquet::Compression::UNCOMPRESSED);
+    default: {
+        return Status::NotSupported(fmt::format("not supported compression type {}", to_string(compression_type)));
     }
+    }
+
+    // Check if arrow supports indicated compression type
+    if (!::parquet::IsCodecSupported(codec)) {
+        return Status::NotSupported(fmt::format("not supported compression codec {}", to_string(compression_type)));
+    }
+
+    return codec;
 }
 
 arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper::make_schema(
@@ -175,11 +188,14 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper:
             ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, std::move(fields)));
 }
 
-std::shared_ptr<::parquet::WriterProperties> ParquetBuildHelper::make_properties(const ParquetBuilderOptions& options) {
+StatusOr<std::shared_ptr<::parquet::WriterProperties>> ParquetBuildHelper::make_properties(
+        const ParquetBuilderOptions& options) {
     ::parquet::WriterProperties::Builder builder;
     builder.version(::parquet::ParquetVersion::PARQUET_2_0);
     options.use_dict ? builder.enable_dictionary() : builder.disable_dictionary();
-    starrocks::parquet::ParquetBuildHelper::build_compression_type(builder, options.compression_type);
+    ASSIGN_OR_RETURN(auto compression_codec,
+                     parquet::ParquetBuildHelper::convert_compression_type(options.compression_type));
+    builder.compression(compression_codec);
     return builder.build();
 }
 

@@ -99,7 +99,7 @@ protected:
     Status _write_chunk(const ChunkPtr& chunk, const std::vector<TypeDescriptor>& type_descs,
                         const std::shared_ptr<::parquet::schema::GroupNode>& schema) {
         ASSIGN_OR_ABORT(auto file, _fs.new_writable_file(_file_path));
-        auto properties = ParquetBuildHelper::make_properties(ParquetBuilderOptions());
+        ASSIGN_OR_RETURN(auto properties, parquet::ParquetBuildHelper::make_properties(ParquetBuilderOptions()));
         auto file_writer = std::make_shared<SyncFileWriter>(std::move(file), properties, schema, type_descs);
         file_writer->init();
         auto st = file_writer->write(chunk.get());
