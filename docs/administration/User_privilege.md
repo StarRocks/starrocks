@@ -1,6 +1,6 @@
 # User Privilege
 
-Based on MySQL's permission management mechanism, StarRocks permission management system supports fine-grained permission control at table level, role-based access control, and whitelisting.
+Based on MySQL's permission management mechanism, StarRocks permission management system supports fine-grained permission control at the table level, role-based access control, and whitelisting.
 
 ## Terminology
 
@@ -16,7 +16,7 @@ Users can set privileges on nodes, databases, or tables. Different privileges re
 
 * Role
 
-StarRocks can create roles with customized names. A role is a collection of permissions. A newly created user can be given a role with corresponding permissions. Subsequent changes to the permissions apply to all users granted with the role.
+StarRocks can create roles with customized names. A role is a collection of permissions. A newly created user can be given a role with corresponding permissions. Subsequent changes to the permissions apply to all users granted the role.
 
 * User Property
 
@@ -39,30 +39,26 @@ User properties are attached directly to a user, not to a user identity That is,
 
 StarRocks currently supports the following types of  privileges.
 
-* Node\_priv  
-    Privileges for Node changes. This allows you to add, delete, and disable FE, BE, and BROKER nodes. Currently, this privilege can only be granted to Root users.
+* Node\_priv
+  Privileges for Node changes. This allows you to add, delete, and disable FE, BE, and BROKER nodes. Currently, this privilege can only be granted to Root users.
 * Grant\_priv  
-    Privileges for privilege changes. This allows you to grant, revoke, and modify users/roles.
+  Privileges for privilege changes. This allows you to grant, revoke, and modify users/roles.
 * Select\_priv  
-    Read-only access to databases and tables.
+  Read-only access to databases and tables.
 * Load\_priv  
-    Write access to databases and tables. This allows you to  Load, Insert, and Delete databases or tables.
+  Write access to databases and tables. This allows you to  Load, Insert, and Delete databases or tables.
 * Alter\_priv  
-     privileges to change databases and tables. This allows you to  rename, add/remove/change columns, add/remove partitions.
+  Privileges to change databases and tables. This allows you to  rename, add/remove/change columns, add/remove partitions.
 * Create\_priv  
-    Privileges to create databases, tables, and views.
+  Privileges to create databases, tables, and views.
 * Drop\_priv  
-    Privileges to delete databases, tables, and views.
+  Privileges to delete databases, tables, and views.
 * Usage\_priv  
-Privileges to use resources.
+  Privileges to use resources.
 
 ## Privilege Hierarchy
 
-<<<<<<< HEAD
-StarRocks classifies database and table privileges into three levels.
-=======
-You can view the property of a user using [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SHOW_PROPERTY.md).
->>>>>>> a9d59e6fc ([Doc] move show property and add label to 3.1/2.5 release notes (#32788))
+StarRocks classifies database and table privileges into three levels:
 
 * GLOBAL LEVEL: Global privileges. This privilege is granted on `.` by the GRANT statement. The privilege granted applies to any table in any database.
 * DATABASE LEVEL: Database level privileges. This  privilege is granted on `db.*` by the `GRANT` statement. The privilege granted applies to any table in a specific  database.
@@ -79,7 +75,7 @@ The `ADMIN\PRIV` and `GRANT_PRIV` privileges are special because they both have 
 
 * CREATE USER
 
-* Users with ADMIN privilege or GRANT privilege at any level can create new users.
+* Users with the ADMIN privilege or GRANT privilege at any level can create new users.
 
 * DROP USER
 
@@ -91,13 +87,13 @@ The `ADMIN\PRIV` and `GRANT_PRIV` privileges are special because they both have 
 
 * GRANT/REVOKE
 
-* Users with ADMIN privilege or GLOBAL level GRANT privilege can grant or revoke privileges to any user.
+* Users with the ADMIN privilege or GLOBAL level GRANT privilege can grant or revoke privileges to any user.
 * Users with DATABASE level GRANT privilege can grant or revoke privileges to any user for any table in a specific database.
 * Users with TABLE level GRANT privilege can grant or revoke privileges to any user for a specific table in a specific database.
 
 * SET PASSWORD
 
-* Users with ADMIN privilege or GLOBAL level GRANT privilege can set the user password.
+* Users with the ADMIN privilege or GLOBAL level GRANT privilege can set the user password.
 * Regular users can set passwords for their User Identity. Use the `SELECT CURRENT_USER();` command to view User Identity.
 * Users with TABLE or DATABASE level GRANT privileges cannot set passwords for existing users, but can set passwords for new users.
 
@@ -137,7 +133,7 @@ Suppose the following user is created.
     After logging in, you can reset the password with the `SET PASSWORD` command.
 * Only root users can reset their password, other users cannot reset root user’s  password.
 * The ADMIN\_PRIV privilege can only be granted or revoked at the GLOBAL level.
-* `GRANT_PRIV` at GLOBAL level is similar to`ADMIN_PRIV`.`GRANT_PRIV` at GLOBAL level has the privilege to grant arbitrary privileges, so please use it carefully.
+* `GRANT_PRIV` at the GLOBAL level is similar to `ADMIN_PRIV`. `GRANT_PRIV` at the GLOBAL level has the privilege to grant arbitrary privileges, so please use it carefully.
 
 * current\_user() and user()
 
@@ -153,7 +149,7 @@ Here are some scenarios for using the StarRocks permission management system.
 
 ### Scenario 1 Permissions Assignment
 
-StarRocks users are divided into Administrator (Admin), Development Engineer (RD) and User (Client). The administrators have all the privileges and are mainly responsible for cluster construction, node management, and so on. The development engineers are responsible for business modeling, including building databases and tables, importing and modifying data,and so on. Users access databases and tables to get data.
+StarRocks users are divided into Administrator (Admin), Development Engineer (RD), and User (Client). The administrators have all the privileges and are mainly responsible for cluster construction, and node management. The development engineers are responsible for business modeling, including building databases and tables, importing and modifying data, and so on. Users access databases and tables to get data.
 
 In this scenario, Admins are granted ADMIN privileges or GRANT privileges. RDs are granted privileges to CREATE, DROP, ALTER, LOAD, and SELECT any or specific database tables. Clients are granted privileges to SELECT any or specific database tables. When there are multiple users, it is also possible to simplify the authorization by creating different roles.
 
