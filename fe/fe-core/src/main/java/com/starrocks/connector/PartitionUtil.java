@@ -61,6 +61,7 @@ import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
+import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
@@ -616,10 +617,16 @@ public class PartitionUtil {
         return sb.substring(0, sb.length() - 1);
     }
 
-    public static List<String> getIcebergPartitionValues(PartitionSpec spec, StructLike partitionData) {
+    public static List<String> getIcebergPartitionValues(PartitionSpec spec, StructLike partition) {
+        PartitionData partitionData = (PartitionData) partition;
         List<String> partitionValues = new ArrayList<>();
-        for (int i = 0; i < partitionData.size(); ++i) {
+        boolean existPartitionEvolution = spec.fields().stream().anyMatch(field -> field.transform().isVoid());
+        for (int i = 0; i < spec.fields().size(); i++) {
             PartitionField partitionField = spec.fields().get(i);
+            if ((!partitionField.transform().isIdentity() && existPartitionEvolution) || partitionData.get(i) == null) {
+                continue;
+            }
+
             Class<?> clazz = spec.javaClasses()[i];
             String value = partitionField.transform().toHumanString(getPartitionValue(partitionData, i, clazz));
             partitionValues.add(value);

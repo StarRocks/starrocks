@@ -38,6 +38,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.types.Types;
@@ -143,6 +144,21 @@ public class IcebergTable extends Table {
         }
 
         return partitionColumns;
+    }
+
+    public List<Column> getPartitionColumnsIncludeTransformed() {
+        List<Column> allPartitionColumns = new ArrayList<>();
+        PartitionSpec currentSpec = getNativeTable().spec();
+        boolean existPartitionEvolution = currentSpec.fields().stream().anyMatch(field -> field.transform().isVoid());
+        for (PartitionField field : getNativeTable().spec().fields()) {
+            if (!field.transform().isIdentity() && existPartitionEvolution) {
+                continue;
+            }
+            String baseColumnName = nativeTable.schema().findColumnName(field.sourceId());
+            Column partitionCol = getColumn(baseColumnName);
+            allPartitionColumns.add(partitionCol);
+        }
+        return allPartitionColumns;
     }
 
     public List<Integer> partitionColumnIndexes() {

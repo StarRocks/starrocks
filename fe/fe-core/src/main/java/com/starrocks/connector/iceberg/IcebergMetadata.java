@@ -306,6 +306,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         Set<String> scannedFiles = new HashSet<>();
         PartitionSpec spec = icebergTable.getNativeTable().spec();
+        List<Column> partitionColumns = icebergTable.getPartitionColumnsIncludeTransformed();
         for (FileScanTask fileScanTask : icebergSplitTasks) {
             String filePath = fileScanTask.file().path().toString();
             if (scannedFiles.contains(filePath)) {
@@ -315,9 +316,14 @@ public class IcebergMetadata implements ConnectorMetadata {
 
             StructLike partitionData = fileScanTask.file().partition();
             List<String> values = PartitionUtil.getIcebergPartitionValues(spec, partitionData);
+            if (values.size() != partitionColumns.size()) {
+                // ban partition evolution and non-identify column.
+                continue;
+            }
             try {
-                partitionKeys.add(createPartitionKey(values, icebergTable.getPartitionColumns(), table.getType()));
+                partitionKeys.add(createPartitionKey(values, partitionColumns, table.getType()));
             } catch (Exception e) {
+                LOG.error("create partition key failed.", e);
                 throw new StarRocksConnectorException(e.getMessage());
             }
         }
