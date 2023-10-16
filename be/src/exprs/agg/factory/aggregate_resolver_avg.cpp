@@ -15,6 +15,7 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/array_agg.h"
+#include "exprs/agg/array_flatten.h"
 #include "exprs/agg/avg.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
@@ -45,10 +46,23 @@ struct ArrayAggDispatcher {
     }
 };
 
+struct ArrayFlattenDispatcher {
+    template <LogicalType lt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (lt_is_aggregate<lt>) {
+            auto func = std::make_shared<ArrayFlattenAggregateFunction<lt, false>>();
+            using AggState = ArrayFlattenAggregateState<lt, false>;
+            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_flatten", false,
+                                                                                                   func);
+            }
+        }
+};
+
 void AggregateFuncResolver::register_avg() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, AvgDispatcher(), this);
         type_dispatch_all(type, ArrayAggDispatcher(), this);
+        type_dispatch_all(type, ArrayFlattenDispatcher(), this);
     }
     type_dispatch_all(TYPE_JSON, ArrayAggDispatcher(), this);
     add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128, true>("decimal_avg");

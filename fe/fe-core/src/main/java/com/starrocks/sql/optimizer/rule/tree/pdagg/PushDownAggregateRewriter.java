@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.tree.pdagg;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
@@ -70,6 +71,8 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     // record all push down column on scan node
     // for check the group bys which is generated in join node(on/where)
     private ColumnRefSet allPushDownGroupBys;
+
+    private static final Map<String, String> REWRITE_FUNCTION_MAP = ImmutableMap.of("array_agg", "array_flatten");
 
     public PushDownAggregateRewriter(TaskContext taskContext) {
         this.factory = taskContext.getOptimizerContext().getColumnRefFactory();
@@ -287,7 +290,11 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     }
 
     private CallOperator genAggregation(CallOperator origin, ScalarOperator args) {
-        Function fn = Expr.getBuiltinFunction(origin.getFunction().getFunctionName().getFunction(),
+        String fnName = origin.getFunction().getFunctionName().getFunction();
+        if (REWRITE_FUNCTION_MAP.containsKey(fnName)) {
+            fnName = REWRITE_FUNCTION_MAP.get(fnName);
+        }
+        Function fn = Expr.getBuiltinFunction(fnName,
                 new Type[] {args.getType()}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
         Preconditions.checkState(fn instanceof AggregateFunction);

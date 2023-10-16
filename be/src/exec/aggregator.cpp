@@ -341,6 +341,11 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
                 arg_type = TypeDescriptor(TYPE_BIGINT);
             }
 
+            if (fn.name.function_name == "array_flatten") {
+                // for array_flatten use inner type as sign
+                arg_type = arg_type.children[0];
+            }
+
             bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
             auto* func = get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type,
                                                 is_input_nullable, fn.binary_type, state->func_version());

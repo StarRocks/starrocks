@@ -281,6 +281,7 @@ public class FunctionSet {
     public static final String EXCHANGE_SPEED = "exchange_speed";
     // Array functions:
     public static final String ARRAY_AGG = "array_agg";
+    public static final String ARRAY_FLATTEN = "array_flatten";
     public static final String ARRAY_CONCAT = "array_concat";
     public static final String ARRAY_DIFFERENCE = "array_difference";
     public static final String ARRAY_INTERSECT = "array_intersect";
@@ -729,6 +730,10 @@ public class FunctionSet {
 
         addBuiltin(AggregateFunction.createBuiltin(ARRAY_AGG,
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.ANY_ARRAY, Type.ANY_STRUCT, true,
+                true, false, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(ARRAY_FLATTEN,
+                Lists.newArrayList(Type.ANY_ARRAY), Type.ANY_ARRAY, Type.ANY_ARRAY, true,
                 true, false, false));
 
         for (Type t : Type.getSupportedTypes()) {
