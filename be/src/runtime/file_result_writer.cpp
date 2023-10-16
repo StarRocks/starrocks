@@ -105,7 +105,7 @@ Status FileResultWriter::_create_file_writer() {
                 std::move(writable_file), _output_expr_ctxs);
         break;
     case TFileFormatType::FORMAT_PARQUET: {
-        auto properties = parquet::ParquetBuildHelper::make_properties(_file_opts->parquet_options);
+        ASSIGN_OR_RETURN(auto properties, parquet::ParquetBuildHelper::make_properties(_file_opts->parquet_options));
         auto result =
                 parquet::ParquetBuildHelper::make_schema(_file_opts->file_column_names, _output_expr_ctxs,
                                                          std::vector<parquet::FileColumnId>(_output_expr_ctxs.size()));
