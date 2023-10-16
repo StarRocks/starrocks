@@ -21,14 +21,14 @@ This topic lists all the SQL commands supported by StarRocks and categorizes the
     - [Catalog](#catalog)
     - [Database](#database)
     - [Resource](#resource)
-  - [Table, partition](#table-partition)
+  - [Create table, partition](#create-table-partition)
   - [View, materialized view](#view-materialized-view)
     - [View](#view)
     - [Materialized view](#materialized-view)
   - [Function, SELECT](#function-select)
   - [CBO statistics](#cbo-statistics)
   - [Backup and restore](#backup-and-restore)
-  - [Utility statements](#utility-statements)
+  - [Utility commands](#utility-commands)
 
 ## User account management
 
@@ -94,6 +94,7 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [ADMIN SET REPLICA STATUS](./Administration/ADMIN_SET_REPLICA_STATUS.md)
 - [ADMIN SHOW REPLICA DISTRIBUTION](./Administration/ADMIN_SHOW_REPLICA_DISTRIBUTION.md)
 - [ADMIN SHOW REPLICA STATUS](./Administration/ADMIN_SHOW_REPLICA_STATUS.md)
+- [RECOVER](./data-definition/RECOVER.md)
 - [SHOW TABLE STATUS](./Administration/SHOW_TABLE_STATUS.md)
 
 ### File, index, variable
@@ -180,7 +181,7 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [DROP RESOURCE](./data-definition/DROP_RESOURCE.md)
 - [SHOW RESOURCES](./data-definition/SHOW_RESOURCES.md)
 
-## Table, partition
+## Create table, partition
 
 - [ALTER TABLE](./data-definition/ALTER_TABLE.md)
 - [CANCEL ALTER TABLE](./data-definition/CANCEL_ALTER_TABLE.md)
@@ -252,7 +253,7 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [SHOW RESTORE](./data-manipulation/SHOW_RESTORE.md)
 - [SHOW SNAPSHOT](./data-manipulation/SHOW_SNAPSHOT.md)
 
-## Utility statements
+## Utility commands
 
 - [DESC](./Utility/DESCRIBE.md)
 - [EXPLAIN](./Administration/EXPLAIN.md)
