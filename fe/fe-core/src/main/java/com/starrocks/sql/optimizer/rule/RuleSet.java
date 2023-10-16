@@ -212,7 +212,6 @@ public class RuleSet {
                 new PushDownLimitCTEAnchor(),
                 new PushDownLimitUnionRule(),
                 new MergeLimitWithLimitRule(),
-                new EliminateLimitZeroRule(),
                 PushDownLimitDirectRule.PROJECT,
                 PushDownLimitDirectRule.ASSERT_ONE_ROW,
                 PushDownLimitDirectRule.CTE_CONSUME,
