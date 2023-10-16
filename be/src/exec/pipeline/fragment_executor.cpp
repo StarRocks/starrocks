@@ -707,7 +707,7 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
 
     DCHECK(_fragment_ctx->enable_resource_group());
     auto* executor = exec_env->wg_driver_executor();
-    _fragment_ctx->iterate_drivers([executor, fragment_ctx = _fragment_ctx.get()](const DriverPtr& driver) {
+    (void)_fragment_ctx->iterate_drivers([executor, fragment_ctx = _fragment_ctx.get()](const DriverPtr& driver) {
         executor->submit(driver.get());
         return Status::OK();
     });
