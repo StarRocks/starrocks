@@ -742,8 +742,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
                 continue;
             }
-            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName());
+            List<String> partitionNames = PartitionUtil.getPartitionNames(baseTable);
             Snapshot snapshot = baseTable.getNativeTable().currentSnapshot();
             long currentVersion = snapshot != null ? snapshot.timestampMillis() : -1;
 
