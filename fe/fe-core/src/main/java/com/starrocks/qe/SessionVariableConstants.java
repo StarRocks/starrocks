@@ -31,4 +31,7 @@ public class SessionVariableConstants {
     public static final String DOUBLE = "double";
 
     public static final String DECIMAL = "decimal";
+
+    public static final String ADAPTIVE_INCREASE = "adaptive_increase";
+    public static final String ADAPTIVE_DECREASE = "adaptive_decrease";
 }

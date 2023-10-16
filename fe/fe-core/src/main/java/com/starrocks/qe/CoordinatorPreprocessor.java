@@ -112,6 +112,9 @@ import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.qe.SessionVariableConstants.ADAPTIVE_DECREASE;
+import static com.starrocks.qe.SessionVariableConstants.ADAPTIVE_INCREASE;
+import static com.starrocks.qe.SessionVariableConstants.AUTO;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.TINY_SCALE_ROWS_LIMIT;
 
 public class CoordinatorPreprocessor {
@@ -1462,12 +1465,17 @@ public class CoordinatorPreprocessor {
             }
         }
 
-        long maxOutputOfRightChild = fragment.getChildren().stream()
-                .sorted(Comparator.comparing(e -> e.getPlanRoot().getId().asInt())).skip(1)
+        // sometimes we may reserve the right fragment and add the children of left fragment
+        // in the children list of right fragment like SHUFFLE_HASH_BUCKET plan, so we need sort
+        // the list to ensure the most left child is at the 0 index position.
+        List<PlanFragment> sortedFragments = fragment.getChildren().stream()
+                .sorted(Comparator.comparing(e -> e.getPlanRoot().getId().asInt()))
+                .collect(Collectors.toList());
+
+        long maxOutputOfRightChild = sortedFragments.stream().skip(1)
                 .map(e -> e.getPlanRoot().getCardinality()).reduce(Long::max)
                 .orElse(fragment.getChild(0).getPlanRoot().getCardinality());
-        long outputOfMostLeftChild = fragment.getChild(0).getPlanRoot().getCardinality();
-
+        long outputOfMostLeftChild = sortedFragments.get(0).getPlanRoot().getCardinality();
 
         long baseNodeNums = Math.max(1, maxOutputOfRightChild / TINY_SCALE_ROWS_LIMIT / fragment.getPipelineDop());
         double base = Math.max(Math.E, baseNodeNums);
@@ -1478,7 +1486,9 @@ public class CoordinatorPreprocessor {
         long nodeNums = Math.min(amplifyFactor * baseNodeNums, candidates.size());
 
         // only increase nodes when enable_adaptive_increase_execute_nodes = true
-        if (connectContext.getSessionVariable().enableAdaptiveIncreaseExecuteNodes() && nodeNums > childUsedHosts.size()) {
+        String mode = connectContext.getSessionVariable().getAdaptiveChooseExecuteInstancesMode();
+        if ((ADAPTIVE_INCREASE.equalsIgnoreCase(mode) || AUTO.equalsIgnoreCase(mode))
+                && nodeNums > childUsedHosts.size()) {
             for (Map.Entry<Long, ComputeNode> entry : candidates.entrySet()) {
                 TNetworkAddress address = new TNetworkAddress(entry.getValue().getHost(), entry.getValue().getBePort());
                 if (!childUsedHosts.contains(address)) {
@@ -1489,7 +1499,9 @@ public class CoordinatorPreprocessor {
                 }
             }
             return childHosts;
-        } else if (nodeNums < childUsedHosts.size() && candidates.size() >= Config.adaptive_choose_nodes_threshold) {
+        } else if ((ADAPTIVE_DECREASE.equalsIgnoreCase(mode) || AUTO.equalsIgnoreCase(mode))
+                && nodeNums < childUsedHosts.size()
+                && candidates.size() >= Config.adaptive_choose_instances_threshold) {
             // only decrease nodes when be nodes > = adaptive_choose_nodes_threshold
             Collections.shuffle(childHosts, random);
             return childHosts.stream().limit(nodeNums).collect(Collectors.toList());

@@ -517,7 +517,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
 
-    public static final String ENABLE_ADAPTIVE_INCREASE_EXECUTE_NODES = "enable_adaptive_increase_execute_nodes";
+    public static final String ADAPTIVE_CHOOSE_EXECUTE_INSTANCES_MODE = "adaptive_choose_execute_instances_mode";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1325,15 +1325,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
     private boolean cboDeriveRangeJoinPredicate = false;
 
-    @VarAttr(name = ENABLE_ADAPTIVE_INCREASE_EXECUTE_NODES)
-    private boolean enableAdaptiveIncreaseExecuteNodes = false;
+    @VarAttr(name = ADAPTIVE_CHOOSE_EXECUTE_INSTANCES_MODE)
+    private String adaptiveChooseExecuteInstancesMode = SessionVariableConstants.ADAPTIVE_DECREASE;
 
-    public boolean enableAdaptiveIncreaseExecuteNodes() {
-        return enableAdaptiveIncreaseExecuteNodes;
+    public String getAdaptiveChooseExecuteInstancesMode() {
+        return adaptiveChooseExecuteInstancesMode;
     }
 
-    public void setEnableAdaptiveIncreaseExecuteNodes(boolean enableAdaptiveIncreaseExecuteNodes) {
-        this.enableAdaptiveIncreaseExecuteNodes = enableAdaptiveIncreaseExecuteNodes;
+    public void setAdaptiveChooseExecuteInstancesMode(String adaptiveChooseExecuteInstancesMode) {
+        this.adaptiveChooseExecuteInstancesMode = adaptiveChooseExecuteInstancesMode;
     }
 
 

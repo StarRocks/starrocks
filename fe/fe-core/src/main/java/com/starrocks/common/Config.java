@@ -2454,5 +2454,5 @@ public class Config extends ConfigBase {
     public static boolean replan_on_insert = false;
 
     @ConfField(mutable = true)
-    public static int adaptive_choose_nodes_threshold = 32;
+    public static int adaptive_choose_instances_threshold = 32;
 }
