@@ -101,12 +101,15 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             Set<Long> shards = entry.getValue();
 
             // 1. drop tablet
-            Backend backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getBackend(backendId);
+            ComputeNode node = GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getBackendOrComputeNode(backendId);
+            if (node == null) {
+                continue;
+            }
             DeleteTabletRequest request = new DeleteTabletRequest();
             request.tabletIds = Lists.newArrayList(shards);
 
             try {
-                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                 DeleteTabletResponse response = lakeService.deleteTablet(request).get();
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
                     LOG.info("failedTablets is {}", response.failedTablets);
