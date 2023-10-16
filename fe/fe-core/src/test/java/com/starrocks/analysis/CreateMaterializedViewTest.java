@@ -15,6 +15,9 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
+import com.google.common.base.Supplier;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -24,6 +27,7 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -36,6 +40,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.connector.ConnectorTableInfo;
+import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
@@ -43,6 +49,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
@@ -2617,6 +2624,42 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testReloadMv() throws Exception {
+        String mvName = "mv_reload";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_reload " +
+                "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH MANUAL AS " +
+                "select     s_suppkey,     s_nationkey, sum(s_acctbal) as total_s_acctbal, " +
+                "count(s_phone) as s_phone_count " +
+                "from hive0.tpch.supplier as supp " +
+                "group by s_suppkey, s_nationkey order by s_suppkey;");
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
+        MaterializedView mv = (MaterializedView) db.getTable(mvName);
+        MvId mvId = mv.getMvId();
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        ConnectorTblMetaInfoMgr tblMgr = GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr();
+        Supplier<Table> getTable = () -> metadataMgr.getTable("hive0", "tpch", "supplier");
+
+        // after create
+        List<String> baseTables = mv.getBaseTableInfos().stream()
+                .map(BaseTableInfo::getTableName).collect(Collectors.toList());
+        Assert.assertEquals(ImmutableList.of("supplier"), baseTables);
+        Table baseTable = getTable.get();
+        Assert.assertEquals(ImmutableSet.of(mvId), baseTable.getRelatedMaterializedViews());
+
+        // on reload
+        ConnectorTableInfo tableInfo = tblMgr.getConnectorTableInfo("hive0", "tpch", "supplier:0");
+        tblMgr.removeConnectorTableInfo("hive0", "tpch", "supplier:0", tableInfo);
+        mv.onReload();
+        baseTable = getTable.get();
+        Assert.assertEquals(ImmutableSet.of(mvId), baseTable.getRelatedMaterializedViews());
+
+        // after drop
+        starRocksAssert.dropMaterializedView(mvName);
+        baseTable = getTable.get();
+        Assert.assertEquals(ImmutableSet.of(), baseTable.getRelatedMaterializedViews());
+    }
+
+    @Test
     public void testHiveMVJoinWithoutPartition() throws Exception {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW supplier_nation_hive_mv DISTRIBUTED BY " +
                 "HASH(`s_suppkey`) BUCKETS 10 REFRESH MANUAL AS select     s_suppkey,     n_name,      sum(s_acctbal) " +
@@ -3763,4 +3806,5 @@ public class CreateMaterializedViewTest {
         });
         Assert.assertTrue(e.getMessage().contains("Do not support create synchronous materialized view(rollup) on"));
     }
+
 }

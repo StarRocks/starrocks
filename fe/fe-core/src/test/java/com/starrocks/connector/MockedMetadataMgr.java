@@ -17,6 +17,7 @@ package com.starrocks.connector;
 
 import com.google.common.base.Strings;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 
@@ -29,7 +30,7 @@ public class MockedMetadataMgr extends MetadataMgr {
     private final LocalMetastore localMetastore;
 
     public MockedMetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
-        super(localMetastore, connectorMgr, new ConnectorTblMetaInfoMgr());
+        super(localMetastore, connectorMgr, GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr());
         this.localMetastore = localMetastore;
     }
 
