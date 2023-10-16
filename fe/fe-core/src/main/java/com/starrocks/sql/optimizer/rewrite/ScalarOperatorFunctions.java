@@ -71,9 +71,14 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.utils.URLEncodedUtils;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.charset.Charset;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
@@ -90,6 +95,7 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.TemporalUnit;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -1278,4 +1284,22 @@ public class ScalarOperatorFunctions {
         }
         return values[values.length - 1];
     }
+
+    @ConstantFunction(name = "url_extract_parameter", argTypes = {VARCHAR, VARCHAR}, returnType = VARCHAR)
+    public static ConstantOperator urlExtractParameter(ConstantOperator url, ConstantOperator parameter) {
+        List<NameValuePair> parametersAndValues = null;
+        try {
+            parametersAndValues = URLEncodedUtils.parse(new URI(url.getVarchar()), Charset.forName("UTF-8"));
+            String parameterName = parameter.getVarchar();
+            for (NameValuePair nv : parametersAndValues) {
+                if (nv.getName().equals(parameterName)) {
+                    return ConstantOperator.createVarchar(nv.getValue());
+                }
+            }
+        } catch (URISyntaxException e) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
+        return ConstantOperator.createNull(Type.VARCHAR);
+    }
 }
+

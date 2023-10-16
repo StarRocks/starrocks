@@ -1,6 +1,6 @@
 # System variables
 
-StarRocks provides many system variables that can be set and modified to suit your requirements. This section describes the variables supported by StarRocks. You can view the settings of these variables by running the [SHOW VARIABLES](../sql-reference/sql-statements/Administration/SHOW%20VARIABLES.md) command on your MySQL client. You can also use the [SET](../sql-reference/sql-statements/Administration/SET.md) command to dynamically set or modify variables. You can make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
+StarRocks provides many system variables that can be set and modified to suit your requirements. This section describes the variables supported by StarRocks. You can view the settings of these variables by running the [SHOW VARIABLES](../sql-reference/sql-statements/Administration/SHOW_VARIABLES.md) command on your MySQL client. You can also use the [SET](../sql-reference/sql-statements/Administration/SET.md) command to dynamically set or modify variables. You can make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
 
 The variables in StarRocks refer to the variable sets in MySQL, but **some variables are only compatible with the MySQL client protocol and do not function on the MySQL database**.
 
@@ -389,7 +389,7 @@ Used for MySQL client compatibility. No practical usage.
 
 The timeout duration of the query optimizer. When the optimizer times out, an error is returned and the query is stopped, which affects the query performance. You can set this variable to a larger value based on your query or contact StarRocks technical support for troubleshooting. A timeout often occurs when a query has too many joins.
 
-Default value: 3000. Unit: seconds.
+Default value: 3000. Unit: ms.
 
 ### parallel_exchange_instance_num
 

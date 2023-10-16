@@ -1075,9 +1075,6 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_udf = false;
 
-    @ConfField
-    public static boolean enable_remote_script = false;
-
     @ConfField(mutable = true)
     public static boolean enable_decimal_v3 = true;
 
@@ -1902,7 +1899,7 @@ public class Config extends ConfigBase {
      * or hdfs into smaller files for hive external table
      */
     @ConfField(mutable = true)
-    public static long hive_max_split_size = 512L * 1024L * 1024L;
+    public static long hive_max_split_size = 64L * 1024L * 1024L;
 
     /**
      * Enable background refresh all external tables all partitions metadata on internal catalog.

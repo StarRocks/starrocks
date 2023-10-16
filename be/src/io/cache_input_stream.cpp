@@ -151,6 +151,9 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
 }
 
 void CacheInputStream::_deduplicate_shared_buffer(SharedBufferedInputStream::SharedBuffer* sb) {
+    if (sb->size == 0) {
+        return;
+    }
     int64_t end_offset = sb->offset + sb->size;
     int64_t start_block_id = sb->offset / _block_size;
     int64_t end_block_id = (end_offset - 1) / _block_size;
@@ -205,6 +208,7 @@ Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count)
 }
 
 StatusOr<int64_t> CacheInputStream::read(void* data, int64_t count) {
+    count = std::min(_size - _offset, count);
     RETURN_IF_ERROR(read_at_fully(_offset, data, count));
     _offset += count;
     return count;

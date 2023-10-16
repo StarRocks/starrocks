@@ -195,6 +195,9 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     if (tablet_schema.__isset.id) {
         schema->set_id(tablet_schema.id);
     }
+    if (tablet_schema.__isset.schema_version) {
+        schema->set_schema_version(tablet_schema.schema_version);
+    }
     schema->set_num_short_key_columns(tablet_schema.short_key_column_count);
     schema->set_num_rows_per_row_block(config::default_num_rows_per_column_file_block);
     switch (tablet_schema.keys_type) {
