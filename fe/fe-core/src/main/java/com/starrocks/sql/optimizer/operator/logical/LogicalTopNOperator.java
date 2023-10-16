@@ -79,7 +79,7 @@ public class LogicalTopNOperator extends LogicalOperator {
         this.sortPhase = sortPhase;
         this.topNType = topNType;
         this.isSplit = isSplit;
-        Preconditions.checkState(limit > 0);
+        Preconditions.checkState(limit != 0);
     }
 
     public SortPhase getSortPhase() {
