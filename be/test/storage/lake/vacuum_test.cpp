@@ -1118,7 +1118,97 @@ TEST_P(LakeVacuumTest, test_commit_time) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_thread_pool_full) {
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+          {
+              "tablet_id": 1900,
+              "txn_id": 14000
+          }
+          )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+          {
+              "tablet_id": 2000,
+              "txn_id": 13000
+          }
+          )DEL")));
+
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [&](void* arg) { *(int64_t*)arg = 0; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:1");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(1900);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(1696998550);
+        request.set_min_active_txn_id(20000);
+        request.set_delete_txn_log(true);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(TStatusCode::SERVICE_UNAVAILABLE, response.status().status_code());
+
+        EXPECT_TRUE(file_exist(txn_log_filename(1900, 14000)));
+        EXPECT_TRUE(file_exist(txn_log_filename(2000, 13000)));
+    }
+}
+
 INSTANTIATE_TEST_SUITE_P(LakeVacuumTest, LakeVacuumTest,
                          ::testing::Values(VacuumTestArg{1}, VacuumTestArg{3}, VacuumTestArg{100}));
+
+TEST(LakeVacuumTest2, test_delete_files_async) {
+    delete_files_async({});
+
+    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file("test_vacuum_delete_files1.txt"));
+    ASSIGN_OR_ABORT(auto f2, fs::new_writable_file("test_vacuum_delete_files2.txt"));
+    ASSERT_OK(f1->append("111"));
+    ASSERT_OK(f1->close());
+    ASSERT_OK(f2->append("222"));
+    ASSERT_OK(f2->close());
+
+    delete_files_async({"test_vacuum_delete_files1.txt", "test_vacuum_delete_files2.txt"});
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    ASSERT_FALSE(fs::path_exist("test_vacuum_delete_files1.txt"));
+    ASSERT_FALSE(fs::path_exist("test_vacuum_delete_files2.txt"));
+}
+
+TEST(LakeVacuumTest2, test_delete_files_callable) {
+    auto future = delete_files_callable({});
+    ASSERT_TRUE(future.valid());
+    ASSERT_TRUE(future.get().ok());
+
+    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file("test_vacuum_delete_files_callable1.txt"));
+    ASSIGN_OR_ABORT(auto f2, fs::new_writable_file("test_vacuum_delete_files_callable2.txt"));
+    ASSERT_OK(f1->append("111"));
+    ASSERT_OK(f1->close());
+    ASSERT_OK(f2->append("222"));
+    ASSERT_OK(f2->close());
+
+    auto future2 =
+            delete_files_callable({"test_vacuum_delete_files_callable1.txt", "test_vacuum_delete_files_callable2.txt"});
+    ASSERT_TRUE(future2.valid());
+    ASSERT_TRUE(future2.get().ok());
+    ASSERT_FALSE(fs::path_exist("test_vacuum_delete_files_callable1.txt"));
+    ASSERT_FALSE(fs::path_exist("test_vacuum_delete_files_callable2.txt"));
+}
+
+TEST(LakeVacuumTest2, test_delete_files_thread_pool_full) {
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:1");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto future = delete_files_callable({"any_non_exist_file"});
+    ASSERT_TRUE(future.valid());
+    ASSERT_EQ(TStatusCode::SERVICE_UNAVAILABLE, future.get().code());
+
+    delete_files_async({"any_non_exist_file"});
+}
 
 } // namespace starrocks::lake

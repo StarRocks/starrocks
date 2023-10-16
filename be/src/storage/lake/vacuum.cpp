@@ -54,7 +54,7 @@ std::future<Status> completed_future(Status value) {
 
 // Batch delete files with specified FileSystem object |fs|
 Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
-    if (paths.empty()) {
+    if (UNLIKELY(paths.empty())) {
         return Status::OK();
     }
 
@@ -83,33 +83,11 @@ Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
     return st;
 }
 
-// Batch delete files with automatically derived FileSystems.
-// REQUIRE: All files in |paths| have the same file system scheme.
-Status delete_files(const std::vector<std::string>& paths) {
-    if (paths.empty()) {
-        return Status::OK();
-    }
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(paths[0]));
-    return do_delete_files(fs.get(), paths);
-}
-
 // Batch delete with short circuit: delete files in paths2 only after all files in paths1 have been deleted successfully.
 Status delete_files2(const std::vector<std::string>& paths1, const std::vector<std::string>& paths2) {
     RETURN_IF_ERROR(delete_files(paths1));
     RETURN_IF_ERROR(delete_files(paths2));
     return Status::OK();
-}
-
-// A Callable wrapper for delete_files that returns a future to the operation so that it can be executed in parallel to other requests
-std::future<Status> delete_files_callable(std::vector<std::string> files_to_delete) {
-    auto task = std::make_shared<std::packaged_task<Status()>>(
-            [files_to_delete = std::move(files_to_delete)]() { return delete_files(files_to_delete); });
-    auto packaged_func = [task]() { (*task)(); };
-    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
-    if (auto st = tp->submit_func(std::move(packaged_func)); !st.ok()) {
-        return completed_future(std::move(st));
-    }
-    return task->get_future();
 }
 
 // A Callable wrapper for delete_files2 that returns a future to the operation so that it can be executed in parallel to other requests
@@ -155,12 +133,38 @@ private:
 
 } // namespace
 
-// An Async wrapper for delete_files that queues the request into a thread executor.
+// Batch delete files with automatically derived FileSystems.
+// REQUIRE: All files in |paths| have the same file system scheme.
+Status delete_files(const std::vector<std::string>& paths) {
+    if (paths.empty()) {
+        return Status::OK();
+    }
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(paths[0]));
+    return do_delete_files(fs.get(), paths);
+}
+
 void delete_files_async(std::vector<std::string> files_to_delete) {
+    if (UNLIKELY(files_to_delete.empty())) {
+        return;
+    }
     auto task = [files_to_delete = std::move(files_to_delete)]() { (void)delete_files(files_to_delete); };
     auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
     auto st = tp->submit_func(std::move(task));
     LOG_IF(ERROR, !st.ok()) << st;
+}
+
+std::future<Status> delete_files_callable(std::vector<std::string> files_to_delete) {
+    if (UNLIKELY(files_to_delete.empty())) {
+        return completed_future(Status::OK());
+    }
+    auto task = std::make_shared<std::packaged_task<Status()>>(
+            [files_to_delete = std::move(files_to_delete)]() { return delete_files(files_to_delete); });
+    auto packaged_func = [task]() { (*task)(); };
+    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
+    if (auto st = tp->submit_func(std::move(packaged_func)); !st.ok()) {
+        return completed_future(std::move(st));
+    }
+    return task->get_future();
 }
 
 static void collect_garbage_files(const TabletMetadataPB& metadata, const std::string& base_dir,

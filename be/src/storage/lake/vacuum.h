@@ -38,8 +38,15 @@ void vacuum_full(TabletManager* tablet_mgr, const VacuumFullRequest& request, Va
 //  - response != NULL
 void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& request, DeleteTabletResponse* response);
 
+// Batch delete files.
+// REQUIRE: All files in |paths| have the same file system scheme.
+Status delete_files(const std::vector<std::string>& paths);
+
+// An Async wrapper for delete_files that queues the request into a thread executor.
 void delete_files_async(std::vector<std::string> files_to_delete);
 
+// A Callable wrapper for delete_files that returns a future to the operation so that
+// it can be executed in parallel to other requests
 std::future<Status> delete_files_callable(std::vector<std::string> files_to_delete);
 
 } // namespace starrocks::lake

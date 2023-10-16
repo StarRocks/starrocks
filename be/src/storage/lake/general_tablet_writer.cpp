@@ -210,7 +210,7 @@ void VerticalGeneralTabletWriter::close() {
     if (!_finished && !_files.empty()) {
         std::vector<std::string> full_paths_to_delete;
         full_paths_to_delete.reserve(_files.size());
-        for (auto& f : _files) {
+        for (const auto& f : _files) {
             full_paths_to_delete.emplace_back(_tablet.segment_location(f));
         }
         delete_files_async(full_paths_to_delete);
