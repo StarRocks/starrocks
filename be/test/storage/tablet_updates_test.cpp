@@ -2545,6 +2545,16 @@ TEST_F(TabletUpdatesTest, get_missing_version_ranges) {
     test_get_missing_version_ranges({3, 4, 5}, {2, 2, 6});
 }
 
+TEST_F(TabletUpdatesTest, column_with_row_update) {
+    auto tablet = create_tablet_column_with_row(rand(), rand());
+    std::vector<int64_t> keys;
+    int N = 100;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    ASSERT_TRUE(tablet->rowset_commit(1, create_rowset_column_with_row(tablet, keys)).ok());
+}
+
 void TabletUpdatesTest::test_get_rowsets_for_incremental_snapshot(const std::vector<int64_t>& versions,
                                                                   const std::vector<int64_t>& missing_ranges,
                                                                   const std::vector<int64_t>& expect_rowset_versions,

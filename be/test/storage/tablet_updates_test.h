@@ -275,6 +275,42 @@ public:
         return *writer->build();
     }
 
+    RowsetSharedPtr create_rowset_column_with_row(const TabletSharedPtr& tablet, const vector<int64_t>& keys) {
+        RowsetWriterContext writer_context;
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+        writer_context.tablet_schema = tablet->thread_safe_get_tablet_schema();
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
+        const auto nkeys = keys.size();
+        const auto& column = tablet->thread_safe_get_tablet_schema()->columns().back();
+        std::vector<ColumnId> cids(tablet->thread_safe_get_tablet_schema()->num_columns() - 1);
+        if (column.name() == "__row") {
+            for (int i = 0; i < tablet->thread_safe_get_tablet_schema()->num_columns() - 1; i++) {
+                cids[i] = i;
+            }
+        }
+        auto schema_without_full_row_column = std::make_unique<Schema>(&schema, cids);
+        auto chunk = ChunkHelper::new_chunk(*schema_without_full_row_column, nkeys);
+        auto& cols = chunk->columns();
+        for (int64_t key : keys) {
+            cols[0]->append_datum(Datum(key));
+            cols[1]->append_datum(Datum((int16_t)(nkeys - 1 - key)));
+            cols[2]->append_datum(Datum((int32_t)(key)));
+        }
+        CHECK_OK(writer->flush_chunk(*chunk));
+        return *writer->build();
+    }
+
     RowsetSharedPtr create_rowset_sort_key_error_encode_case(const TabletSharedPtr& tablet,
                                                              const vector<int64_t>& keys) {
         RowsetWriterContext writer_context;
@@ -448,6 +484,70 @@ public:
         k3.__set_is_allow_null(true);
         k3.column_type.type = TPrimitiveType::INT;
         request.tablet_schema.columns.push_back(k3);
+        auto st = StorageEngine::instance()->create_tablet(request);
+        CHECK(st.ok()) << st.to_string();
+        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+    }
+
+    TabletSharedPtr create_tablet_column_with_row(int64_t tablet_id, int32_t schema_hash,
+                                                  bool multi_column_pk = false) {
+        TCreateTabletReq request;
+        request.tablet_id = tablet_id;
+        request.__set_version(1);
+        request.__set_version_hash(0);
+        request.tablet_schema.schema_hash = schema_hash;
+        request.tablet_schema.short_key_column_count = 1;
+        request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+        request.tablet_schema.storage_type = TStorageType::COLUMN;
+
+        if (multi_column_pk) {
+            TColumn pk1;
+            pk1.column_name = "pk1_bigint";
+            pk1.__set_is_key(true);
+            pk1.column_type.type = TPrimitiveType::BIGINT;
+            request.tablet_schema.columns.push_back(pk1);
+            TColumn pk2;
+            pk2.column_name = "pk2_varchar";
+            pk2.__set_is_key(true);
+            pk2.column_type.type = TPrimitiveType::VARCHAR;
+            pk2.column_type.len = 128;
+            request.tablet_schema.columns.push_back(pk2);
+            TColumn pk3;
+            pk3.column_name = "pk3_int";
+            pk3.__set_is_key(true);
+            pk3.column_type.type = TPrimitiveType::INT;
+            request.tablet_schema.columns.push_back(pk3);
+        } else {
+            TColumn k1;
+            k1.column_name = "pk";
+            k1.__set_is_key(true);
+            k1.column_type.type = TPrimitiveType::BIGINT;
+            request.tablet_schema.columns.push_back(k1);
+        }
+
+        TColumn k2;
+        k2.column_name = "v1";
+        k2.__set_is_key(false);
+        k2.column_type.type = TPrimitiveType::SMALLINT;
+        request.tablet_schema.columns.push_back(k2);
+
+        TColumn k3;
+        k3.column_name = "v2";
+        k3.__set_is_key(false);
+        k3.column_type.type = TPrimitiveType::INT;
+        request.tablet_schema.columns.push_back(k3);
+
+        TColumn row;
+        row.column_name = "__row";
+        TColumnType ctype;
+        ctype.__set_type(TPrimitiveType::VARCHAR);
+        ctype.__set_len(65535);
+        row.__set_column_type(ctype);
+        row.__set_aggregation_type(TAggregationType::REPLACE);
+        row.__set_is_allow_null(false);
+        row.__set_default_value("");
+        request.tablet_schema.columns.push_back(row);
+
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
