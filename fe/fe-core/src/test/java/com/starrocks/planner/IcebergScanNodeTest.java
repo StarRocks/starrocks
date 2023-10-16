@@ -179,6 +179,9 @@ public class IcebergScanNodeTest {
                 table.getNativeTable();
                 result = iTable;
 
+                table.getTableLocation();
+                result = "local_test";
+
                 iTable.currentSnapshot();
                 result = snapshot;
 
