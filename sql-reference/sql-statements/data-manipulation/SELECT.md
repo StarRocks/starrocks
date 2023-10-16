@@ -4,20 +4,42 @@
 
 SELECT 语句用于从单个或多个表，视图，物化视图中读取数据。SELECT 语句一般由以下子句组成：
 
-- [WITH](#with)
-- [WHERE 与操作符](#where-与操作符)
-- [GROUP BY](#group-by)
-- [HAVING](#having)
-- [UNION](#union)
-- [INTERSECT](#intersect)
-- [EXCEPT/MINUS](#exceptminus)
-- [ORDER BY](#order-by)
-- [LIMIT](#limit)
-- [OFFSET](#offset)
-- [Joins](#连接-join)
-- [子查询](#子查询)
-- [DISTINCT](#distinct)
-- [别名](#别名-alias)
+- [SELECT](#select)
+  - [功能](#功能)
+    - [WITH](#with)
+    - [连接 (Join)](#连接-join)
+      - [Self Join](#self-join)
+      - [笛卡尔积 (Cross Join)](#笛卡尔积-cross-join)
+      - [Inner Join](#inner-join)
+      - [Outer Join](#outer-join)
+      - [Semi Join](#semi-join)
+      - [Anti Join](#anti-join)
+      - [等值 Join 和非等值 Join](#等值-join-和非等值-join)
+    - [ORDER BY](#order-by)
+    - [GROUP BY](#group-by)
+  - [语法](#语法)
+    - [Parameters](#parameters)
+    - [Note](#note)
+  - [示例](#示例)
+    - [HAVING](#having)
+    - [LIMIT](#limit)
+      - [OFFSET](#offset)
+    - [**UNION**](#union)
+    - [**INTERSECT**](#intersect)
+    - [**EXCEPT/MINUS**](#exceptminus)
+    - [DISTINCT](#distinct)
+    - [子查询](#子查询)
+      - [不相关子查询](#不相关子查询)
+      - [相关子查询](#相关子查询)
+    - [WHERE 与操作符](#where-与操作符)
+      - [算数操作符](#算数操作符)
+      - [BETWEEN 操作符](#between-操作符)
+      - [比较操作符](#比较操作符)
+      - [In 操作符](#in-操作符)
+      - [Like 操作符](#like-操作符)
+      - [逻辑操作符](#逻辑操作符)
+      - [正则表达式操作符](#正则表达式操作符)
+    - [别名 (alias)](#别名-alias)
 
 SELECT 可以作为独立的语句也可以作为其他语句的子句，其查询结果可以作为另一个语句的输入值。
 
@@ -238,9 +260,146 @@ group by tiny_column;
 |      1      |        2            |
 |      2      |        1            |
 +-------------+---------------------+
-
-2 rows in set (0.07 sec)
 ```
+
+## 语法
+
+  ```sql
+  SELECT ...
+  FROM ...
+  [ ... ]
+  GROUP BY [
+      , ... |
+      GROUPING SETS [, ...] (  groupSet [ , groupSet [ , ... ] ] ) |
+      ROLLUP(expr  [ , expr [ , ... ] ]) |
+      expr  [ , expr [ , ... ] ] WITH ROLLUP |
+      CUBE(expr  [ , expr [ , ... ] ]) |
+      expr  [ , expr [ , ... ] ] WITH CUBE
+      ]
+  [ ... ]
+  ```
+
+### Parameters
+
+- `groupSet` 表示 select list 中的列，别名或者表达式组成的集合 `groupSet ::= { ( expr  [ , expr [ , ... ] ] )}`。
+
+- `expr`  表示 select list 中的列，别名或者表达式。
+
+### Note
+
+StarRocks 支持类似 PostgreSQL 语法，语法实例如下：
+
+  ```sql
+  SELECT a, b, SUM( c ) FROM tab1 GROUP BY GROUPING SETS ( (a, b), (a), (b), ( ) );
+  SELECT a, b,c, SUM( d ) FROM tab1 GROUP BY ROLLUP(a,b,c)
+  SELECT a, b,c, SUM( d ) FROM tab1 GROUP BY CUBE(a,b,c)
+  ```
+
+`ROLLUP(a,b,c)` 等价于如下 `GROUPING SETS` 语句。
+
+  ```sql
+  GROUPING SETS (
+  (a,b,c),
+  (a,b  ),
+  (a    ),
+  (     )
+  )
+  ```
+
+`CUBE ( a, b, c )` 等价于如下 `GROUPING SETS` 语句。
+
+  ```sql
+  GROUPING SETS (
+  ( a, b, c ),
+  ( a, b    ),
+  ( a,    c ),
+  ( a       ),
+  (    b, c ),
+  (    b    ),
+  (       c ),
+  (         )
+  )
+  ```
+
+## 示例
+
+下面是一个实际数据的例子:
+
+  ```sql
+  SELECT * FROM t;
+  +------+------+------+
+  | k1   | k2   | k3   |
+  +------+------+------+
+  | a    | A    |    1 |
+  | a    | A    |    2 |
+  | a    | B    |    1 |
+  | a    | B    |    3 |
+  | b    | A    |    1 |
+  | b    | A    |    4 |
+  | b    | B    |    1 |
+  | b    | B    |    5 |
+  +------+------+------+
+  8 rows in set (0.01 sec)
+
+  SELECT k1, k2, SUM(k3) FROM t
+  GROUP BY GROUPING SETS ( (k1, k2), (k2), (k1), ( ) );
+  +------+------+-----------+
+  | k1   | k2   | sum(`k3`) |
+  +------+------+-----------+
+  | b    | B    |         6 |
+  | a    | B    |         4 |
+  | a    | A    |         3 |
+  | b    | A    |         5 |
+  | NULL | B    |        10 |
+  | NULL | A    |         8 |
+  | a    | NULL |         7 |
+  | b    | NULL |        11 |
+  | NULL | NULL |        18 |
+  +------+------+-----------+
+  9 rows in set (0.06 sec)
+
+  SELECT k1, k2, GROUPING_ID(k1,k2), SUM(k3) FROM t
+  GROUP BY GROUPING SETS ((k1, k2), (k1), (k2), ());
+  +------+------+---------------+----------------+
+  | k1   | k2   | grouping_id(k1,k2) | sum(`k3`) |
+  +------+------+---------------+----------------+
+  | a    | A    |             0 |              3 |
+  | a    | B    |             0 |              4 |
+  | a    | NULL |             1 |              7 |
+  | b    | A    |             0 |              5 |
+  | b    | B    |             0 |              6 |
+  | b    | NULL |             1 |             11 |
+  | NULL | A    |             2 |              8 |
+  | NULL | B    |             2 |             10 |
+  | NULL | NULL |             3 |             18 |
+  +------+------+---------------+----------------+
+  9 rows in set (0.02 sec)
+  ```
+
+GROUP BY `GROUPING SETS` ｜ `CUBE` ｜ `ROLLUP` 是对 GROUP BY 子句的扩展，它能够在一个 GROUP BY 子句中实现多个集合的分组的聚合。其结果等价于将多个相应 GROUP BY 子句进行 UNION 操作。
+
+  GROUP BY 子句是只含有一个元素的 GROUP BY GROUPING SETS 的特例。
+  例如，GROUPING SETS 语句：
+
+  ```sql
+  SELECT a, b, SUM( c ) FROM tab1 GROUP BY GROUPING SETS ( (a, b), (a), (b), ( ) );
+  ```
+
+  其查询结果等价于：
+
+  ```sql
+  SELECT a, b, SUM( c ) FROM tab1 GROUP BY a, b
+  UNION
+  SELECT a, null, SUM( c ) FROM tab1 GROUP BY a
+  UNION
+  SELECT null, b, SUM( c ) FROM tab1 GROUP BY b
+  UNION
+  SELECT null, null, SUM( c ) FROM tab1
+  ```
+
+  `GROUPING(expr)` 指示一个列是否为聚合列，如果是聚合列为 0，否则为 1。
+
+  `GROUPING_ID(expr  [ , expr [ , ... ] ])` 与 GROUPING 类似，GROUPING_ID 根据指定的 column 顺序，计算出一个列列表的 bitmap 值，每一位为 GROUPING 的值. GROUPING_ID()函数返回位向量的十进制值。
 
 ### HAVING
 
