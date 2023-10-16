@@ -122,7 +122,7 @@ public class LimitTest extends PlanTestBase {
 
     @Test
     public void testSortWithLimit0() throws Exception {
-        String queryStr = "select v1 from t order by v1 limit 0";
+        String queryStr = "select v1 from t0 order by v1 limit 0";
         String explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("0:EMPTYSET"));
     }
