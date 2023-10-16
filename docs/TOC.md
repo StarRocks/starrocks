@@ -165,6 +165,7 @@
     + [Profiling](./administration/Profiling.md)
 + Reference
   + SQL Reference
+    + [All commands](./sql-reference/sql-statements/all-commands.md)
     + User Account Management
       + [ALTER USER](./sql-reference/sql-statements/account-management/ALTER_USER.md)
       + [CREATE ROLE](./sql-reference/sql-statements/account-management/CREATE_ROLE.md)
@@ -208,7 +209,7 @@
       + [EXPLAIN](./sql-reference/sql-statements/Administration/EXPLAIN.md)
       + [INSTALL PLUGIN](./sql-reference/sql-statements/Administration/INSTALL_PLUGIN.md)
       + [KILL](./sql-reference/sql-statements/Administration/KILL.md)
-      + [SET](./sql-reference/sql-statements/Administration/SET.md)
+      + [SET (variable)](./sql-reference/sql-statements/Administration/SET.md)
       + [SET DEFAULT STORAGE VOLUME](./sql-reference/sql-statements/Administration/SET_DEFAULT_STORAGE_VOLUME.md)
       + [SHOW BACKENDS](./sql-reference/sql-statements/Administration/SHOW_BACKENDS.md)
       + [SHOW BROKER](./sql-reference/sql-statements/Administration/SHOW_BROKER.md)
@@ -284,7 +285,6 @@
       + [DELETE](./sql-reference/sql-statements/data-manipulation/DELETE.md)
       + [DROP TASK](./sql-reference/sql-statements/data-manipulation/DROP_TASK.md)
       + [EXPORT](./sql-reference/sql-statements/data-manipulation/EXPORT.md)
-      + [GROUP BY](./sql-reference/sql-statements/data-manipulation/GROUP_BY.md)
       + [INSERT](./sql-reference/sql-statements/data-manipulation/insert.md)
       + [PAUSE ROUTINE LOAD](./sql-reference/sql-statements/data-manipulation/PAUSE_ROUTINE_LOAD.md)
       + [REFRESH MATERIALIZED VIEW](./sql-reference/sql-statements/data-manipulation/REFRESH_MATERIALIZED_VIEW.md)
