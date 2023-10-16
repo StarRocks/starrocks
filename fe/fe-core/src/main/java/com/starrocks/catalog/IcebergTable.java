@@ -44,6 +44,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
@@ -61,6 +62,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
@@ -71,6 +73,7 @@ import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 public class IcebergTable extends Table {
     private static final Logger LOG = LogManager.getLogger(IcebergTable.class);
 
+    private Optional<Snapshot> snapshot = Optional.empty();
     private static final String JSON_KEY_ICEBERG_DB = "database";
     private static final String JSON_KEY_ICEBERG_TABLE = "table";
     private static final String JSON_KEY_RESOURCE_NAME = "resource";
@@ -89,6 +92,8 @@ public class IcebergTable extends Table {
 
     private org.apache.iceberg.Table nativeTable; // actual iceberg table
     private List<Column> partitionColumns;
+    // used for recording the last snapshot time when refresh mv based on mv.
+    private long refreshSnapshotTime = -1L;
 
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
@@ -122,6 +127,15 @@ public class IcebergTable extends Table {
 
     public String getRemoteTableName() {
         return remoteTableName;
+    }
+
+    public Optional<Snapshot> getSnapshot() {
+        if (snapshot.isPresent()) {
+            return snapshot;
+        } else {
+            snapshot = Optional.ofNullable(getNativeTable().currentSnapshot());
+            return snapshot;
+        }
     }
 
     @Override
@@ -172,6 +186,10 @@ public class IcebergTable extends Table {
         return indexes;
     }
 
+    public void resetSnapshot() {
+        snapshot = Optional.empty();
+    }
+
     public boolean isV2Format() {
         return ((BaseTable) getNativeTable()).operations().current().formatVersion() > 1;
     }
@@ -210,6 +228,14 @@ public class IcebergTable extends Table {
             nativeTable = resourceMappingTable.getNativeTable();
         }
         return nativeTable;
+    }
+
+    public long getRefreshSnapshotTime() {
+        return refreshSnapshotTime;
+    }
+
+    public void setRefreshSnapshotTime(long refreshSnapshotTime) {
+        this.refreshSnapshotTime = refreshSnapshotTime;
     }
 
     @Override

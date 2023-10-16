@@ -40,26 +40,9 @@ namespace starrocks::lake {
 
 static bvar::LatencyRecorder g_del_file_latency("lake_vacuum_del_file"); // unit: us
 static bvar::Adder<uint64_t> g_del_fails("lake_vacuum_del_file_fails");
+static bvar::Adder<uint64_t> g_deleted_files("lake_vacuum_deleted_files");
 static bvar::LatencyRecorder g_metadata_travel_latency("lake_vacuum_metadata_travel"); // unit: ms
-static bvar::LatencyRecorder g_txnlog_travel_latency("lake_vacuum_txnlog_travel");
-
-static Status delete_file(FileSystem* fs, const std::string& path) {
-    auto wait_duration = config::experimental_lake_wait_per_delete_ms;
-    if (wait_duration > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(wait_duration));
-    }
-    auto t0 = butil::gettimeofday_us();
-    auto st = fs->delete_file(path);
-    if (st.ok()) {
-        auto t1 = butil::gettimeofday_us();
-        g_del_file_latency << (t1 - t0);
-        LOG_IF(INFO, config::lake_print_delete_log) << "Deleted " << path;
-    } else if (!st.is_not_found()) {
-        g_del_fails << 1;
-        LOG(WARNING) << "Fail to delete " << path << ": " << st;
-    }
-    return st;
-}
+static bvar::LatencyRecorder g_vacuum_txnlog_latency("lake_vacuum_delete_txnlog");
 
 static Status delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
     if (paths.empty()) {
@@ -70,19 +53,24 @@ static Status delete_files(FileSystem* fs, const std::vector<std::string>& paths
     if (wait_duration > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(wait_duration));
     }
-    for (auto&& path : paths) {
-        LOG_IF(INFO, config::lake_print_delete_log) << "Deleting " << path;
+
+    if (config::lake_print_delete_log) {
+        for (size_t i = 0, n = paths.size(); i < n; i++) {
+            LOG(INFO) << "Deleting " << paths[i] << "(" << (i + 1) << '/' << n << ')';
+        }
     }
+
     auto t0 = butil::gettimeofday_us();
     auto st = fs->delete_files(paths);
+    TEST_SYNC_POINT_CALLBACK("vacuum.delete_files", &st);
     if (st.ok()) {
         auto t1 = butil::gettimeofday_us();
         g_del_file_latency << (t1 - t0);
-        LOG_IF(INFO, config::lake_print_delete_log) << "Deleted " << paths.size() << " files";
+        g_deleted_files << paths.size();
+        VLOG(5) << "Deleted " << paths.size() << " files cost " << (t1 - t0) << "us";
     } else {
         LOG(WARNING) << "Fail to delete: " << st;
     }
-    TEST_SYNC_POINT_CALLBACK("vacuum.delete_files", &st);
     return st;
 }
 
@@ -125,18 +113,20 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
         } else {
             auto metadata = std::move(res).value();
             if (skip_check_grace_timestamp) {
-                // Reached here means all versions less than |*final_retain_version| were create before
-                // |grace_timestamp| and can be vacuumed.
                 DCHECK_LE(version, final_retain_version);
                 collect_garbage_files(*metadata, data_dir, datafiles_to_vacuum, total_datafile_size);
             } else {
-                // Reached here means that the tablet metadata that has been traversed was created after
-                // |grace_timestamp| and cannot be deleted.
-                // Now check if the current |version| was created before |grace_timestamp|.
-                ASSIGN_OR_RETURN(auto mtime, fs->get_file_modified_time(path));
-                TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_file_modified_time", &mtime);
-                if (mtime < grace_timestamp) {
-                    // |version| is the first version encountered that was created before |grace_timestamp|.
+                int64_t compare_time = 0;
+                if (metadata->has_commit_time() && metadata->commit_time() > 0) {
+                    compare_time = metadata->commit_time();
+                } else {
+                    ASSIGN_OR_RETURN(compare_time, fs->get_file_modified_time(path));
+                    TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_file_modified_time", &compare_time);
+                }
+
+                if (compare_time < grace_timestamp) {
+                    // This is the first metadata we've encountered that was created or committed before
+                    // the |grace_timestamp|, mark it as a version to retain prevents it from being deleted.
                     //
                     // Why not delete this version:
                     // Assuming |grace_timestamp| is the earliest possible initiation time of queries still
@@ -145,19 +135,14 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                     // be kept in case the query fails. And the |version| here is probably the last version
                     // created before grace_timestamp.
                     final_retain_version = version;
+
+                    // From now on, all metadata encountered later will no longer need to be checked for
+                    // |grace_timestamp| and will be considered ready for deletion.
                     skip_check_grace_timestamp = true;
 
-                    // We need to retain metadata files with version |final_retain_version|, but garbage
-                    // files recorded in it can be deleted.
+                    // The metadata will be retained, but garbage files recorded in it can be deleted.
                     collect_garbage_files(*metadata, data_dir, datafiles_to_vacuum, total_datafile_size);
-
-                    // from now on, all versions smaller than |final_retain_version| are versions that can
-                    // be cleaned up, and it is no longer necessary to check the modification time of the
-                    // tablet metadata.
                 } else {
-                    // Although |version| is smaller than |final_retain_version|, since |version| was created after
-                    // the |grace_timestamp|, |version| cannot be deleted either;
-                    // set |version| as the new retain version.
                     DCHECK_LE(version, final_retain_version);
                     final_retain_version = version;
                 }
@@ -179,6 +164,16 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
         metafiles_to_vacuum->emplace_back(join_path(meta_dir, tablet_metadata_filename(tablet_id, v)));
     }
     return Status::OK();
+}
+
+static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, const std::vector<std::string>& metafiles) {
+    auto cache = tablet_mgr->metacache();
+    DCHECK(cache != nullptr);
+    // Assuming the cache key for tablet metadata is the path to tablet metadata.
+    // TODO: Refactor the code to extract a separate function that constructs the tablet metadata cache key
+    for (const auto& path : metafiles) {
+        cache->erase(path);
+    }
 }
 
 static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_dir,
@@ -203,6 +198,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
             (*vacuumed_files) += (datafiles_to_vacuum.size() + metafiles_to_vacuum.size());
             RETURN_IF_ERROR(delete_files(fs.get(), datafiles_to_vacuum));
             RETURN_IF_ERROR(delete_files(fs.get(), metafiles_to_vacuum));
+            erase_tablet_metadata_from_metacache(tablet_mgr, metafiles_to_vacuum);
             datafiles_to_vacuum.clear();
             metafiles_to_vacuum.clear();
         }
@@ -210,18 +206,21 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     (*vacuumed_files) += (datafiles_to_vacuum.size() + metafiles_to_vacuum.size());
     RETURN_IF_ERROR(delete_files(fs.get(), datafiles_to_vacuum));
     RETURN_IF_ERROR(delete_files(fs.get(), metafiles_to_vacuum));
+    erase_tablet_metadata_from_metacache(tablet_mgr, metafiles_to_vacuum);
     return Status::OK();
 }
 
-static Status vacuum_txn_log(std::string_view root_location, const std::vector<int64_t>& tablet_ids,
-                             int64_t min_active_txn_id, int64_t* vacuumed_files, int64_t* vacuumed_file_size) {
+static Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id, int64_t* vacuumed_files,
+                             int64_t* vacuumed_file_size) {
     auto t0 = butil::gettimeofday_s();
-    DCHECK(std::is_sorted(tablet_ids.begin(), tablet_ids.end()));
     DCHECK(vacuumed_files != nullptr);
     DCHECK(vacuumed_file_size != nullptr);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
+    std::vector<std::string> files_to_vacuum;
+    auto ret = Status::OK();
+    auto batch_size = config::lake_vacuum_max_batch_delete_size;
     auto log_dir = join_path(root_location, kTxnLogDirectoryName);
-    auto ret = ignore_not_found(fs->iterate_dir2(log_dir, [&](DirEntry entry) {
+    auto iter_st = ignore_not_found(fs->iterate_dir2(log_dir, [&](DirEntry entry) {
         if (!is_txn_log(entry.name)) {
             return true;
         }
@@ -229,21 +228,25 @@ static Status vacuum_txn_log(std::string_view root_location, const std::vector<i
         if (txn_id >= min_active_txn_id) {
             return true;
         }
-        if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
-            return true;
-        }
-        auto st = delete_file(fs.get(), join_path(log_dir, entry.name));
-        if (st.ok()) {
-            *vacuumed_files += 1;
-            *vacuumed_file_size += entry.size.value_or(0);
-        } else if (!st.is_not_found()) {
-            // Stop execution
-            return false;
+
+        files_to_vacuum.emplace_back(join_path(log_dir, entry.name));
+        *vacuumed_files += 1;
+        *vacuumed_file_size += entry.size.value_or(0);
+
+        if (files_to_vacuum.size() >= batch_size) {
+            auto st = delete_files(fs.get(), files_to_vacuum);
+            files_to_vacuum.clear();
+            ret.update(st);
+            return st.ok(); // Stop list if delete failed
         }
         return true;
     }));
+    ret.update(iter_st);
+    ret.update(delete_files(fs.get(), files_to_vacuum));
+
     auto t1 = butil::gettimeofday_s();
-    g_txnlog_travel_latency << (t1 - t0);
+    g_vacuum_txnlog_latency << (t1 - t0);
+
     return ret;
 }
 
@@ -275,7 +278,7 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_ids, min_retain_version, grace_timestamp,
                                            &vacuumed_files, &vacuumed_file_size));
     if (request.delete_txn_log()) {
-        RETURN_IF_ERROR(vacuum_txn_log(root_loc, tablet_ids, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
+        RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
     }
     response->set_vacuumed_files(vacuumed_files);
     response->set_vacuumed_file_size(vacuumed_file_size);

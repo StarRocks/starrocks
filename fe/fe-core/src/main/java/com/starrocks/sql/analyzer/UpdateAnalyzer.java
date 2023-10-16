@@ -24,6 +24,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
@@ -100,6 +101,9 @@ public class UpdateAnalyzer {
                         // 2. The proportion of columns updated is less than 30%
                         // 3. No where predicate in update stmt
                         updateStmt.setUsePartialUpdate();
+                        if (table instanceof OlapTable && ((OlapTable) table).hasRowStorageType()) {
+                            throw new SemanticException("column with row table must specify where clause for update");
+                        }
                     }
                 }
             }

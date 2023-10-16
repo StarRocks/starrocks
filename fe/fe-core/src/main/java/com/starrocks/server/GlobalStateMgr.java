@@ -75,6 +75,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
@@ -337,6 +338,8 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN;
 
 public class GlobalStateMgr {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
@@ -2793,6 +2796,18 @@ public class GlobalStateMgr {
                     sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(olapTable.getForeignKeyConstraints()))
                             .append("\"");
                 }
+
+                // store type
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)) {
+                    if (olapTable.storageType() != null &&
+                            !PROPERTIES_STORAGE_TYPE_COLUMN.equalsIgnoreCase(olapTable.storageType())) {
+                        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                                .append(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)
+                                .append("\" = \"");
+
+                        sb.append(olapTable.storageType()).append("\"");
+                    }
+                }
             }
 
             if (olapTable.primaryIndexCacheExpireSec() > 0) {
@@ -3777,22 +3792,22 @@ public class GlobalStateMgr {
         if (db == null) {
             throw new StarRocksConnectorException("db: " + tableName.getDb() + " not exists");
         }
-        HiveMetaStoreTable hmsTable;
+
         Table table;
         db.readLock();
         try {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
-            if (!(table instanceof HiveMetaStoreTable)) {
+            if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView)) {
                 throw new StarRocksConnectorException(
-                        "table : " + tableName + " not exists, or is not hive/hudi external table");
+                        "table : " + tableName + " not exists, or is not hive/hudi external table/view");
             }
-            hmsTable = (HiveMetaStoreTable) table;
         } finally {
             db.readUnlock();
         }
 
         if (CatalogMgr.isInternalCatalog(catalogName)) {
-            catalogName = hmsTable.getCatalogName();
+            Preconditions.checkState(table instanceof HiveMetaStoreTable);
+            catalogName = ((HiveMetaStoreTable) table).getCatalogName();
         }
 
         metadataMgr.refreshTable(catalogName, dbName, table, partitions, true);

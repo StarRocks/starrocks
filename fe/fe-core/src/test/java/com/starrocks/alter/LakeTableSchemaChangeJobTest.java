@@ -135,14 +135,16 @@ public class LakeTableSchemaChangeJobTest {
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
         Partition partition = new Partition(partitionId, "t0", index, dist);
         TStorageMedium storage = TStorageMedium.HDD;
-        TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
+        TabletMeta tabletMeta =
+                new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
         for (int i = 0; i < NUM_BUCKETS; i++) {
             Tablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId());
             index.addTablet(tablet, tabletMeta);
         }
         table.addPartition(partition);
 
-        table.setIndexMeta(index.getId(), "t0", Collections.singletonList(c0), 0, 0, (short) 1, TStorageType.COLUMN, keysType);
+        table.setIndexMeta(index.getId(), "t0", Collections.singletonList(c0), 0, 0, (short) 1, TStorageType.COLUMN,
+                keysType);
         table.setBaseIndexId(index.getId());
         table.setUseLightSchemaChange(false);
 
@@ -695,15 +697,18 @@ public class LakeTableSchemaChangeJobTest {
 
         schemaChangeJob.runRunningJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        Assert.assertTrue(schemaChangeJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
         Collection<Partition> partitions = table.getPartitions();
         Assert.assertEquals(1, partitions.size());
         Partition partition = partitions.stream().findFirst().orElse(null);
         Assert.assertNotNull(partition);
         Assert.assertEquals(3, partition.getNextVersion());
-        List<MaterializedIndex> shadowIndexes = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        List<MaterializedIndex> shadowIndexes =
+                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assert.assertEquals(1, shadowIndexes.size());
         MaterializedIndex shadowIndex = shadowIndexes.get(0);
-        Assert.assertEquals(shadowTabletIds, shadowIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()));
+        Assert.assertEquals(shadowTabletIds,
+                shadowIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()));
 
         // Does not support cancel job in FINISHED_REWRITING state.
         schemaChangeJob.cancel("test");
@@ -727,7 +732,9 @@ public class LakeTableSchemaChangeJobTest {
             }
 
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion) throws
+            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
+                                       long commitTime)
+                    throws
                     RpcException {
                 throw new RpcException("publish version failed", "127.0.0.1");
             }
@@ -786,10 +793,12 @@ public class LakeTableSchemaChangeJobTest {
         schemaChangeJob.runRunningJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
-        List<MaterializedIndex> shadowIndexes = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        List<MaterializedIndex> shadowIndexes =
+                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assert.assertEquals(1, shadowIndexes.size());
         MaterializedIndex shadowIndex = shadowIndexes.get(0);
-        Assert.assertEquals(shadowTabletIds, shadowIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()));
+        Assert.assertEquals(shadowTabletIds,
+                shadowIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()));
 
         // The partition's visible version has not catch up with the commit version of this schema change job now.
         schemaChangeJob.runFinishedRewritingJob();
@@ -823,7 +832,8 @@ public class LakeTableSchemaChangeJobTest {
             }
 
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion) {
+            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
+                                       long commitTime) {
                 // nothing to do
             }
         };
@@ -837,6 +847,7 @@ public class LakeTableSchemaChangeJobTest {
 
         schemaChangeJob.runFinishedRewritingJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, schemaChangeJob.getJobState());
+        Assert.assertTrue(schemaChangeJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
 
         Assert.assertEquals(2, table.getBaseSchema().size());
         Assert.assertEquals("c0", table.getBaseSchema().get(0).getName());
@@ -849,10 +860,12 @@ public class LakeTableSchemaChangeJobTest {
         shadowIndexes = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assert.assertEquals(0, shadowIndexes.size());
 
-        List<MaterializedIndex> normalIndexes = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+        List<MaterializedIndex> normalIndexes =
+                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
         Assert.assertEquals(1, normalIndexes.size());
         MaterializedIndex normalIndex = normalIndexes.get(0);
-        Assert.assertEquals(shadowTabletIds, normalIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()));
+        Assert.assertEquals(shadowTabletIds,
+                normalIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()));
 
         for (Long tabletId : shadowTabletIds) {
             TabletMeta tabletMeta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
