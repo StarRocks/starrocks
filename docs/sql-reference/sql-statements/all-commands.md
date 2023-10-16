@@ -41,15 +41,12 @@ Manages users, roles, and privileges.
 - [EXECUTE AS](./account-management/EXECUTE_AS.md)
 - [GRANT](./account-management/GRANT.md)
 - [REVOKE](./account-management/REVOKE.md)
-- [SET DEFAULT ROLE](./account-management/SET_DEFAULT_ROLE.md)
 - [SET PASSWORD](./account-management/SET_PASSWORD.md)
 - [SET PROPERTY](./account-management/SET_PROPERTY.md)
-- [SET ROLE](./account-management/SET_ROLE.md)
 - [SHOW AUTHENTICATION](./account-management/SHOW_AUTHENTICATION.md)
 - [SHOW GRANTS](./account-management/SHOW_GRANTS.md)
 - [SHOW PROPERTY](./account-management/SHOW_PROPERTY.md)
 - [SHOW ROLES](./account-management/SHOW_ROLES.md)
-- [SHOW USERS](./account-management/SHOW_USERS.md)
 
 ## Cluster management
 
@@ -151,7 +148,6 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 
 - [CREATE EXTERNAL CATALOG](./data-definition/CREATE_EXTERNAL_CATALOG.md)
 - [DROP CATALOG](./data-definition/DROP_CATALOG.md)
-- [SET CATALOG](./data-definition/SET_CATALOG.md)
 - [SHOW CATALOGS](./data-manipulation/SHOW_CATALOGS.md)
 - [SHOW CREATE CATALOG](./data-manipulation/SHOW_CREATE_CATALOG.md)
 
