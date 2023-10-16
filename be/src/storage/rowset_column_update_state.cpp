@@ -629,7 +629,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             return Status::InternalError(msg);
         }
         if (!tschema->column(cid).is_key()) {
-            unique_update_column_ids.push_back(cid);
+            unique_update_column_ids.push_back(uid);
         }
     }
     auto partial_tschema = TabletSchema::create(tschema, update_column_ids);
