@@ -175,7 +175,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         version++;
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
@@ -189,7 +189,8 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1, time(NULL))
+                      .status());
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
 
@@ -215,7 +216,8 @@ TEST_F(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1, time(NULL))
+                      .status());
     version++;
     ASSERT_EQ(0, read(version));
 }
@@ -342,7 +344,7 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         version++;
     }
     ASSERT_EQ(kChunkSize * 6, read(version));
@@ -365,7 +367,8 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
         CompactionTask::Progress progress;
         ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, progress.value());
-        ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1, time(NULL))
+                          .status());
         version++;
         ASSERT_EQ(kChunkSize * 6, read(version));
     }
@@ -520,7 +523,7 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, read(version));
@@ -534,7 +537,8 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1, time(NULL))
+                      .status());
     version++;
     ASSERT_EQ(kChunkSize, read(version));
 
@@ -668,7 +672,7 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, read(version));
@@ -706,7 +710,8 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1, time(NULL))
+                      .status());
     version++;
     ASSERT_EQ(kChunkSize - 4, read(version));
 
