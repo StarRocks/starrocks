@@ -343,25 +343,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         }
                         countDownLatch.addMark(backendId, shadowTabletId);
                         // No need to set base tablet id for CreateReplicaTask
-<<<<<<< HEAD
                         CreateReplicaTask createReplicaTask = new CreateReplicaTask(backendId, dbId, tableId, partitionId,
                                 shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0, Partition.PARTITION_INIT_VERSION,
                                 originKeysType, TStorageType.COLUMN, storageMedium, copiedShadowSchema, bfColumns, bfFpp,
                                 countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(),
                                 TTabletType.TABLET_TYPE_LAKE, table.getCompressionType(), copiedSortKeyIdxes);
 
-=======
-                        CreateReplicaTask createReplicaTask =
-                                new CreateReplicaTask(backendId, dbId, tableId, partitionId,
-                                        shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0,
-                                        Partition.PARTITION_INIT_VERSION,
-                                        originKeysType, TStorageType.COLUMN, storageMedium, copiedShadowSchema,
-                                        bfColumns, bfFpp,
-                                        countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(),
-                                        table.primaryIndexCacheExpireSec(), TTabletType.TABLET_TYPE_LAKE,
-                                        table.getCompressionType(),
-                                        copiedSortKeyIdxes, null);
->>>>>>> c7a1c660a0 ([Enhancement] Compare txn commit time with grace time when executing vacuum. (#32424))
                         batchTask.addTask(createReplicaTask);
                     }
                 }
