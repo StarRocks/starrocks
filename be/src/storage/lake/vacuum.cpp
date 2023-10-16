@@ -40,26 +40,9 @@ namespace starrocks::lake {
 
 static bvar::LatencyRecorder g_del_file_latency("lake_vacuum_del_file"); // unit: us
 static bvar::Adder<uint64_t> g_del_fails("lake_vacuum_del_file_fails");
+static bvar::Adder<uint64_t> g_deleted_files("lake_vacuum_deleted_files");
 static bvar::LatencyRecorder g_metadata_travel_latency("lake_vacuum_metadata_travel"); // unit: ms
-static bvar::LatencyRecorder g_txnlog_travel_latency("lake_vacuum_txnlog_travel");
-
-static Status delete_file(FileSystem* fs, const std::string& path) {
-    auto wait_duration = config::experimental_lake_wait_per_delete_ms;
-    if (wait_duration > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(wait_duration));
-    }
-    auto t0 = butil::gettimeofday_us();
-    auto st = fs->delete_file(path);
-    if (st.ok()) {
-        auto t1 = butil::gettimeofday_us();
-        g_del_file_latency << (t1 - t0);
-        LOG_IF(INFO, config::lake_print_delete_log) << "Deleted " << path;
-    } else if (!st.is_not_found()) {
-        g_del_fails << 1;
-        LOG(WARNING) << "Fail to delete " << path << ": " << st;
-    }
-    return st;
-}
+static bvar::LatencyRecorder g_vacuum_txnlog_latency("lake_vacuum_delete_txnlog");
 
 static Status delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
     if (paths.empty()) {
@@ -70,19 +53,24 @@ static Status delete_files(FileSystem* fs, const std::vector<std::string>& paths
     if (wait_duration > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(wait_duration));
     }
-    for (auto&& path : paths) {
-        LOG_IF(INFO, config::lake_print_delete_log) << "Deleting " << path;
+
+    if (config::lake_print_delete_log) {
+        for (size_t i = 0, n = paths.size(); i < n; i++) {
+            LOG(INFO) << "Deleting " << paths[i] << "(" << (i + 1) << '/' << n << ')';
+        }
     }
+
     auto t0 = butil::gettimeofday_us();
     auto st = fs->delete_files(paths);
+    TEST_SYNC_POINT_CALLBACK("vacuum.delete_files", &st);
     if (st.ok()) {
         auto t1 = butil::gettimeofday_us();
         g_del_file_latency << (t1 - t0);
-        LOG_IF(INFO, config::lake_print_delete_log) << "Deleted " << paths.size() << " files";
+        g_deleted_files << paths.size();
+        VLOG(5) << "Deleted " << paths.size() << " files cost " << (t1 - t0) << "us";
     } else {
         LOG(WARNING) << "Fail to delete: " << st;
     }
-    TEST_SYNC_POINT_CALLBACK("vacuum.delete_files", &st);
     return st;
 }
 
@@ -222,15 +210,17 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     return Status::OK();
 }
 
-static Status vacuum_txn_log(std::string_view root_location, const std::vector<int64_t>& tablet_ids,
-                             int64_t min_active_txn_id, int64_t* vacuumed_files, int64_t* vacuumed_file_size) {
+static Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id, int64_t* vacuumed_files,
+                             int64_t* vacuumed_file_size) {
     auto t0 = butil::gettimeofday_s();
-    DCHECK(std::is_sorted(tablet_ids.begin(), tablet_ids.end()));
     DCHECK(vacuumed_files != nullptr);
     DCHECK(vacuumed_file_size != nullptr);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
+    std::vector<std::string> files_to_vacuum;
+    auto ret = Status::OK();
+    auto batch_size = config::lake_vacuum_max_batch_delete_size;
     auto log_dir = join_path(root_location, kTxnLogDirectoryName);
-    auto ret = ignore_not_found(fs->iterate_dir2(log_dir, [&](DirEntry entry) {
+    auto iter_st = ignore_not_found(fs->iterate_dir2(log_dir, [&](DirEntry entry) {
         if (!is_txn_log(entry.name)) {
             return true;
         }
@@ -238,21 +228,25 @@ static Status vacuum_txn_log(std::string_view root_location, const std::vector<i
         if (txn_id >= min_active_txn_id) {
             return true;
         }
-        if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
-            return true;
-        }
-        auto st = delete_file(fs.get(), join_path(log_dir, entry.name));
-        if (st.ok()) {
-            *vacuumed_files += 1;
-            *vacuumed_file_size += entry.size.value_or(0);
-        } else if (!st.is_not_found()) {
-            // Stop execution
-            return false;
+
+        files_to_vacuum.emplace_back(join_path(log_dir, entry.name));
+        *vacuumed_files += 1;
+        *vacuumed_file_size += entry.size.value_or(0);
+
+        if (files_to_vacuum.size() >= batch_size) {
+            auto st = delete_files(fs.get(), files_to_vacuum);
+            files_to_vacuum.clear();
+            ret.update(st);
+            return st.ok(); // Stop list if delete failed
         }
         return true;
     }));
+    ret.update(iter_st);
+    ret.update(delete_files(fs.get(), files_to_vacuum));
+
     auto t1 = butil::gettimeofday_s();
-    g_txnlog_travel_latency << (t1 - t0);
+    g_vacuum_txnlog_latency << (t1 - t0);
+
     return ret;
 }
 
@@ -284,7 +278,7 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_ids, min_retain_version, grace_timestamp,
                                            &vacuumed_files, &vacuumed_file_size));
     if (request.delete_txn_log()) {
-        RETURN_IF_ERROR(vacuum_txn_log(root_loc, tablet_ids, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
+        RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
     }
     response->set_vacuumed_files(vacuumed_files);
     response->set_vacuumed_file_size(vacuumed_file_size);

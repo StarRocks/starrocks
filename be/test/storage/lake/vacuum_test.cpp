@@ -938,14 +938,21 @@ TEST_F(LakeVacuumTest, test_dont_delete_txn_log) {
         }
         )DEL")));
 
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 2000,
+            "txn_id": 3000
+        }
+        )DEL")));
+
     // delete_txn_log = false
     {
         VacuumRequest request;
         VacuumResponse response;
         request.set_delete_txn_log(false);
         request.add_tablet_ids(1900);
-        request.set_grace_timestamp(time(nullptr) + 3600);
-        request.set_min_active_txn_id(100000);
+        request.set_grace_timestamp(time(nullptr) - 3600);
+        request.set_min_active_txn_id(4000);
         request.set_min_retain_version(1000);
 
         vacuum(_tablet_mgr.get(), request, &response);
@@ -962,8 +969,8 @@ TEST_F(LakeVacuumTest, test_dont_delete_txn_log) {
         VacuumResponse response;
         request.set_delete_txn_log(true);
         request.add_tablet_ids(1900);
-        request.set_grace_timestamp(time(nullptr) + 3600);
-        request.set_min_active_txn_id(100000);
+        request.set_grace_timestamp(time(nullptr) - 3600);
+        request.set_min_active_txn_id(4000);
         request.set_min_retain_version(1000);
 
         vacuum(_tablet_mgr.get(), request, &response);
@@ -972,7 +979,8 @@ TEST_F(LakeVacuumTest, test_dont_delete_txn_log) {
         EXPECT_GT(response.vacuumed_file_size(), 0);
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(1900, 2000)));
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(1900, 3000)));
-        EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(1900, 4000)));
+        EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(2000, 3000)));
+        EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(1900, 4000)));
     }
 }
 
