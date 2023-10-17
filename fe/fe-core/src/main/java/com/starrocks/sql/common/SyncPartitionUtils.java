@@ -657,6 +657,17 @@ public class SyncPartitionUtils {
         mvPartitionNameRefBaseTablePartitionMap.remove(mvPartitionName);
     }
 
+
+    private static boolean isMVPartitionNameRefBaseTablePartitionMapEnough(
+            Map<String, MaterializedView.BasePartitionInfo> baseTableVersionInfoMap,
+            Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap) {
+        long refreshedRefBaseTablePartitionSize = baseTableVersionInfoMap.keySet()
+                .stream().filter(x -> !x.equals(ICEBERG_ALL_PARTITION)).count();
+        long refreshAssociatedRefTablePartitionSize = mvPartitionNameRefBaseTablePartitionMap.values()
+                .stream().map(x -> x.size()).reduce(0, Integer::sum);
+        return refreshedRefBaseTablePartitionSize == refreshAssociatedRefTablePartitionSize;
+    }
+
     private static void dropRefBaseTableFromVersionMapForOlapTable(
             MaterializedView mv,
             Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap,
@@ -677,10 +688,8 @@ public class SyncPartitionUtils {
             dropRefBaseTableFromVersionMap(mv, baseTableVersionInfoMap, mvPartitionNameRefBaseTablePartitionMap,
                     tableId.toString(), mvPartitionName);
         } else {
-            long refreshedRefBaseTablePartitionSize = baseTableVersionInfoMap.size();
-            long refreshAssociatedRefTablePartitionSize = mvPartitionNameRefBaseTablePartitionMap.values()
-                    .stream().map(x -> x.size()).reduce(0, (x, y) -> x + y);
-            if (refreshedRefBaseTablePartitionSize == refreshAssociatedRefTablePartitionSize) {
+            if (isMVPartitionNameRefBaseTablePartitionMapEnough(baseTableVersionInfoMap,
+                    mvPartitionNameRefBaseTablePartitionMap)) {
                 // It's safe here that only log warning rather than remove all the ref base table info from version map,
                 // because mvPartitionNameRefBaseTablePartitionMap should track all the changed materialized view
                 // partitions.
@@ -692,10 +701,8 @@ public class SyncPartitionUtils {
                 // NOTE: If the materialized view has created in old version, mvPartitionNameRefBaseTablePartitionMap
                 // may not contain enough info to track associated ref base change partitions.
                 LOG.warn("Remove ref base table {} from materialized view {}'s version meta because " +
-                                "materialized view's partition {} has been dropped, refreshedRefBaseTablePartitionSize:{}, " +
-                                "refreshAssociatedRefTablePartitionSize:{}",
-                        tableId, mv.getName(), mvPartitionName, refreshedRefBaseTablePartitionSize,
-                        refreshAssociatedRefTablePartitionSize);
+                                "materialized view's partition {} has been dropped",
+                        tableId, mv.getName(), mvPartitionName);
                 versionMap.remove(tableId);
             }
         }
@@ -721,11 +728,8 @@ public class SyncPartitionUtils {
             dropRefBaseTableFromVersionMap(mv, baseTableVersionInfoMap,
                     mvPartitionNameRefBaseTablePartitionMap, baseTableInfo.getTableName(), mvPartitionName);
         } else {
-            long refreshedRefBaseTablePartitionSize = baseTableVersionInfoMap.keySet().size();
-            //.stream().filter(x -> !x.equals(ICEBERG_ALL_PARTITION)).count();
-            long refreshAssociatedRefTablePartitionSize = mvPartitionNameRefBaseTablePartitionMap.values()
-                    .stream().map(x -> x.size()).reduce(0, (x, y) -> x + y);
-            if (refreshedRefBaseTablePartitionSize == refreshAssociatedRefTablePartitionSize) {
+            if (isMVPartitionNameRefBaseTablePartitionMapEnough(baseTableVersionInfoMap,
+                    mvPartitionNameRefBaseTablePartitionMap)) {
                 // It's safe here that only log warning rather than remove all the ref base table info from version map,
                 // because mvPartitionNameRefBaseTablePartitionMap should track all the changed materialized view
                 // partitions.
@@ -737,10 +741,8 @@ public class SyncPartitionUtils {
                 // NOTE: If the materialized view has created in old version, mvPartitionNameRefBaseTablePartitionMap
                 // may not contain enough info to track associated ref base change partitions.
                 LOG.warn("Remove ref base table {} from materialized view {}'s version meta because " +
-                                "materialized view's partition {} has been dropped, " +
-                                "refreshedRefBaseTablePartitionSize:{}, refreshAssociatedRefTablePartitionSize:{}",
-                        baseTableInfo, mv.getName(), mvPartitionName, refreshedRefBaseTablePartitionSize,
-                        refreshAssociatedRefTablePartitionSize);
+                                "materialized view's partition {} has been dropped",
+                        baseTableInfo, mv.getName(), mvPartitionName);
                 versionMap.remove(baseTableInfo);
             }
         }
