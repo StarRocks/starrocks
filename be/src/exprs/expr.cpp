@@ -34,6 +34,7 @@
 
 #include "exprs/expr.h"
 
+#include <llvm/IR/Value.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include <sstream>
@@ -43,6 +44,8 @@
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "common/statusor.h"
+#include "exprs/anyval_util.h"
 #include "exprs/arithmetic_expr.h"
 #include "exprs/array_element_expr.h"
 #include "exprs/array_expr.h"
@@ -61,6 +64,9 @@
 #include "exprs/info_func.h"
 #include "exprs/is_null_predicate.h"
 #include "exprs/java_function_call_expr.h"
+#include "exprs/jit/jit_expr.h"
+#include "exprs/jit/jit_functions.h"
+#include "exprs/jit/jit_wrapper.h"
 #include "exprs/lambda_function.h"
 #include "exprs/literal.h"
 #include "exprs/map_apply_expr.h"
@@ -205,6 +211,25 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
                    << status.get_error_msg() << "\n"
                    << apache::thrift::ThriftDebugString(texpr);
     }
+
+    // Enable JIT based on the "enable_jit" parameters.
+    // if (!state->query_options().__isset.enable_jit || !state->query_options().enable_jit) {
+    //     return status;
+    // }
+
+    // Check if JIT compilation is feasible on this platform.
+    auto* jit_wrapper = JITWapper::get_instance();
+    if (!jit_wrapper->support_jit()) {
+        return status;
+    }
+
+    const auto* prev_e = e;
+    e->replace_compilable_exprs(&e, pool);
+    if (e != prev_e) {
+        // The root node was replaced, so we need to update the context.
+        *ctx = pool->add(new ExprContext(e));
+    }
+
     return status;
 }
 
@@ -399,6 +424,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::LITERAL_PRED:
     case TExprNodeType::TUPLE_IS_NULL_PRED:
     case TExprNodeType::RUNTIME_FILTER_MIN_MAX_EXPR:
+    case TExprNodeType::JIT_EXPR:
         break;
     }
     if (*expr == nullptr) {
@@ -652,6 +678,72 @@ ColumnRef* Expr::get_column_ref() {
         }
     }
     return nullptr;
+}
+
+StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
+                                      const std::vector<LLVMDatum>& datums) const {
+    if (!is_compilable()) {
+        return Status::JitCompileError("Expr not supported");
+    }
+
+    ASSIGN_OR_RETURN(auto datum, generate_ir_impl(context, module, b, datums))
+    // Unoin null.
+    if (this->is_nullable()) {
+        // TODO(Yueyang): Check this.
+        for (auto& input : datums) {
+            datum.null_flag = b.CreateOr(datum.null_flag, input.null_flag);
+        }
+    }
+    return datum;
+}
+
+void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs) {
+    if (!this->is_compilable()) {
+        exprs.emplace_back(this);
+        return;
+    }
+    for (auto child : this->children()) {
+        child->get_uncompilable_exprs(exprs);
+    }
+}
+
+void Expr::get_jit_exprs(std::vector<Expr*>& exprs) {
+    if (!this->is_compilable()) {
+        exprs.emplace_back(this);
+        return;
+    }
+    for (auto child : this->children()) {
+        child->get_jit_exprs(exprs);
+    }
+    exprs.emplace_back(this);
+}
+
+Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool) {
+    if ((*expr)->should_compile()) {
+        *expr = JITExpr::create(pool, *expr);
+    } else {
+        for (auto& child : _children) {
+            RETURN_IF_ERROR(child->replace_compilable_exprs(&child, pool));
+        }
+    }
+    return Status::OK();
+}
+
+bool Expr::should_compile() const {
+    if (!is_compilable() || _children.empty()) {
+        return false;
+    }
+
+    for (auto child : _children) {
+        // If an expr is compilable, and it has compilable child nodes that are not leaf nodes,
+        // compiling these compilable nodes into one node via JIT will provide benefits.
+        // The 'literal' is special. It is compilable, but it doesn't have any child nodes
+        if (child->is_compilable() && !child->children().empty()) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 } // namespace starrocks

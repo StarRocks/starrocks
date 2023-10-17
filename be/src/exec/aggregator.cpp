@@ -413,6 +413,14 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             Expr* expr = nullptr;
             ExprContext* ctx = nullptr;
             RETURN_IF_ERROR(Expr::create_tree_from_thrift(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
+
+            const auto* prev_e = expr;
+            expr->replace_compilable_exprs(&expr, _pool);
+            if (expr != prev_e) {
+                // The root node was replaced, so we need to update the context.
+                ctx = _pool->add(new ExprContext(expr));
+            }
+
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 
