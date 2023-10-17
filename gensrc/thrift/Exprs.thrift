@@ -86,6 +86,8 @@ enum TExprNodeType {
 
   // query DICTIONARY object
   DICTIONARY_EXPR,
+  
+  JIT_EXPR,
 }
 
 struct TAggregateExpr {

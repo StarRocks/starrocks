@@ -295,6 +295,8 @@ VALUE_GUARD(LogicalType, IntegerLTGuard, lt_is_integer, TYPE_TINYINT, TYPE_SMALL
             TYPE_LARGEINT)
 VALUE_GUARD(LogicalType, SumBigIntLTGuard, lt_is_sum_bigint, TYPE_BOOLEAN, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT,
             TYPE_BIGINT)
+VALUE_GUARD(LogicalType, UnsignedLTGuard, lt_is_unsigned, TYPE_UNSIGNED_TINYINT, TYPE_UNSIGNED_SMALLINT,
+            TYPE_UNSIGNED_INT, TYPE_UNSIGNED_BIGINT)
 VALUE_GUARD(LogicalType, FloatLTGuard, lt_is_float, TYPE_FLOAT, TYPE_DOUBLE)
 VALUE_GUARD(LogicalType, Decimal32LTGuard, lt_is_decimal32, TYPE_DECIMAL32)
 VALUE_GUARD(LogicalType, Decimal64LTGuard, lt_is_decimal64, TYPE_DECIMAL64)
