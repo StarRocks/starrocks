@@ -2,11 +2,6 @@
 
 StarRocks supports access to other data sources by using external tables. External tables are created based on data tables that are stored in other data sources. StarRocks only stores the metadata of the data tables. You can use external tables to directly query data in other data sources. StarRocks supports the following data sources: MySQL, Elasticsearch, Hive, StarRocks, Apache Iceberg, and Apache Hudi. **Currently, you can only write data from another StarRocks cluster into the current StarRocks cluster. You cannot read data from it. For data sources other than StarRocks, you can only read data from these data sources.**
 
-> **NOTICE**
->
-> * From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, and Hudi. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
-> * From v3.1 onwards, we recommend that you use [JDBC catalog](../data_source/catalog/jdbc_catalog.md) to query data from MySQL and PostgreSQL and use [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) to query data from Elasticsearch.
-
 From 2.5 onwards, StarRocks provides the Data Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Data Cache](data_cache.md).
 
 ## MySQL external table
@@ -289,14 +284,14 @@ StarRocks supports predicate pushdown. Filters can be pushed down to Elasticsear
 
 |   SQL syntax  |   ES syntax  |
 | :---: | :---: |
-|  =   |  term query   |
-|  in   |  terms query   |
-|  \>=,  <=, >, <   |  range   |
-|  and   |  bool.filter   |
-|  or   |  bool.should   |
-|  not   |  bool.must_not   |
-|  not in   |  bool.must_not + terms   |
-|  esquery   |  ES Query DSL  |
+|  `=`   |  term query   |
+|  `in`   |  terms query   |
+|  `>=,  <=, >, <`   |  range   |
+|  `and`   |  bool.filter   |
+|  `or`   |  bool.should   |
+|  `not`   |  bool.must_not   |
+|  `not in`   |  bool.must_not + terms   |
+|  `esquery`   |  ES Query DSL  |
 
 ### Examples
 
@@ -608,7 +603,7 @@ SHOW RESOURCES;
 DROP RESOURCE "hive0";
 ~~~
 
-You can modify `hive.metastore.uris` of a Hive resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md).
+You can modify `hive.metastore.uris` of a Hive resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
 
 ### Create a database
 
@@ -817,7 +812,7 @@ The following table describes the related parameters.
 | iceberg.catalog.type | The catalog type of the resource. Both Hive catalog and custom catalog are supported. If you specify a Hive catalog, set the value to `HIVE`. If you specify a custom catalog, set the value to `CUSTOM`. |
 | iceberg.catalog-impl   | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg external table. |
 
-You can modify `hive.metastore.uris` and `iceberg.catalog-impl`of a Iceberg resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md).
+You can modify `hive.metastore.uris` and `iceberg.catalog-impl`of a Iceberg resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
 
 ##### View Iceberg resources
 
@@ -960,9 +955,9 @@ The following table describes the parameters.
 | Parameter           | Description                                                  |
 | ------------------- | ------------------------------------------------------------ |
 | type                | The type of the Hudi resource. Set the vaue to hudi.         |
-| hive.metastore.uris | The Thrift URI of the Hive metastore to which the Hudi resource connects. After connecting the Hudi resource to a Hive metastore, you can create and manage Hudi tables by using Hive. The Thrift URI is in the <IP address of the Hive metastore\>:<Port number of the Hive metastore\> format. The default port number is 9083. |
+| hive.metastore.uris | The Thrift URI of the Hive metastore to which the Hudi resource connects. After connecting the Hudi resource to a Hive metastore, you can create and manage Hudi tables by using Hive. The Thrift URI is in the `<IP address of the Hive metastore>:<Port number of the Hive metastore>` format. The default port number is 9083. |
 
-From v2.3 onwards, StarRocks allows changing the `hive.metastore.uris` value of a Hudi resource. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md).
+From v2.3 onwards, StarRocks allows changing the `hive.metastore.uris` value of a Hudi resource. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
 
 ##### View Hudi resources
 

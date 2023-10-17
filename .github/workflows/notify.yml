@@ -1,0 +1,22 @@
+name: NOTIFICATION
+
+on:
+  pull_request:
+    types:
+      - opened
+
+  issues:
+    types:
+      - opened
+
+jobs:
+  notification-checker:
+    runs-on: [self-hosted, normal]
+    name: RUN
+
+    steps:
+      - name: run
+        id: check
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh          
+          python3 lib/notify_outer_issue_pr.py

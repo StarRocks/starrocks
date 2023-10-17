@@ -335,13 +335,7 @@ template <PrimitiveType TYPE>
 struct ArrayCumSumImpl {
 public:
     static StatusOr<ColumnPtr> evaluate(const ColumnPtr& col) {
-        if (col->is_constant()) {
-            auto* input = down_cast<ConstColumn*>(col.get());
-            auto arr_col_h = input->data_column()->clone();
-            auto* arr_col = down_cast<ArrayColumn*>(arr_col_h.get());
-            call_cum_sum(arr_col, nullptr);
-            return ConstColumn::create(std::move(arr_col_h));
-        } else if (col->is_nullable()) {
+        if (col->is_nullable()) {
             auto res = col->clone();
             auto* input = down_cast<NullableColumn*>(res.get());
             NullColumn* null_column = input->mutable_null_column();
@@ -394,25 +388,14 @@ private:
         }
 
         for (int i = 0; i < num_rows; ++i) {
-            size_t offset = offsets[i];
-            size_t array_size = offsets[i + 1] - offsets[i];
             if constexpr (nullable) {
-                if (null_data[offset]) {
+                DCHECK(null_data != nullptr);
+                if (null_data[i]) {
                     continue;
                 }
             }
-            RunTimeCppType<TYPE> cum_sum{};
-            if constexpr (element_nullable) {
-                if (element_null_data[offset]) {
-                    // skip null
-                } else {
-                    cum_sum += element_data[offset];
-                }
-            } else {
-                cum_sum += element_data[offset];
-            }
-
-            for (int j = offset + 1; j < offset + array_size; ++j) {
+            RunTimeCppType<TYPE> cum_sum{}; // TODO: to solve overflow
+            for (int j = offsets[i]; j < offsets[i + 1]; ++j) {
                 if constexpr (element_nullable) {
                     if (element_null_data[j]) {
                         // skip null
@@ -428,14 +411,14 @@ private:
     }
 };
 
-#define DEFINE_ARRAY_CUMSUM_FN(NAME, TYPE)                                                              \
-    StatusOr<ColumnPtr> ArrayFunctions::array_cum_sum_##NAME([[maybe_unused]] FunctionContext* context, \
-                                                             const Columns& columns) {                  \
-        DCHECK_EQ(columns.size(), 1);                                                                   \
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);                                                           \
-        const ColumnPtr& arg0 = columns[0];                                                             \
-                                                                                                        \
-        return ArrayCumSumImpl<TYPE>::evaluate(arg0);                                                   \
+#define DEFINE_ARRAY_CUMSUM_FN(NAME, TYPE)                                                                       \
+    StatusOr<ColumnPtr> ArrayFunctions::array_cum_sum_##NAME([[maybe_unused]] FunctionContext* context,          \
+                                                             const Columns& columns) {                           \
+        DCHECK_EQ(columns.size(), 1);                                                                            \
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);                                                                    \
+        const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); \
+                                                                                                                 \
+        return ArrayCumSumImpl<TYPE>::evaluate(arg0);                                                            \
     }
 
 DEFINE_ARRAY_CUMSUM_FN(bigint, TYPE_BIGINT)

@@ -97,6 +97,10 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         return type;
     }
 
+    public boolean isRangePartition() {
+        return type == PartitionType.RANGE || type == PartitionType.EXPR_RANGE || type == PartitionType.EXPR_RANGE_V2;
+    }
+
     public DataProperty getDataProperty(long partitionId) {
         return idToDataProperty.get(partitionId);
     }

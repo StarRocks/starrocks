@@ -2,19 +2,19 @@
 
 ## 1. Does Broker Load support re-running load jobs that have been run successfully and are in the FINISHED state?
 
-Broker Load does not support re-running load jobs that have been run successfully and are in the FINISHED state. Also, to prevent data loss and duplication, Broker Load does not allow reusing the labels of successfully run load jobs. You can use [SHOW LOAD](../../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) to view the history of load jobs and find the load job that you want to re-run. Then, you can copy the information of that load job and use the job information, except the label, to create another load job.
+Broker Load does not support re-running load jobs that have been run successfully and are in the FINISHED state. Also, to prevent data loss and duplication, Broker Load does not allow reusing the labels of successfully run load jobs. You can use [SHOW LOAD](../../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) to view the history of load jobs and find the load job that you want to re-run. Then, you can copy the information of that load job and use the job information, except the label, to create another load job.
 
 ## 2. When I load data from HDFS by using Broker Load, what do I do if the date and time values loaded into the destination StarRocks table are 8 hours later than the date and time values from the source data file?
 
 Both the destination StarRocks table and the Broker Load job are compiled at creation to use a China Standard Time (CST) time zone (specified by using the `timezone` parameter). However, the server is set to run based on a Coordinated Universal Time (UTC) time zone. As a result, 8 extra hours are added to the date and time values from the source data file during data loading. To prevent this issue, do not specify the `timezone` parameter when you create the destination StarRocks table.
 
-## 3. When I load ORC-formatted data by using Broker Load, what do I do if the "ErrorMsg: type:ETL_RUN_FAIL; msg:Cannot cast '<slot 6>' from VARCHAR to ARRAY<VARCHAR(30)>" error occurs?
+## 3. When I load ORC-formatted data by using Broker Load, what do I do if the `ErrorMsg: type:ETL_RUN_FAIL; msg:Cannot cast '<slot 6>' from VARCHAR to ARRAY<VARCHAR(30)>` error occurs?
 
 The source data file has different column names than the destination StarRocks table. In this situation, you must use the `SET` clause in the load statement to specify the column mapping between the file and the table. When executing the `SET` clause, StarRocks needs to perform a type inference, but it fails in invoking the [cast](../../sql-reference/sql-functions/cast.md) function to transform the source data to the destination data types. To resolve this issue, make sure that the source data file has the same column names as the destination StarRocks table. As such, the `SET` clause is not needed and therefore StarRocks does not need to invoke the cast function to perform data type conversions. Then the Broker Load job can be run successfully.
 
 ## 4. The Broker Load job does not report errors, but why am I unable to query the loaded data?
 
-Broker Load is an asynchronous loading method. The load job may still fail even if the load statement does not return errors. After you run a Broker Load job, you can use [SHOW LOAD](../../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) to view the result and `errmsg` of the load job. Then, you can modify the job configuration and retry.
+Broker Load is an asynchronous loading method. The load job may still fail even if the load statement does not return errors. After you run a Broker Load job, you can use [SHOW LOAD](../../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) to view the result and `errmsg` of the load job. Then, you can modify the job configuration and retry.
 
 ## 5. What do I do if the "failed to send batch" or "TabletWriter add batch with unknown id" error occurs?
 
@@ -33,7 +33,7 @@ SET
 )
 ```
 
-The preceding example maps the `tmp_c1` and `tmp_c2` columns of the source data file onto the `name` and `id`  columns of the destination StarRocks table, respectively. If you do not specify the `SET` clause, the column names specified in the `column_list` parameter are used to declare the column mapping. For more information, see [BROKER LOAD](../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+The preceding example maps the `tmp_c1` and `tmp_c2` columns of the source data file onto the `name` and `id`  columns of the destination StarRocks table, respectively. If you do not specify the `SET` clause, the column names specified in the `column_list` parameter are used to declare the column mapping. For more information, see [BROKER LOAD](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 > **NOTICE**
 >

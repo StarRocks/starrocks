@@ -228,36 +228,41 @@ Run the command `kubectl -n starrocks edit src starrockscluster-sample` to confi
 
 Kubernetes also supports using `behavior` to customize scaling behaviors according to business scenarios, helping you achieve rapid or slow scaling or disable scaling. For more information about automatic scaling policies, see [Horizontal Pod Scaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/).
 
-The following is a [template](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/examples/starrocks/starrocks-fe-and-cn-with-autoscaler.yaml) provided by StarRocks to help you configure automatic scaling policies:
+The following is a [template](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/examples/starrocks/deploy_a_starrocks_cluster_with_cn.yaml) provided by StarRocks to help you configure automatic scaling policies:
 
 ```YAML
   starRocksCnSpec:
-    image: starrocks/cn-ubuntu:3.0-latest
+    image: starrocks/cn-ubuntu:latest
+    limits:
+      cpu: 16
+      memory: 64Gi
     requests:
-      cpu: 4
-      memory: 4Gi
+      cpu: 16
+      memory: 64Gi
     autoScalingPolicy: # Automatic scaling policy of the CN cluster.
       maxReplicas: 10 # The maximum number of CNs is set to 10.
       minReplicas: 1 # The minimum number of CNs is set to 1.
+      # operator creates an HPA resource based on the following field.
+      # see https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/ for more information.
       hpaPolicy:
         metrics: # Resource metrics
           - type: Resource
-            resource: 
-              name: memory # The average memory usage of CNs is specified as a resource metric.
+            resource:
+              name: memory  # The average memory usage of CNs is specified as a resource metric.
               target:
-                averageUtilization: 30 
-                # The elastic scaling threshold is 30%.
-                # When the average memory utilization of CNs exceeds 30%, the number of CNs increases for scale-out.
-                # When the average memory utilization of CNs is below 30%, the number of CNs decreases for scale-in.
+                # The elastic scaling threshold is 60%.
+                # When the average memory utilization of CNs exceeds 60%, the number of CNs increases for scale-out.
+                # When the average memory utilization of CNs is below 60%, the number of CNs decreases for scale-in.
+                averageUtilization: 60
                 type: Utilization
           - type: Resource
-            resource: 
+            resource:
               name: cpu # The average CPU utilization of CNs is specified as a resource metric.
               target:
-                averageUtilization: 60
                 # The elastic scaling threshold is 60%.
                 # When the average CPU utilization of CNs exceeds 60%, the number of CNs increases for scale-out.
                 # When the average CPU utilization of CNs is below 60%, the number of CNs decreases for scale-in.
+                averageUtilization: 60
                 type: Utilization
         behavior: #  The scaling behavior is customized according to business scenarios, helping you achieve rapid or slow scaling or disable scaling.
           scaleUp:

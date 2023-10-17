@@ -26,6 +26,9 @@ public class RangePartitionDesc extends PartitionDesc {
     private final List<SingleRangePartitionDesc> singleRangePartitionDescs;
     private final List<MultiRangePartitionDesc> multiRangePartitionDescs;
 
+    // for automatic partition table is ture. otherwise is false
+    protected boolean isAutoPartitionTable = false;
+
     public RangePartitionDesc(List<String> partitionColNames, List<PartitionDesc> partitionDescs) {
         type = PartitionType.RANGE;
         this.partitionColNames = partitionColNames;
@@ -121,9 +124,12 @@ public class RangePartitionDesc extends PartitionDesc {
         }
     }
 
+    public void setAutoPartitionTable(boolean autoPartitionTable) {
+        this.isAutoPartitionTable = autoPartitionTable;
+    }
+
     @Override
-    public PartitionInfo toPartitionInfo(List<Column> schema, Map<String, Long> partitionNameToId,
-                                         boolean isTemp, boolean isExprPartition)
+    public PartitionInfo toPartitionInfo(List<Column> schema, Map<String, Long> partitionNameToId, boolean isTemp)
             throws DdlException {
         List<Column> partitionColumns = Lists.newArrayList();
 

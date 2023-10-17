@@ -46,7 +46,7 @@ public class AnalyzeAlterTableStatementTest {
     @Test(expected = SemanticException.class)
     public void testEmptyNewTableName() {
         TableRenameClause clause = new TableRenameClause("");
-        clauseAnalyzerVisitor.analyze(clause, connectContext);
+        clauseAnalyzerVisitor.analyze(null, clause, connectContext);
     }
 
     @Test(expected = SemanticException.class)

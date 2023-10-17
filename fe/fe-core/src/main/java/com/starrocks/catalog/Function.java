@@ -171,6 +171,7 @@ public class Function implements Writable {
         name = other.name;
         retType = other.retType;
         argTypes = other.argTypes;
+        hasVarArgs = other.hasVarArgs;
         userVisible = other.userVisible;
         location = other.location;
         binaryType = other.binaryType;

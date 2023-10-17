@@ -2,6 +2,8 @@
 
 Updates rows in a Primary Key table.
 
+StarRocks supports the UPDATE statement since v2.3, which only supports single-table UPDATE and does not support common table expressions (CTEs).
+
 ## Syntax
 
 ```SQL
@@ -68,4 +70,4 @@ WHERE Salary < (SELECT AVG(Salary) FROM Employees);
 
 ## Limitations
 
-In V2.5, the UPDATE statement only supports single-table UPDATE and does not support common table expressions (CTEs).
+From v2.3 to v2.5, the UPDATE statement only supports single-table UPDATE and does not support common table expressions (CTEs).

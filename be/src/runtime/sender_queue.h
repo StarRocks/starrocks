@@ -4,6 +4,7 @@
 
 #include <condition_variable>
 
+#include "bthread/mutex.h"
 #include "column/vectorized_fwd.h"
 #include "runtime/data_stream_recvr.h"
 #include "serde/protobuf_serde.h"
@@ -32,11 +33,12 @@ public:
     virtual bool try_get_chunk(vectorized::Chunk** chunk) = 0;
 
     // add chunks to this sender queue if this stream has not been cancelled
-    virtual Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) = 0;
+    virtual Status add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
+                              ::google::protobuf::Closure** done) = 0;
 
     // add chunks to this sender queue if this stream has not been cancelled
     // Process data in strict accordance with the order of the sequence
-    virtual Status add_chunks_and_keep_order(const PTransmitChunkParams& request,
+    virtual Status add_chunks_and_keep_order(const PTransmitChunkParams& request, Metrics& metrics,
                                              ::google::protobuf::Closure** done) = 0;
 
     // Decrement the number of remaining senders for this queue
@@ -49,7 +51,8 @@ public:
 protected:
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
 
-    Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk, faststring* uncompressed_buffer);
+    Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk, Metrics& metrics,
+                              faststring* uncompressed_buffer);
 
     DataStreamRecvr* _recvr = nullptr;
 
@@ -67,9 +70,11 @@ public:
 
     bool try_get_chunk(vectorized::Chunk** chunk) override;
 
-    Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) override;
+    Status add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
+                      ::google::protobuf::Closure** done) override;
 
-    Status add_chunks_and_keep_order(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) override;
+    Status add_chunks_and_keep_order(const PTransmitChunkParams& request, Metrics& metrics,
+                                     ::google::protobuf::Closure** done) override;
 
     void decrement_senders(int be_number) override;
 
@@ -81,7 +86,7 @@ private:
     void clean_buffer_queues();
 
     template <bool keep_order>
-    Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
+    Status add_chunks(const PTransmitChunkParams& request, Metrics& metrics, ::google::protobuf::Closure** done);
 
     struct ChunkItem {
         int64_t chunk_bytes = 0;
@@ -141,9 +146,11 @@ public:
 
     bool try_get_chunk(vectorized::Chunk** chunk) override;
 
-    Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) override;
+    Status add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
+                      ::google::protobuf::Closure** done) override;
 
-    Status add_chunks_and_keep_order(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) override;
+    Status add_chunks_and_keep_order(const PTransmitChunkParams& request, Metrics& metrics,
+                                     ::google::protobuf::Closure** done) override;
 
     void decrement_senders(int be_number) override;
 
@@ -195,19 +202,20 @@ private:
     StatusOr<ChunkList> get_chunks_from_pass_through(const int32_t sender_id, size_t& total_chunk_bytes);
 
     template <bool need_deserialization>
-    StatusOr<ChunkList> get_chunks_from_request(const PTransmitChunkParams& request, size_t& total_chunk_bytes);
+    StatusOr<ChunkList> get_chunks_from_request(const PTransmitChunkParams& request, Metrics& metrics,
+                                                size_t& total_chunk_bytes);
 
-    Status try_to_build_chunk_meta(const PTransmitChunkParams& request);
+    Status try_to_build_chunk_meta(const PTransmitChunkParams& request, Metrics& metrics);
 
     template <bool keep_order>
-    Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
+    Status add_chunks(const PTransmitChunkParams& request, Metrics& metrics, ::google::protobuf::Closure** done);
 
     typedef moodycamel::ConcurrentQueue<ChunkItem> ChunkQueue;
 
     std::atomic<bool> _is_cancelled{false};
     std::atomic<int> _num_remaining_senders;
 
-    typedef SpinLock Mutex;
+    typedef bthread::Mutex Mutex;
     Mutex _lock;
 
     // if _is_pipeline_level_shuffle=true, we will create a queue for each driver sequence to avoid competition
