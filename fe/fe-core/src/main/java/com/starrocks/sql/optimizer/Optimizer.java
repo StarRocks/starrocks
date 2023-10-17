@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MinMaxCountOptOnScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnValueOnlyOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
@@ -317,6 +318,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         deriveLogicalProperty(tree);
 
