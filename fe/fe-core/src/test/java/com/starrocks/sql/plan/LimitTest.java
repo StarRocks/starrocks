@@ -102,11 +102,27 @@ public class LimitTest extends PlanTestBase {
         String explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("OUTPUT EXPRS:4: count"));
         Assert.assertTrue(explainString.contains("0:EMPTYSET"));
+
+        queryStr = "select count(*) from t0 order by 1 limit 0";
+        explainString = getFragmentPlan(queryStr);
+        Assert.assertTrue(explainString.contains("OUTPUT EXPRS:4: count"));
+        Assert.assertTrue(explainString.contains("0:EMPTYSET"));
     }
 
     @Test
     public void testSubQueryWithLimit0() throws Exception {
         String queryStr = "select v1 from (select * from t0 limit 0) t";
+        String explainString = getFragmentPlan(queryStr);
+        Assert.assertTrue(explainString.contains("0:EMPTYSET"));
+
+        queryStr = "select v1 from (select * from t0 order by v1 limit 0) t";
+        explainString = getFragmentPlan(queryStr);
+        Assert.assertTrue(explainString.contains("0:EMPTYSET"));
+    }
+
+    @Test
+    public void testSortWithLimit0() throws Exception {
+        String queryStr = "select v1 from t0 order by v1 limit 0";
         String explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("0:EMPTYSET"));
     }
@@ -115,6 +131,9 @@ public class LimitTest extends PlanTestBase {
     public void testAggSubQueryWithLimit0() throws Exception {
         String queryStr = "select sum(a) from (select v1 as a from t0 limit 0) t";
         String explainString = getFragmentPlan(queryStr);
+        Assert.assertTrue(explainString.contains("0:EMPTYSET"));
+        queryStr = "select sum(a) from (select v1 as a from t0 order by 1 limit 0) t";
+        explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("0:EMPTYSET"));
     }
 
