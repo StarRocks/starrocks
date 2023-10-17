@@ -64,6 +64,22 @@ public class TableTestBase {
                     .withRecordCount(2)
                     .build();
 
+    public static final DataFile FILE_A_1 =
+            DataFiles.builder(SPEC_A)
+                    .withPath("/path/to/data-a1.parquet")
+                    .withFileSizeInBytes(10)
+                    .withPartitionPath("data_bucket=0") // easy way to set partition data for now
+                    .withRecordCount(2)
+                    .build();
+
+    public static final DataFile FILE_A_2 =
+            DataFiles.builder(SPEC_A)
+                    .withPath("/path/to/data-a2.parquet")
+                    .withFileSizeInBytes(10)
+                    .withPartitionPath("data_bucket=1") // easy way to set partition data for now
+                    .withRecordCount(2)
+                    .build();
+
     public static final DataFile FILE_B_1 =
             DataFiles.builder(SPEC_B)
                     .withPath("/path/to/data-b1.parquet")
