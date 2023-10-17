@@ -1415,10 +1415,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isCboPredicateSubfieldPath() {
         return cboPredicateSubfieldPath;
     }
-
-    @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
-    private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
-
+    
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
