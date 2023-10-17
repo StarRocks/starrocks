@@ -50,7 +50,7 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     public void checkUserAction(UserIdentity currentUser, Set<Long> roleIds, UserIdentity impersonateUser,
                                 PrivilegeType privilegeType) throws AccessDeniedException {
         RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.USER,
-                Lists.newArrayList(impersonateUser.getQualifiedUser()));
+                Lists.newArrayList(impersonateUser.getUser()));
         hasPermission(resource, currentUser, privilegeType);
     }
 
