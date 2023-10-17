@@ -207,6 +207,7 @@ protected:
     CSVBuffer _buff;
     raw::RawVector<char> _escape_data;
     virtual Status _fill_buffer() { return Status::InternalError("unsupported csv reader!"); }
+    virtual char* _find_line_delimiter(CSVBuffer& buffer, size_t pos) = 0;
     std::queue<CSVRow> _csv_buff;
     std::unordered_set<size_t> _escape_pos;
     std::vector<CSVColumn> _columns;

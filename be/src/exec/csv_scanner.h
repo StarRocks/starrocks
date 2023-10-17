@@ -58,6 +58,8 @@ private:
 
         Status _fill_buffer() override;
 
+        char* _find_line_delimiter(CSVBuffer& buffer, size_t pos) override;
+
         const std::string& filename();
 
     private:
