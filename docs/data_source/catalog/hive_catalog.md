@@ -1,8 +1,10 @@
 # Hive catalog
 
-A Hive catalog is a kind of external catalog that enables you to query data from Apache Hive™ without ingestion. Also, you can directly transform and load data from Hive by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) based on Hive catalogs.
+A Hive catalog is a kind of external catalog that is supported by StarRocks from v2.4 onwards. Within Hive catalogs, you can:
 
-StarRocks supports Hive catalogs from v2.4 onwards, and from v3.1 onwards StarRocks supports accessing views that are created on tables within Hive catalogs.
+- Directly query data stored in Hive without the need to manually create tables.
+- Use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive and load the data into StarRocks.
+- Perform operations on StarRocks to create or drop Hive databases and tables, or sink data from StarRocks tables to Parquet-formatted Hive tables by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) (this feature is supported from v3.2 onwards).
 
 To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster needs to integrate with two important components:
 
@@ -884,6 +886,258 @@ GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE hive_role_table;
 
 -- Grant the role hive_role_table the privilege to query all views within the Hive catalog hive_catalog.
 GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE hive_role_table;
+```
+
+## Create a Hive database
+
+Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/privilege_item.md#catalog) privilege on a Hive catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) statement to create a database in that Hive catalog. This feature is supported from v3.2 onwards.
+
+> **NOTE**
+>
+> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+[Switch to a Hive catalog](#switch-to-a-hive-catalog-and-a-database-in-it), and then use the following statement to create a Hive database in that catalog:
+
+```SQL
+CREATE DATABASE <database_name>
+[properties ("location" = "<prefix>://<path_to_database>/<database_name.db>")]
+```
+
+The `location` parameter specifies the file path in which you want to create the database, which can be in either HDFS or cloud storage.
+
+- When you use Hive metastore as the metastore of your Hive cluster, the `location` parameter defaults to `<warehouse_location>/<database_name.db>`, which is supported by Hive metastore if you do not specify that parameter at database creation.
+- When you use AWS Glue as the metastore of your Hive cluster, the `location` parameter does not have a default value, and therefore you must specify that parameter at database creation.
+
+The `prefix` varies based on the storage system you use:
+
+| **Storage system**                                         | **`Prefix`** **value**                                       |
+| ---------------------------------------------------------- | ------------------------------------------------------------ |
+| HDFS                                                       | `hdfs`                                                       |
+| Google GCS                                                 | `gs`                                                         |
+| Azure Blob Storage                                         | <ul><li>If your storage account allows access over HTTP, the `prefix` is `wasb`.</li><li>If your storage account allows access over HTTPS, the `prefix` is `wasbs`.</li></ul> |
+| Azure Data Lake Storage Gen1                               | `adl`                                                        |
+| Azure Data Lake Storage Gen2                               | <ul><li>If your storage account allows access over HTTP, the`prefix` is `abfs`.</li><li>If your storage account allows access over HTTPS, the `prefix` is `abfss`.</li></ul> |
+| AWS S3 or other S3-compatible storage (for example, MinIO) | `s3`                                                         |
+
+## Drop a Hive database
+
+Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/privilege_item.md#database) privilege on a Hive database, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) statement to drop that Hive database. This feature is supported from v3.2 onwards. You can only drop empty databases.
+
+> **NOTE**
+>
+> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+When you drop a Hive database, the database's file path on your HDFS cluster or cloud storage will not be dropped along with the database.
+
+[Switch to a Hive catalog](#switch-to-a-hive-catalog-and-a-database-in-it), and then use the following statement to drop a Hive database in that catalog:
+
+```SQL
+DROP DATABASE <database_name>
+```
+
+## Create a Hive table
+
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/privilege_item.md#database) privilege on a Hive database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) or [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) statement to create a table in that Hive database. This feature is supported from v3.2 onwards.
+
+> **NOTE**
+>
+> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+[Switch to a Hive catalog and a database in it](#switch-to-a-hive-catalog-and-a-database-in-it), and then use the following syntax to create a Hive table in that database.
+
+### Syntax
+
+```SQL
+CREATE TABLE [IF NOT EXISTS] [database.]table_name
+(column_definition1[, column_definition2, ...
+partition_column_definition1,partition_column_definition2...])
+[partition_desc]
+[PROPERTIES ("key" = "value", ...)]
+[AS SELECT query]
+```
+
+### Parameters
+
+#### column_definition
+
+The syntax of `column_definition` is as follows:
+
+```SQL
+col_name col_type [COMMENT 'comment']
+```
+
+The following table describes the parameters.
+
+| Parameter | Description                                                  |
+| --------- | ------------------------------------------------------------ |
+| col_name  | The name of the column.                                      |
+| col_type  | The data type of the column. The following data types are supported: TINYINT, SMALLINT, INT, BIGINT, FLOAT, DOUBLE, DECIMAL, DATE, DATETIME, CHAR, VARCHAR[(length)], ARRAY, MAP, and STRUCT. The LARGEINT, HLL, and BITMAP data types are not supported. |
+
+> **NOTICE**
+>
+> All non-partition columns must use `NULL` as the default value. This means that you must specify `DEFAULT "NULL"` for each of the non-partition columns in the table creation statement. Additionally, partition columns must be defined following non-partition columns and cannot use `NULL` as the default value.
+
+#### partition_desc
+
+The syntax of `partition_desc` is as follows:
+
+```SQL
+PARTITION BY (par_col1[, par_col2...])
+```
+
+Currently StarRocks only supports identity transforms, which means that StarRocks creates a partition for each unique partition value.
+
+> **NOTICE**
+>
+> Partition columns must be defined following non-partition columns. Partition columns support all data types excluding FLOAT, DOUBLE, DECIMAL, and DATETIME and cannot use `NULL` as the default value. Additionally, the sequence of the partition columns declared in `partition_desc` must be consistent with the sequence of the columns defined in `column_definition`.
+
+#### properties
+
+You can specify the table attributes in the `"key" = "value"` format in `properties`.
+
+The following table describes a few key properties.
+
+| **Property**      | **Description**                                              |
+| ----------------- | ------------------------------------------------------------ |
+| location          | The file path in which you want to create the Hive table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Hive catalog. When you use AWS Glue as metadata service:<ul><li>If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs. </li><li>If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.</li></ul> |
+| file_format       | The file format of the Hive table. Only the Parquet format is supported. Default value: `parquet`. |
+| compression_codec | The compression algorithm used for the Hive table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. |
+
+### Examples
+
+1. Create a non-partitioned table named `unpartition_tbl`. The table consists of two columns, `id` and `score`, as shown below:
+
+   ```SQL
+   CREATE TABLE unpartition_tbl
+   (
+       id int,
+       score double
+   );
+   ```
+
+2. Create a partitioned table named `partition_tbl_1`. The table consists of three columns, `action`, `id`, and `dt`, of which `id` and `dt` are defined as partition columns, as shown below:
+
+   ```SQL
+   CREATE TABLE partition_tbl_1
+   (
+       action varchar(20),
+       id int,
+       dt date
+   )
+   PARTITION BY (id,dt);
+   ```
+
+3. Query an existing table named `partition_tbl_1`, and create a partitioned table named `partition_tbl_2` based on the query result of `partition_tbl_1`. For `partition_tbl_2`, `id` and `dt` are defined as partition columns, as shown below:
+
+   ```SQL
+   CREATE TABLE partition_tbl_2
+   PARTITION BY (k1, k2)
+   AS SELECT * from partition_tbl_1;
+   ```
+
+## Sink data to a Hive table
+
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/privilege_item.md#table) privilege on a Hive table, you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) statement to sink the data of a StarRocks table to that Hive table (currently only Parquet-formatted Hive tables are supported). This feature is supported from v3.2 onwards.
+
+> **NOTE**
+>
+> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+[Switch to a Hive catalog and a database in it](#switch-to-a-hive-catalog-and-a-database-in-it), and then use the following syntax to sink the data of StarRocks table to a Parquet-formatted Hive table in that database.
+
+### Syntax
+
+```SQL
+INSERT {INTO | OVERWRITE} <table_name>
+[ (column_name [, ...]) ]
+{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
+
+-- If you want to sink data to specified partitions, use the following syntax:
+INSERT {INTO | OVERWRITE} <table_name>
+PARTITION (par_col1=<value> [, par_col2=<value>...])
+{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
+```
+
+> **NOTICE**
+>
+> Partition columns do not allow `NULL` values. Therefore, you must make sure that no empty values are loaded into the partition columns of the Hive table.
+
+### Parameters
+
+| Parameter   | Description                                                  |
+| ----------- | ------------------------------------------------------------ |
+| INTO        | To append the data of the StarRocks table to the Hive table. |
+| OVERWRITE   | To overwrite the existing data of the Hive table with the data of the StarRocks table. |
+| column_name | The name of the destination column to which you want to load data. You can specify one or more columns. If you specify multiple columns, separate them with commas (`,`). You can only specify columns that actually exist in the Hive table, and the destination columns that you specify must include the partition columns of the Hive table. The destination columns you specify are mapped one on one in sequence to the columns of the StarRocks table, regardless of what the destination column names are. If no destination columns are specified, the data is loaded into all columns of the Hive table. If a non-partition column of the StarRocks table cannot be mapped to any column of the Hive table, StarRocks writes the default value `NULL` to the Hive table column. If the INSERT statement contains a query statement whose returned column types differ from the data types of the destination columns, StarRocks performs an implicit conversion on the mismatched columns. If the conversion fails, a syntax parsing error will be returned. |
+| expression  | Expression that assigns values to the destination column.    |
+| DEFAULT     | Assigns a default value to the destination column.           |
+| query       | Query statement whose result will be loaded into the Hive table. It can be any SQL statement supported by StarRocks. |
+| PARTITION   | The partitions into which you want to load data. You must specify all partition columns of the Hive table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If you specify this property, you cannot specify the `column_name` property. |
+
+### Examples
+
+1. Insert three data rows into the `partition_tbl_1` table:
+
+   ```SQL
+   INSERT INTO partition_tbl_1
+   VALUES
+       ("buy", 1, "2023-09-01"),
+       ("sell", 2, "2023-09-02"),
+       ("buy", 3, "2023-09-03");
+   ```
+
+2. Insert the result of a SELECT query, which contains simple computations, into the `partition_tbl_1` table:
+
+   ```SQL
+   INSERT INTO partition_tbl_1 (id, action, dt) SELECT 1+1, 'buy', '2023-09-03';
+   ```
+
+3. Insert the result of a SELECT query, which reads data from the `partition_tbl_1` table, into the same table:
+
+   ```SQL
+   INSERT INTO partition_tbl_1 SELECT 'buy', 1, date_add(dt, INTERVAL 2 DAY)
+   FROM partition_tbl_1
+   WHERE id=1;
+   ```
+
+4. Insert the result of a SELECT query into the partitions that meet two conditions, `dt='2023-09-01'` and `id=1`, of the `partition_tbl_2` table:
+
+   ```SQL
+   INSERT INTO partition_tbl_2 SELECT 'order', 1, '2023-09-01';
+   ```
+
+   Or
+
+   ```SQL
+   INSERT INTO partition_tbl_2 partition(dt='2023-09-01',id=1) SELECT 'order';
+   ```
+
+5. Overwrite all `action` column values in the partitions that meet two conditions, `dt='2023-09-01'` and `id=1`, of the `partition_tbl_1` table with `close`:
+
+   ```SQL
+   INSERT OVERWRITE partition_tbl_1 SELECT 'close', 1, '2023-09-01';
+   ```
+
+   Or
+
+   ```SQL
+   INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
+   ```
+
+## Drop a Hive table
+
+Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/privilege_item.md#table) privilege on a Hive table, you can use the [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) statement to drop that Hive table. This feature is supported from v3.1 onwards.
+
+> **NOTE**
+>
+> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+When you drop a Hive table, you must specify the `FORCE` keyword in the DROP TABLE statement. After the operation is complete, the table's file path is retained, but the table's data on your HDFS cluster or cloud storage is all dropped along with the table. Exercise caution when you perform this operation to drop a Hive table.
+
+[Switch to a Hive catalog and a database in it](#switch-to-a-hive-catalog-and-a-database-in-it), and then use the following statement to drop a Hive table in that database.
+
+```SQL
+DROP TABLE <table_name> FORCE
 ```
 
 ## Manually or automatically update metadata cache
