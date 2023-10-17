@@ -24,6 +24,7 @@ import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.epack.persist.RoleMappingPersistInfo;
 import com.starrocks.epack.privilege.AuthorizationMgrEpack;
 import com.starrocks.epack.privilege.LDAPRoleMapping;
+import com.starrocks.epack.qe.DDLStmtExecutorEPack;
 import com.starrocks.epack.sql.analyzer.RoleMappingStatementAnalyzer;
 import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
 import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
@@ -32,7 +33,6 @@ import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
 import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -81,10 +81,10 @@ public class RoleMappingTest {
         starRocksAssert.withRole("role22write");
 
         // init priv for roles
-        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+        DDLStmtExecutorEPack.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant select on all tables in database test11 to role role11read",
                 starRocksAssert.getCtx()), starRocksAssert.getCtx());
-        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+        DDLStmtExecutorEPack.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant select on all tables in database test22 to role role22write",
                 starRocksAssert.getCtx()), starRocksAssert.getCtx());
 
@@ -100,7 +100,7 @@ public class RoleMappingTest {
                 ")";
         CreateSecurityIntegrationStatement createSecurityIntegrationStatement =
                 (CreateSecurityIntegrationStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        DDLStmtExecutor.execute(createSecurityIntegrationStatement, connectContext);
+        DDLStmtExecutorEPack.execute(createSecurityIntegrationStatement, connectContext);
         ldap2 = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getSecurityIntegration("ldap2");
         sql = "create security integration ldap3 properties (" +
                 "\"type\" = \"ldap\"," +
@@ -113,7 +113,7 @@ public class RoleMappingTest {
                 ")";
         createSecurityIntegrationStatement =
                 (CreateSecurityIntegrationStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        DDLStmtExecutor.execute(createSecurityIntegrationStatement, connectContext);
+        DDLStmtExecutorEPack.execute(createSecurityIntegrationStatement, connectContext);
         ldap3 = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getSecurityIntegration("ldap3");
     }
 
@@ -121,7 +121,7 @@ public class RoleMappingTest {
         CreateRoleMappingStatement createRoleMappingStatement =
                 (CreateRoleMappingStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         RoleMappingStatementAnalyzer.analyze(createRoleMappingStatement, connectContext);
-        DDLStmtExecutor.execute(createRoleMappingStatement, connectContext);
+        DDLStmtExecutorEPack.execute(createRoleMappingStatement, connectContext);
     }
 
     private void alterRoleMapping(String sql) throws Exception {
@@ -129,7 +129,7 @@ public class RoleMappingTest {
                 (AlterRoleMappingStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                         connectContext);
         RoleMappingStatementAnalyzer.analyze(alterRoleMappingStatement, connectContext);
-        DDLStmtExecutor.execute(alterRoleMappingStatement, connectContext);
+        DDLStmtExecutorEPack.execute(alterRoleMappingStatement, connectContext);
     }
 
     private void dropRoleMapping(String name) throws Exception {
@@ -137,7 +137,7 @@ public class RoleMappingTest {
                 (DropRoleMappingStatement) UtFrameUtils.parseStmtWithNewParser("drop role mapping " + name,
                         connectContext);
         RoleMappingStatementAnalyzer.analyze(dropRoleMappingStatement, connectContext);
-        DDLStmtExecutor.execute(dropRoleMappingStatement, connectContext);
+        DDLStmtExecutorEPack.execute(dropRoleMappingStatement, connectContext);
     }
 
     @Test
@@ -571,7 +571,7 @@ public class RoleMappingTest {
         try {
             DropRoleStmt stmt =
                     (DropRoleStmt) UtFrameUtils.parseStmtWithNewParser("drop role role11read", connectContext);
-            DDLStmtExecutor.execute(stmt, connectContext);
+            DDLStmtExecutorEPack.execute(stmt, connectContext);
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains(
                     "cannot drop role 'role11read' because role mappings '[rm21]' are using this role"));

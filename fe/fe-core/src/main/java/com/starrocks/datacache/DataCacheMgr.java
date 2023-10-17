@@ -28,17 +28,17 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class DatacacheMgr {
+public class DataCacheMgr {
 
-    private static final DatacacheMgr INSTANCE = new DatacacheMgr();
+    private static final DataCacheMgr INSTANCE = new DataCacheMgr();
 
     private final AtomicLong ids = new AtomicLong();
-    private final ReadWriteLock datacacheMgrLock = new ReentrantReadWriteLock();
-    private final Map<Long, DatacacheRule> idToCacheRuleMap = new HashMap<>();
+    private final ReadWriteLock dataCacheMgrLock = new ReentrantReadWriteLock();
+    private final Map<Long, DataCacheRule> idToCacheRuleMap = new HashMap<>();
     private final CatalogMapping catalogMapping = new CatalogMapping();
     private static final String STAR_MATCH_ALL = "*";
 
-    public static DatacacheMgr getInstance() {
+    public static DataCacheMgr getInstance() {
         return INSTANCE;
     }
 
@@ -59,7 +59,7 @@ public class DatacacheMgr {
 
         try {
             long id  = ids.getAndIncrement();
-            DatacacheRule cacheRule = new DatacacheRule(id, target, predicates, priority, properties);
+            DataCacheRule cacheRule = new DataCacheRule(id, target, predicates, priority, properties);
             idToCacheRuleMap.put(id, cacheRule);
 
             String catalogName = target.getParts().get(0);
@@ -90,7 +90,7 @@ public class DatacacheMgr {
         writeLock();
 
         try {
-            DatacacheRule cacheRule = idToCacheRuleMap.remove(id);
+            DataCacheRule cacheRule = idToCacheRuleMap.remove(id);
             List<String> parts = cacheRule.getTarget().getParts();
             String catalogName = parts.get(0);
             String dbName = parts.get(1);
@@ -111,7 +111,7 @@ public class DatacacheMgr {
         }
     }
 
-    public Optional<DatacacheRule> getCacheRule(String catalogName, String dbName, String tblName) {
+    public Optional<DataCacheRule> getCacheRule(String catalogName, String dbName, String tblName) {
         readLock();
 
         try {
@@ -134,7 +134,7 @@ public class DatacacheMgr {
             }
 
             // check in tbl level
-            DatacacheRule dataCacheRule;
+            DataCacheRule dataCacheRule;
             if ((dataCacheRule = tblMapping.get(STAR_MATCH_ALL)) == null) {
                 dataCacheRule = tblMapping.get(tblName);
             }
@@ -144,7 +144,7 @@ public class DatacacheMgr {
         }
     }
 
-    public Optional<DatacacheRule> getCacheRule(QualifiedName qualifiedName) {
+    public Optional<DataCacheRule> getCacheRule(QualifiedName qualifiedName) {
         List<String> parts = qualifiedName.getParts();
         return getCacheRule(parts.get(0), parts.get(1), parts.get(2));
     }
@@ -153,11 +153,11 @@ public class DatacacheMgr {
         readLock();
 
         try {
-            for (Map.Entry<Long, DatacacheRule> entry : idToCacheRuleMap.entrySet()) {
+            for (Map.Entry<Long, DataCacheRule> entry : idToCacheRuleMap.entrySet()) {
                 List<String> parts = entry.getValue().getTarget().getParts();
                 String catalog = parts.get(0);
                 if (isMatchAll(catalog) || isMatchAll(otherCatalog)) {
-                    throw new SemanticException(String.format("Datacache rule target's catalog name: %s is " +
+                    throw new SemanticException(String.format("DataCache rule target's catalog name: %s is " +
                             "conflict with existed rule: %s", otherCatalog, entry.getValue()));
                 }
 
@@ -167,7 +167,7 @@ public class DatacacheMgr {
 
                 String db = parts.get(1);
                 if (isMatchAll(db) || isMatchAll(otherDb)) {
-                    throw new SemanticException(String.format("Datacache rule target's database name: %s is " +
+                    throw new SemanticException(String.format("DataCache rule target's database name: %s is " +
                             "conflict with existed rule %s", otherDb, entry.getValue()));
                 }
 
@@ -177,7 +177,7 @@ public class DatacacheMgr {
 
                 String tbl = parts.get(2);
                 if (isMatchAll(tbl) || isMatchAll(otherTbl) || tbl.equals(otherTbl)) {
-                    throw new SemanticException(String.format("Datacache rule target's table name: %s " +
+                    throw new SemanticException(String.format("DataCache rule target's table name: %s " +
                             "is conflict with existed rule %s", otherTbl, entry.getValue()));
                 }
             }
@@ -190,16 +190,16 @@ public class DatacacheMgr {
         readLock();
 
         try {
-            List<DatacacheRule> datacacheRules = new ArrayList<>(idToCacheRuleMap.size());
-            for (Map.Entry<Long, DatacacheRule> entry : idToCacheRuleMap.entrySet()) {
-                datacacheRules.add(entry.getValue());
+            List<DataCacheRule> dataCacheRules = new ArrayList<>(idToCacheRuleMap.size());
+            for (Map.Entry<Long, DataCacheRule> entry : idToCacheRuleMap.entrySet()) {
+                dataCacheRules.add(entry.getValue());
             }
 
             // Sort by id ascended
-            datacacheRules.sort(Comparator.comparingInt(o -> (int) o.getId()));
+            dataCacheRules.sort(Comparator.comparingInt(o -> (int) o.getId()));
 
-            List<List<String>> result = new ArrayList<>(datacacheRules.size());
-            for (DatacacheRule rule : datacacheRules) {
+            List<List<String>> result = new ArrayList<>(dataCacheRules.size());
+            for (DataCacheRule rule : dataCacheRules) {
                 result.add(rule.getShowResultSetRows());
             }
             return result;
@@ -213,19 +213,19 @@ public class DatacacheMgr {
     }
 
     private void readLock() {
-        this.datacacheMgrLock.readLock().lock();
+        this.dataCacheMgrLock.readLock().lock();
     }
 
     private void readUnlock() {
-        this.datacacheMgrLock.readLock().unlock();
+        this.dataCacheMgrLock.readLock().unlock();
     }
 
     private void writeLock() {
-        this.datacacheMgrLock.writeLock().lock();
+        this.dataCacheMgrLock.writeLock().lock();
     }
 
     private void writeUnLock() {
-        this.datacacheMgrLock.writeLock().unlock();
+        this.dataCacheMgrLock.writeLock().unlock();
     }
 
     static class CatalogMapping {
@@ -252,12 +252,12 @@ public class DatacacheMgr {
     }
 
     static class TblMapping {
-        private final Map<String, DatacacheRule> mapping = new HashMap<>();
-        protected DatacacheRule get(String tblName) {
+        private final Map<String, DataCacheRule> mapping = new HashMap<>();
+        protected DataCacheRule get(String tblName) {
             return mapping.get(tblName);
         }
 
-        protected void put(String tblName, DatacacheRule dataCacheRule) {
+        protected void put(String tblName, DataCacheRule dataCacheRule) {
             mapping.put(tblName, dataCacheRule);
         }
 

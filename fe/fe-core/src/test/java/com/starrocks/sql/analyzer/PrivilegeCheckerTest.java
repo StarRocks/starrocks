@@ -35,6 +35,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.epack.qe.DDLStmtExecutorEPack;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -2797,7 +2798,7 @@ public class PrivilegeCheckerTest {
     private void executeDdlAsRoot(String ddl) throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         ctxToRoot();
-        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(ddl, ctx), ctx);
+        DDLStmtExecutorEPack.execute(UtFrameUtils.parseStmtWithNewParser(ddl, ctx), ctx);
         ctxToTestUser();
     }
 

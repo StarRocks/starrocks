@@ -21,14 +21,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public class DatacacheRule {
+public class DataCacheRule {
     private final long id;
     private final QualifiedName target;
     private final Expr predicates;
     private final int priority;
     private final Map<String, String> properties;
 
-    public DatacacheRule(long id, QualifiedName target, Expr predicates, int priority, Map<String, String> properties) {
+    public DataCacheRule(long id, QualifiedName target, Expr predicates, int priority, Map<String, String> properties) {
         this.id = id;
         this.target = target;
         this.predicates = predicates;

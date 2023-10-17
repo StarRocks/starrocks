@@ -25,24 +25,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.datacache.DatacacheMgr;
-import com.starrocks.epack.privilege.SecurityPolicyMgr;
-import com.starrocks.epack.server.WarehouseManagerEpack;
-import com.starrocks.epack.sql.ast.AlterPolicyStmt;
-import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
-import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
-import com.starrocks.epack.sql.ast.CreatePolicyStmt;
-import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
-import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
-import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
-import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
-import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
-import com.starrocks.epack.sql.ast.DropPolicyStmt;
-import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
-import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
-import com.starrocks.epack.sql.ast.DropWarehouseStmt;
-import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
-import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
+import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
@@ -77,10 +60,10 @@ import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
-import com.starrocks.sql.ast.ClearDatacacheRulesStmt;
+import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
-import com.starrocks.sql.ast.CreateDatacacheRuleStmt;
+import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -98,7 +81,7 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
-import com.starrocks.sql.ast.DropDatacacheRuleStmt;
+import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
@@ -120,7 +103,6 @@ import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
-import com.starrocks.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
@@ -174,7 +156,7 @@ public class DDLStmtExecutor {
         }
     }
 
-    static class StmtExecutorVisitor extends AstVisitor<ShowResultSet, ConnectContext> {
+    protected static class StmtExecutorVisitor extends AstVisitor<ShowResultSet, ConnectContext> {
 
         private static final Logger LOG = LogManager.getLogger(StmtExecutorVisitor.class);
 
@@ -394,7 +376,6 @@ public class DDLStmtExecutor {
             return null;
         }
 
-
         @Override
         public ShowResultSet visitCancelCompactionStatement(CancelCompactionStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
@@ -535,114 +516,6 @@ public class DDLStmtExecutor {
                         stmt.getPropertyPairList());
 
             });
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement stmt,
-                                                                     ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthenticationMgr().createSecurityIntegration(
-                        stmt.getName(), stmt.getPropertyMap(), false);
-            });
-
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement stmt,
-                                                                    ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthenticationMgr().alterSecurityIntegration(
-                        stmt.getName(), stmt.getProperties(), false);
-            });
-
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement stmt,
-                                                                   ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthenticationMgr().dropSecurityIntegration(
-                        stmt.getName(), false);
-            });
-
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitCreateRoleMappingStatement(CreateRoleMappingStatement stmt,
-                                                             ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthorizationMgr().getRoleMappingMetaMgr().createRoleMapping(
-                        stmt.getName(), stmt.getPropertyMap(), false);
-            });
-
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitAlterRoleMappingStatement(AlterRoleMappingStatement stmt,
-                                                            ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthorizationMgr().getRoleMappingMetaMgr().alterRoleMapping(
-                        stmt.getName(), stmt.getProperties(), false);
-            });
-
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitDropRoleMappingStatement(DropRoleMappingStatement stmt,
-                                                           ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthorizationMgr().getRoleMappingMetaMgr().dropRoleMapping(
-                        stmt.getName(), false);
-            });
-
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitRefreshRoleMappingStatement(RefreshRoleMappingStatement stmt,
-                                                              ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().refreshRoleMapping(stmt);
-            });
-
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitCreatePolicyStatement(CreatePolicyStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                SecurityPolicyMgr securityPolicyManagerEE =
-                        context.getGlobalStateMgr().getSecurityPolicyManager();
-                securityPolicyManagerEE.createMaskingPolicy(stmt);
-            });
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitDropPolicyStatement(DropPolicyStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                SecurityPolicyMgr securityPolicyManagerEE =
-                        context.getGlobalStateMgr().getSecurityPolicyManager();
-                securityPolicyManagerEE.dropPolicy(stmt);
-            });
-
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitAlterPolicyStatement(AlterPolicyStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                SecurityPolicyMgr securityPolicyManagerEE =
-                        context.getGlobalStateMgr().getSecurityPolicyManager();
-                securityPolicyManagerEE.alterPolicy(stmt);
-            });
-
             return null;
         }
 
@@ -1081,84 +954,28 @@ public class DDLStmtExecutor {
             return null;
         }
 
-        //=========================================== Warehouse Statement ==================================================
-        @Override
-        public ShowResultSet visitCreateWarehouseStatement(CreateWarehouseStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) context.getGlobalStateMgr().getWarehouseMgr();
-                warehouseMgr.createWarehouse(stmt);
-
-            });
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitSuspendWarehouseStatement(SuspendWarehouseStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) context.getGlobalStateMgr().getWarehouseMgr();
-                warehouseMgr.suspendWarehouse(stmt);
-
-            });
-            return null;
-        }
-        
-
-        @Override
-        public ShowResultSet visitResumeWarehouseStatement(ResumeWarehouseStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) context.getGlobalStateMgr().getWarehouseMgr();
-                warehouseMgr.resumeWarehouse(stmt);
-            });
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitDropWarehouseStatement(DropWarehouseStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) context.getGlobalStateMgr().getWarehouseMgr();
-                warehouseMgr.dropWarehouse(stmt);
-            });
-            return null;
-        }
-
-        
         // ==========================================Data Cache Management==============================================
         @Override
-        public ShowResultSet visitCreateDatacacheRuleStatement(CreateDatacacheRuleStmt stmt, ConnectContext context) {
+        public ShowResultSet visitCreateDataCacheRuleStatement(CreateDataCacheRuleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                DatacacheMgr.getInstance().createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(),
+                DataCacheMgr.getInstance().createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(),
                         stmt.getProperties());
             });
             return null;
         }
 
-        public ShowResultSet visitDropDatacacheRuleStatement(DropDatacacheRuleStmt stmt, ConnectContext context) {
+        @Override
+        public ShowResultSet visitDropDataCacheRuleStatement(DropDataCacheRuleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                DatacacheMgr.getInstance().dropCacheRule(stmt.getCacheRuleId());
+                DataCacheMgr.getInstance().dropCacheRule(stmt.getCacheRuleId());
             });
             return null;
         }
 
-        //=========================================== Failover Group Statement ========================================
         @Override
-        public ShowResultSet visitCreatePrimaryFailoverGroupStatement(CreatePrimaryFailoverGroupStmt stmt,
-                                                                      ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() ->
-                    context.getGlobalStateMgr().getFailoverGroupMgr().createFailoverGroup(stmt)
-            );
-            return null;
-        }
-
-        public ShowResultSet visitCreateSecondaryFailoverGroupStatement(CreateSecondaryFailoverGroupStmt stmt,
-                                                                        ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() ->
-                    context.getGlobalStateMgr().getFailoverGroupMgr().createFailoverGroup(stmt)
-            );
-            return null;
-        }
-        public ShowResultSet visitClearDatacacheRulesStatement(ClearDatacacheRulesStmt stmt, ConnectContext context) {
+        public ShowResultSet visitClearDataCacheRulesStatement(ClearDataCacheRulesStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                DatacacheMgr.getInstance().clearRules();
+                DataCacheMgr.getInstance().clearRules();
             });
             return null;
         }

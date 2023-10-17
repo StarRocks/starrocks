@@ -13,8 +13,8 @@
 // limitations under the License.
 package com.starrocks.epack.policy;
 
+import com.starrocks.epack.qe.DDLStmtExecutorEPack;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
-import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -43,33 +43,33 @@ public class DropPolicyTest {
     public void testDropPolicy() throws Exception {
         CreatePolicyStmt createPolicyStmt = (CreatePolicyStmt) analyzeSuccess(
                 "create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1");
-        DDLStmtExecutor.execute(createPolicyStmt, starRocksAssert.getCtx());
+        DDLStmtExecutorEPack.execute(createPolicyStmt, starRocksAssert.getCtx());
 
         assertThrows("Can't find policy mp.", SemanticException.class, () ->
-                DDLStmtExecutor.execute(analyzeSuccess("drop row access policy mp"),
+                DDLStmtExecutorEPack.execute(analyzeSuccess("drop row access policy mp"),
                         starRocksAssert.getCtx()));
 
-        DDLStmtExecutor.execute(analyzeSuccess("drop masking policy mp"), starRocksAssert.getCtx());
+        DDLStmtExecutorEPack.execute(analyzeSuccess("drop masking policy mp"), starRocksAssert.getCtx());
 
         assertThrows("Can't find policy mp.", SemanticException.class, () ->
-                DDLStmtExecutor.execute(analyzeSuccess("drop masking policy mp"), starRocksAssert.getCtx()));
+                DDLStmtExecutorEPack.execute(analyzeSuccess("drop masking policy mp"), starRocksAssert.getCtx()));
 
-        DDLStmtExecutor.execute(analyzeSuccess("drop masking policy if exists mp"), starRocksAssert.getCtx());
+        DDLStmtExecutorEPack.execute(analyzeSuccess("drop masking policy if exists mp"), starRocksAssert.getCtx());
 
         createPolicyStmt = (CreatePolicyStmt) analyzeSuccess(
                 "create row access policy rp as (v1 bigint) returns boolean -> true;");
-        DDLStmtExecutor.execute(createPolicyStmt, starRocksAssert.getCtx());
+        DDLStmtExecutorEPack.execute(createPolicyStmt, starRocksAssert.getCtx());
 
         assertThrows("Can't find policy rp.", SemanticException.class, () ->
-                DDLStmtExecutor.execute(analyzeSuccess("drop masking policy rp"),
+                DDLStmtExecutorEPack.execute(analyzeSuccess("drop masking policy rp"),
                         starRocksAssert.getCtx()));
 
-        DDLStmtExecutor.execute(analyzeSuccess("drop row access policy rp"), starRocksAssert.getCtx());
+        DDLStmtExecutorEPack.execute(analyzeSuccess("drop row access policy rp"), starRocksAssert.getCtx());
 
         assertThrows("Can't find policy rp.", SemanticException.class, () ->
-                DDLStmtExecutor.execute(analyzeSuccess("drop row access  policy rp"), starRocksAssert.getCtx()));
+                DDLStmtExecutorEPack.execute(analyzeSuccess("drop row access  policy rp"), starRocksAssert.getCtx()));
 
-        DDLStmtExecutor.execute(analyzeSuccess("drop row access  policy if exists rp"), starRocksAssert.getCtx());
+        DDLStmtExecutorEPack.execute(analyzeSuccess("drop row access  policy if exists rp"), starRocksAssert.getCtx());
 
         ShowExecutor showExecutor = new ShowExecutor(starRocksAssert.getCtx(),
                 (ShowStmt) analyzeSuccess("show masking policies"));

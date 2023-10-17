@@ -82,6 +82,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
+import com.starrocks.epack.qe.DDLStmtExecutorEPack;
 import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpResultSender;
@@ -1500,7 +1501,7 @@ public class StmtExecutor {
 
     private void handleDdlStmt() {
         try {
-            ShowResultSet resultSet = DDLStmtExecutor.execute(parsedStmt, context);
+            ShowResultSet resultSet = DDLStmtExecutorEPack.execute(parsedStmt, context);
             if (resultSet == null) {
                 context.getState().setOk();
             } else {

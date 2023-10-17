@@ -106,7 +106,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.credential.CredentialUtil;
-import com.starrocks.datacache.DatacacheMgr;
+import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.epack.privilege.AuthorizerEPack;
 import com.starrocks.epack.privilege.DbUID;
 import com.starrocks.epack.privilege.LDAPRoleMapping;
@@ -193,8 +193,8 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
-import com.starrocks.sql.ast.ShowDatacacheRulesStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
@@ -412,7 +412,7 @@ public class ShowExecutor {
             handleShowPlugins();
         } else if (stmt instanceof ShowSqlBlackListStmt) {
             handleShowSqlBlackListStmt();
-        } else if (stmt instanceof ShowDatacacheRulesStmt) {
+        } else if (stmt instanceof ShowDataCacheRulesStmt) {
             handleShowDataCacheRulesStmt();
         } else if (stmt instanceof ShowAnalyzeJobStmt) {
             handleShowAnalyzeJob();
@@ -2700,8 +2700,8 @@ public class ShowExecutor {
     }
 
     private void handleShowDataCacheRulesStmt() {
-        ShowDatacacheRulesStmt showStmt = (ShowDatacacheRulesStmt) stmt;
-        resultSet = new ShowResultSet(showStmt.getMetaData(), DatacacheMgr.getInstance().getShowResultSetRows());
+        ShowDataCacheRulesStmt showStmt = (ShowDataCacheRulesStmt) stmt;
+        resultSet = new ShowResultSet(showStmt.getMetaData(), DataCacheMgr.getInstance().getShowResultSetRows());
     }
 
     private void handleShowAnalyzeJob() {

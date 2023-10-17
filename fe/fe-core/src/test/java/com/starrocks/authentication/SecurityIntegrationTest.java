@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
 import com.starrocks.common.Config;
@@ -21,6 +20,7 @@ import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.epack.persist.SecurityIntegrationPersistInfo;
 import com.starrocks.epack.privilege.AuthenticationMgrEPack;
 import com.starrocks.epack.privilege.RoleMappingMetaMgr;
+import com.starrocks.epack.qe.DDLStmtExecutorEPack;
 import com.starrocks.epack.sql.analyzer.RoleMappingStatementAnalyzer;
 import com.starrocks.epack.sql.analyzer.SecurityIntegrationStatementAnalyzer;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
@@ -32,7 +32,6 @@ import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -66,14 +65,14 @@ public class SecurityIntegrationTest {
         CreateSecurityIntegrationStatement createSecurityIntegrationStatement =
                 (CreateSecurityIntegrationStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         SecurityIntegrationStatementAnalyzer.analyze(createSecurityIntegrationStatement, connectContext);
-        DDLStmtExecutor.execute(createSecurityIntegrationStatement, connectContext);
+        DDLStmtExecutorEPack.execute(createSecurityIntegrationStatement, connectContext);
     }
 
     private void alterSecurityIntegration(String sql) throws Exception {
         AlterSecurityIntegrationStatement alterSecurityIntegrationStatement =
                 (AlterSecurityIntegrationStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         SecurityIntegrationStatementAnalyzer.analyze(alterSecurityIntegrationStatement, connectContext);
-        DDLStmtExecutor.execute(alterSecurityIntegrationStatement, connectContext);
+        DDLStmtExecutorEPack.execute(alterSecurityIntegrationStatement, connectContext);
     }
 
     private void dropSecurityIntegration(String name) throws Exception {
@@ -81,7 +80,7 @@ public class SecurityIntegrationTest {
         DropSecurityIntegrationStatement dropSecurityIntegrationStatement =
                 (DropSecurityIntegrationStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         SecurityIntegrationStatementAnalyzer.analyze(dropSecurityIntegrationStatement, connectContext);
-        DDLStmtExecutor.execute(dropSecurityIntegrationStatement, connectContext);
+        DDLStmtExecutorEPack.execute(dropSecurityIntegrationStatement, connectContext);
     }
 
     @Test
@@ -291,9 +290,8 @@ public class SecurityIntegrationTest {
         CreateRoleMappingStatement createRoleMappingStatement =
                 (CreateRoleMappingStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         RoleMappingStatementAnalyzer.analyze(createRoleMappingStatement, connectContext);
-        DDLStmtExecutor.execute(createRoleMappingStatement, connectContext);
+        DDLStmtExecutorEPack.execute(createRoleMappingStatement, connectContext);
     }
-
 
     @Test
     public void testAlterSecurityIntegration() throws Exception {

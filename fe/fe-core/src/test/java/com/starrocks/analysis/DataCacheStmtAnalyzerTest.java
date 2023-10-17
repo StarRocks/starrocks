@@ -14,10 +14,10 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.datacache.DatacacheMgr;
-import com.starrocks.datacache.DatacacheRule;
+import com.starrocks.datacache.DataCacheMgr;
+import com.starrocks.datacache.DataCacheRule;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.ast.CreateDatacacheRuleStmt;
+import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import org.elasticsearch.common.collect.List;
@@ -31,9 +31,9 @@ import java.util.Optional;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
-public class DatacacheStmtAnalyzerTest {
+public class DataCacheStmtAnalyzerTest {
 
-    private final DatacacheMgr DATACACHE_MGR = DatacacheMgr.getInstance();
+    private final DataCacheMgr DATACACHE_MGR = DataCacheMgr.getInstance();
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -48,7 +48,7 @@ public class DatacacheStmtAnalyzerTest {
 
     @Test
     public void testAddSimpleRule() {
-        CreateDatacacheRuleStmt stmt = (CreateDatacacheRuleStmt)
+        CreateDataCacheRuleStmt stmt = (CreateDataCacheRuleStmt)
                 analyzeSuccess("create datacache rule hive0.partitioned_db.orders priority = -1");
         Assert.assertEquals(-1, stmt.getPriority());
         Assert.assertNull(stmt.getPredicates());
@@ -78,8 +78,8 @@ public class DatacacheStmtAnalyzerTest {
         analyzeFail("create datacache rule * priority = -1");
         analyzeFail("create datacache rule *.a.b priority = -1", "Catalog is *, database and table must use * either");
         analyzeFail("create datacache rule a.*.b priority = -1", "Database is *, table must use * either");
-        analyzeFail("create datacache rule catalog.a.b priority = -1", "Datacache target catalog: catalog does not exist.");
-        analyzeFail("create datacache rule hive0.partitioned_db.b priority = -1", "Datacache target table: b does not exist in [catalog: hive0, database: partitioned_db]");
+        analyzeFail("create datacache rule catalog.a.b priority = -1", "DataCache target catalog: catalog does not exist.");
+        analyzeFail("create datacache rule hive0.partitioned_db.b priority = -1", "DataCache target table: b does not exist in [catalog: hive0, database: partitioned_db]");
         analyzeFail("create datacache rule hive0.partitioned_db.* WHERE dt>'2042' priority = -1", "You must have a specific table when using where clause");
     }
 
@@ -102,10 +102,10 @@ public class DatacacheStmtAnalyzerTest {
 
     @Test
     public void testCreateRuleWithPredicates() {
-        CreateDatacacheRuleStmt stmt = (CreateDatacacheRuleStmt)
+        CreateDataCacheRuleStmt stmt = (CreateDataCacheRuleStmt)
                 analyzeSuccess("create datacache rule hive0.datacache_db.multi_partition_table where l_shipdate > '2012-1-1' priority = -1");
         DATACACHE_MGR.createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(), stmt.getProperties());
-        Optional<DatacacheRule> dataCacheRule = DatacacheMgr.getInstance().getCacheRule(stmt.getTarget());
+        Optional<DataCacheRule> dataCacheRule = DataCacheMgr.getInstance().getCacheRule(stmt.getTarget());
         Assert.assertTrue(dataCacheRule.isPresent());
         Assert.assertEquals("[id = 0, target = hive0.datacache_db.multi_partition_table, predicates = `hive0`.`datacache_db`.`multi_partition_table`.`l_shipdate` > '2012-1-1', priority = -1, properties = NULL]", dataCacheRule.get().toString());
     }

@@ -14,12 +14,12 @@
 
 package com.starrocks.datacache;
 
-import com.starrocks.thrift.TDatacacheOptions;
+import com.starrocks.thrift.TDataCacheOptions;
 
-public class DatacacheOptions {
+public class DataCacheOptions {
     private final int priority;
 
-    public DatacacheOptions(int priority) {
+    public DataCacheOptions(int priority) {
         this.priority = priority;
     }
 
@@ -27,7 +27,7 @@ public class DatacacheOptions {
         return priority;
     }
 
-    public void toThrift(TDatacacheOptions tDatacacheOptions) {
-        tDatacacheOptions.setPriority(priority);
+    public void toThrift(TDataCacheOptions tDataCacheOptions) {
+        tDataCacheOptions.setPriority(priority);
     }
 }
