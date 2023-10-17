@@ -1004,14 +1004,6 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "inspect_mv_relationships", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator inspectMvRelationships() {
         ConnectContext context = ConnectContext.get();
-        try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.OPERATE);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    "", context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.OPERATE.name(), ObjectType.FUNCTION.name(), "inspect_mv_relationships");
-        }
 
         String json = GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().inspect();
         return ConstantOperator.createVarchar(json);
