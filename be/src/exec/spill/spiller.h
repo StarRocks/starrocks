@@ -186,6 +186,7 @@ public:
             const std::vector<const SpillPartitionInfo*>& parititons);
 
     const std::unique_ptr<SpillerWriter>& writer() { return _writer; }
+    const std::shared_ptr<SpillerReader>& reader() { return _reader; }
 
     const std::shared_ptr<spill::Serde>& serde() { return _serde; }
     BlockManager* block_manager() { return _block_manager; }
@@ -204,7 +205,7 @@ private:
     std::weak_ptr<SpillerFactory> _parent;
 
     std::unique_ptr<SpillerWriter> _writer;
-    std::unique_ptr<SpillerReader> _reader;
+    std::shared_ptr<SpillerReader> _reader;
 
     std::mutex _mutex;
 
