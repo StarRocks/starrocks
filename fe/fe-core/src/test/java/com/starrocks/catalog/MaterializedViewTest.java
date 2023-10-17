@@ -46,7 +46,6 @@ import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
@@ -886,7 +885,7 @@ public class MaterializedViewTest {
     }
 
     @Test
-    public void testCreateMVWithIndex() throws Exception{
+    public void testCreateMVWithIndex() throws Exception {
         String mvSqlWithBitMapAndBloomfilter = "create materialized view index_mv_to_check " +
                 "(k2 ," +
                 " total ," +
