@@ -457,12 +457,6 @@ public class HiveMetastoreApiConverter {
     }
 
     public static TextFileFormatDesc toTextFileFormatDesc(Map<String, String> serdeParams) {
-        final String DEFAULT_FIELD_DELIM = "\001";
-        final String DEFAULT_COLLECTION_DELIM = "\002";
-        final String DEFAULT_MAPKEY_DELIM = "\003";
-        final String DEFAULT_LINE_DELIM = "\n";
-
-
         // Get properties 'field.delim', 'line.delim', 'collection.delim' and 'mapkey.delim' from StorageDescriptor
         // Detail refer to:
         // https://github.com/apache/hive/blob/90428cc5f594bd0abb457e4e5c391007b2ad1cb8/serde/src/gen/thrift/gen-javabean/org/apache/hadoop/hive/serde/serdeConstants.java#L34-L40
@@ -486,11 +480,11 @@ public class HiveMetastoreApiConverter {
         String lineDelim = serdeParams.getOrDefault("line.delim", "");
         String mapkeyDelim = serdeParams.getOrDefault("mapkey.delim", "");
 
-        // check is empty
-        fieldDelim = fieldDelim.isEmpty() ? DEFAULT_FIELD_DELIM : fieldDelim;
-        lineDelim = lineDelim.isEmpty() ? DEFAULT_LINE_DELIM : lineDelim;
-        collectionDelim = collectionDelim.isEmpty() ? DEFAULT_COLLECTION_DELIM : collectionDelim;
-        mapkeyDelim = mapkeyDelim.isEmpty() ? DEFAULT_MAPKEY_DELIM : mapkeyDelim;
+        // check delim is empty, if it's empty, we convert it to null
+        fieldDelim = fieldDelim.isEmpty() ? null : fieldDelim;
+        lineDelim = lineDelim.isEmpty() ? null : lineDelim;
+        collectionDelim = collectionDelim.isEmpty() ? null : collectionDelim;
+        mapkeyDelim = mapkeyDelim.isEmpty() ? null : mapkeyDelim;
 
         return new TextFileFormatDesc(fieldDelim, lineDelim, collectionDelim, mapkeyDelim);
     }
