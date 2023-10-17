@@ -205,7 +205,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         // check outer join with isNull predicate on inner table
         // The estimate cardinality of join should not be 0.
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"));
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("3:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [257: ss_ticket_number, INT, false] = [280: sr_ticket_number, INT, true]\n" +
@@ -599,7 +598,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testHiveTPCH02UsingResource() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch02_resource"), null, TExplainLevel.COSTS);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("6:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  equal join conjunct: [24: n_regionkey, INT, true] = [26: r_regionkey, INT, true]\n" +
