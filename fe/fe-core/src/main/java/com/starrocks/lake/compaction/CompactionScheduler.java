@@ -121,6 +121,9 @@ public class CompactionScheduler extends Daemon {
             waitTxnId = transactionMgr.getTransactionIDGenerator().getNextTransactionId();
         }
         finishedWaiting = waitTxnId <= minActiveTxnId;
+        if (!finishedWaiting && LOG.isDebugEnabled()) {
+            LOG.debug("Waiting for active transactions to finish. waitTxnId={} minActiveTxnId={}", waitTxnId, minActiveTxnId);
+        }
         return finishedWaiting;
     }
 
@@ -182,6 +185,9 @@ public class CompactionScheduler extends Daemon {
         int compactionLimit = compactionTaskLimit();
         int numRunningTasks = runningCompactions.values().stream().mapToInt(CompactionJob::getNumTabletCompactionTasks).sum();
         if (numRunningTasks >= compactionLimit) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Current running tasks={} reached compaction task limit={}", numRunningTasks, compactionLimit);
+            }
             return;
         }
 
