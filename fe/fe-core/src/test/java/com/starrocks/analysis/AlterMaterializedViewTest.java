@@ -14,13 +14,9 @@
 
 package com.starrocks.analysis;
 
-<<<<<<< HEAD
-import com.starrocks.alter.AlterJobMgr;
-=======
 import com.google.common.collect.ImmutableList;
-import com.starrocks.alter.AlterMVJobExecutor;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.Column;
->>>>>>> d80283657f ([BugFix] check the schema when trying to activate the mv (#32698))
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
