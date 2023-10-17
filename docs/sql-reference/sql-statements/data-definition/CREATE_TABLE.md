@@ -326,10 +326,43 @@ If partition data cannot be evenly distributed into each tablet by using one buc
 
 **Precautions**:
 
+<<<<<<< HEAD
 - **When a table is created, you must specify the bucketing columns**.
 - The values of bucketing columns cannot be updated.
 - Bucketing columns cannot be modified after they are specified.
 - Since StarRocks 2.5, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
+=======
+  ```SQL
+  DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
+  ```
+
+  Data in partitions can be subdivided into buckets based on the hash values of the bucketing columns and the number of buckets. We recommend that you choose the column that meets the following two requirements as the bucketing column.
+
+  - High cardinality column such as ID
+  - Column that is often used as a filter in queries
+
+  If such a column does not exist, you can determine the bucketing column according to the complexity of queries.
+
+  - If the query is complex, we recommend that you select a high cardinality column as the bucketing column to ensure balanced data distribution among buckets and improve cluster resource utilization.
+  - If the query is relatively simple, we recommend that you select the column that is often used as the query condition as the bucketing column to improve query efficiency.
+
+  If partition data cannot be evenly distributed into each bucket by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../table_design/Data_distribution.md#hash-bucketing).
+
+  **Precautions**:
+
+  - **When you create a table, you must specify its bucketing columns**.
+  - The values of bucketing columns cannot be updated.
+  - Bucketing columns cannot be modified after they are specified.
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
+
+### ORDER BY
+
+Since version 3.0, the primary key and sort key are decoupled in the Primary Key table. The sort key is specified by the `ORDER BY` keyword and can be the permutation and combination of any columns.
+
+> **NOTICE**
+>
+> If the sort key is specified, the prefix index is built according to the sort key; if the sort key is not specified, the prefix index is built according to the primary key.
+>>>>>>> c97e0b6cf8 (fix broken links for the headline of choosing bucketing key in create table (#32930))
 
 ### PROPERTIES
 
