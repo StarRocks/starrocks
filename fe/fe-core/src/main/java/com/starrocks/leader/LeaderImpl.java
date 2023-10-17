@@ -385,6 +385,11 @@ public class LeaderImpl {
                 LOG.debug("finish create replica. tablet id: {}, be: {}, report version: {}",
                         tabletId, task.getBackendId(), request.getReport_version());
             }
+
+            if (createReplicaTask.isFromScheduler()) {
+                GlobalStateMgr.getCurrentState().getTabletScheduler()
+                        .finishCreateReplicaTask(createReplicaTask, request);
+            }
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.CREATE, task.getSignature());
         }

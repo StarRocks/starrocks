@@ -108,6 +108,8 @@ public class CreateReplicaTask extends AgentTask {
     // true if this task is created by recover request(See comment of Config.recover_with_empty_tablet)
     private boolean isRecoverTask = false;
 
+    private boolean isFromScheduler = false;
+
     private int primaryIndexCacheExpireSec = 0;
     private boolean createSchemaFile = true;
 
@@ -235,6 +237,14 @@ public class CreateReplicaTask extends AgentTask {
 
     public void setSchemaVersion(int schemaVersion) {
         this.schemaVersion = schemaVersion;
+    }
+
+    public void setIsFromScheduler(boolean isFromScheduler) {
+        this.isFromScheduler = isFromScheduler;
+    }
+
+    public boolean isFromScheduler() {
+        return isFromScheduler;
     }
 
     public void countDownLatch(long backendId, long tabletId) {
