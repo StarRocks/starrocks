@@ -84,7 +84,7 @@ public class IcebergTableFactory extends ExternalTableFactory {
         return icebergTable;
     }
 
-    private static void validateIcebergColumnType(List<Column> columns, IcebergTable oTable) throws DdlException {
+    public static void validateIcebergColumnType(List<Column> columns, IcebergTable oTable) throws DdlException {
         for (Column column : columns) {
             Map<String, Types.NestedField> icebergColumns = oTable.getNativeTable().schema().columns().stream()
                     .collect(Collectors.toMap(Types.NestedField::name, field -> field));
@@ -105,6 +105,12 @@ public class IcebergTableFactory extends ExternalTableFactory {
 
             if (!column.isAllowNull()) {
                 throw new DdlException("iceberg extern table not support no-nullable column: [" + column.getName() + "]");
+            }
+
+            for (String partName : oTable.getPartitionColumnNames()) {
+                if (!columns.stream().map(Column::getName).collect(Collectors.toList()).contains(partName)) {
+                    throw new DdlException("partition column [" + partName + "] must exist in column list");
+                }
             }
         }
     }
