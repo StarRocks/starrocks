@@ -30,7 +30,7 @@ public:
 
     ~TableFunctionOperator() override = default;
 
-    Status prepare(RuntimeState* state) override;
+    [[nodiscard]] Status prepare(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 
@@ -40,17 +40,18 @@ public:
 
     bool is_finished() const override;
 
-    Status set_finishing(RuntimeState* state) override;
+    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    Status reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+    [[nodiscard]] Status reset_state(starrocks::RuntimeState* state,
+                                     const std::vector<ChunkPtr>& refill_chunks) override;
 
 private:
     ChunkPtr _build_chunk(const std::vector<ColumnPtr>& output_columns);
-    Status _process_table_function();
+    [[nodiscard]] Status _process_table_function();
     void _copy_result(const std::vector<ColumnPtr>& columns, uint32_t max_column_size);
 
     const TPlanNode& _tnode;

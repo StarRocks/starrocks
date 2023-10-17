@@ -29,15 +29,16 @@ public:
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedFunctionCallExpr(*this)); }
 
 protected:
-    Status prepare(RuntimeState* state, ExprContext* context) override;
+    [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override;
 
-    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
+    [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
+                              FunctionContext::FunctionStateScope scope) override;
 
     void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
 
     bool is_constant() const override;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    [[nodiscard]] StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
 private:
     const FunctionDescriptor* _fn_desc{nullptr};

@@ -56,16 +56,16 @@ StreamScanOperator::~StreamScanOperator() {
     }
 }
 
-void StreamScanOperator::_reset_chunk_source(RuntimeState* state, int chunk_source_index) {
+Status StreamScanOperator::_reset_chunk_source(RuntimeState* state, int chunk_source_index) {
     //auto tablet_id = _chunk_sources[chunk_source_index]->get_lane_owner();
     StreamChunkSource* chunk_source = down_cast<StreamChunkSource*>(_chunk_sources[chunk_source_index].get());
     auto tablet_id = chunk_source->get_lane_owner();
     auto binlog_offset = _stream_epoch_manager->get_binlog_offset(state->fragment_instance_id(), _id, tablet_id);
 
     DCHECK(binlog_offset != nullptr);
-    chunk_source->set_stream_offset(binlog_offset->tablet_version, binlog_offset->lsn);
+    RETURN_IF_ERROR(chunk_source->set_stream_offset(binlog_offset->tablet_version, binlog_offset->lsn));
     chunk_source->set_epoch_limit(_current_epoch_info.max_scan_rows, _current_epoch_info.max_exec_millis);
-    chunk_source->reset_status();
+    return chunk_source->reset_status();
 }
 
 // In order to not modify the code of ScanOperator,
@@ -97,7 +97,7 @@ Status StreamScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_
         }
         need_detach = false;
         if (_is_stream_pipeline) {
-            _reset_chunk_source(state, chunk_source_index);
+            RETURN_IF_ERROR(_reset_chunk_source(state, chunk_source_index));
         }
 
         RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
@@ -105,7 +105,7 @@ Status StreamScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_
         if (!_old_chunk_sources.empty()) {
             _chunk_sources[chunk_source_index] = _old_chunk_sources.front();
             _old_chunk_sources.pop();
-            _reset_chunk_source(state, chunk_source_index);
+            RETURN_IF_ERROR(_reset_chunk_source(state, chunk_source_index));
 
             need_detach = false;
             RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
@@ -211,14 +211,14 @@ Status StreamScanOperator::reset_epoch(RuntimeState* state) {
         _closed_chunk_sources.pop();
         StreamChunkSource* chunk_source = down_cast<StreamChunkSource*>(chunk_source_ptr.get());
 
-        chunk_source->reset_status();
+        RETURN_IF_ERROR(chunk_source->reset_status());
         _old_chunk_sources.push(chunk_source_ptr);
 
         auto tablet_id = chunk_source->get_lane_owner();
         auto binlog_offset = _stream_epoch_manager->get_binlog_offset(state->fragment_instance_id(), _id, tablet_id);
 
         DCHECK(binlog_offset != nullptr);
-        chunk_source->set_stream_offset(binlog_offset->tablet_version, binlog_offset->lsn);
+        RETURN_IF_ERROR(chunk_source->set_stream_offset(binlog_offset->tablet_version, binlog_offset->lsn));
         chunk_source->set_epoch_limit(_current_epoch_info.max_scan_rows, _current_epoch_info.max_exec_millis);
     }
 
@@ -262,7 +262,8 @@ Status StreamScanOperator::set_epoch_finished(RuntimeState* state) {
     int chunk_source_size = _closed_chunk_sources.size();
     for (int i = 0; i < chunk_source_size; i++) {
         BinlogOffset binlog_offset{0, 2, 2};
-        _stream_epoch_manager->update_binlog_offset(state->fragment_instance_id(), _id, 0, binlog_offset);
+        RETURN_IF_ERROR(
+                _stream_epoch_manager->update_binlog_offset(state->fragment_instance_id(), _id, 0, binlog_offset));
     }
     return Status::OK();
 }
@@ -353,9 +354,9 @@ void StreamChunkSource::set_epoch_limit(int64_t epoch_rows_limit, int64_t epoch_
     _epoch_time_limit = epoch_time_limit;
 }
 
-void StreamChunkSource::reset_status() {
+Status StreamChunkSource::reset_status() {
     _status = Status::OK();
-    _get_stream_data_source()->reset_status();
+    return _get_stream_data_source()->reset_status();
 }
 
 bool StreamChunkSource::_reach_eof() const {

@@ -35,8 +35,8 @@ public:
     void close() override {}
 
 protected:
-    Status do_get_next(Chunk* chunk) override;
-    Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override {
+    [[nodiscard]] Status do_get_next(Chunk* chunk) override;
+    [[nodiscard]] Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override {
         return Status::EndOfFile("end of empty iterator");
     }
 
@@ -64,26 +64,27 @@ public:
     }
     ~MemStateTable() override = default;
 
-    Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
+    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    [[nodiscard]] Status open(RuntimeState* state) override;
 
-    Status seek(const Columns& keys, StateTableResult& values) const override;
-    Status seek(const Columns& keys, const std::vector<uint8_t>& selection, StateTableResult& values) const override;
+    [[nodiscard]] Status seek(const Columns& keys, StateTableResult& values) const override;
+    [[nodiscard]] Status seek(const Columns& keys, const std::vector<uint8_t>& selection,
+                              StateTableResult& values) const override;
 
-    Status seek(const Columns& keys, const std::vector<std::string>& projection_columns,
-                StateTableResult& values) const override;
+    [[nodiscard]] Status seek(const Columns& keys, const std::vector<std::string>& projection_columns,
+                              StateTableResult& values) const override;
     ChunkIteratorPtrOr prefix_scan(const Columns& keys, size_t row_idx) const override;
     ChunkIteratorPtrOr prefix_scan(const std::vector<std::string>& projection_columns, const Columns& keys,
                                    size_t row_idx) const override;
 
-    Status write(RuntimeState* state, const StreamChunkPtr& chunk) override;
-    Status commit(RuntimeState* state) override;
-    Status reset_epoch(RuntimeState* state) override;
+    [[nodiscard]] Status write(RuntimeState* state, const StreamChunkPtr& chunk) override;
+    [[nodiscard]] Status commit(RuntimeState* state) override;
+    [[nodiscard]] Status reset_epoch(RuntimeState* state) override;
 
 private:
     DatumKeyRow _convert_columns_to_key(const Columns& cols, size_t idx) const;
-    Status _append_datum_row_to_chunk(const DatumRow& v_row, ChunkPtr& result_chunk) const;
-    Status _append_null_to_chunk(ChunkPtr& result_chunk) const;
+    [[nodiscard]] Status _append_datum_row_to_chunk(const DatumRow& v_row, ChunkPtr& result_chunk) const;
+    [[nodiscard]] Status _append_null_to_chunk(ChunkPtr& result_chunk) const;
 
     Schema _make_schema_from_slots(const std::vector<SlotDescriptor*>& slots) const;
     static DatumKeyRow _make_datum_key_row(const ChunkPtr& chunk, size_t start, size_t end, int row_idx);
