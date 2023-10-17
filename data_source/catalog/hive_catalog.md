@@ -1,8 +1,10 @@
 # Hive catalog
 
-Hive Catalog 是一种 External Catalog。通过 Hive Catalog，您不需要执行数据导入就可以直接查询 Apache Hive™ 里的数据。此外，您还可以基于 Hive Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 能力来实现数据转换和导入。
+Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hive Catalog，您可以：
 
-StarRocks 从 2.3 版本开始支持 Hive Catalog。另外从 3.1 版本起，还支持访问 Hive Catalog 内的视图。
+- 无需手动建表，通过 Hive Catalog 直接查询 Hive 内的数据。
+- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 或异步物化视图（3.1 版本及以上）将 Hive 内的数据进行加工建模，并导入至 StarRocks。
+- 在 StarRocks 侧创建或删除 Hive 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 把 StarRocks 表数据写入到 Parquet 格式的 Hive 表中（3.2 版本及以上）。
 
 为保证正常访问 Hive 内的数据，StarRocks 集群必须集成以下两个关键组件：
 
@@ -892,6 +894,261 @@ GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE hive_role_table;
 
 -- 把 hive_catalog 内所有视图的查询权限赋予 hive_role_table。
 GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE hive_role_table;
+```
+
+## 创建 Hive 数据库
+
+同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Hive Catalog 的 [CREATE DATABASE](../../administration/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) 在该 Hive Catalog 内创建数据库。本功能自 3.2 版本起开始支持。
+
+> **说明**
+>
+> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+[切换至目标 Hive Catalog](#切换-hive-catalog-和数据库)，然后通过如下语句创建 Hive 数据库：
+
+```SQL
+CREATE DATABASE <database_name>
+[properties ("location" = "<prefix>://<path_to_database>/<database_name.db>")]
+```
+
+`location` 参数用于指定数据库所在的文件路径，支持 HDFS 和对象存储：
+
+- 选择 HMS 作为元数据服务时，如果您在创建数据库时不指定 `location`，那么系统会使用 HMS 默认的 `<warehouse_location>/<database_name.db>` 作为文件路径。
+- 选择 AWS Glue 作为元数据服务时，`location` 参数没有默认值，因此您在创建数据库时必须指定该参数。
+
+`prefix` 根据存储系统的不同而不同：
+
+| **存储系统**                           | **`Prefix`** **取值**                                        |
+| -------------------------------------- | ------------------------------------------------------------ |
+| HDFS                                   | `hdfs`                                                       |
+| Google GCS                             | `gs`                                                         |
+| Azure Blob Storage                     | <ul><li>如果您的存储账号支持通过 HTTP 协议进行访问，`prefix` 为 `wasb`。</li><li>如果您的存储账号支持通过 HTTPS 协议进行访问，`prefix` 为 `wasbs`。</li></ul> |
+| Azure Data Lake Storage Gen1           | `adl`                                                        |
+| Azure Data Lake Storage Gen2           | <ul><li>如果您的存储账号支持通过 HTTP 协议进行访问，`prefix` 为 `abfs`。</li><li>如果您的存储账号支持通过 HTTPS 协议进行访问，`prefix` 为 `abfss`。</li></ul> |
+| 阿里云 OSS                             | `oss`                                                        |
+| 腾讯云 COS                             | `cosn`                                                       |
+| 华为云 OBS                             | `obs`                                                        |
+| AWS S3 及其他兼容 S3 的存储（如 MinIO) | `s3`                                                         |
+
+## 删除 Hive 数据库
+
+同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [DROP](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) 来删除该 Hive 数据库。本功能自 3.2 版本起开始支持。仅支持删除空数据库。
+
+> **说明**
+>
+> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+删除数据库操作并不会将 HDFS 或对象存储上的对应文件路径删除。
+
+[切换至目标 Hive Catalog](#切换-hive-catalog-和数据库)，然后通过如下语句删除 Hive 数据库：
+
+```SQL
+DROP DATABASE <database_name>
+```
+
+## 创建 Hive 表
+
+同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [CREATE TABLE](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 在该 Hive 数据库下创建表。本功能自 3.2 版本起开始支持。
+
+> **说明**
+>
+> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+[切换至目标 Hive Catalog 和数据库](#切换-hive-catalog-和数据库)。然后通过如下语法创建 Hive 表：
+
+### 语法
+
+```SQL
+CREATE TABLE [IF NOT EXISTS] [database.]table_name
+(column_definition1[, column_definition2, ...
+partition_column_definition1,partition_column_definition2...])
+[partition_desc]
+[PROPERTIES ("key" = "value", ...)]
+[AS SELECT query]
+```
+
+### 参数说明
+
+#### column_definition
+
+`column_definition` 语法定义如下:
+
+```SQL
+col_name col_type [COMMENT 'comment']
+```
+
+参数说明：
+
+| 参数     | 说明                                                         |
+| -------- | ------------------------------------------------------------ |
+| col_name | 列名称。                                                     |
+| col_type | 列数据类型。当前支持如下数据类型：TINYINT、SMALLINT、INT、BIGINT、FLOAT、DOUBLE、DECIMAL、DATE、DATETIME、CHAR、VARCHAR[(length)]、ARRAY、MAP、STRUCT。不支持 LARGEINT、HLL、BITMAP 类型。 |
+
+> **注意**
+>
+> 所有非分区列均以 `NULL` 为默认值（即，在建表语句中指定 `DEFAULT "NULL"`）。分区列必须在最后声明，且不能为 `NULL`。
+
+#### partition_desc
+
+`partition_desc` 语法定义如下:
+
+```SQL
+PARTITION BY (par_col1[, par_col2...])
+```
+
+目前 StarRocks 仅支持 Identity Transforms。 即，会为每个唯一的分区值创建一个分区。
+
+> **注意**
+>
+> 分区列必须在最后声明，支持除 FLOAT、DOUBLE、DECIMAL、DATETIME 以外的数据类型，不支持 `NULL` 值。而且，`partition_desc` 中声明的分区列的顺序必须与 `column_definition` 中定义的列的顺序一致。
+
+#### properties
+
+可以在 `properties` 中通过 `"key" = "value"` 的形式声明 Hive 表的属性。
+
+以下为常见的几个 Hive 表属性：
+
+| **属性**          | **描述**                                                     |
+| ----------------- | ------------------------------------------------------------ |
+| location          | Hive 表所在的文件路径。使用 HMS 作为元数据服务时，您无需指定 `location` 参数。使用 AWS Glue 作为元数据服务时：<ul><li>如果在创建当前数据库时指定了 `location` 参数，那么在当前数据库下建表时不需要再指定 `location` 参数，StarRocks 默认把表建在当前数据库所在的文件路径下。</li><li>如果在创建当前数据库时没有指定 `location` 参数，那么在当前数据库建表时必须指定 `location` 参数。</li></ul> |
+| file_format       | Hive 表的文件格式。当前仅支持 Parquet 格式。默认值：`parquet`。 |
+| compression_codec | Hive 表的压缩格式。当前支持 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。 |
+
+### 示例
+
+1. 创建非分区表 `unpartition_tbl`，包含 `id` 和 `score` 两列，如下所示：
+
+   ```SQL
+   CREATE TABLE unpartition_tbl
+   (
+       id int,
+       score double
+   );
+   ```
+
+2. 创建分区表 `partition_tbl_1`，包含 `action`、`id`、`dt` 三列，并定义 `id` 和 `dt` 为分区列，如下所示：
+
+   ```SQL
+   CREATE TABLE partition_tbl_1
+   (
+       action varchar(20),
+       id int,
+       dt date
+   )
+   PARTITION BY (id,dt);
+   ```
+
+3. 查询原表 `partition_tbl_1` 的数据，并根据查询结果创建分区表 `partition_tbl_2`，定义 `id` 和 `dt` 为 `partition_tbl_2` 的分区列：
+
+   ```SQL
+   CREATE TABLE partition_tbl_2
+   PARTITION BY (id, dt)
+   AS SELECT * from partition_tbl_1;
+   ```
+
+## 向 Hive 表中插入数据
+
+同 StarRocks 内表一致，如果您拥有 Hive 表的 [INSERT](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) 将 StarRocks 表数据写入到该 Hive 表中（当前仅支持写入到 Parquet 格式的 Hive 表）。本功能自 3.2 版本起开始支持。
+
+> **说明**
+>
+> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+[切换至目标 Hive Catalog 和数据库](#切换-hive-catalog-和数据库)，然后通过如下语法将 StarRocks 表数据写入到 Parquet 格式的 Hive 表中：
+
+### 语法
+
+```SQL
+INSERT {INTO | OVERWRITE} <table_name>
+[ (column_name [, ...]) ]
+{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
+
+-- 向指定分区写入数据。
+INSERT {INTO | OVERWRITE} <table_name>
+PARTITION (par_col1=<value> [, par_col2=<value>...])
+{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
+```
+
+> **注意**
+>
+> 分区列不允许为 `NULL`，因此导入时需要保证分区列有值。
+
+### 参数说明
+
+| 参数        | 说明                                                         |
+| ----------- | ------------------------------------------------------------ |
+| INTO        | 将数据追加写入目标表。                                       |
+| OVERWRITE   | 将数据覆盖写入目标表。                                       |
+| column_name | 导入的目标列。可以指定一个或多个列。指定多个列时，必须用逗号 (`,`) 分隔。指定的列必须是目标表中存在的列，并且必须包含分区列。该参数可以与源表中的列名称不同，但顺序需一一对应。如果不指定该参数，则默认导入数据到目标表中的所有列。如果源表中的某个非分区列在目标列不存在，则写入默认值 `NULL`。如果查询语句的结果列类型与目标列的类型不一致，会进行隐式转化，如果不能进行转化，那么 INSERT INTO 语句会报语法解析错误。 |
+| expression  | 表达式，用以为对应列赋值。                                   |
+| DEFAULT     | 为对应列赋予默认值。                                         |
+| query       | 查询语句，查询的结果会导入至目标表中。查询语句支持任意 StarRocks 支持的 SQL 查询语法。 |
+| PARTITION   | 导入的目标分区。需要指定目标表的所有分区列，指定的分区列的顺序可以与建表时定义的分区列的顺序不一致。指定分区时，不允许通过列名 (`column_name`) 指定导入的目标列。 |
+
+### 示例
+
+1. 向表 `partition_tbl_1` 中插入如下三行数据：
+
+   ```SQL
+   INSERT INTO partition_tbl_1
+   VALUES
+       ("buy", 1, "2023-09-01"),
+       ("sell", 2, "2023-09-02"),
+       ("buy", 3, "2023-09-03");
+   ```
+
+2. 向表 `partition_tbl_1` 按指定列顺序插入一个包含简单计算的 SELECT 查询的结果数据：
+
+   ```SQL
+   INSERT INTO partition_tbl_1 (id, action, dt) SELECT 1+1, 'buy', '2023-09-03';
+   ```
+
+3. 向表 `partition_tbl_1` 中插入一个从其自身读取数据的 SELECT 查询的结果数据：
+
+   ```SQL
+   INSERT INTO partition_tbl_1 SELECT 'buy', 1, date_add(dt, INTERVAL 2 DAY)
+   FROM partition_tbl_1
+   WHERE id=1;
+   ```
+
+4. 向表 `partition_tbl_2` 中 `dt='2023-09-01'`、`id=1` 的分区插入一个 SELECT 查询的结果数据：
+
+   ```SQL
+   INSERT INTO partition_tbl_2 SELECT 'order', 1, '2023-09-01';
+   ```
+
+   Or
+
+   ```SQL
+   INSERT INTO partition_tbl_2 partition(dt='2023-09-01',id=1) SELECT 'order';
+   ```
+
+5. 将表 `partition_tbl_1` 中 `dt='2023-09-01'`、`id=1` 的分区下所有 `action` 列值全部覆盖为 `close`：
+
+   ```SQL
+   INSERT OVERWRITE partition_tbl_1 SELECT 'close', 1, '2023-09-01';
+   ```
+
+   Or
+
+   ```SQL
+   INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
+   ```
+
+## 删除 Hive 表
+
+同 StarRocks 内表一致，如果您拥有 Hive 表的 [DROP](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除该 Hive 表。本功能自 3.2 版本起开始支持。
+
+> **说明**
+>
+> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+执行删除表的操作时，您必须在 DROP TABLE 语句中指定 `FORCE` 关键字。该操作不会删除表对应的文件路径，但是会删除 HDFS 或对象存储上的表数据。请您谨慎执行该操作。
+
+[切换至目标 Hive Catalog 和数据库](#切换-hive-catalog-和数据库)，然后通过如下语句删除 Hive 表：
+
+```SQL
+DROP TABLE <table_name> FORCE
 ```
 
 ## 手动或自动更新元数据缓存
