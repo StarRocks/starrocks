@@ -19,10 +19,7 @@ import com.google.gson.JsonElement;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
 import com.starrocks.persist.gson.GsonUtils;
-<<<<<<< HEAD
-=======
 import org.apache.commons.collections.CollectionUtils;
->>>>>>> 5003d5e37e ([BugFix] fix inspect meta functions (#32710) (#32726))
 
 import java.util.Set;
 
@@ -60,13 +57,8 @@ public class ConnectorTableInfo {
                 "}";
     }
 
-<<<<<<< HEAD
-    public String inspect() {
-        return GsonUtils.GSON.toJson(relatedMaterializedViews);
-=======
     public JsonElement inspect() {
         return GsonUtils.GSON.toJsonTree(relatedMaterializedViews);
->>>>>>> 5003d5e37e ([BugFix] fix inspect meta functions (#32710) (#32726))
     }
 
     public void seTableInfoForConnectorTable(Table table) {

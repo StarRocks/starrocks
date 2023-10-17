@@ -114,18 +114,6 @@ public class ConnectorTblMetaInfoMgr {
      * A debugging interface for dump the content as JSON
      */
     public String inspect() {
-<<<<<<< HEAD
-        JsonObject res = new JsonObject();
-        connectorTableMetaInfos.cellSet().forEach(cell -> {
-            String catalog = cell.getRowKey();
-            String db = cell.getColumnKey();
-            cell.getValue().forEach((tableName, tableInfo) -> {
-                TableName key = new TableName(catalog, db, tableName);
-                res.addProperty(key.toString(), tableInfo.inspect());
-            });
-        });
-        return res.toString();
-=======
         readLock();
         try {
             JsonObject res = new JsonObject();
@@ -141,7 +129,6 @@ public class ConnectorTblMetaInfoMgr {
         } finally {
             readUnlock();
         }
->>>>>>> 5003d5e37e ([BugFix] fix inspect meta functions (#32710) (#32726))
     }
 
     private void writeLock() {
