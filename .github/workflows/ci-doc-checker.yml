@@ -80,7 +80,8 @@ jobs:
           git checkout -b merge_pr;
           git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
 
-      - uses: articulate/actions-markdownlint@v1.1.0
+      - name: Link Check
+        uses: articulate/actions-markdownlint@v1.1.0
         with:
           config: "docs/.markdownlint.yaml"
           files: 'docs/**/*.md'
