@@ -231,11 +231,7 @@ public class DatabaseTransactionMgr {
     public Optional<Long> getMinActiveTxnId() {
         readLock();
         try {
-            if (idToRunningTransactionState.isEmpty()) {
-                return Optional.empty();
-            }
-            long minId = idToRunningTransactionState.keySet().stream().min(Comparator.comparing(Long::longValue)).get();
-            return Optional.of(minId);
+            return idToRunningTransactionState.keySet().stream().min(Comparator.comparing(Long::longValue));
         } finally {
             readUnlock();
         }
@@ -244,9 +240,6 @@ public class DatabaseTransactionMgr {
     public Optional<Long> getMinActiveCompactionTxnId() {
         readLock();
         try {
-            if (idToRunningTransactionState.isEmpty()) {
-                return Optional.empty();
-            }
             OptionalLong minId = idToRunningTransactionState.values().stream()
                     .filter(state -> state.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION)
                     .mapToLong(TransactionState::getTransactionId).min();
