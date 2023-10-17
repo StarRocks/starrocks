@@ -121,4 +121,7 @@ struct SyncTaskExecutor {
 
 #define TRACKER_WITH_SPILLER_GUARD(state, spiller) RESOURCE_TLS_MEMTRACER_GUARD(state, spiller->weak_from_this())
 
+#define TRACKER_WITH_SPILLER_READER_GUARD(state, spiller) \
+    RESOURCE_TLS_MEMTRACER_GUARD(state, spiller->weak_from_this(), std::weak_ptr((spiller)->reader()))
+
 } // namespace starrocks::spill
