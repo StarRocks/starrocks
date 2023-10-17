@@ -1216,7 +1216,7 @@ public class ScalarOperatorFunctions {
      * Return the content in ConnectorTblMetaInfoMgr, which contains mapping information from base table to mv
      */
     @ConstantFunction(name = "inspect_mv_relationships", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
-    public static ConstantOperator inspect_mv_relationships() throws AccessDeniedException {
+    public static ConstantOperator inspectMvRelationships() {
         ConnectContext context = ConnectContext.get();
         try {
             Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
