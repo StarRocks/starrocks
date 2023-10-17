@@ -3073,7 +3073,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testSelectFromSyncMV() throws Exception {
+    public void testSelectFromSyncMV1() throws Exception {
         // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
@@ -3088,6 +3088,17 @@ public class CreateMaterializedViewTest {
                 "     rollup: sync_mv1\n" +
                 "     tabletRatio=6/6"));
         starRocksAssert.dropMaterializedView("sync_mv1");
+    }
+
+    @Test
+    public void testSelectFromSyncMV2() throws Exception {
+        try {
+            String sql = "select * from tbl1 [_SYNC_MV_];";
+            Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Detail message: Unknown table 'test.tbl1'"));
+        }
     }
 
     // create sync mv that mv's name already existed in the db
