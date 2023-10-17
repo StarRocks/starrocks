@@ -56,12 +56,15 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.metric.MaterializedViewMetricsEntity;
+import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.OlapScanNode;
@@ -148,6 +151,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     private long oldTransactionVisibleWaitTimeout;
 
+    // represents the refresh job final job status
+    public enum RefreshJobStatus {
+        SUCCESS,
+        FAILED,
+        EMPTY,
+        TOTAL
+    }
+
     @VisibleForTesting
     public MvTaskRunContext getMvContext() {
         return mvContext;
@@ -166,14 +177,24 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     @Override
     public void processTaskRun(TaskRunContext context) throws Exception {
         prepare(context);
+
+        Preconditions.checkState(materializedView != null);
+        MaterializedViewMetricsEntity mvEntity =
+                MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(materializedView.getMvId());
+        mvEntity.increaseRefreshJobStatus(RefreshJobStatus.TOTAL);
+
         try {
-            doMvRefresh(context);
+            RefreshJobStatus status = doMvRefresh(context, mvEntity);
+            mvEntity.increaseRefreshJobStatus(status);
+        } catch (Exception e) {
+            mvEntity.increaseRefreshJobStatus(RefreshJobStatus.FAILED);
+            throw e;
         } finally {
             postProcess();
         }
     }
 
-    private void doMvRefresh(TaskRunContext context) throws Exception {
+    private RefreshJobStatus doMvRefresh(TaskRunContext context, MaterializedViewMetricsEntity mvEntity) throws Exception {
         InsertStmt insertStmt = null;
         ExecPlan execPlan = null;
         int retryNum = 0;
@@ -181,6 +202,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         Map<Table, Set<String>> refTableRefreshPartitions = null;
         Set<String> mvToRefreshedPartitions = null;
+        long startRefreshTs = System.currentTimeMillis();
         while (!checked) {
             // sync partitions between materialized view and base tables out of lock
             // do it outside lock because it is a time-cost operation
@@ -206,11 +228,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             materializedView.getName(), retryNum);
                     continue;
                 }
+                mvEntity.increaseRefreshRetryMetaCount((long) retryNum);
+
                 checked = true;
                 mvToRefreshedPartitions = getPartitionsToRefreshForMaterializedView(context.getProperties());
                 if (mvToRefreshedPartitions.isEmpty()) {
                     LOG.info("no partitions to refresh for materialized view {}", materializedView.getName());
-                    return;
+                    return RefreshJobStatus.EMPTY;
                 }
 
                 // Only refresh the first partition refresh number partitions, other partitions will generate new tasks
@@ -272,6 +296,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (mvContext.hasNextBatchPartition()) {
             generateNextTaskRun();
         }
+
+        {
+            long refreshDurationMs = System.currentTimeMillis() - startRefreshTs;
+            LOG.info("Refresh {} success, cost time(s): {}", materializedView.getName(),
+                    DebugUtil.DECIMAL_FORMAT_SCALE_3.format(refreshDurationMs / 1000));
+            mvEntity.updateRefreshDuration(refreshDurationMs);
+        }
+
+        return RefreshJobStatus.SUCCESS;
     }
 
     /**

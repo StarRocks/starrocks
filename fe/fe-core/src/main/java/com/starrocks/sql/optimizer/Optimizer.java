@@ -168,15 +168,16 @@ public class Optimizer {
         Memo memo = context.getMemo();
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
+
+        // collect all olap scan operator
+        collectAllScanOperators(logicOperatorTree, rootTaskContext);
+
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.RuleBaseOptimize")) {
             logicOperatorTree = rewriteAndValidatePlan(connectContext, logicOperatorTree, rootTaskContext);
         }
 
         memo.init(logicOperatorTree);
         OptimizerTraceUtil.log(connectContext, "after logical rewrite, root group:\n%s", memo.getRootGroup());
-
-        // collect all olap scan operator
-        collectAllScanOperators(memo, rootTaskContext);
 
         // Currently, we cache output columns in logic property.
         // We derive logic property Bottom Up firstly when new group added to memo,
@@ -218,9 +219,9 @@ public class Optimizer {
             // valid the final plan
             PlanValidator.getInstance().validatePlan(finalPlan, rootTaskContext);
             // validate mv and log tracer if needed
-            MVRewriteValidator.getInstance().validateMV(finalPlan);
-            // Audit the usage of materialized view
-            MVRewriteValidator.getInstance().auditMv(finalPlan, context);
+            MVRewriteValidator.getInstance().validateMV(connectContext, finalPlan, rootTaskContext);
+            // audit mv
+            MVRewriteValidator.getInstance().auditMv(connectContext, finalPlan, rootTaskContext);
             return finalPlan;
         }
     }
@@ -669,10 +670,9 @@ public class Optimizer {
         return expression;
     }
 
-    private void collectAllScanOperators(Memo memo, TaskContext rootTaskContext) {
-        OptExpression tree = memo.getRootGroup().extractLogicalTree();
+    private void collectAllScanOperators(OptExpression tree, TaskContext rootTaskContext) {
         List<LogicalOlapScanOperator> list = Lists.newArrayList();
-        Utils.extractOlapScanOperator(tree.getGroupExpression(), list);
+        Utils.extractOperator(tree, list, op -> op instanceof LogicalOlapScanOperator);
         rootTaskContext.setAllScanOperators(Collections.unmodifiableList(list));
     }
 
