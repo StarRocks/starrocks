@@ -738,7 +738,7 @@ resumeWarehouseStatement
 
 createStorageVolumeStatement
     : CREATE STORAGE VOLUME (IF NOT EXISTS)? storageVolumeName=identifierOrString typeDesc locationsDesc
-          comment? properties
+          comment? properties?
     ;
 
 typeDesc
