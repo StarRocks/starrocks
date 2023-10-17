@@ -265,11 +265,13 @@ void calculate_column_stats(const std::shared_ptr<::parquet::FileMetaData>& meta
             auto column_chunk_meta = meta->RowGroup(rg_idx)->ColumnChunk(col_idx);
             column_sizes[field_id] += column_chunk_meta->total_compressed_size();
 
-            auto column_stat = column_chunk_meta->statistics();
-            if (rg_idx == 0) {
-                column_stats[field_id] = column_stat;
-            } else {
-                merge_stats(column_stats[field_id], column_stat);
+            if (column_chunk_meta->is_stats_set()) {
+                auto column_stat = column_chunk_meta->statistics();
+                if (!column_stats.count(field_id)) {
+                    column_stats[field_id] = column_stat;
+                } else {
+                    merge_stats(column_stats[field_id], column_stat);
+                }
             }
         }
     }
