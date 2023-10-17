@@ -1420,6 +1420,31 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
+    private PartitionDesc visitMVPartitionBy(StarRocksParser.MaterializedViewPartitionDescContext desc) {
+        if (desc.primaryExpression() != null) {
+            ExpressionPartitionDesc res = null;
+            Expr expr = (Expr) visit(desc.primaryExpression());
+            if (expr instanceof SlotRef) {
+                res = new ExpressionPartitionDesc(expr);
+            } else if (expr instanceof FunctionCallExpr) {
+                AnalyzerUtils.checkAndExtractPartitionCol((FunctionCallExpr) expr, null);
+                res = new ExpressionPartitionDesc(expr);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                        expr.getPos());
+            }
+
+            return res;
+        } else if (desc.identifierList() != null) {
+            List<Identifier> columnList = visit(desc.identifierList().identifier(), Identifier.class);
+            List<String> columns = columnList.stream().map(Identifier::getValue).collect(toList());
+            return new ListPartitionDesc(columns, createPos(desc));
+
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("PARTITION BY", desc.toString()), desc);
+        }
+    }
+
     @Override
     public ParseNode visitCreateMaterializedViewStatement(
             StarRocksParser.CreateMaterializedViewStatementContext context) {
@@ -1438,7 +1463,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         RefreshSchemeClause refreshSchemeDesc = null;
         Map<String, String> properties = new HashMap<>();
-        ExpressionPartitionDesc expressionPartitionDesc = null;
+        PartitionDesc partitionByDesc = null;
         DistributionDesc distributionDesc = null;
         List<String> sortKeys = null;
 
@@ -1463,20 +1488,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
 
             // process partition by
-            if (desc.primaryExpression() != null) {
-                if (expressionPartitionDesc != null) {
-                    throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("PARTITION"), clausePos);
-                }
-                Expr expr = (Expr) visit(desc.primaryExpression());
-                if (expr instanceof SlotRef) {
-                    expressionPartitionDesc = new ExpressionPartitionDesc(expr);
-                } else if (expr instanceof FunctionCallExpr) {
-                    AnalyzerUtils.checkAndExtractPartitionCol((FunctionCallExpr) expr, null);
-                    expressionPartitionDesc = new ExpressionPartitionDesc(expr);
-                } else {
-                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
-                            expr.getPos());
-                }
+            if (desc.materializedViewPartitionDesc() != null) {
+                partitionByDesc = visitMVPartitionBy(desc.materializedViewPartitionDesc());
             }
 
             // process distribution
@@ -1505,9 +1518,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
-            if (expressionPartitionDesc != null) {
+            if (partitionByDesc != null) {
                 throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("SYNC refresh type", "PARTITION BY"),
-                        expressionPartitionDesc.getPos());
+                        partitionByDesc.getPos());
             }
             if (distributionDesc != null) {
                 throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("SYNC refresh type", "DISTRIBUTION BY"),
@@ -1526,7 +1539,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments, comment,
                 refreshSchemeDesc,
-                expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement, createPos(context));
+                partitionByDesc, distributionDesc, sortKeys, properties, queryStatement, createPos(context));
     }
 
     @Override

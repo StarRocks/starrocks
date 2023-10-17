@@ -198,6 +198,7 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.PartitionConvertContext;
@@ -3319,52 +3320,60 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public static PartitionInfo buildPartitionInfo(CreateMaterializedViewStatement stmt) throws DdlException {
-        ExpressionPartitionDesc expressionPartitionDesc = stmt.getPartitionExpDesc();
-        if (expressionPartitionDesc != null) {
-            Expr expr = expressionPartitionDesc.getExpr();
-            if (expr instanceof SlotRef) {
-                SlotRef slotRef = stmt.getPartitionRefTableExpr().unwrapSlotRef();
-                boolean useListPartition = slotRef.getType().getPrimitiveType() == PrimitiveType.VARCHAR;
+        PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
+        if (partitionDesc != null) {
+            if (partitionDesc instanceof ListPartitionDesc) {
+                ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
 
-                // FIXME: refactor the table type check code
-                TableName tableName = slotRef.getTblNameWithoutAnalyzed();
-                Optional<Table>
-                        table = stmt.getBaseTableInfos().stream()
-                        .filter(base -> base.getTable().getName().equalsIgnoreCase(tableName.getTbl()))
-                        .findFirst()
-                        .flatMap(x -> Optional.ofNullable(x.getTable()));
-                Preconditions.checkState(table.isPresent(), "table not exists: " + tableName.getTbl());
+                return new ListPartitionInfo(PartitionType.LIST, Collections.singletonList(stmt.getPartitionColumn()));
+            } else if (partitionDesc instanceof ExpressionPartitionDesc) {
+                ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
+                Expr expr = expressionPartitionDesc.getExpr();
+                if (expr instanceof SlotRef) {
+                    SlotRef slotRef = stmt.getPartitionRefTableExpr().unwrapSlotRef();
+                    boolean useListPartition = slotRef.getType().getPrimitiveType() == PrimitiveType.VARCHAR;
 
-                if (table.isPresent() && table.get().isOlapOrCloudNativeTable()) {
-                    OlapTable olap = (OlapTable) table.get();
-                    PartitionInfo partitionInfo = olap.getPartitionInfo();
-                    if (partitionInfo instanceof ListPartitionInfo) {
-                        useListPartition = true;
+                    // FIXME: refactor the table type check code
+                    TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+                    Optional<Table>
+                            table = stmt.getBaseTableInfos().stream()
+                            .filter(base -> base.getTable().getName().equalsIgnoreCase(tableName.getTbl()))
+                            .findFirst()
+                            .flatMap(x -> Optional.ofNullable(x.getTable()));
+                    Preconditions.checkState(table.isPresent(), "table not exists: " + tableName.getTbl());
+
+                    if (table.isPresent() && table.get().isOlapOrCloudNativeTable()) {
+                        OlapTable olap = (OlapTable) table.get();
+                        PartitionInfo partitionInfo = olap.getPartitionInfo();
+                        if (partitionInfo instanceof ListPartitionInfo) {
+                            useListPartition = true;
+                        }
+                    }
+
+                    if (useListPartition) {
+                        return new ListPartitionInfo(PartitionType.LIST,
+                                Collections.singletonList(stmt.getPartitionColumn()));
                     }
                 }
 
-                if (useListPartition) {
-                    return new ListPartitionInfo(PartitionType.LIST,
-                            Collections.singletonList(stmt.getPartitionColumn()));
+                if ((expr instanceof FunctionCallExpr)) {
+                    FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+                    if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+                        Column partitionColumn = new Column(stmt.getPartitionColumn());
+                        partitionColumn.setType(com.starrocks.catalog.Type.DATE);
+                        return partitionDesc.toPartitionInfo(
+                                Collections.singletonList(partitionColumn),
+                                Maps.newHashMap(), false);
+                    }
                 }
+                return partitionDesc.toPartitionInfo(
+                        Collections.singletonList(stmt.getPartitionColumn()),
+                        Maps.newHashMap(), false);
             }
-
-            if ((expr instanceof FunctionCallExpr)) {
-                FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
-                    Column partitionColumn = new Column(stmt.getPartitionColumn());
-                    partitionColumn.setType(com.starrocks.catalog.Type.DATE);
-                    return expressionPartitionDesc.toPartitionInfo(
-                            Collections.singletonList(partitionColumn),
-                            Maps.newHashMap(), false);
-                }
-            }
-            return expressionPartitionDesc.toPartitionInfo(
-                    Collections.singletonList(stmt.getPartitionColumn()),
-                    Maps.newHashMap(), false);
         } else {
             return new SinglePartitionInfo();
         }
+        return new SinglePartitionInfo();
     }
 
     private void createTaskForMaterializedView(String dbName, MaterializedView materializedView,

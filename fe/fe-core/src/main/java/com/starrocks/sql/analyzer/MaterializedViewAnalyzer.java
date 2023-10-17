@@ -65,6 +65,8 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -484,29 +486,38 @@ public class MaterializedViewAnalyzer {
         }
 
         private void checkExpInColumn(CreateMaterializedViewStatement statement) {
-            ExpressionPartitionDesc expressionPartitionDesc = statement.getPartitionExpDesc();
-            List<Column> columns = statement.getMvColumnItems();
-            SlotRef slotRef = getSlotRef(expressionPartitionDesc.getExpr());
-            if (slotRef.getTblNameWithoutAnalyzed() != null) {
-                throw new SemanticException("Materialized view partition exp: "
-                        + slotRef.toSql() + " must related to column", expressionPartitionDesc.getExpr().getPos());
+            PartitionDesc partitionDesc = statement.getPartitionExpDesc();
+            if (partitionDesc instanceof ListPartitionDesc) {
+                ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
+                List<String> columns = listPartitionDesc.getPartitionColNames();
+
             }
-            int columnId = 0;
-            for (Column column : columns) {
-                if (slotRef.getColumnName().equalsIgnoreCase(column.getName())) {
-                    statement.setPartitionColumn(column);
-                    SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(columnId), slotRef.getColumnName(),
-                            column.getType(), column.isAllowNull());
-                    slotRef.setDesc(slotDescriptor);
-                    slotRef.setType(column.getType());
-                    slotRef.setNullable(column.isAllowNull());
-                    break;
+            if (partitionDesc instanceof ExpressionPartitionDesc) {
+                ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
+                List<Column> columns = statement.getMvColumnItems();
+                SlotRef slotRef = getSlotRef(expressionPartitionDesc.getExpr());
+                if (slotRef.getTblNameWithoutAnalyzed() != null) {
+                    throw new SemanticException("Materialized view partition exp: "
+                            + slotRef.toSql() + " must related to column", expressionPartitionDesc.getExpr().getPos());
                 }
-                columnId++;
-            }
-            if (statement.getPartitionColumn() == null) {
-                throw new SemanticException("Materialized view partition exp column:"
-                        + slotRef.getColumnName() + " is not found in query statement");
+                int columnId = 0;
+                for (Column column : columns) {
+                    if (slotRef.getColumnName().equalsIgnoreCase(column.getName())) {
+                        statement.setPartitionColumn(column);
+                        SlotDescriptor slotDescriptor =
+                                new SlotDescriptor(new SlotId(columnId), slotRef.getColumnName(),
+                                        column.getType(), column.isAllowNull());
+                        slotRef.setDesc(slotDescriptor);
+                        slotRef.setType(column.getType());
+                        slotRef.setNullable(column.isAllowNull());
+                        break;
+                    }
+                    columnId++;
+                }
+                if (statement.getPartitionColumn() == null) {
+                    throw new SemanticException("Materialized view partition exp column:"
+                            + slotRef.getColumnName() + " is not found in query statement");
+                }
             }
         }
 
@@ -524,7 +535,7 @@ public class MaterializedViewAnalyzer {
         private void checkPartitionColumnExprs(CreateMaterializedViewStatement statement,
                                                Map<Column, Expr> columnExprMap,
                                                ConnectContext connectContext) {
-            ExpressionPartitionDesc expressionPartitionDesc = statement.getPartitionExpDesc();
+            ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) statement.getPartitionExpDesc();
             Column partitionColumn = statement.getPartitionColumn();
 
             // partition column expr from input query
@@ -676,8 +687,8 @@ public class MaterializedViewAnalyzer {
             }
 
             if (partitionColumns.size() != 1) {
-                    throw new SemanticException("Materialized view related base table partition columns " +
-                            "only supports single column");
+                throw new SemanticException("Materialized view related base table partition columns " +
+                        "only supports single column");
             }
 
             String partitionColumn = partitionColumns.get(0).getName();

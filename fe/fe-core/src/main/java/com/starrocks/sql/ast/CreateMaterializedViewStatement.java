@@ -48,7 +48,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private boolean ifNotExists;
     private String comment;
     private RefreshSchemeClause refreshSchemeDesc;
-    private ExpressionPartitionDesc expressionPartitionDesc;
+    private PartitionDesc partitionDesc;
     private Map<String, String> properties;
     private QueryStatement queryStatement;
     private DistributionDesc distributionDesc;
@@ -66,6 +66,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     // Sink table information
     private List<Column> mvColumnItems = Lists.newArrayList();
     private Column partitionColumn;
+    private List<Column> listPartitionColumns;
     // record expression which related with partition by clause
     private Expr partitionRefTableExpr;
 
@@ -73,7 +74,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            List<ColWithComment> colWithComments,
                                            String comment,
                                            RefreshSchemeClause refreshSchemeDesc,
-                                           ExpressionPartitionDesc expressionPartitionDesc,
+                                           PartitionDesc partitionDesc,
                                            DistributionDesc distributionDesc, List<String> sortKeys,
                                            Map<String, String> properties,
                                            QueryStatement queryStatement, NodePosition pos) {
@@ -83,7 +84,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.ifNotExists = ifNotExists;
         this.comment = comment;
         this.refreshSchemeDesc = refreshSchemeDesc;
-        this.expressionPartitionDesc = expressionPartitionDesc;
+        this.partitionDesc = partitionDesc;
         this.distributionDesc = distributionDesc;
         this.sortKeys = sortKeys;
         this.properties = properties;
@@ -126,12 +127,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.refreshSchemeDesc = refreshSchemeDesc;
     }
 
-    public ExpressionPartitionDesc getPartitionExpDesc() {
-        return expressionPartitionDesc;
+    public PartitionDesc getPartitionExpDesc() {
+        return partitionDesc;
     }
 
-    public void setPartitionExpDesc(ExpressionPartitionDesc expressionPartitionDesc) {
-        this.expressionPartitionDesc = expressionPartitionDesc;
+    public void setPartitionExpDesc(PartitionDesc expressionPartitionDesc) {
+        this.partitionDesc = expressionPartitionDesc;
     }
 
     public void setKeysType(KeysType keysType) {
@@ -208,6 +209,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setPartitionColumn(Column partitionColumn) {
         this.partitionColumn = partitionColumn;
+    }
+
+    public List<Column> getListPartitionColumns() {
+        return listPartitionColumns;
+    }
+
+    public void setListPartitionColumns(List<Column> listPartitionColumns) {
+        this.listPartitionColumns = listPartitionColumns;
     }
 
     public Expr getPartitionRefTableExpr() {

@@ -16,7 +16,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -43,6 +42,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
@@ -830,7 +830,8 @@ public class CreateMaterializedViewTest {
         try {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            ExpressionPartitionDesc partitionExpDesc = createMaterializedViewStatement.getPartitionExpDesc();
+            ExpressionPartitionDesc partitionExpDesc =
+                    (ExpressionPartitionDesc) createMaterializedViewStatement.getPartitionExpDesc();
             Assert.assertFalse(partitionExpDesc.isFunction());
             Assert.assertTrue(partitionExpDesc.getExpr() instanceof SlotRef);
             Assert.assertEquals("ss", partitionExpDesc.getSlotRef().getColumnName());
@@ -852,7 +853,8 @@ public class CreateMaterializedViewTest {
         try {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            ExpressionPartitionDesc partitionExpDesc = createMaterializedViewStatement.getPartitionExpDesc();
+            ExpressionPartitionDesc partitionExpDesc =
+                    (ExpressionPartitionDesc) createMaterializedViewStatement.getPartitionExpDesc();
             Assert.assertFalse(partitionExpDesc.isFunction());
             Assert.assertTrue(partitionExpDesc.getExpr() instanceof SlotRef);
             Assert.assertEquals("ss", partitionExpDesc.getSlotRef().getColumnName());
@@ -891,7 +893,8 @@ public class CreateMaterializedViewTest {
         try {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            ExpressionPartitionDesc partitionExpDesc = createMaterializedViewStatement.getPartitionExpDesc();
+            ExpressionPartitionDesc partitionExpDesc =
+                    (ExpressionPartitionDesc) createMaterializedViewStatement.getPartitionExpDesc();
             Assert.assertTrue(partitionExpDesc.isFunction());
             Assert.assertTrue(partitionExpDesc.getExpr() instanceof FunctionCallExpr);
             Assert.assertEquals(partitionExpDesc.getExpr().getChild(1), partitionExpDesc.getSlotRef());
@@ -915,7 +918,8 @@ public class CreateMaterializedViewTest {
                     "as select a, b, c, d from jdbc0.partitioned_db0.tbl1;";
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            ExpressionPartitionDesc partitionExpDesc = createMaterializedViewStatement.getPartitionExpDesc();
+            ExpressionPartitionDesc partitionExpDesc =
+                    (ExpressionPartitionDesc) createMaterializedViewStatement.getPartitionExpDesc();
             Assert.assertTrue(partitionExpDesc.isFunction());
             Assert.assertTrue(partitionExpDesc.getExpr() instanceof FunctionCallExpr);
             Assert.assertEquals(partitionExpDesc.getExpr().getChild(0), partitionExpDesc.getSlotRef());
@@ -962,7 +966,8 @@ public class CreateMaterializedViewTest {
         try {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            ExpressionPartitionDesc partitionExpDesc = createMaterializedViewStatement.getPartitionExpDesc();
+            ExpressionPartitionDesc partitionExpDesc =
+                    (ExpressionPartitionDesc) createMaterializedViewStatement.getPartitionExpDesc();
             Assert.assertTrue(partitionExpDesc.isFunction());
             Assert.assertTrue(partitionExpDesc.getExpr() instanceof FunctionCallExpr);
             Assert.assertEquals(partitionExpDesc.getExpr().getChild(1), partitionExpDesc.getSlotRef());
@@ -985,7 +990,8 @@ public class CreateMaterializedViewTest {
         try {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            ExpressionPartitionDesc partitionExpDesc = createMaterializedViewStatement.getPartitionExpDesc();
+            ExpressionPartitionDesc partitionExpDesc =
+                    (ExpressionPartitionDesc) createMaterializedViewStatement.getPartitionExpDesc();
             Assert.assertFalse(partitionExpDesc.isFunction());
             Assert.assertTrue(partitionExpDesc.getExpr() instanceof SlotRef);
             Assert.assertEquals(partitionExpDesc.getExpr(), partitionExpDesc.getSlotRef());
@@ -3806,21 +3812,12 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testCreateMVForListPartitionedOlapTable() throws Exception {
-        mockDdl();
-        starRocksAssert.withTable("create table t_list_part (dt date not null, id int) " +
-                "partition by (dt) " +
-                "properties('replication_num'='1') ");
-
-        starRocksAssert.getCtx().executeSql("insert into t_list_part values('2023-01-01', 1)");
-        starRocksAssert.getCtx().executeSql("insert into t_list_part values('2023-01-02', 2)");
-        OlapTable baseTable = (OlapTable) testDb.getTable("t_list_part");
-        Assert.assertEquals(ImmutableMap.of(), baseTable.getListPartitionMap());
-
+    public void testMVWithMultiColumnListPartition() throws Exception {
+        MockedHiveMetadata.mockT1WithMultiPartitionColumns();
         starRocksAssert.withMaterializedView("create materialized view t_mv_list_part " +
-                "partition by (dt) " +
+                "partition by (par_col, par_date) " +
                 "refresh deferred async " +
-                "as select dt, id from t_list_part");
+                "as select par_col, par_date from hive0.partitioned_db.t1_par");
 
         starRocksAssert.getCtx().executeSql("refresh materialized view t_mv_list_part with sync mode");
         MaterializedView mv = (MaterializedView) testDb.getTable("t_mv_list_part");
