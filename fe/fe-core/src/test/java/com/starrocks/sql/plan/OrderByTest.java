@@ -520,6 +520,27 @@ public class OrderByTest extends PlanTestBase {
                 "  |  order by: [1, VARCHAR, false] ASC, [2, SMALLINT, false] ASC\n" +
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (<slot 1> 1: t1a), remote = false");
+
+        // no order by column case
+        sql = "SELECT a, b FROM ( SELECT t1a AS a, t1b AS b, row_number() OVER() AS rn FROM" +
+                " test_all_type_not_null ) tb_rn WHERE rn>=10 and rn<19;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "runtime filters");
+
+        sql = "SELECT a, b FROM ( SELECT t1a AS a, t1b AS b, row_number() OVER( partition by t1a) AS rn FROM" +
+                " test_all_type_not_null ) tb_rn WHERE rn<19;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "runtime filters");
+
+        // no order by column pattern 2
+        sql = "select * from test_all_type_not_null limit 1000,200";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "runtime filters");
+
+        // order by null case
+        sql = "select * from test_all_type_not_null order by null + 1 limit 1";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "runtime filters");
     }
 
     // @Test
