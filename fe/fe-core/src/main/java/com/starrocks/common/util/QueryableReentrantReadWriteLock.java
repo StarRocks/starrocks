@@ -15,7 +15,17 @@
 
 package com.starrocks.common.util;
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/common/util/QueryableReentrantReadWriteLock.java
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+=======
+import com.starrocks.common.NoAliveBackendException;
+import com.starrocks.common.UserException;
+import com.starrocks.server.RunMode;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.Assert;
+import org.junit.Test;
+>>>>>>> ceeb60396f ([BugFix]refactor auto infer default replication num (#32792)):fe/fe-core/src/test/java/com/starrocks/common/util/AutoInferUtilTest.java
 
 /*
  * This Lock is for exposing the getOwner() method,
@@ -23,6 +33,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/common/util/QueryableReentrantReadWriteLock.java
     public QueryableReentrantReadWriteLock(boolean fair) {
         super(fair);
     }
@@ -30,5 +41,24 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
     @Override
     public Thread getOwner() {
         return super.getOwner();
+=======
+    @Test
+    public void testCalDefaultReplicationNum() throws Exception {
+        try {
+            AutoInferUtil.calDefaultReplicationNum();
+        } catch (UserException e) {
+            Assert.assertTrue(e instanceof NoAliveBackendException
+                    && e.getMessage().contains("No alive backend"));
+        }
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        Assert.assertEquals(1, AutoInferUtil.calDefaultReplicationNum());
+>>>>>>> ceeb60396f ([BugFix]refactor auto infer default replication num (#32792)):fe/fe-core/src/test/java/com/starrocks/common/util/AutoInferUtilTest.java
     }
 }
