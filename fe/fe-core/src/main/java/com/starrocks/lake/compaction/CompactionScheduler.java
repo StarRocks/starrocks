@@ -250,17 +250,13 @@ public class CompactionScheduler extends Daemon {
             return null;
         }
 
-        if (!db.tryReadLock(50, TimeUnit.MILLISECONDS)) {
-            LOG.info("Skipped partition compaction due to get database lock timeout");
-            compactionManager.enableCompactionAfter(partitionIdentifier, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
-            return null;
-        }
-
         long txnId;
         long currentVersion;
         OlapTable table;
         Partition partition;
         Map<Long, List<Long>> beToTablets;
+
+        db.readLock();
 
         try {
             // lake table or lake materialized view
