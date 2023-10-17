@@ -44,7 +44,7 @@ RuntimeFilterSerializeType::PrimitiveType RuntimeFilterSerializeType::to_seriali
 }
 
 void SimdBlockFilter::init(size_t nums) {
-    nums = std::max(1UL, nums);
+    nums = std::max(MINIMUM_ELEMENT_NUM, nums);
     int log_heap_space = std::ceil(std::log2(nums));
     _log_num_buckets = std::max(1, log_heap_space - LOG_BUCKET_BYTE_SIZE);
     _directory_mask = (1ull << std::min(63, _log_num_buckets)) - 1;
@@ -226,13 +226,13 @@ bool JoinRuntimeFilter::check_equal(const JoinRuntimeFilter& rf) const {
 void JoinRuntimeFilter::_reset_bf(size_t new_size) {
     DCHECK(_ignore_bf);
     if (_num_hash_partitions == 0) {
-        _bf.reset(1UL);
-        _size = 1;
+        _bf.reset(new_size);
+        _size = new_size;
     } else {
         for (size_t i = 0; i < _num_hash_partitions; i++) {
-            _hash_partition_bf[i].reset(1UL);
+            _hash_partition_bf[i].reset(new_size);
         }
-        _size = _num_hash_partitions;
+        _size = new_size * _num_hash_partitions;
     }
 }
 

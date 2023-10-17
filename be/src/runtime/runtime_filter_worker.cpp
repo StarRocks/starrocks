@@ -256,8 +256,8 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
     }
     if (params.has_ignore_bf() && params.ignore_bf()) {
         VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. some partial rf's size exceeds "
-                     "global_runtime_filter_build_max_size, stop building bf and only reserve min/max filter" rf
-                             ->set_ignore_bf(true);
+                     "global_runtime_filter_build_max_size, stop building bf and only reserve min/max filter";
+        rf->set_ignore_bf(true);
         status->ignore_bf = true;
     }
 

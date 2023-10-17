@@ -96,6 +96,7 @@ public:
     // The filter is divided up into Buckets:
     static constexpr int BITS_SET_PER_BLOCK = 8;
     using Bucket = uint32_t[BITS_SET_PER_BLOCK];
+    static constexpr size_t MINIMUM_ELEMENT_NUM = 1UL;
 
     SimdBlockFilter() = default;
 
@@ -308,7 +309,7 @@ public:
         // after set_ignore_bf, the existed bloom filter is no longer use,
         // we can reset it to a minimum size
         if (ignore_bf) {
-            _reset_bf(1UL);
+            _reset_bf(SimdBlockFilter::MINIMUM_ELEMENT_NUM);
         }
     }
 
@@ -353,7 +354,10 @@ protected:
     size_t _num_hash_partitions = 0;
     std::vector<SimdBlockFilter> _hash_partition_bf;
     bool _always_true = false;
-    // whether ignore bloom filter, only take effects in global runtime filter
+    // whether ignore bloom filter, only take effects on global runtime filter,
+    // if the bloom filter's size of partial rf has exceed the size limit of global runtime filter,
+    // we still send this rf but ignore bloom filter and only keep min/max filter.
+    // this information need to be passed when sending rf.
     bool _ignore_bf = false;
     size_t _rf_version = 0;
 };
