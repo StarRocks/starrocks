@@ -270,7 +270,7 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
         status->ignore_bf = true;
     }
 
-    LOG(INFO) << "RuntimeFilterMerger::merge_runtime_filter. assembled filter_id = " << filter_id
+    VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. assembled filter_id = " << filter_id
               << ", be_number = " << be_number;
     status->arrives.insert(be_number);
     status->filters.insert(std::make_pair(be_number, rf));
@@ -367,7 +367,7 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     int64_t now = UnixMillis();
     status->broadcast_filter_ts = now;
 
-    LOG(INFO) << "RuntimeFilterMerger::merge_runtime_filter. target_nodes[0] = " << target_nodes->at(0)
+    VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. target_nodes[0] = " << target_nodes->at(0)
               << ", target_nodes_size = " << target_nodes->size() << ", filter_id = " << request.filter_id()
               << ", latency(last-first = " << status->recv_last_filter_ts - status->recv_first_filter_ts
               << ", send-first = " << status->broadcast_filter_ts - status->recv_first_filter_ts << ")"

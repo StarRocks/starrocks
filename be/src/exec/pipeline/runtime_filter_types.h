@@ -390,9 +390,6 @@ public:
         return Status::OK();
     }
 
-    // @TODO seems not used
-    size_t local_rf_limit() const { return _local_rf_limit; }
-
 private:
     StatusOr<bool> _try_do_merge(RuntimeBloomFilters&& bloom_filter_descriptors) {
         if (1 == _num_active_builders--) {
