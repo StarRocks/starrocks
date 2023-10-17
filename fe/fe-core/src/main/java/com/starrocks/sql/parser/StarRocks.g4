@@ -617,11 +617,16 @@ createMaterializedViewStatement
     ;
 
 materializedViewDesc
-    : (PARTITION BY primaryExpression)
+    : (PARTITION BY materializedViewPartitionDesc)
     | distributionDesc
     | orderByDesc
     | refreshSchemeDesc
     | properties
+    ;
+
+materializedViewPartitionDesc
+    : primaryExpression
+    | identifierList
     ;
 
 showMaterializedViewsStatement

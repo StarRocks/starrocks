@@ -50,6 +50,10 @@ public class ListPartitionDesc extends PartitionDesc {
     // for automatic partition table is ture. otherwise is false
     protected boolean isAutoPartitionTable = false;
 
+    public ListPartitionDesc(List<String> partitionColNames, NodePosition pos) {
+        this(partitionColNames, Lists.newArrayList(), pos);
+    }
+
     public ListPartitionDesc(List<String> partitionColNames,
                              List<PartitionDesc> partitionDescs) {
         this(partitionColNames, partitionDescs, NodePosition.ZERO);

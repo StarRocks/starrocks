@@ -16,7 +16,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -3806,21 +3805,11 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testCreateMVForListPartitionedOlapTable() throws Exception {
-        mockDdl();
-        starRocksAssert.withTable("create table t_list_part (dt date not null, id int) " +
-                "partition by (dt) " +
-                "properties('replication_num'='1') ");
-
-        starRocksAssert.getCtx().executeSql("insert into t_list_part values('2023-01-01', 1)");
-        starRocksAssert.getCtx().executeSql("insert into t_list_part values('2023-01-02', 2)");
-        OlapTable baseTable = (OlapTable) testDb.getTable("t_list_part");
-        Assert.assertEquals(ImmutableMap.of(), baseTable.getListPartitionMap());
-
+    public void testCreateMVForExprPartitionedOlapTable() throws Exception {
         starRocksAssert.withMaterializedView("create materialized view t_mv_list_part " +
-                "partition by (dt) " +
+                "partition by (par_col, par_date) " +
                 "refresh deferred async " +
-                "as select dt, id from t_list_part");
+                "as select dt, id from hive0.tpch.t1_par");
 
         starRocksAssert.getCtx().executeSql("refresh materialized view t_mv_list_part with sync mode");
         MaterializedView mv = (MaterializedView) testDb.getTable("t_mv_list_part");
