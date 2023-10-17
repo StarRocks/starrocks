@@ -113,7 +113,7 @@ public class CompactionScheduler extends Daemon {
         if (finishedWaiting) {
             return true;
         }
-        // Note: must call getMinActiveTxnIdOfCompactionTask() before getNextTransactionId(), otherwise if there are
+        // Note: must call getMinActiveCompactionTxnId() before getNextTransactionId(), otherwise if there are
         // no running transactions waitTxnId <= minActiveTxnId will always be false.
         long minActiveTxnId = transactionMgr.getMinActiveCompactionTxnId();
         if (waitTxnId < 0) {
