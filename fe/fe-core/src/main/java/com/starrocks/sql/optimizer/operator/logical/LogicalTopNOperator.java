@@ -1,11 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator.logical;
 
-<<<<<<< HEAD
-=======
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
->>>>>>> d868096d84 ([BugFix] optimize topn 0,0 (#32818))
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
