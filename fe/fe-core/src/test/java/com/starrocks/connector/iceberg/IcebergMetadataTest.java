@@ -655,6 +655,32 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertTrue(partitionKeys.get(0) instanceof IcebergPartitionKey);
         IcebergPartitionKey partitionKey =  (IcebergPartitionKey) partitionKeys.get(0);
         Assert.assertEquals("types: [VARCHAR]; keys: [0]; ", partitionKey.toString());
+
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A_2).commit();
+        mockedNativeTableA.refresh();
+        icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", columns, mockedNativeTableA, Maps.newHashMap());
+        partitionKeys = metadata.getPrunedPartitions(icebergTable, null, 100);
+        Assert.assertEquals(2, partitionKeys.size());
+    }
+
+    @Test
+    public void testPartitionPruneWithDuplicated() {
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("data", STRING));
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).appendFile(FILE_A_1).commit();
+        mockedNativeTableA.refresh();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", columns, mockedNativeTableA, Maps.newHashMap());
+        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, 1);
+        Assert.assertEquals(1, partitionKeys.size());
+        Assert.assertTrue(partitionKeys.get(0) instanceof IcebergPartitionKey);
+        PartitionKey partitionKey = partitionKeys.get(0);
+        Assert.assertEquals("types: [VARCHAR]; keys: [0]; ", partitionKey.toString());
     }
 
     @Test
