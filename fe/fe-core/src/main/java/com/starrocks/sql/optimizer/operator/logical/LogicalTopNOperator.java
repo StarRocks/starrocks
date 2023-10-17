@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -78,6 +79,7 @@ public class LogicalTopNOperator extends LogicalOperator {
         this.sortPhase = sortPhase;
         this.topNType = topNType;
         this.isSplit = isSplit;
+        Preconditions.checkState(limit != 0);
     }
 
     public SortPhase getSortPhase() {
