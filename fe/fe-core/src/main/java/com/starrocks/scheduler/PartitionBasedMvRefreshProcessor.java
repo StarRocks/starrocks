@@ -1372,7 +1372,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     @VisibleForTesting
     public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan, InsertStmt insertStmt)
             throws Exception {
-        long beginTimeInNanoSecond = TimeUtils.getStartTime();
         Preconditions.checkNotNull(execPlan);
         Preconditions.checkNotNull(insertStmt);
         ConnectContext ctx = mvContext.getCtx();
@@ -1385,7 +1384,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         ctx.setStmtId(new AtomicInteger().incrementAndGet());
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
         try {
-            executor.handleDMLStmtWithProfile(execPlan, insertStmt, beginTimeInNanoSecond);
+            executor.handleDMLStmtWithProfile(execPlan, insertStmt);
         } catch (Exception e) {
             LOG.warn("refresh materialized view {} failed: {}", materializedView.getName(), e);
             throw e;

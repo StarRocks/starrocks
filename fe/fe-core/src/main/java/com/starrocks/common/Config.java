@@ -517,6 +517,18 @@ public class Config extends ConfigBase {
     public static int heartbeat_mgr_blocking_queue_size = 1024;
 
     /**
+     * num of thread to handle heartbeat events in heartbeat_mgr.
+     */
+    @ConfField
+    public static int profile_process_threads_num = 2;
+
+    /**
+     * blocking queue size to store heartbeat task in heartbeat_mgr.
+     */
+    @ConfField
+    public static int profile_process_blocking_queue_size = 1024;
+
+    /**
      * max num of thread to handle agent task in agent task thread-pool.
      */
     @ConfField

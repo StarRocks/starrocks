@@ -233,6 +233,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RUNTIME_PROFILE_REPORT_INTERVAL = "runtime_profile_report_interval";
     public static final String PROFILE_LIMIT_FOLD = "profile_limit_fold";
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
+    public static final String ENABLE_ASYNC_PROFILE = "enable_async_profile";
 
     public static final String RESOURCE_GROUP_ID = "workgroup_id";
     public static final String RESOURCE_GROUP_ID_V2 = "resource_group_id";
@@ -831,6 +832,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
     private int pipelineProfileLevel = 1;
+
+    @VariableMgr.VarAttr(name = ENABLE_ASYNC_PROFILE, flag = VariableMgr.INVISIBLE)
+    private boolean enableAsyncProfile = true;
 
     @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, alias = RESOURCE_GROUP_ID_V2,
             show = RESOURCE_GROUP_ID_V2, flag = VariableMgr.INVISIBLE)
@@ -2133,6 +2137,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getPipelineProfileLevel() {
         return pipelineProfileLevel;
+    }
+
+    public boolean isEnableAsyncProfile() {
+        return enableAsyncProfile;
+    }
+
+    public void setEnableAsyncProfile(boolean enableAsyncProfile) {
+        this.enableAsyncProfile = enableAsyncProfile;
     }
 
     public boolean isEnableReplicationJoin() {

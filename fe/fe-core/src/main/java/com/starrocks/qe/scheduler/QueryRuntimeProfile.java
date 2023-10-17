@@ -21,6 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
@@ -50,13 +51,25 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class QueryRuntimeProfile {
     private static final Logger LOG = LogManager.getLogger(QueryRuntimeProfile.class);
+
+    /**
+     * Set the queue size to a large value. The decision to execute the profile process task asynchronously
+     * occurs when a listener is added to {@link QueryRuntimeProfile#profileDoneSignal}. The function
+     * {@link QueryRuntimeProfile#addListener} will then determine if the size of the queued task exceeds
+     * {@link Config#profile_process_blocking_queue_size}.
+     */
+    private static final ThreadPoolExecutor EXECUTOR =
+            ThreadPoolManager.newDaemonFixedThreadPool(Config.profile_process_threads_num,
+                    Integer.MAX_VALUE, "profile-worker", false);
 
     /**
      * The value is meaningless, and it is just used as a value placeholder of {@link MarkedCountDownLatch}.
@@ -203,6 +216,17 @@ public class QueryRuntimeProfile {
 
     public boolean isFinished() {
         return profileDoneSignal.getCount() == 0;
+    }
+
+    public boolean addListener(Consumer<Boolean> task) {
+        if (EXECUTOR.getQueue().size() > Config.profile_process_blocking_queue_size) {
+            return false;
+        }
+        // We need to make sure this submission won't be rejected by set the queue size to Integer.MAX_VALUE
+        profileDoneSignal.addListener(() -> EXECUTOR.submit(() -> {
+            task.accept(true);
+        }));
+        return true;
     }
 
     public boolean waitForProfileFinished(long timeout, TimeUnit unit) {
