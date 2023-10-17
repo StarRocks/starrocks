@@ -25,6 +25,7 @@ import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
 import java.util.List;
+import java.util.Objects;
 
 public class SubfieldExpr extends Expr {
 
@@ -98,5 +99,22 @@ public class SubfieldExpr extends Expr {
     @Override
     public boolean isSelfMonotonic() {
         return children.get(0).isSelfMonotonic();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        SubfieldExpr that = (SubfieldExpr) o;
+        return Objects.equals(fieldNames, that.fieldNames);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), fieldNames);
     }
 }
