@@ -612,10 +612,10 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             update_column_uids.push_back((uint32_t)cid);
         }
     }
-    for (uint32_t cid : txn_meta.partial_update_column_unique_ids()) {
-        auto& column = tschema.column(cid);
-        if (!column.is_key()) {
-            unique_update_column_ids.push_back(cid);
+    for (uint32_t uid : txn_meta.partial_update_column_unique_ids()) {
+        if (uid >= tschema.num_columns() || !tschema.column(uid).is_key()) {
+            // unique column id equal column id when this column is key column
+            unique_update_column_ids.push_back(uid);
         }
     }
     auto partial_tschema = TabletSchema::create(tschema, update_column_ids);
