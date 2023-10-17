@@ -1197,14 +1197,23 @@ public class ScalarOperatorFunctions {
      * Return the content in ConnectorTblMetaInfoMgr, which contains mapping information from base table to mv
      */
     @ConstantFunction(name = "inspect_mv_relationships", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+<<<<<<< HEAD
     public static ConstantOperator inspect_mv_relationships() throws AccessDeniedException {
+=======
+    public static ConstantOperator inspectMvRelationships() {
+>>>>>>> 5003d5e37e ([BugFix] fix inspect meta functions (#32710) (#32726))
         ConnectContext context = ConnectContext.get();
         try {
             Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
+<<<<<<< HEAD
                     "ANY", ObjectType.SYSTEM, "inspect_mv_relationships");
+=======
+                    "", context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.FUNCTION.name(), "inspect_mv_relationships");
+>>>>>>> 5003d5e37e ([BugFix] fix inspect meta functions (#32710) (#32726))
         }
 
         String json = GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().inspect();
