@@ -16,10 +16,6 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.alter.AlterJobMgr;
-<<<<<<< HEAD
-=======
-import com.starrocks.alter.AlterMVJobExecutor;
->>>>>>> c1e3a1e122 ([Enhancement] active mv automatically (#32829))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
@@ -30,13 +26,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.RefreshSchemeDesc;
-=======
-import com.starrocks.sql.ast.RefreshSchemeClause;
-import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.plan.PlanTestBase;
->>>>>>> c1e3a1e122 ([Enhancement] active mv automatically (#32829))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;

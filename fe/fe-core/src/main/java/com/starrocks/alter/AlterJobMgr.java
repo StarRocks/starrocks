@@ -423,13 +423,8 @@ public class AlterJobMgr {
             GlobalStateMgr.getCurrentState().updateBaseTableRelatedMv(materializedView.getDbId(),
                     materializedView, baseTableInfos);
             materializedView.setActive();
-<<<<<<< HEAD
         } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
-            materializedView.setInactiveAndReason("user use alter materialized view set status to inactive");
-=======
-        } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason(MANUAL_INACTIVE_MV_REASON);
->>>>>>> c1e3a1e122 ([Enhancement] active mv automatically (#32829))
         }
     }
 
