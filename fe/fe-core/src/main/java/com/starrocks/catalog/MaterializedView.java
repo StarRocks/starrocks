@@ -465,6 +465,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     public void setActive() {
         this.active = true;
+        this.inactiveReason = null;
         // reset mv rewrite cache when it is active again
         CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
     }
