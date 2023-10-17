@@ -1060,6 +1060,11 @@ install(FILES
     ${BASE_DIR}/../conf/udf_security.policy
     DESTINATION ${OUTPUT_DIR}/conf)
 
+install(FILES
+        ${BASE_DIR}/../conf/hdfs-site.xml
+        ${BASE_DIR}/../conf/core-site.xml
+        DESTINATION ${OUTPUT_DIR}/conf OPTIONAL)
+
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
 install(FILES
     ${BASE_DIR}/../conf/asan_suppressions.conf
