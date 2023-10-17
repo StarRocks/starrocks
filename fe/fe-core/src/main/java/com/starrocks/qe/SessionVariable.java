@@ -588,6 +588,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_HYPERSCAN_VEC = "enable_hyperscan_vec";
 
+    public static final String ENABLE_JIT = "enable_jit";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1471,6 +1473,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_SHORT_CIRCUIT)
     private boolean enableShortCircuit = false;
+
+    @VarAttr(name = ENABLE_JIT)
+    private boolean enableJit = false;
 
     private int exprChildrenLimit = -1;
 
@@ -3039,6 +3044,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
         tResult.setEnable_hyperscan_vec(enableHyperscanVec);
+        tResult.setEnable_jit(enableJit);
         return tResult;
     }
 
