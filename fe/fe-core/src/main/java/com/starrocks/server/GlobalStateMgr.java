@@ -234,6 +234,7 @@ import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
@@ -545,6 +546,7 @@ public class GlobalStateMgr {
     private PipeManager pipeManager;
     private PipeListener pipeListener;
     private PipeScheduler pipeScheduler;
+    private MVActiveChecker mvActiveChecker;
 
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
@@ -766,6 +768,7 @@ public class GlobalStateMgr {
         this.pipeManager = new PipeManager();
         this.pipeListener = new PipeListener(this.pipeManager);
         this.pipeScheduler = new PipeScheduler(this.pipeManager);
+        this.mvActiveChecker = new MVActiveChecker();
 
         if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
@@ -1021,6 +1024,10 @@ public class GlobalStateMgr {
 
     public PipeListener getPipeListener() {
         return pipeListener;
+    }
+
+    public MVActiveChecker getMvActiveChecker() {
+        return mvActiveChecker;
     }
 
     public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
@@ -1389,6 +1396,7 @@ public class GlobalStateMgr {
         mvMVJobExecutor.start();
         pipeListener.start();
         pipeScheduler.start();
+        mvActiveChecker.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
