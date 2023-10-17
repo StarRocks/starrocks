@@ -18,7 +18,6 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.PlanFragment;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import mockit.Mock;
@@ -89,7 +88,6 @@ public class PipelineParallelismTest extends PlanTestBase {
                 "(\"broker.name\" = \"my_broker\"," +
                 "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
                 "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");");
-        System.out.println(plan.getExplainString(StatementBase.ExplainLevel.COST));
         PlanFragment fragment0 = plan.getFragments().get(0);
         assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "RESULT SINK");
         Assert.assertEquals(1, fragment0.getParallelExecNum());

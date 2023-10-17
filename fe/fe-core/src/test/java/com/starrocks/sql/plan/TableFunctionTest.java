@@ -21,7 +21,6 @@ public class TableFunctionTest extends PlanTestBase {
     public void testSql0() throws Exception {
         String sql = "SELECT * FROM TABLE(unnest(ARRAY<INT>[1, 2, 3]))";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:2: unnest\n" +
                 "  PARTITION: UNPARTITIONED\n" +
@@ -45,7 +44,6 @@ public class TableFunctionTest extends PlanTestBase {
     public void testSql1() throws Exception {
         String sql = "SELECT x FROM TABLE(unnest(ARRAY<INT>[1, 2, 3])) t(x)";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:2: x\n" +
                 "  PARTITION: UNPARTITIONED\n" +
@@ -69,7 +67,6 @@ public class TableFunctionTest extends PlanTestBase {
     public void testSql2() throws Exception {
         String sql = "SELECT * FROM TABLE(unnest(ARRAY<INT>[1])) t0(x), TABLE(unnest(ARRAY<INT>[1, 2, 3])) t1(x)";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:2: x | 5: x\n" +
                 "  PARTITION: UNPARTITIONED\n" +
@@ -120,7 +117,6 @@ public class TableFunctionTest extends PlanTestBase {
         String sql = "SELECT * FROM TABLE(unnest(ARRAY<INT>[1])) t0(x) JOIN TABLE(unnest(ARRAY<INT>[1, 2, 3])) t1(x)" +
                 " ON t0.x=t1 .x";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:2: x | 5: x\n" +
                 "  PARTITION: UNPARTITIONED\n" +

@@ -72,7 +72,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
         connectContext.getSessionVariable().disableDPJoinReorder();
         String sql = "select * from t1 join t3 on t1.v4 = t3.v10 join t0 join t2";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("3:OlapScanNode\n" +
                 "     TABLE: t0"));
         Assert.assertTrue(planFragment.contains(" |----8:EXCHANGE\n" +
