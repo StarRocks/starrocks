@@ -53,6 +53,8 @@ public:
 
     void close();
 
+    [[nodiscard]] int64_t queueing_memtable_num() const { return _writer->queueing_memtable_num(); }
+
     [[nodiscard]] int64_t tablet_id() const { return _writer->tablet_id(); }
 
     [[nodiscard]] int64_t partition_id() const { return _writer->partition_id(); }
@@ -236,6 +238,10 @@ void AsyncDeltaWriter::finish(Callback cb) {
 
 void AsyncDeltaWriter::close() {
     _impl->close();
+}
+
+int64_t AsyncDeltaWriter::queueing_memtable_num() const {
+    return _impl->queueing_memtable_num();
 }
 
 int64_t AsyncDeltaWriter::tablet_id() const {
