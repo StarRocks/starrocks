@@ -80,15 +80,15 @@ jobs:
           git checkout -b merge_pr;
           git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
 
-      - name: Link Check
-        uses: articulate/actions-markdownlint@v1.1.0
+      - uses: articulate/actions-markdownlint@v1.1.0
         with:
           config: "docs/.markdownlint.yaml"
           files: 'docs/**/*.md'
           ignore: node_modules
           version: 0.28.1
 
-      - uses: gaurav-nelson/github-action-markdown-link-check@v1
+      - name: Link Check
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
         with:
           use-quiet-mode: 'yes'
           use-verbose-mode: 'yes'
