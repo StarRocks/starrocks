@@ -772,21 +772,10 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitExecuteAsStatement(ExecuteAsStmt statement, ConnectContext context) {
-<<<<<<< HEAD
         AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
         if (!authorizationManager.canExecuteAs(context, statement.getToUser())) {
             AccessDeniedException.reportAccessDenied("IMPERSONATE", ObjectType.USER,
-                    statement.getToUser().getQualifiedUser());
-=======
-        try {
-            Authorizer.checkUserAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), statement.getToUser(),
-                    PrivilegeType.IMPERSONATE);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.IMPERSONATE.name(), ObjectType.USER.name(), statement.getToUser().getUser());
->>>>>>> a039c27ece ([BugFix] Fix the bug of mixed use of current user and qualifiedUser (#32820))
+                    statement.getToUser().getUser());
         }
         return null;
     }
@@ -900,21 +889,9 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitShowUserPropertyStatement(ShowUserPropertyStmt statement, ConnectContext context) {
         String user = statement.getUser();
-<<<<<<< HEAD
-        if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())) {
+        if (user != null && !user.equals(context.getCurrentUserIdentity().getUser())) {
             Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.GRANT);
-=======
-        if (user != null && !user.equals(context.getCurrentUserIdentity().getUser())) {
-            try {
-                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
-            } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(
-                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.GRANT.name(), ObjectType.SYSTEM.name(), null);
-            }
->>>>>>> a039c27ece ([BugFix] Fix the bug of mixed use of current user and qualifiedUser (#32820))
         }
         return null;
     }
@@ -922,21 +899,9 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitSetUserPropertyStatement(SetUserPropertyStmt statement, ConnectContext context) {
         String user = statement.getUser();
-<<<<<<< HEAD
-        if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())) {
+        if (user != null && !user.equals(context.getCurrentUserIdentity().getUser())) {
             Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.GRANT);
-=======
-        if (user != null && !user.equals(context.getCurrentUserIdentity().getUser())) {
-            try {
-                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
-            } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(
-                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.GRANT.name(), ObjectType.SYSTEM.name(), null);
-            }
->>>>>>> a039c27ece ([BugFix] Fix the bug of mixed use of current user and qualifiedUser (#32820))
         }
         return null;
     }

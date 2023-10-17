@@ -61,20 +61,8 @@ public class RangerStarRocksAccessControl implements AccessControl {
     }
 
     @Override
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/privilege/ranger/starrocks/RangerStarRocksAccessControl.java
-    public void checkCatalogAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, PrivilegeType privilegeType) {
-=======
-    public void checkUserAction(UserIdentity currentUser, Set<Long> roleIds, UserIdentity impersonateUser,
-                                PrivilegeType privilegeType) throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.USER,
-                Lists.newArrayList(impersonateUser.getUser()));
-        hasPermission(resource, currentUser, privilegeType);
-    }
-
-    @Override
     public void checkCatalogAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, PrivilegeType privilegeType)
             throws AccessDeniedException {
->>>>>>> a039c27ece ([BugFix] Fix the bug of mixed use of current user and qualifiedUser (#32820)):fe/fe-core/src/main/java/com/starrocks/privilege/ranger/starrocks/RangerStarRocksAccessController.java
         RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.CATALOG, Lists.newArrayList(catalogName));
         if (!hasPermission(resource, currentUser, privilegeType)) {
             AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.CATALOG, catalogName);
