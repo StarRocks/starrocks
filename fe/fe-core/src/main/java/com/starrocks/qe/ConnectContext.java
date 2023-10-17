@@ -133,14 +133,19 @@ public class ConnectContext {
     protected String currentDb = "";
     // warehouse
     protected String currentWarehouse;
-
-    // username@host of current login user
+    // `qualifiedUser` is the user used when the user establishes connection and authentication.
+    // It is the real user used for this connection.
+    // Different from the `currentUserIdentity` authentication user of execute as,
+    // `qualifiedUser` should not be changed during the entire session.
     protected String qualifiedUser;
-    // username@host combination for the StarRocks account
-    // that the server used to authenticate the current client.
-    // In other word, currentUserIdentity is the entry that matched in StarRocks auth table.
-    // This account determines user's access privileges.
+    // `currentUserIdentity` is the user used for authorization. Under normal circumstances,
+    // `currentUserIdentity` and `qualifiedUser` are the same user,
+    // but currentUserIdentity may be modified by execute as statement.
     protected UserIdentity currentUserIdentity;
+    // currentRoleIds is the role that has taken effect in the current session.
+    // Note that this set is not all roles belonging to the current user.
+    // `execute as` will modify currentRoleIds and assign the active role of the impersonate user to currentRoleIds.
+    // For specific logic, please refer to setCurrentRoleIds.
     protected Set<Long> currentRoleIds = new HashSet<>();
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
