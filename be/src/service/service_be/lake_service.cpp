@@ -720,7 +720,7 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller,
         }
     }
 
-    DeferOp defer([]() {
+    DeferOp defer([&]() {
         if (request->partition_id() > 0) {
             std::lock_guard l(s_mtx);
             s_vacuuming_partitions.erase(request->partition_id());
