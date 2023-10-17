@@ -85,6 +85,12 @@ public class StorageVolumeTest {
         Assert.assertEquals("CREATE STORAGE VOLUME storage_volume_1 TYPE = azblob " +
                         "LOCATIONS = ('azblob://xxx', 'azblob://yyy') PROPERTIES (\"azure.blob.shared_key\" = \"******\", \"azure.blob.sas_token\" = \"******\")",
                 AstToStringBuilder.toString(stmt));
+
+        sql = "CREATE STORAGE VOLUME hdfsvolume TYPE = HDFS LOCATIONS = ('hdfs://abc');";
+        stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assert.assertTrue(stmt instanceof CreateStorageVolumeStmt);
+        Assert.assertEquals("CREATE STORAGE VOLUME hdfsvolume TYPE = HDFS " +
+                "LOCATIONS = ('hdfs://abc')", AstToStringBuilder.toString(stmt));
     }
 
     @Test
