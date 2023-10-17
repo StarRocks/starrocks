@@ -284,7 +284,7 @@ public class AlterJobMgr {
             String createMvSql = materializedView.getMaterializedViewDdlStmt(false);
             QueryStatement mvQueryStatement = null;
             try {
-                mvQueryStatement = tryActiveMV(materializedView, context);
+                mvQueryStatement = recreateMVQuery(materializedView, context);
             } catch (SemanticException e) {
                 throw new SemanticException("Can not active materialized view [" + materializedView.getName() +
                         "] because analyze materialized view define sql: \n\n" + createMvSql +
@@ -304,10 +304,10 @@ public class AlterJobMgr {
         }
     }
 
-    /**
-     * Try to activate the new mv. Throw exception if fail
+    /*
+     * Recreate the MV query and validate the correctness of syntax and schema
      */
-    private static QueryStatement tryActiveMV(MaterializedView materializedView, ConnectContext context) {
+    private static QueryStatement recreateMVQuery(MaterializedView materializedView, ConnectContext context) {
         // If we could parse the MV sql successfully, and the schema of mv does not change,
         // we could reuse the existing MV
         String createMvSql = materializedView.getMaterializedViewDdlStmt(false);
