@@ -74,7 +74,7 @@ public class MVActiveChecker extends FrontendDaemon {
         }
     }
 
-    private void tryToActivate(MaterializedView mv) {
+    public static void tryToActivate(MaterializedView mv) {
         // if the mv is set to inactive manually, we don't activate it
         String reason = mv.getInactiveReason();
         if (mv.isActive() || AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(reason)) {

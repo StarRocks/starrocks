@@ -29,6 +29,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -234,6 +235,7 @@ public class AlterMaterializedViewTest {
 
     @Test
     public void testActiveChecker() throws Exception {
+        PlanTestBase.mockDml();
         MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
         checker.setStop();
 
@@ -242,7 +244,7 @@ public class AlterMaterializedViewTest {
                 "create table " + baseTableName + " ( k1 int, k2 int) properties('replication_num'='1')";
         starRocksAssert.withTable(createTableSql);
         starRocksAssert.withMaterializedView("create materialized view mv_active " +
-                " refresh async as select * from base_tbl_active");
+                " refresh manual as select * from base_tbl_active");
         MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "mv_active");
         Assert.assertTrue(mv.isActive());
 
@@ -258,6 +260,15 @@ public class AlterMaterializedViewTest {
         connectContext.setThreadLocalInfo();
         starRocksAssert.withTable(createTableSql);
         checker.runForTest();
+        Assert.assertTrue(mv.isActive());
+
+        // activate before refresh
+        connectContext.setThreadLocalInfo();
+        starRocksAssert.dropTable(baseTableName);
+        starRocksAssert.withTable(createTableSql);
+        Assert.assertFalse(mv.isActive());
+        Thread.sleep(1000);
+        starRocksAssert.getCtx().executeSql("refresh materialized view " + mv.getName() + " with sync mode");
         Assert.assertTrue(mv.isActive());
 
         // manually set to inactive
