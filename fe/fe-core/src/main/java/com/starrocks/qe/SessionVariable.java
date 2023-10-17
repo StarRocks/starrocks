@@ -34,6 +34,9 @@
 
 package com.starrocks.qe;
 
+import com.amazonaws.util.StringUtils;
+import com.google.common.base.Enums;
+import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.common.reflect.TypeToken;
@@ -65,6 +68,8 @@ import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+
+import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.ADAPTIVE_DECREASE;
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
@@ -517,6 +522,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_ICEBERG_NDV = "enable_iceberg_ndv";
 
     public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
+
+    public static final String CHOOSE_EXECUTE_INSTANCES_MODE = "choose_execute_instances_mode";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1323,6 +1330,27 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
     private boolean cboDeriveRangeJoinPredicate = false;
+
+    @VarAttr(name = CHOOSE_EXECUTE_INSTANCES_MODE)
+    private String chooseExecuteInstancesMode = ADAPTIVE_DECREASE.name();
+
+    public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
+        return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
+                        StringUtils.upperCase(chooseExecuteInstancesMode))
+                .or(SessionVariableConstants.ChooseInstancesMode.LOCALITY);
+    }
+
+    public void setChooseExecuteInstancesMode(String mode) {
+        SessionVariableConstants.ChooseInstancesMode result =
+                Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class, StringUtils.upperCase(mode))
+                        .orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ChooseInstancesMode.values());
+            throw new IllegalArgumentException("Legal values of choose_execute_instances_mode are " + legalValues);
+        }
+        this.chooseExecuteInstancesMode = StringUtils.upperCase(mode);
+    }
+
 
     public boolean enableCboDeriveRangeJoinPredicate() {
         return cboDeriveRangeJoinPredicate;

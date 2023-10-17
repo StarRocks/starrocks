@@ -626,8 +626,6 @@ public class Optimizer {
         result = new ExtractAggregateColumn().rewrite(result, rootTaskContext);
         result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
 
-        SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
-
         // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator
         // too early will prevent it from certain optimizations that depend on the equivalence of the ColumnRefOperator.
         result = new CloneDuplicateColRefRule().rewrite(result, rootTaskContext);
@@ -658,16 +656,17 @@ public class Optimizer {
             childPlans.add(childPlan);
         }
 
-        OptExpression expression = OptExpression.create(groupExpression.getOp(),
-                childPlans);
-        // record inputProperties at optExpression, used for planFragment builder to determine join type
-        expression.setRequiredProperties(inputProperties);
-        expression.setStatistics(groupExpression.getGroup().getStatistics());
-        expression.setCost(groupExpression.getCost(requiredProperty));
+        OptExpression.Builder builder = OptExpression.buildWithOpAndInputs(groupExpression.getOp(), childPlans);
 
-        // When build plan fragment, we need the output column of logical property
-        expression.setLogicalProperty(rootGroup.getLogicalProperty());
-        return expression;
+
+        // record inputProperties used to determine join type when building planFragment
+        // record logical property used to obtain output colRefSet when building planFragment
+        builder.setRequiredProperties(inputProperties)
+                .setStatistics(groupExpression.getGroup().getStatistics())
+                .setCost(groupExpression.getCost(requiredProperty))
+                .setLogicalProperty(rootGroup.getLogicalProperty());
+
+        return builder.build();
     }
 
     private void collectAllScanOperators(OptExpression tree, TaskContext rootTaskContext) {

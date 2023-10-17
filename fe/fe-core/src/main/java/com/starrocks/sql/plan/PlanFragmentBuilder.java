@@ -425,9 +425,36 @@ public class PlanFragmentBuilder {
         }
 
         public PlanFragment translate(OptExpression optExpression, ExecPlan context) {
-            return visit(optExpression, context);
+            PlanFragment fragment = visit(optExpression, context);
+            computeFragmentCost(context, fragment);
+            return fragment;
         }
 
+        private void computeFragmentCost(ExecPlan context, PlanFragment fragment) {
+            for (PlanFragment child : fragment.getChildren()) {
+                computeFragmentCost(context, child);
+            }
+            OptExpression output = getOptExpression(context, fragment.getPlanRoot());
+
+            // scan fragment
+            if (fragment.getLeftMostNode() instanceof ScanNode) {
+                fragment.setFragmentCost(output.getCost());
+                return;
+            }
+
+            List<OptExpression> inputs = fragment.getChildren().stream().map(PlanFragment::getPlanRoot)
+                    .map(p -> getOptExpression(context, p)).collect(Collectors.toList());
+
+            double childCost = inputs.stream().map(OptExpression::getCost).reduce(Double::sum).orElse(0D);
+            fragment.setFragmentCost(output.getCost() - childCost);
+        }
+
+        private OptExpression getOptExpression(ExecPlan context, PlanNode node) {
+            if (context.getOptExpression(node.getId().asInt()) == null && node instanceof ProjectNode) {
+                node = node.getChild(0);
+            }
+            return context.getOptExpression(node.getId().asInt());
+        }
         @Override
         public PlanFragment visit(OptExpression optExpression, ExecPlan context) {
             canUseLocalShuffleAgg &= optExpression.arity() <= 1;

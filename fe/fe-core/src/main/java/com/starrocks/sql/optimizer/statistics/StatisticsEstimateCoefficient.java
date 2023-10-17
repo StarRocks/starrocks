@@ -50,6 +50,9 @@ public class StatisticsEstimateCoefficient {
     public static final double DEFAULT_ANTI_JOIN_SELECTIVITY_COEFFICIENT = 0.4;
     // default shuffle column row count limit
     public static final double DEFAULT_PRUNE_SHUFFLE_COLUMN_ROWS_LIMIT = 200000;
+
+    public static final long TINY_SCALE_ROWS_LIMIT = 100000;
+
     // a small scale rows, such as default push down aggregate row count limit, 100w
     public static final long SMALL_SCALE_ROWS_LIMIT = 1000000;
     // default or predicate limit

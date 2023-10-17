@@ -26,6 +26,7 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.Reference;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
@@ -110,6 +111,8 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.TINY_SCALE_ROWS_LIMIT;
 
 public class CoordinatorPreprocessor {
     private static final Logger LOG = LogManager.getLogger(CoordinatorPreprocessor.class);
@@ -623,25 +626,25 @@ public class CoordinatorPreprocessor {
                 // hostSet contains target backends to whom fragment instances of the current PlanFragment will be
                 // delivered. when pipeline parallelization is adopted, the number of instances should be the size
                 // of hostSet, that it to say, each backend has exactly one fragment.
-                Set<TNetworkAddress> hostSet = Sets.newHashSet();
-
+                final Set<TNetworkAddress> hostSet = Sets.newHashSet();
+                final Set<TNetworkAddress> childHosts = Sets.newHashSet();
                 // don't use all nodes in shared_data running mode to avoid heavy exchange cost
                 if (connectContext.getSessionVariable().isPreferComputeNode() && hasComputeNode) {
-                    for (Map.Entry<Long, ComputeNode> entry : idToComputeNode.entrySet()) {
-                        ComputeNode computeNode = entry.getValue();
-                        if (!computeNode.isAlive() || SimpleScheduler.isInBlacklist(computeNode.getId())) {
-                            continue;
-                        }
-                        TNetworkAddress addr = new TNetworkAddress(computeNode.getHost(), computeNode.getBePort());
-                        hostSet.add(addr);
-                        this.recordUsedBackend(addr, computeNode.getId());
-                    }
-                    //make olapScan maxParallelism equals prefer compute node number
+                    Map<Long, ComputeNode> candidates = getAliveNodes(idToComputeNode);
+                    candidates.values().stream().forEach(e -> childHosts.add(e.getAddress()));
+                    // make olapScan maxParallelism equals prefer compute node number
+                    List<Pair<Long, TNetworkAddress>> chosenNodes = adaptiveChooseNodes(fragment, candidates, childHosts);
+                    chosenNodes.stream().forEach(e -> {
+                        hostSet.add(e.second);
+                        recordUsedBackend(e.second, e.first);
+                    });
                     maxParallelism = hostSet.size() * fragment.getParallelExecNum();
+
                 } else {
                     if (isUnionFragment(fragment) && isGatherOutput) {
                         // union fragment use all children's host
                         // if output fragment isn't gather, all fragment must keep 1 instance
+
                         for (PlanFragment child : fragment.getChildren()) {
                             FragmentExecParams childParams = fragmentExecParamsMap.get(child.getFragmentId());
                             childParams.instanceExecParams.stream().map(e -> e.host).forEach(hostSet::add);
@@ -650,8 +653,15 @@ public class CoordinatorPreprocessor {
                         maxParallelism = hostSet.size() * fragment.getParallelExecNum();
                     } else {
                         for (FInstanceExecParam execParams : maxParallelismFragmentExecParams.instanceExecParams) {
-                            hostSet.add(execParams.host);
+                            childHosts.add(execParams.host);
                         }
+                        List<Pair<Long, TNetworkAddress>> chosenNodes = adaptiveChooseNodes(fragment,
+                                getAliveNodes(idToBackend), childHosts);
+
+                        chosenNodes.stream().forEach(e -> {
+                            hostSet.add(e.second);
+                            recordUsedBackend(e.second, e.first);
+                        });
                     }
                 }
 
@@ -1440,6 +1450,70 @@ public class CoordinatorPreprocessor {
         }
 
         return resourceGroup;
+    }
+
+    private List<Pair<Long, TNetworkAddress>> adaptiveChooseNodes(PlanFragment fragment, Map<Long, ComputeNode> candidates,
+                                                                  Set<TNetworkAddress> childUsedHosts) {
+        List<Pair<Long, TNetworkAddress>> childHosts = Lists.newArrayList();
+        for (Map.Entry<Long, ComputeNode> entry : candidates.entrySet()) {
+            TNetworkAddress address = entry.getValue().getAddress();
+            if (childUsedHosts.contains(address)) {
+                childHosts.add(Pair.create(entry.getKey(), address));
+            }
+        }
+
+        // sometimes we may reserve the right fragment and add the children of left fragment
+        // in the children list of right fragment like SHUFFLE_HASH_BUCKET plan, so we need sort
+        // the list to ensure the most left child is at the 0 index position.
+        List<PlanFragment> sortedFragments = fragment.getChildren().stream()
+                .sorted(Comparator.comparing(e -> e.getPlanRoot().getId().asInt()))
+                .collect(Collectors.toList());
+
+        long maxOutputOfRightChild = sortedFragments.stream().skip(1)
+                .map(e -> e.getPlanRoot().getCardinality()).reduce(Long::max)
+                .orElse(fragment.getChild(0).getPlanRoot().getCardinality());
+        long outputOfMostLeftChild = sortedFragments.get(0).getPlanRoot().getCardinality();
+
+        long baseNodeNums = Math.max(1, maxOutputOfRightChild / TINY_SCALE_ROWS_LIMIT / fragment.getPipelineDop());
+        double base = Math.max(Math.E, baseNodeNums);
+
+        long amplifyFactor = Math.round(Math.max(1,
+                Math.log(outputOfMostLeftChild / TINY_SCALE_ROWS_LIMIT / fragment.getPipelineDop()) / Math.log(base)));
+
+        long nodeNums = Math.min(amplifyFactor * baseNodeNums, candidates.size());
+
+        SessionVariableConstants.ChooseInstancesMode mode = connectContext.getSessionVariable()
+                .getChooseExecuteInstancesMode();
+        if (mode.enableIncreaseInstance() && nodeNums > childUsedHosts.size()) {
+            for (Map.Entry<Long, ComputeNode> entry : candidates.entrySet()) {
+                TNetworkAddress address = new TNetworkAddress(entry.getValue().getHost(), entry.getValue().getBePort());
+                if (!childUsedHosts.contains(address)) {
+                    childHosts.add(Pair.create(entry.getKey(), address));
+                    if (childHosts.size() == nodeNums) {
+                        break;
+                    }
+                }
+            }
+            return childHosts;
+        } else if (mode.enableDecreaseInstance() && nodeNums < childUsedHosts.size()
+                && candidates.size() >= Config.adaptive_choose_instances_threshold) {
+            Collections.shuffle(childHosts, random);
+            return childHosts.stream().limit(nodeNums).collect(Collectors.toList());
+        } else {
+            return childHosts;
+        }
+    }
+
+    private Map<Long, ComputeNode> getAliveNodes(ImmutableMap<Long, ComputeNode> nodeMap) {
+        Map<Long, ComputeNode> candidates = Maps.newHashMap();
+        for (Map.Entry<Long, ComputeNode> entry : nodeMap.entrySet()) {
+            ComputeNode computeNode = entry.getValue();
+            if (!computeNode.isAlive() || SimpleScheduler.isInBlacklist(computeNode.getId())) {
+                continue;
+            }
+            candidates.put(entry.getKey(), entry.getValue());
+        }
+        return candidates;
     }
 
     // fragment instance exec param, it is used to assemble

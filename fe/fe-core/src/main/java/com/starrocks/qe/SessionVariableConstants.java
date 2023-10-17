@@ -31,4 +31,23 @@ public class SessionVariableConstants {
     public static final String DOUBLE = "double";
 
     public static final String DECIMAL = "decimal";
+
+    public static final String ADAPTIVE_INCREASE = "adaptive_increase";
+    public static final String ADAPTIVE_DECREASE = "adaptive_decrease";
+
+
+    public enum ChooseInstancesMode {
+        LOCALITY,
+        AUTO,
+        ADAPTIVE_INCREASE,
+        ADAPTIVE_DECREASE;
+
+        public boolean enableIncreaseInstance() {
+            return this == AUTO || this == ADAPTIVE_INCREASE;
+        }
+
+        public boolean enableDecreaseInstance() {
+            return this == AUTO || this == ADAPTIVE_DECREASE;
+        }
+    }
 }
