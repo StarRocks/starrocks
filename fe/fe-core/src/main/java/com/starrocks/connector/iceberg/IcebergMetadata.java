@@ -304,22 +304,24 @@ public class IcebergMetadata implements ConnectorMetadata {
                     dbName, tableName, predicate);
         }
 
-        Set<String> scannedFiles = new HashSet<>();
+        Set<List<String>> scannedPartitions = new HashSet<>();
         PartitionSpec spec = icebergTable.getNativeTable().spec();
         List<Column> partitionColumns = icebergTable.getPartitionColumnsIncludeTransformed();
         for (FileScanTask fileScanTask : icebergSplitTasks) {
-            String filePath = fileScanTask.file().path().toString();
-            if (scannedFiles.contains(filePath)) {
-                continue;
-            }
-            scannedFiles.add(filePath);
-
             StructLike partitionData = fileScanTask.file().partition();
             List<String> values = PartitionUtil.getIcebergPartitionValues(spec, partitionData);
+
             if (values.size() != partitionColumns.size()) {
                 // ban partition evolution and non-identify column.
                 continue;
             }
+
+            if (scannedPartitions.contains(values)) {
+                continue;
+            } else {
+                scannedPartitions.add(values);
+            }
+
             try {
                 partitionKeys.add(createPartitionKey(values, partitionColumns, table.getType()));
             } catch (Exception e) {
