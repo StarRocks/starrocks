@@ -113,8 +113,8 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 | starrocks.database.name             | 是       |                                                              | StarRocks 目标库名。                                         |
 | starrocks.username                  | 是       |                                                              | StarRocks 用户名。用户需要具有目标表的 INSERT 权限。         |
 | starrocks.password                  | 是       |                                                              | StarRocks 用户密码。                                         |
-| key.converter                       | 是       |                                                              | 在本场景中 StarRocks 提供的 Kafka connector 是sink connector，该参数表示 sink connector 的 key converter，用于反序列化 Kafka 数据的 key。您需要根据 source connector 的 key converter 确定该 key converter。 |
-| value.converter                     | 是       |                                                              | sink connector 的 value converter，用于反序列化 Kafka 数据的 value。您需要根据 source connector 的 value converter 确定该 value converter。 |
+| key.converter                       | 否       | Kafka connect 集群的 key converter                            | sink connector (在本场景中即 Kafka-connector-starrocks) 的 key converter，用于反序列化 Kafka 数据的 key。默认为 Kafka connect 集群的 key converter, 您也可以自定义配置。      |
+| value.converter                     | 否       | Kafka connect 集群的 value converter                          | sink connector 的 value converter，用于反序列化 Kafka 数据的 value。默认为 Kafka connect 集群的 value converter, 您也可以自定义配置。    |
 | key.converter.schema.registry.url   | 否       |                                                              | key converter 对应的 schema registry 地址。                  |
 | value.converter.schema.registry.url | 否       |                                                              | value converter 对应的 schema registry 地址。                |
 | tasks.max                           | 否       | 1                                                            | Kafka connector 要创建的 task 线程数量上限，通常与 Kafka Connect 集群中的 worker 节点上的 CPU 核数量相同。如果需要增加导入性能的时候可以调整该参数。 |
