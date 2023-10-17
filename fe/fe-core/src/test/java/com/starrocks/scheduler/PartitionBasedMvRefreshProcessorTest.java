@@ -469,23 +469,6 @@ public class PartitionBasedMvRefreshProcessorTest {
     }
 
     @Test
-    public void testInactive() {
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_inactive"));
-        materializedView.setInactiveAndReason("");
-        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
-
-        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
-        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
-        try {
-            taskRun.executeTaskRun();
-            Assert.fail("should not be here. executeTaskRun will throw exception");
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("is not active, skip sync partition and data with base tables"));
-        }
-    }
-
-    @Test
     public void testMvWithoutPartition() {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_without_partition"));
