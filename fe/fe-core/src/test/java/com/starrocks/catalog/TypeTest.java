@@ -327,15 +327,15 @@ public class TypeTest {
     @Test
     public void testPTypeDescFromProtobuf() {
         PTypeDesc pTypeDesc = buildScalarType(TPrimitiveType.BIGINT);
-        Type tp = Type.fromProtobuf(pTypeDesc, 0);
+        Type tp = Type.fromProtobuf(pTypeDesc);
         Assert.assertTrue(tp.isBigint());
 
         pTypeDesc = buildArrayType(TPrimitiveType.BIGINT);
-        tp = Type.fromProtobuf(pTypeDesc, 0);
+        tp = Type.fromProtobuf(pTypeDesc);
         Assert.assertTrue(tp.isArrayType());
 
         pTypeDesc = buildMapType(TPrimitiveType.BIGINT, TPrimitiveType.BOOLEAN);
-        tp = Type.fromProtobuf(pTypeDesc, 0);
+        tp = Type.fromProtobuf(pTypeDesc);
         Assert.assertTrue(tp.isMapType());
 
         ArrayList<String> fieldNames = new ArrayList<>();
@@ -348,7 +348,7 @@ public class TypeTest {
         fieldTypes.add(TPrimitiveType.DOUBLE);
 
         pTypeDesc = buildStructType(fieldNames, fieldTypes);
-        tp = Type.fromProtobuf(pTypeDesc, 0);
+        tp = Type.fromProtobuf(pTypeDesc);
         Assert.assertTrue(tp.isStructType());
     }
 }
