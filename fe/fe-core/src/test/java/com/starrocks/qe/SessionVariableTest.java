@@ -42,4 +42,29 @@ public class SessionVariableTest {
         Assert.assertEquals(SessionVariable.DEFAULT_SESSION_VARIABLE.getPipelineProfileLevel(), kv.defaultValue);
         Assert.assertEquals(100, kv.actualValue);
     }
+
+    @Test
+    public void testSetChooseMode() {
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setAdaptiveChooseExecuteInstancesMode("adaptive_increase");
+        Assert.assertTrue(SessionVariableConstants.ChooseInstancesMode
+                .enableIncreaseInstance(sessionVariable.getAdaptiveChooseExecuteInstancesMode()));
+
+        sessionVariable.setAdaptiveChooseExecuteInstancesMode("adaptive_decrease");
+        Assert.assertTrue(SessionVariableConstants.ChooseInstancesMode
+                .enableDecreaseInstance(sessionVariable.getAdaptiveChooseExecuteInstancesMode()));
+
+        sessionVariable.setAdaptiveChooseExecuteInstancesMode("auto");
+        Assert.assertTrue(SessionVariableConstants.ChooseInstancesMode
+                .enableIncreaseInstance(sessionVariable.getAdaptiveChooseExecuteInstancesMode()));
+        Assert.assertTrue(SessionVariableConstants.ChooseInstancesMode
+                .enableDecreaseInstance(sessionVariable.getAdaptiveChooseExecuteInstancesMode()));
+        try {
+            sessionVariable.setAdaptiveChooseExecuteInstancesMode("xxx");
+            Assert.fail("cannot set a invalid value");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(),
+                    e.getMessage().contains("Legal values of adaptive_choose_execute_instances_mode are"));
+        }
+    }
 }

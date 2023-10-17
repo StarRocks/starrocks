@@ -14,6 +14,9 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Enums;
+import org.apache.commons.lang3.StringUtils;
+
 public class SessionVariableConstants {
 
     private SessionVariableConstants() {}
@@ -34,4 +37,24 @@ public class SessionVariableConstants {
 
     public static final String ADAPTIVE_INCREASE = "adaptive_increase";
     public static final String ADAPTIVE_DECREASE = "adaptive_decrease";
+
+
+    public enum ChooseInstancesMode {
+        LOCALITY,
+        AUTO,
+        ADAPTIVE_INCREASE,
+        ADAPTIVE_DECREASE;
+
+        public static boolean enableIncreaseInstance(String mode) {
+            ChooseInstancesMode chooseInstancesMode = Enums.getIfPresent(ChooseInstancesMode.class,
+                    StringUtils.upperCase(mode)).or(LOCALITY);
+            return chooseInstancesMode == AUTO || chooseInstancesMode == ADAPTIVE_INCREASE;
+        }
+
+        public static boolean enableDecreaseInstance(String mode) {
+            ChooseInstancesMode chooseInstancesMode = Enums.getIfPresent(ChooseInstancesMode.class,
+                    StringUtils.upperCase(mode)).or(LOCALITY);
+            return chooseInstancesMode == AUTO || chooseInstancesMode == ADAPTIVE_DECREASE;
+        }
+    }
 }

@@ -34,6 +34,9 @@
 
 package com.starrocks.qe;
 
+import com.amazonaws.util.StringUtils;
+import com.google.common.base.Enums;
+import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.common.reflect.TypeToken;
@@ -65,6 +68,8 @@ import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+
+import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.ADAPTIVE_DECREASE;
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
@@ -1326,14 +1331,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean cboDeriveRangeJoinPredicate = false;
 
     @VarAttr(name = ADAPTIVE_CHOOSE_EXECUTE_INSTANCES_MODE)
-    private String adaptiveChooseExecuteInstancesMode = SessionVariableConstants.ADAPTIVE_DECREASE;
+    private String adaptiveChooseExecuteInstancesMode = ADAPTIVE_DECREASE.name();
 
     public String getAdaptiveChooseExecuteInstancesMode() {
         return adaptiveChooseExecuteInstancesMode;
     }
 
-    public void setAdaptiveChooseExecuteInstancesMode(String adaptiveChooseExecuteInstancesMode) {
-        this.adaptiveChooseExecuteInstancesMode = adaptiveChooseExecuteInstancesMode;
+    public void setAdaptiveChooseExecuteInstancesMode(String mode) {
+        SessionVariableConstants.ChooseInstancesMode result =
+                Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class, StringUtils.upperCase(mode))
+                        .orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ChooseInstancesMode.values());
+            throw new IllegalArgumentException("Legal values of adaptive_choose_execute_instances_mode are " + legalValues);
+        }
+        this.adaptiveChooseExecuteInstancesMode = StringUtils.upperCase(mode);
     }
 
 

@@ -112,9 +112,8 @@ import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.qe.SessionVariableConstants.ADAPTIVE_DECREASE;
-import static com.starrocks.qe.SessionVariableConstants.ADAPTIVE_INCREASE;
-import static com.starrocks.qe.SessionVariableConstants.AUTO;
+import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.enableDecreaseInstance;
+import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.enableIncreaseInstance;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.TINY_SCALE_ROWS_LIMIT;
 
 public class CoordinatorPreprocessor {
@@ -1486,8 +1485,7 @@ public class CoordinatorPreprocessor {
         long nodeNums = Math.min(amplifyFactor * baseNodeNums, candidates.size());
 
         String mode = connectContext.getSessionVariable().getAdaptiveChooseExecuteInstancesMode();
-        if ((ADAPTIVE_INCREASE.equalsIgnoreCase(mode) || AUTO.equalsIgnoreCase(mode))
-                && nodeNums > childUsedHosts.size()) {
+        if (enableIncreaseInstance(mode) && nodeNums > childUsedHosts.size()) {
             for (Map.Entry<Long, ComputeNode> entry : candidates.entrySet()) {
                 TNetworkAddress address = new TNetworkAddress(entry.getValue().getHost(), entry.getValue().getBePort());
                 if (!childUsedHosts.contains(address)) {
@@ -1498,8 +1496,7 @@ public class CoordinatorPreprocessor {
                 }
             }
             return childHosts;
-        } else if ((ADAPTIVE_DECREASE.equalsIgnoreCase(mode) || AUTO.equalsIgnoreCase(mode))
-                && nodeNums < childUsedHosts.size()
+        } else if (enableDecreaseInstance(mode) && nodeNums < childUsedHosts.size()
                 && candidates.size() >= Config.adaptive_choose_instances_threshold) {
             Collections.shuffle(childHosts, random);
             return childHosts.stream().limit(nodeNums).collect(Collectors.toList());
