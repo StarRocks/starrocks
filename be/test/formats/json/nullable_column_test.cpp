@@ -85,4 +85,22 @@ TEST_F(AddNullableColumnTest, test_add_invalid) {
     ASSERT_TRUE(st.is_invalid_argument());
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::vectorized
+=======
+TEST_F(AddNullableColumnTest, add_null_numeric_array) {
+    auto desc = TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT));
+    auto column = ColumnHelper::create_column(desc, true);
+
+    simdjson::ondemand::parser parser;
+    auto json = R"(  { "f_array": [null]}  )"_padded;
+    auto doc = parser.iterate(json);
+    simdjson::ondemand::value val = doc.find_field("f_array");
+
+    auto st = add_nullable_column(column.get(), desc, "f_array", &val, false);
+    ASSERT_TRUE(st.ok());
+    column->check_or_die();
+}
+
+} // namespace starrocks
+>>>>>>> 600a65ceb3 ([BugFix] Append null to nullable numeric column (#32767))
