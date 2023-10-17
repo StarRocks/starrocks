@@ -635,6 +635,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw new DmlException("database " + context.ctx.getDatabase() + " do not exist.");
         }
         materializedView = (MaterializedView) table;
+
+        // try to activate the mv before refresh
+        if (!materializedView.isActive()) {
+            MVActiveChecker.tryToActivate(materializedView);
+            LOG.info("Activated the MV before refreshing: {}", materializedView.getName());
+        }
         if (!materializedView.isActive()) {
             String errorMsg = String.format("Materialized view: %s, id: %d is not active, " +
                     "skip sync partition and data with base tables", materializedView.getName(), mvId);

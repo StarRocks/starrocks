@@ -230,6 +230,7 @@ import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
@@ -536,9 +537,16 @@ public class GlobalStateMgr {
 
     private AutovacuumDaemon autovacuumDaemon;
 
+<<<<<<< HEAD
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
+=======
+    private PipeManager pipeManager;
+    private PipeListener pipeListener;
+    private PipeScheduler pipeScheduler;
+    private MVActiveChecker mvActiveChecker;
+>>>>>>> c1e3a1e122 ([Enhancement] active mv automatically (#32829))
 
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
@@ -753,6 +761,13 @@ public class GlobalStateMgr {
         this.starMgrMetaSyncer = new StarMgrMetaSyncer();
 
         this.binlogManager = new BinlogManager();
+<<<<<<< HEAD
+=======
+        this.pipeManager = new PipeManager();
+        this.pipeListener = new PipeListener(this.pipeManager);
+        this.pipeScheduler = new PipeScheduler(this.pipeManager);
+        this.mvActiveChecker = new MVActiveChecker();
+>>>>>>> c1e3a1e122 ([Enhancement] active mv automatically (#32829))
 
         if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
@@ -1002,6 +1017,25 @@ public class GlobalStateMgr {
         return storageVolumeMgr;
     }
 
+<<<<<<< HEAD
+=======
+    public PipeManager getPipeManager() {
+        return pipeManager;
+    }
+
+    public PipeScheduler getPipeScheduler() {
+        return pipeScheduler;
+    }
+
+    public PipeListener getPipeListener() {
+        return pipeListener;
+    }
+
+    public MVActiveChecker getMvActiveChecker() {
+        return mvActiveChecker;
+    }
+
+>>>>>>> c1e3a1e122 ([Enhancement] active mv automatically (#32829))
     public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
         return connectorTblMetaInfoMgr;
     }
@@ -1366,6 +1400,12 @@ public class GlobalStateMgr {
         taskManager.start();
         taskCleaner.start();
         mvMVJobExecutor.start();
+<<<<<<< HEAD
+=======
+        pipeListener.start();
+        pipeScheduler.start();
+        mvActiveChecker.start();
+>>>>>>> c1e3a1e122 ([Enhancement] active mv automatically (#32829))
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
