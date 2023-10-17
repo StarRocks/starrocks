@@ -58,7 +58,6 @@ public class TracerMVTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid where empid = 10 group by empid,emps.locationid");
         String pr = Tracers.printScopeTimer();
-        System.out.println(pr);
         Tracers.close();
         assertContains(pr, "-- Planner");
     }
@@ -72,7 +71,6 @@ public class TracerMVTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid where empid = 10 group by empid,emps.locationid");
         String pr = Tracers.printVars();
-        System.out.println(pr);
         Tracers.close();
         assertContains(pr, "mv0: Rewrite Succeed");
     }
@@ -87,7 +85,6 @@ public class TracerMVTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid where empid = 10 group by empid,emps.locationid");
         String pr = Tracers.printLogs();
-        System.out.println(pr);
         Tracers.close();
         assertContains(pr, "[MV TRACE]");
     }
@@ -102,9 +99,39 @@ public class TracerMVTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid where empid = 10 group by empid,emps.locationid");
         String pr = Tracers.printLogs();
-        System.out.println(pr);
         Tracers.close();
         assertNotContains(pr, "[MV TRACE]");
         connectContext.getSessionVariable().setTraceLogMode("command");
+    }
+
+    @Test
+    public void testTracerLogMV_Success() {
+        connectContext.getSessionVariable().setTraceLogMode("command");
+        Tracers.register(connectContext);
+        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
+        String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where empid = 10 group by empid,emps.locationid");
+        String pr = Tracers.printLogs();
+        Tracers.close();
+        assertContains(pr, "[MV TRACE]");
+        assertContains(pr, "Query has already been successfully rewritten by: mv0.");
+    }
+
+
+    @Test
+    public void testTracerLogMV_Fail() {
+        connectContext.getSessionVariable().setTraceLogMode("command");
+        Tracers.register(connectContext);
+        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
+        String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
+        testRewriteFail(mv, "select emps.locationid, empid, sum(emps.deptno + 1) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where empid  > 10 group by empid,emps.locationid");
+        String pr = Tracers.printLogs();
+        Tracers.close();
+        assertContains(pr, "[MV TRACE]");
+        assertNotContains(pr, "Query has already been successfully rewritten by: mv0.");
     }
 }
