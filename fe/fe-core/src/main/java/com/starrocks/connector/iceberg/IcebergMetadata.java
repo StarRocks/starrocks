@@ -25,6 +25,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
@@ -94,6 +95,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
 import static com.starrocks.connector.PartitionUtil.createPartitionKey;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.parsePartitionFields;
@@ -261,9 +263,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         String tableName = table.getRemoteTableName();
 
         IcebergFilter key = IcebergFilter.of(dbName, tableName, snapshotId, predicate);
-        if (!scannedTables.contains(key)) {
-            collectTableStatisticsAndCacheIcebergSplit(table, predicate, limit);
-        }
+        triggerIcebergPlanFilesIfNeeded(key, table, predicate, limit);
 
         List<FileScanTask> icebergScanTasks = splitTasks.get(key);
         if (icebergScanTasks == null) {
@@ -277,6 +277,14 @@ public class IcebergMetadata implements ConnectorMetadata {
         return Lists.newArrayList(remoteFileInfo);
     }
 
+    private void triggerIcebergPlanFilesIfNeeded(IcebergFilter key, IcebergTable table, ScalarOperator predicate, long limit) {
+        if (!scannedTables.contains(key)) {
+            try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.processSplit." + key)) {
+                collectTableStatisticsAndCacheIcebergSplit(table, predicate, limit);
+            }
+        }
+    }
+
     public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
         IcebergTable icebergTable = (IcebergTable) table;
         String dbName = icebergTable.getRemoteDbName();
@@ -287,9 +295,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         IcebergFilter key = IcebergFilter.of(dbName, tableName, snapshot.get().snapshotId(), predicate);
-        if (!scannedTables.contains(key)) {
-            collectTableStatisticsAndCacheIcebergSplit(icebergTable, predicate, limit);
-        }
+        triggerIcebergPlanFilesIfNeeded(key, icebergTable, predicate, limit);
 
         List<PartitionKey> partitionKeys = new ArrayList<>();
         List<FileScanTask> icebergSplitTasks = splitTasks.get(key);
@@ -298,20 +304,28 @@ public class IcebergMetadata implements ConnectorMetadata {
                     dbName, tableName, predicate);
         }
 
-        Set<String> scannedFiles = new HashSet<>();
+        Set<List<String>> scannedPartitions = new HashSet<>();
         PartitionSpec spec = icebergTable.getNativeTable().spec();
+        List<Column> partitionColumns = icebergTable.getPartitionColumnsIncludeTransformed();
         for (FileScanTask fileScanTask : icebergSplitTasks) {
-            String filePath = fileScanTask.file().path().toString();
-            if (scannedFiles.contains(filePath)) {
-                continue;
-            }
-            scannedFiles.add(filePath);
-
             StructLike partitionData = fileScanTask.file().partition();
             List<String> values = PartitionUtil.getIcebergPartitionValues(spec, partitionData);
+
+            if (values.size() != partitionColumns.size()) {
+                // ban partition evolution and non-identify column.
+                continue;
+            }
+
+            if (scannedPartitions.contains(values)) {
+                continue;
+            } else {
+                scannedPartitions.add(values);
+            }
+
             try {
-                partitionKeys.add(createPartitionKey(values, icebergTable.getPartitionColumns(), table.getType()));
+                partitionKeys.add(createPartitionKey(values, partitionColumns, table.getType()));
             } catch (Exception e) {
+                LOG.error("create partition key failed.", e);
                 throw new StarRocksConnectorException(e.getMessage());
             }
         }
@@ -319,7 +333,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         return partitionKeys;
     }
 
-    public void collectTableStatisticsAndCacheIcebergSplit(Table table, ScalarOperator predicate, long limit) {
+    private void collectTableStatisticsAndCacheIcebergSplit(Table table, ScalarOperator predicate, long limit) {
         IcebergTable icebergTable = (IcebergTable) table;
         Optional<Snapshot> snapshot = icebergTable.getSnapshot();
         // empty table
@@ -412,7 +426,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         IcebergMetricsReporter.lastReport().ifPresent(scanReportWithCounter ->
-                Tracers.record(Tracers.Module.EXTERNAL, "Iceberg.Metadata.ScanMetrics." +
+                Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.ScanMetrics." +
                                 scanReportWithCounter.getScanReport().tableName() + " / No_" +
                                 scanReportWithCounter.getCount(),
                         scanReportWithCounter.getScanReport().scanMetrics().toString()));
@@ -443,9 +457,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         IcebergFilter key = IcebergFilter.of(
                 icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), snapshotId, predicate);
 
-        if (!scannedTables.contains(key)) {
-            collectTableStatisticsAndCacheIcebergSplit(table, predicate, limit);
-        }
+        triggerIcebergPlanFilesIfNeeded(key, icebergTable, predicate, limit);
 
         return statisticProvider.getTableStatistics(icebergTable, columns, session, predicate);
     }
@@ -454,8 +466,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         long offset = fileScanTask.start();
         long length = fileScanTask.length();
         DataFile dataFileWithoutStats = fileScanTask.file().copyWithoutStats();
-        DeleteFile[] deleteFiles = new DeleteFile[fileScanTask.deletes().size()];
-        fileScanTask.deletes().toArray(deleteFiles);
+        DeleteFile[] deleteFiles = fileScanTask.deletes().stream()
+                .map(DeleteFile::copyWithoutStats)
+                .toArray(DeleteFile[]::new);
         String schemaString = SchemaParser.toJson(fileScanTask.spec().schema());
         String partitionString = PartitionSpecParser.toJson(fileScanTask.spec());
         ResidualEvaluator residualEvaluator = ResidualEvaluator.of(fileScanTask.spec(), icebergPredicate, true);

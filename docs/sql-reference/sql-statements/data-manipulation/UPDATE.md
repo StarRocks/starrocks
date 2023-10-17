@@ -2,7 +2,7 @@
 
 Updates rows in a Primary Key table.
 
-In versions earlier than version 3.0, the UPDATE statement only supports single-table UPDATE and does not support common table expressions (CTEs). Starting from version 3.0, StarRocks enriches the syntax to support multi-table joins and CTEs. If you need to join the table to be updated with other tables in the database, you can reference these other tables in the FROM clause or CTE. Since version 3.1, the UPDATE statement supports the partial updates in column mode, which is suitable for scenarios involving a small number of columns but a large number of rows, resulting in faster update speeds.
+StarRocks supports the UPDATE statement since v2.3, which only supports single-table UPDATE and does not support common table expressions (CTEs). Starting from version 3.0, StarRocks enriches the syntax to support multi-table joins and CTEs. If you need to join the table to be updated with other tables in the database, you can reference these other tables in the FROM clause or CTE. Since version 3.1, the UPDATE statement supports the partial updates in column mode, which is suitable for scenarios involving a small number of columns but a large number of rows, resulting in faster update speeds.
 
 This command requires the UPDATE privilege on the table you want to update.
 

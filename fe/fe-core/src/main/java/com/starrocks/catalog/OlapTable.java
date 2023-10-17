@@ -808,6 +808,10 @@ public class OlapTable extends Table {
         return new ArrayList<Column>();
     }
 
+    /**
+     * NOTE: The result key columns are not in the creating order because `nameToColumn`
+     * uses unordered hashmap to keeps name to column's mapping.
+     */
     public List<Column> getKeyColumns() {
         return getColumns().stream().filter(Column::isKey).collect(Collectors.toList());
     }

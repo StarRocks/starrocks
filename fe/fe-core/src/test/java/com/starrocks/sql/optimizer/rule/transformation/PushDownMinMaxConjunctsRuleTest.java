@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
@@ -35,8 +34,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -45,6 +42,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 import static org.junit.Assert.assertEquals;
@@ -106,8 +104,9 @@ public class PushDownMinMaxConjunctsRuleTest extends TableTestBase {
 
         mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
         mockedNativeTableA.refresh();
+        List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("data", STRING));
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
-                "iceberg_table", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+                "iceberg_table", columns, mockedNativeTableA, Maps.newHashMap());
 
         ColumnRefOperator colRef1 = new ColumnRefOperator(1, Type.INT, "id", true);
         Column col1 = new Column("id", Type.INT, true);
@@ -121,13 +120,6 @@ public class PushDownMinMaxConjunctsRuleTest extends TableTestBase {
         OptExpression scan =
                 new OptExpression(new LogicalIcebergScanOperator(icebergTable, colRefToColumnMetaMap, columnMetaToColRefMap,
                         -1, null));
-
-        new MockUp<IcebergTable>() {
-            @Mock
-            public List<Column> getPartitionColumns() {
-                return ImmutableList.of(new Column("data", STRING));
-            }
-        };
 
         rule0.transform(scan, new OptimizerContext(new Memo(), new ColumnRefFactory()));
         assertEquals(1, ((LogicalIcebergScanOperator) scan.getOp()).getScanOperatorPredicates()

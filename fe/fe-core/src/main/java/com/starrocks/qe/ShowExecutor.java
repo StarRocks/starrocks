@@ -1808,8 +1808,8 @@ public class ShowExecutor {
                             connectContext.getCurrentRoleIds(), new TableName(dbName, tableName));
                 } catch (AccessDeniedException e) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW DATA",
-                            connectContext.getQualifiedUser(),
-                            connectContext.getRemoteIP(),
+                            connectContext.getCurrentUserIdentity().getUser(),
+                            connectContext.getCurrentUserIdentity().getHost(),
                             tableName);
                 }
 

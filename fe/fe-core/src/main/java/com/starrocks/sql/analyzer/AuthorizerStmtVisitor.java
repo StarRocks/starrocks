@@ -1124,7 +1124,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.IMPERSONATE.name(), ObjectType.USER.name(), statement.getToUser().getQualifiedUser());
+                    PrivilegeType.IMPERSONATE.name(), ObjectType.USER.name(), statement.getToUser().getUser());
         }
         return null;
     }
@@ -1307,7 +1307,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitShowUserPropertyStatement(ShowUserPropertyStmt statement, ConnectContext context) {
         String user = statement.getUser();
-        if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())) {
+        if (user != null && !user.equals(context.getCurrentUserIdentity().getUser())) {
             try {
                 Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
             } catch (AccessDeniedException e) {
@@ -1323,7 +1323,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitSetUserPropertyStatement(SetUserPropertyStmt statement, ConnectContext context) {
         String user = statement.getUser();
-        if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())) {
+        if (user != null && !user.equals(context.getCurrentUserIdentity().getUser())) {
             try {
                 Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
             } catch (AccessDeniedException e) {

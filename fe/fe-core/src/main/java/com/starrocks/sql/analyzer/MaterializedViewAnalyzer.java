@@ -52,6 +52,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
@@ -97,7 +98,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -253,14 +254,19 @@ public class MaterializedViewAnalyzer {
             statement.setBaseTableInfos(Lists.newArrayList(baseTableInfos));
 
             // set the columns into createMaterializedViewStatement
-            List<Column> mvColumns = genMaterializedViewColumns(statement);
+            List<Pair<Column, Integer>> mvColumnPairs = genMaterializedViewColumns(statement);
+            List<Column> mvColumns = mvColumnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
             statement.setMvColumnItems(mvColumns);
 
             Map<TableName, Table> aliasTableMap = getNormalizedBaseTables(queryStatement, context);
             Map<Column, Expr> columnExprMap = Maps.newHashMap();
+
+            // columns' order may be changed for sort keys' reorder, need to
+            // change `queryStatement.getQueryRelation`'s outputs at the same time.
             List<Expr> outputExpressions = queryStatement.getQueryRelation().getOutputExpression();
-            for (int i = 0; i < outputExpressions.size(); ++i) {
-                columnExprMap.put(mvColumns.get(i), outputExpressions.get(i));
+            for (Pair<Column, Integer> pair : mvColumnPairs) {
+                Preconditions.checkState(pair.second < outputExpressions.size());
+                columnExprMap.put(pair.first, outputExpressions.get(pair.second));
             }
             // some check if partition exp exists
             if (statement.getPartitionExpDesc() != null) {
@@ -372,13 +378,69 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private List<Column> genMaterializedViewColumns(CreateMaterializedViewStatement statement) {
+        /**
+         * when the materialized view's sort keys are not set by hand, choose the sort keys by iterating the columns
+         *  and find the satisfied columns as sort keys.
+         */
+        List<String> chooseSortKeysByDefault(List<Column> mvColumns) {
+            List<String> keyCols = Lists.newArrayList();
+            int theBeginIndexOfValue = 0;
+            int keySizeByte = 0;
+
+            // skip the firth nth columns which can not be used for keys.
+            for (; theBeginIndexOfValue < mvColumns.size(); theBeginIndexOfValue++) {
+                Column column = mvColumns.get(theBeginIndexOfValue);
+                if (column.getType().canBeMVKey()) {
+                    break;
+                }
+            }
+            if (theBeginIndexOfValue == mvColumns.size()) {
+                throw new SemanticException("All columns of materialized view cannot be used for keys");
+            }
+
+            int skip = theBeginIndexOfValue;
+            for (; theBeginIndexOfValue < mvColumns.size(); theBeginIndexOfValue++) {
+                Column column = mvColumns.get(theBeginIndexOfValue);
+                keySizeByte += column.getType().getIndexSize();
+                if (keySizeByte > FeConstants.SHORTKEY_MAXSIZE_BYTES) {
+                    if (column.getType().getPrimitiveType().isCharFamily()) {
+                        keyCols.add(column.getName());
+                        theBeginIndexOfValue++;
+                    }
+                    break;
+                }
+
+                if (!column.getType().canBeMVKey()) {
+                    continue;
+                }
+
+                if (column.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
+                    keyCols.add(column.getName());
+                    theBeginIndexOfValue++;
+                    break;
+                }
+
+                keyCols.add(column.getName());
+            }
+            if (theBeginIndexOfValue == skip) {
+                throw new SemanticException("Data type of first column cannot be " +
+                        mvColumns.get(theBeginIndexOfValue).getType());
+            }
+            return keyCols;
+        }
+
+        /**
+         * NOTE: order or column names of the defined query may be changed when generating.
+         * @param statement : creating materialized view statement
+         * @return          : Generate materialized view's columns and corresponding output expression index pair
+         *                      from creating materialized view statement.
+         */
+        private List<Pair<Column, Integer>> genMaterializedViewColumns(CreateMaterializedViewStatement statement) {
             List<String> columnNames = statement.getQueryStatement().getQueryRelation()
                     .getRelationFields().getAllFields().stream()
                     .map(Field::getName).collect(Collectors.toList());
             Scope queryScope = statement.getQueryStatement().getQueryRelation().getScope();
             List<Field> relationFields = queryScope.getRelationFields().getAllFields();
-
             List<Column> mvColumns = Lists.newArrayList();
             for (int i = 0; i < relationFields.size(); ++i) {
                 Type type = AnalyzerUtils.transformTableColumnType(relationFields.get(i).getType(), false);
@@ -405,33 +467,7 @@ public class MaterializedViewAnalyzer {
             // set duplicate key, when sort key is set, it is dup key col.
             List<String> keyCols = statement.getSortKeys();
             if (CollectionUtils.isEmpty(keyCols)) {
-                keyCols = Lists.newArrayList();
-                int theBeginIndexOfValue = 0;
-                int keySizeByte = 0;
-                for (; theBeginIndexOfValue < mvColumns.size(); theBeginIndexOfValue++) {
-                    Column column = mvColumns.get(theBeginIndexOfValue);
-                    keySizeByte += column.getType().getIndexSize();
-                    if (theBeginIndexOfValue + 1 > FeConstants.SHORTKEY_MAX_COLUMN_COUNT ||
-                            keySizeByte > FeConstants.SHORTKEY_MAXSIZE_BYTES) {
-                        if (theBeginIndexOfValue == 0 && column.getType().getPrimitiveType().isCharFamily()) {
-                            keyCols.add(column.getName());
-                            theBeginIndexOfValue++;
-                        }
-                        break;
-                    }
-                    if (!column.getType().canBeMVKey()) {
-                        break;
-                    }
-                    if (column.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
-                        keyCols.add(column.getName());
-                        theBeginIndexOfValue++;
-                        break;
-                    }
-                    keyCols.add(column.getName());
-                }
-                if (theBeginIndexOfValue == 0) {
-                    throw new SemanticException("Data type of first column cannot be " + mvColumns.get(0).getType());
-                }
+                keyCols = chooseSortKeysByDefault(mvColumns);
             }
 
             if (keyCols.isEmpty()) {
@@ -442,41 +478,38 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("The number of sort key should be less than the number of columns.");
             }
 
-            // Without specified sortkeys, set keys from columns
-            // Map<String, Column> columnMap = mvColumns.stream().collect(Collectors.toMap(Column::getName, col -> col));
-            Map<String, Column> columnMap = new HashMap<>();
-            for (Column col : mvColumns) {
-                if (columnMap.putIfAbsent(col.getName(), col) != null) {
+            // Reorder the MV columns according to sort-key
+            Map<String, Pair<Column, Integer>> columnMap = new HashMap<>();
+            for (int i = 0; i < mvColumns.size(); i++) {
+                Column col = mvColumns.get(i);
+                if (columnMap.putIfAbsent(col.getName(), Pair.create(col, i)) != null) {
                     throw new SemanticException("Duplicate column name " + Strings.quote(col.getName()));
                 }
             }
-            if (CollectionUtils.isEmpty(statement.getSortKeys())) {
-                for (String col : keyCols) {
-                    columnMap.get(col).setIsKey(true);
-                }
-                return mvColumns;
-            }
 
-            // Reorder the MV columns according to sort-key
-            List<Column> reorderedColumns = new ArrayList<>();
-            Set<String> usedColumns = new HashSet<>();
+            List<Pair<Column, Integer>> reorderedColumns = new ArrayList<>();
+            Set<String> usedColumns = new LinkedHashSet<>();
             for (String columnName : keyCols) {
-                Column keyColumn = columnMap.get(columnName);
-                if (keyColumn == null) {
+                Pair<Column, Integer> columnPair = columnMap.get(columnName);
+                if (columnPair == null || columnPair.first == null) {
                     throw new SemanticException("Sort key not exists: " + columnName);
                 }
+                Column keyColumn = columnPair.first;
                 Type keyColType = keyColumn.getType();
                 if (!keyColType.canBeMVKey()) {
                     throw new SemanticException("Type %s cannot be sort key: %s", keyColType, columnName);
                 }
                 keyColumn.setIsKey(true);
                 keyColumn.setAggregationType(null, false);
-                reorderedColumns.add(keyColumn);
+
+                reorderedColumns.add(columnPair);
                 usedColumns.add(columnName);
             }
             for (Column col : mvColumns) {
-                if (!usedColumns.contains(col.getName())) {
-                    reorderedColumns.add(col);
+                String colName = col.getName();
+                if (!usedColumns.contains(colName)) {
+                    Preconditions.checkState(columnMap.containsKey(colName));
+                    reorderedColumns.add(columnMap.get(colName));
                 }
             }
             return reorderedColumns;

@@ -75,6 +75,18 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE `tt` (\n" +
+                "  `v1` bigint NULL, \n" +
+                "  `ass` ARRAY<STRUCT<a int, b int, c int>> NULL " +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
     }
 
     @Before
@@ -815,5 +827,12 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "select * from cte1 union all " +
                 "select * from cte1";
         assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testArrayIndexStruct() throws Exception {
+        String sql = "select ass[1].a, ass[1].b from tt;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "[/ass/INDEX/a, /ass/INDEX/b]");
     }
 }
