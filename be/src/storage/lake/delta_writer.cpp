@@ -114,6 +114,8 @@ public:
 
     [[nodiscard]] Status flush_async();
 
+    int64_t queueing_memtable_num() const;
+
     std::vector<std::string> files() const;
 
     int64_t data_size() const;
@@ -576,6 +578,14 @@ int64_t DeltaWriterImpl::num_rows() const {
     return (_tablet_writer != nullptr) ? _tablet_writer->num_rows() : 0;
 }
 
+int64_t DeltaWriterImpl::queueing_memtable_num() const {
+    if (_flush_token != nullptr) {
+        return _flush_token->get_stats().queueing_memtable_num;
+    } else {
+        return 0;
+    }
+}
+
 //// DeltaWriter
 
 DeltaWriter::~DeltaWriter() {
@@ -629,6 +639,10 @@ Status DeltaWriter::flush_async() {
 
 std::vector<std::string> DeltaWriter::files() const {
     return _impl->files();
+}
+
+const int64_t DeltaWriter::queueing_memtable_num() const {
+    return _impl->queueing_memtable_num();
 }
 
 int64_t DeltaWriter::data_size() const {

@@ -38,6 +38,7 @@
 #include "service/backend_options.h"
 #include "storage/lake/async_delta_writer.h"
 #include "storage/memtable.h"
+#include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
 #include "util/bthreads/bthread_shared_mutex.h"
 #include "util/compression/block_compression.h"
@@ -224,6 +225,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                                    PTabletWriterAddBatchResult* response) {
     std::shared_lock<bthreads::BThreadSharedMutex> rolk(_rw_mtx);
     auto t0 = std::chrono::steady_clock::now();
+    int64_t wait_memtable_flush_time_us = 0;
 
     if (UNLIKELY(!request.has_sender_id())) {
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
@@ -302,6 +304,22 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         int64_t tablet_id = tablet_ids[row_indexes[from]];
         auto& dw = _delta_writers[tablet_id];
         DCHECK(dw != nullptr);
+
+        // back pressure OlapTableSink since there are too many memtables need to flush
+        while (dw->queueing_memtable_num() >= config::max_queueing_memtable_per_tablet) {
+            auto t1 = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count() > request.timeout_ms()) {
+                LOG(INFO) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                          << " wait tablet " << tablet_id << " flush memtable " << request.timeout_ms()
+                          << "ms still has queueing num " << dw->queueing_memtable_num();
+                break;
+            }
+            bthread_usleep(10000); // 10ms
+            wait_memtable_flush_time_us +=
+                    std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t1)
+                            .count();
+        }
+
         if (auto st = dw->open(); !st.ok()) { // Fail to `open()` AsyncDeltaWriter
             context->update_status(st);
             count_down_latch.count_down(channel_size - i);
@@ -377,6 +395,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     auto t1 = std::chrono::steady_clock::now();
     response->set_execution_time_us(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
     response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
+    response->set_wait_memtable_flush_time_us(wait_memtable_flush_time_us);
 
     if (close_channel) {
         _load_channel->remove_tablets_channel(_index_id);
