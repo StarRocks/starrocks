@@ -296,7 +296,6 @@ public class AlterJobMgr {
         }
     }
 
-<<<<<<< HEAD
     public void processAlterMaterializedView(AlterMaterializedViewStmt stmt)
             throws DdlException, MetaNotFoundException {
         // check db
@@ -399,10 +398,6 @@ public class AlterJobMgr {
 
         if (AlterMaterializedViewStmt.ACTIVE.equalsIgnoreCase(status)) {
             String viewDefineSql = materializedView.getViewDefineSql();
-=======
-    public void alterMaterializedViewStatus(MaterializedView materializedView, String status, boolean isReplay) {
-        if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
->>>>>>> d80283657f ([BugFix] check the schema when trying to activate the mv (#32698))
             ConnectContext context = new ConnectContext();
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
@@ -420,12 +415,8 @@ public class AlterJobMgr {
             }
 
             // Skip checks to maintain eventual consistency when replay
-<<<<<<< HEAD
-            List<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(queryStatement, !isReplay);
-=======
             List<BaseTableInfo> baseTableInfos =
                     Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
->>>>>>> d80283657f ([BugFix] check the schema when trying to activate the mv (#32698))
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             GlobalStateMgr.getCurrentState().updateBaseTableRelatedMv(materializedView.getDbId(),
