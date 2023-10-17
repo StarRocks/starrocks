@@ -478,15 +478,7 @@ Status TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t versi
     _num_key_columns = 0;
     _num_columns = 0;
     bool has_bf_columns = false;
-    // There is no record on the FE for which columns need to have bloom filter indexes generated.
-    // And we will lost bloom filter when we build new tablet schema according to FE.
-    // So we need to set bloom filter column to the new column according to current BE tablet schema.
-    std::set<ColumnUID> bf_column_uids;
-    for (const auto& col : _cols) {
-        if (col.is_bf_column()) {
-            bf_column_uids.insert(col.unique_id());
-        }
-    }
+
     _cols.clear();
     _unique_id_to_index.clear();
     _sort_key_uids.clear();
@@ -500,10 +492,6 @@ Status TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t versi
                 _num_key_columns++;
             }
             if (column.is_bf_column()) {
-                has_bf_columns = true;
-            }
-            if (bf_column_uids.count(column.unique_id()) > 0) {
-                column.set_is_bf_column(true);
                 has_bf_columns = true;
             }
             _unique_id_to_index[column.unique_id()] = _num_columns;
