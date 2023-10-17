@@ -149,6 +149,12 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getPrunedPartitions(table, predicate, limit);
+    }
+
+    @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit) {
         ConnectorMetadata metadata = metadataOfTable(table);
