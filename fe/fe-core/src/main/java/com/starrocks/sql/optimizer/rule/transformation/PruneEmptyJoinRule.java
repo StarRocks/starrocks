@@ -20,6 +20,7 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
@@ -109,8 +110,15 @@ public class PruneEmptyJoinRule extends TransformationRule {
                 .forEach(ref -> outputs.put(ref, ConstantOperator.createNull(ref.getType())));
 
         LogicalProjectOperator project = new LogicalProjectOperator(outputs);
+        OptExpression result = OptExpression.create(project, input.inputAt(1 - emptyIndex));
 
-        return Lists.newArrayList(OptExpression.create(project, input.inputAt(1 - emptyIndex)));
+        // save predicate
+        if (input.getOp().getPredicate() != null) {
+            // don't set predicate to child direct, because some operator doesn't support predicate
+            result = OptExpression.create(new LogicalFilterOperator(input.getOp().getPredicate()), result);
+        }
+
+        return Lists.newArrayList(result);
     }
 
     public List<OptExpression> transToEmpty(OptExpression input, OptimizerContext context) {

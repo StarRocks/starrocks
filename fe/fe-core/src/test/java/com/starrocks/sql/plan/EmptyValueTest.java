@@ -194,4 +194,46 @@ public class EmptyValueTest extends PlanTestBase {
                 "  |      [4: L_ORDERKEY, INT, true]\n" +
                 "  |      [24: L_ORDERKEY, INT, true]");
     }
+
+    @Test
+    public void testOuterPredicate() throws Exception {
+        String sql = "select t0.v2 from t0 full outer join " +
+                "(select * from lineitem_partition p where L_SHIPDATE = '2000-01-01') x on x.L_ORDERKEY = t0.v2" +
+                " where (t0.v3 + 1) is NULL";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:SELECT\n" +
+                "  |  predicates: 3: v3 + 1 IS NULL");
+
+        sql = "select t0.v2 from t0 left outer join " +
+                "(select * from lineitem_partition p where L_SHIPDATE = '2000-01-01') x on x.L_ORDERKEY = t0.v2" +
+                " where (x.L_SUPPKEY + 1) is NULL";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:SELECT\n" +
+                "  |  predicates: CAST(6: L_SUPPKEY AS BIGINT) + 1 IS NULL\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 6> : NULL\n" +
+                "  |  <slot 21> : NULL");
+
+        sql = "select t0.v2 from t0 right outer join " +
+                "(select * from lineitem_partition p where L_SHIPDATE = '2000-01-01') x on x.L_ORDERKEY = t0.v2" +
+                " where (x.L_SUPPKEY + 1) is NULL";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  RESULT SINK\n" +
+                "\n" +
+                "  0:EMPTYSET");
+
+        sql = "select t0.v2 from (select * from lineitem_partition p where L_SHIPDATE = '2000-01-01') x " +
+                " right outer join t0 on x.L_ORDERKEY = t0.v2" +
+                " where (x.L_SUPPKEY + 1) is NULL";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:SELECT\n" +
+                "  |  predicates: CAST(3: L_SUPPKEY AS BIGINT) + 1 IS NULL\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 3> : NULL\n" +
+                "  |  <slot 19> : 19: v2\n" +
+                "  |  <slot 21> : NULL");
+    }
 }
