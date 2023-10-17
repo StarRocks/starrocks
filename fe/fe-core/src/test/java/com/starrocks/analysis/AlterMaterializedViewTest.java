@@ -35,6 +35,7 @@ import org.junit.Test;
 
 import java.util.List;
 
+
 public class AlterMaterializedViewTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -266,4 +267,5 @@ public class AlterMaterializedViewTest {
         checker.start();
         Config.enable_mv_automatic_active_check = false;
     }
+
 }
