@@ -219,7 +219,7 @@ void OlapScanNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;
     }
-    exec_debug_action(TExecNodePhase::CLOSE);
+    (void)exec_debug_action(TExecNodePhase::CLOSE);
     _update_status(Status::Cancelled("closed"));
     _result_chunks.shutdown();
     while (_running_threads.load(std::memory_order_acquire) > 0) {
