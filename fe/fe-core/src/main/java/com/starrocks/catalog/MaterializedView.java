@@ -188,8 +188,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         @SerializedName("baseTableInfoVisibleVersionMap")
         private final Map<BaseTableInfo, Map<String, BasePartitionInfo>> baseTableInfoVisibleVersionMap;
 
-        // Materialized view partition is updated/added associated with ref-base-table. This meta
-        // is kept to track materialized view's partition change and update associated ref-base-table
+        // Materialized view partition is updated/added associated with ref-base-table partitions. This meta
+        // is kept to track materialized view's partition change and update associated ref-base-table partitions
         // at the same time.
         @SerializedName("mvPartitionNameRefBaseTablePartitionMap")
         private final Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap;

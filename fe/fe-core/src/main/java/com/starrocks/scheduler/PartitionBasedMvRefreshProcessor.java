@@ -119,6 +119,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -516,8 +517,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                                Set<String> mvRefreshedPartitions,
                                                Map<Table, Set<String>> refTableAndPartitionNames) {
         Map<String, Set<String>> mvToBaseNameRef = mvContext.getMvRefBaseTableIntersectedPartitions();
-        if (mvToBaseNameRef != null) {
+        if (!Objects.isNull(mvToBaseNameRef) && !Objects.isNull(refTableAndPartitionNames) &&
+                !refTableAndPartitionNames.isEmpty()) {
             try {
+                Preconditions.checkState(refTableAndPartitionNames.size() == 1);
                 Table refBaseTable = refTableAndPartitionNames.keySet().iterator().next();
                 Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
                         refreshContext.getMvPartitionNameRefBaseTablePartitionMap();
