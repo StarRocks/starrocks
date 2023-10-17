@@ -3756,48 +3756,56 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         Map<String, Column> nameToColumn = table.getNameToColumn();
-        nameToColumn.remove(colName);
-        column.renameColumn(newColName);
-        nameToColumn.put(newColName, column);
 
-        DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-        if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
-            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-            List<Column> distributionColumns = hashDistributionInfo.getDistributionColumns();
-            for (Column distributionColumn : distributionColumns) {
-                if (distributionColumn.getName().equalsIgnoreCase(colName)) {
-                    distributionColumn.renameColumn(newColName);
-                }
-            }
-        }
+        db.writeLock();
+        try {
+            nameToColumn.remove(colName);
+            column.renameColumn(newColName);
+            nameToColumn.put(newColName, column);
 
-        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        if (partitionInfo.isRangePartition()) {
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-            for (Column partitionColumn : partitionColumns) {
-                if (partitionColumn.getName().equalsIgnoreCase(colName)) {
-                    partitionColumn.renameColumn(newColName);
+            DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+            if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
+                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
+                List<Column> distributionColumns = hashDistributionInfo.getDistributionColumns();
+                for (Column distributionColumn : distributionColumns) {
+                    if (distributionColumn.getName().equalsIgnoreCase(colName)) {
+                        distributionColumn.renameColumn(newColName);
+                    }
                 }
             }
-            // for expression range partition will also modify the inner slotRef
-            if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-                ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) rangePartitionInfo;
-                Expr expr = expressionRangePartitionInfo.getPartitionExprs().get(0);
-                AnalyzerUtils.renameSlotRef(expr, newColName);
-            } else if (partitionInfo instanceof ExpressionRangePartitionInfoV2) {
-                ExpressionRangePartitionInfoV2 expressionRangePartitionInfo = (ExpressionRangePartitionInfoV2) rangePartitionInfo;
-                Expr expr = expressionRangePartitionInfo.getPartitionExprs().get(0);
-                AnalyzerUtils.renameSlotRef(expr, newColName);
-            }
-        } else if (partitionInfo instanceof ListPartitionInfo) {
-            ListPartitionInfo rangePartitionInfo = (ListPartitionInfo) partitionInfo;
-            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-            for (Column partitionColumn : partitionColumns) {
-                if (partitionColumn.getName().equalsIgnoreCase(colName)) {
-                    partitionColumn.renameColumn(newColName);
+
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            if (partitionInfo.isRangePartition()) {
+                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                for (Column partitionColumn : partitionColumns) {
+                    if (partitionColumn.getName().equalsIgnoreCase(colName)) {
+                        partitionColumn.renameColumn(newColName);
+                    }
+                }
+                // for expression range partition will also modify the inner slotRef
+                if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+                    ExpressionRangePartitionInfo expressionRangePartitionInfo =
+                            (ExpressionRangePartitionInfo) rangePartitionInfo;
+                    Expr expr = expressionRangePartitionInfo.getPartitionExprs().get(0);
+                    AnalyzerUtils.renameSlotRef(expr, newColName);
+                } else if (partitionInfo instanceof ExpressionRangePartitionInfoV2) {
+                    ExpressionRangePartitionInfoV2 expressionRangePartitionInfo =
+                            (ExpressionRangePartitionInfoV2) rangePartitionInfo;
+                    Expr expr = expressionRangePartitionInfo.getPartitionExprs().get(0);
+                    AnalyzerUtils.renameSlotRef(expr, newColName);
+                }
+            } else if (partitionInfo instanceof ListPartitionInfo) {
+                ListPartitionInfo rangePartitionInfo = (ListPartitionInfo) partitionInfo;
+                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                for (Column partitionColumn : partitionColumns) {
+                    if (partitionColumn.getName().equalsIgnoreCase(colName)) {
+                        partitionColumn.renameColumn(newColName);
+                    }
                 }
             }
+        } finally {
+            db.writeUnlock();
         }
 
         // TODO: log

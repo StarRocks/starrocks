@@ -260,7 +260,7 @@ public class SlotDescriptor {
             tSlotDescriptor.setSlotType(type.toThrift());
             if (column != null) {
                 LOG.debug("column physical name:{}, column unique id:{}",
-                        column.getConvertedColumnName(), column.getUniqueId());
+                        column.getPhysicalName(), column.getUniqueId());
                 tSlotDescriptor.setCol_unique_id(column.getUniqueId());
             }
         }
@@ -268,7 +268,7 @@ public class SlotDescriptor {
         tSlotDescriptor.setByteOffset(-1);
         tSlotDescriptor.setNullIndicatorByte(-1);
         tSlotDescriptor.setNullIndicatorBit(nullIndicatorBit);
-        tSlotDescriptor.setColName(((column != null) ? column.getConvertedColumnName() : ""));
+        tSlotDescriptor.setColName(((column != null) ? column.getPhysicalName() : ""));
         tSlotDescriptor.setSlotIdx(-1);
         tSlotDescriptor.setIsMaterialized(true);
         tSlotDescriptor.setIsOutputColumn(isOutputColumn);
