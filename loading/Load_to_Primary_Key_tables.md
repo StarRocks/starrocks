@@ -594,7 +594,7 @@ SELECT * FROM table4;
 >
 > - 不支持删除操作。
 >
-> - 不支持同部分更新一并使用。
+> - 在 3.1.3 版本及以前，StarRocks 不支持条件更新同部分更新一并使用。自 3.1.3 版本起，StarRocks 才支持条件更新同部分更新一并使用。
 >
 > - 当前仅 Stream Load 和 Routine Load 支持条件更新。
 
