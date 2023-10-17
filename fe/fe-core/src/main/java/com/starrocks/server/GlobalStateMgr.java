@@ -223,6 +223,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
@@ -520,6 +521,8 @@ public class GlobalStateMgr {
 
     private ConfigRefreshDaemon configRefreshDaemon;
 
+    private MVActiveChecker mvActiveChecker;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -721,6 +724,7 @@ public class GlobalStateMgr {
         this.shardDeleter = new ShardDeleter();
 
         this.binlogManager = new BinlogManager();
+        this.mvActiveChecker = new MVActiveChecker();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -948,6 +952,10 @@ public class GlobalStateMgr {
 
     public WarehouseManager getWarehouseMgr() {
         return warehouseMgr;
+    }
+
+    public MVActiveChecker getMvActiveChecker() {
+        return mvActiveChecker;
     }
 
     public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
@@ -1331,6 +1339,7 @@ public class GlobalStateMgr {
         taskManager.start();
         taskCleaner.start();
         mvMVJobExecutor.start();
+        mvActiveChecker.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();

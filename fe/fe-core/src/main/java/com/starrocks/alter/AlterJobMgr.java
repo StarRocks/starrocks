@@ -157,6 +157,7 @@ import static com.starrocks.catalog.TableProperty.INVALID;
 
 public class AlterJobMgr {
     private static final Logger LOG = LogManager.getLogger(AlterJobMgr.class);
+    public static final String MANUAL_INACTIVE_MV_REASON = "user use alter materialized view set status to inactive";
 
     private final SchemaChangeHandler schemaChangeHandler;
     private final MaterializedViewHandler materializedViewHandler;
@@ -406,6 +407,7 @@ public class AlterJobMgr {
                     materializedView, baseTableInfos);
             materializedView.setActive(true);
         } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
+            materializedView.setInactiveAndReason(MANUAL_INACTIVE_MV_REASON);
             materializedView.setActive(false);
         }
     }
