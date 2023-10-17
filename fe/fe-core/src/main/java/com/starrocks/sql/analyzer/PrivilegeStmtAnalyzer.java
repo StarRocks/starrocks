@@ -162,7 +162,7 @@ public class PrivilegeStmtAnalyzer {
                 UserAuthenticationInfo info = provider.validAuthenticationInfo(
                         userIdentity, new String(password, StandardCharsets.UTF_8), stmt.getAuthStringUnResolved());
                 info.setAuthPlugin(authPluginUsing);
-                info.setOrigUserHost(userIdentity.getQualifiedUser(), userIdentity.getHost());
+                info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
                 stmt.setAuthenticationInfo(info);
                 if (stmt instanceof AlterUserStmt) {
                     session.getGlobalStateMgr().getAuthenticationMgr().checkPasswordReuse(
@@ -182,7 +182,7 @@ public class PrivilegeStmtAnalyzer {
 
         private boolean needProtectAdminUser(UserIdentity userIdentity, ConnectContext context) {
             return Config.authorization_enable_admin_user_protection &&
-                    userIdentity.getQualifiedUser().equalsIgnoreCase("admin") &&
+                    userIdentity.getUser().equalsIgnoreCase("admin") &&
                     !context.getCurrentUserIdentity().equals(UserIdentity.ROOT);
         }
 
