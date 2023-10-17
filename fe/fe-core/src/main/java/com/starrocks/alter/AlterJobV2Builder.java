@@ -40,6 +40,7 @@ public abstract class AlterJobV2Builder {
     protected Map<Long, Short> newIndexShortKeyCount = new HashMap<>();
     protected List<Integer> sortKeyIdxes;
     protected long warehouseId;
+    protected List<Integer> sortKeyUniqueIds;
 
     public AlterJobV2Builder() {
     }
@@ -98,6 +99,11 @@ public abstract class AlterJobV2Builder {
 
     public AlterJobV2Builder withWarehouse(@Nullable long warehouseId) {
         this.warehouseId = warehouseId;
+        return this;
+    }
+    
+    public AlterJobV2Builder withSortKeyUniqueIds(@Nullable List<Integer> sortKeyUniqueIds) {
+        this.sortKeyUniqueIds = sortKeyUniqueIds;
         return this;
     }
 

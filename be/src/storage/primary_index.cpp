@@ -1017,7 +1017,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     MonotonicStopWatch timer;
     timer.start();
 
-    const TabletSchemaCSPtr tablet_schema_ptr = tablet->thread_safe_get_tablet_schema();
+    const TabletSchemaCSPtr tablet_schema_ptr = tablet->tablet_schema();
     vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
     for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
@@ -1080,7 +1080,8 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     auto chunk = chunk_shared_ptr.get();
     for (auto& rowset : rowsets) {
         RowsetReleaseGuard guard(rowset);
-        auto res = rowset->get_segment_iterators2(pkey_schema, tablet->data_dir()->get_meta(), apply_version, &stats);
+        auto res = rowset->get_segment_iterators2(pkey_schema, tablet->tablet_schema(), tablet->data_dir()->get_meta(),
+                                                  apply_version, &stats);
         if (!res.ok()) {
             return res.status();
         }

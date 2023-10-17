@@ -83,6 +83,7 @@ message TabletSchemaPB {
     optional CompressionTypePB compression_type = 10 [default=LZ4_FRAME];
     repeated uint32 sort_key_idxes = 11;
     optional int32 schema_version = 12;
+    repeated uint32 sort_key_unique_ids = 13;
     optional int64 id = 50;
 }
 

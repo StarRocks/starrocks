@@ -286,7 +286,8 @@ public:
     // ]
     Status get_column_values(const std::vector<uint32_t>& column_ids, int64_t read_version, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                             vector<std::unique_ptr<Column>>* columns, void* state);
+                             vector<std::unique_ptr<Column>>* columns, void* state,
+                             const TabletSchemaCSPtr& tablet_schema);
 
     Status get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
                                 std::vector<uint64_t>* rss_rowids, int64_t timeout_ms = 0);
@@ -387,7 +388,7 @@ private:
 
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
                       const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
-                      DeletesMap* new_deletes);
+                      DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema);
 
     // This method will acquire |_lock|.
     size_t _get_rowset_num_deletes(uint32_t rowsetid);
@@ -425,7 +426,7 @@ private:
 
     void _update_total_stats(const std::vector<uint32_t>& rowsets, size_t* row_count_before, size_t* row_count_after);
 
-    Status _convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet, const ChunkIteratorPtr& seg_iterator,
+    Status _convert_from_base_rowset(const Schema& base_schema, const ChunkIteratorPtr& seg_iterator,
                                      ChunkChanger* chunk_changer, const std::unique_ptr<RowsetWriter>& rowset_writer);
 
     void _check_creation_time_increasing();

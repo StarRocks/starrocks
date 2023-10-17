@@ -620,9 +620,15 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             update_column_uids.push_back((uint32_t)cid);
         }
     }
-    for (uint32_t cid : txn_meta.partial_update_column_unique_ids()) {
-        auto& column = tschema->column(cid);
-        if (!column.is_key()) {
+    for (uint32_t uid : txn_meta.partial_update_column_unique_ids()) {
+        auto cid = tschema->field_index(uid);
+        if (cid == -1) {
+            std::string msg =
+                    strings::Substitute("column with unique id:$0 does not exist. tablet:$1", uid, tablet->tablet_id());
+            LOG(ERROR) << msg;
+            return Status::InternalError(msg);
+        }
+        if (!tschema->column(cid).is_key()) {
             unique_update_column_ids.push_back(cid);
         }
     }

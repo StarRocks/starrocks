@@ -244,7 +244,6 @@ class StarrocksSQLApiLib(object):
         try:
             with self.mysql_lib.connector.cursor() as cursor:
                 cursor.execute(sql)
-
                 result = cursor.fetchall()
                 if isinstance(result, tuple):
                     index = 0
@@ -964,6 +963,7 @@ class StarrocksSQLApiLib(object):
         wait alter table job finish and return status
         """
         status = ""
+        sleep_time = 0
         while True:
             res = self.execute_sql(
                 "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
@@ -974,8 +974,11 @@ class StarrocksSQLApiLib(object):
 
             status = res["result"][0][9]
             if status == "FINISHED" or status == "CANCELLED" or status == "":
+                if sleep_time <= 1:
+                    time.sleep(1)
                 break
             time.sleep(0.5)
+            sleep_time += 0.5
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
     def wait_optimize_table_finish(self, alter_type="OPTIMIZE"):
@@ -1159,7 +1162,6 @@ class StarrocksSQLApiLib(object):
         create_table_sqls = self.get_sql_from_file("create.sql", dir_path=os.path.join(common_sql_path, data_name))
         res = self.execute_sql(create_table_sqls, True)
         tools.assert_true(res["status"], "create %s table error, %s" % (data_name, res["msg"]))
-
         # load data
         data_files = self.get_common_data_files(data_name)
         for data in data_files:

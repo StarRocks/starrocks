@@ -153,6 +153,7 @@ public:
     // reload this rowset after the underlying segment file is changed
     Status reload();
     Status reload_segment(int32_t segment_id);
+    Status reload_segment_with_schema(int32_t segment_id, TabletSchemaCSPtr& schema);
     int64_t total_segment_data_size();
 
     const TabletSchema& schema_ref() const { return *_schema; }
@@ -183,7 +184,9 @@ public:
     // return iterator list, an iterator for each segment,
     // if the segment is empty, put an empty pointer in list
     // caller is also responsible to call rowset's acquire/release
-    StatusOr<std::vector<ChunkIteratorPtr>> get_segment_iterators2(const Schema& schema, KVStore* meta, int64_t version,
+    StatusOr<std::vector<ChunkIteratorPtr>> get_segment_iterators2(const Schema& schema,
+                                                                   const TabletSchemaCSPtr& tablet_schema,
+                                                                   KVStore* meta, int64_t version,
                                                                    OlapReaderStatistics* stats,
                                                                    KVStore* dcg_meta = nullptr);
 

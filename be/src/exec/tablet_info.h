@@ -33,11 +33,19 @@ namespace starrocks {
 class MemPool;
 class RuntimeState;
 
+struct OlapTableColumnParam {
+    std::vector<TabletColumn*> columns;
+    std::vector<int32_t> sort_key_uid;
+    int32_t short_key_column_count;
+
+    void to_protobuf(POlapTableColumnParam* pcolumn) const;
+};
+
 struct OlapTableIndexSchema {
     int64_t index_id;
     std::vector<SlotDescriptor*> slots;
     int32_t schema_hash;
-    std::vector<TabletColumn*> columns;
+    OlapTableColumnParam* column_param;
 
     void to_protobuf(POlapTableIndexSchema* pindex) const;
 };

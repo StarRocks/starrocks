@@ -460,7 +460,8 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                         CONVERT_FROM_TYPE(uint64_t);
                     default:
                         LOG(WARNING) << "the column type which was altered from was unsupported."
-                                     << " from_type=" << ref_type << ", to_type=" << new_type;
+                                     << " from_type=" << logical_type_to_string(ref_type)
+                                     << ", to_type=" << logical_type_to_string(new_type);
                         return false;
                     }
                     if (new_type < ref_type) {
