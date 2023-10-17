@@ -305,6 +305,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
     public static final String GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE = "global_runtime_filter_build_max_size";
+
+    public static final String GLOBAL_RUNTIME_FILTER_BUILD_MIN_SIZE = "global_runtime_filter_build_min_size";
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE = "global_runtime_filter_probe_min_size";
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY =
             "global_runtime_filter_probe_min_selectivity";
@@ -337,9 +339,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
     public static final String ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER =
             "enable_multicolumn_global_runtime_filter";
-
-    public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
-    public static final String ENABLE_MV_OPTIMIZER_TRACE_LOG = "enable_mv_optimizer_trace_log";
 
     // command, file
     public static final String TRACE_LOG_MODE = "trace_log_mode";
@@ -442,6 +441,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
 
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
+    public static final String ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST = "enable_prune_complex_types_in_unnest";
     public static final String RANGE_PRUNER_PREDICATES_MAX_LEN = "range_pruner_max_predicate";
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
@@ -969,6 +969,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // otherwise would decide based on the cardinality
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE, flag = VariableMgr.INVISIBLE)
     private long globalRuntimeFilterBuildMaxSize = 64L * 1024L * 1024L;
+
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_BUILD_MIN_SIZE, flag = VariableMgr.INVISIBLE)
+    private long globalRuntimeFilterBuildMinSize = 128L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE, flag = VariableMgr.INVISIBLE)
     private long globalRuntimeFilterProbeMinSize = 100L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
@@ -1263,6 +1266,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
     private boolean enablePruneComplexTypes = true;
+
+    @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST)
+    private boolean enablePruneComplexTypesInUnnest = true;
 
     @VarAttr(name = RANGE_PRUNER_PREDICATES_MAX_LEN)
     public int rangePrunerPredicateMaxLen = 100;
@@ -1893,6 +1899,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return globalRuntimeFilterBuildMaxSize;
     }
 
+    public void setGlobalRuntimeFilterBuildMinSize(long value) {
+        this.globalRuntimeFilterBuildMinSize = value;
+    }
+
+    public long getGlobalRuntimeFilterBuildMinSize() {
+        return globalRuntimeFilterBuildMinSize;
+    }
+
     public long getGlobalRuntimeFilterProbeMinSize() {
         return globalRuntimeFilterProbeMinSize;
     }
@@ -2444,6 +2458,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePruneComplexTypes(boolean enablePruneComplexTypes) {
         this.enablePruneComplexTypes = enablePruneComplexTypes;
+    }
+
+    public boolean getEnablePruneComplexTypesInUnnest() {
+        return this.enablePruneComplexTypesInUnnest;
+    }
+
+    public void setEnablePruneComplexTypesInUnnest(boolean enablePruneComplexTypesInUnnest) {
+        this.enablePruneComplexTypesInUnnest = enablePruneComplexTypesInUnnest;
     }
 
     public int getRangePrunerPredicateMaxLen() {

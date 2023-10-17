@@ -96,5 +96,4 @@ public:
 private:
     BfdParser* _parser;
 };
-
 } // namespace starrocks

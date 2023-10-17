@@ -80,8 +80,6 @@ private:
     Status _read_min_max_chunk(const tparquet::RowGroup& row_group, const std::vector<SlotDescriptor*>& slots,
                                ChunkPtr* min_chunk, ChunkPtr* max_chunk, bool* exist) const;
 
-    Status _get_next_internal(ChunkPtr* chunk);
-
     // only scan partition column + not exist column
     Status _exec_no_materialized_column_scan(ChunkPtr* chunk);
 
@@ -101,13 +99,8 @@ private:
                                   const tparquet::ColumnMetaData& column_meta,
                                   const tparquet::ColumnOrder* column_order, ColumnPtr* min_column,
                                   ColumnPtr* max_column, bool* decode_ok) const;
-    bool _can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
-                                const tparquet::ColumnOrder* column_order) const;
-    // statistics.min_value max_value
-    static bool _can_use_stats(const tparquet::Type::type& type, const tparquet::ColumnOrder* column_order);
-    // statistics.min max
-    static bool _can_use_deprecated_stats(const tparquet::Type::type& type, const tparquet::ColumnOrder* column_order);
-    static bool _is_integer_type(const tparquet::Type::type& type);
+
+    bool _has_correct_min_max_stats(const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order) const;
 
     // get the data page start offset in parquet file
     static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group);

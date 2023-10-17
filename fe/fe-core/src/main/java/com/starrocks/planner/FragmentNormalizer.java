@@ -44,6 +44,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
 import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TGlobalDict;
 import com.starrocks.thrift.TNormalPlanNode;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
@@ -56,6 +57,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -104,6 +106,7 @@ public class FragmentNormalizer {
 
     private Set<Integer> cachedPlanNodeIds = Sets.newHashSet();
     private boolean assignScanRangesAcrossDrivers = false;
+
     public FragmentNormalizer(ExecPlan execPlan, PlanFragment fragment) {
         this.execPlan = execPlan;
         this.fragment = fragment;
@@ -307,9 +310,13 @@ public class FragmentNormalizer {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
 
             for (TNormalPlanNode node : normalizedPlanNodes) {
-                byte[] data = serializer.serialize(node);
-                digest.update(data);
+                digest.update(serializer.serialize(node));
             }
+            List<TGlobalDict> dicts = normalizeDicts(getAllOffspringFragments(fragment));
+            for (TGlobalDict dict : dicts) {
+                digest.update(serializer.serialize(dict));
+            }
+
             List<SlotId> slotIds = cachePointNode.getOutputSlotIds(execPlan.getDescTbl());
             List<Integer> remappedSlotIds = remapSlotIds(slotIds);
             Map<Integer, Integer> outputSlotIdRemapping = Maps.newHashMap();
@@ -706,7 +713,7 @@ public class FragmentNormalizer {
         // Get leftmost path
         List<PlanNode> leftNodesTopDown = Lists.newArrayList();
         for (PlanNode currNode = root; currNode != null && currNode.getFragment() == fragment;
-                currNode = currNode.getChild(0)) {
+             currNode = currNode.getChild(0)) {
             leftNodesTopDown.add(currNode);
         }
 
@@ -795,8 +802,35 @@ public class FragmentNormalizer {
         normalizeSubTree(leftNodeIds, topMostDigestNode, Sets.newHashSet());
         List<PlanNode> cachedPlanNodes = leftNodesTopDown.stream().skip(firstAggNodeIdx).collect(Collectors.toList());
         fragment.setAssignScanRangesPerDriverSeq(canAssignScanRangesAcrossDrivers(cachedPlanNodes));
-        cachedPlanNodeIds = cachedPlanNodes.stream().map(node->node.getId().asInt()).collect(Collectors.toSet());
+        cachedPlanNodeIds = cachedPlanNodes.stream().map(node -> node.getId().asInt()).collect(Collectors.toSet());
         return computeDigest(firstAggNode);
+    }
+
+    // get All of offspring fragments of the current fragment, the current fragment
+    // is also included. fragments containing MulticastSink are counted once.
+    private List<PlanFragment> getAllOffspringFragments(PlanFragment fragment) {
+        List<ExchangeNode> exchangeNodes = Lists.newArrayList();
+        fragment.getPlanRoot().collect(ExchangeNode.class, exchangeNodes);
+        List<PlanFragment> fragments = exchangeNodes.stream()
+                .flatMap(ex -> ex.getChildren().stream().map(PlanNode::getFragment))
+                .sorted(Comparator.comparingInt(frag -> frag.getFragmentId().asInt()))
+                .distinct().collect(Collectors.toList());
+        fragments.add(fragment);
+        return fragments;
+    }
+
+    // Normalize global dicts of the given fragments
+    private List<TGlobalDict> normalizeDicts(List<PlanFragment> fragments) {
+        List<TGlobalDict> dicts = Lists.newArrayList();
+        for (PlanFragment fragment : fragments) {
+            if (fragment.getQueryGlobalDicts() != null) {
+                dicts.addAll(fragment.normalizeDicts(fragment.getQueryGlobalDicts(), this));
+            }
+            if (fragment.getLoadGlobalDicts() != null) {
+                dicts.addAll(fragment.normalizeDicts(fragment.getLoadGlobalDicts(), this));
+            }
+        }
+        return dicts;
     }
 
     private UnionFind<SlotId> equivRelation = new UnionFind<>();

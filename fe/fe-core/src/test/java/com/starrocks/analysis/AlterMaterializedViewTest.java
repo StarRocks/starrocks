@@ -14,7 +14,9 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.alter.AlterMVJobExecutor;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
@@ -30,6 +32,9 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -182,5 +187,40 @@ public class AlterMaterializedViewTest {
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
             Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
         }
+    }
+
+    @Test
+    public void testAlterMVOnView() throws Exception {
+        final String mvName = "mv_on_view_1";
+        starRocksAssert.withView("CREATE VIEW view1 as select v1, sum(v2) as k2 from t0 group by v1");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName +
+                "                DISTRIBUTED BY HASH(v1) BUCKETS 10\n" +
+                "                PROPERTIES(\n" +
+                "                    \"replication_num\" = \"1\"\n" +
+                "                )\n" +
+                "                as select v1, k2 from view1");
+
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), mvName);
+        List<String> columns = mv.getColumns().stream().map(Column::getName).sorted().collect(Collectors.toList());
+        Assert.assertEquals(ImmutableList.of("k2", "v1"), columns);
+
+        // alter the view to a different type, cause MV inactive
+        connectContext.executeSql("alter view view1 as select v1, avg(v2) as k2 from t0 group by v1");
+        Assert.assertFalse(mv.isActive());
+        Assert.assertEquals("base view view1 changed", mv.getInactiveReason());
+
+        // try to active the mv
+        connectContext.executeSql(String.format("alter materialized view %s active", mvName));
+        Assert.assertFalse(mv.isActive());
+        Assert.assertEquals("mv schema changed: " +
+                "[[`k2` bigint(20) NULL COMMENT \"\", `v1` bigint(20) NULL COMMENT \"\"]] " +
+                "does not match " +
+                "[[`k2` double NULL COMMENT \"\", `v1` bigint(20) NULL COMMENT \"\"]]", mv.getInactiveReason());
+
+        // use a illegal view schema, should active the mv correctly
+        connectContext.executeSql("alter view view1 as select v1, max(v2) as k2 from t0 group by v1");
+        connectContext.executeSql(String.format("alter materialized view %s active", mvName));
+        Assert.assertTrue(mv.isActive());
+        Assert.assertNull(mv.getInactiveReason());
     }
 }

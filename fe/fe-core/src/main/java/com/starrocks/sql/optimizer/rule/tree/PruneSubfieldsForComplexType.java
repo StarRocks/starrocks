@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.tree;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ComplexTypeAccessGroup;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -24,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -47,7 +49,8 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
         }
         // Store all operator's context, used for PRUNE_SUBFIELDS_OPT_VISITOR.
         // globalContext contains all physical operators' context
-        PruneComplexTypeUtil.Context context = new PruneComplexTypeUtil.Context();
+        PruneComplexTypeUtil.Context context = new PruneComplexTypeUtil.Context(
+                taskContext.getOptimizerContext().getSessionVariable().getEnablePruneComplexTypesInUnnest());
         root.getOp().accept(MARK_SUBFIELDS_OPT_VISITOR, root, context);
         if (context.getEnablePruneComplexTypes()) {
             // Still do prune
@@ -82,6 +85,19 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
                 opt.getOp().accept(this, opt, context);
             }
             return null;
+        }
+
+        @Override
+        public Void visitPhysicalTableFunction(OptExpression optExpression,
+                                               PruneComplexTypeUtil.Context context) {
+            PhysicalTableFunctionOperator tableFunctionOperator = (PhysicalTableFunctionOperator) optExpression.getOp();
+            // only prune type in unnest()
+            if (context.isEnablePruneComplexTypesInUnnest() &&
+                    tableFunctionOperator.getFn().functionName().equalsIgnoreCase("unnest") &&
+                    tableFunctionOperator.getFnParamColumnRefs().size() == tableFunctionOperator.getFnResultColRefs().size()) {
+                context.setUnnest(tableFunctionOperator);
+            }
+            return visit(optExpression, context);
         }
 
         @Override
@@ -124,7 +140,8 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
             Projection projection = optExpression.getOp().getProjection();
             if (projection == null) {
                 for (ColumnRefOperator columnRefOperator : physicalScanOperator.getOutputColumns()) {
-                    if (columnRefOperator.getType().isMapType() || columnRefOperator.getType().isStructType()) {
+                    if ((columnRefOperator.getType().isMapType() || columnRefOperator.getType().isStructType()) &&
+                            !context.hasUnnestColRefMapValue(columnRefOperator)) {
                         context.add(columnRefOperator, columnRefOperator);
                     }
                 }
@@ -153,7 +170,7 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
         public Void visitPhysicalScan(OptExpression optExpression, PruneComplexTypeUtil.Context context) {
             PhysicalScanOperator physicalScanOperator = (PhysicalScanOperator) optExpression.getOp();
 
-            if (OperatorType.PHYSICAL_OLAP_SCAN.equals(physicalScanOperator.getOpType())) {
+            if (OperatorType.PHYSICAL_OLAP_SCAN.equals(physicalScanOperator.getOpType()) && !FeConstants.runningUnitTest) {
                 // olap scan operator prune column not in this rule
                 return null;
             }
@@ -162,6 +179,19 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
                     .entrySet()) {
                 if (entry.getKey().getType().isComplexType()) {
                     pruneForComplexType(entry.getKey(), context);
+                }
+            }
+            return visit(optExpression, context);
+        }
+
+        @Override
+        public Void visitPhysicalTableFunction(OptExpression optExpression, PruneComplexTypeUtil.Context context) {
+            PhysicalTableFunctionOperator operator = (PhysicalTableFunctionOperator) optExpression.getOp();
+            for (int i = 0; i < operator.getFnResultColRefs().size(); i++) {
+                ColumnRefOperator output = operator.getFnResultColRefs().get(i);
+                if (output.getType().isComplexType() && context.hasUnnestColRefMapKey(output)) {
+                    pruneForComplexType(output, context);
+                    operator.getFn().getTableFnReturnTypes().set(i, output.getType());
                 }
             }
             return visit(optExpression, context);
