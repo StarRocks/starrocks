@@ -70,7 +70,7 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
         UserAuthenticationInfo ret = new UserAuthenticationInfo();
         ret.setPassword(password.getPassword());
         ret.setAuthPlugin(PLUGIN_NAME);
-        ret.setOrigUserHost(userIdentity.getQualifiedUser(), userIdentity.getHost());
+        ret.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
         ret.setTextForAuthPlugin(password.getUserForAuthPlugin());
         return ret;
     }

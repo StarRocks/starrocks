@@ -173,7 +173,7 @@ public class AuthorizationMgrTest {
     @Test
     public void testTable() throws Exception {
         setCurrentUserAndRoles(ctx, testUser);
-        ctx.setQualifiedUser(testUser.getQualifiedUser());
+        ctx.setQualifiedUser(testUser.getUser());
 
         AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(

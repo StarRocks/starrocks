@@ -76,21 +76,21 @@ public class UserPropertyMgr implements Writable {
     public void setPasswordForDomain(UserIdentity userIdentity, byte[] password, boolean errOnExist,
                                      boolean errOnNonExist) throws DdlException {
         Preconditions.checkArgument(userIdentity.isDomain());
-        UserProperty property = propertyMap.get(userIdentity.getQualifiedUser());
+        UserProperty property = propertyMap.get(userIdentity.getUser());
         if (property == null) {
             if (errOnNonExist) {
                 throw new DdlException("user " + userIdentity + " does not exist");
             }
-            property = new UserProperty(userIdentity.getQualifiedUser());
+            property = new UserProperty(userIdentity.getUser());
         }
         property.setPasswordForDomain(userIdentity.getHost(), password, errOnExist);
         // update propertyMap after setPasswordForDomain, cause setPasswordForDomain may throw exception
-        propertyMap.put(userIdentity.getQualifiedUser(), property);
+        propertyMap.put(userIdentity.getUser(), property);
     }
 
     public void removeDomainFromUser(UserIdentity userIdentity) {
         Preconditions.checkArgument(userIdentity.isDomain());
-        UserProperty userProperty = propertyMap.get(userIdentity.getQualifiedUser());
+        UserProperty userProperty = propertyMap.get(userIdentity.getUser());
         if (userProperty == null) {
             return;
         }
@@ -99,8 +99,8 @@ public class UserPropertyMgr implements Writable {
     }
 
     public void dropUser(UserIdentity userIdent) {
-        if (propertyMap.remove(userIdent.getQualifiedUser()) != null) {
-            LOG.info("drop user {} from user property manager", userIdent.getQualifiedUser());
+        if (propertyMap.remove(userIdent.getUser()) != null) {
+            LOG.info("drop user {} from user property manager", userIdent.getUser());
         }
     }
 
@@ -146,18 +146,18 @@ public class UserPropertyMgr implements Writable {
     // check if specified user identity has password
     public boolean doesUserHasPassword(UserIdentity userIdent) {
         Preconditions.checkState(userIdent.isDomain());
-        if (!propertyMap.containsKey(userIdent.getQualifiedUser())) {
+        if (!propertyMap.containsKey(userIdent.getUser())) {
             return false;
         }
-        return propertyMap.get(userIdent.getQualifiedUser()).getWhiteList().hasPassword(userIdent.getHost());
+        return propertyMap.get(userIdent.getUser()).getWhiteList().hasPassword(userIdent.getHost());
     }
 
     public boolean doesUserExist(UserIdentity userIdent) {
         Preconditions.checkState(userIdent.isDomain());
-        if (!propertyMap.containsKey(userIdent.getQualifiedUser())) {
+        if (!propertyMap.containsKey(userIdent.getUser())) {
             return false;
         }
-        return propertyMap.get(userIdent.getQualifiedUser()).getWhiteList().containsDomain(userIdent.getHost());
+        return propertyMap.get(userIdent.getUser()).getWhiteList().containsDomain(userIdent.getHost());
     }
 
     public void addUserPrivEntriesByResolvedIPs(Map<String, Set<String>> resolvedIPsMap) {
