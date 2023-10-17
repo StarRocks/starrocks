@@ -999,6 +999,25 @@ public class ScalarOperatorFunctions {
     }
 
     /**
+     * Return the content in ConnectorTblMetaInfoMgr, which contains mapping information from base table to mv
+     */
+    @ConstantFunction(name = "inspect_mv_relationships", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMvRelationships() {
+        ConnectContext context = ConnectContext.get();
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    "", context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.FUNCTION.name(), "inspect_mv_relationships");
+        }
+
+        String json = GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().inspect();
+        return ConstantOperator.createVarchar(json);
+    }
+
+    /**
      * Return Hive partition info
      */
     @ConstantFunction(name = "inspect_hive_part_info",
