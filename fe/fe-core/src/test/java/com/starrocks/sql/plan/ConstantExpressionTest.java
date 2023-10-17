@@ -81,6 +81,11 @@ public class ConstantExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testInspect_inspect_mv_relationships() throws Exception {
+        testFragmentPlanContains("select inspect_mv_relationships()", "Project");
+    }
+
+    @Test
     public void testDate() throws Exception {
         testFragmentPlanContainsConstExpr(
                 "select date_format('2020-02-19 16:01:12','%H%i');",
