@@ -47,7 +47,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.journal.JournalTask;
@@ -276,10 +275,6 @@ public class AccessTestUtil {
                 minTimes = 0;
                 result = "testDb";
 
-                analyzer.getQualifiedUser();
-                minTimes = 0;
-                result = "testUser";
-
                 analyzer.incrementCallDepth();
                 minTimes = 0;
                 result = 1;
@@ -291,22 +286,6 @@ public class AccessTestUtil {
                 analyzer.getCallDepth();
                 minTimes = 0;
                 result = 1;
-            }
-        };
-        return analyzer;
-    }
-
-    public static Analyzer fetchBlockAnalyzer() throws AnalysisException {
-        Analyzer analyzer = new Analyzer(fetchBlockCatalog(), new ConnectContext(null));
-        new Expectations(analyzer) {
-            {
-                analyzer.getDefaultDb();
-                minTimes = 0;
-                result = "testCluster:testDb";
-
-                analyzer.getQualifiedUser();
-                minTimes = 0;
-                result = "testCluster:testUser";
             }
         };
         return analyzer;
@@ -411,10 +390,6 @@ public class AccessTestUtil {
                 analyzer.getTable((TableName) any);
                 minTimes = 0;
                 result = table;
-
-                analyzer.getQualifiedUser();
-                minTimes = 0;
-                result = "testUser";
 
                 analyzer.getCatalog();
                 minTimes = 0;

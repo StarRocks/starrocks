@@ -775,7 +775,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
         if (!authorizationManager.canExecuteAs(context, statement.getToUser())) {
             AccessDeniedException.reportAccessDenied("IMPERSONATE", ObjectType.USER,
-                    statement.getToUser().getQualifiedUser());
+                    statement.getToUser().getUser());
         }
         return null;
     }
@@ -889,7 +889,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitShowUserPropertyStatement(ShowUserPropertyStmt statement, ConnectContext context) {
         String user = statement.getUser();
-        if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())) {
+        if (user != null && !user.equals(context.getCurrentUserIdentity().getUser())) {
             Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.GRANT);
         }
@@ -899,7 +899,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitSetUserPropertyStatement(SetUserPropertyStmt statement, ConnectContext context) {
         String user = statement.getUser();
-        if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())) {
+        if (user != null && !user.equals(context.getCurrentUserIdentity().getUser())) {
             Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.GRANT);
         }

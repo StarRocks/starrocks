@@ -89,7 +89,7 @@ public class StatisticUtils {
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setCurrentUserIdentity(UserIdentity.ROOT);
         context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-        context.setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
+        context.setQualifiedUser(UserIdentity.ROOT.getUser());
         context.setQueryId(UUIDUtil.genUUID());
         context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
         context.setStartTime();

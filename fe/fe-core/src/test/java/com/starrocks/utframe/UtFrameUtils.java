@@ -901,7 +901,7 @@ public class UtFrameUtils {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setCurrentUserIdentity(userIdentity);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-        ctx.setQualifiedUser(userIdentity.getQualifiedUser());
+        ctx.setQualifiedUser(userIdentity.getUser());
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         globalStateMgr.initAuth(true);
         ctx.setGlobalStateMgr(globalStateMgr);
