@@ -173,7 +173,8 @@ Status TabletSinkSender::open_wait() {
             }
         });
 
-        if (index_channel->has_intolerable_failure()) {
+        // when enable replicated storage, we only send to primary replica, one node channel lead to indicate whole load fail
+        if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
             LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
             return err_st;
         }
@@ -204,7 +205,8 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                 }
             });
 
-            if (intolerable_failure) {
+            // when enable replicated storage, we only send to primary replica, one node channel lead to indicate whole load fail
+            if (intolerable_failure || (_enable_replicated_storage && !err_st.ok())) {
                 break;
             }
 
@@ -253,7 +255,8 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
         }
     }
 
-    if (intolerable_failure) {
+    // when enable replicated storage, we only send to primary replica, one node channel lead to indicate whole load fail
+    if (intolerable_failure || (_enable_replicated_storage && !err_st.ok())) {
         return err_st;
     } else {
         return Status::OK();
@@ -293,7 +296,8 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
                     }
                     ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
                 });
-                if (index_channel->has_intolerable_failure()) {
+                // when enable replicated storage, we only send to primary replica, one node channel lead to indicate whole load fail
+                if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
                     status = err_st;
                     index_channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
                 }
