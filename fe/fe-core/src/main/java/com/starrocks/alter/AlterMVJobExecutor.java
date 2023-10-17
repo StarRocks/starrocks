@@ -320,6 +320,7 @@ public class AlterMVJobExecutor extends AlterJobExecutorEPack {
 
         try {
             if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
+                materializedView.fixRelationship();
                 if (materializedView.isActive()) {
                     return null;
                 }

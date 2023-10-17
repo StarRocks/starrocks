@@ -15,8 +15,11 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.Sets;
+import com.google.gson.JsonElement;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
+import com.starrocks.persist.gson.GsonUtils;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.Set;
 
@@ -25,7 +28,7 @@ public class ConnectorTableInfo {
     // replay create mv journal.
     private Set<MvId> relatedMaterializedViews;
 
-    private ConnectorTableInfo(Set<MvId> relatedMaterializedViews) {
+    protected ConnectorTableInfo(Set<MvId> relatedMaterializedViews) {
         this.relatedMaterializedViews = relatedMaterializedViews;
     }
 
@@ -43,11 +46,19 @@ public class ConnectorTableInfo {
         }
     }
 
+    public boolean empty() {
+        return CollectionUtils.isEmpty(relatedMaterializedViews);
+    }
+
     @Override
     public String toString() {
         return "ConnectorTableInfo {" +
                 "relatedMaterializedViews=" + relatedMaterializedViews +
                 "}";
+    }
+
+    public JsonElement inspect() {
+        return GsonUtils.GSON.toJsonTree(relatedMaterializedViews);
     }
 
     public void seTableInfoForConnectorTable(Table table) {
