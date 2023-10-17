@@ -83,6 +83,7 @@ public:
     size_t current_size = 0;
     size_t max_size = 0;
     bool stop = false;
+    bool ignore_bf = false;
 
     // statistics.
     // timestamp in ms since unix epoch;

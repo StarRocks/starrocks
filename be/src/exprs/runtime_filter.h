@@ -165,6 +165,8 @@ public:
     bool check_equal(const SimdBlockFilter& bf) const;
     uint32_t directory_mask() const { return _directory_mask; }
 
+    void reset(size_t new_size);
+
 private:
     // The number of bits to set in a tiny Bloom filter block
 
@@ -300,6 +302,17 @@ public:
     virtual std::string debug_string() const = 0;
 
     void set_join_mode(int8_t join_mode) { _join_mode = join_mode; }
+
+    void set_ignore_bf(bool ignore_bf) {
+        _ignore_bf = true;
+        // after set_ignore_bf, the existed bloom filter is no longer use,
+        // we can reset it to a minimum size
+        if (ignore_bf) {
+            _reset_bf(1UL);
+        }
+    }
+
+    bool is_ignore_bf() const { return _ignore_bf; }
     // RuntimeFilter version
     // if the RuntimeFilter is updated, the version will be updated as well,
     // (usually used for TopN Filter)
@@ -313,7 +326,9 @@ public:
 
     virtual void merge(const JoinRuntimeFilter* rf) {
         _has_null |= rf->_has_null;
-        _bf.merge(rf->_bf);
+        if (UNLIKELY(!_ignore_bf)) {
+            _bf.merge(rf->_bf);
+        }
     }
 
     virtual void concat(JoinRuntimeFilter* rf) {
@@ -329,6 +344,8 @@ public:
 protected:
     void _update_version() { _rf_version++; }
 
+    void _reset_bf(size_t new_size);
+
     bool _has_null = false;
     size_t _size = 0;
     int8_t _join_mode = 0;
@@ -336,6 +353,8 @@ protected:
     size_t _num_hash_partitions = 0;
     std::vector<SimdBlockFilter> _hash_partition_bf;
     bool _always_true = false;
+    // whether ignore bloom filter, only take effects in global runtime filter
+    bool _ignore_bf = false;
     size_t _rf_version = 0;
 };
 
@@ -413,8 +432,10 @@ public:
     }
 
     void insert(const CppType& value) {
-        size_t hash = compute_hash(value);
-        _bf.insert_hash(hash);
+        if (UNLIKELY(!_ignore_bf)) {
+            size_t hash = compute_hash(value);
+            _bf.insert_hash(hash);
+        }
 
         _min = std::min(value, _min);
         _max = std::max(value, _max);
@@ -431,9 +452,11 @@ public:
 
     void evaluate(Column* input_column, RunningContext* ctx) const override {
         if (_num_hash_partitions != 0) {
-            return _t_evaluate<true>(input_column, ctx);
+            return _ignore_bf ? _t_evaluate<true, true>(input_column, ctx)
+                              : _t_evaluate<true, false>(input_column, ctx);
         } else {
-            return _t_evaluate<false>(input_column, ctx);
+            return _ignore_bf ? _t_evaluate<false, true>(input_column, ctx)
+                              : _t_evaluate<false, false>(input_column, ctx);
         }
     }
 
@@ -461,7 +484,8 @@ public:
     std::string debug_string() const override {
         LogicalType ltype = Type;
         std::stringstream ss;
-        ss << "RuntimeBF(type = " << ltype << ", bfsize = " << _size << ", has_null = " << _has_null;
+        ss << "RuntimeBF(type = " << ltype << ", bfsize = " << _size << ", has_null = " << _has_null
+           << ", ignore_bf = " << _ignore_bf;
         if constexpr (std::is_integral_v<CppType> || std::is_floating_point_v<CppType>) {
             if constexpr (!std::is_same_v<CppType, __int128>) {
                 ss << ", _min = " << _min << ", _max = " << _max;
@@ -804,7 +828,7 @@ private:
     // and for global runtime filter, since it concates multiple runtime filters from partitions
     // so it has multiple `simd-block-filter` and `hash_partition` is true.
     // For more information, you can refers to doc `shuffle-aware runtime filter`.
-    template <bool hash_partition = false>
+    template <bool hash_partition = false, bool skip_evaluate_bf = false>
     void _t_evaluate(Column* input_column, RunningContext* ctx) const {
         size_t size = input_column->size();
         Filter& _selection_filter = ctx->use_merged_selection ? ctx->merged_selection : ctx->selection;
@@ -823,7 +847,9 @@ private:
             } else {
                 const auto& input_data = GetContainer<Type>().get_data(const_column->data_column());
                 _evaluate_min_max(input_data, _selection, 1);
-                _rf_test_data<hash_partition>(_selection, input_data, _hash_values, 0);
+                if constexpr (!skip_evaluate_bf) {
+                    _rf_test_data<hash_partition>(_selection, input_data, _hash_values, 0);
+                }
             }
             uint8_t sel = _selection[0];
             memset(_selection, sel, size);
@@ -837,19 +863,25 @@ private:
                     if (null_data[i]) {
                         _selection[i] = _has_null;
                     } else {
-                        _rf_test_data<hash_partition>(_selection, input_data, _hash_values, i);
+                        if constexpr (!skip_evaluate_bf) {
+                            _rf_test_data<hash_partition>(_selection, input_data, _hash_values, i);
+                        }
                     }
                 }
             } else {
-                for (int i = 0; i < size; ++i) {
-                    _rf_test_data<hash_partition>(_selection, input_data, _hash_values, i);
+                if constexpr (!skip_evaluate_bf) {
+                    for (int i = 0; i < size; ++i) {
+                        _rf_test_data<hash_partition>(_selection, input_data, _hash_values, i);
+                    }
                 }
             }
         } else {
             const auto& input_data = GetContainer<Type>().get_data(input_column);
             _evaluate_min_max(input_data, _selection, size);
-            for (int i = 0; i < size; ++i) {
-                _rf_test_data<hash_partition>(_selection, input_data, _hash_values, i);
+            if constexpr (!skip_evaluate_bf) {
+                for (int i = 0; i < size; ++i) {
+                    _rf_test_data<hash_partition>(_selection, input_data, _hash_values, i);
+                }
             }
         }
     }

@@ -100,6 +100,8 @@ public:
     JoinRuntimeFilter* runtime_filter() { return _runtime_filter; }
     void set_is_pipeline(bool flag) { _is_pipeline = flag; }
     bool is_pipeline() const { return _is_pipeline; }
+    void set_ignore_bf(bool ignore_bf) { _ignore_bf = ignore_bf; }
+    bool is_ignore_bf() const { return _ignore_bf; }
 
 private:
     friend class HashJoinNode;
@@ -117,6 +119,7 @@ private:
     std::vector<TNetworkAddress> _merge_nodes;
     JoinRuntimeFilter* _runtime_filter = nullptr;
     bool _is_pipeline = false;
+    bool _ignore_bf = false;
     std::mutex _mutex;
 };
 

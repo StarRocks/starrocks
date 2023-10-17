@@ -208,7 +208,8 @@ private:
 // not take effects on operators in front of LocalExchangeSourceOperators before they are merged into a total one.
 class PartialRuntimeFilterMerger {
 public:
-    PartialRuntimeFilterMerger(ObjectPool* pool, size_t limit) : _pool(pool), _limit(limit) {}
+    PartialRuntimeFilterMerger(ObjectPool* pool, size_t local_rf_limit, size_t global_rf_limit)
+            : _pool(pool), _local_rf_limit(local_rf_limit), _global_rf_limit(global_rf_limit) {}
 
     void incr_builder() {
         _ht_row_counts.emplace_back(0);
@@ -314,16 +315,23 @@ public:
         for (auto count : _ht_row_counts) {
             row_count += count;
         }
+
         for (auto& desc : _bloom_filter_descriptors) {
             desc->set_is_pipeline(true);
             // skip if it does not have consumer.
             if (!desc->has_consumer()) continue;
             // skip if ht.size() > limit, and it's only for local.
-            if (!desc->has_remote_targets() && row_count > _limit) continue;
+            if (!desc->has_remote_targets() && row_count > _local_rf_limit) continue;
             LogicalType build_type = desc->build_expr_type();
             JoinRuntimeFilter* filter = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
             if (filter == nullptr) continue;
-            filter->init(row_count);
+
+            if (desc->has_remote_targets() && row_count > _global_rf_limit) {
+                filter->set_ignore_bf(true);
+                desc->set_ignore_bf(true);
+            } else {
+                filter->init(row_count);
+            }
             filter->set_join_mode(desc->join_mode());
             desc->set_runtime_filter(filter);
         }
@@ -382,7 +390,8 @@ public:
         return Status::OK();
     }
 
-    size_t limit() const { return _limit; }
+    // @TODO seems not used
+    size_t local_rf_limit() const { return _local_rf_limit; }
 
 private:
     StatusOr<bool> _try_do_merge(RuntimeBloomFilters&& bloom_filter_descriptors) {
@@ -402,7 +411,8 @@ private:
 
 private:
     ObjectPool* _pool;
-    const size_t _limit;
+    const size_t _local_rf_limit;
+    const size_t _global_rf_limit;
     std::atomic<bool> _always_true = false;
     std::atomic<size_t> _num_active_builders{0};
     std::vector<size_t> _ht_row_counts;

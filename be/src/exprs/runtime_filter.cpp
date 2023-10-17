@@ -140,6 +140,14 @@ bool SimdBlockFilter::check_equal(const SimdBlockFilter& bf) const {
            memcmp(_directory, bf._directory, alloc_size) == 0;
 }
 
+void SimdBlockFilter::reset(size_t new_size) {
+    if (_directory) {
+        free(_directory);
+        _directory = nullptr;
+    }
+    init(new_size);
+}
+
 size_t JoinRuntimeFilter::max_serialized_size() const {
     // todo(yan): noted that it's not serialize compatible with 32-bit and 64-bit.
     size_t size = sizeof(_has_null) + sizeof(_size) + sizeof(_num_hash_partitions) + sizeof(_join_mode);
@@ -213,6 +221,19 @@ bool JoinRuntimeFilter::check_equal(const JoinRuntimeFilter& rf) const {
         }
     }
     return true;
+}
+
+void JoinRuntimeFilter::_reset_bf(size_t new_size) {
+    DCHECK(_ignore_bf);
+    if (_num_hash_partitions == 0) {
+        _bf.reset(1UL);
+        _size = 1;
+    } else {
+        for (size_t i = 0; i < _num_hash_partitions; i++) {
+            _hash_partition_bf[i].reset(1UL);
+        }
+        _size = _num_hash_partitions;
+    }
 }
 
 } // namespace starrocks

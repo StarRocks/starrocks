@@ -129,12 +129,13 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<RuntimeFilterBuildDesc
         finst_id->set_hi(state->fragment_instance_id().hi);
         finst_id->set_lo(state->fragment_instance_id().lo);
         params.set_build_be_number(state->be_number());
+        params.set_ignore_bf(rf_desc->is_ignore_bf());
 
         // print before setting data, otherwise it's too big.
         VLOG_FILE << "RuntimeFilterPort::publish_runtime_filters. merge_node[0] = " << rf_desc->merge_nodes()[0]
                   << ", filter_size = " << filter->size() << ", query_id = " << params.query_id()
                   << ", finst_id = " << params.finst_id() << ", be_number = " << params.build_be_number()
-                  << ", is_pipeline = " << params.is_pipeline();
+                  << ", is_pipeline = " << params.is_pipeline() << ", ignore_bf = " << params.ignore_bf();
 
         std::string* rf_data = params.mutable_data();
         size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(filter);
@@ -181,7 +182,7 @@ void RuntimeFilterPort::receive_shared_runtime_filter(int32_t filter_id,
     auto it = _listeners.find(filter_id);
     if (it == _listeners.end()) return;
     auto& wait_list = it->second;
-    VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(shared). filter_id = " << filter_id
+    LOG(INFO) << "RuntimeFilterPort::receive_runtime_filter(shared). filter_id = " << filter_id
               << ", filter_size = " << rf->size() << ", wait_list_size = " << wait_list.size();
     for (auto* rf_desc : wait_list) {
         rf_desc->set_shared_runtime_filter(rf);
@@ -253,25 +254,38 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
         // something wrong with deserialization.
         return;
     }
+    if (params.has_ignore_bf() && params.ignore_bf()) {
+        LOG(INFO) << "skip build bf, only keep min/max, data size: " << params.data().size();
+
+        rf->set_ignore_bf(true);
+        status->ignore_bf = true;
+    }
+    LOG(INFO) << "merge rf, current size: " << status->current_size << ", rf size:" << rf->size()
+              << ", status max size:" << status->max_size;
 
     // exceeds max size, stop building it.
     status->current_size += rf->size();
     if (status->current_size > status->max_size) {
         // alreay exceeds max size, no need to build it.
-        VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. stop building since size too "
+        LOG(INFO) << "RuntimeFilterMerger::merge_runtime_filter. stop building since size too "
                      "large. filter_id = "
                   << filter_id << ", size = " << status->current_size;
-        status->stop = true;
-        return;
+        status->ignore_bf = true;
     }
 
-    VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. assembled filter_id = " << filter_id
+    LOG(INFO) << "RuntimeFilterMerger::merge_runtime_filter. assembled filter_id = " << filter_id
               << ", be_number = " << be_number;
     status->arrives.insert(be_number);
     status->filters.insert(std::make_pair(be_number, rf));
-
+    LOG(INFO) << "current filter size: " << status->filters.size() << ", expect_number: " << status->expect_number;
     // not ready. still have to wait more filters.
     if (status->filters.size() < status->expect_number) return;
+    if (status->ignore_bf) {
+        LOG(INFO) << "RuntimeFilterMerger::merge_runtime_filter, skip build bf in all filters";
+        for (auto& [be_number, rf] : status->filters) {
+            rf->set_ignore_bf(true);
+        }
+    }
     _send_total_runtime_filter(rf_version, filter_id);
 }
 
@@ -321,6 +335,8 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     JoinRuntimeFilter* first = status->filters.begin()->second;
     ObjectPool* pool = &(status->pool);
     out = first->create_empty(pool);
+    out->set_ignore_bf(status->ignore_bf);
+
     for (auto it : status->filters) {
         out->concat(it.second);
     }
@@ -333,6 +349,8 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     }
     request.set_filter_id(filter_id);
     request.set_is_partial(false);
+    request.set_ignore_bf(status->ignore_bf);
+
     PUniqueId* query_id = request.mutable_query_id();
     query_id->set_hi(_query_id.hi);
     query_id->set_lo(_query_id.lo);
@@ -352,7 +370,7 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     int64_t now = UnixMillis();
     status->broadcast_filter_ts = now;
 
-    VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. target_nodes[0] = " << target_nodes->at(0)
+    LOG(INFO) << "RuntimeFilterMerger::merge_runtime_filter. target_nodes[0] = " << target_nodes->at(0)
               << ", target_nodes_size = " << target_nodes->size() << ", filter_id = " << request.filter_id()
               << ", latency(last-first = " << status->recv_last_filter_ts - status->recv_first_filter_ts
               << ", send-first = " << status->broadcast_filter_ts - status->recv_first_filter_ts << ")"
@@ -495,7 +513,7 @@ RuntimeFilterWorker::~RuntimeFilterWorker() {
 
 void RuntimeFilterWorker::open_query(const TUniqueId& query_id, const TQueryOptions& query_options,
                                      const TRuntimeFilterParams& params, bool is_pipeline) {
-    VLOG_FILE << "RuntimeFilterWorker::open_query. query_id = " << query_id << ", params = " << params;
+    LOG(INFO) << "RuntimeFilterWorker::open_query. query_id = " << query_id << ", params = " << params;
     RuntimeFilterWorkerEvent ev;
     ev.type = OPEN_QUERY;
     ev.query_id = query_id;
@@ -537,10 +555,11 @@ void RuntimeFilterWorker::send_broadcast_runtime_filter(PTransmitRuntimeFilterPa
 }
 
 void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterParams& params) {
-    VLOG_FILE << "RuntimeFilterWorker::receive_runtime_filter: partial = " << params.is_partial()
+    LOG(INFO) << "RuntimeFilterWorker::receive_runtime_filter: partial = " << params.is_partial()
               << ", query_id = " << params.query_id() << ", finst_id = " << params.finst_id()
               << ", filter_id = " << params.filter_id() << ", # probe insts = " << params.probe_finst_ids_size()
-              << ", is_pipeline = " << params.is_pipeline();
+              << ", is_pipeline = " << params.is_pipeline()
+              << ", ignore_bf = " << (params.has_ignore_bf() ? params.ignore_bf() : false);
 
     RuntimeFilterWorkerEvent ev;
     if (params.is_partial()) {
@@ -628,6 +647,9 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
         return;
     }
     std::shared_ptr<JoinRuntimeFilter> shared_rf(rf);
+    if (request.has_ignore_bf() && request.ignore_bf()) {
+        shared_rf->set_ignore_bf(true);
+    }
     // for pipeline engine
     if (request.has_is_pipeline() && request.is_pipeline()) {
         receive_total_runtime_filter_pipeline(request, shared_rf);

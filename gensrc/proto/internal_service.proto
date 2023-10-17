@@ -130,6 +130,7 @@ message PTransmitRuntimeFilterParams {
     // When merge node starts to broadcast this rf(millseconds since unix epoch).
     optional int64 broadcast_timestamp = 10;
     optional bool is_pipeline = 11;
+    optional bool ignore_bf = 12;
 };
 
 message PTransmitRuntimeFilterResult {

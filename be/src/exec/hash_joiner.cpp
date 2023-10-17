@@ -557,6 +557,7 @@ Status HashJoiner::_create_runtime_in_filters(RuntimeState* state) {
 }
 
 Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t limit) {
+    SCOPED_TIMER(build_metrics().build_runtime_filter_timer);
     auto& ht = _hash_join_builder->hash_table();
     for (auto* rf_desc : _build_runtime_filters) {
         rf_desc->set_is_pipeline(true);
