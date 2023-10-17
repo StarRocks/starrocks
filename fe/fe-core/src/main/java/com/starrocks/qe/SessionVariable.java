@@ -1333,8 +1333,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ADAPTIVE_CHOOSE_EXECUTE_INSTANCES_MODE)
     private String adaptiveChooseExecuteInstancesMode = ADAPTIVE_DECREASE.name();
 
-    public String getAdaptiveChooseExecuteInstancesMode() {
-        return adaptiveChooseExecuteInstancesMode;
+    public SessionVariableConstants.ChooseInstancesMode getAdaptiveChooseExecuteInstancesMode() {
+        return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
+                        StringUtils.upperCase(adaptiveChooseExecuteInstancesMode))
+                .or(SessionVariableConstants.ChooseInstancesMode.LOCALITY);
     }
 
     public void setAdaptiveChooseExecuteInstancesMode(String mode) {

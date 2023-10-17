@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Enums;
+import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.CastExpr;
@@ -35,6 +37,7 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
@@ -187,6 +190,16 @@ public class SetStmtAnalyzer {
 
         if (variable.equalsIgnoreCase(SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ)) {
             checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L, null);
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.ADAPTIVE_CHOOSE_EXECUTE_INSTANCES_MODE)) {
+            SessionVariableConstants.ChooseInstancesMode mode =
+                    Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
+                            StringUtils.upperCase(resolvedExpression.getStringValue())).orNull();
+            if (mode == null) {
+                String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ChooseInstancesMode.values());
+                throw new IllegalArgumentException("Legal values of adaptive_choose_execute_instances_mode are " + legalValues);
+            }
         }
 
         var.setResolvedExpression(resolvedExpression);

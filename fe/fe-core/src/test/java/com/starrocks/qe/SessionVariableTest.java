@@ -47,18 +47,15 @@ public class SessionVariableTest {
     public void testSetChooseMode() {
         SessionVariable sessionVariable = new SessionVariable();
         sessionVariable.setAdaptiveChooseExecuteInstancesMode("adaptive_increase");
-        Assert.assertTrue(SessionVariableConstants.ChooseInstancesMode
-                .enableIncreaseInstance(sessionVariable.getAdaptiveChooseExecuteInstancesMode()));
+        Assert.assertTrue(sessionVariable.getAdaptiveChooseExecuteInstancesMode().enableIncreaseInstance());
 
         sessionVariable.setAdaptiveChooseExecuteInstancesMode("adaptive_decrease");
-        Assert.assertTrue(SessionVariableConstants.ChooseInstancesMode
-                .enableDecreaseInstance(sessionVariable.getAdaptiveChooseExecuteInstancesMode()));
+        Assert.assertTrue(sessionVariable.getAdaptiveChooseExecuteInstancesMode().enableDecreaseInstance());
 
         sessionVariable.setAdaptiveChooseExecuteInstancesMode("auto");
-        Assert.assertTrue(SessionVariableConstants.ChooseInstancesMode
-                .enableIncreaseInstance(sessionVariable.getAdaptiveChooseExecuteInstancesMode()));
-        Assert.assertTrue(SessionVariableConstants.ChooseInstancesMode
-                .enableDecreaseInstance(sessionVariable.getAdaptiveChooseExecuteInstancesMode()));
+        Assert.assertTrue(sessionVariable.getAdaptiveChooseExecuteInstancesMode().enableIncreaseInstance());
+        Assert.assertTrue(sessionVariable.getAdaptiveChooseExecuteInstancesMode().enableDecreaseInstance());
+
         try {
             sessionVariable.setAdaptiveChooseExecuteInstancesMode("xxx");
             Assert.fail("cannot set a invalid value");
