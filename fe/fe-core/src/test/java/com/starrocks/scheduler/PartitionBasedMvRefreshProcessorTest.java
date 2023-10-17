@@ -15,6 +15,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
@@ -39,6 +40,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.hive.MockedHiveMetadata;
+import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
@@ -678,6 +680,95 @@ public class PartitionBasedMvRefreshProcessorTest {
         ExecPlan execPlan = mvContext.getExecPlan();
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
         Assert.assertTrue(plan.contains("4:HASH JOIN"));
+    }
+
+    private static void trigerRefreshPaimonMv(Database testDb, MaterializedView partitionedMaterializedView)
+            throws Exception {
+        Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+    }
+
+    @Test
+    public void testCreateUnPartitionedIcebergMaterializedView() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_mv1`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView partitionedMaterializedView = ((MaterializedView) testDb.getTable("iceberg_mv1"));
+        trigerRefreshPaimonMv(testDb, partitionedMaterializedView);
+
+        Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
+        Assert.assertEquals(1, partitions.size());
+        Assert.assertEquals(Lists.newArrayList(partitions).get(0).getName(), "iceberg_mv1");
+    }
+
+    @Test
+    public void testCreatePartitionedIcebergMaterializeView() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_parttbl_mv1`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY str2date(`date`, '%Y-%m-%d')\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView partitionedMaterializedView = ((MaterializedView) testDb.getTable("iceberg_parttbl_mv1"));
+        trigerRefreshPaimonMv(testDb, partitionedMaterializedView);
+
+        Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
+        Assert.assertEquals(4, partitions.size());
+
+        MockIcebergMetadata mockIcebergMetadata = (MockIcebergMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                getOptionalMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME).get();
+        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 100, "date=2020-01-02");
+        // refresh only one partition
+        Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                taskRun.getProcessor();
+
+        MvTaskRunContext mvContext = processor.getMvContext();
+        ExecPlan execPlan = mvContext.getExecPlan();
+        assertPlanContains(execPlan, "3: date >= '2020-01-02', 3: date < '2020-01-03'");
+
+        partitions = partitionedMaterializedView.getPartitions();
+        Assert.assertEquals(4, partitions.size());
+        Assert.assertEquals(2,
+                partitionedMaterializedView.getPartition("p20200101_20200102").getVisibleVersion());
+        Assert.assertEquals(3,
+                partitionedMaterializedView.getPartition("p20200102_20200103").getVisibleVersion());
+        Assert.assertEquals(2,
+                partitionedMaterializedView.getPartition("p20200103_20200104").getVisibleVersion());
+        Assert.assertEquals(2,
+                partitionedMaterializedView.getPartition("p20200104_20200105").getVisibleVersion());
+
+        // add new row and refresh again
+        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 100, "date=2020-01-01");
+        taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        processor = (PartitionBasedMvRefreshProcessor)
+                taskRun.getProcessor();
+
+        mvContext = processor.getMvContext();
+        execPlan = mvContext.getExecPlan();
+        assertPlanContains(execPlan, "3: date >= '2020-01-01', 3: date < '2020-01-02'");
     }
 
     @Test
