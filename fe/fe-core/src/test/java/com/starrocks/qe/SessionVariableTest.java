@@ -46,22 +46,22 @@ public class SessionVariableTest {
     @Test
     public void testSetChooseMode() {
         SessionVariable sessionVariable = new SessionVariable();
-        sessionVariable.setAdaptiveChooseExecuteInstancesMode("adaptive_increase");
-        Assert.assertTrue(sessionVariable.getAdaptiveChooseExecuteInstancesMode().enableIncreaseInstance());
+        sessionVariable.setChooseExecuteInstancesMode("adaptive_increase");
+        Assert.assertTrue(sessionVariable.getChooseExecuteInstancesMode().enableIncreaseInstance());
 
-        sessionVariable.setAdaptiveChooseExecuteInstancesMode("adaptive_decrease");
-        Assert.assertTrue(sessionVariable.getAdaptiveChooseExecuteInstancesMode().enableDecreaseInstance());
+        sessionVariable.setChooseExecuteInstancesMode("adaptive_decrease");
+        Assert.assertTrue(sessionVariable.getChooseExecuteInstancesMode().enableDecreaseInstance());
 
-        sessionVariable.setAdaptiveChooseExecuteInstancesMode("auto");
-        Assert.assertTrue(sessionVariable.getAdaptiveChooseExecuteInstancesMode().enableIncreaseInstance());
-        Assert.assertTrue(sessionVariable.getAdaptiveChooseExecuteInstancesMode().enableDecreaseInstance());
+        sessionVariable.setChooseExecuteInstancesMode("auto");
+        Assert.assertTrue(sessionVariable.getChooseExecuteInstancesMode().enableIncreaseInstance());
+        Assert.assertTrue(sessionVariable.getChooseExecuteInstancesMode().enableDecreaseInstance());
 
         try {
-            sessionVariable.setAdaptiveChooseExecuteInstancesMode("xxx");
+            sessionVariable.setChooseExecuteInstancesMode("xxx");
             Assert.fail("cannot set a invalid value");
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage(),
-                    e.getMessage().contains("Legal values of adaptive_choose_execute_instances_mode are"));
+                    e.getMessage().contains("Legal values of choose_execute_instances_mode are"));
         }
     }
 }

@@ -1483,7 +1483,7 @@ public class CoordinatorPreprocessor {
         long nodeNums = Math.min(amplifyFactor * baseNodeNums, candidates.size());
 
         SessionVariableConstants.ChooseInstancesMode mode = connectContext.getSessionVariable()
-                .getAdaptiveChooseExecuteInstancesMode();
+                .getChooseExecuteInstancesMode();
         if (mode.enableIncreaseInstance() && nodeNums > childUsedHosts.size()) {
             for (Map.Entry<Long, ComputeNode> entry : candidates.entrySet()) {
                 TNetworkAddress address = new TNetworkAddress(entry.getValue().getHost(), entry.getValue().getBePort());

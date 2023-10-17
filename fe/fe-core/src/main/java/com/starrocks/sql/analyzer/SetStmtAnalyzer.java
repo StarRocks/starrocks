@@ -192,13 +192,13 @@ public class SetStmtAnalyzer {
             checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L, null);
         }
 
-        if (variable.equalsIgnoreCase(SessionVariable.ADAPTIVE_CHOOSE_EXECUTE_INSTANCES_MODE)) {
+        if (variable.equalsIgnoreCase(SessionVariable.CHOOSE_EXECUTE_INSTANCES_MODE)) {
             SessionVariableConstants.ChooseInstancesMode mode =
                     Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
                             StringUtils.upperCase(resolvedExpression.getStringValue())).orNull();
             if (mode == null) {
                 String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ChooseInstancesMode.values());
-                throw new IllegalArgumentException("Legal values of adaptive_choose_execute_instances_mode are " + legalValues);
+                throw new IllegalArgumentException("Legal values of choose_execute_instances_mode are " + legalValues);
             }
         }
 
