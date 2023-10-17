@@ -2372,7 +2372,6 @@ public class PartitionBasedMvRefreshProcessorTest {
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            System.out.println(plan);
             Assert.assertFalse(plan.contains("partitions=5/5"));
             Assert.assertTrue(plan.contains("PREDICATES: 2: k2 > 0\n" +
                     "     partitions=1/5\n" +
@@ -2393,7 +2392,6 @@ public class PartitionBasedMvRefreshProcessorTest {
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            System.out.println(plan);
             Assert.assertTrue(plan.contains("k1 > '2022-01-01', 2: k2 > 0\n" +
                     "     partitions=4/5\n" +
                     "     rollup: tbl4"));
@@ -2749,7 +2747,6 @@ public class PartitionBasedMvRefreshProcessorTest {
 
         // get base table partitions
         List<String> baseParNames = mockedJDBCMetadata.listPartitionNames("partitioned_db0", "tbl1");
-        System.out.println(baseParNames);
         Assert.assertEquals(3, baseParNames.size());
 
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");

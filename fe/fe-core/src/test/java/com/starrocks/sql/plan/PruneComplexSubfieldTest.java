@@ -195,7 +195,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     public void testIsNullStruct() throws Exception {
         String sql = "select 1 from sc0 where st1.s2 is null";
         String plan = getVerboseExplain(sql);
-        System.out.println(plan);
         assertContains(plan, "[/st1/s2]");
     }
 
