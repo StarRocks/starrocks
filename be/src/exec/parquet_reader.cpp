@@ -87,8 +87,15 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
                                                    parquet::ParquetFileReader::Open(_parquet, _properties),
                                                    arrow_reader_properties, &_reader);
         if (!st.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << "failed to create parquet file reader, errmsg=" << st.ToString();
             return Status::InternalError("Failed to create file reader");
+=======
+            std::ostringstream oss;
+            oss << "Failed to create parquet file reader. error: " << st.ToString() << ", filename: " << _filename;
+            LOG(INFO) << oss.str();
+            return Status::InternalError(oss.str());
+>>>>>>> 74f3311fa9 ([BugFix] optional map key for parquet (#28296))
         }
 
         if (!_reader || !_reader->parquet_reader()) {
