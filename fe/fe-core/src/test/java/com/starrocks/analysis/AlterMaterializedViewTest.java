@@ -18,6 +18,7 @@ import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -182,5 +183,36 @@ public class AlterMaterializedViewTest {
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
             Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
         }
+    }
+
+    @Test
+    public void testActiveChecker() throws Exception {
+        MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
+        checker.setStop();
+
+        String baseTableName = "base_tbl_active";
+        String createTableSql =
+                "create table " + baseTableName + " ( k1 int, k2 int) properties('replication_num'='1')";
+        starRocksAssert.withTable(createTableSql);
+        starRocksAssert.withMaterializedView("create materialized view mv_active " +
+                " refresh async as select * from base_tbl_active");
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "mv_active");
+        Assert.assertTrue(mv.isActive());
+
+        // drop the base table and try to activate it
+        starRocksAssert.dropTable(baseTableName);
+        Assert.assertFalse(mv.isActive());
+        Assert.assertEquals("base-table dropped: base_tbl_active", mv.getInactiveReason());
+        checker.runForTest();
+        Assert.assertFalse(mv.isActive());
+        Assert.assertEquals("base-table dropped: base_tbl_active", mv.getInactiveReason());
+
+        // create the table again, and activate it
+        connectContext.setThreadLocalInfo();
+        starRocksAssert.withTable(createTableSql);
+        checker.runForTest();
+        Assert.assertTrue(mv.isActive());
+
+        checker.start();
     }
 }

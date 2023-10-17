@@ -15,6 +15,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -22,14 +23,19 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -50,6 +56,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.Utils;
@@ -3762,5 +3769,53 @@ public class CreateMaterializedViewTest {
             GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
         });
         Assert.assertTrue(e.getMessage().contains("Do not support create synchronous materialized view(rollup) on"));
+    }
+
+    private static void setPartitionVersion(Partition partition, long version) {
+        partition.setVisibleVersion(version, System.currentTimeMillis());
+        MaterializedIndex baseIndex = partition.getBaseIndex();
+        List<Tablet> tablets = baseIndex.getTablets();
+        for (Tablet tablet : tablets) {
+            List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+            for (Replica replica : replicas) {
+                replica.updateVersionInfo(version, -1, version);
+            }
+        }
+    }
+
+    private void mockDdl() {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    if (tbl != null) {
+                        for (Partition partition : tbl.getPartitions()) {
+                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    @Test
+    public void testCreateMVForExprPartitionedOlapTable() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view t_mv_list_part " +
+                "partition by (par_col, par_date) " +
+                "refresh deferred async " +
+                "as select dt, id from hive0.tpch.t1_par");
+
+        starRocksAssert.getCtx().executeSql("refresh materialized view t_mv_list_part with sync mode");
+        MaterializedView mv = (MaterializedView) testDb.getTable("t_mv_list_part");
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        Assert.assertEquals(PartitionType.LIST, partitionInfo.getType());
+        List<String> partitions = mv.getPartitions().stream().map(Partition::getName).collect(Collectors.toList());
+        Assert.assertEquals(ImmutableList.of("hehe"), partitions);
     }
 }
