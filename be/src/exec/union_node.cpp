@@ -227,7 +227,7 @@ Status UnionNode::_get_next_materialize(RuntimeState* state, ChunkPtr* chunk) {
             continue;
         }
 
-        _move_materialize_chunk(tmp_chunk, *chunk);
+        RETURN_IF_ERROR(_move_materialize_chunk(tmp_chunk, *chunk));
         break;
     }
 
