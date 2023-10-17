@@ -44,7 +44,7 @@ namespace starrocks {
 namespace {
 ThreadPool* get_thread_pool(ExecEnv* env, TTaskType::type type) {
     auto agent = env ? env->agent_server() : nullptr;
-    return agent ? agent->get_thread_pool(TTaskType::PUBLISH_VERSION) : nullptr;
+    return agent ? agent->get_thread_pool(type) : nullptr;
 }
 
 ThreadPool* publish_version_thread_pool(ExecEnv* env) {
@@ -109,7 +109,7 @@ int get_num_vacuum_active_tasks(void*) {
 
 bvar::Adder<int64_t> g_publish_version_failed_tasks("lake_publish_version_failed_tasks");
 bvar::LatencyRecorder g_publish_tablet_version_latency("lake_publish_tablet_version");
-bvar::LatencyRecorder g_publish_tablet_version_queuing_latency("lake_putlish_tablet_version_queuing");
+bvar::LatencyRecorder g_publish_tablet_version_queuing_latency("lake_publish_tablet_version_queuing");
 bvar::PassiveStatus<int> g_publish_version_queued_tasks("lake_publish_version_queued_tasks",
                                                         get_num_publish_queued_tasks, nullptr);
 bvar::PassiveStatus<int> g_publish_version_active_tasks("lake_publish_version_active_tasks",
@@ -720,6 +720,13 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller,
         }
     }
 
+    DeferOp defer([]() {
+        if (request->partition_id() > 0) {
+            std::lock_guard l(s_mtx);
+            s_vacuuming_partitions.erase(request->partition_id());
+        }
+    });
+
     TEST_SYNC_POINT("LakeServiceImpl::vacuum:2");
 
     auto latch = BThreadCountDownLatch(1);
@@ -734,11 +741,6 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller,
     }
 
     latch.wait();
-
-    if (request->partition_id() > 0) {
-        std::lock_guard l(s_mtx);
-        s_vacuuming_partitions.erase(request->partition_id());
-    }
 }
 
 void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,

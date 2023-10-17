@@ -301,14 +301,14 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     DCHECK(vacuumed_file_size != nullptr);
 
     AsyncFileDeleter async_deleter;
-    int64_t max_batch_delete_size = config::lake_vacuum_min_batch_delete_size;
+    int64_t min_batch_delete_size = config::lake_vacuum_min_batch_delete_size;
     std::vector<std::string> datafiles_to_vacuum;
     std::vector<std::string> metafiles_to_vacuum;
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
     for (auto tablet_id : tablet_ids) {
         RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_id, grace_timestamp, min_retain_version,
                                                 &datafiles_to_vacuum, &metafiles_to_vacuum, vacuumed_file_size));
-        if (datafiles_to_vacuum.size() < max_batch_delete_size && metafiles_to_vacuum.size() < max_batch_delete_size) {
+        if (datafiles_to_vacuum.size() < min_batch_delete_size && metafiles_to_vacuum.size() < min_batch_delete_size) {
             continue;
         }
         (*vacuumed_files) += (datafiles_to_vacuum.size() + metafiles_to_vacuum.size());
