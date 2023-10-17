@@ -86,6 +86,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -235,6 +236,21 @@ public class DatabaseTransactionMgr {
             }
             long minId = idToRunningTransactionState.keySet().stream().min(Comparator.comparing(Long::longValue)).get();
             return Optional.of(minId);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public Optional<Long> getMinActiveCompactionTxnId() {
+        readLock();
+        try {
+            if (idToRunningTransactionState.isEmpty()) {
+                return Optional.empty();
+            }
+            OptionalLong minId = idToRunningTransactionState.values().stream()
+                    .filter(state -> state.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION)
+                    .mapToLong(TransactionState::getTransactionId).min();
+            return minId.isPresent() ? Optional.of(minId.getAsLong()) : Optional.empty();
         } finally {
             readUnlock();
         }

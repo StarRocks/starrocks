@@ -99,24 +99,23 @@ public class CompactionScheduler extends Daemon {
         // Schedule compaction tasks only when this is a leader FE and all edit logs have finished replay.
         // In order to ensure that the input rowsets of compaction still exists when doing publishing version, it is
         // necessary to ensure that the compaction task of the same partition is executed serially, that is, the next
-        // compaction task can be executed only after the status of the previous compaction task changes to visible or canceled.
-        if (stateMgr.isLeader() && stateMgr.isReady() && allCommittedTransactionsBeforeRestartHaveFinished()) {
+        // compaction task can be executed only after the status of the previous compaction task changes to visible or
+        // canceled.
+        if (stateMgr.isLeader() && stateMgr.isReady() && allCommittedCompactionsBeforeRestartHaveFinished()) {
             schedule();
             history.changeMaxSize(Config.lake_compaction_history_size);
             failHistory.changeMaxSize(Config.lake_compaction_fail_history_size);
         }
     }
 
-    // Returns true if all transactions committed before this restart have finished(i.e., of VISIBLE state).
-    // Technically, we only need to wait for compaction transactions finished, but I don't want to check the
-    // type of each transaction.
-    private boolean allCommittedTransactionsBeforeRestartHaveFinished() {
+    // Returns true if all compaction transactions committed before this restart have finished(i.e., of VISIBLE state).
+    private boolean allCommittedCompactionsBeforeRestartHaveFinished() {
         if (finishedWaiting) {
             return true;
         }
-        // Note: must call getMinActiveTxnId() before getNextTransactionId(), otherwise if there are no running transactions
-        // waitTxnId <= minActiveTxnId will always be false.
-        long minActiveTxnId = transactionMgr.getMinActiveTxnId();
+        // Note: must call getMinActiveTxnIdOfCompactionTask() before getNextTransactionId(), otherwise if there are
+        // no running transactions waitTxnId <= minActiveTxnId will always be false.
+        long minActiveTxnId = transactionMgr.getMinActiveCompactionTxnId();
         if (waitTxnId < 0) {
             waitTxnId = transactionMgr.getTransactionIDGenerator().getNextTransactionId();
         }
