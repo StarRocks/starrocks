@@ -82,11 +82,11 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
         list.add(arguments);
 
         sql = "select * from orders where (O_CUSTKEY = abs(1) or O_ORDERKEY <=> null or " +
-                "O_ORDERDATE = str_to_date('2014-12-21', '%Y-%m')) and O_CLERK > O_ORDERPRIORITY";
+                "O_ORDERDATE = str_to_date('2014-12-21', '%Y-%m-%d')) and O_CLERK > O_ORDERPRIORITY";
         arguments = Arguments.of(sql, ImmutableList.of("UNION",
                 "PREDICATES: 1: O_ORDERKEY <=> NULL, 7: O_CLERK > 6: O_ORDERPRIORITY",
                 "PREDICATES: 2: O_CUSTKEY = CAST(abs(1) AS INT), NOT (1: O_ORDERKEY <=> NULL), 7: O_CLERK > 6: O_ORDERPRIORITY",
-                "PREDICATES: 5: O_ORDERDATE = str_to_date('2014-12-21', '%Y-%m'), NOT (1: O_ORDERKEY <=> NULL), " +
+                "PREDICATES: 5: O_ORDERDATE = '2014-12-21', NOT (1: O_ORDERKEY <=> NULL), " +
                         "(2: O_CUSTKEY != CAST(abs(1) AS INT)) OR (2: O_CUSTKEY = CAST(abs(1) AS INT) IS NULL), " +
                         "7: O_CLERK > 6: O_ORDERPRIORITY"));
         list.add(arguments);

@@ -1434,7 +1434,7 @@ public class ExpressionAnalyzer {
             ScalarOperator format = SqlToScalarOperatorTranslator.translate(node.getChild(1), expressionMapping,
                     new ColumnRefFactory());
             if (format.isConstantRef() && !HAS_TIME_PART.matcher(format.toString()).matches()) {
-                return Expr.getBuiltinFunction("str2date", argumentTypes,
+                return Expr.getBuiltinFunction("str_to_date", argumentTypes,
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
 

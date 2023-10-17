@@ -101,7 +101,7 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "2022-10-20 05:00:00");
 
         sql = "SELECT date_parse('20141221','%Y%m%d');";
-        assertPlanContains(sql, "'2014-12-21'");
+        assertPlanContains(sql, "'2014-12-21 00:00:00'");
 
         sql = "select date_parse('2014-12-21 12:34:56', '%Y-%m-%d %H:%i:%s');";
         assertPlanContains(sql, "2014-12-21 12:34:56");
