@@ -143,7 +143,9 @@ public:
 
     static Status EAgain(std::string_view msg) { return Status(TStatusCode::SR_EAGAIN, msg); }
 
-    static Status RemoteFileNotFound(std::string_view msg) { return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg); }
+    static Status RemoteFileNotFound(const Slice& msg) { return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg); }
+
+    static Status JitCompileError(const Slice& msg) { return Status(TStatusCode::JIT_COMPILE_ERROR, msg); }
 
     static Status Yield() { return {TStatusCode::YIELD, ""}; }
 
