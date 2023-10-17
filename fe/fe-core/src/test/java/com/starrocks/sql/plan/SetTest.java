@@ -508,9 +508,10 @@ public class SetTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertNotContains(plan, "UNION");
     }
-    /*
+
     @Test
     public void testUnionWithOrderBy() throws Exception {
+<<<<<<< HEAD
         {
             String sql =
                     "select * from t0 union all select * from t0 union all select * from t0 where v1 > 1 order by v3 limit 2";
@@ -524,29 +525,42 @@ public class SetTest extends PlanTestBase {
                     "  |    \n" +
                     "  2:EXCHANGE"));
         }
+=======
+        connectContext.getSessionVariable().setCboPushDownTopNLimit(0);
+        String sql =
+                "select * from t0 union all select * from t0 union all select * from t0 where v1 > 1 order by v3 limit 2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  7:TOP-N\n" +
+                "  |  order by: <slot 12> 12: v3 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:EXCHANGE"));
+>>>>>>> 973b72f9aa ([UT] Fix unstable fe unit tests  (#32979))
 
-        {
-            String sql = "select * from (select * from t0 order by v1 limit 1) t union select * from t1";
-            String plan = getFragmentPlan(sql);
-            Assert.assertTrue(plan.contains("  2:TOP-N\n" +
-                    "  |  order by: <slot 1> 1: v1 ASC\n" +
-                    "  |  offset: 0\n" +
-                    "  |  limit: 1\n" +
-                    "  |  \n" +
-                    "  1:OlapScanNode\n" +
-                    "     TABLE: t0"));
-        }
+        sql = "select * from (select * from t0 order by v1 limit 1) t union select * from t1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:TOP-N\n" +
+                "  |  order by: <slot 1> 1: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 1\n" +
+                "  |  \n" +
+                "  1:OlapScanNode\n" +
+                "     TABLE: t0"));
 
-        {
-            String sql = "select v1+v2 from t0 union all select v4 from t1 order by 1";
-            String plan = getFragmentPlan(sql);
-            Assert.assertTrue(plan.contains("  6:SORT\n" +
-                    "  |  order by: <slot 8> 8: expr ASC"));
-            Assert.assertTrue(plan.contains("  2:Project\n" +
-                    "  |  <slot 4> : 1: v1 + 2: v2"));
-        }
+        sql = "select v1+v2 from t0 union all select v4 from t1 order by 1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  6:SORT\n" +
+                "  |  order by: <slot 8> 8: expr ASC"));
+        Assert.assertTrue(plan.contains("  2:Project\n" +
+                "  |  <slot 4> : 1: v1 + 2: v2"));
     }
-    */
 
     @Test
     public void testUserVariable() throws Exception {

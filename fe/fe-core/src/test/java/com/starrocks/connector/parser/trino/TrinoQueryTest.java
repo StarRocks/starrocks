@@ -569,6 +569,7 @@ public class TrinoQueryTest extends TrinoTestBase {
 
     @Test
     public void testSelectSetOperation() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownTopNLimit(0);
         String sql = "select * from t0 union select * from t1 union select * from t0";
         assertPlanContains(sql, "7:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
@@ -592,6 +593,7 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select * from (select v1 from t0 union all select v4 from t1 union all select v3 from t0) tt order by v1 " +
                 "limit 2;";
+<<<<<<< HEAD
         assertPlanContains(sql, "0:UNION\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
@@ -599,11 +601,17 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "  |----6:EXCHANGE\n" +
                 "  |    \n" +
                 "  2:EXCHANGE");
+=======
+        assertPlanContains(sql, "0:UNION", "7:TOP-N\n" +
+                "  |  order by: <slot 10> 10: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 2");
+>>>>>>> 973b72f9aa ([UT] Fix unstable fe unit tests  (#32979))
 
         sql = "select * from (select v1 from t0 intersect select v4 from t1 intersect select v3 from t0 limit 10) tt " +
                 "order by v1 limit 2;";
         assertPlanContains(sql, "0:INTERSECT\n" +
-                "  |  limit: 10",
+                        "  |  limit: 10",
                 "8:TOP-N\n" +
                         "  |  order by: <slot 10> 10: v1 ASC\n" +
                         "  |  offset: 0\n" +
