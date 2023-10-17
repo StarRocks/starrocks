@@ -128,7 +128,7 @@ where empid < 5;
 
 ## 最佳实践
 
-在实际业务场景中，您可以通过分析 Audit Log 或[大查询日志](../administration/monitor_manage_big_queries.md)来识别执行较慢、资源消耗较高的查询。您还可以使用 [Query Profile](../administration/query_profile.md) 来精确定位查询缓慢的特定阶段。以下各小节提供了如何通过物化视图提高数据湖查询性能的说明和示例。
+在实际业务场景中，您可以通过分析 Audit Log 来识别执行较慢、资源消耗较高的查询。您还可以使用 [Query Profile](../administration/query_profile.md) 来精确定位查询缓慢的特定阶段。以下各小节提供了如何通过物化视图提高数据湖查询性能的说明和示例。
 
 ### 案例一：加速数据湖中的 Join 计算
 
