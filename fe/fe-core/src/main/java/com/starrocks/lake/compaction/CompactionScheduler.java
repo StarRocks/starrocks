@@ -44,6 +44,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.VisibleStateWaiter;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -374,8 +375,17 @@ public class CompactionScheduler extends Daemon {
         TransactionState.TxnSourceType txnSourceType = TransactionState.TxnSourceType.FE;
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
         String label = String.format("COMPACTION_%d-%d-%d-%d", dbId, tableId, partitionId, currentTs);
+        String warehouseName = Config.lake_compaction_warehouse;
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+        if (warehouse == null) {
+            throw new BeginTransactionException("warehouse " + warehouseName + " not exist");
+        }
+        if (!warehouse.isAvailable()) {
+            throw new BeginTransactionException("warehouse " + warehouseName + " is not available");
+        }
+
         return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
-                loadJobSourceType, TXN_TIMEOUT_SECOND);
+                loadJobSourceType, TXN_TIMEOUT_SECOND, warehouse.getAnyAvailableCluster().getWorkerGroupId());
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job)

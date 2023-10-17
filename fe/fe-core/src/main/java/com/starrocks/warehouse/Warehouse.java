@@ -86,6 +86,10 @@ public abstract class Warehouse implements Writable {
         return state;
     }
 
+    public boolean isAvailable() {
+        return state == WarehouseState.AVAILABLE;
+    }
+
     public abstract void getProcNodeData(BaseProcResult result);
 
     public abstract Map<Long, Cluster> getClusters() throws DdlException;

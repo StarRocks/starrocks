@@ -2282,6 +2282,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_fail_history_size = 12;
 
+    @ConfField(mutable = true)
+    public static String lake_compaction_warehouse = "default_warehouse";
+
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
 
@@ -2550,4 +2553,5 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean replan_on_insert = false;
+
 }
