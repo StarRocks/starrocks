@@ -66,7 +66,7 @@ void HorizontalGeneralTabletWriter::close() {
         for (const auto& f : _files) {
             full_paths_to_delete.emplace_back(_tablet.segment_location(f));
         }
-        delete_files_async(full_paths_to_delete);
+        delete_files_async(std::move(full_paths_to_delete));
     }
     _files.clear();
 }
@@ -213,7 +213,7 @@ void VerticalGeneralTabletWriter::close() {
         for (const auto& f : _files) {
             full_paths_to_delete.emplace_back(_tablet.segment_location(f));
         }
-        delete_files_async(full_paths_to_delete);
+        delete_files_async(std::move(full_paths_to_delete));
     }
     _files.clear();
 }

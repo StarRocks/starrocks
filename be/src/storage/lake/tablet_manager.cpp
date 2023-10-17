@@ -866,7 +866,7 @@ void TabletManager::abort_txn(int64_t tablet_id, const int64_t* txns, int txns_s
         metacache()->erase(CacheKey(log_path));
     }
 
-    delete_files_async(files_to_delete);
+    delete_files_async(std::move(files_to_delete));
 }
 
 Status TabletManager::publish_log_version(int64_t tablet_id, int64_t txn_id, int64 log_version) {
