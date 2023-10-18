@@ -24,13 +24,13 @@ min(alive_be_number, partition_number, desired_concurrent_number, max_routine_lo
   - 如果还未创建导入作业，则需要在执行 [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 创建导入作业时，设置该参数。
   - 如果已经创建导入作业，则需要执行 [ALTER ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD.md)，修改该参数。
 
-- `max_routine_load_task_concurrent_num`：Routine Load 导入作业的默认最大任务并行度的 ，默认值为 `5`。该参数为 FE 动态参数，更多说明和设置方式，请参见 [配置参数](../../administration/Configuration.md#导入和导出相关动态参数)。
+- `max_routine_load_task_concurrent_num`：Routine Load 导入作业的默认最大任务并行度的 ，默认值为 `5`。该参数为 FE 动态参数，更多说明和设置方式，请参见 [配置参数](../../administration/Configuration.md#导入和导出)。
 
 因此当消费分区和 BE 节点数量较多，并且大于其余两个参数时，如果您需要增加实际任务并行度，则可以提高如下参数。
 
 假设消费分区数量为 `7`，存活 BE 数量为 `5`，`max_routine_load_task_concurrent_num` 为默认值 `5`。此时如果需要增加实际任务并发度至上限，则需要将 `desired_concurrent_number` 设置为 `5`（默认值为 `3`），则计算实际任务并行度 `min(5,7,5,5)` 为 `5`。
 
-更多参数说明，请参见 [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#example)。
+更多参数说明，请参见 [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#示例)。
 
 **方式二**：**增大单个导入任务消费分区的数据量**。
 
@@ -38,7 +38,7 @@ min(alive_be_number, partition_number, desired_concurrent_number, max_routine_lo
 >
 > 该方式会造成数据导入的延迟变大。
 
-单个 Routine Load 导入任务消费消息的上限由导入任务最多消费消息量 `max_routine_load_batch_size`，或者消费最大时长 `routine_load_task_consume_second` 决定。当导入任务消费数据并达到上述要求后，则完成消费。上述两个参数为 FE 配置项，更多说明和设置方式，请参见 [配置参数](../../administration/Configuration.md#导入和导出相关动态参数)。
+单个 Routine Load 导入任务消费消息的上限由导入任务最多消费消息量 `max_routine_load_batch_size`，或者消费最大时长 `routine_load_task_consume_second` 决定。当导入任务消费数据并达到上述要求后，则完成消费。上述两个参数为 FE 配置项，更多说明和设置方式，请参见 [配置参数](../../administration/Configuration.md#导入和导出)。
 
 您可以通过查看 **be/log/be.INFO** 中的日志，分析单个导入任务消费数据量的上限由上述何种参数决定，并且通过提高该参数，增大单个导入任务消费的数据量。
 

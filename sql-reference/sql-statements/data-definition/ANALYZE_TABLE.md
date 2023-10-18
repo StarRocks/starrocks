@@ -6,7 +6,7 @@
 
 ### 手动采集基础统计信息
 
-关于基础统计信息，请参见[CBO 统计信息](../../../using_starrocks/Cost_based_optimizer.md#统计信息类型)。
+关于基础统计信息，请参见[CBO 统计信息](../../../using_starrocks/Cost_based_optimizer.md#统计信息数据类型)。
 
 #### 语法
 
@@ -62,7 +62,7 @@ ANALYZE SAMPLE TABLE tbl_name (v1, v2, v3) PROPERTIES(
 
 ### 手动采集直方图统计信息
 
-关于直方图的说明，请参见[CBO 统计信息](../../../using_starrocks/Cost_based_optimizer.md#统计信息类型)。
+关于直方图的说明，请参见[CBO 统计信息](../../../using_starrocks/Cost_based_optimizer.md#统计信息数据类型)。
 
 #### 语法
 

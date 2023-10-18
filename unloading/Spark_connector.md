@@ -25,10 +25,10 @@ Spark Connector 支持三种数据读取方式：Spark SQL、Spark DataFrame 和
 
 > **注意**
 >
-> - 了解不同版本的 Spark connector 之间的行为变化，请查看[升级 Spark connector](#升级-spark-connector)。
+> - 了解不同版本的 Spark connector 之间的行为变化，请查看[升级 Spark connector](#100-升级至-110)。
 > - 自 1.1.1 版本起，Spark connector 不再提供 MySQL JDBC 驱动程序，您需要将驱动程序手动放到 Spark 的类路径中。您可以在 [MySQL 官网](https://dev.mysql.com/downloads/connector/j/)或 [Maven 中央仓库](https://repo1.maven.org/maven2/mysql/mysql-connector-java/)上找到该驱动程序。
 > - 1.0.0 版本只支持读取 StarRocks，从 1.1.0 版本开始同时支持读写 StarRocks。
-> - 1.0.0 版本和 1.1.0 版本在参数和类型映射上存在差别，请查看[升级 Spark connector](#升级-spark-connector)。
+> - 1.0.0 版本和 1.1.0 版本在参数和类型映射上存在差别，请查看[升级 Spark connector](#100-升级至-110)。
 > - 1.0.0 版本一般情况下不再增加新功能，条件允许请尽快升级 Spark Connector。
 
 ## 获取 Spark Connector
