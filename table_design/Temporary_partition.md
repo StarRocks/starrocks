@@ -91,7 +91,7 @@ ADD TEMPORARY PARTITIONS START ("2020-04-01") END ("2021-01-01") EVERY (INTERVAL
 
 ## 查看临时分区
 
-您可以通过如下 [SHOW TEMPORARY PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS) 命令，查看表的临时分区。
+您可以通过如下 [SHOW TEMPORARY PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 命令，查看表的临时分区。
 
 ```SQL
 SHOW TEMPORARY PARTITIONS FROM site_access;
