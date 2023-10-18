@@ -77,6 +77,10 @@ public:
                          tablet_metadata_lock_filename(tablet_id, version, expire_time));
     }
 
+    std::string schema_file_location(int64_t tablet_id, int64_t schema_id) {
+        return join_path(root_location(tablet_id), schema_filename(schema_id));
+    }
+
 private:
     static std::string join_path(std::string_view parent, std::string_view child) {
         return fmt::format("{}/{}", parent, child);
