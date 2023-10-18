@@ -521,6 +521,13 @@ DEFINE_UNARY_FN_WITH_IMPL(week_of_yearImpl, v) {
 }
 DEFINE_TIME_UNARY_FN(week_of_year, TYPE_DATETIME, TYPE_INT);
 
+// year_week
+DEFINE_UNARY_FN_WITH_IMPL(year_weekImpl, v) {
+    auto day = (DateValue)v;
+    return day.year_week();
+}
+DEFINE_TIME_UNARY_FN(year_week, TYPE_DATETIME, TYPE_INT);
+
 uint TimeFunctions::week_mode(uint mode) {
     uint week_format = (mode & 7);
     if (!(week_format & WEEK_MONDAY_FIRST)) week_format ^= WEEK_FIRST_WEEKDAY;

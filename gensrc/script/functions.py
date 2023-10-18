@@ -350,6 +350,7 @@ vectorized_functions = [
     [50030, 'quarter', 'INT', ['DATETIME'], 'TimeFunctions::quarter'],
     [50040, 'dayofweek', 'INT', ['DATETIME'], 'TimeFunctions::day_of_week'],
     [50041, 'dayofweek_iso', 'INT', ['DATETIME'], 'TimeFunctions::day_of_week_iso'],
+    [50042, 'yearweek', 'INT', ['DATETIME'], 'TimeFunctions::year_week'],
     [50050, 'to_date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
     [50051, 'date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
     [50052, 'to_tera_date', 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_tera_date', "TimeFunctions::to_tera_date_prepare", "TimeFunctions::to_tera_date_close"],

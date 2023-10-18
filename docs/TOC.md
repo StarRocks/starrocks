@@ -586,6 +586,7 @@
       + [years_add](./sql-reference/sql-functions/date-time-functions/years_add.md)
       + [years_diff](./sql-reference/sql-functions/date-time-functions/years_diff.md)
       + [years_sub](./sql-reference/sql-functions/date-time-functions/years_sub.md)
+      + [yearweek](./sql-reference/sql-functions/date-time-functions/yearweek.md)
     + Geographic Functions
       + [st_astext](./sql-reference/sql-functions/spatial-functions/st_astext.md)
       + [st_circle](./sql-reference/sql-functions/spatial-functions/st_circle.md)
