@@ -123,7 +123,7 @@ SELECT * FROM <mv_name> [_SYNC_MV_];
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 [COMMENT ""]
 -- distribution_desc
-[DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]]
+DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
 -- refresh_desc
 [REFRESH 
 -- refresh_moment
@@ -160,41 +160,21 @@ AS
 
 物化视图的注释。注意建立物化视图时 `COMMENT` 必须在 `mv_name` 之后，否则创建失败。
 
-**distribution_desc**（选填）
+**distribution_desc**（必填）
 
-异步物化视图的分桶方式，包括哈希分桶和随机分桶（自 3.1 版本起）。如不指定该参数，StarRocks 使用随机分桶方式，并自动设置分桶数量。
+异步物化视图的分桶方式。
+
+语法
+
+```SQL
+DISTRIBUTED BY HASH (<bucket_key1>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
+```
+
+更多信息，请参见 [分桶](../../../table_design/Data_distribution.md#分桶)。
 
 > **说明**
 >
-> 创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
-
-- **哈希分桶**：
-
-  语法
-
-  ```SQL
-  DISTRIBUTED BY HASH (<bucket_key1>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
-  ```
-
-  更多信息，请参见 [分桶](../../../table_design/Data_distribution.md#分桶)。
-
-  > **说明**
-  >
-  > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
-
-- **随机分桶**：
-
-  如果您选择随机分桶方式，并且自动设置分桶数量，则无需指定 `distribution_desc`。如果您需要手动设置分桶数，请使用以下语法：
-
-  ```SQL
-  DISTRIBUTED BY RANDOM BUCKETS <bucket_number>
-  ```
-
-  > **注意**
-  >
-  > 采用随机分桶方式的异步物化视图不支持设置 Colocation Group。
-
-  更多信息，请参见 [随机分桶](../../../table_design/Data_distribution.md#随机分桶自-v31)。
+> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
 
 **refresh_moment**（选填）
 
