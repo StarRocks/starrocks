@@ -264,6 +264,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -3855,6 +3856,19 @@ public class LocalMetastore implements ConnectorMetadata {
             nameToColumn.remove(colName);
             column.renameColumn(newColName);
             nameToColumn.put(newColName, column);
+
+            Set<String> bfColumns = olapTable.getBfColumns();
+            if (bfColumns != null) {
+                Iterator<String> iterator = bfColumns.iterator();
+                while (iterator.hasNext()) {
+                    String bfColumn = iterator.next();
+                    if (bfColumn.equalsIgnoreCase(colName)) {
+                        iterator.remove();
+                        bfColumns.add(newColName);
+                        break;
+                    }
+                }
+            }
 
             DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
             if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
