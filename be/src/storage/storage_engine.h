@@ -153,8 +153,7 @@ public:
     DataDir* get_store(const std::string& path);
     DataDir* get_store(int64_t path_hash);
 
-    bool is_lake_persistent_index_dir_inited();
-    DataDir* get_persistent_index_store();
+    DataDir* get_persistent_index_store(int64_t tablet_id);
 
     uint32_t available_storage_medium_type_count() { return _available_storage_medium_type_count; }
 
@@ -283,6 +282,8 @@ public:
         _finish_publish_version_cv.notify_one();
     }
 
+    bool is_as_cn() { return !_options.need_write_cluster_id; }
+
 protected:
     static StorageEngine* _s_instance;
 
@@ -373,11 +374,7 @@ private:
     EngineOptions _options;
     std::mutex _store_lock;
     std::map<std::string, DataDir*> _store_map;
-    DataDir* _persistent_index_data_dir = nullptr;
     uint32_t _available_storage_medium_type_count;
-
-    std::atomic<bool> _lake_persistent_index_dir_inited{false};
-
     bool _is_all_cluster_id_exist;
 
     std::mutex _gc_mutex;
