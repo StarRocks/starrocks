@@ -159,7 +159,7 @@ public class SlotRequestQueue {
             return slotsToAllocate;
         } finally {
             stats.finalizeStats();
-            ResourceGroupMetricMgr.setQueryQueueQueries(stats);
+            ResourceGroupMetricMgr.setQueryQueuePendingReason(stats);
         }
     }
 

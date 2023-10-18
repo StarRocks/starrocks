@@ -41,8 +41,9 @@ public class ResourceGroupMetricMgr {
     private static final String RESOURCE_GROUP_QUERY_QUEUE_PENDING = "resource_group_query_queue_pending";
     private static final String RESOURCE_GROUP_QUERY_QUEUE_TIMEOUT = "resource_group_query_queue_timeout";
 
-    private static final String QUERY_QUEUE_QUERIES = "query_queue_queries";
-    private static final String QUERY_QUEUE_QUERIES_DESC = "the number of queries in query queue with the specific status";
+    private static final String QUERY_QUEUE_PENDING_REASON = "query_queue_pending_reason";
+    private static final String QUERY_QUEUE_PENDING_REASON_DESC =
+            "the number of pending queries in the query queue with the specific reason";
 
     private static final ConcurrentHashMap<String, LongCounterMetric> RESOURCE_GROUP_QUERY_COUNTER_MAP
             = new ConcurrentHashMap<>();
@@ -60,36 +61,32 @@ public class ResourceGroupMetricMgr {
     private static final ConcurrentHashMap<String, LongCounterMetric> RESOURCE_GROUP_QUERY_QUEUE_TIMEOUT_MAP
             = new ConcurrentHashMap<>();
 
-    private static final LongCounterMetric QUERY_QUEUE_ADMITTING_QUERIES = new LongCounterMetric(QUERY_QUEUE_QUERIES,
-            Metric.MetricUnit.REQUESTS, QUERY_QUEUE_QUERIES_DESC);
     private static final LongCounterMetric QUERY_QUEUE_PENDING_BY_GLOBAL_RESOURCE_QUERIES =
-            new LongCounterMetric(QUERY_QUEUE_QUERIES,
-                    Metric.MetricUnit.REQUESTS, QUERY_QUEUE_QUERIES_DESC);
-    private static final LongCounterMetric QUERY_QUEUE_PENDING_BY_GLOBAL_SLOT_QUERIES = new LongCounterMetric(QUERY_QUEUE_QUERIES,
-            Metric.MetricUnit.REQUESTS, QUERY_QUEUE_QUERIES_DESC);
+            new LongCounterMetric(QUERY_QUEUE_PENDING_REASON,
+                    Metric.MetricUnit.REQUESTS, QUERY_QUEUE_PENDING_REASON_DESC);
+    private static final LongCounterMetric QUERY_QUEUE_PENDING_BY_GLOBAL_SLOT_QUERIES = new LongCounterMetric(
+            QUERY_QUEUE_PENDING_REASON,
+            Metric.MetricUnit.REQUESTS, QUERY_QUEUE_PENDING_REASON_DESC);
     private static final LongCounterMetric QUERY_QUEUE_PENDING_BY_GROUP_RESOURCE_QUERIES =
-            new LongCounterMetric(QUERY_QUEUE_QUERIES,
-                    Metric.MetricUnit.REQUESTS, QUERY_QUEUE_QUERIES_DESC);
-    private static final LongCounterMetric QUERY_QUEUE_PENDING_BY_GROUP_SLOT_QUERIES = new LongCounterMetric(QUERY_QUEUE_QUERIES,
-            Metric.MetricUnit.REQUESTS, QUERY_QUEUE_QUERIES_DESC);
+            new LongCounterMetric(QUERY_QUEUE_PENDING_REASON,
+                    Metric.MetricUnit.REQUESTS, QUERY_QUEUE_PENDING_REASON_DESC);
+    private static final LongCounterMetric QUERY_QUEUE_PENDING_BY_GROUP_SLOT_QUERIES = new LongCounterMetric(
+            QUERY_QUEUE_PENDING_REASON,
+            Metric.MetricUnit.REQUESTS, QUERY_QUEUE_PENDING_REASON_DESC);
 
     static {
-        QUERY_QUEUE_ADMITTING_QUERIES.addLabel(new MetricLabel("status", "admitting"));
-        QUERY_QUEUE_PENDING_BY_GLOBAL_RESOURCE_QUERIES.addLabel(
-                new MetricLabel("status", "pending_by_global_cpu_or_memory_limit"));
-        QUERY_QUEUE_PENDING_BY_GLOBAL_SLOT_QUERIES.addLabel(new MetricLabel("status", "pending_by_global_concurrency_limit"));
-        QUERY_QUEUE_PENDING_BY_GROUP_RESOURCE_QUERIES.addLabel(new MetricLabel("status", "pending_by_group_max_cpu_cores"));
-        QUERY_QUEUE_PENDING_BY_GROUP_SLOT_QUERIES.addLabel(new MetricLabel("status", "pending_by_group_concurrency_limit"));
+        QUERY_QUEUE_PENDING_BY_GLOBAL_RESOURCE_QUERIES.addLabel(new MetricLabel("status", "global_cpu_or_memory_limit"));
+        QUERY_QUEUE_PENDING_BY_GLOBAL_SLOT_QUERIES.addLabel(new MetricLabel("status", "global_concurrency_limit"));
+        QUERY_QUEUE_PENDING_BY_GROUP_RESOURCE_QUERIES.addLabel(new MetricLabel("status", "group_max_cpu_cores"));
+        QUERY_QUEUE_PENDING_BY_GROUP_SLOT_QUERIES.addLabel(new MetricLabel("status", "group_concurrency_limit"));
 
-        MetricRepo.addMetric(QUERY_QUEUE_ADMITTING_QUERIES);
         MetricRepo.addMetric(QUERY_QUEUE_PENDING_BY_GLOBAL_RESOURCE_QUERIES);
         MetricRepo.addMetric(QUERY_QUEUE_PENDING_BY_GLOBAL_SLOT_QUERIES);
         MetricRepo.addMetric(QUERY_QUEUE_PENDING_BY_GROUP_RESOURCE_QUERIES);
         MetricRepo.addMetric(QUERY_QUEUE_PENDING_BY_GROUP_SLOT_QUERIES);
     }
 
-    public static void setQueryQueueQueries(QueryQueueStatistics stats) {
-        QUERY_QUEUE_ADMITTING_QUERIES.increase(-QUERY_QUEUE_ADMITTING_QUERIES.getValue() + stats.getAdmittingQueries());
+    public static void setQueryQueuePendingReason(QueryQueueStatistics stats) {
         QUERY_QUEUE_PENDING_BY_GLOBAL_RESOURCE_QUERIES.increase(
                 -QUERY_QUEUE_PENDING_BY_GLOBAL_RESOURCE_QUERIES.getValue() + stats.getPendingByGlobalResourceQueries());
         QUERY_QUEUE_PENDING_BY_GLOBAL_SLOT_QUERIES.increase(
