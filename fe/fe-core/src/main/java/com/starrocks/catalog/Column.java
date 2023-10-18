@@ -66,6 +66,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import static com.starrocks.common.util.DateUtils.DATE_TIME_FORMATTER;
 
@@ -769,7 +770,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return this.uniqueId;
     }
 
-    public void setIndexFlag(TColumn tColumn, List<Index> indexes) {
+    public void setIndexFlag(TColumn tColumn, List<Index> indexes, Set<String> bfColumns) {
         for (Index index : indexes) {
             if (index.getIndexType() == IndexDef.IndexType.BITMAP) {
                 List<String> columns = index.getColumns();
@@ -777,6 +778,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                     tColumn.setHas_bitmap_index(true);
                 }
             }
+        }
+        if (bfColumns != null && bfColumns.contains(this.name)) {
+            tColumn.setIs_bloom_filter_column(true);
         }
     }
 }
