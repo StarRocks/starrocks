@@ -20,7 +20,7 @@
 - 某些情况下使用 UDF 会存在内存泄露。[#29467](https://github.com/StarRocks/starrocks/pull/29467) [#29465](https://github.com/StarRocks/starrocks/pull/29465)
 - ORDER BY 子句中包含聚合函数时报错“java.lang.IllegalStateException: null”。[#30108](https://github.com/StarRocks/starrocks/pull/30108)
 - 如果 Hive Catalog 是多级目录，且数据存储在腾讯云 COS 中，会导致查询结果不正确。[#30363](https://github.com/StarRocks/starrocks/pull/30363)
-- 如果 ARRAY<STRUCT> 类型的数据中 STRUCT 的某些子列缺失，在读取数据时因为填充默认数据长度错误会导致 BE Crash。[#30263](https://github.com/StarRocks/starrocks/pull/30263)
+- 如果 ARRAY&lt;STRUCT&gt; 类型的数据中 STRUCT 的某些子列缺失，在读取数据时因为填充默认数据长度错误会导致 BE Crash。[#30263](https://github.com/StarRocks/starrocks/pull/30263)
 - 升级 Berkeley DB Java Edition 的版本，避免安全漏洞。[#30029](https://github.com/StarRocks/starrocks/pull/30029)
 - 主键模型表导入时，如果 Truncate 操作和查询并发，在有些情况下会报错“java.lang.NullPointerException”。[#30573](https://github.com/StarRocks/starrocks/pull/30573)
 - 如果 Schema Change 执行时间过长，会因为 Tablet 版本被垃圾回收而失败。 [#31376](https://github.com/StarRocks/starrocks/pull/31376)
