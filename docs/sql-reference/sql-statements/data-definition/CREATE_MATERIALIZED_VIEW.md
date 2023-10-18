@@ -122,7 +122,7 @@ The following table shows the correspondence between the aggregate function in t
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 [COMMENT ""]
 -- distribution_desc
-[DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]]
+DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
 -- refresh_desc
 [REFRESH 
 -- refresh_moment
@@ -161,41 +161,21 @@ The name of the materialized view. The naming requirements are as follows:
 
 Comment on the materialized view. Note that `COMMENT` must be placed after `mv_name`. Otherwise, the materialized view cannot be created.
 
-**distribution_desc** (optional)
+**distribution_desc** (reuqired)
 
-The bucketing strategy of the asynchronous materialized view. StarRocks supports hash bucketing and random bucketing. If you do not specify this parameter, StarRocks uses the random bucketing strategy and automatically sets the number of buckets.
+The bucketing strategy of the asynchronous materialized view.
+
+Syntax
+
+```SQL
+DISTRIBUTED BY HASH (<bucket_key1>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
+```
+
+For more information, see [Data distribution](../../../table_design/Data_distribution.md#data-distribution).
 
 > **NOTE**
 >
-> While creating an asynchronous materialized view, you must specify either `distribution_desc` or `refresh_scheme`, or both.
-
-- **Hash bucketing**:
-
-  Syntax
-
-  ```SQL
-  DISTRIBUTED BY HASH (<bucket_key1>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
-  ```
-
-  For more information, see [Data distribution](../../../table_design/Data_distribution.md#data-distribution).
-
-  > **NOTE**
-  >
-  > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
-
-- **Random bucketing**:
-
-  If you choose the random bucketing strategy and allow StarRocks to set the number of buckets automatically, you do not need to specify `distribution_desc`. However, if you want to set the number of buckets manually, you can refer to the following syntax:
-
-  ```SQL
-  DISTRIBUTED BY RANDOM BUCKETS <bucket_number>
-  ```
-
-  > **CAUTION**
-  >
-  > Asynchronous materialized views with a random bucketing strategy cannot be assigned to a colocation group.
-
-  For more information, see [Random bucketing](../../../table_design/Data_distribution.md#random-bucketing-since-v31)
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 **refresh_moment** (optional)
 
