@@ -73,16 +73,10 @@ public class ResourceGroupMetricMgr {
     private static final LongCounterMetric QUERY_QUEUE_PENDING_BY_GROUP_SLOT_QUERIES = new LongCounterMetric(QUERY_QUEUE_QUERIES,
             Metric.MetricUnit.REQUESTS, QUERY_QUEUE_QUERIES_DESC);
 
-    public static volatile boolean isInit = false;
-
-    public static void init() {
-        if (isInit) {
-            return;
-        }
-
+    static {
         QUERY_QUEUE_ADMITTING_QUERIES.addLabel(new MetricLabel("status", "admitting"));
         QUERY_QUEUE_PENDING_BY_GLOBAL_RESOURCE_QUERIES.addLabel(
-                new MetricLabel("status", "pending_by_global_CPU_or_memory_limit"));
+                new MetricLabel("status", "pending_by_global_cpu_or_memory_limit"));
         QUERY_QUEUE_PENDING_BY_GLOBAL_SLOT_QUERIES.addLabel(new MetricLabel("status", "pending_by_global_concurrency_limit"));
         QUERY_QUEUE_PENDING_BY_GROUP_RESOURCE_QUERIES.addLabel(new MetricLabel("status", "pending_by_group_max_cpu_cores"));
         QUERY_QUEUE_PENDING_BY_GROUP_SLOT_QUERIES.addLabel(new MetricLabel("status", "pending_by_group_concurrency_limit"));
@@ -92,8 +86,6 @@ public class ResourceGroupMetricMgr {
         MetricRepo.addMetric(QUERY_QUEUE_PENDING_BY_GLOBAL_SLOT_QUERIES);
         MetricRepo.addMetric(QUERY_QUEUE_PENDING_BY_GROUP_RESOURCE_QUERIES);
         MetricRepo.addMetric(QUERY_QUEUE_PENDING_BY_GROUP_SLOT_QUERIES);
-
-        isInit = true;
     }
 
     public static void setQueryQueueQueries(QueryQueueStatistics stats) {
