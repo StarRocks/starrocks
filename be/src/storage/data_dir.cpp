@@ -97,6 +97,7 @@ Status DataDir::init(bool read_only) {
     RETURN_IF_ERROR_WITH_WARN(_init_data_dir(), "_init_data_dir failed");
     RETURN_IF_ERROR_WITH_WARN(_init_tmp_dir(), "_init_tmp_dir failed");
     RETURN_IF_ERROR_WITH_WARN(_init_meta(read_only), "_init_meta failed");
+    RETURN_IF_ERROR_WITH_WARN(init_persistent_index_dir(), "_init_persistent_index_dir failed");
 
     _is_used = true;
     return Status::OK();

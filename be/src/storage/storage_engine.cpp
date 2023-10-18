@@ -278,14 +278,6 @@ Status StorageEngine::_init_store_map() {
     for (auto& store : tmp_stores) {
         _store_map.emplace(store.second->path(), store.second);
         store.first = false;
-        if (!_lake_persistent_index_dir_inited) {
-            auto status = store.second->init_persistent_index_dir();
-            if (!status.ok()) {
-                return Status::InternalError(strings::Substitute("init persistIndex dir failed, error=$0", error_msg));
-            }
-            _lake_persistent_index_dir_inited = true;
-            _persistent_index_data_dir = store.second;
-        }
     }
 
     release_guard.cancel();
@@ -533,13 +525,14 @@ DataDir* StorageEngine::get_store(int64_t path_hash) {
     return nullptr;
 }
 
-bool StorageEngine::is_lake_persistent_index_dir_inited() {
-    return _lake_persistent_index_dir_inited;
-}
-
-// maybe nullptr if storage_root_path is not set
-DataDir* StorageEngine::get_persistent_index_store() {
-    return _persistent_index_data_dir;
+// maybe nullptr if as cn
+DataDir* StorageEngine::get_persistent_index_store(int64_t tablet_id) {
+    auto stores = get_stores<false>();
+    if (stores.empty()) {
+        return nullptr;
+    } else {
+        return stores[tablet_id % stores.size()];
+    }
 }
 
 static bool too_many_disks_are_failed(uint32_t unused_num, uint32_t total_num) {

@@ -83,7 +83,7 @@ Status UpdateManager::commit_primary_index(IndexEntry* index_entry, Tablet* tabl
         if (index.enable_persistent_index()) {
             // only take affect in local persistent index
             PersistentIndexMetaPB index_meta;
-            DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store();
+            DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet->id());
             RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, tablet->id(), &index_meta));
             RETURN_IF_ERROR(index.commit(&index_meta));
             RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, tablet->id(), index_meta));
