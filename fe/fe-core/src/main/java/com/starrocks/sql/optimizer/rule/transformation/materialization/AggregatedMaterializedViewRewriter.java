@@ -68,6 +68,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
     private static final Map<String, String> ROLLUP_FUNCTION_MAP = ImmutableMap.<String, String>builder()
             .put(FunctionSet.COUNT, FunctionSet.SUM)
+            .put(FunctionSet.ARRAY_AGG, FunctionSet.ARRAY_CONCAT)
             .build();
 
     private static final Set<String> SUPPORTED_ROLLUP_FUNCTIONS = ImmutableSet.<String>builder()
