@@ -346,7 +346,9 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
             req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb->mutable_schema(),
             req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
-    RETURN_IF_ERROR(create_schema_file(req.tablet_id, tablet_metadata_pb->schema()));
+    if (req.create_schema_file) {
+        RETURN_IF_ERROR(create_schema_file(req.tablet_id, tablet_metadata_pb->schema()));
+    }
 
     return put_tablet_metadata(std::move(tablet_metadata_pb));
 }
@@ -894,27 +896,21 @@ Status TabletManager::delete_tablet_metadata_lock(int64_t tablet_id, int64_t ver
 }
 
 // Store a copy of the tablet schema in a separate schema file named SCHEMA_{indexId}.
-// If this is a multi-partition table, then each partition directory will contain a schema file.
-// This method may be concurrently and repeatedly called multiple times. That means concurrent
-// creation and writes to the same schema file could happen. We assume the FileSystem interface
-// guarantees last-write-wins semantics here.
 Status TabletManager::create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb) {
-    auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(schema_pb.id()));
-    if (!fs::path_exist(schema_file_path)) {
-        VLOG(3) << "Creating schema file of id " << schema_pb.id() << " for tablet " << tablet_id;
-        ProtobufFile file(schema_file_path);
-        RETURN_IF_ERROR(file.save(schema_pb));
+    auto schema_file_path = _location_provider->schema_file_location(tablet_id, schema_pb.id());
+    VLOG(3) << "Creating schema file of id " << schema_pb.id() << " for tablet " << tablet_id;
+    ProtobufFile file(schema_file_path);
+    RETURN_IF_ERROR(file.save(schema_pb));
 
-        // Save the schema into the in-memory cache
-        auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(schema_pb);
-        if (UNLIKELY(schema == nullptr)) {
-            return Status::InternalError("failed to emplace the schema hash map");
-        }
-        auto cache_key = global_schema_cache_key(schema_pb.id());
-        auto cache_value = std::make_unique<CacheValue>(schema);
-        auto cache_size = inserted ? schema->mem_usage() : 0;
-        fill_metacache(cache_key, cache_value.release(), cache_size);
+    // Save the schema into the in-memory cache
+    auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(schema_pb);
+    if (UNLIKELY(schema == nullptr)) {
+        return Status::InternalError("failed to emplace the schema hash map");
     }
+    auto cache_key = global_schema_cache_key(schema_pb.id());
+    auto cache_value = std::make_unique<CacheValue>(schema);
+    auto cache_size = inserted ? schema->mem_usage() : 0;
+    fill_metacache(cache_key, cache_value.release(), cache_size);
     return Status::OK();
 }
 

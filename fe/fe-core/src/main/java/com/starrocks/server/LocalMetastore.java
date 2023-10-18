@@ -1822,6 +1822,12 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, Partition partition,
                                                             MaterializedIndex index) throws DdlException {
+<<<<<<< HEAD
+=======
+        LOG.info("build create replica tasks for index {} db {} table {} partition {}",
+                index, dbId, table.getId(), partition);
+        boolean createSchemaFile = true;
+>>>>>>> 32b4ad42a9 ([Enhancement] Avoid duplicate schema file creation (#33014))
         List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         for (Tablet tablet : index.getTablets()) {
@@ -1857,7 +1863,16 @@ public class LocalMetastore implements ConnectorMetadata {
                         table.enablePersistentIndex(),
                         table.getPersistentIndexType(),
                         TTabletType.TABLET_TYPE_LAKE,
+<<<<<<< HEAD
                         table.getCompressionType(), indexMeta.getSortKeyIdxes());
+=======
+                        table.getCompressionType(), indexMeta.getSortKeyIdxes(),
+                        indexMeta.getSortKeyUniqueIds(),
+                        createSchemaFile);
+                // For each partition, the schema file is created only when the first Tablet is created
+                createSchemaFile = false;
+                task.setSchemaVersion(indexMeta.getSchemaVersion());
+>>>>>>> 32b4ad42a9 ([Enhancement] Avoid duplicate schema file creation (#33014))
                 tasks.add(task);
             } else {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {

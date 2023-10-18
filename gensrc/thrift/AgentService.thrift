@@ -109,6 +109,12 @@ struct TCreateTabletReq {
     16: optional Types.TCompressionType compression_type = Types.TCompressionType.LZ4_FRAME
     17: optional TBinlogConfig binlog_config;
     18: optional TPersistentIndexType persistent_index_type;
+<<<<<<< HEAD
+=======
+    19: optional i32 primary_index_cache_expire_sec;
+    // Whether or not need to create a separate file to hold schema information.
+    20: optional bool create_schema_file = true;
+>>>>>>> 32b4ad42a9 ([Enhancement] Avoid duplicate schema file creation (#33014))
 }
 
 struct TDropTabletReq {
