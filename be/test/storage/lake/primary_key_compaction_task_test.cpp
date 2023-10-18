@@ -231,7 +231,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     ASSIGN_OR_ABORT(auto new_tablet_metadata1, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata1->rowsets_size(), 3);
 
-    ExecEnv::GetInstance()->vacuum_thread_pool()->wait();
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
     // make sure delvecs have been generated
     for (int i = 0; i < 2; i++) {
         auto itr = new_tablet_metadata1->delvec_meta().version_to_file().find(version - i);

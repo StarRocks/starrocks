@@ -71,6 +71,9 @@ public:
 #define TEST_IDX_SYNC_POINT(x, index)
 #define TEST_SYNC_POINT_CALLBACK(x, y)
 #define INIT_SYNC_POINT_SINGLETONS()
+#define TEST_ERROR_POINT(x)
+#define TEST_ENABLE_ERROR_POINT(x, y)
+#define TEST_DISABLE_ERROR_POINT(x)
 #else
 
 namespace starrocks {
@@ -166,6 +169,15 @@ private:
 #define TEST_IDX_SYNC_POINT(x, index) starrocks::SyncPoint::GetInstance()->Process(x + std::to_string(index))
 #define TEST_SYNC_POINT_CALLBACK(x, y) starrocks::SyncPoint::GetInstance()->Process(x, y)
 #define INIT_SYNC_POINT_SINGLETONS() (void)starrocks::SyncPoint::GetInstance();
+#define TEST_ERROR_POINT(x)                                   \
+    do {                                                      \
+        Status st;                                            \
+        starrocks::SyncPoint::GetInstance()->Process(x, &st); \
+        if (!st.ok()) return st;                              \
+    } while (0)
+#define TEST_ENABLE_ERROR_POINT(x, y) \
+    starrocks::SyncPoint::GetInstance()->SetCallBack(x, [](void* arg) { *(Status*)arg = y; })
+#define TEST_DISABLE_ERROR_POINT(x) starrocks::SyncPoint::GetInstance()->ClearCallBack(x)
 #endif // NDEBUG
 
 // Callback sync point for any read IO errors that should be ignored by

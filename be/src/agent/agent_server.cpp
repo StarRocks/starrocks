@@ -174,8 +174,8 @@ void AgentServer::Impl::init_or_die() {
                                         [this]() { return _thread_pool_publish_version->num_queued_tasks(); });
 #endif
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("drop", config::drop_tablet_worker_count, config::drop_tablet_worker_count,
-                                       std::numeric_limits<int>::max(), _thread_pool_drop);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("drop", 1, config::drop_tablet_worker_count, std::numeric_limits<int>::max(),
+                                       _thread_pool_drop);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL("create_tablet", config::create_tablet_worker_count,
                                        config::create_tablet_worker_count, std::numeric_limits<int>::max(),
