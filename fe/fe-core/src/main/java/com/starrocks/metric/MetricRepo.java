@@ -462,6 +462,8 @@ public final class MetricRepo {
 
         initMemoryMetrics();
 
+        ResourceGroupMetricMgr.init();
+
         updateMetrics();
         isInit = true;
 

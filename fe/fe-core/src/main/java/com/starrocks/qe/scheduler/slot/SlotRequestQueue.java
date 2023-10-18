@@ -15,6 +15,7 @@
 package com.starrocks.qe.scheduler.slot;
 
 import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendCoreStat;
@@ -47,6 +48,8 @@ public class SlotRequestQueue {
 
     private final BooleanSupplier isGlobalResourceOverloaded;
     private final Function<Long, Boolean> isGroupResourceOverloaded;
+
+    private final QueryQueueStatistics stats = new QueryQueueStatistics();
 
     public SlotRequestQueue(BooleanSupplier isGlobalResourceOverloaded, Function<Long, Boolean> isGroupResourceOverloaded) {
         this.isGlobalResourceOverloaded = isGlobalResourceOverloaded;
@@ -99,47 +102,61 @@ public class SlotRequestQueue {
             return slotsToAllocate;
         }
 
-        int numAllocatedSlots = allocatedSlots.getNumSlots();
-        int numAllocatedDrivers = allocatedSlots.getNumDrivers();
-        if (!isGlobalSlotAvailable(numAllocatedSlots) || isGlobalResourceOverloaded.getAsBoolean()) {
-            return slotsToAllocate;
-        }
+        stats.reset(slots.size());
+        try {
+            if (isGlobalResourceOverloaded.getAsBoolean()) {
+                stats.incrPendingByGlobalResourceQueries(stats.getTotalQueries());
+                return slotsToAllocate;
+            }
 
-        // Traverse groups round-robin from nextGroupIndex.
-        int localNextGroupIndex = nextGroupIndex;
-        Iterator<Map.Entry<Long, LinkedHashMap<TUniqueId, LogicalSlot>>> groupIterator = groupIdToSubQueue.entrySet().iterator();
-        for (int i = 0; i < localNextGroupIndex && groupIterator.hasNext(); i++) {
-            groupIterator.next();
-        }
-
-        for (int i = 0; i < groupIdToSubQueue.size(); i++) {
+            int numAllocatedSlots = allocatedSlots.getNumSlots();
+            int numAllocatedDrivers = allocatedSlots.getNumDrivers();
             if (!isGlobalSlotAvailable(numAllocatedSlots)) {
-                break;
+                stats.incrPendingByGlobalSlotQueries(stats.getTotalQueries());
+                return slotsToAllocate;
             }
 
-            localNextGroupIndex = (localNextGroupIndex + 1) % groupIdToSubQueue.size();
-            if (!groupIterator.hasNext()) {
-                groupIterator = groupIdToSubQueue.entrySet().iterator();
+            // Traverse groups round-robin from nextGroupIndex.
+            int localNextGroupIndex = nextGroupIndex;
+            Iterator<Map.Entry<Long, LinkedHashMap<TUniqueId, LogicalSlot>>> groupIterator =
+                    groupIdToSubQueue.entrySet().iterator();
+            for (int i = 0; i < localNextGroupIndex && groupIterator.hasNext(); i++) {
+                groupIterator.next();
             }
-            Map.Entry<Long, LinkedHashMap<TUniqueId, LogicalSlot>> entry = groupIterator.next();
-            Long groupId = entry.getKey();
-            LinkedHashMap<TUniqueId, LogicalSlot> subQueue = entry.getValue();
 
-            ResourceGroup group = GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(groupId);
-            int numAllocatedSlotsOfGroup = allocatedSlots.getNumSlotsOfGroup(groupId);
-            AllocatedResource allocatedResource = peakSlotsToAllocateFromSubQueue(
-                    subQueue, group, numAllocatedSlots, numAllocatedSlotsOfGroup, numAllocatedDrivers, slotsToAllocate);
-            numAllocatedSlots += allocatedResource.numSlots;
-            numAllocatedDrivers += allocatedResource.numDrivers;
+            for (int i = 0; i < groupIdToSubQueue.size(); i++) {
+                if (!isGlobalSlotAvailable(numAllocatedSlots)) {
+                    break;
+                }
 
-            // If the group of the current index peaks slots to allocate, update nextGroupIndex to make the next turn starts
-            // from the next group index.
-            if (allocatedResource.numSlots > 0) {
-                nextGroupIndex = localNextGroupIndex;
+                localNextGroupIndex = (localNextGroupIndex + 1) % groupIdToSubQueue.size();
+                if (!groupIterator.hasNext()) {
+                    groupIterator = groupIdToSubQueue.entrySet().iterator();
+                }
+                Map.Entry<Long, LinkedHashMap<TUniqueId, LogicalSlot>> entry = groupIterator.next();
+                Long groupId = entry.getKey();
+                LinkedHashMap<TUniqueId, LogicalSlot> subQueue = entry.getValue();
+
+                ResourceGroup group = GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(groupId);
+                int numAllocatedSlotsOfGroup = allocatedSlots.getNumSlotsOfGroup(groupId);
+                AllocatedResource allocatedResource = peakSlotsToAllocateFromSubQueue(
+                        subQueue, group, numAllocatedSlots, numAllocatedSlotsOfGroup, numAllocatedDrivers, slotsToAllocate);
+                numAllocatedSlots += allocatedResource.numSlots;
+                numAllocatedDrivers += allocatedResource.numDrivers;
+                stats.incrAdmittingQueries(allocatedResource.numSlots);
+
+                // If the group of the current index peaks slots to allocate, update nextGroupIndex to make the next turn starts
+                // from the next group index.
+                if (allocatedResource.numSlots > 0) {
+                    nextGroupIndex = localNextGroupIndex;
+                }
             }
+
+            return slotsToAllocate;
+        } finally {
+            stats.finalizeStats();
+            ResourceGroupMetricMgr.setQueryQueueQueries(stats);
         }
-
-        return slotsToAllocate;
     }
 
     private boolean isGlobalSlotAvailable(int numAllocatedSlots) {
@@ -151,12 +168,14 @@ public class SlotRequestQueue {
         if (group == null) {
             return true;
         }
+        return !group.isConcurrencyLimitEffective() || numAllocatedSlotsOfGroup < group.getConcurrencyLimit();
+    }
 
-        if (group.isConcurrencyLimitEffective() && numAllocatedSlotsOfGroup >= group.getConcurrencyLimit()) {
+    private boolean isGroupResourceOverloaded(ResourceGroup group) {
+        if (group == null) {
             return false;
         }
-
-        return !isGroupResourceOverloaded.apply(group.getId());
+        return isGroupResourceOverloaded.apply(group.getId());
     }
 
     private int calculateSlotPipelineDop(final int numAllocatedDrivers, final int numFragmentsToAllocate) {
@@ -200,10 +219,17 @@ public class SlotRequestQueue {
         int numDriversToAllocate = 0;
         for (LogicalSlot slot : subQueue.values()) {
             if (!isGlobalSlotAvailable(numAllocatedSlots + numSlotsToAllocate)) {
+                stats.incrPendingByGlobalSlotQueries(subQueue.size() - numSlotsToAllocate);
                 break;
             }
 
             if (!isGroupSlotAvailable(group, numAllocatedSlotsOfGroup + numSlotsToAllocate)) {
+                stats.incrPendingByGroupSlotQueries(subQueue.size() - numSlotsToAllocate);
+                break;
+            }
+
+            if (isGroupResourceOverloaded(group)) {
+                stats.incrPendingByGroupResourceQueries(subQueue.size() - numSlotsToAllocate);
                 break;
             }
 
@@ -238,4 +264,5 @@ public class SlotRequestQueue {
             this.numDrivers = numDrivers;
         }
     }
+
 }
