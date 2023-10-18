@@ -388,6 +388,8 @@ set(EXEC_FILES
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         ./storage/compaction_parallelization_test.cpp
+        ./storage/lake/persistent_index_memtable_test.cpp
+        ./storage/lake/cloud_native_persistent_index_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
