@@ -430,7 +430,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
         *has_remain = _probe_state->has_remain;
 #ifdef BE_TEST
         if (!_probe_state->has_remain && !_probe_state->handles.empty()) {
-            throw runtime_error(print_id(state->fragment_instance_id()) + " haven't remain tuples but have coroutines");
+            throw std::runtime_error(print_id(state->fragment_instance_id()) +
+                                     " haven't remain tuples but have coroutines");
         }
 #endif
     }
