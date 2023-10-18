@@ -904,7 +904,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     olapTable.isInMemory(),
                     olapTable.enablePersistentIndex(),
                     olapTable.getPartitionInfo().getTabletType(partitionId),
-                    olapTable.getCompressionType(), indexMeta.getSortKeyIdxes());
+                    olapTable.getCompressionType(), indexMeta.getSortKeyIdxes(),
+                    true);
             createReplicaTask.setIsRecoverTask(true);
             taskTimeoutMs = Config.tablet_sched_min_clone_task_timeout_sec * 1000;
 

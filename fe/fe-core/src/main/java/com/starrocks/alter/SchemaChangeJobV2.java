@@ -359,7 +359,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     tbl.isInMemory(),
                                     tbl.enablePersistentIndex(),
                                     tbl.getPartitionInfo().getTabletType(partitionId),
-                                    tbl.getCompressionType(), copiedSortKeyIdxes);
+                                    tbl.getCompressionType(), copiedSortKeyIdxes, true);
                             createReplicaTask.setBaseTablet(
                                     partitionIndexTabletMap.get(partitionId, shadowIdxId).get(shadowTabletId),
                                     originSchemaHash);

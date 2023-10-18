@@ -868,7 +868,7 @@ public class RestoreJob extends AbstractJob {
                             localTbl.isInMemory(),
                             localTbl.enablePersistentIndex(),
                             localTbl.getPartitionInfo().getTabletType(restorePart.getId()),
-                            localTbl.getCompressionType(), indexMeta.getSortKeyIdxes());
+                            localTbl.getCompressionType(), indexMeta.getSortKeyIdxes(), true);
                     task.setInRestoreMode(true);
                     batchTask.addTask(task);
                 }
