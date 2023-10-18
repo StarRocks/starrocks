@@ -27,7 +27,7 @@ public class HiveTableName {
     }
 
     public static HiveTableName of(String databaseName, String tableName) {
-        return new HiveTableName(databaseName, tableName);
+        return new HiveTableName(databaseName.toLowerCase(), tableName.toLowerCase());
     }
 
     public String getDatabaseName() {
