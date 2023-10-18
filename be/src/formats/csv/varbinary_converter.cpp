@@ -93,7 +93,7 @@ bool VarBinaryConverter::read_string(Column* column, const Slice& s, const Optio
     return true;
 }
 
-bool VarBinaryConverter::bool read_quoted_string(Column* column, const Slice& s, const Options& options) const {
+bool VarBinaryConverter::read_quoted_string(Column* column, const Slice& s, const Options& options) const {
     // TODO: need write quote for binary?
     if (!remove_enclosing_quotes<'"'>(&s)) {
         return false;
