@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.BoundType;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.TreeRangeSet;
@@ -30,14 +31,26 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+
+import static com.starrocks.common.util.DateUtils.DATEKEY_FORMATTER_UNIX;
+import static com.starrocks.common.util.DateUtils.DATE_FORMATTER_UNIX;
 
 // all ranges about one column ref
 // eg: a > 10 and a < 100 => a -> (10, 100)
 // (a > 10 and a < 100) or (a > 1000 and a <= 10000) => a -> (10, 100) or (1000, 10000]
 public class ColumnRangePredicate extends RangePredicate {
+    private static List<DateTimeFormatter> SUPPORTED_DATE_FORMATS = ImmutableList.<DateTimeFormatter>builder()
+            .add(DATE_FORMATTER_UNIX)
+            .add(DATEKEY_FORMATTER_UNIX).build();
+
+    private static List<String> SUPPORTED_DATE_PATTERNS = ImmutableList.<String>builder()
+            .add("%Y-%m-%d")
+            .add("%Y%m%d").build();
+
     private ScalarOperator expression;
     private ColumnRefOperator columnRef;
     // the relation between each Range in RangeSet is 'or'
@@ -108,7 +121,7 @@ public class ColumnRangePredicate extends RangePredicate {
         return Lists.newArrayList();
     }
 
-    boolean isCastDate() {
+    private boolean isCastDate() {
         if (!(expression instanceof CastOperator)) {
             return false;
         }
@@ -118,7 +131,7 @@ public class ColumnRangePredicate extends RangePredicate {
                 && castOperator.getType().isDate();
     }
 
-    boolean isStr2Date() {
+    private boolean isStr2Date() {
         if (!(expression instanceof CallOperator)) {
             return false;
         }
@@ -126,35 +139,39 @@ public class ColumnRangePredicate extends RangePredicate {
         // check whether is str2date(columnref, '%Y-%m-%d')
         return callOperator.getFnName().equalsIgnoreCase(FunctionSet.STR2DATE)
                 && callOperator.getChild(0).isColumnRef() &&
-                ((ConstantOperator) callOperator.getChild(1)).getChar().equals("%Y-%m-%d");
+                SUPPORTED_DATE_PATTERNS.contains(((ConstantOperator) callOperator.getChild(1)).getChar());
     }
 
     // may return date with different format, so this function returns List<ColumnRangePredicate>
     public List<ColumnRangePredicate> getEquivalentRangePredicateForDate() {
-        TreeRangeSet<ConstantOperator> stringRangeSet = TreeRangeSet.create();
-        // convert constant date to constant string
-        for (Range<ConstantOperator> range : canonicalColumnRanges.asRanges()) {
-            Range<ConstantOperator> stringRange = convertRange(range);
-            stringRangeSet.add(stringRange);
+        List<ColumnRangePredicate> results = Lists.newArrayList();
+        for (DateTimeFormatter format : SUPPORTED_DATE_FORMATS) {
+            TreeRangeSet<ConstantOperator> stringRangeSet = TreeRangeSet.create();
+            // convert constant date to constant string
+            for (Range<ConstantOperator> range : canonicalColumnRanges.asRanges()) {
+                Range<ConstantOperator> stringRange = convertRange(range, format);
+                stringRangeSet.add(stringRange);
+            }
+            ColumnRangePredicate rangePredicate = new ColumnRangePredicate(columnRef, stringRangeSet);
+            results.add(rangePredicate);
         }
-        ColumnRangePredicate rangePredicate = new ColumnRangePredicate(columnRef, stringRangeSet);
-        return Lists.newArrayList(rangePredicate);
+        return results;
     }
 
-    private Range<ConstantOperator> convertRange(Range<ConstantOperator> from) {
+    private Range<ConstantOperator> convertRange(Range<ConstantOperator> from, DateTimeFormatter format) {
         if (from.hasLowerBound() && from.hasUpperBound()) {
-            return Range.range(ConstantOperator.createChar(
-                    from.lowerEndpoint().getDate().toLocalDate().toString(), Type.VARCHAR),
+            return Range.range(
+                    ConstantOperator.createChar(from.lowerEndpoint().getDate().toLocalDate().format(format), Type.VARCHAR),
                     from.lowerBoundType(),
-                    ConstantOperator.createChar(from.upperEndpoint().getDate().toLocalDate().toString(), Type.VARCHAR),
+                    ConstantOperator.createChar(from.upperEndpoint().getDate().toLocalDate().format(format), Type.VARCHAR),
                     from.upperBoundType());
         } else if (from.hasUpperBound()) {
             return Range.upTo(ConstantOperator.createChar(
-                    from.upperEndpoint().getDate().toLocalDate().toString(), Type.VARCHAR),
+                    from.upperEndpoint().getDate().toLocalDate().format(format), Type.VARCHAR),
                     from.upperBoundType());
         } else if (from.hasLowerBound()) {
             return Range.downTo(ConstantOperator.createChar(
-                    from.lowerEndpoint().getDate().toLocalDate().toString(), Type.VARCHAR),
+                    from.lowerEndpoint().getDate().toLocalDate().format(format), Type.VARCHAR),
                     from.lowerBoundType());
         }
         return Range.all();
