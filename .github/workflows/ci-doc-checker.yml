@@ -86,3 +86,33 @@ jobs:
           files: 'docs/**/*.md'
           ignore: node_modules
           version: 0.28.1
+<<<<<<< HEAD
+=======
+      - name: docusaurus-mdx-checker
+        if: always()
+        run: |
+          npx docusaurus-mdx-checker -c docs
+      - name: link check
+        if: always()
+        uses: lycheeverse/lychee-action@v1.8.0
+        with:
+          fail: true
+          args: >
+            --config docs/lychee.toml
+            --offline "docs/**/*.md"
+
+  behavior-unchange:
+    runs-on: ubuntu-latest
+    needs: add-doc-label
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      REPO: ${{ github.repository }}
+      GITHUB_TOKEN: ${{ secrets.PAT }}
+    steps:
+      - name: Set Body
+        run: |
+          body=$(gh pr view ${PR_NUMBER} -R ${REPO} --json body -q .body)
+          body=${body//"[x] Yes, this PR will result in a change in behavior."/"[ ] Yes, this PR will result in a change in behavior."}
+          body=${body//"[ ] No, this PR will not result in a change in behavior."/"[x] No, this PR will not result in a change in behavior."}
+          gh pr edit ${PR_NUMBER} -R ${REPO} -b "$body"
+>>>>>>> efbce76cc4 ([Doc] add link checking for docs (#33090))
