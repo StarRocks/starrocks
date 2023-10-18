@@ -51,6 +51,7 @@ message AbortTxnResponse {
 }
 
 message DeleteTabletRequest {
+    // All tablets must be in the same partition.
     repeated int64 tablet_ids = 1;
 }
 
@@ -188,6 +189,7 @@ message AbortCompactionResponse {
 }
 
 message VacuumRequest {
+    // All tablets must be in the same partition.
     repeated int64 tablet_ids = 1;
     // Tablet metadata files with version numbers greater than or equals to min_retain_version
     // will NOT be vacuumed. For tablet metadata files with version numbers less than
@@ -203,6 +205,8 @@ message VacuumRequest {
     optional int64 min_active_txn_id = 4;
     // Whether need to delete committed txn logs or not.
     optional bool delete_txn_log = 5;
+    // ID of the partition the tablet belongs to.
+    optional int64 partition_id = 6;
 }
 
 message VacuumResponse {
