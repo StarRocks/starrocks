@@ -80,7 +80,7 @@
 
 ![External_Catalog+INSERT_INTO](../assets/External_Catalog+INSERT_INTO.png)
 
-**准备工作**：创建 [Hive catalog](../data_source/catalog/hive_catalog) 允许 StarRocks 访问 Hive 表 `source_table`。
+**准备工作**：创建 [Hive catalog](../data_source/catalog/hive_catalog.md) 允许 StarRocks 访问 Hive 表 `source_table`。
 
 **阶段一：创建全局字典，并且导入 Hive 表中的订单编号列值，从而构建 STRING 和 INTEGER 值之间的映射关系。**
 
