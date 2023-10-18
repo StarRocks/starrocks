@@ -15,13 +15,16 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -35,6 +38,7 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedView;
@@ -250,6 +254,10 @@ public class MaterializedViewAnalyzer {
             List<Pair<Column, Integer>> mvColumnPairs = genMaterializedViewColumns(statement);
             List<Column> mvColumns = mvColumnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
             statement.setMvColumnItems(mvColumns);
+
+            // set the Indexes into createMaterializedViewStatement
+            List<Index> mvIndexes = genMaterializedViewIndexes(statement);
+            statement.setMvIndexes(mvIndexes);
 
             Map<TableName, Table> aliasTableMap = getNormalizedBaseTables(queryStatement, context);
             Map<Column, Expr> columnExprMap = Maps.newHashMap();
@@ -506,6 +514,50 @@ public class MaterializedViewAnalyzer {
                 }
             }
             return reorderedColumns;
+        }
+
+        private List<Index> genMaterializedViewIndexes(CreateMaterializedViewStatement statement) {
+            List<IndexDef> indexDefs = statement.getIndexDefs();
+            List<Index> indexes = new ArrayList<>();
+            List<Column> columns = statement.getMvColumnItems();
+
+            if (CollectionUtils.isNotEmpty(indexDefs)) {
+                Multimap<String, Integer> indexMultiMap = ArrayListMultimap.create();
+                Multimap<String, Integer> colMultiMap = ArrayListMultimap.create();
+
+                for (IndexDef indexDef : indexDefs) {
+                    indexDef.analyze();
+                    for (String indexColName : indexDef.getColumns()) {
+                        boolean found = false;
+                        for (Column column : columns) {
+                            if (column.getName().equalsIgnoreCase(indexColName)) {
+                                indexDef.checkColumn(column, statement.getKeysType());
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            throw new SemanticException("BITMAP column does not exist in table. invalid column: " + indexColName,
+                                    indexDef.getPos());
+                        }
+                    }
+                    indexes.add(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
+                            indexDef.getComment()));
+                    indexMultiMap.put(indexDef.getIndexName().toLowerCase(), 1);
+                    colMultiMap.put(String.join(",", indexDef.getColumns()), 1);
+                }
+                for (String indexName : indexMultiMap.asMap().keySet()) {
+                    if (indexMultiMap.get(indexName).size() > 1) {
+                        throw new SemanticException("Duplicate index name '%s'", indexName);
+                    }
+                }
+                for (String colName : colMultiMap.asMap().keySet()) {
+                    if (colMultiMap.get(colName).size() > 1) {
+                        throw new SemanticException("Duplicate column name '%s' in index", colName);
+                    }
+                }
+            }
+            return indexes;
         }
 
         private void checkExpInColumn(CreateMaterializedViewStatement statement) {
