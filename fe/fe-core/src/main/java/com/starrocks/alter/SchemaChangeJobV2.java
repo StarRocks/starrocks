@@ -806,7 +806,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 // modify column
                 for (Column col : shadowSchema) {
                     if (col.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
-                        modifiedColumns.add(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
+                        modifiedColumns.add(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, col.getName()));
                     }
                 }
             } else if (shadowSchema.size() < originSchema.size()) {

@@ -254,8 +254,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return this.name;
     }
 
-    public String getNameWithoutPrefix(String prefix) {
-        if (isNameWithPrefix(prefix)) {
+    public String getNameWithoutPrefix(String prefix, String name) {
+        if (name.startsWith(prefix)) {
             return name.substring(prefix.length());
         }
         return name;

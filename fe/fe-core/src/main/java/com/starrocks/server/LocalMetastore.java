@@ -3790,6 +3790,17 @@ public class LocalMetastore implements ConnectorMetadata {
             column.renameColumn(newColName);
             nameToColumn.put(newColName, column);
 
+            Set<String> bfColumns = olapTable.getBfColumns();
+            if (bfColumns != null) {
+                for (String bfColumn : bfColumns) {
+                    if (bfColumn.equalsIgnoreCase(colName)) {
+                        bfColumns.remove(colName);
+                        bfColumns.add(newColName);
+                        break;
+                    }
+                }
+            }
+
             DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
             if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
