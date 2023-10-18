@@ -2626,7 +2626,7 @@ public class AlterTest {
 
     @Test
     public void testCatalogRenameColumn() throws Exception {
-        String stmt = "alter table test.tbl1 rename column k3 k3_new";
+        String stmt = "alter table test.tbl1 rename column k3 TO k3_new";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         ColumnRenameClause clause = (ColumnRenameClause) alterTableStmt.getOps().get(0);
         Assert.assertEquals(clause.getNewColName(), "k3_new");
