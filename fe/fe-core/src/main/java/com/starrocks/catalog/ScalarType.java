@@ -569,7 +569,11 @@ public class ScalarType extends Type implements Cloneable {
                 }
                 break;
             case VARBINARY:
-                stringBuilder.append("varbinary").append("(").append(len).append(")");
+                if (len == -1) {
+                    stringBuilder.append("varbinary");
+                } else {
+                    stringBuilder.append("varbinary").append("(").append(len).append(")");
+                }
                 break;
             case DECIMALV2:
                 stringBuilder.append("decimal").append("(").append(precision).append(", ").append(scale).append(")");
