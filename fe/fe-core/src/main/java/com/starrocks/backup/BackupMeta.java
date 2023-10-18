@@ -37,9 +37,14 @@ package com.starrocks.backup;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.StarRocksFEMetaVersion;
+import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -116,16 +121,24 @@ public class BackupMeta implements Writable, GsonPostProcessable {
     }
 
     public static BackupMeta read(DataInput in) throws IOException {
-        BackupMeta backupMeta = new BackupMeta();
-        backupMeta.readFields(in);
-        return backupMeta;
+        if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
+            return GsonUtils.GSON.fromJson(Text.readString(in), BackupMeta.class);
+        } else {
+            BackupMeta backupMeta = new BackupMeta();
+            backupMeta.readFields(in);
+            return backupMeta;
+        }
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
-        out.writeInt(tblNameMap.size());
-        for (Table table : tblNameMap.values()) {
-            table.write(out);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            Text.writeString(out, GsonUtils.GSON.toJson(this));
+        } else {
+            out.writeInt(tblNameMap.size());
+            for (Table table : tblNameMap.values()) {
+                table.write(out);
+            }
         }
     }
 
