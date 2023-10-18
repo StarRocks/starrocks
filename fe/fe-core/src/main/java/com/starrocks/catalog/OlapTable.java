@@ -1696,8 +1696,8 @@ public class OlapTable extends Table {
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
-        OlapTable copied = new OlapTable();
-        if (!DeepCopy.copy(this, copied, OlapTable.class)) {
+        OlapTable copied = DeepCopy.copyWithGson(this, OlapTable.class);
+        if (copied == null) {
             LOG.warn("failed to copy olap table: " + getName());
             return null;
         }

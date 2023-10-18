@@ -1314,8 +1314,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             db.readLock();
             try {
                 if (table.isOlapTable()) {
-                    Table copied = new OlapTable();
-                    if (!DeepCopy.copy(table, copied, OlapTable.class)) {
+                    Table copied = DeepCopy.copyWithGson(table, OlapTable.class);
+                    if (copied == null) {
                         throw new DmlException("Failed to copy olap table: %s", table.getName());
                     }
                     tables.put(table.getId(), Pair.create(baseTableInfo, copied));
