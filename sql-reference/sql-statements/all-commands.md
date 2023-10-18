@@ -15,7 +15,6 @@
     - [Routine load](#routine-load)
     - [其他导入](#其他导入)
     - [导出](#导出)
-    - [ETL 任务](#etl-任务)
   - [数据目录 (Catalog)，数据库，资源](#数据目录-catalog数据库资源)
     - [Catalog](#catalog)
     - [数据库](#数据库)
@@ -139,11 +138,6 @@
 - [EXPORT](./data-manipulation/EXPORT.md)
 - [CANCEL EXPORT](./data-manipulation/CANCEL_EXPORT.md)
 - [SHOW EXPORT](./data-manipulation/SHOW_EXPORT.md)
-
-### ETL 任务
-
-- [DROP TASK](./data-manipulation/DROP_TASK.md)
-- [SUBMIT TASK](./data-manipulation/SUBMIT_TASK.md)
 
 ## 数据目录 (Catalog)，数据库，资源
 

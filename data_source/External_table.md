@@ -297,7 +297,7 @@ StarRocks 支持对目标表进行谓词下推，把过滤条件推给目标表�
 * 创建 JDBC 外部表时，不支持索引，也不支持通过 PARTITION BY、DISTRIBUTED BY 来指定数据分布规则。
 * 查询 JDBC 外部表时，不支持下推函数。
 
-## (Deprecated) Elasticsearch 外部表
+## Elasticsearch 外部表
 
 如要查询 Elasticsearch 中的数据，需要在 StarRocks 中创建 Elasticsearch 外部表，并将外部表与待查询的 Elasticsearch 表建立映射。StarRocks 与 Elasticsearch 都是目前流行的分析系统。StarRocks 擅长大规模分布式计算，且支持通过外部表查询 Elasticsearch。Elasticsearch 擅长全文检索。两者结合提供了一个更完善的 OLAP 解决方案。
 
@@ -841,7 +841,7 @@ Hive 表 (Hive Table) 的 Partition 统计信息以及 Partition 下面的文件
 
 3. 重启 FE，BE。
 
-## (Deprecated) Iceberg 外部表
+## Iceberg 外部表
 
 如要查询 Iceberg 数据，需要在 StarRocks 中创建 Iceberg 外部表，并将外部表与需要查询的 Iceberg 表建立映射。
 
