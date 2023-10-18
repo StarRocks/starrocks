@@ -219,11 +219,11 @@ sh bin/benchmark.sh -p -d tpcds
 
 #### 4.2.1 创建表结构
 
-在 Hive 中创建外部表，外部表存储格式是 Parquet，压缩格式是 LZ4。详细建表语句见 [5.3 创建 Parquet 格式 Hive 外表](#1--hive-外部表建表-parquet-格式)，这个 Hive 外部表就是 StarRocks 和 Trino 对比测试查询的表。
+在 Hive 中创建外部表，外部表存储格式是 Parquet，压缩格式是 LZ4。详细建表语句见 [5.3 创建 Parquet 格式 Hive 外表](#53-hive-外部表建表parquet-格式)，这个 Hive 外部表就是 StarRocks 和 Trino 对比测试查询的表。
 
 #### 4.2.2 导入数据
 
-将 [4.1.1 StarRocks 本地表测试](#生成数据) 中生成的 TPC-DS CSV 原始数据上传到 HDFS 指定路径，本文以路径 `/user/tmp/csv/` 为例，然后在 Hive 中创建 CSV 格式外部表，存储路径为 `/user/tmp/csv/`，详细建表语句见 [5.4 创建 CSV 格式 Hive 外表](#1--hive-外部表建表-csv-格式)。
+将 [4.1.1 StarRocks 本地表测试](#411-生成数据) 中生成的 TPC-DS CSV 原始数据上传到 HDFS 指定路径，本文以路径 `/user/tmp/csv/` 为例，然后在 Hive 中创建 CSV 格式外部表，存储路径为 `/user/tmp/csv/`，详细建表语句见 [5.4 创建 CSV 格式 Hive 外表](#54-hive-外部表建表-csv-格式)。
 
 通过 INSERT INTO 命令将 CSV 格式外部表的数据导入到 Parquet 格式外部表中，这样就得到了存储格式为 Parquet，压缩格式为 LZ4 的数据，导入命令如下：
 
