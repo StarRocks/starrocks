@@ -32,7 +32,7 @@ This error occurs when you run programs in Java Runtime Environment (JRE). To so
 
 This error occurs when Setuptools versions installed on multiple frontends (FEs) are inconsistent. To solve this problem, you can execute the following command as a root user.
 
-```Plain%20Text
+```plaintext
 yum remove python-setuptools
 
 rm /usr/lib/python2.7/site-packages/setuptool* -rf
@@ -47,40 +47,40 @@ Yes. Perform the following steps to complete the modifications for an FE and a B
 - FE: You can complete the modification for an FE in one of the following ways:
   - SQL
 
-```Plain%20Text
+```plaintext
 ADMIN SET FRONTEND CONFIG ("key" = "value");
 ```
 
 Example:
 
-```Plain%20Text
+```plaintext
 ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "false");
 ```
 
 - Shell
 
-```Plain%20Text
+```plaintext
 curl --location-trusted -u username:password \
 http://<ip>:<fe_http_port/api/_set_config?key=value>
 ```
 
 Example:
 
-```Plain%20Text
+```plaintext
 curl --location-trusted -u <username>:<password> \
 http://192.168.110.101:8030/api/_set_config?enable_statistic_collect=true
 ```
 
 - BE: You can complete the modification for a BE in the following way:
 
-```Plain%20Text
+```plaintext
 curl -XPOST -u username:password \
 http://<ip>:<be_http_port>/api/update_config?key=value
 ```
 
 > Note: Make sure that the user has permission to log in remotely. If not, you can grant the permission to the user in the following way:
 
-```Plain%20Text
+```plaintext
 CREATE USER 'test'@'%' IDENTIFIED BY '123456';
 
 GRANT SELECT_PRIV ON . TO 'test'@'%';
@@ -97,7 +97,7 @@ This error may occur during data loading into Primary Key tables. During data lo
 Patches to this bug (Primary Key tables do not support BE disk space re-balancing) is still under active development. Currently, you can fix it in either of the following two ways:
 
 - Manually distribute data among disks. For example, copy the directory from the disk with a high space usage to a disk with a larger space.
-- If the data on these disks is not important, we recommend you delete the disks and modify the disk path. If this error persists, use [TRUNCATE TABLE](../sql-reference/sql-statements/data-definition/TRUNCATE%20TABLE.md) to clear data in the table to free up some space.
+- If the data on these disks is not important, we recommend you delete the disks and modify the disk path. If this error persists, use [TRUNCATE TABLE](../sql-reference/sql-statements/data-definition/TRUNCATE_TABLE.md) to clear data in the table to free up some space.
 
 ## Why does the error "Fe type:unknown ,is ready :false." occur when I start an FE during the cluster restart?
 

@@ -84,6 +84,10 @@ public class CallOperator extends ScalarOperator {
         return fn;
     }
 
+    public void setFunction(Function fn) {
+        this.fn = fn;
+    }
+
     public List<ScalarOperator> getArguments() {
         return arguments;
     }
@@ -174,11 +178,11 @@ public class CallOperator extends ScalarOperator {
             return false;
         }
         CallOperator other = (CallOperator) obj;
-
         return isDistinct == other.isDistinct &&
                 Objects.equals(fnName, other.fnName) &&
                 Objects.equals(type, other.type) &&
-                Objects.equals(arguments, other.arguments);
+                Objects.equals(arguments, other.arguments) &&
+                Objects.equals(fn, other.fn);
     }
 
     @Override

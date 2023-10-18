@@ -59,11 +59,9 @@ public class MaterializedViewTestBase extends PlanTestBase {
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setEnableQueryCache(false);
-        // connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         FeConstants.runningUnitTest = true;
@@ -71,8 +69,9 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         new MockUp<MaterializedView>() {
             @Mock
-            Set<String> getPartitionNamesToRefreshForMv(boolean isQueryRewrite) {
-                return Sets.newHashSet();
+            public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
+                                                           boolean isQueryRewrite) {
+                return true;
             }
         };
 

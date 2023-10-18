@@ -53,6 +53,8 @@ struct TTabletSchema {
     8: optional bool is_in_memory // Deprecated
     9: optional i64 id;
     10: optional list<i32> sort_key_idxes
+    11: optional list<i32> sort_key_unique_ids
+    12: optional i32 schema_version;
 }
 
 // this enum stands for different storage format in src_backends
@@ -109,6 +111,7 @@ struct TCreateTabletReq {
     16: optional Types.TCompressionType compression_type = Types.TCompressionType.LZ4_FRAME
     17: optional TBinlogConfig binlog_config;
     18: optional TPersistentIndexType persistent_index_type;
+    19: optional i32 primary_index_cache_expire_sec;
 }
 
 struct TDropTabletReq {
@@ -343,7 +346,9 @@ enum TTabletMetaType {
     REPLICATED_STORAGE,
     DISABLE_BINLOG,
     BINLOG_CONFIG,
-    BUCKET_SIZE
+    BUCKET_SIZE,
+    PRIMARY_INDEX_CACHE_EXPIRE_SEC,
+    STORAGE_TYPE
 }
 
 struct TTabletMetaInfo {
@@ -354,10 +359,14 @@ struct TTabletMetaInfo {
     5: optional bool is_in_memory // Deprecated
     6: optional bool enable_persistent_index
     7: optional TBinlogConfig binlog_config
+    8: optional i32 primary_index_cache_expire_sec
 }
 
 struct TUpdateTabletMetaInfoReq {
     1: optional list<TTabletMetaInfo> tabletMetaInfos
+    // for update lake tablet meta
+    2: optional TTabletType tablet_type
+    3: optional i64 txn_id
 }
 
 struct TPluginMetaInfo {

@@ -16,6 +16,7 @@
         <module>hudi-reader</module>
         <module>udf-examples</module>
         <module>paimon-reader</module>
+        <module>hadoop-ext</module>
     </modules>
     <name>starrocks-java-extensions</name>
 
@@ -76,6 +77,7 @@
                     <consoleOutput>true</consoleOutput>
                     <failsOnError>true</failsOnError>
                     <linkXRef>false</linkXRef>
+                    <excludes>org/apache/hadoop/fs/**</excludes>
                 </configuration>
                 <executions>
                     <execution>

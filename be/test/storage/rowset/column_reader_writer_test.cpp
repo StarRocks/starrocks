@@ -99,7 +99,7 @@ protected:
     void TearDown() override {}
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
-        return std::make_shared<Segment>(Segment::private_type(0), fs, fname, 1, _dummy_segment_schema);
+        return std::make_shared<Segment>(fs, fname, 1, _dummy_segment_schema, nullptr);
     }
 
     template <LogicalType type, EncodingTypePB encoding, uint32_t version>

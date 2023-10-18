@@ -53,7 +53,7 @@ BitmapIndexReader::BitmapIndexReader() {
 }
 
 BitmapIndexReader::~BitmapIndexReader() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), mem_usage());
 }
 
 StatusOr<bool> BitmapIndexReader::load(const IndexReadOptions& opts, const BitmapIndexPB& meta) {
@@ -61,7 +61,7 @@ StatusOr<bool> BitmapIndexReader::load(const IndexReadOptions& opts, const Bitma
         Status st = _do_load(opts, meta);
         if (st.ok()) {
             MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
-                                     _mem_usage() - sizeof(BitmapIndexReader));
+                                     mem_usage() - sizeof(BitmapIndexReader));
         } else {
             _reset();
         }

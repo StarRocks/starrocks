@@ -62,7 +62,9 @@ import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeTableAlterMetaJob;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
+import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.authentication.LDAPSecurityIntegration;
@@ -161,8 +163,11 @@ import com.starrocks.sql.optimizer.dump.HiveTableDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
+import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
+import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.system.BackendHbResponse;
 import com.starrocks.system.BrokerHbResponse;
@@ -243,7 +248,9 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory.of(AlterJobV2.class, "clazz")
                     .registerSubtype(RollupJobV2.class, "RollupJobV2")
                     .registerSubtype(SchemaChangeJobV2.class, "SchemaChangeJobV2")
-                    .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob");
+                    .registerSubtype(OptimizeJobV2.class, "OptimizeJobV2")
+                    .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
+                    .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob");
 
     // runtime adapter for class "LoadJobStateUpdateInfo"
     private static final RuntimeTypeAdapterFactory<LoadJobStateUpdateInfo>
@@ -369,6 +376,12 @@ public class GsonUtils {
                     .registerSubtype(NativeAnalyzeStatus.class, "NativeAnalyzeStatus", true)
                     .registerSubtype(ExternalAnalyzeStatus.class, "ExternalAnalyzeStatus");
 
+    public static final RuntimeTypeAdapterFactory<AnalyzeJob> ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(AnalyzeJob.class, "clazz")
+                    .registerSubtype(NativeAnalyzeJob.class, "NativeAnalyzeJob", true)
+                    .registerSubtype(ExternalAnalyzeJob.class, "ExternalAnalyzeJob");
+
+
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -427,6 +440,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(FUNCTION_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(STORAGE_VOLUME_MGR_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)

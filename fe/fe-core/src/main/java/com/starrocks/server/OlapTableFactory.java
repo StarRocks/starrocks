@@ -185,6 +185,8 @@ public class OlapTableFactory implements AbstractTableFactory {
         // create table
         long tableId = GlobalStateMgr.getCurrentState().getNextId();
         OlapTable table;
+        // only OlapTable support light schema change so far
+        Boolean useLightSchemaChange = true;
         if (stmt.isExternal()) {
             table = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
@@ -193,6 +195,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                             ((ExternalOlapTable) table).getSourceTablePort())) {
                 throw new DdlException("can not create OLAP external table of self cluster");
             }
+            useLightSchemaChange = false;
         } else if (stmt.isOlapEngine()) {
             RunMode runMode = RunMode.getCurrentRunMode();
             String volume = "";
@@ -211,6 +214,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
                 String storageVolumeId = svm.getStorageVolumeIdOfTable(tableId);
                 metastore.setLakeStorageInfo(table, storageVolumeId, properties);
+                useLightSchemaChange = false;
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
             }
@@ -226,19 +230,22 @@ public class OlapTableFactory implements AbstractTableFactory {
             table.setBaseIndexId(baseIndexId);
 
             // get use light schema change
-            Boolean useLightSchemaChange;
             try {
-                useLightSchemaChange = PropertyAnalyzer.analyzeUseLightSchemaChange(properties);
+                useLightSchemaChange &= PropertyAnalyzer.analyzeUseLightSchemaChange(properties);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
             // only support olap table use light schema change optimization
             table.setUseLightSchemaChange(useLightSchemaChange);
+            List<Integer> sortKeyUniqueIds = new ArrayList<>();
             if (useLightSchemaChange) {
                 for (Column column : baseSchema) {
                     column.setUniqueId(table.incAndGetMaxColUniqueId());
                     LOG.debug("table: {}, newColumn: {}, uniqueId: {}", table.getName(), column.getName(),
                             column.getUniqueId());
+                }
+                for (Integer idx : sortKeyIdxes) {
+                    sortKeyUniqueIds.add(baseSchema.get(idx).getUniqueId());
                 }
             } else {
                 LOG.debug("table: {} doesn't use light schema change", table.getName());
@@ -318,6 +325,13 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
             table.setEnablePersistentIndex(enablePersistentIndex);
 
+            try {
+                table.setPrimaryIndexCacheExpireSec(PropertyAnalyzer.analyzePrimaryIndexCacheExpireSecProp(properties, 
+                        PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, 0));
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+
             if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL))) {
@@ -343,6 +357,8 @@ public class OlapTableFactory implements AbstractTableFactory {
                         PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, Config.default_automatic_bucket_size);
                 if (bucketSize > 0) {
                     table.setAutomaticBucketSize(bucketSize);
+                } else {
+                    throw new DdlException("Illegal bucket size: " + bucketSize);
                 }
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
@@ -469,7 +485,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             // get base index storage type. default is COLUMN
             TStorageType baseIndexStorageType = null;
             try {
-                baseIndexStorageType = PropertyAnalyzer.analyzeStorageType(properties);
+                baseIndexStorageType = PropertyAnalyzer.analyzeStorageType(properties, table);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
@@ -485,7 +501,8 @@ public class OlapTableFactory implements AbstractTableFactory {
 
             if (stmt.getSortKeys() != null) {
                 table.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
-                        shortKeyColumnCount, baseIndexStorageType, keysType, null, sortKeyIdxes);
+                        shortKeyColumnCount, baseIndexStorageType, keysType, null, sortKeyIdxes,
+                        sortKeyUniqueIds);
             } else {
                 table.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
                         shortKeyColumnCount, baseIndexStorageType, keysType, null);
@@ -499,7 +516,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 // get storage type for rollup index
                 TStorageType rollupIndexStorageType = null;
                 try {
-                    rollupIndexStorageType = PropertyAnalyzer.analyzeStorageType(addRollupClause.getProperties());
+                    rollupIndexStorageType = PropertyAnalyzer.analyzeStorageType(addRollupClause.getProperties(), table);
                 } catch (AnalysisException e) {
                     throw new DdlException(e.getMessage());
                 }
@@ -528,6 +545,9 @@ public class OlapTableFactory implements AbstractTableFactory {
             if (properties != null) {
                 properties.remove("storage_format");
             }
+
+            //storage type
+            table.setStorageType(baseIndexStorageType.name());
 
             // get compression type
             TCompressionType compressionType = TCompressionType.LZ4_FRAME;

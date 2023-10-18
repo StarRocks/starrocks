@@ -160,13 +160,16 @@ public:
 
         const auto& read_stats = (*stream_st)->get_read_stats();
         auto stats = std::make_unique<io::NumericStatistics>();
-        stats->reserve(6);
+        stats->reserve(9);
         stats->append(kBytesReadLocalDisk, read_stats.bytes_read_local_disk);
         stats->append(kBytesReadRemote, read_stats.bytes_read_remote);
         stats->append(kIOCountLocalDisk, read_stats.io_count_local_disk);
         stats->append(kIOCountRemote, read_stats.io_count_remote);
         stats->append(kIONsLocalDisk, read_stats.io_ns_local_disk);
         stats->append(kIONsRemote, read_stats.io_ns_remote);
+        stats->append(kPrefetchHitCount, read_stats.prefetch_hit_count);
+        stats->append(kPrefetchWaitFinishNs, read_stats.prefetch_wait_finish_ns);
+        stats->append(kPrefetchPendingNs, read_stats.prefetch_pending_ns);
         return std::move(stats);
     }
 
@@ -505,6 +508,10 @@ public:
     }
 
     Status delete_files(const std::vector<std::string>& paths) override {
+        if (paths.empty()) {
+            return Status::OK();
+        }
+
         std::vector<std::string> parsed_paths;
         parsed_paths.reserve(paths.size());
         std::shared_ptr<staros::starlet::fslib::FileSystem> fs = nullptr;

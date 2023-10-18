@@ -77,7 +77,7 @@ Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, Sp
         writer->shuffle(indexs, hash_column);
         writer->process_partition_data(chunk, indexs, std::forward<Processer>(processer));
     }
-    COUNTER_SET(_metrics.partition_writer_peak_memory_usage, 0);
+    COUNTER_SET(_metrics.partition_writer_peak_memory_usage, writer->mem_consumption());
     RETURN_IF_ERROR(writer->flush_if_full(state, executor, guard));
     return Status::OK();
 }
@@ -170,6 +170,8 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
     };
     // submit io task
     RETURN_IF_ERROR(executor.submit(std::move(task)));
+    COUNTER_UPDATE(_spiller->metrics().flush_io_task_count, 1);
+    COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks);
     return Status::OK();
 }
 
@@ -193,12 +195,16 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
     DCHECK(_stream->enable_prefetch());
     // if all is well and input stream enable prefetch and not eof
     if (!_stream->eof()) {
+        // make sure _running_restore_tasks < io_tasks_per_scan_operator to avoid scan overloaded
+        if (_stream->is_ready() && _running_restore_tasks >= config::io_tasks_per_scan_operator) {
+            return Status::OK();
+        }
         _running_restore_tasks++;
         auto restore_task = [this, guard, trace = TraceInfo(state)]() {
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
             RETURN_IF(!guard.scoped_begin(), Status::OK());
-            auto defer = DeferOp([&]() { _running_restore_tasks--; });
             {
+                auto defer = DeferOp([&]() { _running_restore_tasks--; });
                 Status res;
                 SerdeContext ctx;
                 res = _stream->prefetch(ctx);
@@ -214,6 +220,8 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
             return Status::OK();
         };
         RETURN_IF_ERROR(executor.submit(std::move(restore_task)));
+        COUNTER_UPDATE(_spiller->metrics().restore_io_task_count, 1);
+        COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_restore_tasks);
     }
     return Status::OK();
 }
@@ -293,6 +301,8 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
     };
 
     RETURN_IF_ERROR(executor.submit(std::move(task)));
+    COUNTER_UPDATE(_spiller->metrics().flush_io_task_count, 1);
+    COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks);
 
     return Status::OK();
 }

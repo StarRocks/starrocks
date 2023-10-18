@@ -1110,7 +1110,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 return;
             }
             if (coord != null && !isSyncStreamLoad) {
-                coord.cancel();
+                coord.cancel(txnStatusChangeReason);
                 QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
             }
             for (int i = 0; i < channelNum; i++) {

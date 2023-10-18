@@ -154,7 +154,7 @@ private:
     Status _init_mem_tracker();
     void _reset_tracker();
 
-    Status _init_storage_page_cache();
+    void _init_storage_page_cache();
 
     template <class... Args>
     std::shared_ptr<MemTracker> regist_tracker(Args&&... args);
@@ -252,6 +252,7 @@ public:
     ClientCache<T>* get_client_cache();
 
     PriorityThreadPool* thread_pool() { return _thread_pool; }
+    ThreadPool* streaming_load_thread_pool() { return _streaming_load_thread_pool; }
     workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
     workgroup::ScanExecutor* connector_scan_executor() { return _connector_scan_executor; }
 
@@ -325,6 +326,7 @@ private:
     ClientCache<TFileBrokerServiceClient>* _broker_client_cache = nullptr;
 
     PriorityThreadPool* _thread_pool = nullptr;
+    ThreadPool* _streaming_load_thread_pool = nullptr;
 
     workgroup::ScanExecutor* _scan_executor = nullptr;
     workgroup::ScanExecutor* _connector_scan_executor = nullptr;

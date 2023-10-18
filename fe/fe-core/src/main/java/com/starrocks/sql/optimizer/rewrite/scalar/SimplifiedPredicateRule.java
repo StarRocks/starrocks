@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
@@ -37,10 +38,38 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
+    private static final ImmutableMap<String, List<String>> TIME_FNS = ImmutableMap.<String, List<String>>builder()
+            .put("years_", ImmutableList.of(FunctionSet.YEARS_ADD, FunctionSet.YEARS_SUB))
+            .put("quarters_", ImmutableList.of(FunctionSet.QUARTERS_ADD, FunctionSet.QUARTERS_SUB))
+            .put("months_", ImmutableList.of(FunctionSet.MONTHS_ADD, FunctionSet.MONTHS_SUB))
+            .put("weeks_", ImmutableList.of(FunctionSet.WEEKS_ADD, FunctionSet.WEEKS_SUB))
+            .put("days_", ImmutableList.of(FunctionSet.DAYS_ADD, FunctionSet.DAYS_SUB))
+            .put("hours_", ImmutableList.of(FunctionSet.HOURS_ADD, FunctionSet.HOURS_SUB))
+            .put("minutes_", ImmutableList.of(FunctionSet.MINUTES_ADD, FunctionSet.MINUTES_SUB))
+            .put("seconds_", ImmutableList.of(FunctionSet.SECONDS_ADD, FunctionSet.SECONDS_SUB))
+            .put("milliseconds_", ImmutableList.of(FunctionSet.MILLISECONDS_ADD, FunctionSet.MILLISECONDS_SUB))
+            .put("microseconds_", ImmutableList.of(FunctionSet.MICROSECONDS_ADD, FunctionSet.MICROSECONDS_SUB))
+            .put("date", ImmutableList.of(FunctionSet.DATE_ADD, FunctionSet.DATE_SUB))
+            .build();
+    private static final List<String> TIME_FN_NAMES = ImmutableList.<String>builder()
+            .add(FunctionSet.YEARS_ADD).add(FunctionSet.YEARS_SUB)
+            .add(FunctionSet.QUARTERS_ADD).add(FunctionSet.QUARTERS_SUB)
+            .add(FunctionSet.MONTHS_ADD).add(FunctionSet.MONTHS_SUB)
+            .add(FunctionSet.WEEKS_ADD).add(FunctionSet.WEEKS_SUB)
+            .add(FunctionSet.DAYS_ADD).add(FunctionSet.DAYS_SUB)
+            .add(FunctionSet.HOURS_ADD).add(FunctionSet.HOURS_SUB)
+            .add(FunctionSet.MINUTES_ADD).add(FunctionSet.MINUTES_SUB)
+            .add(FunctionSet.SECONDS_ADD).add(FunctionSet.SECONDS_SUB)
+            .add(FunctionSet.MILLISECONDS_ADD).add(FunctionSet.MILLISECONDS_SUB)
+            .add(FunctionSet.MICROSECONDS_ADD).add(FunctionSet.MICROSECONDS_SUB)
+            .add(FunctionSet.DATE_ADD).add(FunctionSet.DATE_SUB)
+            .build();
+
     private static final EliminateNegationsRewriter ELIMINATE_NEGATIONS_REWRITER = new EliminateNegationsRewriter();
 
     @Override
@@ -294,8 +323,8 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
     }
 
-    //Simplify the comparison result of the same column
-    //eg a >= a with not nullable transform to true constant;
+    // Simplify the comparison result of the same column
+    // eg a >= a with not nullable transform to true constant;
     @Override
     public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate,
                                                ScalarOperatorRewriteContext context) {
@@ -315,6 +344,64 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return ifNull(call);
         } else if (FunctionSet.ARRAY_MAP.equals(call.getFnName())) {
             return arrayMap(call);
+        } else if (TIME_FN_NAMES.contains(call.getFnName())) {
+            return simplifiedTimeFns(call);
+        } else if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(call.getFnName())) {
+            return simplifiedDateTrunc(call);
+        }
+        return call;
+    }
+
+    // reduce `date_sub(date_add(x, 1), 2)` -> `date_sub(x, 1)`
+    private ScalarOperator simplifiedTimeFns(CallOperator call) {
+        String fn = TIME_FNS.keySet().stream().filter(s -> call.getFnName().contains(s))
+                .findFirst().orElse("impossible");
+        if (!call.getChild(1).isConstantRef() || !Type.INT.equals(call.getChild(1).getType())) {
+            return call;
+        }
+        if (!(call.getChild(0) instanceof CallOperator)) {
+            return call;
+        }
+
+        CallOperator child = call.getChild(0).cast();
+        if (!child.getFnName().contains(fn) || !TIME_FN_NAMES.contains(child.getFnName())) {
+            return call;
+        }
+        if (!child.getChild(1).isConstantRef() || !Type.INT.equals(child.getChild(1).getType())) {
+            return call;
+        }
+
+        ConstantOperator l1 = call.getChild(1).cast();
+        ConstantOperator l2 = call.getChild(0).getChild(1).cast();
+
+        if (l1.isNull() || l2.isNull()) {
+            return ConstantOperator.createNull(call.getType());
+        }
+
+        int i1 = call.getFnName().contains("add") ? l1.getInt() : l1.getInt() * -1;
+        int i2 = child.getFnName().contains("add") ? l2.getInt() : l2.getInt() * -1;
+
+        int result = i1 + i2;
+        ConstantOperator interval = ConstantOperator.createInt(Math.abs(result));
+
+        if (result != 0) {
+            String fnName = result < 0 ? Objects.requireNonNull(TIME_FNS.get(fn)).get(1) :
+                    Objects.requireNonNull(TIME_FNS.get(fn)).get(0);
+            Function newFn = Expr.getBuiltinFunction(fnName, call.getFunction().getArgs(),
+                    Function.CompareMode.IS_SUPERTYPE_OF);
+            return new CallOperator(fnName, call.getType(), Lists.newArrayList(child.getChild(0), interval), newFn);
+        } else {
+            return child.getChild(0);
+        }
+    }
+
+    private ScalarOperator simplifiedDateTrunc(CallOperator call) {
+        if (!call.getType().isDate() || !call.getChild(0).isConstantRef()) {
+            return call;
+        }
+        ConstantOperator child = call.getChild(0).cast();
+        if ("day".equalsIgnoreCase(child.toString())) {
+            return call.getChild(1);
         }
         return call;
     }

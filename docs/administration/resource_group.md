@@ -103,7 +103,7 @@ A classifier matches a query only when one or all conditions of the classifier m
 >
 > If a query does not hit any classifiers, the default resource group `default_wg` is used. The resource limits of `default_wg` are as follows:
 >
-> - `cpu_core_limit`: 1 (<= v2.3.7) or the number of CPU cores in BE (> v2.3.7)
+> - `cpu_core_limit`: 1 (`<=` v2.3.7) or the number of CPU cores in BE (`>` v2.3.7)
 > - `mem_limit`: 100%
 > - `concurrency_limit`: 0
 > - `big_query_cpu_second_limit`: 0
@@ -120,7 +120,7 @@ StarRocks calculates the degree of matching between a query and a classifier by 
 
 If multiple classifiers match a query, the classifier with a larger number of conditions has a higher degree of matching.
 
-```Plain%20Text
+```plaintext
 -- Classifier B has more conditions than Classifier A. Therefore, Classifier B has a higher degree of matching than Classifier A.
 
 
@@ -132,7 +132,7 @@ classifier B (user='Alice', source_ip = '192.168.1.0/24')
 
 If multiple matching classifiers have the same number of conditions, the classifier whose conditions are described more accurately has a higher degree of matching.
 
-```Plain%20Text
+```plaintext
 -- The CIDR block that is specified in Classifier B is smaller in range than Classifier A. Therefore, Classifier B has a higher degree of matching than Classifier A.
 classifier A (user='Alice', source_ip = '192.168.1.0/16')
 classifier B (user='Alice', source_ip = '192.168.1.0/24')
@@ -285,7 +285,7 @@ ALTER RESOURCE GROUP <group_name> DROP ALL;
 
 ## Monitor resource group
 
-You can set [monitor and alert](Monitor_and_alert.md) for your resource groups.
+You can set [monitor and alert](Monitor_and_Alert.md) for your resource groups.
 
 Metrics you can monitor regarding resource groups include:
 

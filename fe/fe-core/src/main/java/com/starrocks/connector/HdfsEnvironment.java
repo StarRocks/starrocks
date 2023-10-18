@@ -18,51 +18,44 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import org.apache.hadoop.conf.Configuration;
 
+import java.util.HashMap;
 import java.util.Map;
 
 public class HdfsEnvironment {
-    private final HdfsConfiguration hdfsConfiguration;
+    private final Configuration hdfsConfiguration;
+    private CloudConfiguration cloudConfiguration;
 
     /**
      * Create default Hdfs environment
      */
     public HdfsEnvironment() {
-        this.hdfsConfiguration = new HdfsConfiguration();
+        hdfsConfiguration = new Configuration();
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
     }
 
     public HdfsEnvironment(Map<String, String> properties) {
         this();
         if (properties != null) {
-            this.hdfsConfiguration.applyToCloudConfiguration(
-                    CloudConfigurationFactory.buildCloudConfigurationForStorage(properties));
+            CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+            this.cloudConfiguration = cc;
+            cc.applyToConfiguration(hdfsConfiguration);
         }
     }
 
-    public HdfsEnvironment(CloudConfiguration cloudConfiguration) {
+    public HdfsEnvironment(CloudConfiguration cc) {
         this();
         if (cloudConfiguration != null) {
-            this.hdfsConfiguration.applyToCloudConfiguration(cloudConfiguration);
+            this.cloudConfiguration = cc;
+            cc.applyToConfiguration(hdfsConfiguration);
         }
     }
 
     public Configuration getConfiguration() {
-        return hdfsConfiguration.getConfiguration();
+        return hdfsConfiguration;
     }
 
-    private static class HdfsConfiguration {
-        private final Configuration configuration;
-
-        public HdfsConfiguration() {
-            this.configuration = new Configuration();
-        }
-
-        public void applyToCloudConfiguration(CloudConfiguration cloudConfiguration) {
-            cloudConfiguration.applyToConfiguration(configuration);
-        }
-
-        public Configuration getConfiguration() {
-            return configuration;
-        }
+    public CloudConfiguration getCloudConfiguration() {
+        return cloudConfiguration;
     }
 }
 

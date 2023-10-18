@@ -15,6 +15,7 @@
 #include "formats/orc/orc_chunk_reader.h"
 
 #include <gtest/gtest.h>
+#include <testutil/assert.h>
 
 #include <ctime>
 #include <filesystem>
@@ -75,8 +76,8 @@ void create_tuple_descriptor(RuntimeState* state, ObjectPool* pool, const SlotDe
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
-
+    auto st = DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    CHECK(st.ok()) << st;
     RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
     *tuple_desc = row_desc->tuple_descriptors()[0];
     return;
@@ -206,19 +207,18 @@ static uint64_t get_hit_rows(OrcChunkReader* reader) {
     return records;
 }
 
-void check_schema(const std::string& path, const std::vector<std::pair<std::string, LogicalType>>& expected_schema) {
+void check_schema(const std::string& path, const std::vector<std::pair<std::string, TypeDescriptor>>& expected_schema) {
     OrcChunkReader reader;
     auto input_stream = orc::readLocalFile(path);
     reader.init(std::move(input_stream));
     std::vector<SlotDescriptor> schema;
-
-    auto st = reader.get_schema(&schema);
-    DCHECK(st.ok()) << st.get_error_msg();
-
+    EXPECT_OK(reader.get_schema(&schema));
     EXPECT_EQ(schema.size(), expected_schema.size());
     for (size_t i = 0; i < expected_schema.size(); ++i) {
         EXPECT_EQ(schema[i].col_name(), expected_schema[i].first);
-        EXPECT_EQ(schema[i].type().type, expected_schema[i].second) << schema[i].col_name();
+        EXPECT_TRUE(schema[i].type() == expected_schema[i].second)
+                << "column name: " << schema[i].col_name() << " expected: " << expected_schema[i].second.debug_string()
+                << " actual: " << schema[i].type().debug_string();
     }
 }
 
@@ -2134,22 +2134,45 @@ TEST_F(OrcChunkReaderTest, TestTypeMismatched) {
 }
 
 TEST_F(OrcChunkReaderTest, get_file_schema) {
-    const std::vector<std::pair<std::string, std::vector<std::pair<std::string, LogicalType>>>> test_cases = {
+    const std::vector<std::pair<std::string, std::vector<std::pair<std::string, TypeDescriptor>>>> test_cases = {
             {"./be/test/exec/test_data/orc_scanner/scalar_types.orc",
-             {{"col_bool", TYPE_BOOLEAN},
-              {"col_tinyint", TYPE_TINYINT},
-              {"col_smallint", TYPE_SMALLINT},
-              {"col_int", TYPE_INT},
-              {"col_bigint", TYPE_BIGINT},
-              {"col_float", TYPE_FLOAT},
-              {"col_double", TYPE_DOUBLE},
-              {"col_string", TYPE_VARCHAR},
-              {"col_char", TYPE_CHAR},
-              {"col_varchar", TYPE_VARCHAR},
-              {"col_binary", TYPE_VARBINARY},
-              {"col_decimal", TYPE_DECIMAL128},
-              {"col_timestamp", TYPE_DATETIME},
-              {"col_date", TYPE_DATE}}}};
+             {{"col_bool", TypeDescriptor::from_logical_type(TYPE_BOOLEAN)},
+              {"col_tinyint", TypeDescriptor::from_logical_type(TYPE_TINYINT)},
+              {"col_smallint", TypeDescriptor::from_logical_type(TYPE_SMALLINT)},
+              {"col_int", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+              {"col_float", TypeDescriptor::from_logical_type(TYPE_FLOAT)},
+              {"col_double", TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+              {"col_string", TypeDescriptor::create_varchar_type(1048576)},
+              {"col_char", TypeDescriptor::create_char_type(10)},
+              {"col_varchar", TypeDescriptor::create_varchar_type(1048576)},
+              {"col_binary", TypeDescriptor::create_varbinary_type(1048576)},
+              {"col_decimal", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 19)},
+              {"col_timestamp", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
+              {"col_date", TypeDescriptor::from_logical_type(TYPE_DATE)}}},
+            {"./be/test/exec/test_data/orc_scanner/compound.orc",
+             {{"col_int", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_list_int", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_list_list_int", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
+                                            TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_map_string_int", TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
+                                                                     TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_map_string_map_string_int",
+               TypeDescriptor::create_map_type(
+                       TypeDescriptor::create_varchar_type(1048576),
+                       TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
+                                                       TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_struct_string_int",
+               TypeDescriptor::create_struct_type(
+                       {"field_string", "field_int"},
+                       {TypeDescriptor::create_varchar_type(1048576), TypeDescriptor::from_logical_type(TYPE_INT)})},
+              {"col_struct_struct_string_int_string",
+               TypeDescriptor::create_struct_type(
+                       {"filed_struct", "field_string2"},
+                       {TypeDescriptor::create_struct_type({"field_string1", "field_int"},
+                                                           {TypeDescriptor::create_varchar_type(1048576),
+                                                            TypeDescriptor::from_logical_type(TYPE_INT)}),
+                        TypeDescriptor::create_varchar_type(1048576)})}}}};
 
     for (const auto& test_case : test_cases) {
         check_schema(test_case.first, test_case.second);

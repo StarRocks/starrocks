@@ -199,13 +199,15 @@ public class QueryAnalyzer {
             sourceScope.setParent(scope);
 
             Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
-            new AstTraverser<Void, Void>() {
-                @Override
-                public Void visitTable(TableRelation tableRelation, Void context) {
-                    generatedExprToColumnRef.putAll(tableRelation.getGeneratedExprToColumnRef());
-                    return null;
-                }
-            }.visit(resolvedRelation);
+            if (!(resolvedRelation instanceof ViewRelation)) {
+                new AstTraverser<Void, Void>() {
+                    @Override
+                    public Void visitTable(TableRelation tableRelation, Void context) {
+                        generatedExprToColumnRef.putAll(tableRelation.getGeneratedExprToColumnRef());
+                        return null;
+                    }
+                }.visit(resolvedRelation);
+            }
             analyzeState.setGeneratedExprToColumnRef(generatedExprToColumnRef);
 
             SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
@@ -678,10 +680,6 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
-            if (node.getView().isInvalid()) {
-                throw new SemanticException("View " + node.getName() + " need re-build, " + node.getView().getReason());
-            }
-
             Scope queryOutputScope;
             try {
                 queryOutputScope = process(node.getQueryStatement(), scope);
@@ -705,27 +703,6 @@ public class QueryAnalyzer {
                 Field field = new Field(column.getName(), originField.getType(), node.getResolveTableName(),
                         originField.getOriginExpression());
                 fields.add(field);
-            }
-
-            // check view schema
-            Map<String, Column> columns = node.getView().getColumns().stream()
-                    .collect(Collectors.toMap(c -> c.getName().toLowerCase(), c -> c));
-
-            for (Field field : fields) {
-                String name = field.getName().toLowerCase();
-                if (!columns.containsKey(name)) {
-                    throw new SemanticException(
-                            "Found undefined column[%s] from View[%s]'s query, " +
-                                    "please check the source table has been modified", field.getName(),
-                            node.getName().toSql());
-                }
-
-                Column column = columns.get(name);
-                if (!column.getType().matchesType(field.getType())) {
-                    throw new SemanticException("The type of column[%s] on View[%s] is different with query, " +
-                            "please check the source table has been modified", column.getName(),
-                            node.getName().toSql());
-                }
             }
 
             if (session.getDumpInfo() != null) {
@@ -977,6 +954,11 @@ public class QueryAnalyzer {
                             || ((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE_WITH_LOAD)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");
             }
+
+            if (table.isExternalTableWithFileSystem() && tableRelation.getPartitionNames() != null) {
+                throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
+            }
+
             return table;
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());

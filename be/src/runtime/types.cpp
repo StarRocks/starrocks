@@ -381,6 +381,21 @@ int TypeDescriptor::get_slot_size() const {
     return -1;
 }
 
+size_t TypeDescriptor::get_flat_size() const {
+    if (is_unknown_type()) {
+        return 0;
+    }
+    if (!is_complex_type()) {
+        return 1;
+    } else {
+        int size = 0;
+        for (const auto& type : children) {
+            size += type.get_flat_size();
+        }
+        return size;
+    }
+}
+
 size_t TypeDescriptor::get_array_depth_limit() const {
     int depth = 1;
     const TypeDescriptor* type = this;

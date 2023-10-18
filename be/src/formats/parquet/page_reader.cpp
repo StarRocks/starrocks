@@ -15,6 +15,8 @@
 #include "formats/parquet/page_reader.h"
 
 #include "common/config.h"
+#include "exec/hdfs_scanner.h"
+#include "formats/parquet/column_reader.h"
 #include "gutil/strings/substitute.h"
 #include "util/thrift_util.h"
 
@@ -26,8 +28,9 @@ static constexpr size_t kDefaultPageHeaderSize = 16 * 1024;
 // 16MB is borrowed from Arrow
 static constexpr size_t kMaxPageHeaderSize = 16 * 1024 * 1024;
 
-PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, uint64_t length, uint64_t num_values)
-        : _stream(stream), _finish_offset(start_offset + length), _num_values_total(num_values) {}
+PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, uint64_t length, uint64_t num_values,
+                       HdfsScanStats* stats)
+        : _stream(stream), _finish_offset(start_offset + length), _num_values_total(num_values), _stats(stats) {}
 
 Status PageReader::next_header() {
     if (_offset != _next_header_pos) {
@@ -47,18 +50,40 @@ Status PageReader::next_header() {
     size_t remaining = _finish_offset - _offset;
     uint32_t header_length = 0;
 
+    RETURN_IF_ERROR(_stream->seek(_offset));
+
     do {
         allowed_page_size = std::min(std::min(allowed_page_size, remaining), kMaxPageHeaderSize);
 
         std::vector<uint8_t> page_buffer;
-        page_buffer.reserve(allowed_page_size);
-        uint8_t* page_buf = page_buffer.data();
+        const uint8_t* page_buf = nullptr;
 
-        RETURN_IF_ERROR(_stream->read_at_fully(_offset, page_buf, allowed_page_size));
+        // prefer peek data instead to read data.
+        bool peek_mode = false;
+        {
+            auto st = _stream->peek(allowed_page_size);
+            if (st.ok() && st.value().size() == allowed_page_size) {
+                page_buf = (const uint8_t*)st.value().data();
+                peek_mode = true;
+            } else {
+                page_buffer.reserve(allowed_page_size);
+                RETURN_IF_ERROR(_stream->read_at_fully(_offset, page_buffer.data(), allowed_page_size));
+                page_buf = page_buffer.data();
+                auto st = _stream->peek(allowed_page_size);
+                if (st.ok()) {
+                    _stats->bytes_read -= allowed_page_size;
+                    peek_mode = true;
+                }
+            }
+        }
 
         header_length = allowed_page_size;
         auto st = deserialize_thrift_msg(page_buf, &header_length, TProtocolType::COMPACT, &_cur_header);
+
         if (st.ok()) {
+            if (peek_mode) {
+                _stats->bytes_read += header_length;
+            }
             break;
         }
 
@@ -92,11 +117,11 @@ Status PageReader::read_bytes(void* buffer, size_t size) {
 }
 
 Status PageReader::skip_bytes(size_t size) {
-    if (_offset + size > _next_header_pos) {
+    if (UNLIKELY(_offset + size > _next_header_pos)) {
         return Status::InternalError("Size to skip exceed page size");
     }
     _offset += size;
-    _stream->skip(size);
+    RETURN_IF_ERROR(_stream->skip(size));
     return Status::OK();
 }
 
@@ -104,7 +129,7 @@ StatusOr<std::string_view> PageReader::peek(size_t size) {
     if (_offset + size > _next_header_pos) {
         return Status::InternalError("Size to read exceed page size");
     }
-    _stream->seek(_offset);
+    RETURN_IF_ERROR(_stream->seek(_offset));
     ASSIGN_OR_RETURN(auto ret, _stream->peek(size));
     return ret;
 }

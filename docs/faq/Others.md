@@ -16,20 +16,20 @@ To solve this problem, perform the following steps:
 
 1. For example, there is a file named **original**, whose text is garbled. The character set of this file is ISO-8859-1. Run the following code to obtain the character set of the file.
 
-    ```Plain%20Text
+    ```plaintext
     file --mime-encoding origin.txt
     origin.txt: iso-8859-1
     ```
 
 2. Run the `iconv` command to convert the character set of this file into UTF-8.
 
-    ```Plain%20Text
+    ```plaintext
     iconv -f iso-8859-1 -t utf-8 origin.txt > origin_utf-8.txt
     ```
 
 3. After the conversion, the text of this file still appears garbled. You can then regrade the character set of this file as GBK and convert the character set into UTF-8 again.
 
-    ```Plain%20Text
+    ```plaintext
     iconv -f gbk -t utf-8 origin.txt > origin_utf-8.txt
     ```
 
@@ -51,7 +51,7 @@ Execute the SHOW DATA statement to see the corresponding storage space. You can 
 
 To request a quota increase, run the following code:
 
-```Plain%20Text
+```plaintext
 ALTER DATABASE example_db SET DATA QUOTA 10T;
 ```
 
@@ -111,7 +111,7 @@ This error occurs due to BDBJE's bug. To solve this problem, update the BDBJE ve
 
 ### Problem description
 
-```Plain%20Text
+```plaintext
 msg:Broker list path exception
 
 path=hdfs://172.31.3.136:9000/user/hive/warehouse/zltest.db/student_info/*, broker=TNetworkAddress(hostname:172.31.4.233, port:8000)
@@ -125,7 +125,7 @@ Contact the StarRocks technical support and check whether the address and port o
 
 ### Problem description
 
-```Plain%20Text
+```plaintext
 msg:get hive partition meta data failed: java.net.UnknownHostException: emr-header-1.cluster-242
 ```
 
@@ -139,7 +139,7 @@ Ensure that the network is connected and upload the **host** file to each backen
 
 The metadata of the Apache Hive is cached in the FEs. But there is a two-hours time lag for StarRocks to update the metadata. Before StarRocks finishes the update, If you insert new data or update data in the Apache Hive table, the data in HDFS scanned by the BEs and the data obtained by the FEs are different. Therefore, this error occurs.
 
-```Plain%20Text
+```plaintext
 MySQL [bdp_dim]> select * from dim_page_func_s limit 1;
 
 ERROR 1064 (HY000): HdfsOrcScanner::do_open failed. reason = Invalid ORC postscript length
@@ -150,7 +150,7 @@ ERROR 1064 (HY000): HdfsOrcScanner::do_open failed. reason = Invalid ORC postscr
 To solve this problem, perform one of the following operations:
 
 - Upgrade your current version to StarRocks 2.2 or later.
-- Manually refresh your Apache Hive table. For more information, see [Metadata caching strategy](../using_starrocks/External_table#metadata-caching-strategy).
+- Manually refresh your Apache Hive table. For more information, see [Metadata caching strategy](../data_source/External_table.md).
 
 ## This error "caching_sha2_password cannot be loaded" occurs when I connect external tables of MySQL
 
@@ -170,7 +170,7 @@ ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'yourpass
 
 - Modify the `my.cnf` file.
 
-```Plain%20Text
+```plaintext
 vim my.cnf
 
 [mysqld]
@@ -188,7 +188,14 @@ Run the `select current_version();` command or the CLI command `./bin/show_fe_ve
 
 ## How to set the memory size of an FE?
 
-FEs are used to store metadata. You can set the memory size of an FE based on the number of tablets. In StarRocks, you can set the memory size of an FE to 20 GB at most. 10 million tablets occupy about 20 GB of an FE memory.
+The metadata is stored in the memory used by the FE. You can set the memory size of the FE according to the number of tablets as shown in the table below. For example, if the number of tablets is below 1 million, you should allocate a minimum of 16 GB memory to the FE. You can configure the values of the parameters `-Xms` 和 `-Xmx` in the **JAVA_OPTS** configuration item in the **fe.conf** file, and the values of the parameters `-Xms` 和 `-Xmx` should be consistent. Note that the configuration should be same across all FEs because any of the FEs can be elected as a Leader.
+
+| Number of tablets    | Memory size of each FE |
+| -------------- | ----------- |
+| below 1 million      | 16 GB        |
+| 1 ～ 2 million | 32 GB        |
+| 2 ～ 5 million | 64 GB        |
+| 5 ～ 10 million   | 128 GB       |
 
 ## How does StarRocks calculate its query time?
 

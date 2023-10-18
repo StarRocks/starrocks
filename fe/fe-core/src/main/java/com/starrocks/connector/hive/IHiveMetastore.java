@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
@@ -57,11 +56,9 @@ public interface IHiveMetastore {
 
     void addPartitions(String dbName, String tableName, List<HivePartitionWithStats> partitions);
 
-    void alterPartition(HivePartitionWithStats partition);
-
     void dropPartition(String dbName, String tableName, List<String> partValues, boolean deleteData);
 
-    boolean partitionExists(String dbName, String tableName, List<String> partitionValues);
+    boolean partitionExists(Table table, List<String> partitionValues);
 
     Map<String, Partition> getPartitionsByNames(String dbName, String tableName, List<String> partitionNames);
 
@@ -77,6 +74,10 @@ public interface IHiveMetastore {
     // return refreshed partitions in cache for partitioned table, return empty list for unpartitioned table
     default List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName, boolean onlyCachedPartitions) {
         return Lists.newArrayList();
+    }
+
+    default boolean refreshView(String hiveDbName, String hiveTblName) {
+        return true;
     }
 
     default List<HivePartitionName> refreshTableBackground(String hiveDbName, String hiveTblName, boolean onlyCachedPartitions) {

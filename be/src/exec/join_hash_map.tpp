@@ -71,6 +71,7 @@ void JoinBuildFunc<LT>::construct_hash_table(RuntimeState* state, JoinHashTableI
             table_items->first[bucket_num] = i;
         }
     }
+    table_items->calculate_ht_info(table_items->key_columns[0]->byte_size());
 }
 
 template <LogicalType LT>
@@ -116,6 +117,7 @@ void DirectMappingJoinBuildFunc<LT>::construct_hash_table(RuntimeState* state, J
             table_items->first[buckets] = i;
         }
     }
+    table_items->calculate_ht_info(table_items->key_columns[0]->byte_size());
 }
 
 template <LogicalType LT>
@@ -165,6 +167,7 @@ void FixedSizeJoinBuildFunc<LT>::construct_hash_table(RuntimeState* state, JoinH
         }
         _build_columns(table_items, probe_state, data_columns, 1 + state->chunk_size() * quo, rem);
     }
+    table_items->calculate_ht_info(table_items->build_key_column->byte_size());
 }
 
 template <LogicalType LT>
@@ -215,6 +218,7 @@ void DirectMappingJoinProbeFunc<LT>::lookup_init(const JoinHashTableItems& table
     static constexpr CppType MIN_VALUE = RunTimeTypeLimits<LT>::min_value();
     size_t probe_row_count = probe_state->probe_row_count;
     auto& data = get_key_data(*probe_state);
+    probe_state->active_coroutines = 0; // the ht data is not large, so disable it always.
 
     if ((*probe_state->key_columns)[0]->is_nullable()) {
         auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>((*probe_state->key_columns)[0]);
@@ -280,12 +284,14 @@ void JoinProbeFunc<LT>::lookup_init(const JoinHashTableItems& table_items, HashT
             }
             probe_state->null_array = nullptr;
         }
+        probe_state->consider_probe_time_locality();
         return;
     }
 
     for (size_t i = 0; i < probe_row_count; i++) {
         probe_state->next[i] = table_items.first[probe_state->buckets[i]];
     }
+    probe_state->consider_probe_time_locality();
     probe_state->null_array = nullptr;
 }
 
@@ -332,6 +338,7 @@ void FixedSizeJoinProbeFunc<LT>::lookup_init(const JoinHashTableItems& table_ite
     } else {
         _probe_column(table_items, probe_state, data_columns);
     }
+    probe_state->consider_probe_time_locality();
 }
 
 template <LogicalType LT>
@@ -363,6 +370,7 @@ void FixedSizeJoinProbeFunc<LT>::_probe_nullable_column(const JoinHashTableItems
             probe_state->is_nulls[j] |= null_columns[i]->get_data()[j];
         }
     }
+    probe_state->null_array = &null_columns[0]->get_data();
 
     JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, probe_state->probe_key_column.get(), 0,
                                                            row_count);
@@ -761,6 +769,10 @@ template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht(RuntimeState* state, ChunkPtr* probe_chunk) {
     if (!_probe_state->has_remain) {
         _probe_state->probe_row_count = (*probe_chunk)->num_rows();
+        _probe_state->active_coroutines = state->query_options().interleaving_group_size;
+        if (state->query_options().interleaving_group_size > 0 && !_table_items->ht_cache_miss_serious()) {
+            _probe_state->active_coroutines = 0;
+        }
         ProbeFunc().lookup_init(*_table_items, _probe_state);
 
         auto& build_data = BuildFunc().get_key_data(*_table_items);
@@ -808,6 +820,22 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_remain(RuntimeState* stat
     _probe_state->count = match_count;
 }
 
+#define DO_PROBE(X, Y)                                                                  \
+    if (_probe_state->active_coroutines != 0) {                                         \
+        if constexpr (first_probe) {                                                    \
+            auto group_size = std::abs(state->query_options().interleaving_group_size); \
+            _probe_state->cur_probe_index = 0;                                          \
+            _probe_state->handles.clear();                                              \
+            for (int i = 0; i < group_size; ++i) {                                      \
+                _probe_state->handles.insert(X(state, build_data, data));               \
+            }                                                                           \
+            _probe_state->active_coroutines = group_size;                               \
+        }                                                                               \
+        _probe_coroutine<first_probe, Y>(state, build_data, data);                      \
+    } else {                                                                            \
+        X<first_probe>(state, build_data, data);                                        \
+    }
+
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state, const Buffer<CppType>& build_data,
@@ -815,56 +843,48 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
     if (!_table_items->with_other_conjunct) {
         switch (_table_items->join_type) {
         case TJoinOp::LEFT_OUTER_JOIN:
-            _probe_from_ht_for_left_outer_join<first_probe>(state, build_data, data);
+            DO_PROBE(_probe_from_ht_for_left_outer_join, false);
             break;
         case TJoinOp::LEFT_SEMI_JOIN:
-            _probe_from_ht_for_left_semi_join<first_probe>(state, build_data, data);
+            DO_PROBE(_probe_from_ht_for_left_semi_join, false);
             break;
         case TJoinOp::LEFT_ANTI_JOIN:
         case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
-            _probe_from_ht_for_left_anti_join<first_probe>(state, build_data, data);
+            DO_PROBE(_probe_from_ht_for_left_anti_join, false);
             break;
         case TJoinOp::RIGHT_OUTER_JOIN:
-            _probe_from_ht_for_right_outer_join<first_probe>(state, build_data, data);
+            DO_PROBE(_probe_from_ht_for_right_outer_join, false);
             break;
         case TJoinOp::RIGHT_SEMI_JOIN:
-            _probe_from_ht_for_right_semi_join<first_probe>(state, build_data, data);
+            DO_PROBE(_probe_from_ht_for_right_semi_join, false);
             break;
         case TJoinOp::RIGHT_ANTI_JOIN:
-            _probe_from_ht_for_right_anti_join<first_probe>(state, build_data, data);
+            DO_PROBE(_probe_from_ht_for_right_anti_join, false);
             break;
         case TJoinOp::FULL_OUTER_JOIN:
-            _probe_from_ht_for_full_outer_join<first_probe>(state, build_data, data);
+            DO_PROBE(_probe_from_ht_for_full_outer_join, false);
             break;
         default:
-            _probe_from_ht<first_probe>(state, build_data, data);
+            DO_PROBE(_probe_from_ht, false);
             break;
         }
     } else {
         switch (_table_items->join_type) {
-        case TJoinOp::LEFT_OUTER_JOIN:
-            _probe_from_ht_for_left_outer_join_with_other_conjunct<first_probe>(state, build_data, data);
-            break;
         case TJoinOp::LEFT_SEMI_JOIN:
-            _probe_from_ht_for_left_semi_join_with_other_conjunct<first_probe>(state, build_data, data);
-            break;
-        case TJoinOp::LEFT_ANTI_JOIN:
-            _probe_from_ht_for_left_anti_join_with_other_conjunct<first_probe>(state, build_data, data);
+            DO_PROBE(_probe_from_ht_for_left_semi_join_with_other_conjunct, true);
             break;
         case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
-            _probe_from_ht_for_null_aware_anti_join_with_other_conjunct<first_probe>(state, build_data, data);
+            DO_PROBE(_probe_from_ht_for_null_aware_anti_join_with_other_conjunct, true);
             break;
         case TJoinOp::RIGHT_OUTER_JOIN:
-            _probe_from_ht_for_right_outer_join_with_other_conjunct<first_probe>(state, build_data, data);
-            break;
         case TJoinOp::RIGHT_SEMI_JOIN:
-            _probe_from_ht_for_right_semi_join_with_other_conjunct<first_probe>(state, build_data, data);
-            break;
         case TJoinOp::RIGHT_ANTI_JOIN:
-            _probe_from_ht_for_right_anti_join_with_other_conjunct<first_probe>(state, build_data, data);
+            DO_PROBE(_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct, false);
             break;
+        case TJoinOp::LEFT_OUTER_JOIN:
+        case TJoinOp::LEFT_ANTI_JOIN:
         case TJoinOp::FULL_OUTER_JOIN:
-            _probe_from_ht_for_full_outer_join_with_other_conjunct<first_probe>(state, build_data, data);
+            DO_PROBE(_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct, true);
             break;
         default:
             // can't reach here
@@ -898,6 +918,48 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
         return;                                                  \
     }
 
+#define COWAIT_IF_CHUNK_FULL()                              \
+    if (_probe_state->match_count == state->chunk_size()) { \
+        _probe_state->has_remain = true;                    \
+        _probe_state->count = state->chunk_size();          \
+        co_await std::suspend_always{};                     \
+    }
+
+#define REORDER_PROBE_INDEX()                                                                                         \
+    if (_probe_state->match_flag != JoinMatchFlag::NORMAL) {                                                          \
+        Buffer<uint32_t> permutation(_probe_state->probe_index.size(), -1);                                           \
+        for (auto i = 0; i < _probe_state->match_count; ++i) {                                                        \
+            permutation[_probe_state->probe_index[i]] = i;                                                            \
+        }                                                                                                             \
+        Buffer<uint32_t> new_order(_probe_state->build_index.size(), 0);                                              \
+        uint32_t count = 0;                                                                                           \
+        for (auto i = 0; i < _probe_state->probe_row_count; ++i) {                                                    \
+            if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE ||                                           \
+                (_probe_state->match_flag == JoinMatchFlag::MOST_MATCH_ONE && _probe_state->probe_match_filter[i])) { \
+                DCHECK(permutation[i] != -1);                                                                         \
+                new_order[count++] = _probe_state->build_index[permutation[i]];                                       \
+            }                                                                                                         \
+        }                                                                                                             \
+        if (UNLIKELY(count != _probe_state->match_count)) {                                                           \
+            auto msg = fmt::format("Coroutine join match count {} != expected {}", count, _probe_state->match_count); \
+            LOG(WARNING) << msg;                                                                                      \
+            throw std::runtime_error(msg);                                                                            \
+        }                                                                                                             \
+        _probe_state->build_index.swap(new_order);                                                                    \
+    }
+
+#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86)) /* _mm_prefetch() not defined outside of x86/x64 */
+#include <mmintrin.h> /* https://msdn.microsoft.com/fr-fr/library/84szxsww(v=vs.90).aspx */
+#define XXH_PREFETCH(ptr) _mm_prefetch((const char*)(ptr), _MM_HINT_T0)
+#elif defined(__GNUC__) && ((__GNUC__ >= 4) || ((__GNUC__ == 3) && (__GNUC_MINOR__ >= 1)))
+#define XXH_PREFETCH(ptr) __builtin_prefetch((ptr), 0 /* rw==read */, 3 /* locality */)
+#endif
+
+#define PREFETCH_AND_COWAIT(x, y) \
+    XXH_PREFETCH(x);              \
+    XXH_PREFETCH(y);              \
+    co_await std::suspend_always{};
+
 // When a probe row corresponds to multiple Build rows,
 // a Probe Chunk may generate multiple ResultChunks,
 // so each probe will have search one more row to determine whether it has reached the boundary,
@@ -925,6 +987,46 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
     match_count++;                              \
     _probe_state->cur_row_match_count++;
 
+#define MATCH_RIGHT_TABLE_ROWS_CORO()                         \
+    _probe_state->probe_index[_probe_state->match_count] = i; \
+    _probe_state->build_index[_probe_state->match_count] = j; \
+    _probe_state->probe_match_index[i]++;                     \
+    _probe_state->match_count++;                              \
+    cur_row_match_count++;
+
+/// TODO (fzh): calculate hash distribution, skew or not.
+// NOTE: coroutine only SIMD code of SSE but not AVX
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+template <bool first_probe, bool init_match>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_coroutine(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                             const Buffer<CppType>& probe_data) {
+    _probe_state->match_flag = JoinMatchFlag::NORMAL;
+    _probe_state->match_count = 0;
+    _probe_state->cur_row_match_count = 0;
+    _probe_state->count = 0;
+    if constexpr (first_probe && init_match) {
+        _probe_state->probe_match_index.assign(state->chunk_size(), 0);
+    }
+    // disorder probe id as matching steps are different for each probe
+    while (!_probe_state->handles.empty()) {
+        for (auto it = _probe_state->handles.begin(); it != _probe_state->handles.end();) {
+            if (it->promise().exception != nullptr) {
+                std::rethrow_exception(it->promise().exception);
+            }
+            if (it->done()) {
+                it->destroy();
+                it = _probe_state->handles.erase(it);
+            } else {
+                it->resume();
+                it++;
+            }
+            if (_probe_state->count == state->chunk_size()) {
+                return;
+            }
+        }
+    }
+}
+
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
@@ -934,7 +1036,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
     bool one_to_many = false;
     size_t i = _probe_state->cur_probe_index;
 
-    if constexpr (!first_probe) {
+    if constexpr (!first_probe) { // chunk_size + 1 probe
         _probe_state->probe_index[0] = _probe_state->probe_index[state->chunk_size()];
         _probe_state->build_index[0] = _probe_state->build_index[state->chunk_size()];
         match_count = 1;
@@ -980,6 +1082,91 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
 
     if constexpr (first_probe) {
         CHECK_MATCH()
+    }
+    PROBE_OVER()
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+    for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
+         i = _probe_state->cur_probe_index++) {
+        _probe_state->probe_match_filter[i] = 0;
+        uint32_t cur_row_match_count = 0;
+        size_t build_index = _probe_state->next[i];
+        if (build_index != 0) {
+            do {
+                PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index))
+                if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                    COWAIT_IF_CHUNK_FULL()
+                    _probe_state->probe_index[_probe_state->match_count] = i;
+                    _probe_state->build_index[_probe_state->match_count] = build_index;
+                    _probe_state->match_count++;
+                    cur_row_match_count++;
+                    _probe_state->probe_match_filter[i] = 1;
+                }
+                build_index = _table_items->next[build_index];
+            } while (build_index != 0);
+
+            if (cur_row_match_count > 1) {
+                _probe_state->cur_row_match_count = cur_row_match_count; // means one_to_many match
+            }
+        }
+    }
+
+    if (--_probe_state->active_coroutines > 0) {
+        co_return;
+    }
+    // only the last coroutine does
+    auto match_count = _probe_state->match_count;
+    bool one_to_many = _probe_state->cur_row_match_count > 1;
+    if (!_probe_state->has_remain) {
+        CHECK_MATCH()
+        REORDER_PROBE_INDEX()
+    }
+    PROBE_OVER()
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+    for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
+         i = _probe_state->cur_probe_index++) {
+        int cur_row_match_count = 0;
+        size_t build_index = _probe_state->next[i];
+        while (build_index != 0) {
+            PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index))
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                COWAIT_IF_CHUNK_FULL()
+                _probe_state->probe_index[_probe_state->match_count] = i;
+                _probe_state->build_index[_probe_state->match_count] = build_index;
+                _probe_state->match_count++;
+                cur_row_match_count++;
+            }
+            build_index = _table_items->next[build_index];
+        }
+        if (cur_row_match_count <= 0) {
+            COWAIT_IF_CHUNK_FULL()
+            // one key of left table match none key of right table
+            _probe_state->probe_index[_probe_state->match_count] = i;
+            _probe_state->build_index[_probe_state->match_count] = 0;
+            _probe_state->match_count++;
+            _probe_state->has_null_build_tuple = true;
+        } else if (cur_row_match_count > 1) {
+            // one key of left table match multi key of right table
+            _probe_state->cur_row_match_count = cur_row_match_count;
+        }
+    }
+
+    if (--_probe_state->active_coroutines > 0) {
+        co_return;
+    }
+    // only the last coroutine does
+    auto match_count = _probe_state->match_count;
+    bool one_to_many = _probe_state->cur_row_match_count > 1;
+    if (!_probe_state->has_remain) {
+        CHECK_ALL_MATCH()
+        REORDER_PROBE_INDEX()
     }
     PROBE_OVER()
 }
@@ -1048,6 +1235,35 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join(R
         CHECK_ALL_MATCH()
     }
     PROBE_OVER()
+}
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+    for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
+         i = _probe_state->cur_probe_index++) {
+        size_t build_index = _probe_state->next[i];
+        if (build_index == 0) {
+            continue;
+        }
+
+        while (build_index != 0) {
+            PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index))
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                _probe_state->probe_index[_probe_state->match_count] = i;
+                _probe_state->match_count++;
+                break;
+            }
+            build_index = _table_items->next[build_index];
+        }
+    }
+
+    if (--_probe_state->active_coroutines > 0) {
+        co_return;
+    }
+    // only the last coroutine does
+    auto match_count = _probe_state->match_count;
+    PROBE_OVER()
+    _probe_state->has_null_build_tuple = true;
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
@@ -1141,6 +1357,73 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join(Ru
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+    DCHECK_LT(0, _table_items->row_count);
+    if (_table_items->join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && _probe_state->null_array != nullptr) {
+        // process left anti join from not in
+        for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
+             i = _probe_state->cur_probe_index++) {
+            size_t build_index = _probe_state->next[i];
+            if ((*_probe_state->null_array)[i] == 1) {
+                continue;
+            }
+
+            if (build_index == 0) {
+                _probe_state->probe_index[_probe_state->match_count] = i;
+                _probe_state->match_count++;
+                continue;
+            }
+
+            bool found = false;
+            while (build_index != 0) {
+                PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index))
+                if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                    found = true;
+                    break;
+                }
+                build_index = _table_items->next[build_index];
+            }
+            if (!found) {
+                _probe_state->probe_index[_probe_state->match_count] = i;
+                _probe_state->match_count++;
+            }
+        }
+    } else {
+        for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
+             i = _probe_state->cur_probe_index++) {
+            size_t build_index = _probe_state->next[i];
+            if (build_index == 0) {
+                _probe_state->probe_index[_probe_state->match_count] = i;
+                _probe_state->match_count++;
+                continue;
+            }
+            bool found = false;
+            while (build_index != 0) {
+                PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index))
+                if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                    found = true;
+                    break;
+                }
+                build_index = _table_items->next[build_index];
+            }
+            if (!found) {
+                _probe_state->probe_index[_probe_state->match_count] = i;
+                _probe_state->match_count++;
+            }
+        }
+    }
+
+    if (--_probe_state->active_coroutines > 0) {
+        co_return;
+    }
+    // only the last coroutine does
+    auto match_count = _probe_state->match_count;
+    PROBE_OVER()
+    _probe_state->has_null_build_tuple = true;
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join(RuntimeState* state,
                                                                                 const Buffer<CppType>& build_data,
@@ -1177,6 +1460,38 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join(
         }
     }
 
+    // TODO: all match optimized
+    PROBE_OVER()
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+    for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
+         i = _probe_state->cur_probe_index++) {
+        size_t build_index = _probe_state->next[i];
+        if (build_index == 0) {
+            continue;
+        }
+
+        while (build_index != 0) {
+            PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index))
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                COWAIT_IF_CHUNK_FULL()
+                _probe_state->probe_index[_probe_state->match_count] = i;
+                _probe_state->build_index[_probe_state->match_count] = build_index;
+                _probe_state->build_match_index[build_index] = 1;
+                _probe_state->match_count++;
+            }
+            build_index = _table_items->next[build_index];
+        }
+    }
+
+    if (--_probe_state->active_coroutines > 0) {
+        co_return;
+    }
+    // only the last coroutine does
+    auto match_count = _probe_state->match_count;
     // TODO: all match optimized
     PROBE_OVER()
 }
@@ -1221,6 +1536,39 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join(R
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+    for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
+         i = _probe_state->cur_probe_index++) {
+        size_t build_index = _probe_state->next[i];
+        if (build_index == 0) {
+            continue;
+        }
+
+        while (build_index != 0) {
+            PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index))
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                if (_probe_state->build_match_index[build_index] == 0) {
+                    COWAIT_IF_CHUNK_FULL()
+                    _probe_state->probe_index[_probe_state->match_count] = i;
+                    _probe_state->build_index[_probe_state->match_count] = build_index;
+                    _probe_state->build_match_index[build_index] = 1;
+                    _probe_state->match_count++;
+                }
+            }
+            build_index = _table_items->next[build_index];
+        }
+    }
+
+    if (--_probe_state->active_coroutines > 0) {
+        co_return;
+    }
+    // only the last coroutine does
+    auto match_count = _probe_state->match_count;
+    PROBE_OVER()
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join(RuntimeState* state,
                                                                                const Buffer<CppType>& build_data,
@@ -1237,6 +1585,27 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join(R
                 _probe_state->build_match_index[index] = 1;
             }
             index = _table_items->next[index];
+        }
+    }
+    _probe_state->count = 0;
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+    for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
+         i = _probe_state->cur_probe_index++) {
+        size_t build_index = _probe_state->next[i];
+        if (build_index == 0) {
+            continue;
+        }
+
+        while (build_index != 0) {
+            PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index))
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                _probe_state->build_match_index[build_index] = 1;
+            }
+            build_index = _table_items->next[build_index];
         }
     }
     _probe_state->count = 0;
@@ -1299,62 +1668,37 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join(R
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
-void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join_with_other_conjunct(
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
-    size_t match_count = 0;
-
-    size_t i = _probe_state->cur_probe_index;
-    if constexpr (!first_probe) {
-        _probe_state->probe_index[0] = _probe_state->probe_index[state->chunk_size()];
-        _probe_state->build_index[0] = _probe_state->build_index[state->chunk_size()];
-        match_count = 1;
-        if (_probe_state->next[i] == 0) {
-            i++;
-            _probe_state->cur_row_match_count = 0;
-        }
-    } else {
-        _probe_state->cur_row_match_count = 0;
-        for (size_t j = 0; j < state->chunk_size(); j++) {
-            _probe_state->probe_match_index[j] = 0;
-        }
-    }
-
-    size_t probe_row_count = _probe_state->probe_row_count;
-    for (; i < probe_row_count; i++) {
+    for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
+         i = _probe_state->cur_probe_index++) {
         size_t build_index = _probe_state->next[i];
-        if (build_index == 0) {
-            _probe_state->probe_index[match_count] = i;
-            _probe_state->build_index[match_count] = 0;
-            match_count++;
-
-            RETURN_IF_CHUNK_FULL()
-            continue;
-        }
-
+        int cur_row_match_count = 0;
         while (build_index != 0) {
+            PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index))
             if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
-                _probe_state->probe_index[match_count] = i;
-                _probe_state->build_index[match_count] = build_index;
-                _probe_state->probe_match_index[i]++;
-                match_count++;
-                _probe_state->cur_row_match_count++;
-
-                RETURN_IF_CHUNK_FULL()
+                COWAIT_IF_CHUNK_FULL()
+                _probe_state->probe_index[_probe_state->match_count] = i;
+                _probe_state->build_index[_probe_state->match_count] = build_index;
+                _probe_state->build_match_index[build_index] = 1;
+                _probe_state->match_count++;
+                cur_row_match_count++;
             }
             build_index = _table_items->next[build_index];
         }
-        if (_probe_state->cur_row_match_count <= 0) {
-            _probe_state->probe_index[match_count] = i;
-            _probe_state->build_index[match_count] = 0;
-            match_count++;
-
-            RETURN_IF_CHUNK_FULL()
+        if (cur_row_match_count <= 0) {
+            COWAIT_IF_CHUNK_FULL()
+            _probe_state->probe_index[_probe_state->match_count] = i;
+            _probe_state->build_index[_probe_state->match_count] = 0;
+            _probe_state->match_count++;
         }
-        _probe_state->cur_row_match_count = 0;
     }
 
-    _probe_state->has_null_build_tuple = true;
+    if (--_probe_state->active_coroutines > 0) {
+        co_return;
+    }
+    // only the last coroutine does
+    auto match_count = _probe_state->match_count;
     PROBE_OVER()
 }
 
@@ -1403,62 +1747,34 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join_wi
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
-void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join_with_other_conjunct(
+HashTableProbeState::ProbeCoroutine
+JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join_with_other_conjunct(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
-    size_t match_count = 0;
-
-    size_t i = _probe_state->cur_probe_index;
-    if constexpr (!first_probe) {
-        _probe_state->probe_index[0] = _probe_state->probe_index[state->chunk_size()];
-        _probe_state->build_index[0] = _probe_state->build_index[state->chunk_size()];
-        match_count = 1;
-        if (_probe_state->next[i] == 0) {
-            i++;
-            _probe_state->cur_row_match_count = 0;
-        }
-    } else {
-        _probe_state->cur_row_match_count = 0;
-        for (size_t j = 0; j < state->chunk_size(); j++) {
-            _probe_state->probe_match_index[j] = 0;
-        }
-    }
-
-    size_t probe_row_count = _probe_state->probe_row_count;
-    for (; i < probe_row_count; i++) {
+    for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
+         i = _probe_state->cur_probe_index++) {
         size_t build_index = _probe_state->next[i];
         if (build_index == 0) {
-            _probe_state->probe_index[match_count] = i;
-            _probe_state->build_index[match_count] = 0;
-            match_count++;
-
-            RETURN_IF_CHUNK_FULL()
             continue;
         }
 
         while (build_index != 0) {
+            PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index))
             if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
-                _probe_state->probe_index[match_count] = i;
-                _probe_state->build_index[match_count] = build_index;
-                _probe_state->probe_match_index[i]++;
-                match_count++;
-                _probe_state->cur_row_match_count++;
-
-                RETURN_IF_CHUNK_FULL()
+                COWAIT_IF_CHUNK_FULL()
+                _probe_state->probe_index[_probe_state->match_count] = i;
+                _probe_state->build_index[_probe_state->match_count] = build_index;
+                _probe_state->match_count++;
             }
             build_index = _table_items->next[build_index];
         }
-        if (_probe_state->cur_row_match_count <= 0) {
-            _probe_state->probe_index[match_count] = i;
-            _probe_state->build_index[match_count] = 0;
-            match_count++;
-
-            RETURN_IF_CHUNK_FULL()
-        }
-        _probe_state->cur_row_match_count = 0;
     }
 
+    if (--_probe_state->active_coroutines > 0) {
+        co_return;
+    }
+    // only the last coroutine does
     _probe_state->has_null_build_tuple = true;
+    auto match_count = _probe_state->match_count;
     PROBE_OVER()
 }
 
@@ -1557,9 +1873,91 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
-void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join_with_other_conjunct(
+HashTableProbeState::ProbeCoroutine
+JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_join_with_other_conjunct(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+    for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
+         i = _probe_state->cur_probe_index++) {
+        size_t build_index = _probe_state->next[i];
+        int cur_row_match_count = 0;
+        if (build_index == 0) {
+            bool change_flag = false;
+            if (_probe_state->null_array != nullptr && (*_probe_state->null_array)[i] == 1) {
+                // when left table col value is null needs match all rows in right table
+                for (size_t j = 1; j < _table_items->row_count + 1; j++) {
+                    change_flag = true;
+                    COWAIT_IF_CHUNK_FULL()
+                    MATCH_RIGHT_TABLE_ROWS_CORO()
+                }
+            } else if (_table_items->key_columns[0]->is_nullable()) {
+                // when left table col value not hits in hash table needs match all null value rows in right table
+                auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
+                auto& null_array = nullable_column->null_column()->get_data();
+                for (size_t j = 1; j < _table_items->row_count + 1; j++) {
+                    if (null_array[j] == 1) {
+                        change_flag = true;
+                        COWAIT_IF_CHUNK_FULL()
+                        MATCH_RIGHT_TABLE_ROWS_CORO()
+                    }
+                }
+            }
+
+            if (!change_flag) {
+                COWAIT_IF_CHUNK_FULL()
+                _probe_state->probe_index[_probe_state->match_count] = i;
+                _probe_state->build_index[_probe_state->match_count] = 0;
+                _probe_state->match_count++;
+            }
+            continue;
+        } else {
+            // left table col value hits in hash table, we also need match null values firstly then match hit rows.
+            if (_table_items->key_columns[0]->is_nullable()) {
+                auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
+                auto& null_array = nullable_column->null_column()->get_data();
+                for (size_t j = 1; j < _table_items->row_count + 1; j++) {
+                    if (null_array[j] == 1) {
+                        COWAIT_IF_CHUNK_FULL()
+                        MATCH_RIGHT_TABLE_ROWS_CORO()
+                    }
+                }
+            }
+        }
+
+        while (build_index != 0) {
+            PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index))
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                COWAIT_IF_CHUNK_FULL()
+                _probe_state->probe_index[_probe_state->match_count] = i;
+                _probe_state->build_index[_probe_state->match_count] = build_index;
+                _probe_state->probe_match_index[i]++;
+                _probe_state->match_count++;
+                cur_row_match_count++;
+            }
+            build_index = _table_items->next[build_index];
+        }
+
+        if (cur_row_match_count <= 0) {
+            COWAIT_IF_CHUNK_FULL()
+            _probe_state->probe_index[_probe_state->match_count] = i;
+            _probe_state->build_index[_probe_state->match_count] = 0;
+            _probe_state->match_count++;
+        }
+    }
+
+    if (--_probe_state->active_coroutines > 0) {
+        co_return;
+    }
+    // only the last coroutine does
+    _probe_state->has_null_build_tuple = true;
+    auto match_count = _probe_state->match_count;
+    PROBE_OVER()
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+template <bool first_probe>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::
+        _probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct(
+                RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t i = _probe_state->cur_probe_index;
 
@@ -1588,70 +1986,39 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join_
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
-void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join_with_other_conjunct(
+HashTableProbeState::ProbeCoroutine
+JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
-    size_t match_count = 0;
-    size_t i = _probe_state->cur_probe_index;
-
-    PROCESS_PROBE_STAGE_FOR_RIGHT_JOIN_WITH_OTHER_CONJUNCT()
-
-    size_t probe_row_count = _probe_state->probe_row_count;
-    for (; i < probe_row_count; i++) {
+    for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
+         i = _probe_state->cur_probe_index++) {
         size_t build_index = _probe_state->next[i];
         if (build_index == 0) {
             continue;
         }
 
         while (build_index != 0) {
+            PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index))
             if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
-                _probe_state->probe_index[match_count] = i;
-                _probe_state->build_index[match_count] = build_index;
-                match_count++;
-
-                RETURN_IF_CHUNK_FULL()
+                COWAIT_IF_CHUNK_FULL()
+                _probe_state->probe_index[_probe_state->match_count] = i;
+                _probe_state->build_index[_probe_state->match_count] = build_index;
+                _probe_state->match_count++;
             }
             build_index = _table_items->next[build_index];
         }
     }
 
-    PROBE_OVER()
-}
-
-template <LogicalType LT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
-void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join_with_other_conjunct(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
-    size_t match_count = 0;
-    size_t i = _probe_state->cur_probe_index;
-
-    PROCESS_PROBE_STAGE_FOR_RIGHT_JOIN_WITH_OTHER_CONJUNCT()
-
-    size_t probe_row_count = _probe_state->probe_row_count;
-    for (; i < probe_row_count; i++) {
-        size_t build_index = _probe_state->next[i];
-        if (build_index == 0) {
-            continue;
-        }
-
-        while (build_index != 0) {
-            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
-                _probe_state->probe_index[match_count] = i;
-                _probe_state->build_index[match_count] = build_index;
-                match_count++;
-
-                RETURN_IF_CHUNK_FULL()
-            }
-            build_index = _table_items->next[build_index];
-        }
+    if (--_probe_state->active_coroutines > 0) {
+        co_return;
     }
-
+    // only the last coroutine does
+    auto match_count = _probe_state->match_count;
     PROBE_OVER()
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
-void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join_with_other_conjunct(
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
 
@@ -1705,7 +2072,44 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join_w
     }
 
     _probe_state->has_null_build_tuple = true;
+    PROBE_OVER()
+}
 
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+HashTableProbeState::ProbeCoroutine
+JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+    for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
+         i = _probe_state->cur_probe_index++) {
+        size_t build_index = _probe_state->next[i];
+        int cur_row_match_count = 0;
+
+        while (build_index != 0) {
+            PREFETCH_AND_COWAIT((build_data.data() + build_index), (_table_items->next.data() + build_index))
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                COWAIT_IF_CHUNK_FULL()
+                _probe_state->probe_index[_probe_state->match_count] = i;
+                _probe_state->build_index[_probe_state->match_count] = build_index;
+                _probe_state->probe_match_index[i]++;
+                _probe_state->match_count++;
+                cur_row_match_count++;
+            }
+            build_index = _table_items->next[build_index];
+        }
+        if (cur_row_match_count <= 0) {
+            COWAIT_IF_CHUNK_FULL()
+            _probe_state->probe_index[_probe_state->match_count] = i;
+            _probe_state->build_index[_probe_state->match_count] = 0;
+            _probe_state->match_count++;
+        }
+    }
+
+    if (--_probe_state->active_coroutines > 0) {
+        co_return;
+    }
+    // only the last coroutine does
+    _probe_state->has_null_build_tuple = true;
+    auto match_count = _probe_state->match_count;
     PROBE_OVER()
 }
 

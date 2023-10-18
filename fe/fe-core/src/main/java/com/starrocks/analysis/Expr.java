@@ -445,6 +445,32 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         extractConjunctsImpl(cpe.getChild(1), conjuncts);
     }
 
+    public static List<Expr> flattenPredicate(Expr root) {
+        List<Expr> children = Lists.newArrayList();
+        if (null == root) {
+            return children;
+        }
+
+        flattenPredicate(root, children);
+        return children;
+    }
+
+    private static void flattenPredicate(Expr root, List<Expr> children) {
+        if (!(root instanceof CompoundPredicate)) {
+            children.add(root);
+            return;
+        }
+
+        CompoundPredicate cpe = (CompoundPredicate) root;
+        if (CompoundPredicate.Operator.AND.equals(cpe.getOp()) || CompoundPredicate.Operator.OR.equals(cpe.getOp())) {
+            extractConjunctsImpl(cpe.getChild(0), children);
+            extractConjunctsImpl(cpe.getChild(1), children);
+        } else {
+            children.add(root);
+        }
+    }
+
+
     public static Expr compoundAnd(Collection<Expr> conjuncts) {
         return createCompound(CompoundPredicate.Operator.AND, conjuncts);
     }
@@ -1392,17 +1418,17 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
         if (num == 1 && (idx == 0 || idx == children.size() - 1)) {
             if (children.size() <= 1) {
-                throw new SemanticException("Lambda functions need array inputs in high-order functions.");
+                throw new SemanticException("Lambda functions need array/map inputs in high-order functions");
             }
             return true;
         } else if (num > 1) {
             throw new SemanticException("A high-order function should have only 1 lambda function, " +
-                    "but there are " + num + " lambda functions.");
+                    "but there are " + num + " lambda functions");
         } else if (idx > 0 && idx < children.size() - 1) {
             throw new SemanticException(
                     "Lambda functions should only be the first or last argument of any high-order function, " +
                             "or lambda arguments should be in () if there are more than one lambda arguments, " +
-                            "like (x,y)->x+y.");
+                            "like (x,y)->x+y");
         } else if (num == 0) {
             if (expression instanceof FunctionCallExpr) {
                 String funcName = ((FunctionCallExpr) expression).getFnName().getFunction();

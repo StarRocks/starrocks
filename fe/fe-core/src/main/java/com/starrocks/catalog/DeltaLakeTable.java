@@ -44,6 +44,10 @@ public class DeltaLakeTable extends Table {
     private DeltaLog deltaLog;
     public static final String PARTITION_NULL_VALUE = "null";
 
+    public DeltaLakeTable() {
+        super(TableType.DELTALAKE);
+    }
+
     public DeltaLakeTable(long id, String catalogName, String dbName, String tableName, List<Column> schema,
                           List<String> partitionNames, DeltaLog deltaLog, long createTime) {
         super(id, tableName, TableType.DELTALAKE, schema);

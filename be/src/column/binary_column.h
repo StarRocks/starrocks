@@ -42,7 +42,7 @@ public:
 
         Slice operator[](size_t index) const { return _column.get_slice(index); }
 
-        size_t size() { return _column.size(); }
+        size_t size() const { return _column.size(); }
 
     private:
         const BinaryColumnBase& _column;
@@ -85,6 +85,14 @@ public:
     bool has_large_column() const override;
 
     ~BinaryColumnBase() override {
+#ifndef NDEBUG
+        // sometimes we may fill _bytes and _offsets separately and resize them in the final stage,
+        // if an exception is thrown in the middle process, _offsets maybe inconsistent with _bytes,
+        // we should skip the check.
+        if (std::uncaught_exception()) {
+            return;
+        }
+#endif
         if (!_offsets.empty()) {
             DCHECK_EQ(_bytes.size(), _offsets.back());
         } else {

@@ -111,7 +111,7 @@ private:
 
     // Try to send rpc if buffer is not empty and channel is not busy
     // And we need to put this function and other extra works(pre_works) together as an atomic operation
-    Status _try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works);
+    [[nodiscard]] Status _try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works);
 
     // send by rpc or http
     Status _send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure, const TransmitChunkInfo& req);
@@ -157,7 +157,9 @@ private:
     phmap::flat_hash_map<int64_t, int32_t> _num_finished_rpcs;
     phmap::flat_hash_map<int64_t, int32_t> _num_in_flight_rpcs;
     phmap::flat_hash_map<int64_t, TimeTrace> _network_times;
+    phmap::flat_hash_map<int64_t, std::shared_ptr<QueryStatistics>> _eos_query_stats;
     phmap::flat_hash_map<int64_t, std::unique_ptr<Mutex>> _mutexes;
+    phmap::flat_hash_map<int64_t, TNetworkAddress> _dest_addrs;
 
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
     // but there may be still in-flight RPC running.
@@ -190,7 +192,6 @@ private:
     int64_t _first_send_time = -1;
     int64_t _last_receive_time = -1;
     int64_t _rpc_http_min_size = 0;
-    std::shared_ptr<QueryStatistics> _eos_query_stats = std::make_shared<QueryStatistics>();
 };
 
 } // namespace starrocks::pipeline

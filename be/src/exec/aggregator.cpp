@@ -487,8 +487,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 }
 
 Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks,
-                               pipeline::Operator* refill_op) {
-    RETURN_IF_ERROR(_reset_state(state));
+                               pipeline::Operator* refill_op, bool reset_sink_complete) {
+    RETURN_IF_ERROR(_reset_state(state, reset_sink_complete));
     // begin_pending_reset_state just tells the Aggregator, the chunks are intermediate type, it should call
     // merge method of agg functions to process these chunks.
     begin_pending_reset_state();
@@ -502,12 +502,16 @@ Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector
     return Status::OK();
 }
 
-Status Aggregator::_reset_state(RuntimeState* state) {
+Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     _is_ht_eos = false;
     _num_input_rows = 0;
-    _is_sink_complete = false;
+    if (reset_sink_complete) {
+        _is_sink_complete = false;
+    }
     _it_hash.reset();
     _num_rows_processed = 0;
+    _num_pass_through_rows = 0;
+    _num_rows_returned = 0;
 
     _buffer = {};
 
@@ -897,8 +901,8 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
     _num_pass_through_rows += result_chunk->num_rows();
     _num_rows_returned += result_chunk->num_rows();
     _num_rows_processed += result_chunk->num_rows();
+    COUNTER_UPDATE(_agg_stat->pass_through_row_count, result_chunk->num_rows());
     *chunk = std::move(result_chunk);
-    COUNTER_SET(_agg_stat->pass_through_row_count, _num_pass_through_rows);
     return Status::OK();
 }
 

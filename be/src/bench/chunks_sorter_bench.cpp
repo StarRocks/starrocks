@@ -37,6 +37,8 @@
 #include "runtime/runtime_state.h"
 #include "runtime/sorted_chunks_merger.h"
 #include "runtime/types.h"
+#include "types/logical_type.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -91,6 +93,7 @@ public:
         std::random_device dev;
         std::mt19937 rng(dev());
         UniformInt uniform_int;
+        std::uniform_real_distribution<> niform_real(1, 10);
         if (low_card) {
             uniform_int.param(UniformInt::param_type(1, 100 * std::pow(2, slot_index)));
         } else {
@@ -122,6 +125,8 @@ public:
                 column->append_datum(Datum(x));
             } else if (type_desc.type == TYPE_VARCHAR) {
                 column->append_datum(Datum(gen_rand_str()));
+            } else if (type_desc.type == TYPE_DOUBLE) {
+                column->append_datum(Datum(niform_real(rng)));
             } else {
                 std::cerr << "not supported" << std::endl;
             }
@@ -193,6 +198,8 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
         type_desc = TypeDescriptor(TYPE_INT);
     } else if (data_type == TYPE_VARCHAR) {
         type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    } else if (data_type == TYPE_DOUBLE) {
+        type_desc = TypeDescriptor(TYPE_DOUBLE);
     } else {
         ASSERT_TRUE(false) << "not support type: " << data_type;
     }
@@ -228,6 +235,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
 
     for (auto _ : state) {
         state.PauseTiming();
+        RuntimeProfile profile("dummy");
         std::unique_ptr<ChunksSorter> sorter;
         size_t expected_rows = 0;
         size_t total_rows = chunk->num_rows() * num_chunks;
@@ -257,6 +265,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
         default:
             ASSERT_TRUE(false) << "unknown algorithm " << (int)sorter_algo;
         }
+        sorter->setup_runtime(suite._runtime_state.get(), &profile, suite._runtime_state->instance_mem_tracker());
 
         int64_t iteration_data_size = 0;
         for (int i = 0; i < num_chunks; i++) {
@@ -443,6 +452,9 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
 static void BM_fullsort_notnull(benchmark::State& state) {
     do_bench(state, FullSort, TYPE_INT, state.range(0), state.range(1));
 }
+static void BM_fullsort_float_notnull(benchmark::State& state) {
+    do_bench(state, FullSort, TYPE_DOUBLE, state.range(0), state.range(1));
+}
 static void BM_fullsort_nullable(benchmark::State& state) {
     do_bench(state, FullSort, TYPE_INT, state.range(0), state.range(1), SortParameters::with_nullable(true));
 }
@@ -521,6 +533,7 @@ static void CustomArgsLimit(benchmark::internal::Benchmark* b) {
 // Full sort
 BENCHMARK(BM_fullsort_notnull)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_nullable)->Apply(CustomArgsFull);
+BENCHMARK(BM_fullsort_float_notnull)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_varchar_column_incr)->Apply(CustomArgsFull);
 
 // Low-Cardinality Sort

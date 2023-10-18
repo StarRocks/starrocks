@@ -18,18 +18,22 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 public class EquivalenceClasses implements Cloneable {
     private final Map<ColumnRefOperator, Set<ColumnRefOperator>> columnToEquivalenceClass;
-
     private List<Set<ColumnRefOperator>> cacheColumnToEquivalenceClass;
+
+    private final Map<ColumnRefOperator, Set<ColumnRefOperator>> redundantColumnToEquivalenceClass;
 
     public EquivalenceClasses() {
         columnToEquivalenceClass = Maps.newHashMap();
+        redundantColumnToEquivalenceClass = Maps.newHashMap();
     }
 
     @Override
@@ -41,6 +45,15 @@ public class EquivalenceClasses implements Cloneable {
                 Set<ColumnRefOperator> columnEcs = Sets.newLinkedHashSet(entry.getValue());
                 for (ColumnRefOperator column : columnEcs) {
                     ec.columnToEquivalenceClass.put(column, columnEcs);
+                }
+            }
+        }
+        for (Map.Entry<ColumnRefOperator, Set<ColumnRefOperator>> entry :
+                this.redundantColumnToEquivalenceClass.entrySet()) {
+            if (!ec.redundantColumnToEquivalenceClass.containsKey(entry.getKey())) {
+                Set<ColumnRefOperator> columnEcs = Sets.newLinkedHashSet(entry.getValue());
+                for (ColumnRefOperator column : columnEcs) {
+                    ec.redundantColumnToEquivalenceClass.put(column, columnEcs);
                 }
             }
         }
@@ -83,6 +96,10 @@ public class EquivalenceClasses implements Cloneable {
         return columnToEquivalenceClass.get(column);
     }
 
+    public boolean containsKey(ColumnRefOperator column) {
+        return columnToEquivalenceClass.containsKey(column);
+    }
+
     public List<Set<ColumnRefOperator>> getEquivalenceClasses() {
         // Remove redundant equal classes, eg:
         // a,b are equal calsses:
@@ -102,5 +119,66 @@ public class EquivalenceClasses implements Cloneable {
             }
         }
         return cacheColumnToEquivalenceClass;
+    }
+
+    public boolean addRedundantEquivalence(ColumnRefOperator left, ColumnRefOperator right) {
+        boolean isContainsLeft = columnToEquivalenceClass.containsKey(left);
+        boolean isContainsRight = columnToEquivalenceClass.containsKey(right);
+        boolean isAddIntoRedundant = false;
+        if (!isContainsLeft) {
+            redundantColumnToEquivalenceClass.computeIfAbsent(left, x -> Sets.newHashSet(left));
+            if (!isContainsRight) {
+                redundantColumnToEquivalenceClass.get(left).add(right);
+            }
+            isAddIntoRedundant = true;
+        }
+        if (!isContainsRight) {
+            redundantColumnToEquivalenceClass.computeIfAbsent(right, x -> Sets.newHashSet(right));
+            if (!isContainsLeft) {
+                redundantColumnToEquivalenceClass.get(right).add(left);
+            }
+            isAddIntoRedundant = true;
+        }
+        return isAddIntoRedundant;
+    }
+
+    public boolean containsRedundantKey(ColumnRefOperator column) {
+        return redundantColumnToEquivalenceClass.containsKey(column);
+    }
+
+    public boolean containsEquivalentKey(ColumnRefOperator column) {
+        Optional<ColumnRefOperator> opt = redundantColumnToEquivalenceClass.keySet()
+                .stream().filter(x -> ScalarOperator.isEquivalent(x, column)).findFirst();
+        if (!opt.isPresent()) {
+            return false;
+        }
+        Set<ColumnRefOperator> refOperators = redundantColumnToEquivalenceClass.get(opt.get());
+        return refOperators.size() > 1;
+    }
+
+    public void deleteRedundantKey(ColumnRefOperator column) {
+        if (!redundantColumnToEquivalenceClass.containsKey(column)) {
+            return;
+        }
+        Set<ColumnRefOperator> redundantKeys = redundantColumnToEquivalenceClass.get(column);
+
+        // 1. remove redundant keys
+        Set<ColumnRefOperator> oldValues = null;
+        for (ColumnRefOperator redundantKey : redundantKeys) {
+            if (columnToEquivalenceClass.containsKey(redundantKey)) {
+                oldValues = Sets.newHashSet(columnToEquivalenceClass.get(redundantKey));
+                columnToEquivalenceClass.remove(redundantKey);
+            }
+        }
+
+        // 2. remove redundant columns as values
+        if (oldValues != null) {
+            for (ColumnRefOperator col : oldValues) {
+                if (columnToEquivalenceClass.containsKey(col)) {
+                    columnToEquivalenceClass.get(col).removeAll(redundantKeys);
+                }
+            }
+        }
+        this.cacheColumnToEquivalenceClass = null;
     }
 }

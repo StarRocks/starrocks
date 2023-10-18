@@ -322,6 +322,7 @@ public class OperationType {
 
     // drop catalog
     public static final short OP_DROP_CATALOG = 10061;
+
     // grant & revoke impersonate
     @Deprecated
     public static final short OP_GRANT_IMPERSONATE = 10062;
@@ -411,6 +412,10 @@ public class OperationType {
     // external table analyze
     public static final short OP_ADD_EXTERNAL_ANALYZE_STATUS = 11200;
     public static final short OP_REMOVE_EXTERNAL_ANALYZE_STATUS = 11201;
+    public static final short OP_ADD_EXTERNAL_ANALYZER_JOB = 11202;
+    public static final short OP_REMOVE_EXTERNAL_ANALYZER_JOB = 11203;
+    public static final short OP_ADD_EXTERNAL_BASIC_STATS_META = 11204;
+    public static final short OP_REMOVE_EXTERNAL_BASIC_STATS_META = 11205;
 
     //Database json format log
     public static final short OP_CREATE_DB_V2 = 12001;
@@ -495,6 +500,12 @@ public class OperationType {
 
     // Pipe operations log
     public static final short OP_PIPE = 12200;
+
+    // Primary key
+    public static final short OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC = 13200;
+
+    // alter catalog
+    public static final short OP_ALTER_CATALOG = 13300;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds

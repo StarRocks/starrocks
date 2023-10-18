@@ -36,6 +36,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
@@ -83,7 +84,7 @@ public class DateLiteral extends LiteralExpr {
         super();
     }
 
-    public DateLiteral(Type type, boolean isMax) throws AnalysisException {
+    public DateLiteral(Type type, boolean isMax) {
         super();
         this.type = type;
         if (type.isDate()) {
@@ -157,7 +158,7 @@ public class DateLiteral extends LiteralExpr {
         type = other.type;
     }
 
-    public static DateLiteral createMinValue(Type type) throws AnalysisException {
+    public static DateLiteral createMinValue(Type type) {
         return new DateLiteral(type, false);
     }
 
@@ -451,5 +452,49 @@ public class DateLiteral extends LiteralExpr {
             return this.compareLiteral(DateLiteral.MIN_DATE) < 0 || DateLiteral.MAX_DATE.compareLiteral(this) < 0;
         }
         return true;
+    }
+
+    @Override
+    public void parseMysqlParam(ByteBuffer data) {
+        int len = getParamLen(data);
+        if (type.getPrimitiveType() == PrimitiveType.DATE) {
+            if (len >= 4) {
+                year = (int) data.getChar();
+                month = (int) data.get();
+                day = (int) data.get();
+                hour = 0;
+                minute = 0;
+                second = 0;
+                microsecond = 0;
+            } else {
+                copy(MIN_DATE);
+            }
+            return;
+        }
+        if (type.getPrimitiveType() == PrimitiveType.DATETIME) {
+            if (len >= 4) {
+                year = (int) data.getChar();
+                month = (int) data.get();
+                day = (int) data.get();
+                microsecond = 0;
+                if (len > 4) {
+                    hour = (int) data.get();
+                    minute = (int) data.get();
+                    second = (int) data.get();
+                } else {
+                    hour = 0;
+                    minute = 0;
+                    second = 0;
+                    microsecond = 0;
+                }
+                if (len > 7) {
+                    microsecond = data.getInt();
+                    // choose the highest scale to keep microsecond value
+                    type = ScalarType.createDecimalV2Type(6);
+                }
+            } else {
+                copy(MIN_DATETIME);
+            }
+        }
     }
 }

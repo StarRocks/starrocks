@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.google.common.collect.ImmutableSet;
 import com.starrocks.connector.config.ConnectorConfig;
 import com.starrocks.connector.delta.DeltaLakeConnector;
 import com.starrocks.connector.elasticsearch.ElasticsearchConnector;
@@ -24,27 +23,32 @@ import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.connector.jdbc.JDBCConnector;
 import com.starrocks.connector.paimon.PaimonConnector;
+import com.starrocks.connector.unified.UnifiedConnector;
+import org.apache.commons.lang3.EnumUtils;
 
+import java.util.EnumSet;
 import java.util.Set;
 
 public enum ConnectorType {
 
-    ELASTICSEARCH("es", ElasticsearchConnector.class, EsConfig.class),
+    ES("es", ElasticsearchConnector.class, EsConfig.class),
     HIVE("hive", HiveConnector.class, null),
     ICEBERG("iceberg", IcebergConnector.class, null),
     JDBC("jdbc", JDBCConnector.class, null),
     HUDI("hudi", HudiConnector.class, null),
     DELTALAKE("deltalake", DeltaLakeConnector.class, null),
-    PAIMON("paimon", PaimonConnector.class, null);
+    PAIMON("paimon", PaimonConnector.class, null),
+    UNIFIED("unified", UnifiedConnector.class, null);
 
-    public static Set<String> SUPPORT_TYPE_SET = ImmutableSet.of(
-            ELASTICSEARCH.getName(),
-            HIVE.getName(),
-            ICEBERG.getName(),
-            JDBC.getName(),
-            HUDI.getName(),
-            DELTALAKE.getName(),
-            PAIMON.getName()
+    public static Set<ConnectorType> SUPPORT_TYPE_SET = EnumSet.of(
+            ES,
+            HIVE,
+            ICEBERG,
+            JDBC,
+            HUDI,
+            DELTALAKE,
+            PAIMON,
+            UNIFIED
     );
 
     ConnectorType(String name, Class connectorClass, Class configClass) {
@@ -70,28 +74,16 @@ public enum ConnectorType {
     }
 
     public static boolean isSupport(String name) {
-        return SUPPORT_TYPE_SET.contains(name);
+        ConnectorType type = EnumUtils.getEnumIgnoreCase(ConnectorType.class, name);
+        return type != null && SUPPORT_TYPE_SET.contains(type);
     }
 
     public static ConnectorType from(String name) {
-        switch (name) {
-            case "es":
-                return ELASTICSEARCH;
-            case "hive":
-                return HIVE;
-            case "iceberg":
-                return ICEBERG;
-            case "jdbc":
-                return JDBC;
-            case "hudi":
-                return HUDI;
-            case "deltalake":
-                return DELTALAKE;
-            case "paimon":
-                return PAIMON;
-            default:
-                throw new IllegalStateException("Unexpected value: " + name);
+        ConnectorType res = EnumUtils.getEnumIgnoreCase(ConnectorType.class, name);
+        if (res == null) {
+            throw new IllegalStateException("unsupported catalog type: " + name);
         }
+        return res;
     }
 
 }

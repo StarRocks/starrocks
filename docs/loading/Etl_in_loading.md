@@ -4,7 +4,7 @@ import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks supports data transformation at loading.
 
-This feature supports [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), and [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) but does not support [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md).
+This feature supports [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), and [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) but does not support [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md).
 
 <InsertPrivNote />
 
@@ -144,7 +144,7 @@ curl --location-trusted -u <username>:<password> \
 >
 > If you choose Stream Load, you must use the `columns` parameter to temporarily name the columns of the data file to create a column mapping between the data file and the StarRocks table.
 
-For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
 
 #### Load data from an HDFS cluster
 
@@ -166,7 +166,7 @@ WITH BROKER "broker1";
 >
 > If you choose Broker Load, you must use the `column_list` parameter to temporarily name the columns of the data file to create a column mapping between the data file and the StarRocks table.
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 #### Load data from a Kafka cluster
 
@@ -188,7 +188,7 @@ FROM KAFKA
 >
 > If you choose Routine Load, you must use the `COLUMNS` parameter to temporarily name the columns of the data file to create a column mapping between the data file and the StarRocks table.
 
-For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
+For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md).
 
 ### Query data
 
@@ -240,7 +240,7 @@ curl --location-trusted -u <username>:<password> \
     http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
 ```
 
-For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
 
 #### Load data from an HDFS cluster
 
@@ -259,7 +259,7 @@ LOAD LABEL test_db.label2
 WITH BROKER "broker1";
 ```
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 #### Load data from a Kafka cluster
 
@@ -278,7 +278,7 @@ FROM KAFKA
 );
 ```
 
-For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
+For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md).
 
 ### Query data
 
@@ -333,7 +333,7 @@ curl --location-trusted -u <username>:<password> \
 >
 > - Stream Load does not support `column_name = function(column_name)` but supports `column_name = function(column_name)`.
 
-For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
 
 #### Load data from an HDFS cluster
 
@@ -356,7 +356,7 @@ WITH BROKER "broker1";
 >
 > You must first use the `column_list` parameter to temporarily name **all columns** of the data file, and then use the SET clause to temporarily name the new columns that you want to generate from the original columns of the data file. As shown in the preceding example, the only column of `file2.csv` is temporarily named as `date` in the `column_list` parameter, and then the `year=year(date)`, `month=month(date)`, and `day=day(date)` functions are invoked in the SET clause to generate three new columns, which are temporarily named as `year`, `month`, and `day`.
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 #### Load data from a Kafka cluster
 
@@ -378,7 +378,7 @@ FROM KAFKA
 >
 > In the `COLUMNS` parameter, you must first temporarily name **all columns** of the data file, and then temporarily name the new columns that you want to generate from the original columns of the data file. As shown in the preceding example, the only column of `file2.csv` is temporarily named as `date`, and then the `year=year(date)`, `month=month(date)`, and `day=day(date)` functions are invoked to generate three new columns, which are temporarily named as `year`, `month`, and `day`.
 
-For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
+For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md).
 
 ### Query data
 
@@ -438,7 +438,7 @@ WITH BROKER "broker1";
 >
 > In the preceding example, the `date` partition field in the specified file path is equivalent to the `event_date` column of `table1`. Therefore, you need to use the SET clause to map the `date` partition field onto the `event_date` column. If the partition field in the specified file path has the same name as a column of the StarRocks table, you do not need to use the SET clause to create a mapping.
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 ### Query data
 

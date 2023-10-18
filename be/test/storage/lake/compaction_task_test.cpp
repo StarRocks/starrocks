@@ -14,52 +14,28 @@
 
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <memory>
 #include <random>
 
-#include "butil/file_util.h"
 #include "column/chunk.h"
-#include "column/column_helper.h"
-#include "column/column_pool.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
-#include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "exec/pipeline/query_context.h"
-#include "fs/fs_util.h"
-#include "gtest/gtest.h"
-#include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "runtime/mem_tracker.h"
-#include "runtime/memory/mem_chunk_allocator.h"
-#include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_test_utils.h"
 #include "storage/lake/delta_writer.h"
-#include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/horizontal_compaction_task.h"
-#include "storage/lake/join_path.h"
-#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/vertical_compaction_task.h"
-#include "storage/options.h"
-#include "storage/storage_engine.h"
-#include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
-#include "storage/update_manager.h"
 #include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
-#include "util/cpu_info.h"
-#include "util/disk_info.h"
-#include "util/logging.h"
-#include "util/mem_info.h"
-#include "util/timezone_utils.h"
+#include "testutil/init_test_env.h"
 
 namespace starrocks::lake {
 
@@ -186,14 +162,20 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
-                                                _mem_tracker.get());
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         version++;
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
@@ -207,7 +189,8 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1, time(NULL))
+                      .status());
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
 
@@ -233,7 +216,8 @@ TEST_F(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1, time(NULL))
+                      .status());
     version++;
     ASSERT_EQ(0, read(version));
 }
@@ -344,8 +328,14 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
-                                                _mem_tracker.get());
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         for (int j = 0; j < i + 1; ++j) {
             ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -354,7 +344,7 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         version++;
     }
     ASSERT_EQ(kChunkSize * 6, read(version));
@@ -377,7 +367,8 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
         CompactionTask::Progress progress;
         ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, progress.value());
-        ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1, time(NULL))
+                          .status());
         version++;
         ASSERT_EQ(kChunkSize * 6, read(version));
     }
@@ -519,14 +510,20 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
-                                                _mem_tracker.get());
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, read(version));
@@ -540,7 +537,8 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1, time(NULL))
+                      .status());
     version++;
     ASSERT_EQ(kChunkSize, read(version));
 
@@ -661,14 +659,20 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
-                                                _mem_tracker.get());
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, read(version));
@@ -706,7 +710,8 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1, time(NULL))
+                      .status());
     version++;
     ASSERT_EQ(kChunkSize - 4, read(version));
 
@@ -723,79 +728,5 @@ INSTANTIATE_TEST_SUITE_P(LakeUniqueKeyCompactionWithDeleteTest, LakeUniqueKeyCom
 } // namespace starrocks::lake
 
 int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    if (getenv("STARROCKS_HOME") == nullptr) {
-        fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
-        exit(-1);
-    }
-    std::string conffile = std::string(getenv("STARROCKS_HOME")) + "/conf/be_test.conf";
-    if (!starrocks::config::init(conffile.c_str(), false)) {
-        fprintf(stderr, "error read config file. \n");
-        return -1;
-    }
-    butil::FilePath curr_dir(std::filesystem::current_path());
-    butil::FilePath storage_root;
-    CHECK(butil::CreateNewTempDirectory("tmp_ut_", &storage_root));
-    starrocks::config::storage_root_path = storage_root.value();
-    starrocks::config::enable_event_based_compaction_framework = false;
-    starrocks::config::l0_snapshot_size = 1048576;
-    starrocks::config::storage_flood_stage_left_capacity_bytes = 10485600;
-
-    starrocks::init_glog("lake_compaction_task_test", true);
-    starrocks::CpuInfo::init();
-    starrocks::DiskInfo::init();
-    starrocks::MemInfo::init();
-    starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
-
-    starrocks::date::init_date_cache();
-    starrocks::TimezoneUtils::init_time_zones();
-
-    std::vector<starrocks::StorePath> paths;
-    paths.emplace_back(starrocks::config::storage_root_path);
-
-    auto metadata_mem_tracker = std::make_unique<starrocks::MemTracker>();
-    auto tablet_schema_mem_tracker =
-            std::make_unique<starrocks::MemTracker>(-1, "tablet_schema", metadata_mem_tracker.get());
-    auto schema_change_mem_tracker = std::make_unique<starrocks::MemTracker>();
-    auto compaction_mem_tracker = std::make_unique<starrocks::MemTracker>();
-    auto update_mem_tracker = std::make_unique<starrocks::MemTracker>();
-    starrocks::StorageEngine* engine = nullptr;
-    starrocks::EngineOptions options;
-    options.store_paths = paths;
-    options.compaction_mem_tracker = compaction_mem_tracker.get();
-    options.update_mem_tracker = update_mem_tracker.get();
-    starrocks::Status s = starrocks::StorageEngine::open(options, &engine);
-    if (!s.ok()) {
-        butil::DeleteFile(storage_root, true);
-        fprintf(stderr, "storage engine open failed, path=%s, msg=%s\n", starrocks::config::storage_root_path.c_str(),
-                s.to_string().c_str());
-        return -1;
-    }
-    auto* global_env = starrocks::GlobalEnv::GetInstance();
-    starrocks::config::disable_storage_page_cache = true;
-    global_env->init();
-    auto* exec_env = starrocks::ExecEnv::GetInstance();
-    // Pagecache is turned on by default, and some test cases require cache to be turned on,
-    // and some test cases do not. For easy management, we turn cache off during unit test
-    // initialization. If there are test cases that require Pagecache, it must be responsible
-    // for managing it.
-    exec_env->init(paths);
-
-    int r = RUN_ALL_TESTS();
-
-    // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
-    starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
-    (void)butil::DeleteFile(storage_root, true);
-    starrocks::TEST_clear_all_columns_this_thread();
-    // delete engine
-    starrocks::StorageEngine::instance()->stop();
-    // destroy exec env
-    starrocks::tls_thread_status.set_mem_tracker(nullptr);
-    exec_env->stop();
-    exec_env->destroy();
-    global_env->stop();
-
-    starrocks::shutdown_logging();
-
-    return r;
+    starrocks::init_test_env(argc, argv);
 }

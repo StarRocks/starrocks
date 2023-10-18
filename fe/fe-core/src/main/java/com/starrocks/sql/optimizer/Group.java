@@ -367,17 +367,18 @@ public class Group {
         for (GroupExpression expr : logicalExpressions) {
             sb.append(expr).append('\n');
         }
+        sb.deleteCharAt(sb.length() - 1);
         return sb.toString();
     }
 
-    public String toPrettyString(String headlineIndent, String detailIndent) {
+    public String debugString(String headlineIndent, String detailIndent) {
         StringBuilder sb = new StringBuilder();
         sb.append(headlineIndent).append("Group: ").append(id).append("\n");
         for (GroupExpression expr : logicalExpressions) {
-            sb.append(expr.toPrettyString(headlineIndent, detailIndent));
+            sb.append(expr.debugString(headlineIndent, detailIndent));
         }
         for (GroupExpression expr : physicalExpressions) {
-            sb.append(expr.toPrettyString(headlineIndent, detailIndent));
+            sb.append(expr.debugString(headlineIndent, detailIndent));
         }
         return sb.toString();
     }

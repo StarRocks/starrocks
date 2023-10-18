@@ -25,44 +25,42 @@ import java.util.Map;
 
 public class HDFSCloudCredential implements CloudCredential {
     public static final String EMPTY = "empty";
-
     private String authentication;
     private String userName;
     private String password;
-    private String principal;
-    private String keyTab;
-    private String keyContent;
-    private Map<String, String> haConfigurations;
+    private String krbPrincipal;
+    private String krbKeyTabFile;
+    private String krbKeyTabData;
+    private Map<String, String> hadoopConfiguration;
 
-    protected HDFSCloudCredential(String authentication, String userName, String password, String principal,
-                                  String keyTab, String keyContent, Map<String, String> haConfigurations) {
+    protected HDFSCloudCredential(String authentication, String username, String password, String krbPrincipal,
+                                  String krbKeyTabFile, String krbKeyTabData, Map<String, String> hadoopConfiguration) {
         Preconditions.checkNotNull(authentication);
-        Preconditions.checkNotNull(userName);
+        Preconditions.checkNotNull(username);
         Preconditions.checkNotNull(password);
-        Preconditions.checkNotNull(principal);
-        Preconditions.checkNotNull(keyTab);
-        Preconditions.checkNotNull(keyContent);
-        Preconditions.checkNotNull(haConfigurations);
+        Preconditions.checkNotNull(krbPrincipal);
+        Preconditions.checkNotNull(krbKeyTabFile);
+        Preconditions.checkNotNull(krbKeyTabData);
+        Preconditions.checkNotNull(hadoopConfiguration);
         this.authentication = authentication;
-        this.userName = userName;
+        this.userName = username;
         this.password = password;
-        this.principal = principal;
-        this.keyTab = keyTab;
-        this.keyContent = keyContent;
-        this.haConfigurations = haConfigurations;
+        this.krbPrincipal = krbPrincipal;
+        this.krbKeyTabFile = krbKeyTabFile;
+        this.krbKeyTabData = krbKeyTabData;
+        this.hadoopConfiguration = hadoopConfiguration;
     }
 
     public String getAuthentication() {
         return authentication;
     }
 
-    public Map<String, String> getHaConfigurations() {
-        return haConfigurations;
+    public Map<String, String> getHadoopConfiguration() {
+        return hadoopConfiguration;
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
-        // TODO
     }
 
     @Override
@@ -76,10 +74,10 @@ public class HDFSCloudCredential implements CloudCredential {
         }
 
         if (authentication.equals("kerberos")) {
-            if (principal.isEmpty()) {
+            if (krbPrincipal.isEmpty()) {
                 return false;
             }
-            return !(keyContent.isEmpty() && keyTab.isEmpty());
+            return !(krbKeyTabData.isEmpty() && krbKeyTabFile.isEmpty());
         }
 
         return false;
@@ -87,18 +85,17 @@ public class HDFSCloudCredential implements CloudCredential {
 
     @Override
     public void toThrift(Map<String, String> properties) {
-        // TODO
     }
 
     @Override
-    public String getCredentialString() {
+    public String toCredString() {
         return "HDFSCloudCredential{" +
-                "authentication=" + authentication +
-                ", userName='" + userName + '\'' +
+                "authentication='" + authentication + '\'' +
+                ", username='" + userName + '\'' +
                 ", password='" + password + '\'' +
-                ", principal='" + principal + '\'' +
-                ", keyTab='" + keyTab + '\'' +
-                ", keyContent='" + keyContent + '\'' +
+                ", krbPrincipal='" + krbPrincipal + '\'' +
+                ", krbKeyTabFile='" + krbKeyTabFile + '\'' +
+                ", krbKeyTabData='" + krbKeyTabData + '\'' +
                 '}';
     }
 

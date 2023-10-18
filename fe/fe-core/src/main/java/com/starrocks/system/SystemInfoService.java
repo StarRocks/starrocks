@@ -124,13 +124,7 @@ public class SystemInfoService implements GsonPostProcessable {
             throws DdlException {
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            // check is already exist
-            if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
-                throw new DdlException("Same backend already exists[" + pair.first + ":" + pair.second + "]");
-            }
-            if (getComputeNodeWithHeartbeatPort(pair.first, pair.second) != null) {
-                throw new DdlException("Same compute node already exists[" + pair.first + ":" + pair.second + "]");
-            }
+            checkSameNodeExist(pair.first, pair.second);
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
@@ -186,14 +180,22 @@ public class SystemInfoService implements GsonPostProcessable {
      */
     public void addBackends(List<Pair<String, Integer>> hostPortPairs) throws DdlException {
         for (Pair<String, Integer> pair : hostPortPairs) {
-            // check is already exist
-            if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
-                throw new DdlException("Same backend already exists[" + pair.first + ":" + pair.second + "]");
-            }
+            checkSameNodeExist(pair.first, pair.second);
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
             addBackend(pair.first, pair.second);
+        }
+    }
+
+    private void checkSameNodeExist(String host, int heartPort) throws DdlException {
+        // check is already exist
+        if (getBackendWithHeartbeatPort(host, heartPort) != null) {
+            throw new DdlException("Backend already exists with same host " + host + " and port " + heartPort);
+        }
+
+        if (getComputeNodeWithHeartbeatPort(host, heartPort) != null) {
+            throw new DdlException("Compute node already exists with same host " + host + " and port " + heartPort);
         }
     }
 
@@ -485,6 +487,13 @@ public class SystemInfoService implements GsonPostProcessable {
         return backend != null && backend.isAvailable();
     }
 
+    public boolean checkNodeAvailable(ComputeNode node) {
+        if (node instanceof Backend) {
+            return node != null && node.isAvailable();
+        }
+        return node != null && node.isAlive();
+    }
+
     public boolean checkBackendAlive(long backendId) {
         Backend backend = idToBackendRef.get(backendId);
         return backend != null && backend.isAlive();
@@ -574,6 +583,14 @@ public class SystemInfoService implements GsonPostProcessable {
             }
         }
         return null;
+    }
+
+    public ComputeNode getBackendOrComputeNodeWithBePort(String host, int bePort) {
+        ComputeNode node = getBackendWithBePort(host, bePort);
+        if (node == null) {
+            node = getComputeNodeWithBePort(host, bePort);
+        }
+        return node;
     }
 
     public List<Backend> getBackendOnlyWithHost(String host) {
@@ -855,13 +872,8 @@ public class SystemInfoService implements GsonPostProcessable {
         if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db != null) {
-                db.readLock();
-                try {
-                    atomicLong.set(newReportVersion);
-                    LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
-                } finally {
-                    db.readUnlock();
-                }
+                atomicLong.set(newReportVersion);
+                LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
             } else {
                 LOG.warn("failed to update backend report version, db {} does not exist", dbId);
             }

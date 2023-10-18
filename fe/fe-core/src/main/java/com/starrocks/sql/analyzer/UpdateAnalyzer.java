@@ -24,6 +24,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
@@ -87,27 +88,29 @@ public class UpdateAnalyzer {
             }
         }
 
-        if (session.getSessionVariable().getPartialUpdateMode().equals("column")) {
-            // use partial update by column
-            updateStmt.setUsePartialUpdate();
-        } else if (session.getSessionVariable().getPartialUpdateMode().equals("auto")) {
-            // decide by default rules
-            if (updateStmt.getWherePredicate() == null) {
-                if (checkIfUsePartialUpdate(assignmentList.size(), table.getBaseSchema().size())) {
-                    // use partial update if:
-                    // 1. Columns updated are less than 4
-                    // 2. The proportion of columns updated is less than 30%
-                    // 3. No where predicate in update stmt
-                    updateStmt.setUsePartialUpdate();
-                } else {
-                    throw new SemanticException("must specify where clause to prevent full table update");
+        if (table.isOlapTable()) {
+            if (session.getSessionVariable().getPartialUpdateMode().equals("column")) {
+                // use partial update by column
+                updateStmt.setUsePartialUpdate();
+            } else if (session.getSessionVariable().getPartialUpdateMode().equals("auto")) {
+                // decide by default rules
+                if (updateStmt.getWherePredicate() == null) {
+                    if (checkIfUsePartialUpdate(assignmentList.size(), table.getBaseSchema().size())) {
+                        // use partial update if:
+                        // 1. Columns updated are less than 4
+                        // 2. The proportion of columns updated is less than 30%
+                        // 3. No where predicate in update stmt
+                        updateStmt.setUsePartialUpdate();
+                        if (table instanceof OlapTable && ((OlapTable) table).hasRowStorageType()) {
+                            throw new SemanticException("column with row table must specify where clause for update");
+                        }
+                    }
                 }
             }
-        } else {
-            // when var `partial_update_mode` == row, use full columns update instead of partial update
-            if (updateStmt.getWherePredicate() == null) {
-                throw new SemanticException("must specify where clause to prevent full table update");
-            }
+        }
+
+        if (!updateStmt.usePartialUpdate() && updateStmt.getWherePredicate() == null) {
+            throw new SemanticException("must specify where clause to prevent full table update");
         }
 
         SelectList selectList = new SelectList();

@@ -1,0 +1,12 @@
+-- name: testHiveCatalog
+create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+-- result:
+-- !result
+select * from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy where col_date = (select max(col_date) from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy);
+-- result:
+1	hello world	2022-01-01	1
+2	hello wrold	2022-01-01	1
+-- !result
+drop catalog hive_sql_test_${uuid0}
+-- result:
+-- !result

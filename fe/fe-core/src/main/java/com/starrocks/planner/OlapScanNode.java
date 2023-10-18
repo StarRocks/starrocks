@@ -43,6 +43,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -448,8 +449,7 @@ public class OlapScanNode extends ScanNode {
         String schemaHashStr = String.valueOf(schemaHash);
         long visibleVersion = physicalPartition.getVisibleVersion();
         String visibleVersionStr = String.valueOf(visibleVersion);
-        boolean fillDataCache =
-                olapTable.isCloudNativeTable() && ((LakeTable) olapTable).isEnableFillDataCache(partition);
+        boolean fillDataCache = olapTable.isEnableFillDataCache(partition);
         selectedPartitionNames.add(partition.getName());
         selectedPartitionVersions.add(visibleVersion);
 
@@ -766,6 +766,10 @@ public class OlapScanNode extends ScanNode {
             output.append(explainColumnAccessPath(prefix));
         }
 
+        if (olapTable.isMaterializedView()) {
+            output.append(prefix).append("MaterializedView: true\n");
+        }
+
         return output.toString();
     }
 
@@ -779,10 +783,17 @@ public class OlapScanNode extends ScanNode {
         List<String> keyColumnNames = new ArrayList<String>();
         List<TPrimitiveType> keyColumnTypes = new ArrayList<TPrimitiveType>();
         List<TColumn> columnsDesc = new ArrayList<TColumn>();
+        Set<String> bfColumns = olapTable.getBfColumns();
 
         if (selectedIndexId != -1) {
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
             if (indexMeta != null) {
+                for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
+                    TColumn tColumn = col.toThrift();
+                    tColumn.setColumn_name(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
+                    col.setIndexFlag(tColumn, olapTable.getIndexes(), bfColumns);
+                    columnsDesc.add(tColumn);
+                }
                 if (KeysType.PRIMARY_KEYS == olapTable.getKeysType() && indexMeta.getSortKeyIdxes() != null) {
                     for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
                         Column col = indexMeta.getSchema().get(sortKeyIdx);
@@ -791,14 +802,10 @@ public class OlapScanNode extends ScanNode {
                     }
                 } else {
                     for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
-                        TColumn tColumn = col.toThrift();
-                        col.setIndexFlag(tColumn, olapTable.getIndexes());
-                        columnsDesc.add(tColumn);
-
                         if (!col.isKey()) {
                             continue;
                         }
-
+    
                         keyColumnNames.add(col.getName());
                         keyColumnTypes.add(col.getPrimitiveType().toThrift());
                     }
@@ -838,8 +845,8 @@ public class OlapScanNode extends ScanNode {
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
-                    new TOlapScanNode(desc.getId().asInt(), keyColumnNames,
-                        keyColumnTypes, isPreAggregation, columnsDesc);
+                    new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
+            msg.olap_scan_node.setColumns_desc(columnsDesc);
             msg.olap_scan_node.setSort_key_column_names(keyColumnNames);
             msg.olap_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
             if (!conjuncts.isEmpty()) {
@@ -859,8 +866,11 @@ public class OlapScanNode extends ScanNode {
             if (!olapTable.hasDelete()) {
                 msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
             }
-            msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
-            msg.olap_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
+
+            if (!scanTabletIds.isEmpty()) {
+                msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
+                msg.olap_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
+            }
 
             if (!bucketExprs.isEmpty()) {
                 msg.olap_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
@@ -1203,5 +1213,10 @@ public class OlapScanNode extends ScanNode {
         LOG.debug("mapTabletsToPartitions. tabletToPartitionMap: {}, partitionToTabletMap: {}",
                 tabletToPartitionMap, partitionToTabletMap);
         return partitionToTabletMap;
+    }
+
+    @Override
+    protected boolean supportTopNRuntimeFilter() {
+        return true;
     }
 }

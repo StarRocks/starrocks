@@ -20,6 +20,7 @@
 #include "common/status.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 class Chunk;

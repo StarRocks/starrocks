@@ -170,7 +170,7 @@ public:
               _num_operators_generated(num_operators_generated),
               _rf_probe_collector(std::move(rf_probe_collector)) {}
 
-    Status prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p) {
+    [[nodiscard]] Status prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p) {
         if ((_count.fetch_sub(1) & PREPARE_COUNTER_MASK) == _num_operators_generated) {
             RETURN_IF_ERROR(_rf_probe_collector.prepare(state, row_desc, p));
             RETURN_IF_ERROR(_rf_probe_collector.open(state));
@@ -220,14 +220,16 @@ public:
     // mark runtime_filter as always true.
     bool set_always_true() {
         _always_true = true;
-        return _try_do_merge({});
+        (void)_try_do_merge({});
+        return true;
     }
 
     // HashJoinBuildOperator call add_partial_filters to gather partial runtime filters. the last HashJoinBuildOperator
     // will merge partial runtime filters into total one finally.
-    StatusOr<bool> add_partial_filters(size_t idx, size_t ht_row_count, RuntimeInFilters&& partial_in_filters,
-                                       OptRuntimeBloomFilterBuildParams&& partial_bloom_filter_build_params,
-                                       RuntimeBloomFilters&& bloom_filter_descriptors) {
+    [[nodiscard]] StatusOr<bool> add_partial_filters(
+            size_t idx, size_t ht_row_count, RuntimeInFilters&& partial_in_filters,
+            OptRuntimeBloomFilterBuildParams&& partial_bloom_filter_build_params,
+            RuntimeBloomFilters&& bloom_filter_descriptors) {
         DCHECK(idx < _partial_bloom_filter_build_params.size());
         // both _ht_row_counts, _partial_in_filters, _partial_bloom_filter_build_params are reserved beforehand,
         // each HashJoinBuildOperator mutates its corresponding slot indexed by driver_sequence, so concurrent
@@ -247,7 +249,7 @@ public:
         return {_bloom_filter_descriptors.begin(), _bloom_filter_descriptors.end()};
     }
 
-    Status merge_local_in_filters() {
+    [[nodiscard]] Status merge_local_in_filters() {
         bool can_merge_in_filters = true;
         size_t num_rows = 0;
         ssize_t k = -1;
@@ -305,7 +307,7 @@ public:
         return Status::OK();
     }
 
-    Status merge_local_bloom_filters() {
+    [[nodiscard]] Status merge_local_bloom_filters() {
         if (_partial_bloom_filter_build_params.empty()) {
             return Status::OK();
         }
@@ -384,7 +386,7 @@ public:
     size_t limit() const { return _limit; }
 
 private:
-    bool _try_do_merge(RuntimeBloomFilters&& bloom_filter_descriptors) {
+    StatusOr<bool> _try_do_merge(RuntimeBloomFilters&& bloom_filter_descriptors) {
         if (1 == _num_active_builders--) {
             if (_always_true) {
                 _partial_in_filters.clear();
@@ -392,8 +394,8 @@ private:
                 return true;
             }
             _bloom_filter_descriptors = std::move(bloom_filter_descriptors);
-            merge_local_in_filters();
-            merge_local_bloom_filters();
+            RETURN_IF_ERROR(merge_local_in_filters());
+            RETURN_IF_ERROR(merge_local_bloom_filters());
             return true;
         }
         return false;

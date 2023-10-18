@@ -172,13 +172,15 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             auto new_version = request->new_version();
             auto txns = request->txn_ids().data();
             auto txns_size = request->txn_ids().size();
+            auto commit_time = request->commit_time();
             auto tablet_manager = _env->lake_tablet_manager();
             g_publish_tablet_version_queuing_latency << (run_ts - start_ts);
 
-            auto res = tablet_manager->publish_version(tablet_id, base_version, new_version, txns, txns_size);
+            auto res =
+                    tablet_manager->publish_version(tablet_id, base_version, new_version, txns, txns_size, commit_time);
             if (res.ok()) {
                 auto metadata = std::move(res).value();
-                auto score = compaction_score(*metadata);
+                auto score = compaction_score(metadata);
                 std::lock_guard l(response_mtx);
                 response->mutable_compaction_scores()->insert({tablet_id, score});
             } else {
@@ -192,7 +194,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             g_publish_tablet_version_latency << (butil::gettimeofday_us() - run_ts);
         };
 
-        auto st = thread_pool->submit_func(task, ThreadPool::HIGH_PRIORITY);
+        auto st = thread_pool->submit_func(task);
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
             LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_id=" << tablet_id
@@ -254,7 +256,7 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
             }
         };
 
-        auto st = thread_pool->submit_func(task, ThreadPool::HIGH_PRIORITY);
+        auto st = thread_pool->submit_func(task);
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
             LOG(WARNING) << "Fail to submit publish log version task: " << st;
@@ -309,9 +311,9 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
         cntl->SetFailed("tablet manager is null");
         return;
     }
-    auto thread_pool = _env->vacuum_thread_pool();
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::CLONE);
     if (UNLIKELY(thread_pool == nullptr)) {
-        cntl->SetFailed("no vacuum thread pool");
+        cntl->SetFailed("no thread pool to run task");
         return;
     }
     auto latch = BThreadCountDownLatch(1);
@@ -344,9 +346,9 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
         return;
     }
 
-    auto thread_pool = _env->vacuum_thread_pool();
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::CLONE);
     if (UNLIKELY(thread_pool == nullptr)) {
-        cntl->SetFailed("no vacuum thread pool");
+        cntl->SetFailed("no thread pool to run task");
         return;
     }
     auto latch = BThreadCountDownLatch(1);

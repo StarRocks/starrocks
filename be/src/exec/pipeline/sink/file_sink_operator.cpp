@@ -63,8 +63,10 @@ Status FileSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_pro
     if (!_is_prepared.compare_exchange_strong(expected, true)) {
         return Status::OK();
     }
+    auto dop = state->query_options().pipeline_dop;
 
-    RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(), 1024, &_sender));
+    RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(),
+                                                                   std::min(dop << 1, 1024), &_sender));
 
     _state = state;
     _writer = std::make_shared<FileResultWriter>(_file_opts.get(), _output_expr_ctxs, parent_profile);
@@ -108,8 +110,9 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
         _sender->close(final_status);
         _sender.reset();
 
-        _state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
-                                                         state->fragment_instance_id());
+        auto st = _state->exec_env()->result_mgr()->cancel_at_time(
+                time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
+        st.permit_unchecked_error();
     }
     SinkIOBuffer::close(state);
 }

@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -27,6 +28,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -58,15 +60,20 @@ import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
+import org.junit.rules.TemporaryFolder;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Set;
 
 public class MvRewriteTestBase {
     private static final Logger LOG = LogManager.getLogger(MvRewriteTestBase.class);
     protected static ConnectContext connectContext;
     protected static PseudoCluster cluster;
     protected static StarRocksAssert starRocksAssert;
+    @ClassRule
+    public static TemporaryFolder temp = new TemporaryFolder();
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -78,6 +85,7 @@ public class MvRewriteTestBase {
         Config.tablet_sched_checker_interval_seconds = 1;
         Config.tablet_sched_repair_delay_factor_second = 1;
         Config.enable_new_publish_mechanism = true;
+        FeConstants.enablePruneEmptyOutputScan = false;
 
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
@@ -85,9 +93,8 @@ public class MvRewriteTestBase {
 
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
 
-        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+        ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test");
 
@@ -315,7 +322,7 @@ public class MvRewriteTestBase {
         return s;
     }
 
-    protected Table getTable(String dbName, String mvName) {
+    public static Table getTable(String dbName, String mvName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(mvName);
         Assert.assertNotNull(table);
@@ -387,5 +394,11 @@ public class MvRewriteTestBase {
         for (OptExpression child : root.getInputs()) {
             getScanOperators(child, name, results);
         }
+    }
+
+    public static Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
+        Set<String> toRefreshPartitions = Sets.newHashSet();
+        mv.getPartitionNamesToRefreshForMv(toRefreshPartitions, true);
+        return toRefreshPartitions;
     }
 }

@@ -165,7 +165,8 @@ void ResultBufferMgr::cancel_thread() {
 
         // cancel query
         for (auto& i : query_to_cancel) {
-            cancel(i);
+            auto st = cancel(i);
+            st.permit_unchecked_error();
         }
         nap_sleep(1, [this] { return _is_stop; });
     }

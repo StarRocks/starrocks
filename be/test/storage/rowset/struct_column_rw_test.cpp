@@ -50,7 +50,7 @@ protected:
     void TearDown() override {}
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
-        return std::make_shared<Segment>(Segment::private_type(0), fs, fname, 1, _dummy_segment_schema);
+        return std::make_shared<Segment>(fs, fname, 1, _dummy_segment_schema, nullptr);
     }
 
     void test_int_struct() {
@@ -199,7 +199,7 @@ protected:
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
-                ASSERT_EQ("{f1:1,f2:''}", dst_column->debug_item(0));
+                ASSERT_EQ("{f1:1,f2:CONST: ''}", dst_column->debug_item(0));
             }
         }
 
@@ -238,7 +238,7 @@ protected:
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
-                ASSERT_EQ("{f1:0,f2:'Column2'}", dst_column->debug_item(0));
+                ASSERT_EQ("{f1:CONST: 0,f2:'Column2'}", dst_column->debug_item(0));
             }
         }
     }

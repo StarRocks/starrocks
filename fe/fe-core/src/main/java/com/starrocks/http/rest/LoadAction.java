@@ -40,10 +40,12 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.warehouse.Warehouse;
@@ -71,7 +73,7 @@ public class LoadAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
         try {
             executeWithoutPasswordInternal(request, response);
         } catch (DdlException e) {
@@ -84,7 +86,8 @@ public class LoadAction extends RestBaseAction {
         }
     }
 
-    public void executeWithoutPasswordInternal(BaseRequest request, BaseResponse response) throws DdlException {
+    public void executeWithoutPasswordInternal(BaseRequest request, BaseResponse response) throws DdlException,
+            AccessDeniedException {
 
         // A 'Load' request must have 100-continue header
         if (!request.getRequest().headers().contains(HttpHeaders.Names.EXPECT)) {
@@ -103,7 +106,8 @@ public class LoadAction extends RestBaseAction {
 
         String label = request.getRequest().headers().get(LABEL_KEY);
 
-        checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.INSERT);
+        Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
+                dbName, tableName, PrivilegeType.INSERT);
 
         // Choose a backend sequentially, or choose a cn in shared_data mode
         List<Long> nodeIds = new ArrayList<>();

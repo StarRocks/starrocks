@@ -41,10 +41,7 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -117,7 +114,7 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-    public abstract void execute(BaseRequest request, BaseResponse response) throws DdlException;
+    public abstract void execute(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException;
 
     protected void writeResponse(BaseRequest request, BaseResponse response, HttpResponseStatus status) {
         // if (HttpHeaders.is100ContinueExpected(request.getRequest())) {
@@ -268,7 +265,8 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-    protected void handleChannelInactive(ChannelHandlerContext ctx) {};
+    protected void handleChannelInactive(ChannelHandlerContext ctx) {
+    }
 
     public static class ActionAuthorizationInfo {
         public String fullUserName;
@@ -292,13 +290,6 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-    // For new RBAC privilege framework
-    protected void checkActionOnSystem(UserIdentity currentUser, PrivilegeType... systemActions) {
-        for (PrivilegeType systemAction : systemActions) {
-            Authorizer.checkSystemAction(currentUser, null, systemAction);
-        }
-    }
-
     // We check whether user owns db_admin and user_admin role in new RBAC privilege framework for
     // operation which checks `PrivPredicate.ADMIN` in global table in old Auth framework.
     protected void checkUserOwnsAdminRole(UserIdentity currentUser) throws AccessDeniedException {
@@ -308,19 +299,11 @@ public abstract class BaseAction implements IAction {
                     userOwnedRoles.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID) ||
                     (userOwnedRoles.contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID) &&
                             userOwnedRoles.contains(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID)))) {
-                throw new AccessDeniedException(
-                        "Access denied; you need own root role or own db_admin and user_admin roles for this " +
-                                "operation");
+                throw new AccessDeniedException();
             }
         } catch (PrivilegeException e) {
-            AccessDeniedException newException = new AccessDeniedException(
-                    "Access denied; you need own db_admin and user_admin roles for this operation");
-            newException.initCause(e);
+            throw new AccessDeniedException();
         }
-    }
-
-    protected void checkTableAction(ConnectContext context, String db, String tbl, PrivilegeType privType) {
-        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), db, tbl, privType);
     }
 
     // return currentUserIdentity from StarRocks auth

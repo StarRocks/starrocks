@@ -16,6 +16,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.utframe.StarRocksAssert;
@@ -79,6 +80,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "\"in_memory\" = \"false\",\n" +
                 "\"enable_persistent_index\" = \"false\"\n" +
                 ");");
+        FeConstants.enablePruneEmptyOutputScan = false;
     }
 
     private static String removeSlotIds(String s) {
@@ -104,9 +106,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select avg(coalesce(col_decimal128p20s3, col_double)) from db1.decimal_table";
         String expectString = "fn:TFunction(name:TFunctionName(function_name:coalesce), binary_type:BUILTIN, " +
                 "arg_types:[TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))])], " +
-                "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))]), " +
-                "has_var_args:true, scalar_fn:TScalarFunction(symbol:), " +
-                "id:70407, fid:70407";
+                "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))]), ";
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift, thrift.contains(expectString));
     }
@@ -127,9 +127,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String expectString =
                 "fn:TFunction(name:TFunctionName(function_name:money_format), binary_type:BUILTIN, arg_types:[TTypeDesc" +
                         "(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:20, scale:3))])], ret_type:TTypeDesc" +
-                        "(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))]), has_var_args:false, scalar_fn:" +
-                        "TScalarFunction(symbol:)" +
-                        ", id:304022, fid:304022";
+                        "(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))]), has_var_args:false, scalar_fn:";
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
 

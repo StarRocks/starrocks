@@ -48,7 +48,9 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             _num_finished_rpcs[instance_id.lo] = 0;
             _num_in_flight_rpcs[instance_id.lo] = 0;
             _network_times[instance_id.lo] = TimeTrace{};
+            _eos_query_stats[instance_id.lo] = std::make_shared<QueryStatistics>();
             _mutexes[instance_id.lo] = std::make_unique<Mutex>();
+            _dest_addrs[instance_id.lo] = dest.brpc_server;
 
             PUniqueId finst_id;
             finst_id.set_hi(instance_id.hi);
@@ -65,7 +67,12 @@ SinkBuffer::~SinkBuffer() {
 
     DCHECK(is_finished());
 
-    _buffers.clear();
+    {
+        // Since the deallocation of _buffers may happen inside bthread, make sure all the allocations and
+        // deallocations are executed using the process level MemTracker
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+        _buffers.clear();
+    }
 }
 
 void SinkBuffer::incr_sinker(RuntimeState* state) {
@@ -87,7 +94,12 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
     }
     {
         auto& instance_id = request.fragment_instance_id;
-        RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() { _buffers[instance_id.lo].push(request); }));
+        RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() {
+            // Since the deallocation of _buffers may happen inside bthread, make sure all the allocations and
+            // deallocations are executed using the process level MemTracker
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+            _buffers[instance_id.lo].push(request);
+        }));
     }
 
     return Status::OK();
@@ -156,12 +168,10 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     COUNTER_SET(bytes_sent_counter, _bytes_sent);
     COUNTER_SET(request_sent_counter, _request_sent);
 
-    if (_bytes_enqueued - _bytes_sent > 0) {
-        auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
-        auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
-        COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
-        COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
-    }
+    auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
+    auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
+    COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
+    COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
 
     profile->add_derived_counter(
             "NetworkBandwidth", TUnit::BYTES_PER_SECOND,
@@ -249,7 +259,8 @@ void SinkBuffer::_try_to_merge_query_statistics(TransmitChunkInfo& request) {
         }
     }
     if (need_merge) {
-        _eos_query_stats->merge_pb(query_statistics);
+        auto& instance_id = request.fragment_instance_id;
+        _eos_query_stats[instance_id.lo]->merge_pb(query_statistics);
         request.params->clear_query_statistics();
     }
 }
@@ -285,16 +296,17 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         TransmitChunkInfo& request = buffer.front();
         bool need_wait = false;
-        DeferOp pop_defer([&need_wait, &buffer, mem_tracker = _mem_tracker]() {
+        DeferOp pop_defer([&need_wait, &buffer]() {
             if (need_wait) {
                 return;
             }
 
-            // The request memory is acquired by ExchangeSinkOperator,
-            // so use the instance_mem_tracker passed from ExchangeSinkOperator to release memory.
-            // This must be invoked before decrease_defer desctructed to avoid sink_buffer and fragment_ctx released.
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
-            buffer.pop();
+            {
+                // Since the deallocation of _buffers may happen inside bthread, make sure all the allocations and
+                // deallocations are executed using the process level MemTracker
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+                buffer.pop();
+            }
         });
 
         // The order of data transmiting in IO level may not be strictly the same as
@@ -334,9 +346,10 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     return Status::OK();
                 }
                 // this is the last eos query, set query stats
-                _eos_query_stats->merge_pb(request.params->query_statistics());
+                _eos_query_stats[instance_id.lo]->merge_pb(request.params->query_statistics());
                 request.params->clear_query_statistics();
-                _eos_query_stats->to_pb(request.params->mutable_query_statistics());
+                _eos_query_stats[instance_id.lo]->to_pb(request.params->mutable_query_statistics());
+                _eos_query_stats[instance_id.lo]->clear();
             }
         }
 
@@ -362,8 +375,12 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                 --_num_in_flight_rpcs[ctx.instance_id.lo];
             }
             --_total_in_flight_rpc;
-            std::string err_msg = fmt::format("transmit chunk rpc failed:{}", print_id(ctx.instance_id));
-            _fragment_ctx->cancel(Status::InternalError(err_msg));
+
+            const auto& dest_addr = _dest_addrs[ctx.instance_id.lo];
+            std::string err_msg = fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}]",
+                                              print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port);
+
+            _fragment_ctx->cancel(Status::ThriftRpcError(err_msg));
             LOG(WARNING) << err_msg;
         });
         closure->addSuccessHandler([this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
@@ -376,13 +393,16 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             if (!status.ok()) {
                 _is_finishing = true;
                 _fragment_ctx->cancel(status);
-                LOG(WARNING) << fmt::format("transmit chunk rpc failed:{}, msg:{}", print_id(ctx.instance_id),
+
+                const auto& dest_addr = _dest_addrs[ctx.instance_id.lo];
+                LOG(WARNING) << fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] [msg={}]",
+                                            print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port,
                                             status.message());
             } else {
-                _try_to_send_rpc(ctx.instance_id, [&]() {
+                static_cast<void>(_try_to_send_rpc(ctx.instance_id, [&]() {
                     _update_network_time(ctx.instance_id, ctx.send_timestamp, result.receiver_post_process_time());
                     _process_send_window(ctx.instance_id, ctx.sequence);
-                });
+                }));
             }
             --_total_in_flight_rpc;
         });
@@ -402,6 +422,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         if (bthread_self()) {
             st = _send_rpc(closure, request);
         } else {
+            // Since the deallocation of protobuf request must be done in the bthread.
             // When the driver worker thread sends request and creates the protobuf request,
             // also use process_mem_tracker to record the memory of the protobuf request.
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);

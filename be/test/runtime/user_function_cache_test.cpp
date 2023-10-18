@@ -114,10 +114,11 @@ public:
         hostname = "http://127.0.0.1:" + std::to_string(real_port);
 
         // compile code to so
-        system("g++ -shared ./be/test/runtime/test_data/user_function_cache/lib/my_add.cc -o "
-               "./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
+        [[maybe_unused]] auto res =
+                system("g++ -shared ./be/test/runtime/test_data/user_function_cache/lib/my_add.cc -o "
+                       "./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
 
-        system("touch ./be/test/runtime/test_data/user_function_cache/lib/my_udf.jar");
+        res = system("touch ./be/test/runtime/test_data/user_function_cache/lib/my_udf.jar");
 
         my_add_md5sum = compute_md5("./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
 
@@ -127,9 +128,9 @@ public:
         s_server->stop();
         s_server->join();
         delete s_server;
-        system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
-        system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_udf.jar");
-        system("rm -rf ./be/test/runtime/test_data/user_function_cache/download/");
+        [[maybe_unused]] auto res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
+        res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_udf.jar");
+        res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/download/");
     }
     void SetUp() override { k_is_downloaded = false; }
 };
@@ -152,13 +153,14 @@ TEST_F(UserFunctionCacheTest, download_normal) {
     std::string lib_dir = "./be/test/runtime/test_data/user_function_cache/download";
     fs::remove_all(lib_dir);
     auto st = cache.init(lib_dir);
-    ASSERT_TRUE(st.ok());
+    ASSERT_TRUE(st.ok()) << st;
 
     {
         std::string libpath;
         int fid = 0;
         std::string URL = fmt::format("http://127.0.0.1:{}/test.jar", real_port);
-        cache.get_libpath(fid, URL, jar_md5sum, &libpath);
+        st = cache.get_libpath(fid, URL, jar_md5sum, &libpath);
+        st.permit_unchecked_error();
     }
 }
 

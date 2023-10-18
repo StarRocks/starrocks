@@ -72,9 +72,12 @@ import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.BeginTransactionException;
+import com.starrocks.transaction.CommitRateExceededException;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -93,6 +96,7 @@ public class BrokerLoadJob extends BulkLoadJob {
     private static final Logger LOG = LogManager.getLogger(BrokerLoadJob.class);
     private ConnectContext context;
     private List<LoadLoadingTask> newLoadingTasks = Lists.newArrayList();
+    private long writeDurationMs = 0;
 
     // only for log replay
     public BrokerLoadJob() {
@@ -365,7 +369,9 @@ public class BrokerLoadJob extends BulkLoadJob {
         // check data quality
         if (!checkDataQuality()) {
             cancelJobWithoutCheck(
-                    new FailMsg(FailMsg.CancelType.ETL_QUALITY_UNSATISFIED, DataQualityException.QUALITY_FAIL_MSG),
+                    new FailMsg(FailMsg.CancelType.ETL_QUALITY_UNSATISFIED,
+                            DataQualityException.QUALITY_FAIL_MSG +
+                                    ". You can find detailed error message from running `TrackingSQL`."),
                     true, true);
             return;
         }
@@ -380,16 +386,42 @@ public class BrokerLoadJob extends BulkLoadJob {
             cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
             return;
         }
+        while (true) {
+            try {
+                commitTransactionUnderDatabaseLock(db);
+                break;
+            } catch (CommitRateExceededException e) {
+                // Sleep and retry.
+                ThreadUtil.sleepAtLeastIgnoreInterrupts(Math.max(e.getAllowCommitTime() - System.currentTimeMillis(), 0));
+            } catch (UserException e) {
+                LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
+                        .add("database_id", dbId)
+                        .add("error_msg", "Failed to commit txn with error:" + e.getMessage())
+                        .build(), e);
+                cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
+                break;
+            }
+        }
+    }
+
+    private void commitTransactionUnderDatabaseLock(Database db) throws UserException {
         db.writeLock();
         try {
             LOG.info(new LogBuilder(LogKey.LOAD_JOB, id)
                     .add("txn_id", transactionId)
                     .add("msg", "Load job try to commit txn")
                     .build());
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().commitTransaction(
-                    dbId, transactionId, commitInfos, failInfos,
-                    new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp,
-                            finishTimestamp, state, failMsg));
+            // Update the write duration before committing the transaction.
+            GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+            TransactionState transactionState = transactionMgr.getTransactionState(dbId, transactionId);
+            if (transactionState != null) {
+                transactionState.setWriteDurationMs(writeDurationMs);
+            }
+
+            transactionMgr.commitTransaction(dbId, transactionId, commitInfos, failInfos,
+                    new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp, finishTimestamp, state,
+                            failMsg));
+
             MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
             // collect table-level metrics
             loadingStatus.travelTableCounters(kv -> {
@@ -407,13 +439,6 @@ public class BrokerLoadJob extends BulkLoadJob {
                             .increase(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_FINISHED));
                 }
             });
-        } catch (UserException e) {
-            LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
-                    .add("database_id", dbId)
-                    .add("error_msg", "Failed to commit txn with error:" + e.getMessage())
-                    .build(), e);
-            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
-            return;
         } finally {
             db.writeUnlock();
         }
@@ -432,6 +457,7 @@ public class BrokerLoadJob extends BulkLoadJob {
         if (!attachment.getRejectedRecordPaths().isEmpty()) {
             loadingStatus.setRejectedRecordPaths(attachment.getRejectedRecordPaths());
         }
+        writeDurationMs += attachment.getWriteDurationMs();
         commitInfos.addAll(attachment.getCommitInfoList());
         failInfos.addAll(attachment.getFailInfoList());
         progress = (int) ((double) finishedTaskIds.size() / idToTasks.size() * 100);

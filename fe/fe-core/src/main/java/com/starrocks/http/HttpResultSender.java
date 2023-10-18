@@ -124,7 +124,7 @@ public class HttpResultSender {
             while (!channel.channel().isWritable()) {
                 // if channel is closed, cancel query
                 if (!channel.channel().isActive()) {
-                    coord.cancel();
+                    coord.cancel("channel is closed, cancel query");
                     return;
                 }
                 Thread.yield();

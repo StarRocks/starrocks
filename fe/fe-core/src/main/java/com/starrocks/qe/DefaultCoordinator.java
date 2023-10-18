@@ -47,6 +47,9 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThriftServer;
 import com.starrocks.common.UserException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
@@ -58,7 +61,6 @@ import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
-import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.QueryRuntimeProfile;
@@ -71,11 +73,9 @@ import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
-import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.thrift.TAuditStatisticsItem;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
@@ -89,7 +89,6 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.thrift.TUniqueId;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -126,7 +125,7 @@ public class DefaultCoordinator extends Coordinator {
 
     /**
      * Overall status of the entire query.
-     * <p> Set to the first reported fragment error status or to CANCELLED, if {@link #cancel()} is called.
+     * <p> Set to the first reported fragment error status or to CANCELLED, if {@link #cancel(String cancelledMessage)} is called.
      */
     private Status queryStatus = new Status();
 
@@ -374,8 +373,8 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
-    public void setExecPlanSupplier(Supplier<ExecPlan> execPlanSupplier) {
-        queryProfile.setExecPlanSupplier(execPlanSupplier);
+    public void setExecPlan(ExecPlan execPlan) {
+        queryProfile.setExecPlan(execPlan);
     }
 
     @Override
@@ -416,6 +415,10 @@ public class DefaultCoordinator extends Coordinator {
                     DebugUtil.printId(jobSpec.getQueryId()), jobSpec.getDescTable());
         }
 
+        if (slot != null && slot.getPipelineDop() > 0 && slot.getPipelineDop() != jobSpec.getQueryOptions().getPipeline_dop()) {
+            jobSpec.getFragments().forEach(fragment -> fragment.limitMaxPipelineDop(slot.getPipelineDop()));
+        }
+
         coordinatorPreprocessor.prepareExec();
 
         prepareResultSink();
@@ -448,15 +451,15 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public void startScheduling(boolean needDeploy) throws Exception {
-        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Pending")) {
+        try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Pending")) {
             QueryQueueManager.getInstance().maybeWait(connectContext, this);
         }
 
-        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Prepare")) {
+        try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Prepare")) {
             prepareExec();
         }
 
-        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Deploy")) {
+        try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
             deliverExecFragments(needDeploy);
         }
 
@@ -523,7 +526,7 @@ public class DefaultCoordinator extends Coordinator {
 
     private void deliverExecFragments(boolean needDeploy) throws RpcException, UserException {
         lock();
-        try {
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployLockInternalTime")) {
             Deployer deployer =
                     new Deployer(connectContext, jobSpec, executionDAG, coordinatorPreprocessor.getCoordAddress(),
                             this::handleErrorExecution);
@@ -881,23 +884,12 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
-    public void updateAuditStatistics(TReportAuditStatisticsParams params) {
-        auditStatistics = new PQueryStatistics();
-        auditStatistics.scanRows = params.scan_rows;
-        auditStatistics.scanBytes = params.scan_bytes;
-        auditStatistics.returnedRows = params.returned_rows;
-        auditStatistics.cpuCostNs = params.cpu_cost_ns;
-        auditStatistics.memCostBytes = params.mem_cost_bytes;
-        auditStatistics.spillBytes = params.spill_bytes;
-        if (CollectionUtils.isNotEmpty(params.stats_items)) {
-            auditStatistics.statsItems = Lists.newArrayList();
-            for (TAuditStatisticsItem item : params.stats_items) {
-                QueryStatisticsItemPB itemPB = new QueryStatisticsItemPB();
-                itemPB.scanBytes = item.scan_bytes;
-                itemPB.scanRows = item.scan_rows;
-                itemPB.tableId = item.table_id;
-                auditStatistics.statsItems.add(itemPB);
-            }
+    public synchronized void updateAuditStatistics(TReportAuditStatisticsParams params) {
+        PQueryStatistics newAuditStatistics = AuditStatisticsUtil.toProtobuf(params.audit_statistics);
+        if (auditStatistics == null) {
+            auditStatistics = newAuditStatistics;
+        } else {
+            AuditStatisticsUtil.mergeProtobuf(newAuditStatistics, auditStatistics);
         }
     }
 

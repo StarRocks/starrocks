@@ -15,31 +15,43 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MaxLiteral;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionKeyDiscreteDomain;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.BitSet;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class PartitionColPredicateEvaluator {
@@ -48,13 +60,15 @@ public class PartitionColPredicateEvaluator {
 
     private static final int IN_OPERANDS_LIMIT = 50;
 
-    private List<Long> candidatePartitions;
+    private final List<Long> candidatePartitions;
 
-    private List<Range<PartitionKey>> candidateRanges;
+    private final List<Range<PartitionKey>> candidateRanges;
 
-    private int candidateNum = 0;
+    private final Map<ScalarOperator, List<Range<PartitionKey>>> exprToCandidateRanges;
 
-    private Column partitionColumn;
+    private final int candidateNum;
+
+    private final Column partitionColumn;
 
     public PartitionColPredicateEvaluator(RangePartitionInfo rangePartitionInfo, List<Long> candidatePartitions) {
         this.candidatePartitions = candidatePartitions;
@@ -64,6 +78,7 @@ public class PartitionColPredicateEvaluator {
         for (long id : candidatePartitions) {
             candidateRanges.add(rangePartitionInfo.getIdToRange(false).get(id));
         }
+        exprToCandidateRanges = Maps.newHashMap();
     }
 
     public List<Long> prunePartitions(PartitionColPredicateExtractor extractor, ScalarOperator predicates) {
@@ -96,13 +111,60 @@ public class PartitionColPredicateEvaluator {
 
         @Override
         public BitSet visitConstant(ConstantOperator literal, Void context) {
-            Preconditions.checkState(Type.BOOLEAN == literal.getType());
             return literal.getBoolean() ? createAllTrueBitSet() : new BitSet(candidateNum);
+        }
+
+        @Override
+        public BitSet visitCall(CallOperator call, Void context) {
+            if (!exprToCandidateRanges.containsKey(call)) {
+                List<Range<PartitionKey>> mappingRanges = Lists.newArrayList();
+                PrimitiveType returnType = call.getType().getPrimitiveType();
+                for (Range<PartitionKey> range : candidateRanges) {
+                    Range<PartitionKey> newRange;
+                    if (!range.hasUpperBound() || range.upperEndpoint().getKeys().get(0) instanceof MaxLiteral) {
+                        newRange = createFullScopeRange(returnType);
+                    } else {
+                        PartitionKey lowerKey = new PartitionKey();
+                        PartitionKey upperKey = new PartitionKey();
+                        LiteralExpr lowerBound = range.hasLowerBound() ? range.lowerEndpoint().getKeys().get(0)
+                                : createInfinity(partitionColumn.getType(), false);
+                        LiteralExpr upperBound = range.upperEndpoint().getKeys().get(0);
+                        Optional<LiteralExpr> mappingLowerBound = mapRangeBoundValue(call, lowerBound);
+                        Optional<LiteralExpr> mappingUpperBound = mapRangeBoundValue(call, upperBound);
+                        if (mappingLowerBound.isPresent() && mappingUpperBound.isPresent()) {
+                            LiteralExpr newLowerBound = mappingLowerBound.get();
+                            LiteralExpr newUpperBound = mappingUpperBound.get();
+                            // switch bound value
+                            if (newLowerBound.compareTo(newUpperBound) > 0) {
+                                LiteralExpr tmp = newLowerBound;
+                                newLowerBound = newUpperBound;
+                                newUpperBound = tmp;
+                            }
+                            lowerKey.pushColumn(newLowerBound, returnType);
+                            upperKey.pushColumn(newUpperBound, returnType);
+                            newRange = Range.range(lowerKey, BoundType.CLOSED, upperKey, BoundType.CLOSED);
+                        } else {
+                            newRange = createFullScopeRange(call.getType().getPrimitiveType());
+                        }
+                    }
+                    mappingRanges.add(newRange);
+                }
+
+                exprToCandidateRanges.put(call, mappingRanges);
+            }
+            return null;
+        }
+
+        @Override
+        public BitSet visitVariableReference(ColumnRefOperator variable, Void context) {
+            exprToCandidateRanges.put(variable, candidateRanges);
+            return null;
         }
 
         @Override
         public BitSet visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
             BinaryType type = predicate.getBinaryType();
+            predicate.getChild(0).accept(this, null);
             ConstantOperator constantOperator = (ConstantOperator) predicate.getChild(1);
             LiteralExpr literalExpr;
             try {
@@ -111,7 +173,6 @@ public class PartitionColPredicateEvaluator {
                     literalExpr = LiteralExpr.createInfinity(columnType, false);
                 } else {
                     literalExpr = ColumnFilterConverter.convertLiteral(constantOperator);
-
                 }
             } catch (AnalysisException e) {
                 return createAllTrueBitSet();
@@ -140,7 +201,7 @@ public class PartitionColPredicateEvaluator {
                 default:
                     predicateRange = Range.all();
             }
-            return evaluateRangeHitSet(predicateRange);
+            return evaluateRangeHitSet(predicate.getChild(0), predicateRange);
         }
 
         @Override
@@ -162,6 +223,7 @@ public class PartitionColPredicateEvaluator {
         // only process in scene
         @Override
         public BitSet visitInPredicate(InPredicateOperator predicate, Void context) {
+            predicate.getChild(0).accept(this, null);
             List<ConstantOperator> constList = predicate.getChildren().stream()
                     .skip(1).map(ConstantOperator.class::cast)
                     .filter(e -> !e.isNull()).sorted().collect(Collectors.toList());
@@ -174,7 +236,7 @@ public class PartitionColPredicateEvaluator {
                         PartitionKey conditionKey = new PartitionKey();
                         conditionKey.pushColumn(literalExpr, partitionColumn.getPrimitiveType());
                         Range<PartitionKey> predicateRange = Range.closed(conditionKey, conditionKey);
-                        res.or(evaluateRangeHitSet(predicateRange));
+                        res.or(evaluateRangeHitSet(predicate.getChild(0), predicateRange));
                     } catch (AnalysisException e) {
                         encounterEx = true;
                         break;
@@ -189,7 +251,7 @@ public class PartitionColPredicateEvaluator {
                     PartitionKey maxKey = new PartitionKey();
                     maxKey.pushColumn(max, partitionColumn.getPrimitiveType());
                     Range<PartitionKey> coarseRange = Range.range(minKey, BoundType.CLOSED, maxKey, BoundType.CLOSED);
-                    res.or(evaluateRangeHitSet(coarseRange));
+                    res.or(evaluateRangeHitSet(predicate.getChild(0), coarseRange));
                 } catch (AnalysisException e) {
                     encounterEx = true;
                 }
@@ -203,6 +265,7 @@ public class PartitionColPredicateEvaluator {
 
         @Override
         public BitSet visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
+            predicate.getChild(0).accept(this, null);
             PartitionKey conditionKey = new PartitionKey();
             Type columnType = Type.fromPrimitiveType(partitionColumn.getPrimitiveType());
             try {
@@ -211,15 +274,19 @@ public class PartitionColPredicateEvaluator {
                 return createAllTrueBitSet();
             }
             Range<PartitionKey> predicateRange = Range.closed(conditionKey, conditionKey);
-            return evaluateRangeHitSet(predicateRange);
+            return evaluateRangeHitSet(predicate.getChild(0), predicateRange);
         }
 
-        private BitSet evaluateRangeHitSet(Range<PartitionKey> predicateRange) {
+        private BitSet evaluateRangeHitSet(ScalarOperator scalarOperator, Range<PartitionKey> predicateRange) {
             BitSet bitSet = new BitSet(candidateNum);
+            if (!exprToCandidateRanges.containsKey(scalarOperator)) {
+                return createAllTrueBitSet();
+            }
+            List<Range<PartitionKey>> ranges = exprToCandidateRanges.get(scalarOperator);
             for (int i = 0; i < candidateNum; i++) {
-                Range<PartitionKey> range = candidateRanges.get(i);
+                Range<PartitionKey> range = ranges.get(i);
                 if (range.isConnected(predicateRange) && !range.intersection(predicateRange).isEmpty()) {
-                    if (isCanonicalType(partitionColumn.getType())) {
+                    if (isCanonicalType(scalarOperator.getType())) {
                         // try to canonical predicate
                         Range intersectedRange = range.intersection(predicateRange);
                         Range canonicalRange = intersectedRange.canonical(new PartitionKeyDiscreteDomain());
@@ -243,5 +310,73 @@ public class PartitionColPredicateEvaluator {
             res.flip(0, candidateNum);
             return res;
         }
+
+        private LiteralExpr createInfinity(Type type, boolean isMax) {
+            if (isMax) {
+                return MaxLiteral.MAX_VALUE;
+            }
+
+            switch (type.getPrimitiveType()) {
+                case TINYINT:
+                case SMALLINT:
+                case INT:
+                case BIGINT:
+                    return IntLiteral.createMinValue(type);
+                case LARGEINT:
+                    return LargeIntLiteral.createMinValue();
+                case DATE:
+                case DATETIME:
+                    return DateLiteral.createMinValue(type);
+                default:
+                    throw new IllegalArgumentException("Invalid data type for creating infinity: " + type);
+            }
+        }
+
+        private Optional<LiteralExpr> mapRangeBoundValue(CallOperator callOperator, LiteralExpr literalExpr) {
+            ColumnRefReplacer refReplacer = new ColumnRefReplacer(literalExpr);
+            CallOperator newCall = (CallOperator) callOperator.accept(refReplacer, null);
+
+            ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+            ScalarOperator result = rewriter.rewrite(newCall,
+                    Collections.singletonList(new FoldConstantsRule(true)));
+            if (result.isConstantRef()) {
+                LiteralExpr newLiteralExpr;
+                try {
+                    newLiteralExpr = ColumnFilterConverter.convertLiteral((ConstantOperator) result);
+                } catch (Exception e) {
+                    return Optional.empty();
+                }
+                return Optional.of(newLiteralExpr);
+            } else {
+                return Optional.empty();
+            }
+        }
+
+        private Range<PartitionKey> createFullScopeRange(PrimitiveType type) {
+            PartitionKey upperKey = new PartitionKey();
+            upperKey.pushColumn(MaxLiteral.MAX_VALUE, type);
+            return Range.lessThan(upperKey);
+        }
+    }
+
+    private class ColumnRefReplacer extends BaseScalarOperatorShuttle {
+
+        private final LiteralExpr literalExpr;
+
+        public ColumnRefReplacer(LiteralExpr literalExpr) {
+            this.literalExpr = literalExpr;
+        }
+
+        @Override
+        public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+            if (literalExpr instanceof NullLiteral) {
+                return ConstantOperator.createNull(literalExpr.getType());
+            } else if (literalExpr instanceof MaxLiteral) {
+                return variable;
+            } else {
+                return ConstantOperator.createObject(literalExpr.getRealObjectValue(), literalExpr.getType());
+            }
+        }
+
     }
 }

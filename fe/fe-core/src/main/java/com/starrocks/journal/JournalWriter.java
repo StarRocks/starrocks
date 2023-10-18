@@ -261,7 +261,7 @@ public class JournalWriter {
             }
             String reason;
             if (rollJournalCounter >= Config.edit_log_roll_num) {
-                reason = String.format("rollEditCounter {} >= edit_log_roll_num {}",
+                reason = String.format("rollEditCounter %d >= edit_log_roll_num %d",
                         rollJournalCounter, Config.edit_log_roll_num);
             } else {
                 reason = "triggering a new checkpoint manually";

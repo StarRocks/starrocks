@@ -146,7 +146,7 @@ public:
 
     size_t get_store_num() { return _store_map.size(); }
 
-    Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
+    void get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
 
     std::vector<string> get_store_paths();
     // Get root path vector for creating tablet. The returned vector is sorted by the disk usage in asc order,
@@ -195,21 +195,21 @@ public:
         _report_cv.notify_all();
     }
 
-    // call this to wait for a report notification until timeout
-    void wait_for_report_notify(int64_t timeout_sec, bool from_report_tablet_thread) {
+    // call this to wait for a report notification or until timeout.
+    // returns:
+    // - true: wake up with notification recieved
+    // - false: wait until timeout without notification
+    bool wait_for_report_notify(int64_t timeout_sec, bool from_report_tablet_thread) {
+        bool* watch_var = from_report_tablet_thread ? &_need_report_tablet : &_need_report_disk_stat;
         auto wait_timeout_sec = std::chrono::seconds(timeout_sec);
         std::unique_lock<std::mutex> l(_report_mtx);
-        // When wait_for() returns, regardless of the return-result(possibly a timeout
-        // error), the report_tablet_thread and report_disk_stat_thread(see TaskWorkerPool)
-        // immediately begin the next round of reporting, so there is no need to check
-        // the return-value of wait_for().
-        if (from_report_tablet_thread) {
-            _report_cv.wait_for(l, wait_timeout_sec, [this] { return _need_report_tablet; });
-            _need_report_tablet = false;
-        } else {
-            _report_cv.wait_for(l, wait_timeout_sec, [this] { return _need_report_disk_stat; });
-            _need_report_disk_stat = false;
+        auto ret = _report_cv.wait_for(l, wait_timeout_sec, [&] { return *watch_var; });
+        if (ret) {
+            // if is waken up with return value `true`, the condition must be satisfied.
+            DCHECK(*watch_var);
+            *watch_var = false;
         }
+        return ret;
     }
 
     Status execute_task(EngineTask* task);

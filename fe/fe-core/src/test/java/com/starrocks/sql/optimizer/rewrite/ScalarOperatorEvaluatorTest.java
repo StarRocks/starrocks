@@ -25,8 +25,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import mockit.Expectations;
+import org.junit.Assert;
 import org.junit.Test;
 
+import java.math.BigInteger;
 import java.time.LocalDateTime;
 
 import static org.junit.Assert.assertEquals;
@@ -125,6 +127,20 @@ public class ScalarOperatorEvaluatorTest {
         ScalarOperator result = ScalarOperatorEvaluator.INSTANCE.evaluation(operator);
 
         assertEquals(result, operator);
+    }
+
+    @Test
+    public void testCreateConstantValue() {
+        ConstantOperator tinyInt = ConstantOperator.createExampleValueByType(Type.TINYINT);
+        Assert.assertTrue(tinyInt.getTinyInt() == 1);
+        ConstantOperator smallInt = ConstantOperator.createExampleValueByType(Type.SMALLINT);
+        Assert.assertTrue(smallInt.getSmallint() == 1);
+        ConstantOperator intValue = ConstantOperator.createExampleValueByType(Type.INT);
+        Assert.assertTrue(intValue.getInt() == 1);
+        ConstantOperator bigInt = ConstantOperator.createExampleValueByType(Type.BIGINT);
+        Assert.assertTrue(bigInt.getBigint() == 1L);
+        ConstantOperator largeInt = ConstantOperator.createExampleValueByType(Type.LARGEINT);
+        Assert.assertTrue(largeInt.getLargeInt().equals(new BigInteger("1")));
     }
 
 }

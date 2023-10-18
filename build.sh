@@ -51,12 +51,12 @@ if [ -z $STARROCKS_VERSION ]; then
     elif [ ! -z $branch_name ]; then
         export STARROCKS_VERSION=$branch_name
     else
-        export STARROCKS_VERSION=$(git rev-parse --short HEAD)
+        export STARROCKS_VERSION=$(git rev-parse --short=7 HEAD)
     fi
 fi
 
-if [ -z $STARROCKS_COMMIT_HASH]; then
-    export STARROCKS_COMMIT_HASH=$(git rev-parse --short HEAD)
+if [ -z $STARROCKS_COMMIT_HASH ] ; then
+    export STARROCKS_COMMIT_HASH=$(git rev-parse --short=7 HEAD)
 fi
 
 set -eo pipefail
@@ -87,6 +87,7 @@ Usage: $0 <options>
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
+     --without-java-ext build Backend without java-extensions(default with java-extensions)
      -j                 build Backend parallel
 
   Eg.
@@ -112,6 +113,7 @@ OPTS=$(getopt \
   -l 'with-bench' \
   -l 'with-clang-tidy' \
   -l 'without-gcov' \
+  -l 'without-java-ext' \
   -l 'use-staros' \
   -o 'j:' \
   -l 'help' \
@@ -132,6 +134,7 @@ WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
 USE_STAROS=OFF
+BUILD_JAVA_EXT=ON
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -216,6 +219,7 @@ else
             --use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
+            --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -252,6 +256,7 @@ echo "Get params:
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
     WITH_CACHELIB       -- $WITH_CACHELIB
     ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
+    BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
 "
 
 check_tool()
@@ -322,6 +327,18 @@ if [ ${BUILD_BE} -eq 1 ] ; then
       fi
       export STARLET_INSTALL_DIR
     fi
+
+    # Temporarily keep the default behavior same as before to avoid frequent thirdparty update.
+    # Once the starcache version is stable, we will turn on it by default.
+    if [[ -z ${WITH_STARCACHE} ]]; then
+      WITH_STARCACHE=${USE_STAROS}
+    fi
+
+    if [[ "${WITH_STARCACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/starcache/lib/libstarcache.a ]]; then
+        echo "Missing depdency libraries(starcache), you can download and extract it to thirdparty installed directory."
+        exit 1
+    fi
+
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
                   -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
                   -DSTARROCKS_HOME=${STARROCKS_HOME}                    \
@@ -335,8 +352,8 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DWITH_CACHELIB=${WITH_CACHELIB}                      \
+                  -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DUSE_STAROS=${USE_STAROS}                            \
-                  -DWITH_STARCACHE=${USE_STAROS}                        \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
 
@@ -347,14 +364,18 @@ if [ ${BUILD_BE} -eq 1 ] ; then
 
     ${BUILD_SYSTEM} install
 
-    # Build JDBC Bridge
-    echo "Build Java Extensions"
-    cd ${STARROCKS_HOME}/java-extensions
-    if [ ${CLEAN} -eq 1 ]; then
-        ${MVN_CMD} clean
+    # Build Java Extensions
+    if [ ${BUILD_JAVA_EXT} = "ON" ]; then
+        echo "Build Java Extensions"
+        cd ${STARROCKS_HOME}/java-extensions
+        if [ ${CLEAN} -eq 1 ]; then
+            ${MVN_CMD} clean
+        fi
+        ${MVN_CMD} package -DskipTests
+        cd ${STARROCKS_HOME}
+    else
+        echo "Skip Building Java Extensions"
     fi
-    ${MVN_CMD} package -DskipTests
-    cd ${STARROCKS_HOME}
 fi
 
 cd ${STARROCKS_HOME}
@@ -378,6 +399,8 @@ if [ ${FE_MODULES}x != ""x ]; then
         ${MVN_CMD} clean
     fi
     ${MVN_CMD} package -am -pl ${FE_MODULES} -DskipTests
+    cd ${STARROCKS_HOME}/java-extensions
+    ${MVN_CMD} package -am -pl hadoop-ext -DskipTests
     cd ${STARROCKS_HOME}
 fi
 
@@ -397,14 +420,15 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/bin/show_fe_version.sh ${STARROCKS_OUTPUT}/fe/bin/
         cp -r -p ${STARROCKS_HOME}/bin/common.sh ${STARROCKS_OUTPUT}/fe/bin/
         cp -r -p ${STARROCKS_HOME}/conf/fe.conf ${STARROCKS_OUTPUT}/fe/conf/
+        cp -r -p ${STARROCKS_HOME}/conf/udf_security.policy ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/fe/conf/
         rm -rf ${STARROCKS_OUTPUT}/fe/lib/*
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/fe/lib/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler/* ${STARROCKS_OUTPUT}/fe/bin/
         MSG="${MSG} √ ${MSG_FE}"
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
@@ -426,6 +450,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
 
     cp -r -p ${STARROCKS_HOME}/be/output/bin/* ${STARROCKS_OUTPUT}/be/bin/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/be.conf ${STARROCKS_OUTPUT}/be/conf/
+    cp -r -p ${STARROCKS_HOME}/be/output/conf/udf_security.policy ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/be_test.conf ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/cn.conf ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/be/conf/
@@ -460,6 +485,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/paimon-reader-lib ${STARROCKS_OUTPUT}/be/lib/
     cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib
+    cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/hadoop-azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
@@ -476,8 +502,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
     fi
 
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib/
     MSG="${MSG} √ ${MSG_BE}"
 fi

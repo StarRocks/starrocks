@@ -12,7 +12,7 @@ Users with the system-defined role `user_admin` can view all the user and role i
 
 ### View privilege information
 
-You can view the privileges granted to a user or a role using [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW%20GRANTS.md).
+You can view the privileges granted to a user or a role using [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW_GRANTS.md).
 
 - View the privileges of the current user.
 
@@ -42,7 +42,7 @@ You can view the privileges granted to a user or a role using [SHOW GRANTS](../s
 
 ### View user property
 
-You can view the property of a user using [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SET%20PROPERTY.md).
+You can view the property of a user using [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SHOW_PROPERTY.md).
 
 The following example shows the property of the user `jack`:
 
@@ -52,7 +52,7 @@ SHOW PROPERTY FOR jack@'172.10.1.10';
 
 ### View roles
 
-You can view all the roles within the StarRocks cluster using [SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW%20ROLES.md).
+You can view all the roles within the StarRocks cluster using [SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW_ROLES.md).
 
 ```SQL
 SHOW ROLES;
@@ -74,7 +74,7 @@ Users with the system-defined role `user_admin` can create users, alter users, a
 
 You can create a user by specifying the user identity, authentication method, and default role.
 
-StarRocks supports user authentication with login credentials or LDAP authentication. For more information about StarRocks' authentication, see [Authentication](../administration/Authentication.md). For more information and advanced instructions on creating a user, see [CREATE USER](../sql-reference/sql-statements/account-management/CREATE%20USER.md).
+StarRocks supports user authentication with login credentials or LDAP authentication. For more information about StarRocks' authentication, see [Authentication](../administration/Authentication.md). For more information and advanced instructions on creating a user, see [CREATE USER](../sql-reference/sql-statements/account-management/CREATE_USER.md).
 
 The following example creates the user `jack`, allows it to connect only from the IP address `172.10.1.10`, sets the password to `12345` for it, and assigns the role `example_role` to it as its default role:
 
@@ -95,7 +95,7 @@ The default role of a user is automatically activated when the user connects to 
 
 #### Alter the default role of a user
 
-You can set the default role of a user using [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) or [ALTER USER](../sql-reference/sql-statements/account-management/ALTER%20USER.md).
+You can set the default role of a user using [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) or [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md).
 
 Both of the following examples set the default role of `jack` to `db1_admin`. Note that `db1_admin` must have been assigned to `jack`.
 
@@ -113,7 +113,7 @@ Both of the following examples set the default role of `jack` to `db1_admin`. No
 
 #### Alter the property of a user
 
-You can set the property of a user using [SET PROPERTY](../sql-reference/sql-statements/account-management/SET%20PROPERTY.md).
+You can set the property of a user using [SET PROPERTY](../sql-reference/sql-statements/account-management/SET_PROPERTY.md).
 
 The following example sets the maximum number of connections for user `jack` to `1000`. User identities that have the same user name share the same property.
 
@@ -125,7 +125,7 @@ SET PROPERTY FOR jack 'max_user_connections' = '1000';
 
 #### Reset password for a user
 
-You can reset the password for a user using [SET PASSWORD](../sql-reference/sql-statements/account-management/SET%20PASSWORD.md) or [ALTER USER](../sql-reference/sql-statements/account-management/ALTER%20USER.md).
+You can reset the password for a user using [SET PASSWORD](../sql-reference/sql-statements/account-management/SET_PASSWORD.md) or [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md).
 
 > **NOTE**
 >
@@ -196,7 +196,7 @@ If you have lost the password of the `root` user and cannot connect to StarRocks
 
 ### Drop a user
 
-You can drop a user using [DROP USER](../sql-reference/sql-statements/account-management/DROP%20USER.md).
+You can drop a user using [DROP USER](../sql-reference/sql-statements/account-management/DROP_USER.md).
 
 The following example drops the user `jack`:
 
@@ -210,7 +210,7 @@ Users with the system-defined role `user_admin` can create, grant, revoke, or dr
 
 ### Create a role
 
-You can create a role using [CREATE ROLE](../sql-reference/sql-statements/account-management/CREATE%20ROLE.md).
+You can create a role using [CREATE ROLE](../sql-reference/sql-statements/account-management/CREATE_ROLE.md).
 
 The following example creates the role `example_role`:
 
@@ -264,7 +264,7 @@ You can revoke roles from a user or another role using [REVOKE](../sql-reference
 
 ### Drop a role
 
-You can drop a role using [DROP ROLE](../sql-reference/sql-statements/account-management/DROP%20ROLE.md).
+You can drop a role using [DROP ROLE](../sql-reference/sql-statements/account-management/DROP_ROLE.md).
 
 The following example drops the role `example_role`:
 
@@ -459,6 +459,8 @@ We recommend you customize roles to manage privileges and users. The following e
    ```SQL
    --Create a role.
    CREATE ROLE read_catalog_only;
+   -- Grant the USAGE privilege on the destination catalog to the role.
+   GRANT USAGE ON CATALOG hive_catalog TO ROLE read_catalog_only;
    --Switch to the corresponding catalog.
    SET CATALOG hive_catalog;
    --Grant the SELECT privilege on all tables and views in all databases.
@@ -475,6 +477,8 @@ We recommend you customize roles to manage privileges and users. The following e
    ```SQL
    -- Create a role.
    CREATE ROLE write_catalog_only;
+   -- Grant the USAGE privilege on the destination catalog to the role.
+   GRANT USAGE ON CATALOG iceberg_catalog TO ROLE read_catalog_only;
    -- Switch to the corresponding catalog.
    SET CATALOG iceberg_catalog;
    -- Grant the privilege to write data into Iceberg tables.

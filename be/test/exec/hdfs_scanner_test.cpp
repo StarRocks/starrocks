@@ -49,7 +49,7 @@ public:
 protected:
     void _create_runtime_state(const std::string& timezone);
     void _create_runtime_profile();
-    Status _init_block_cache(size_t mem_size, const std::string& engine);
+    Status _init_datacache(size_t mem_size, const std::string& engine);
     HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, const TupleDescriptor* tuple_desc);
     void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc,
                                  bool diff_case_sensitive = false);
@@ -80,12 +80,13 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
     _runtime_state->init_instance_mem_tracker();
 }
 
-Status HdfsScannerTest::_init_block_cache(size_t mem_size, const std::string& engine) {
+Status HdfsScannerTest::_init_datacache(size_t mem_size, const std::string& engine) {
     BlockCache* cache = BlockCache::instance();
     CacheOptions cache_options;
     cache_options.mem_space_size = mem_size;
-    cache_options.block_size = starrocks::config::block_cache_block_size;
-    cache_options.enable_checksum = starrocks::config::block_cache_checksum_enable;
+    cache_options.block_size = starrocks::config::datacache_block_size;
+    cache_options.enable_checksum = starrocks::config::datacache_checksum_enable;
+    cache_options.max_concurrent_inserts = 1500000;
     cache_options.engine = engine;
     return cache->init(cache_options);
 }
@@ -97,10 +98,10 @@ THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uin
     scan_range->offset = offset;
     scan_range->length = length == 0 ? file_size : length;
     scan_range->file_length = file_size;
-    scan_range->text_file_desc.field_delim = ",";
-    scan_range->text_file_desc.line_delim = "\n";
-    scan_range->text_file_desc.collection_delim = "\003";
-    scan_range->text_file_desc.mapkey_delim = "\004";
+    scan_range->text_file_desc.__set_field_delim(",");
+    scan_range->text_file_desc.__set_line_delim("\n");
+    scan_range->text_file_desc.__set_collection_delim("\003");
+    scan_range->text_file_desc.__set_mapkey_delim("\004");
     return scan_range;
 }
 
@@ -167,7 +168,8 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size)
+                  .ok());
     auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
     auto* tuple_desc = row_desc->tuple_descriptors()[0];
     return tuple_desc;
@@ -485,8 +487,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {20, 30, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -516,8 +518,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {2000, 5000, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -547,8 +549,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {3000, 10000, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -618,8 +620,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        Expr::prepare(it.second, _runtime_state);
-        Expr::open(it.second, _runtime_state);
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -704,8 +706,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDiffEncodeDictFilter) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        Expr::prepare(it.second, _runtime_state);
-        Expr::open(it.second, _runtime_state);
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -803,8 +805,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
         param->min_max_conjunct_ctxs.push_back(ctx);
     }
 
-    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -902,8 +904,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        Expr::prepare(it.second, _runtime_state);
-        Expr::open(it.second, _runtime_state);
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1023,8 +1025,8 @@ TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
             param->min_max_conjunct_ctxs.push_back(ctx);
         }
 
-        Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-        Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+        ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+        ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
         auto scanner = std::make_shared<HdfsOrcScanner>();
         Status status = scanner->init(_runtime_state, *param);
@@ -1171,8 +1173,8 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        Expr::prepare(it.second, _runtime_state);
-        Expr::open(it.second, _runtime_state);
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1226,8 +1228,8 @@ TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        Expr::prepare(it.second, _runtime_state);
-        Expr::open(it.second, _runtime_state);
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1420,8 +1422,8 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
     }
 
     param->min_max_tuple_desc = min_max_tuple_desc;
-    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -1506,6 +1508,53 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         uint64_t records = 0;
         READ_SCANNER_RETURN_ROWS(scanner, records);
         EXPECT_NE(records, 100);
+        scanner->close(_runtime_state);
+    }
+}
+
+TEST_F(HdfsScannerTest, TestCSVWithDifferentLineDelimiter) {
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"action", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {""}};
+
+    const std::string end_with_r = "./be/test/exec/test_data/csv_scanner/line_delimiter_end_with_r.csv";
+    const std::string end_with_n = "./be/test/exec/test_data/csv_scanner/line_delimiter_end_with_n.csv";
+    Status status;
+
+    {
+        // test line delimiter = \r
+        auto* range = _create_scan_range(end_with_r, 0, 0);
+        range->text_file_desc.__isset.line_delim = false;
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(end_with_r, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        READ_SCANNER_ROWS(scanner, 5);
+        scanner->close(_runtime_state);
+    }
+    {
+        // test line delimiter = \r
+        auto* range = _create_scan_range(end_with_n, 0, 0);
+        range->text_file_desc.__isset.line_delim = false;
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(end_with_n, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        READ_SCANNER_ROWS(scanner, 5);
         scanner->close(_runtime_state);
     }
 }
@@ -1603,13 +1652,13 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
         auto* tuple_desc = _create_tuple_desc(csv_descs);
         auto* param = _create_param(small_file, range, tuple_desc);
 #if defined(WITH_STARCACHE)
-        status = _init_block_cache(50 * 1024 * 1024, "starcache"); // 50MB
+        status = _init_datacache(50 * 1024 * 1024, "starcache"); // 50MB
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
-        param->use_block_cache = true;
+        param->use_datacache = true;
 #elif defined(WITH_CACHELIB)
-        status = _init_block_cache(50 * 1024 * 1024, "cachelib"); // 50MB
+        status = _init_datacache(50 * 1024 * 1024, "cachelib"); // 50MB
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
-        param->use_block_cache = true;
+        param->use_datacache = true;
 #endif
         build_hive_column_names(param, tuple_desc, true);
         auto scanner = std::make_shared<HdfsTextScanner>();
@@ -1985,8 +2034,8 @@ TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
         param->conjunct_ctxs.push_back(ctx);
     }
 
-    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -2151,8 +2200,8 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
         param->conjunct_ctxs.push_back(ctx);
     }
 
-    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -2196,8 +2245,8 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
         param->conjunct_ctxs.push_back(ctx);
     }
 
-    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -2650,6 +2699,27 @@ TEST_F(HdfsScannerTest, TestParquetIcebergCaseSensitive) {
     READ_SCANNER_ROWS(scanner, 1);
     EXPECT_EQ(scanner->raw_rows_read(), 1);
     EXPECT_EQ(_debug_row_output, "[1]\n");
+    scanner->close(_runtime_state);
+}
+
+TEST_F(HdfsScannerTest, TestParquetLZOFormat) {
+    SlotDesc parquet_descs[] = {{"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                {"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/lzo_compression.parquet";
+
+    _create_runtime_state("Asia/Shanghai");
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 100000);
     scanner->close(_runtime_state);
 }
 

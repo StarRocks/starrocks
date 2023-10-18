@@ -25,6 +25,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.types.DataField;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -45,7 +46,7 @@ public class PaimonTable extends Table {
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
                        String catalogType, String metastoreUris, String warehousePath,
-                       org.apache.paimon.table.Table paimonNativeTable) {
+                       org.apache.paimon.table.Table paimonNativeTable, long createTime) {
         super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), tblName, TableType.PAIMON, schema);
         this.catalogName = catalogName;
         this.databaseName = dbName;
@@ -58,6 +59,7 @@ public class PaimonTable extends Table {
         this.paimonFieldNames = paimonNativeTable.rowType().getFields().stream()
                 .map(DataField::name)
                 .collect(Collectors.toList());
+        this.createTime = createTime;
     }
 
     public String getCatalogName() {
@@ -78,7 +80,7 @@ public class PaimonTable extends Table {
 
     @Override
     public String getUUID() {
-        return String.join(".", catalogName, databaseName, tableName);
+        return String.join(".", catalogName, databaseName, tableName, Long.toString(createTime));
     }
 
     @Override
@@ -89,6 +91,15 @@ public class PaimonTable extends Table {
     @Override
     public List<String> getPartitionColumnNames() {
         return partColumnNames;
+    }
+
+    public List<Column> getPartitionColumns() {
+        List<Column> partitionColumns = new ArrayList<>();
+        if (!partColumnNames.isEmpty()) {
+            partitionColumns = partColumnNames.stream().map(this::getColumn)
+                    .collect(Collectors.toList());
+        }
+        return partitionColumns;
     }
 
     public List<String> getFieldNames() {

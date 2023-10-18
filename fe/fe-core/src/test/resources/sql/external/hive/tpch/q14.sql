@@ -44,7 +44,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 08
 
 7:AGGREGATE (update serialize)
-|  aggregate: sum[(if[(21: p_type LIKE 'PROMO%', [37: multiply, DECIMAL128(33,4), true], 0); args: BOOLEAN,DECIMAL128,DECIMAL128; result: DECIMAL128(33,4); args nullable: true; result nullable: true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true], sum[([27: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[(if[(21: p_type LIKE 'PROMO%', [35: multiply, DECIMAL128(33,4), true], 0); args: BOOLEAN,DECIMAL128,DECIMAL128; result: DECIMAL128(33,4); args nullable: true; result nullable: true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true], sum[([27: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[-Infinity, Infinity, 0.0, 16.0, 1.0] ESTIMATE
@@ -53,14 +53,14 @@ OutPut Exchange Id: 08
 6:Project
 |  output columns:
 |  21 <-> [21: p_type, VARCHAR, true]
-|  27 <-> [37: multiply, DECIMAL128(33,4), true]
-|  37 <-> [37: multiply, DECIMAL128(33,4), true]
+|  27 <-> [35: multiply, DECIMAL128(33,4), true]
+|  35 <-> clone([35: multiply, DECIMAL128(33,4), true])
 |  common expressions:
-|  33 <-> cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2))
-|  34 <-> [7: l_discount, DECIMAL64(15,2), true]
-|  35 <-> 1 - [34: cast, DECIMAL64(18,2), true]
-|  36 <-> cast([35: subtract, DECIMAL64(18,2), true] as DECIMAL128(18,2))
-|  37 <-> [33: cast, DECIMAL128(15,2), true] * [36: cast, DECIMAL128(18,2), true]
+|  32 <-> [7: l_discount, DECIMAL64(15,2), true]
+|  33 <-> 1 - [32: cast, DECIMAL64(18,2), true]
+|  34 <-> cast([33: subtract, DECIMAL64(18,2), true] as DECIMAL128(18,2))
+|  35 <-> [31: cast, DECIMAL128(15,2), true] * [34: cast, DECIMAL128(18,2), true]
+|  31 <-> cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2))
 |  cardinality: 6653886
 |  column statistics:
 |  * p_type-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
@@ -112,7 +112,7 @@ OutPut Exchange Id: 04
 2:HdfsScanNode
 TABLE: lineitem
 NON-PARTITION PREDICATES: 11: l_shipdate >= '1997-02-01', 11: l_shipdate < '1997-03-01'
-MIN/MAX PREDICATES: 31: l_shipdate >= '1997-02-01', 32: l_shipdate < '1997-03-01'
+MIN/MAX PREDICATES: 11: l_shipdate >= '1997-02-01', 11: l_shipdate < '1997-03-01'
 partitions=1/1
 avgRowSize=28.0
 cardinality: 6653886

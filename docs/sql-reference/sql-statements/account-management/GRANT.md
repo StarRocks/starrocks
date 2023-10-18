@@ -8,9 +8,9 @@ Grants roles to users or other roles.
 
 For more information about the privileges that can be granted, see [Privilege items](../../../administration/privilege_item.md).
 
-After a GRANT operation is performed, you can run [SHOW GRANTS](./SHOW%20GRANTS.md) to view detailed privilege information or run [REVOKE](REVOKE.md) to revoke a privilege or role.
+After a GRANT operation is performed, you can run [SHOW GRANTS](./SHOW_GRANTS.md) to view detailed privilege information or run [REVOKE](REVOKE.md) to revoke a privilege or role.
 
-Before a GRANT operation is performed, make sure that the related user or role has been created. For more information, see [CREATE USER](./CREATE%20USER.md) and [CREATE ROLE](./CREATE%20ROLE.md).
+Before a GRANT operation is performed, make sure that the related user or role has been created. For more information, see [CREATE USER](./CREATE_USER.md) and [CREATE ROLE](./CREATE_ROLE.md).
 
 > **NOTE**
 >
@@ -21,121 +21,157 @@ Before a GRANT operation is performed, make sure that the related user or role h
 
 ### Grant privileges to roles or users
 
-```SQL
-# System
+#### System
 
+```SQL
 GRANT
-    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | ALL [PRIVILEGES]} 
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE } 
     ON SYSTEM
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+```
 
-# Resource group
+#### Resource group
 
+```SQL
 GRANT
     { ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE GROUP <resource_group_name> [, <resource_group_name >,...] ｜ ALL RESOURCE GROUPS} 
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+```
 
-# Resource
+#### Resource
 
+```SQL
 GRANT
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE <resource_name> [, < resource_name >,...] ｜ ALL RESOURCES} 
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+```
 
-# Global UDF
+#### Global UDF
 
+```SQL
 GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { GLOBAL FUNCTION <function_name> [, < function_name >,...]    
        | ALL GLOBAL FUNCTIONS }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+```
 
-# Internal catalog
+#### Internal catalog
 
+```SQL
 GRANT
     { USAGE | CREATE DATABASE | ALL [PRIVILEGES]} 
     ON CATALOG default_catalog
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+```
 
-# External catalog
+#### External catalog
 
+```SQL
 GRANT
    { USAGE | DROP | ALL [PRIVILEGES] } 
    ON { CATALOG <catalog_name> [, <catalog_name>,...] | ALL CATALOGS}
    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+```
 
-# Database
+#### Database
 
+```SQL
 GRANT
     { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
     ON { DATABASE <db_name> [, <db_name>,...] | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-  
+```
+
 * You must first run SET CATALOG before you run this command.
 
-# Table
+#### Table
 
+```SQL
 GRANT
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
     ON { TABLE <table_name> [, < table_name >,...]
        | ALL TABLES} IN 
            { DATABASE <db_name> | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+```
 
-* You must first run SET CATALOG before you run this command. 
-* You can also use <db_name>.<table_name> to represent a table.
-GRANT <priv> ON TABLE <db_name>.<table_name> TO {ROLE <role_name> | USER <user_name>}
+* You must first run SET CATALOG before you run this command.
+* You can also use `<db_name>.<table_name>` to represent a table.
 
-# View
+  ```SQL
+  GRANT <priv> ON TABLE <db_name>.<table_name> TO {ROLE <role_name> | USER <user_name>}
+  ```
 
+#### View
+
+```SQL
 GRANT  
     { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
            {  DATABASE <db_name> | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-    
-* You must first run SET CATALOG before you run this command. 
-* You can also use <db_name>.<view_name> to represent a view.
-GRANT <priv> ON VIEW <db_name>.<view_name> TO {ROLE <role_name> | USER <user_name>}
+```
 
-# Materialized view
+* You must first run SET CATALOG before you run this command.
+* You can also use `<db_name>.<view_name>` to represent a view.
 
+  ```SQL
+  GRANT <priv> ON VIEW <db_name>.<view_name> TO {ROLE <role_name> | USER <user_name>}
+  ```
+
+#### Materialized view
+
+```SQL
 GRANT
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
            { DATABASE <db_name> | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-    
-* You must first run SET CATALOG before you run this command. 
-* You can also use <db_name>.<mv_name> to represent an mv.
-GRANT <priv> ON MATERIALIZED_VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USER <user_name>}
+```
 
-# Function
+* You must first run SET CATALOG before you run this command.
+* You can also use `<db_name>.<mv_name>` to represent an mv.
 
+  ```SQL
+  GRANT <priv> ON MATERIALIZED_VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USER <user_name>}
+  ```
+
+#### Function
+
+```SQL
 GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { FUNCTION <function_name> [, < function_name >,...]
        ｜ ALL FUNCTIONS} IN 
            {  DATABASE <db_name>  | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-    
-* You must first run SET CATALOG before you run this command. 
-* You can also use <db_name>.<function_name> to represent a function.
-GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <user_name>}
+```
 
-# User
+* You must first run SET CATALOG before you run this command.
+* You can also use `<db_name>.<function_name>` to represent a function.
 
+  ```SQL
+  GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <user_name>}
+  ```
+
+#### User
+
+```SQL
 GRANT IMPERSONATE
 ON USER <user_identity>
 TO USER <user_identity> [ WITH GRANT OPTION ]
+```
 
-# Storage volume
+#### Storage volume
 
+```SQL
 GRANT
-    CREATE STORAGE VOLUME 
+    CREATE STORAGE VOLUME
     ON SYSTEM
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
@@ -254,6 +290,8 @@ We recommend you customize roles to manage privileges and users. The following e
    ```SQL
    -- Create a role.
    CREATE ROLE read_catalog_only;
+   -- Grant the USAGE privilege on the destination catalog to the role.
+   GRANT USAGE ON CATALOG hive_catalog TO ROLE read_catalog_only;
    -- Switch to the corresponding catalog.
    SET CATALOG hive_catalog;
    -- Grant the privileges to query all tables and all views in all databases.
@@ -270,6 +308,8 @@ You can only write data into Iceberg tables (since v3.1).
    ```SQL
    -- Create a role.
    CREATE ROLE write_catalog_only;
+   -- Grant the USAGE privilege on the destination catalog to the role.
+   GRANT USAGE ON CATALOG iceberg_catalog TO ROLE read_catalog_only;
    -- Switch to the corresponding catalog.
    SET CATALOG iceberg_catalog;
    -- Grant the privilege to write data into Iceberg tables.

@@ -24,6 +24,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -32,9 +33,14 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class MockedJDBCMetadata implements ConnectorMetadata {
     private final AtomicLong idGen = new AtomicLong(0L);
     public static final String MOCKED_JDBC_CATALOG_NAME = "jdbc0";
+    public static final String MOCKED_JDBC_PG_CATALOG_NAME = "jdbc_postgres";
     public static final String MOCKED_PARTITIONED_DB_NAME = "partitioned_db0";
-    public static final String MOCKED_PARTITIONED_TABLE_NAME = "tbl0";
+    public static final String MOCKED_PARTITIONED_TABLE_NAME0 = "tbl0";
+    public static final String MOCKED_PARTITIONED_TABLE_NAME1 = "tbl1";
+    public static final String MOCKED_PARTITIONED_TABLE_NAME2 = "tbl2";
+    public static final String MOCKED_PARTITIONED_TABLE_NAME3 = "tbl3";
     private Map<String, String> properties;
+    private Map<String, JDBCTable> tables = new HashMap<>();
 
     private List<String> partitionNames = Arrays.asList("20230801", "20230802", "20230803");
     private List<PartitionInfo> partitions = Arrays.asList(new Partition("d", 1690819200L),
@@ -52,11 +58,26 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         }
     }
 
-    private Table getJDBCTable() {
+    private Table getJDBCTable(String tblName) {
         readLock();
         try {
-            return new JDBCTable(100000, MOCKED_PARTITIONED_TABLE_NAME, getSchema(),
-                    getPartitionColumns(), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties);
+            if (tables.get(tblName) == null) {
+                if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME0)) {
+
+                    tables.put(tblName, new JDBCTable(100000, MOCKED_PARTITIONED_TABLE_NAME0, getSchema(tblName),
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
+                    tables.put(tblName, new JDBCTable(100001, MOCKED_PARTITIONED_TABLE_NAME1, getSchema(tblName),
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
+                    tables.put(tblName, new JDBCTable(100002, MOCKED_PARTITIONED_TABLE_NAME2, getSchema(tblName),
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
+                    tables.put(tblName, new JDBCTable(100002, MOCKED_PARTITIONED_TABLE_NAME3, getSchema(tblName),
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                }
+            }
+            return tables.get(tblName);
         } catch (DdlException e) {
             e.printStackTrace();
         } finally {
@@ -65,20 +86,36 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         return null;
     }
 
-    private List<Column> getSchema() {
+    private List<Column> getSchema(String tblName) {
         readLock();
         try {
-            return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
-                    new Column("c", Type.VARCHAR), new Column("d", Type.INT));
+            if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME0)) {
+                return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
+                        new Column("c", Type.INT), new Column("d", Type.INT));
+            } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
+                return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
+                        new Column("c", Type.INT), new Column("d", Type.CHAR));
+            } else {
+                return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
+                        new Column("c", Type.INT), new Column("d", Type.VARCHAR));
+            }
+
         } finally {
             readUnlock();
         }
     }
 
-    private List<Column> getPartitionColumns() {
+    private List<Column> getPartitionColumns(String tblName) {
         readLock();
         try {
-            return Arrays.asList(new Column("d", Type.INT));
+            if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME0)) {
+                return Arrays.asList(new Column("d", Type.INT));
+            }
+            if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
+                return Arrays.asList(new Column("d", Type.CHAR));
+            } else {
+                return Arrays.asList(new Column("d", Type.VARCHAR));
+            }
         } finally {
             readUnlock();
         }
@@ -88,7 +125,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public com.starrocks.catalog.Table getTable(String dbName, String tblName) {
         readLock();
         try {
-            return getJDBCTable();
+            return getJDBCTable(tblName);
         } finally {
             readUnlock();
         }
@@ -108,7 +145,13 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public List<String> listPartitionNames(String dbName, String tableName) {
         readLock();
         try {
-            return partitionNames;
+            if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
+                return Arrays.asList("1234567", "1234568", "1234569");
+            } else if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
+                return Arrays.asList("20230801", "20230802");
+            } else {
+                return partitionNames;
+            }
         } finally {
             readUnlock();
         }
@@ -118,7 +161,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public List<String> listTableNames(String dbName) {
         readLock();
         try {
-            return Arrays.asList(MOCKED_PARTITIONED_TABLE_NAME);
+            return Arrays.asList(MOCKED_PARTITIONED_TABLE_NAME0, MOCKED_PARTITIONED_TABLE_NAME1, MOCKED_PARTITIONED_TABLE_NAME2);
         } finally {
             readUnlock();
         }
@@ -144,14 +187,37 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         }
     }
 
+    public void initPartitions() {
+        readLock();
+        try {
+            partitionNames = Arrays.asList("20230801", "20230802", "20230803");
+            partitions = Arrays.asList(new Partition("d", 1690819200L),
+                    new Partition("d", 1690819200L),
+                    new Partition("d", 1690819200L));
+        } finally {
+            readUnlock();
+        }
+    }
+
     public void addPartitions() {
         readLock();
         try {
             partitionNames = Arrays.asList("20230802", "20230803", "20230804", "20230805");
             partitions = Arrays.asList(new Partition("d", 1690819200L),
-                            new Partition("d", 1690819200L),
-                            new Partition("d", 1690819200L),
-                            new Partition("d", 1690819200L));
+                    new Partition("d", 1690819200L),
+                    new Partition("d", 1690819200L),
+                    new Partition("d", 1690819200L));
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public void refreshPartitions() {
+        readLock();
+        try {
+            partitions = Arrays.asList(new Partition("d", 1690819300L),
+                    new Partition("d", 1690819300L),
+                    new Partition("d", 1690819300L));
         } finally {
             readUnlock();
         }

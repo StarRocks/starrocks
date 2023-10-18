@@ -33,6 +33,7 @@ logger = AdapterLogger("starrocks")
 class StarRocksCredentials(Credentials):
     host: Optional[str] = None
     port: Optional[int] = None
+    catalog: Optional[str] = 'default_catalog'
     database: Optional[str] = None
     schema: Optional[str] = None
     username: Optional[str] = None
@@ -72,8 +73,8 @@ class StarRocksCredentials(Credentials):
         return (
             "host",
             "port",
-            "database",
             "schema",
+            "catalog",
             "username",
         )
 
@@ -102,8 +103,8 @@ class StarRocksConnectionManager(SQLConnectionManager):
             return connection
 
         credentials = cls.get_credentials(connection.credentials)
-        kwargs = {"host": credentials.host, "username": credentials.username, "password": credentials.password,
-                  "database": credentials.schema}
+        kwargs = {"host": credentials.host, "username": credentials.username,
+                  "password": credentials.password, "database": credentials.catalog + "." + credentials.schema}
 
         if credentials.port:
             kwargs["port"] = credentials.port

@@ -315,7 +315,7 @@ OutPut Exchange Id: 13
 11:HdfsScanNode
 TABLE: nation
 NON-PARTITION PREDICATES: 34: n_name = 'CANADA'
-MIN/MAX PREDICATES: 72: n_name <= 'CANADA', 73: n_name >= 'CANADA'
+MIN/MAX PREDICATES: 34: n_name <= 'CANADA', 34: n_name >= 'CANADA'
 partitions=1/1
 avgRowSize=29.0
 cardinality: 1
@@ -339,7 +339,7 @@ OutPut Exchange Id: 07
 5:HdfsScanNode
 TABLE: orders
 NON-PARTITION PREDICATES: 26: o_orderstatus = 'F'
-MIN/MAX PREDICATES: 74: o_orderstatus <= 'F', 75: o_orderstatus >= 'F'
+MIN/MAX PREDICATES: 26: o_orderstatus <= 'F', 26: o_orderstatus >= 'F'
 partitions=1/1
 avgRowSize=9.0
 cardinality: 50000000

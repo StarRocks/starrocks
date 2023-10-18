@@ -15,6 +15,7 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
+"light_schema_change" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -34,8 +35,32 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
+"light_schema_change" = "true",
 "compression" = "LZ4"
 );
+-- !result
+-- name: test_invalid_bucket_size
+create table t(k int) properties('bucket_size'='0');
+-- result:
+E: (1064, 'Unexpected exception: Illegal bucket size: 0')
+-- !result
+create table t(k int) properties('bucket_size'='-1');
+-- result:
+E: (1064, 'Unexpected exception: Illegal bucket size: -1')
+-- !result
+create table t(k int) properties('bucket_size'='1024');
+-- result:
+-- !result
+alter table t set('bucket_size'='0');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Illegal bucket size: 0.')
+-- !result
+alter table t set('bucket_size'='-1');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Illegal bucket size: -1.')
+-- !result
+alter table t set('bucket_size'='2048');
+-- result:
 -- !result
 -- name: test_automatic_bucket
 create database kkk;
@@ -81,4 +106,173 @@ insert into t values(1);
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
 -- result:
 27
+-- !result
+-- name: test_range_partition
+create database ttt;
+-- result:
+-- !result
+use ttt;
+-- result:
+-- !result
+create table t(k date, v int) PARTITION BY RANGE(`k`)
+(PARTITION p20210101 VALUES [("2021-01-01"), ("2021-01-02")),
+PARTITION p20210102 VALUES [("2021-01-02"), ("2021-01-03")),
+PARTITION p20210103 VALUES [("2021-01-03"), ("2021-01-04")),
+PARTITION p20210104 VALUES [("2021-01-04"), ("2021-01-05")),
+PARTITION p20210105 VALUES [("2021-01-05"), ("2021-01-06")))
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1"
+);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ttt';
+-- result:
+15
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ttt';
+-- result:
+15
+-- !result
+insert into t values('2021-01-03', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ttt';
+-- result:
+18
+-- !result
+insert into t values('2021-01-05', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ttt';
+-- result:
+21
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ttt';
+-- result:
+24
+-- !result
+select * from t;
+-- result:
+2021-01-05	1
+2021-01-01	1
+2021-01-01	1
+2021-01-03	1
+-- !result
+-- name: test_list_partition
+create database ddd;
+-- result:
+-- !result
+use ddd;
+-- result:
+-- !result
+create table t(k date not null, v int) PARTITION BY LIST(`k`)
+(PARTITION p20210101 VALUES IN ("2021-01-01"),
+PARTITION p20210102 VALUES IN ("2021-01-02"),
+PARTITION p20210103 VALUES IN ("2021-01-03"),
+PARTITION p20210104 VALUES IN ("2021-01-04"),
+PARTITION p20210105 VALUES IN ("2021-01-05"))
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1"
+);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
+-- result:
+15
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
+-- result:
+15
+-- !result
+insert into t values('2021-01-03', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
+-- result:
+18
+-- !result
+insert into t values('2021-01-05', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
+-- result:
+21
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
+-- result:
+24
+-- !result
+select * from t;
+-- result:
+2021-01-01	1
+2021-01-03	1
+2021-01-05	1
+2021-01-01	1
+-- !result
+-- name: test_expr_partition
+create database eee;
+-- result:
+-- !result
+use eee;
+-- result:
+-- !result
+create table t(k date, v int) PARTITION BY DATE_TRUNC('DAY', `k`)
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1"
+);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
+-- result:
+3
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
+-- result:
+6
+-- !result
+insert into t values('2021-01-03', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
+-- result:
+12
+-- !result
+insert into t values('2021-01-05', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
+-- result:
+18
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
+-- result:
+21
+-- !result
+select * from t;
+-- result:
+2021-01-03	1
+2021-01-05	1
+2021-01-01	1
+2021-01-01	1
 -- !result

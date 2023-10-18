@@ -37,6 +37,7 @@ import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.persist.SinglePartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DistributionDesc;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -48,9 +49,10 @@ public class PartitionUtils {
 
     public static void createAndAddTempPartitionsForTable(Database db, OlapTable targetTable,
                                                           String postfix, List<Long> sourcePartitionIds,
-                                                          List<Long> tmpPartitionIds) throws DdlException {
+                                                          List<Long> tmpPartitionIds,
+                                                          DistributionDesc distributionDesc)throws DdlException {
         List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().createTempPartitionsFromPartitions(
-                db, targetTable, postfix, sourcePartitionIds, tmpPartitionIds);
+                db, targetTable, postfix, sourcePartitionIds, tmpPartitionIds, distributionDesc);
         if (!db.writeLockAndCheckExist()) {
             throw new DdlException("create and add partition failed. database:{}" + db.getFullName() + " not exist");
         }

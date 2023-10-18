@@ -133,15 +133,13 @@ public class DatabaseTransactionMgr {
     private int runningRoutineLoadTxnNums = 0;
     private GlobalStateMgr globalStateMgr;
     private EditLog editLog;
-    private TransactionIdGenerator idGenerator;
     // not realtime usedQuota value to make a fast check for database data quota
     private volatile long usedQuotaDataBytes = -1;
     private long maxCommitTs = 0;
 
-    public DatabaseTransactionMgr(long dbId, GlobalStateMgr globalStateMgr, TransactionIdGenerator idGenerator) {
+    public DatabaseTransactionMgr(long dbId, GlobalStateMgr globalStateMgr) {
         this.dbId = dbId;
         this.globalStateMgr = globalStateMgr;
-        this.idGenerator = idGenerator;
         this.editLog = globalStateMgr.getEditLog();
     }
 
@@ -303,7 +301,7 @@ public class DatabaseTransactionMgr {
 
             checkRunningTxnExceedLimit(sourceType);
 
-            long tid = idGenerator.getNextTransactionId();
+            long tid = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
             LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
                     tid, label, coordinator, listenerId);
             TransactionState transactionState =
@@ -397,6 +395,9 @@ public class DatabaseTransactionMgr {
         if (Config.empty_load_as_error && tabletCommitInfos.isEmpty()
                 && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
             throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+        }
+        if (transactionState.getWriteEndTimeMs() < 0) {
+            transactionState.setWriteEndTimeMs(System.currentTimeMillis());
         }
         if (!tabletCommitInfos.isEmpty()) {
             transactionState.setTabletCommitInfos(tabletCommitInfos);
@@ -1422,6 +1423,10 @@ public class DatabaseTransactionMgr {
                 // 2. if we add routine load txn to runningTxnNums, runningTxnNums will always be occupied by routine load,
                 //    and other txn may not be able to submitted.
                 break;
+            case LAKE_COMPACTION:
+                // no need to check limit for cloud native table compaction.
+                // high frequency and small batch loads may cause compaction execute rarely.
+                break;
             default:
                 if (runningTxnNums >= Config.max_running_txn_num_per_db) {
                     throw new BeginTransactionException("current running txns on db " + dbId + " is "
@@ -1451,7 +1456,11 @@ public class DatabaseTransactionMgr {
             TransactionLogApplier applier = txnLogApplierFactory.create(table);
             applier.applyVisibleLog(transactionState, tableCommitInfo, db);
         }
-        GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows(transactionState);
+        try {
+            GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows(transactionState);
+        } catch (Throwable t) {
+            LOG.warn("update load rows failed for txn: {}", transactionState, t);
+        }
         return true;
     }
 

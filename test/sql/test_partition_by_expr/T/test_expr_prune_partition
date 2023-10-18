@@ -1,0 +1,72 @@
+-- name: test_expr_prune_partition
+CREATE TABLE `ptest` (
+  `k1` int(11) NOT NULL COMMENT "",
+  `d2` date NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `v3` int(11) NULL COMMENT "",
+  `s1` varchar(255) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`, `d2`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`d2`)
+(PARTITION p202001 VALUES [('1000-01-01'), ('2020-01-01')),
+PARTITION p202004 VALUES [('2020-01-01'), ('2020-04-01')),
+PARTITION p202007 VALUES [('2020-04-01'), ('2020-07-01')),
+PARTITION p202008 VALUES [('2020-07-01'), ('2020-07-29')),
+PARTITION p202012 VALUES [('2020-08-01'), (MAXVALUE)))
+DISTRIBUTED BY HASH(`k1`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+
+CREATE TABLE `ptest_expr` (
+  `k1` int(11) NOT NULL COMMENT "",
+  `d2` date NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `v3` int(11) NULL COMMENT "",
+  `s1` varchar(255) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`, `d2`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', d2)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+
+insert into ptest (k1, d2) values (1, '1000-01-01'), (2, '1000-01-02'), (3, '1100-05-06'), (4, '1500-06-06'), (5, '1999-07-08'),
+(6, '2020-01-01'), (7, '2020-01-04'), (8, '2020-02-06'), (9, '2020-03-21'), (10, '2020-03-31'), (11, '2020-04-01'),
+(12, '2020-04-26'), (13, '2020-06-30'), (14, '2020-07-01'), (14, '2050-01-05');
+
+insert into ptest_expr (k1, d2) values (1, '1000-01-01'), (2, '1000-01-02'), (3, '1100-05-06'), (4, '1500-06-06'), (5, '1999-07-08'),
+(6, '2020-01-01'), (7, '2020-01-04'), (8, '2020-02-06'), (9, '2020-03-21'), (10, '2020-03-31'), (11, '2020-04-01'),
+(12, '2020-04-26'), (13, '2020-06-30'), (14, '2020-07-01'), (14, '2050-01-05'), (15, null), (16, null);
+
+select k1, d2 from ptest where date_trunc('day', d2) is null order by k1;
+select k1, d2 from ptest where date_trunc('day', d2) in ('2020-01-01', '2020-06-30') order by k1;
+select k1, d2 from ptest where date_trunc('day', d2) not in ('2020-01-01', '2020-06-30') order by k1;
+select k1, d2 from ptest where date_trunc('day', d2) >='2030-01-01' and date_trunc('month', d2) >='2030-01-01' order by k1;
+select k1, d2 from ptest where date_trunc('day', date_trunc('day', d2)) in ('2020-01-01', '2020-06-30') order by k1;
+select k1, d2 from ptest where (days_add(d2, 1) in ('1000-01-02', '1999-03-22') or d2 > '2020-07-01') and v2 is null and v3 is null order by k1;
+select k1, d2 from ptest where date_trunc('day', d2) > days_sub(d2, 4) order by k1;
+select k1, d2 from ptest where datediff('2020-08-01', d2) < 0 order by k1;
+select k1, d2 from ptest where date_trunc('month', d2) = '2020-07-01' order by k1;
+
+
+
+select k1, d2 from ptest_expr where date_trunc('day', d2) is null order by k1;
+select k1, d2 from ptest_expr where date_trunc('day', d2) in ('2020-01-01', '2020-06-30') order by k1;
+select k1, d2 from ptest_expr where date_trunc('day', d2) not in ('2020-01-01', '2020-06-30') order by k1;
+select k1, d2 from ptest_expr where date_trunc('day', d2) >='2030-01-01' and date_trunc('month', d2) >='2030-01-01' order by k1;
+select k1, d2 from ptest_expr where date_trunc('day', date_trunc('day', d2)) in ('2020-01-01', '2020-06-30') order by k1;
+select k1, d2 from ptest_expr where (days_add(d2, 1) in ('1000-01-02', '1999-03-22') or d2 > '2020-07-01') and v2 is null and v3 is null order by k1;
+select k1, d2 from ptest_expr where date_trunc('day', d2) > days_sub(d2, 4) order by k1;
+select k1, d2 from ptest_expr where datediff('2020-08-01', d2) < 0 order by k1;
+
+
+
+

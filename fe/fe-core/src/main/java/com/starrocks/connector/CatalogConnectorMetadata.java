@@ -27,6 +27,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
@@ -117,8 +118,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, long snapshotId,
-                                                   ScalarOperator predicate, List<String> fieldNames) {
-        return normal.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames);
+                                                   ScalarOperator predicate, List<String> fieldNames, long limit) {
+        return normal.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames, limit);
     }
 
     @Override
@@ -128,8 +129,13 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
-                                         List<PartitionKey> partitionKeys, ScalarOperator predicate) {
-        return normal.getTableStatistics(session, table, columns, partitionKeys, predicate);
+                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit) {
+        return normal.getTableStatistics(session, table, columns, partitionKeys, predicate, limit);
+    }
+
+    @Override
+    public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
+        return normal.getPrunedPartitions(table, predicate, limit);
     }
 
     @Override
@@ -265,5 +271,10 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     @Override
     public void alterView(AlterViewStmt stmt) throws DdlException, UserException {
         normal.alterView(stmt);
+    }
+
+    @Override
+    public CloudConfiguration getCloudConfiguration() {
+        return normal.getCloudConfiguration();
     }
 }

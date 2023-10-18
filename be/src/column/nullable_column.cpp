@@ -70,8 +70,9 @@ void NullableColumn::append_datum(const Datum& datum) {
 
 void NullableColumn::append(const Column& src, size_t offset, size_t count) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
-
-    if (src.is_nullable()) {
+    if (src.only_null()) {
+        append_nulls(count);
+    } else if (src.is_nullable()) {
         const auto& c = down_cast<const NullableColumn&>(src);
 
         DCHECK_EQ(c._null_column->size(), c._data_column->size());
@@ -90,8 +91,9 @@ void NullableColumn::append(const Column& src, size_t offset, size_t count) {
 void NullableColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
     size_t orig_size = _null_column->size();
-
-    if (src.is_nullable()) {
+    if (src.only_null()) {
+        append_nulls(size);
+    } else if (src.is_nullable()) {
         const auto& src_column = down_cast<const NullableColumn&>(src);
 
         DCHECK_EQ(src_column._null_column->size(), src_column._data_column->size());
@@ -110,8 +112,9 @@ void NullableColumn::append_selective(const Column& src, const uint32_t* indexes
 void NullableColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
     size_t orig_size = _null_column->size();
-
-    if (src.is_nullable()) {
+    if (src.only_null()) {
+        append_nulls(size);
+    } else if (src.is_nullable()) {
         const auto& src_column = down_cast<const NullableColumn&>(src);
 
         DCHECK_EQ(src_column._null_column->size(), src_column._data_column->size());

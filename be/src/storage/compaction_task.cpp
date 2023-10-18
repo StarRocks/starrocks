@@ -81,7 +81,9 @@ void CompactionTask::run() {
         // reset compaction before judge need_compaction again
         // because if there is a compaction task for one compaction type in a tablet,
         // it will not be able to run another one for that type
-        _tablet->reset_compaction();
+        for (const auto& rowset : _input_rowsets) {
+            rowset->set_is_compacting(false);
+        }
         _task_info.end_time = UnixMillis();
         StorageEngine::instance()->compaction_manager()->unregister_task(this);
         // compaction context has been updated when commit
@@ -142,6 +144,7 @@ bool CompactionTask::should_stop() const {
 void CompactionTask::_success_callback() {
     set_compaction_task_state(COMPACTION_SUCCESS);
     // for compatible, update compaction time
+    int64_t cost_time = UnixMillis() - _task_info.start_time;
     if (_task_info.compaction_type == CUMULATIVE_COMPACTION) {
         _tablet->set_last_cumu_compaction_success_time(UnixMillis());
         _tablet->set_last_cumu_compaction_failure_status(TStatusCode::OK);
@@ -156,9 +159,15 @@ void CompactionTask::_success_callback() {
     if (_task_info.compaction_type == CUMULATIVE_COMPACTION) {
         StarRocksMetrics::instance()->cumulative_compaction_deltas_total.increment(_input_rowsets.size());
         StarRocksMetrics::instance()->cumulative_compaction_bytes_total.increment(_task_info.input_rowsets_size);
+        StarRocksMetrics::instance()->cumulative_compaction_task_cost_time_ms.set_value(cost_time);
+        StarRocksMetrics::instance()->cumulative_compaction_task_byte_per_second.set_value(
+                _task_info.input_rowsets_size / (cost_time / 1000.0 + 1));
     } else {
         StarRocksMetrics::instance()->base_compaction_deltas_total.increment(_input_rowsets.size());
         StarRocksMetrics::instance()->base_compaction_bytes_total.increment(_task_info.input_rowsets_size);
+        StarRocksMetrics::instance()->base_compaction_task_cost_time_ms.set_value(cost_time);
+        StarRocksMetrics::instance()->base_compaction_task_byte_per_second.set_value(_task_info.input_rowsets_size /
+                                                                                     (cost_time / 1000.0 + 1));
     }
 
     // preload the rowset
@@ -176,8 +185,10 @@ void CompactionTask::_failure_callback(const Status& st) {
     if (_task_info.compaction_type == CUMULATIVE_COMPACTION) {
         _tablet->set_last_cumu_compaction_failure_time(UnixMillis());
         _tablet->set_last_cumu_compaction_failure_status(st.code());
+        StarRocksMetrics::instance()->cumulative_compaction_request_failed.increment(1);
     } else {
         _tablet->set_last_base_compaction_failure_time(UnixMillis());
+        StarRocksMetrics::instance()->base_compaction_request_failed.increment(1);
     }
     LOG(WARNING) << "compaction task:" << _task_info.task_id << ", tablet:" << _task_info.tablet_id << " failed.";
 }
@@ -207,7 +218,7 @@ Status CompactionTask::_shortcut_compact(Statistics* statistics) {
         std::unique_ptr<RowsetWriter> output_rs_writer;
         RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(_tablet.get(), max_rows_per_segment,
                                                                         _task_info.algorithm, _task_info.output_version,
-                                                                        &output_rs_writer));
+                                                                        &output_rs_writer, _tablet_schema));
         Status status = output_rs_writer->add_rowset(data_rowsets.back());
         if (!status.ok()) {
             LOG(WARNING) << "fail to compact rowset."

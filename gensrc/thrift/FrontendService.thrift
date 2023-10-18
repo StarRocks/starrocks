@@ -700,16 +700,14 @@ struct TReportExecStatusParams {
 
   23: optional i64 unselected_rows
 
-  24: optional string rejected_record_path
+  24: optional i64 source_scan_bytes
 
   25: optional list<Types.TSinkCommitInfo> sink_commit_infos
 
-  26: optional i64 source_scan_bytes
+  27: optional string rejected_record_path
 }
 
-struct TReportAuditStatisticsParams {
-    1: optional Types.TUniqueId query_id
-    2: optional Types.TUniqueId fragment_instance_id
+struct TAuditStatistics {
     3: optional i64 scan_rows
     4: optional i64 scan_bytes
     5: optional i64 returned_rows
@@ -717,6 +715,12 @@ struct TReportAuditStatisticsParams {
     7: optional i64 mem_cost_bytes
     8: optional i64 spill_bytes
     9: optional list<TAuditStatisticsItem> stats_items
+}
+
+struct TReportAuditStatisticsParams {
+    1: optional Types.TUniqueId query_id
+    2: optional Types.TUniqueId fragment_instance_id
+    3: optional TAuditStatistics audit_statistics
 }
 
 struct TAuditStatisticsItem {
@@ -788,6 +792,9 @@ struct TMasterOpResult {
     4: optional string state;
     // for query statement
     5: optional list<binary> channelBufferList;
+
+    6: optional string resource_group_name;
+    7: optional TAuditStatistics audit_statistics;
 }
 
 struct TIsMethodSupportedRequest {
@@ -954,6 +961,9 @@ struct TLoadTxnCommitRequest {
 
 struct TLoadTxnCommitResult {
     1: required Status.TStatus status
+    // If the error code is SR_EAGAIN, the BE will retry
+    // the commit after waiting for retry_interval_ms
+    2: optional i64 retry_interval_ms
 }
 
 struct TLoadTxnRollbackRequest {
@@ -1412,6 +1422,9 @@ struct TResourceLogicalSlot {
     5: optional i64 expired_pending_time_ms
     6: optional i64 expired_allocated_time_ms
     7: optional i64 fe_start_time_ms
+
+    100: optional i32 num_fragments
+    101: optional i32 pipeline_dop
 }
 
 struct TRequireSlotRequest {
@@ -1425,6 +1438,8 @@ struct TRequireSlotResponse {
 struct TFinishSlotRequirementRequest {
     1: optional Status.TStatus status
     2: optional Types.TUniqueId slot_id
+
+    100: optional i32 pipeline_dop
 }
 
 struct TFinishSlotRequirementResponse {

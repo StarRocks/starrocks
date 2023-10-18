@@ -22,10 +22,12 @@
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
+#include "util/defer_op.h"
 #include "utils.h"
 
 namespace starrocks::parquet {
@@ -49,6 +51,7 @@ Status GroupReader::prepare() {
     _init_read_chunk();
     _range = SparseRange<uint64_t>(_row_group_first_row, _row_group_first_row + _row_group_metadata->num_rows);
     _range_iter = _range.new_iterator();
+
     return Status::OK();
 }
 
@@ -188,16 +191,8 @@ Status GroupReader::_do_get_next_new(ChunkPtr* chunk, size_t* row_count) {
 
         active_chunk->reset();
 
-        RETURN_IF_ERROR(_read_range(_active_column_indices, r, nullptr, &active_chunk));
-
         bool has_filter = false;
         Filter chunk_filter(count, 1);
-        // dict filter chunk
-        {
-            SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
-            SCOPED_RAW_TIMER(&_param.stats->group_dict_filter_ns);
-            has_filter = _filter_chunk_with_dict_filter(&active_chunk, &chunk_filter);
-        }
 
         // row id filter
         if ((nullptr != _need_skip_rowids) && !_need_skip_rowids->empty()) {
@@ -210,29 +205,26 @@ Status GroupReader::_do_get_next_new(ChunkPtr* chunk, size_t* row_count) {
                     chunk_filter[*start_str - r.begin()] = 0;
                     has_filter = true;
                 }
+                if (SIMD::count_nonzero(chunk_filter.data(), count) == 0) {
+                    continue;
+                }
             }
         }
 
-        int32_t chunk_size = -1;
-        // other filter that not dict
-        if (!_left_conjunct_ctxs.empty()) {
-            SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
-            ASSIGN_OR_RETURN(chunk_size, ExecNode::eval_conjuncts_into_filter(_left_conjunct_ctxs, active_chunk.get(),
-                                                                              &chunk_filter));
+        // we really have predicate to run round by round
+        if (!_dict_column_indices.empty() || !_left_no_dict_filter_conjuncts_by_slot.empty()) {
             has_filter = true;
-        }
-
-        if (has_filter) {
-            size_t hit_count = chunk_size >= 0 ? chunk_size : SIMD::count_nonzero(chunk_filter.data(), count);
-            // no hit, continue read active column
+            ASSIGN_OR_RETURN(size_t hit_count, _read_range_round_by_round(r, &chunk_filter, &active_chunk));
             if (hit_count == 0) {
                 _param.stats->skip_read_rows += count;
                 continue;
             }
-        }
-
-        if (has_filter) {
             active_chunk->filter_range(chunk_filter, 0, count);
+        } else if (has_filter) {
+            RETURN_IF_ERROR(_read_range(_active_column_indices, r, &chunk_filter, &active_chunk));
+            active_chunk->filter_range(chunk_filter, 0, count);
+        } else {
+            RETURN_IF_ERROR(_read_range(_active_column_indices, r, nullptr, &active_chunk));
         }
 
         // deal with lazy columns
@@ -244,13 +236,11 @@ Status GroupReader::_do_get_next_new(ChunkPtr* chunk, size_t* row_count) {
 
             if (has_filter) {
                 RETURN_IF_ERROR(_read_range(_lazy_column_indices, r, &chunk_filter, &lazy_chunk));
+                lazy_chunk->filter_range(chunk_filter, 0, count);
             } else {
                 RETURN_IF_ERROR(_read_range(_lazy_column_indices, r, nullptr, &lazy_chunk));
             }
 
-            if (has_filter) {
-                lazy_chunk->filter_range(chunk_filter, 0, count);
-            }
             if (lazy_chunk->num_rows() != active_chunk->num_rows()) {
                 return Status::InternalError(strings::Substitute("Unmatched row count, active_rows=$0, lazy_rows=$1",
                                                                  active_chunk->num_rows(), lazy_chunk->num_rows()));
@@ -286,6 +276,50 @@ Status GroupReader::_read_range(const std::vector<int>& read_columns, const Rang
     return Status::OK();
 }
 
+StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& range, Filter* filter,
+                                                         ChunkPtr* chunk) {
+    const std::vector<int>& read_order = _column_read_order_ctx->get_column_read_order();
+    size_t round_cost = 0;
+    DeferOp defer([&]() { _column_read_order_ctx->update_ctx(round_cost); });
+    size_t hit_count = 0;
+    for (int col_idx : read_order) {
+        auto& column = _param.read_cols[col_idx];
+        round_cost += _column_read_order_ctx->get_column_cost(col_idx);
+        SlotId slot_id = column.slot_id;
+        RETURN_IF_ERROR(
+                _column_readers[slot_id]->read_range(range, filter, (*chunk)->get_column_by_slot_id(slot_id).get()));
+
+        if (std::find(_dict_column_indices.begin(), _dict_column_indices.end(), col_idx) !=
+            _dict_column_indices.end()) {
+            SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
+            SCOPED_RAW_TIMER(&_param.stats->group_dict_filter_ns);
+            for (const auto& sub_field_path : _dict_column_sub_field_paths[col_idx]) {
+                _column_readers[slot_id]->filter_dict_column((*chunk)->get_column_by_slot_id(slot_id), filter,
+                                                             sub_field_path, 0);
+                hit_count = SIMD::count_nonzero(*filter);
+                if (hit_count == 0) {
+                    return hit_count;
+                }
+            }
+        }
+
+        if (_left_no_dict_filter_conjuncts_by_slot.find(slot_id) != _left_no_dict_filter_conjuncts_by_slot.end()) {
+            SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
+            std::vector<ExprContext*> ctxs = _left_no_dict_filter_conjuncts_by_slot.at(slot_id);
+            auto temp_chunk = std::make_shared<Chunk>();
+            temp_chunk->columns().reserve(1);
+            ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_id);
+            temp_chunk->append_column(column, slot_id);
+            ASSIGN_OR_RETURN(hit_count, ExecNode::eval_conjuncts_into_filter(ctxs, temp_chunk.get(), filter));
+            if (hit_count == 0) {
+                break;
+            }
+        }
+    }
+
+    return hit_count;
+}
+
 void GroupReader::close() {
     if (_param.sb_stream) {
         _param.sb_stream->release_to_offset(_end_offset);
@@ -295,6 +329,7 @@ void GroupReader::close() {
     } else {
         _param.lazy_column_coalesce_counter->fetch_sub(1, std::memory_order_relaxed);
     }
+    _param.stats->group_min_round_cost = _column_read_order_ctx->get_min_round_cost();
     _column_readers.clear();
 }
 
@@ -353,6 +388,13 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
                     _use_as_dict_filter_column(read_col_idx, slot_id, sub_field_path);
                 } else {
                     _left_conjunct_ctxs.emplace_back(ctx);
+                    // used for struct col, some dict filter conjunct pushed down to leaf some left
+                    if (_left_no_dict_filter_conjuncts_by_slot.find(slot_id) ==
+                        _left_no_dict_filter_conjuncts_by_slot.end()) {
+                        _left_no_dict_filter_conjuncts_by_slot.insert({slot_id, std::vector<ExprContext*>{ctx}});
+                    } else {
+                        _left_no_dict_filter_conjuncts_by_slot[slot_id].emplace_back(ctx);
+                    }
                 }
             }
             _active_column_indices.emplace_back(read_col_idx);
@@ -365,6 +407,16 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
         }
         ++read_col_idx;
     }
+
+    std::unordered_map<int, size_t> col_cost;
+    size_t all_cost = 0;
+    for (int col_idx : _active_column_indices) {
+        size_t flat_size = _param.read_cols[col_idx].col_type_in_chunk.get_flat_size();
+        col_cost.insert({col_idx, flat_size});
+        all_cost += flat_size;
+    }
+    _column_read_order_ctx =
+            std::make_unique<ColumnReadOrderCtx>(_active_column_indices, all_cost, std::move(col_cost));
 
     if (_active_column_indices.empty()) {
         _active_column_indices.swap(_lazy_column_indices);
@@ -538,6 +590,7 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
     }
 
     size_t count = *row_count;
+    size_t real_count = count;
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
         SlotId slot_id = column.slot_id;
@@ -546,6 +599,10 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
         Status status = _column_readers[slot_id]->next_batch(&count, (*chunk)->get_column_by_slot_id(slot_id).get());
         if (!status.ok() && !status.is_end_of_file()) {
             return status;
+        }
+        real_count = col_idx == read_columns[0] ? count : real_count;
+        if (UNLIKELY(real_count != count)) {
+            return Status::InternalError(strings::Substitute("Unmatched row count, $0", _param.file->filename()));
         }
     }
 
@@ -576,10 +633,7 @@ Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const 
         while (ctx->rows_to_skip > 0) {
             size_t to_read = std::min(ctx->rows_to_skip, chunk_size);
             auto temp_column = chunk->get_column_by_slot_id(slot_id)->clone_empty();
-            Status status = _column_readers[slot_id]->next_batch(&to_read, temp_column.get());
-            if (!status.ok()) {
-                return status;
-            }
+            RETURN_IF_ERROR(_column_readers[slot_id]->next_batch(&to_read, temp_column.get()));
         }
     }
 

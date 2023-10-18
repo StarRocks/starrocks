@@ -1,0 +1,278 @@
+-- name: test_union_all_with_topn 
+ CREATE TABLE `duplicate_table_with_null` (
+    `k1`  date, 
+    `k2`  datetime, 
+    `k3`  char(20), 
+    `k4`  varchar(20), 
+    `k5`  boolean, 
+    `k6`  tinyint, 
+    `k7`  smallint, 
+    `k8`  int, 
+    `k9`  bigint, 
+    `k10` largeint, 
+    `k11` float, 
+    `k12` double, 
+    `k13` decimal(27,9) ) 
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) 
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 
+PROPERTIES ("storage_format" = "v2" );
+-- result:
+-- !result
+INSERT INTO duplicate_table_with_null VALUES
+    ('2020-10-22','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-23','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-24','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    (null,'2020-10-26 12:12:12',null,null,null,null,null,null,null,null,1,1.12,2.889),
+    (null,'2020-10-27 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+-- result:
+-- !result
+CREATE TABLE `duplicate_table` (
+    `k1`  date not null, 
+    `k2`  datetime not null, 
+    `k3`  char(20), 
+    `k4`  varchar(20), 
+    `k5`  boolean, 
+    `k6`  tinyint, 
+    `k7`  smallint, 
+    `k8`  int, 
+    `k9`  bigint, 
+    `k10` largeint, 
+    `k11` float, 
+    `k12` double, 
+    `k13` decimal(27,9) ) 
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) 
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 
+PROPERTIES ("storage_format" = "v2" );
+-- result:
+-- !result
+INSERT INTO duplicate_table VALUES
+    ('2020-10-22','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-23','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-24','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+-- result:
+-- !result
+select * from (select * from duplicate_table_with_null union all select * from duplicate_table_with_null) t order by k2 limit 2, 1;
+-- result:
+2020-10-23	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from (select * from duplicate_table_with_null union all select * from duplicate_table_with_null) t order by k1,k2,k3,k4 limit 3;
+-- result:
+None	2020-10-26 12:12:12	None	None	None	None	None	None	None	None	1.0	1.12	2.889000000
+None	2020-10-26 12:12:12	None	None	None	None	None	None	None	None	1.0	1.12	2.889000000
+None	2020-10-27 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2)t2 ) t order by k2 limit 3;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-23	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2)t2 ) t order by k2 limit 1;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 1)t2 ) t order by k1 limit 1;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 2)t2 ) t order by k1 limit 3;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-23	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 3)t2 ) t order by k1 limit 2;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select a, b, c from ( 
+    select k1 as a, k2 as b, k3 as c from duplicate_table_with_null
+    union all 
+    select k1, k2, k3 from duplicate_table_with_null
+) t order by a, b, c limit 3;
+-- result:
+None	2020-10-26 12:12:12	None
+None	2020-10-26 12:12:12	None
+None	2020-10-27 12:12:12	k3
+-- !result
+select a, b, c from ( 
+    select k1 as a, k2 as b, k3 as c from duplicate_table_with_null
+    union all 
+    select k1 as a, k2 as b, k3 as c from duplicate_table_with_null
+) t order by a, b, c limit 2;
+-- result:
+None	2020-10-26 12:12:12	None
+None	2020-10-26 12:12:12	None
+-- !result
+select * from (select * from duplicate_table union all select * from duplicate_table_with_null) t order by k1 limit 4, 1;
+-- result:
+2020-10-23	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from (select * from duplicate_table_with_null union all select * from duplicate_table_with_null) t order by k1,k2,k3,k4 limit 3;
+-- result:
+None	2020-10-26 12:12:12	None	None	None	None	None	None	None	None	1.0	1.12	2.889000000
+None	2020-10-26 12:12:12	None	None	None	None	None	None	None	None	1.0	1.12	2.889000000
+None	2020-10-27 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 )t2 ) t order by k2 limit 3;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-23	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2)t2 ) t order by k2 limit 1;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 1)t2 ) t order by k1 limit 1;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 2)t2 ) t order by k2 limit 3;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-23	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 3)t2 ) t order by k1 limit 2;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select a, b, c from ( 
+    select k1 as a, k2 as b, k3 as c from duplicate_table
+    union all 
+    select k1, k2, k3 from duplicate_table_with_null
+) t order by a, b, c limit 3;
+-- result:
+None	2020-10-26 12:12:12	None
+None	2020-10-27 12:12:12	k3
+2020-10-22	2020-10-23 12:12:12	k3
+-- !result
+select a, b, c from ( 
+    select k1 as a, k2 as b, k3 as c from duplicate_table
+    union all 
+    select k1 as a, k2 as b, k3 as c from duplicate_table_with_null
+) t order by a, b, c limit 2;
+-- result:
+None	2020-10-26 12:12:12	None
+None	2020-10-27 12:12:12	k3
+-- !result
+set cbo_push_down_topn_limit=0;
+-- result:
+-- !result
+select * from (select * from duplicate_table_with_null union all select * from duplicate_table_with_null) t order by k2 limit 2, 1;
+-- result:
+2020-10-23	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from (select * from duplicate_table_with_null union all select * from duplicate_table_with_null) t order by k1,k2,k3,k4 limit 3;
+-- result:
+None	2020-10-26 12:12:12	None	None	None	None	None	None	None	None	1.0	1.12	2.889000000
+None	2020-10-26 12:12:12	None	None	None	None	None	None	None	None	1.0	1.12	2.889000000
+None	2020-10-27 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2)t2 ) t order by k2 limit 3;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-23	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2)t2 ) t order by k2 limit 1;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 1)t2 ) t order by k1 limit 1;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 2)t2 ) t order by k1 limit 3;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-23	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table_with_null order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 3)t2 ) t order by k1 limit 2;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select a, b, c from ( 
+    select k1 as a, k2 as b, k3 as c from duplicate_table_with_null
+    union all 
+    select k1, k2, k3 from duplicate_table_with_null
+) t order by a, b, c limit 3;
+-- result:
+None	2020-10-26 12:12:12	None
+None	2020-10-26 12:12:12	None
+None	2020-10-27 12:12:12	k3
+-- !result
+select a, b, c from ( 
+    select k1 as a, k2 as b, k3 as c from duplicate_table_with_null
+    union all 
+    select k1 as a, k2 as b, k3 as c from duplicate_table_with_null
+) t order by a, b, c limit 2;
+-- result:
+None	2020-10-26 12:12:12	None
+None	2020-10-26 12:12:12	None
+-- !result
+select * from (select * from duplicate_table union all select * from duplicate_table_with_null) t order by k1 limit 4, 1;
+-- result:
+2020-10-23	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from (select * from duplicate_table_with_null union all select * from duplicate_table_with_null) t order by k1,k2,k3,k4 limit 3;
+-- result:
+None	2020-10-26 12:12:12	None	None	None	None	None	None	None	None	1.0	1.12	2.889000000
+None	2020-10-26 12:12:12	None	None	None	None	None	None	None	None	1.0	1.12	2.889000000
+None	2020-10-27 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 )t2 ) t order by k2 limit 3;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-23	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2)t2 ) t order by k2 limit 1;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 1)t2 ) t order by k1 limit 1;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 2)t2 ) t order by k2 limit 3;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-23	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select * from ( select * from (select * from duplicate_table order by k2 limit 3) t1 union all select * from (select * from duplicate_table_with_null order by k2 limit 3)t2 ) t order by k1 limit 2;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-22	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+select a, b, c from ( 
+    select k1 as a, k2 as b, k3 as c from duplicate_table
+    union all 
+    select k1, k2, k3 from duplicate_table_with_null
+) t order by a, b, c limit 3;
+-- result:
+None	2020-10-26 12:12:12	None
+None	2020-10-27 12:12:12	k3
+2020-10-22	2020-10-23 12:12:12	k3
+-- !result
+select a, b, c from ( 
+    select k1 as a, k2 as b, k3 as c from duplicate_table
+    union all 
+    select k1 as a, k2 as b, k3 as c from duplicate_table_with_null
+) t order by a, b, c limit 2;
+-- result:
+None	2020-10-26 12:12:12	None
+None	2020-10-27 12:12:12	k3
+-- !result
+drop table duplicate_table_with_null;
+-- result:
+-- !result
+drop table duplicate_table;
+-- result:
+-- !result

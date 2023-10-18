@@ -48,9 +48,9 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
-#include "gutil/sysinfo.h"
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
+#include "testutil/sync_point.h"
 #include "util/phmap/phmap.h"
 #include "util/threadpool.h"
 
@@ -216,7 +216,6 @@ void AgentServer::Impl::init_or_die() {
         BUILD_DYNAMIC_TASK_THREAD_POOL("drop_auto_increment_map_dir", 0, 1, std::numeric_limits<int>::max(),
                                        _thread_pool_drop_auto_increment_map);
 
-#ifndef BE_TEST
         // Currently FE can have at most num_of_storage_path * schedule_slot_num_per_path(default 2) clone tasks
         // scheduled simultaneously, but previously we have only 3 clone worker threads by default,
         // so this is to keep the dop of clone task handling in sync with FE.
@@ -230,7 +229,6 @@ void AgentServer::Impl::init_or_die() {
                                        std::max(_exec_env->store_paths().size() * config::parallel_clone_task_per_path,
                                                 MIN_CLONE_TASK_THREADS_IN_POOL),
                                        DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
-#endif
 
         // It is the same code to create workers of each type, so we use a macro
         // to make code to be more readable.
@@ -553,39 +551,56 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
 
 ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
     // TODO: more thread pools.
+    ThreadPool* ret = nullptr;
     switch (type) {
     case TTaskType::PUBLISH_VERSION:
-        return _thread_pool_publish_version.get();
+        ret = _thread_pool_publish_version.get();
+        break;
     case TTaskType::CLONE:
-        return _thread_pool_clone.get();
+        ret = _thread_pool_clone.get();
+        break;
     case TTaskType::DROP:
-        return _thread_pool_drop.get();
+        ret = _thread_pool_drop.get();
+        break;
     case TTaskType::CREATE:
-        return _thread_pool_create_tablet.get();
+        ret = _thread_pool_create_tablet.get();
+        break;
     case TTaskType::STORAGE_MEDIUM_MIGRATE:
-        return _thread_pool_storage_medium_migrate.get();
+        ret = _thread_pool_storage_medium_migrate.get();
+        break;
     case TTaskType::MAKE_SNAPSHOT:
-        return _thread_pool_make_snapshot.get();
+        ret = _thread_pool_make_snapshot.get();
+        break;
     case TTaskType::RELEASE_SNAPSHOT:
-        return _thread_pool_release_snapshot.get();
+        ret = _thread_pool_release_snapshot.get();
+        break;
     case TTaskType::CHECK_CONSISTENCY:
-        return _thread_pool_check_consistency.get();
+        ret = _thread_pool_check_consistency.get();
+        break;
     case TTaskType::COMPACTION:
-        return _thread_pool_compaction.get();
+        ret = _thread_pool_compaction.get();
+        break;
     case TTaskType::UPLOAD:
-        return _thread_pool_upload.get();
+        ret = _thread_pool_upload.get();
+        break;
     case TTaskType::DOWNLOAD:
-        return _thread_pool_download.get();
+        ret = _thread_pool_download.get();
+        break;
     case TTaskType::MOVE:
-        return _thread_pool_move_dir.get();
+        ret = _thread_pool_move_dir.get();
+        break;
     case TTaskType::UPDATE_TABLET_META_INFO:
-        return _thread_pool_update_tablet_meta_info.get();
+        ret = _thread_pool_update_tablet_meta_info.get();
+        break;
     case TTaskType::ALTER:
-        return _thread_pool_alter_tablet.get();
+        ret = _thread_pool_alter_tablet.get();
+        break;
     case TTaskType::CLEAR_TRANSACTION_TASK:
-        return _thread_pool_clear_transaction.get();
+        ret = _thread_pool_clear_transaction.get();
+        break;
     case TTaskType::DROP_AUTO_INCREMENT_MAP:
-        return _thread_pool_drop_auto_increment_map.get();
+        ret = _thread_pool_drop_auto_increment_map.get();
+        break;
     case TTaskType::PUSH:
     case TTaskType::REALTIME_PUSH:
     case TTaskType::ROLLUP:
@@ -595,14 +610,13 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
     case TTaskType::CLEAR_ALTER_TASK:
     case TTaskType::RECOVER_TABLET:
     case TTaskType::STREAM_LOAD:
-
     case TTaskType::INSTALL_PLUGIN:
     case TTaskType::UNINSTALL_PLUGIN:
     case TTaskType::NUM_TASK_TYPE:
-    default:
         break;
     }
-    return nullptr;
+    TEST_SYNC_POINT_CALLBACK("AgentServer::Impl::get_thread_pool:1", &ret);
+    return ret;
 }
 
 AgentServer::AgentServer(ExecEnv* exec_env, bool is_compute_node)

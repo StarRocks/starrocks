@@ -15,7 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.ast.DropDbStmt;
@@ -68,8 +68,8 @@ public class AnalyzeDropDbTest {
             DDLStmtExecutor.execute(dropDbStmt, connectContext);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof StarRocksConnectorException);
-            Assert.assertTrue(e.getMessage().contains("This connector doesn't support dropping databases"));
+            Assert.assertTrue(e instanceof DdlException);
+            Assert.assertTrue(e.getMessage().contains("Can't drop database"));
         }
     }
 }

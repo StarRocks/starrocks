@@ -37,6 +37,8 @@ import java.util.stream.Collectors;
 
 /** Convert paimon type to hive string representation. */
 public class PaimonTypeUtils {
+    public static final int MAX_DECIMAL32_PRECISION = 9;
+    public static final int MAX_DECIMAL64_PRECISION = 18;
     private PaimonTypeUtils() {}
 
     public static String fromPaimonType(DataType type) {
@@ -64,7 +66,15 @@ public class PaimonTypeUtils {
         }
 
         public String visit(DecimalType decimalType) {
-            return String.format("decimal(%d,%d)", decimalType.getPrecision(), decimalType.getScale());
+            // convert decimal(x,y) to decimal
+            int precision = decimalType.getPrecision();
+            if (precision <= MAX_DECIMAL32_PRECISION) {
+                return "decimal32";
+            } else if (precision <= MAX_DECIMAL64_PRECISION) {
+                return "decimal64";
+            } else {
+                return "decimal128";
+            }
         }
 
         public String visit(TinyIntType tinyIntType) {
@@ -110,9 +120,9 @@ public class PaimonTypeUtils {
         }
 
         public String visit(RowType rowType) {
-            String type = rowType.getFields().stream().map(f -> f.type().accept(this) + ",")
+            String type = rowType.getFields().stream().map(f -> f.name() + ":" + f.type().accept(this))
                     .collect(Collectors.joining(","));
-            return String.format("struct<%s>", type.substring(0, type.length() - 1));
+            return String.format("struct<%s>", type);
         }
 
         @Override

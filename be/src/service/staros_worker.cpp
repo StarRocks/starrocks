@@ -22,6 +22,7 @@
 #include "absl/strings/str_format.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "common/shutdown_hook.h"
 #include "file_store.pb.h"
 #include "fmt/format.h"
 #include "fslib/star_cache_configuration.h"
@@ -114,6 +115,14 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::get_shard_info(ShardId 
     return it->second.shard_info;
 }
 
+absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::retrieve_shard_info(ShardId id) {
+    auto st = get_shard_info(id);
+    if (absl::IsNotFound(st.status())) {
+        return _fetch_shard_info_from_remote(id);
+    }
+    return st;
+}
+
 std::vector<staros::starlet::ShardInfo> StarOSWorker::shards() const {
     std::vector<staros::starlet::ShardInfo> vec;
     vec.reserve(_shards.size());
@@ -183,8 +192,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
     }
 }
 
-absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,
-                                                                                            const Configuration& conf) {
+absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_remote(ShardId id) {
     static const int64_t kGetShardInfoTimeout = 5 * 1000 * 1000; // 5s (heartbeat interval)
     static const int64_t kCheckInterval = 10 * 1000;             // 10ms
     Awaitility wait;
@@ -195,7 +203,12 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
     }
 
     // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
-    auto info_or = g_starlet->get_shard_info(id);
+    return g_starlet->get_shard_info(id);
+}
+
+absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,
+                                                                                            const Configuration& conf) {
+    auto info_or = _fetch_shard_info_from_remote(id);
     if (!info_or.ok()) {
         return info_or.status();
     }
@@ -248,85 +261,8 @@ absl::StatusOr<std::string> StarOSWorker::build_scheme_from_shard_info(const Sha
 }
 
 absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(const ShardInfo& info) {
-    fslib::Configuration conf;
-
-    switch (info.path_info.fs_info().fs_type()) {
-    case staros::FileStoreType::S3: {
-        auto& s3_info = info.path_info.fs_info().s3_fs_info();
-        if (!info.path_info.full_path().empty()) {
-            conf[fslib::kSysRoot] = info.path_info.full_path();
-        }
-        if (!s3_info.bucket().empty()) {
-            conf[fslib::kS3Bucket] = s3_info.bucket();
-        }
-        if (!s3_info.region().empty()) {
-            conf[fslib::kS3Region] = s3_info.region();
-        }
-        if (!s3_info.endpoint().empty()) {
-            conf[fslib::kS3OverrideEndpoint] = s3_info.endpoint();
-        }
-        if (s3_info.has_credential()) {
-            auto& credential = s3_info.credential();
-            if (credential.has_default_credential()) {
-                conf[fslib::kS3CredentialType] = "default";
-            } else if (credential.has_simple_credential()) {
-                conf[fslib::kS3CredentialType] = "simple";
-                auto& simple_credential = credential.simple_credential();
-                conf[fslib::kS3CredentialSimpleAccessKeyId] = simple_credential.access_key();
-                conf[fslib::kS3CredentialSimpleAccessKeySecret] = simple_credential.access_key_secret();
-            } else if (credential.has_profile_credential()) {
-                conf[fslib::kS3CredentialType] = "instance_profile";
-            } else if (credential.has_assume_role_credential()) {
-                conf[fslib::kS3CredentialType] = "assume_role";
-                auto& role_credential = credential.assume_role_credential();
-                conf[fslib::kS3CredentialAssumeRoleArn] = role_credential.iam_role_arn();
-                conf[fslib::kS3CredentialAssumeRoleExternalId] = role_credential.external_id();
-            } else {
-                conf[fslib::kS3CredentialType] = "default";
-            }
-        }
-    } break;
-    case staros::FileStoreType::HDFS: {
-        conf[fslib::kSysRoot] = info.path_info.full_path();
-        break;
-    }
-    case staros::FileStoreType::AZBLOB: {
-        conf[fslib::kSysRoot] = info.path_info.full_path();
-        conf[fslib::kAzBlobEndpoint] = info.path_info.fs_info().azblob_fs_info().endpoint();
-        auto& credential = info.path_info.fs_info().azblob_fs_info().credential();
-        conf[fslib::kAzBlobSharedKey] = credential.shared_key();
-        conf[fslib::kAzBlobSASToken] = credential.sas_token();
-        conf[fslib::kAzBlobTenantId] = credential.tenant_id();
-        conf[fslib::kAzBlobClientId] = credential.client_id();
-        conf[fslib::kAzBlobClientSecret] = credential.client_secret();
-        conf[fslib::kAzBlobClientCertificatePath] = credential.client_certificate_path();
-        conf[fslib::kAzBlobAuthorityHost] = credential.authority_host();
-    } break;
-    default:
-        return absl::InvalidArgumentError("Unknown shard storage scheme!");
-    }
-
-    if (need_enable_cache(info)) {
-        auto& cache_info = info.cache_info;
-        const static std::string conf_prefix("cachefs.");
-
-        // rebuild configuration for cachefs
-        Configuration tmp;
-        tmp.swap(conf);
-        for (auto& iter : tmp) {
-            conf[conf_prefix + iter.first] = iter.second;
-        }
-        conf[fslib::kSysRoot] = "/";
-        // original fs sys.root as cachefs persistent uri
-        conf[fslib::kCacheFsPersistUri] = tmp[fslib::kSysRoot];
-        // use persistent uri as identifier to maximize sharing of cache data
-        conf[fslib::kCacheFsIdentifier] = tmp[fslib::kSysRoot];
-        conf[fslib::kCacheFsTtlSecs] = absl::StrFormat("%ld", cache_info.ttl_seconds());
-        if (cache_info.async_write_back()) {
-            conf[fslib::kCacheFsAsyncWriteBack] = "true";
-        }
-    }
-    return conf;
+    // use the remote fsroot as the default cache identifier
+    return info.fslib_conf_from_this(need_enable_cache(info), "");
 }
 
 absl::StatusOr<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::new_shared_filesystem(
@@ -437,6 +373,9 @@ void shutdown_staros_worker() {
     g_starlet->stop();
     g_starlet.reset();
     g_worker = nullptr;
+
+    LOG(INFO) << "Executing starlet shutdown hooks ...";
+    staros::starlet::common::ShutdownHook::shutdown();
 }
 
 } // namespace starrocks

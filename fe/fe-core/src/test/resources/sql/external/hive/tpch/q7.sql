@@ -119,6 +119,7 @@ OutPut Exchange Id: 23
 |  equal join conjunct: [45: n_nationkey, INT, true] = [36: c_nationkey, INT, true]
 |  equal join conjunct: [25: o_custkey, INT, true] = [33: c_custkey, INT, true]
 |  build runtime filters:
+|  - filter_id = 3, build_expr = (36: c_nationkey), remote = false
 |  - filter_id = 4, build_expr = (33: c_custkey), remote = true
 |  output columns: 13, 14, 18, 42, 46
 |  cardinality: 554680
@@ -142,6 +143,8 @@ OutPut Exchange Id: 23
 distribution type: SHUFFLE
 partition exprs: [25: o_custkey, INT, true]
 cardinality: 6939052
+probe runtime filters:
+- filter_id = 3, probe_expr = (45: n_nationkey)
 
 PLAN FRAGMENT 3(F12)
 
@@ -262,7 +265,7 @@ OutPut Exchange Id: 14
 2:HdfsScanNode
 TABLE: lineitem
 NON-PARTITION PREDICATES: 18: l_shipdate >= '1995-01-01', 18: l_shipdate <= '1996-12-31'
-MIN/MAX PREDICATES: 56: l_shipdate >= '1995-01-01', 57: l_shipdate <= '1996-12-31'
+MIN/MAX PREDICATES: 18: l_shipdate >= '1995-01-01', 18: l_shipdate <= '1996-12-31'
 partitions=1/1
 avgRowSize=32.0
 cardinality: 173476304
@@ -348,7 +351,7 @@ OutPut Exchange Id: 08
 4:HdfsScanNode
 TABLE: nation
 NON-PARTITION PREDICATES: 42: n_name IN ('CANADA', 'IRAN')
-MIN/MAX PREDICATES: 54: n_name >= 'CANADA', 55: n_name <= 'IRAN'
+MIN/MAX PREDICATES: 42: n_name >= 'CANADA', 42: n_name <= 'IRAN'
 partitions=1/1
 avgRowSize=29.0
 cardinality: 25
@@ -365,7 +368,7 @@ OutPut Exchange Id: 06
 5:HdfsScanNode
 TABLE: nation
 NON-PARTITION PREDICATES: 46: n_name IN ('IRAN', 'CANADA')
-MIN/MAX PREDICATES: 52: n_name >= 'CANADA', 53: n_name <= 'IRAN'
+MIN/MAX PREDICATES: 46: n_name >= 'CANADA', 46: n_name <= 'IRAN'
 partitions=1/1
 avgRowSize=29.0
 cardinality: 25

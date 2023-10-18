@@ -39,7 +39,12 @@ Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     RETURN_IF_ERROR(_ctx->prepare(state));
-    RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->olap_scan_ranges()));
+
+    auto* capture_tablet_rowsets_timer = ADD_TIMER(_unique_metrics, "CaptureTabletRowsetsTime");
+    {
+        SCOPED_TIMER(capture_tablet_rowsets_timer);
+        RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->olap_scan_ranges()));
+    }
 
     return Status::OK();
 }
@@ -65,7 +70,7 @@ StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
 
     _ctx->set_prepare_finished();
     if (!status.ok()) {
-        _ctx->set_finished();
+        static_cast<void>(_ctx->set_finished());
         return status;
     }
 

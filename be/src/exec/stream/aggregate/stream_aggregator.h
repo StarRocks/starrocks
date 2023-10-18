@@ -57,52 +57,53 @@ public:
         }
     }
 
-    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
+    [[nodiscard]] Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
 
-    Status open(RuntimeState* state);
+    [[nodiscard]] Status open(RuntimeState* state);
 
     // Process input's chunks util `Epoch` chunk is received.
-    Status process_chunk(StreamChunk* chunk);
+    [[nodiscard]] Status process_chunk(StreamChunk* chunk);
 
     // Called when need to generate incremental outputs and Output agg_states for the next batch.
-    Status output_changes(int32_t chunk_size, StreamChunkPtr* result_chunk);
+    [[nodiscard]] Status output_changes(int32_t chunk_size, StreamChunkPtr* result_chunk);
 
     // Called when need to generate incremental outputs and Output agg_states for the next batch.
-    Status output_changes(int32_t chunk_size, StreamChunkPtr* result_chunk, ChunkPtr* intermediate_chunk,
-                          std::vector<ChunkPtr>& detail_chunks);
+    [[nodiscard]] Status output_changes_internal(int32_t chunk_size, StreamChunkPtr* result_chunk,
+                                                 ChunkPtr* intermediate_chunk, std::vector<ChunkPtr>& detail_chunks);
 
     // Reset the aggregator's state to avoid hashmap too large.
-    Status reset_state(RuntimeState* state);
+    [[nodiscard]] Status reset_state(RuntimeState* state);
 
     // When the epoch is finished, commit the state table.
-    Status commit_epoch(RuntimeState* state);
+    [[nodiscard]] Status commit_epoch(RuntimeState* state);
 
     // When the epoch starts, reset stream aggreator's state in the new epoch.
-    Status reset_epoch(RuntimeState* state);
+    [[nodiscard]] Status reset_epoch(RuntimeState* state);
 
 private:
-    Status _prepare_state_tables(RuntimeState* state);
+    [[nodiscard]] Status _prepare_state_tables(RuntimeState* state);
 
     // Output intermediate(same to OLAP's agg_state) chunks.
-    Status _output_intermediate_changes(int32_t chunk_size, const Columns& group_by_columns,
-                                        ChunkPtr* intermediate_chunk);
+    [[nodiscard]] Status _output_intermediate_changes(int32_t chunk_size, const Columns& group_by_columns,
+                                                      ChunkPtr* intermediate_chunk);
 
     // Output incremental result changes based on previous outputs and new incremental outputs.
-    Status _output_result_changes(int32_t chunk_size, const Columns& group_by_columns, StreamChunkPtr* result_chunk);
+    [[nodiscard]] Status _output_result_changes(int32_t chunk_size, const Columns& group_by_columns,
+                                                StreamChunkPtr* result_chunk);
 
     // Use history(prev) output and final count to generate UPDATE_BEFORE/DELETE Ops:
     // If prev output exists and final count > 0: generate UPDATE_BEFORE
     // If prev output exists and final count = 0: generate DELETE
-    Status _output_result_changes_with_retract(size_t chunk_size, const Columns& group_by_columns,
-                                               StreamChunkPtr* result_chunk_with_ops);
+    [[nodiscard]] Status _output_result_changes_with_retract(size_t chunk_size, const Columns& group_by_columns,
+                                                             StreamChunkPtr* result_chunk_with_ops);
 
     // output results by calling retract functions
-    Status _output_final_result_with_retract(size_t chunk_size, const Columns& group_by_columns,
-                                             ChunkPtr* post_chunk_result);
+    [[nodiscard]] Status _output_final_result_with_retract(size_t chunk_size, const Columns& group_by_columns,
+                                                           ChunkPtr* post_chunk_result);
 
     // Output results without generating retract messages.
-    Status _output_result_changes_without_retract(size_t chunk_size, const Columns& group_by_columns,
-                                                  StreamChunkPtr* result_chunk);
+    [[nodiscard]] Status _output_result_changes_without_retract(size_t chunk_size, const Columns& group_by_columns,
+                                                                StreamChunkPtr* result_chunk);
 
 private:
     // Store buffers which can be reused in the incremental compute.

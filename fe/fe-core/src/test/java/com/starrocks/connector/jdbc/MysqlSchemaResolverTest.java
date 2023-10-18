@@ -15,11 +15,14 @@
 
 package com.starrocks.connector.jdbc;
 
+import com.google.common.collect.Lists;
 import com.mockrunner.mock.jdbc.MockResultSet;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.DdlException;
+import com.starrocks.connector.PartitionUtil;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -57,7 +60,7 @@ public class MysqlSchemaResolverTest {
     @Before
     public void setUp() throws SQLException {
         partitionsResult = new MockResultSet("partitions");
-        partitionsResult.addColumn("PARTITION_DESCRIPTION", Arrays.asList("'20230810'"));
+        partitionsResult.addColumn("NAME", Arrays.asList("'20230810'"));
         partitionsResult.addColumn("PARTITION_EXPRESSION", Arrays.asList("`d`"));
         partitionsResult.addColumn("MODIFIED_TIME", Arrays.asList("2023-08-01"));
         properties = new HashMap<>();
@@ -159,6 +162,18 @@ public class MysqlSchemaResolverTest {
             System.out.println(e.getMessage());
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testGetPartitions_NonPartitioned() throws DdlException {
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+        List<Column> columns = Arrays.asList(new Column("d", Type.VARCHAR));
+        JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", columns, Lists.newArrayList(),
+                "test", "catalog", properties);
+        int size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
+        Assert.assertEquals(1, size);
+        List<String> partitionNames = PartitionUtil.getPartitionNames(jdbcTable);
+        Assert.assertEquals(Arrays.asList("tbl1"), partitionNames);
     }
 
     @Test

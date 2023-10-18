@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
@@ -111,8 +110,8 @@ public class HiveConnectorInternalMgr {
 
     public IHiveMetastore createHiveMetastore() {
         // TODO(stephen): Abstract the creator class to construct hive meta client
-        HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(properties);
-        IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName);
+        HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(hdfsEnvironment, properties);
+        IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName, metastoreType);
         IHiveMetastore baseHiveMetastore;
         if (!enableMetastoreCache) {
             baseHiveMetastore = hiveMetastore;
@@ -174,6 +173,12 @@ public class HiveConnectorInternalMgr {
     public Executor getUpdateStatisticsExecutor() {
         Executor baseExecutor = Executors.newCachedThreadPool(
                 new ThreadFactoryBuilder().setNameFormat("hive-metastore-update-%d").build());
+        return new ReentrantExecutor(baseExecutor, remoteFileConf.getRefreshMaxThreadNum());
+    }
+
+    public Executor getRefreshOthersFeExecutor() {
+        Executor baseExecutor = Executors.newCachedThreadPool(
+                new ThreadFactoryBuilder().setNameFormat("refresh-others-fe-hive-metadata-cache-%d").build());
         return new ReentrantExecutor(baseExecutor, remoteFileConf.getRefreshMaxThreadNum());
     }
 

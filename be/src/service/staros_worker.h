@@ -59,12 +59,17 @@ public:
 
     absl::Status update_worker_info(const WorkerInfo& info) override;
 
+    // get shard info directly from local cache, if the shard is assigned to this worker
     absl::StatusOr<ShardInfo> get_shard_info(ShardId id) const override;
 
     std::vector<ShardInfo> shards() const override;
 
     // `conf`: a k-v map, provides additional information about the filesystem configuration
     absl::StatusOr<std::shared_ptr<FileSystem>> get_shard_filesystem(ShardId id, const Configuration& conf);
+
+    // retrieve shard info from the worker. Unlike `get_shard_info`, if the shard info is not there in local cache,
+    // the worker will try to fetch it back from starmgr.
+    absl::StatusOr<ShardInfo> retrieve_shard_info(ShardId id);
 
 private:
     struct ShardInfoDetails {
@@ -75,6 +80,10 @@ private:
     };
 
     using CacheValue = std::weak_ptr<FileSystem>;
+
+    // This function can be made static perfectly. The only reason to make it `virtual`
+    // is, for unit test MOCK as it is the only interface to interact with g_starlet.
+    virtual absl::StatusOr<ShardInfo> _fetch_shard_info_from_remote(ShardId id);
 
     static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
 

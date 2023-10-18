@@ -634,7 +634,7 @@ TEST(FixedLengthColumnTest, test_fill_range) {
 
     std::vector<int64_t> ids{0, 0, 0};
     std::vector<uint8_t> filter{1, 0, 1, 0, 1};
-    c1->fill_range(ids, filter);
+    ASSERT_TRUE(c1->fill_range(ids, filter).ok());
 
     auto* p = reinterpret_cast<const int64_t*>(c1->raw_data());
     ASSERT_EQ(0, p[0]);

@@ -55,12 +55,6 @@ Status Compaction::do_compaction() {
     return st;
 }
 
-RowsetSharedPtr& tablet_meta_with_max_rowset_version(std::vector<RowsetSharedPtr> rowsets) {
-    return *std::max_element(rowsets.begin(), rowsets.end(), [](const RowsetSharedPtr& a, const RowsetSharedPtr& b) {
-        return a->version() < b->version();
-    });
-}
-
 Status Compaction::do_compaction_impl() {
     OlapStopWatch watch;
 
@@ -85,13 +79,12 @@ Status Compaction::do_compaction_impl() {
         return iterator_num_res.status();
     }
 
-    const TabletSchemaCSPtr& cur_tablet_schema = tablet_meta_with_max_rowset_version(_input_rowsets)->schema();
-
+    auto cur_tablet_schema = CompactionUtils::rowset_with_max_schema_version(_input_rowsets)->schema();
     size_t segment_iterator_num = iterator_num_res.value();
     CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
-            _tablet->num_columns(), config::vertical_compaction_max_columns_per_group, segment_iterator_num);
+            cur_tablet_schema->num_columns(), config::vertical_compaction_max_columns_per_group, segment_iterator_num);
     if (algorithm == VERTICAL_COMPACTION) {
-        CompactionUtils::split_column_into_groups(_tablet->num_columns(), cur_tablet_schema->sort_key_idxes(),
+        CompactionUtils::split_column_into_groups(cur_tablet_schema->num_columns(), cur_tablet_schema->sort_key_idxes(),
                                                   config::vertical_compaction_max_columns_per_group, &_column_groups);
     }
 
@@ -106,7 +99,7 @@ Status Compaction::do_compaction_impl() {
               << ", columns per group=" << config::vertical_compaction_max_columns_per_group;
 
     RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(
-            _tablet.get(), max_rows_per_segment, algorithm, _output_version, &_output_rs_writer, &cur_tablet_schema));
+            _tablet.get(), max_rows_per_segment, algorithm, _output_version, &_output_rs_writer, cur_tablet_schema));
     TRACE("prepare finished");
 
     Statistics stats;
@@ -247,7 +240,7 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
         bool is_key = (i == 0);
         if (!is_key) {
             // read mask buffer from the beginning
-            mask_buffer->flip_to_read();
+            RETURN_IF_ERROR(mask_buffer->flip_to_read());
         }
 
         Schema schema = ChunkHelper::convert_schema(tablet_schema, _column_groups[i]);

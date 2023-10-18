@@ -18,6 +18,7 @@
 
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_local_persistent_index.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/primary_key_encoder.h"
 #include "util/trace.h"
@@ -33,6 +34,11 @@ Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadat
         return _status;
     }
     _status = _do_lake_load(tablet, metadata, base_version, builder);
+    if (_status.ok()) {
+        // update data version when memory index or persistent index load finish.
+        _data_version = base_version;
+    }
+    _tablet_id = tablet->id();
     _loaded = true;
     TRACE("end load pk index");
     if (!_status.ok()) {
@@ -80,7 +86,7 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
                     RETURN_IF_ERROR(
                             StorageEngine::instance()->get_persistent_index_store()->create_dir_if_path_not_exists(
                                     path));
-                    _persistent_index = std::make_unique<LakeLocalPersistentIndex>(path, this);
+                    _persistent_index = std::make_unique<LakeLocalPersistentIndex>(path);
                     return ((LakeLocalPersistentIndex*)_persistent_index.get())
                             ->load_from_lake_tablet(tablet, metadata, base_version, builder);
                 }
@@ -154,8 +160,6 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
             itr->close();
         }
     }
-    _tablet_id = tablet->id();
-    _data_version = base_version;
     auto cost_ns = watch.elapsed_time();
     g_load_pk_index_latency << cost_ns / 1000;
     LOG_IF(INFO, cost_ns >= /*10ms=*/10 * 1000 * 1000)

@@ -352,7 +352,7 @@ void PlanFragmentExecutor::update_status(const Status& new_status) {
         // if current `_status` is ok, set it to `new_status` to record the error.
         if (_status.ok()) {
             if (new_status.is_mem_limit_exceeded()) {
-                _runtime_state->set_mem_limit_exceeded(new_status.get_error_msg());
+                (void)_runtime_state->set_mem_limit_exceeded(new_status.get_error_msg());
             }
             _status = new_status;
             if (_runtime_state->query_options().query_type == TQueryType::EXTERNAL) {
@@ -396,7 +396,8 @@ void PlanFragmentExecutor::cancel() {
         _stream_load_contexts.resize(0);
     }
     _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
-    _runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
+    auto st = _runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
+    st.permit_unchecked_error();
 
     if (_is_runtime_filter_merge_node) {
         _runtime_state->exec_env()->runtime_filter_worker()->close_query(_query_id);

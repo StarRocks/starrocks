@@ -37,6 +37,7 @@ package com.starrocks.sql.ast;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -63,6 +64,10 @@ public abstract class StatementBase implements ParseNode {
 
     private ExplainLevel explainLevel;
 
+    private Tracers.Mode traceMode;
+
+    private String traceModule;
+
     // True if this QueryStmt is the top level query from an EXPLAIN <query>
     protected boolean isExplain = false;
 
@@ -74,13 +79,22 @@ public abstract class StatementBase implements ParseNode {
         this.explainLevel = explainLevel;
     }
 
+    public void setIsTrace(Tracers.Mode mode, String module) {
+        this.isExplain = true;
+        this.traceMode = mode;
+        this.traceModule = module;
+    }
+
     public boolean isExplain() {
         return isExplain;
     }
 
-    public boolean isTrace() {
-        return isExplain && (explainLevel == ExplainLevel.OPTIMIZER ||
-                explainLevel == ExplainLevel.REWRITE);
+    public Tracers.Mode getTraceMode() {
+        return traceMode;
+    }
+
+    public String getTraceModule() {
+        return traceModule;
     }
 
     public ExplainLevel getExplainLevel() {

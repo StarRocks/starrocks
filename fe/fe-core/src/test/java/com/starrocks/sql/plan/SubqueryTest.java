@@ -24,6 +24,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import static org.junit.Assert.fail;
+
 public class SubqueryTest extends PlanTestBase {
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
@@ -1181,25 +1183,21 @@ public class SubqueryTest extends PlanTestBase {
 
     @Test
     public void testOnClauseNotSupportedCases() {
-        assertExceptionMessage("select * from t0 " +
+        assertExceptionMsgContains("select * from t0 " +
                         "join t1 on (select v1 from t0 where t0.v2 = t1.v5) = (select v4 from t1 where t0.v2 = t1.v5)",
-                "Not support ON Clause conjunct contains more than one subquery");
+                "contains more than one subquery");
 
-        assertExceptionMessage("select * from t0 " +
-                        "join t1 on t0.v1 + t1.v4 = (select count(*) from t0)",
-                "Not support ON Clause un-correlated subquery referencing columns of more than one table");
-
-        assertExceptionMessage("select * from t0 " +
+        assertExceptionMsgContains("select * from t0 " +
                         "join t1 on 1 = (select count(*) from t2 where t0.v1 = t2.v7 and t1.v4 = t2.v7)",
-                "Not support ON Clause correlated subquery referencing columns of more than one table");
+                "referencing columns from more than one table");
 
-        assertExceptionMessage("select * from t0 " +
+        assertExceptionMsgContains("select * from t0 " +
                         "join t1 on 1 = (select count(*) from t2 where t0.v1 = t2.v7 and t1.v4 = t2.v7)",
-                "Not support ON Clause correlated subquery referencing columns of more than one table");
+                "referencing columns from more than one table");
 
-        assertExceptionMessage("select * from t0 " +
+        assertExceptionMsgContains("select * from t0 " +
                         "join t1 on t0.v1 in (select t2.v7 from t2 where t1.v5 = t2.v8)",
-                "Not support ON Clause correlated in-subquery referencing columns of more than one table");
+                "referencing columns from more than one table");
     }
 
     @Test
@@ -1783,7 +1781,7 @@ public class SubqueryTest extends PlanTestBase {
     @Test
     public void testNestSubquery() throws Exception {
         String sql = "select * from t0 where exists (select * from t1 where t0.v1 in (select v7 from t2));";
-        assertExceptionMessage(sql, "Getting analyzing error. Detail message: Unsupported complex nested in-subquery.");
+        assertExceptionMsgContains(sql, "Getting analyzing error. Detail message: Unsupported complex nested in-subquery.");
 
         sql = "select * from t0 where exists (select * from t1 where t0.v1 = (select v7 from t2));";
         String plan = getFragmentPlan(sql);
@@ -1885,6 +1883,56 @@ public class SubqueryTest extends PlanTestBase {
                     () -> getFragmentPlan(sql));
         } finally {
             connectContext.getSessionVariable().setSqlMode(sqlMode);
+        }
+    }
+
+    @Test
+    public void testComplexCorrelationPredicateInSubquery1() throws Exception {
+        String sql = "select v2 in (select v5 from t1 where (t0.v1 IS NULL) = (t1.v4 IS NULL)) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 5> : 5: v5\n" +
+                "  |  <slot 8> : 4: v4 IS NULL\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t1");
+    }
+
+    @Test
+    public void testComplexCorrelationPredicateNotInSubquery2() throws Exception {
+        String sql = "select v2 not in (select v5 from t1 where t0.v1 = t1.v4 + t0.v1) from t0";
+        Assert.assertThrows("IN subquery not supported the correlation predicate of the" +
+                        " WHERE clause that used multiple outer-table columns at the same time.\n", SemanticException.class,
+                () -> getFragmentPlan(sql));
+    }
+
+    @Test
+    public void testUnsupportedInSubquery() {
+        String sql = "select * from t0 left join t1 on v1 in (select v7 from t2 where v4 = v8) or v1 < v5;";
+        try {
+            getFragmentPlan(sql);
+            fail("sql should fail");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("referencing columns from more than one table"));
+        }
+
+        sql = "select * from t0 left join t1 on v1 + v4 in (select v7 from t2) or v1 < v5;";
+        try {
+            getFragmentPlan(sql);
+            fail("sql should fail");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("referencing columns from more than one table"));
+        }
+    }
+
+    @Test
+    public void testUnsupportedExistSubquery() {
+        String sql = "select * from t0 left join t1 on exists (select v7 from t2 where v1 = v4) or v1 < v5;";
+        try {
+            getFragmentPlan(sql);
+            fail("sql should fail");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("referencing columns from more than one table"));
         }
     }
 }

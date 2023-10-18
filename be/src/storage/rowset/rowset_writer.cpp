@@ -118,8 +118,7 @@ Status RowsetWriter::init() {
     _writer_options.referenced_column_ids = _context.referenced_column_ids;
 
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
-        (_context.partial_update_tablet_schema || !_context.merge_condition.empty() ||
-         _context.miss_auto_increment_column)) {
+        (_context.is_partial_update || !_context.merge_condition.empty() || _context.miss_auto_increment_column)) {
         _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
     }
 
@@ -155,14 +154,14 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
             _rowset_meta_pb->set_segments_overlap_pb(NONOVERLAPPING);
         }
         // if load only has delete, we can skip the partial update logic
-        if (_context.partial_update_tablet_schema && _flush_chunk_state != FlushChunkState::DELETE) {
-            DCHECK(_context.referenced_column_ids.size() == _context.partial_update_tablet_schema->columns().size());
+        if (_context.is_partial_update && _flush_chunk_state != FlushChunkState::DELETE) {
+            DCHECK(_context.referenced_column_ids.size() == _context.tablet_schema->columns().size());
             RETURN_IF(_num_segment != _rowset_txn_meta_pb->partial_rowset_footers().size(),
                       Status::InternalError(fmt::format("segment number {} not equal to partial_rowset_footers size {}",
                                                         _num_segment,
                                                         _rowset_txn_meta_pb->partial_rowset_footers().size())));
-            for (auto i = 0; i < _context.partial_update_tablet_schema->columns().size(); ++i) {
-                const auto& tablet_column = _context.partial_update_tablet_schema->column(i);
+            for (auto i = 0; i < _context.tablet_schema->columns().size(); ++i) {
+                const auto& tablet_column = _context.tablet_schema->column(i);
                 _rowset_txn_meta_pb->add_partial_update_column_ids(_context.referenced_column_ids[i]);
                 _rowset_txn_meta_pb->add_partial_update_column_unique_ids(tablet_column.unique_id());
             }
@@ -210,6 +209,13 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
     } else {
         _rowset_meta_pb->set_rowset_state(VISIBLE);
     }
+    TabletSchemaPB* ts_pb = _rowset_meta_pb->mutable_tablet_schema();
+    if (_context.full_tablet_schema != nullptr) {
+        _context.full_tablet_schema->to_schema_pb(ts_pb);
+    } else {
+        _context.tablet_schema->to_schema_pb(ts_pb);
+    }
+
     auto rowset_meta = std::make_shared<RowsetMeta>(_rowset_meta_pb);
     RowsetSharedPtr rowset;
     RETURN_IF_ERROR(
@@ -250,7 +256,7 @@ Status RowsetWriter::_flush_segment(const SegmentPB& segment_pb, butil::IOBuf& d
     }
     RETURN_IF_ERROR(wfile->close());
 
-    if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
+    if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.is_partial_update) {
         auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
         partial_rowset_footer->set_position(segment_pb.partial_footer_position());
         partial_rowset_footer->set_size(segment_pb.partial_footer_size());
@@ -723,7 +729,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         } else {
             itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators, _context.merge_condition), true);
         }
-        itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+        RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
         _context.max_rows_per_segment = CompactionUtils::get_segment_max_rows(config::max_segment_file_size,
                                                                               _num_rows_written, _total_data_size);
@@ -790,7 +796,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         RETURN_IF_ERROR(mask_buffer->flush());
 
         for (size_t i = 1; i < column_groups.size(); ++i) {
-            mask_buffer->flip_to_read();
+            RETURN_IF_ERROR(mask_buffer->flip_to_read());
 
             seg_iterators.clear();
 
@@ -821,7 +827,7 @@ Status HorizontalRowsetWriter::_final_merge() {
             } else {
                 itr = new_aggregate_iterator(new_mask_merge_iterator(seg_iterators, mask_buffer.get()), false);
             }
-            itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+            RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
             auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
             auto chunk = chunk_shared_ptr.get();
@@ -893,7 +899,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         } else {
             itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators, _context.merge_condition), 0);
         }
-        itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+        RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
         auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
@@ -972,7 +978,7 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
     RETURN_IF_ERROR((*segment_writer)->finalize(&segment_size, &index_size, &footer_position));
     _num_rows_of_tmp_segment_files.push_back(_num_rows_written - _num_rows_flushed);
     _num_rows_flushed = _num_rows_written;
-    if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
+    if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.is_partial_update) {
         uint64_t footer_size = segment_size - footer_position;
         auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
         partial_rowset_footer->set_position(footer_position);
@@ -1119,7 +1125,7 @@ Status VerticalRowsetWriter::final_flush() {
             LOG(WARNING) << "Fail to finalize segment footer, " << st;
             return st;
         }
-        if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
+        if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.is_partial_update) {
             auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
             partial_rowset_footer->set_position(footer_position);
             partial_rowset_footer->set_size(segment_size - footer_position);

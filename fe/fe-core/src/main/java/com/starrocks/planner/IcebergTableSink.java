@@ -86,7 +86,7 @@ public class IcebergTableSink extends DataSink {
         if (tabularTempCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             this.cloudConfiguration = tabularTempCloudConfiguration;
         } else {
-            this.cloudConfiguration = connector.getCloudConfiguration();
+            this.cloudConfiguration = connector.getMetadata().getCloudConfiguration();
         }
 
         Preconditions.checkState(cloudConfiguration != null,

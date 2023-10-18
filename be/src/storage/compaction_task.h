@@ -209,6 +209,8 @@ public:
 
     void set_mem_tracker(MemTracker* mem_tracker) { _mem_tracker = mem_tracker; }
 
+    void set_tablet_schema(TabletSchemaCSPtr& tablet_schema) { _tablet_schema = tablet_schema; }
+
     std::string get_task_info() {
         _task_info.elapsed_time = _watch.elapsed_time() / 1000;
         return _task_info.to_string();
@@ -225,9 +227,9 @@ protected:
 
     void _try_lock() {
         if (_task_info.compaction_type == CUMULATIVE_COMPACTION) {
-            _compaction_lock = std::unique_lock(_tablet->get_cumulative_lock(), std::try_to_lock);
+            _compaction_lock = std::shared_lock(_tablet->get_cumulative_lock(), std::try_to_lock);
         } else {
-            _compaction_lock = std::unique_lock(_tablet->get_base_lock(), std::try_to_lock);
+            _compaction_lock = std::shared_lock(_tablet->get_base_lock(), std::try_to_lock);
         }
     }
 
@@ -287,8 +289,9 @@ protected:
     RuntimeProfile _runtime_profile;
     std::vector<RowsetSharedPtr> _input_rowsets;
     TabletSharedPtr _tablet;
+    TabletSchemaCSPtr _tablet_schema;
     RowsetSharedPtr _output_rowset;
-    std::unique_lock<std::mutex> _compaction_lock;
+    std::shared_lock<std::shared_mutex> _compaction_lock;
     MonotonicStopWatch _watch;
     MemTracker* _mem_tracker{nullptr};
 };

@@ -727,8 +727,13 @@ Status SnapshotLoader::move(const std::string& snapshot_path, const TabletShared
     // snapshot loader not need to change tablet uid
     // fixme: there is no header now and can not call load_one_tablet here
     // reload header
-    status = StorageEngine::instance()->tablet_manager()->load_tablet_from_dir(store, tablet_id, schema_hash,
-                                                                               tablet_path, true);
+    {
+        std::unique_lock l(tablet->get_meta_store_lock());
+        // prevet the concurrent issue with tablet meta checkpoint
+        tablet->set_will_be_force_replaced();
+        status = StorageEngine::instance()->tablet_manager()->load_tablet_from_dir(store, tablet_id, schema_hash,
+                                                                                   tablet_path, true);
+    }
     if (!status.ok()) {
         LOG(WARNING) << "Fail to reload header of tablet. tablet_id=" << tablet_id << " err=" << status.to_string();
         return status;

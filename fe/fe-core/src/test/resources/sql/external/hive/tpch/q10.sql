@@ -109,6 +109,8 @@ OutPut Exchange Id: 18
 14:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
 |  equal join conjunct: [1: c_custkey, INT, true] = [10: o_custkey, INT, true]
+|  build runtime filters:
+|  - filter_id = 2, build_expr = (10: o_custkey), remote = false
 |  output columns: 1, 2, 3, 5, 6, 8, 23, 24, 35
 |  cardinality: 7651211
 |  column statistics:
@@ -134,6 +136,8 @@ OutPut Exchange Id: 18
 distribution type: SHUFFLE
 partition exprs: [1: c_custkey, INT, true]
 cardinality: 15000000
+probe runtime filters:
+- filter_id = 2, probe_expr = (1: c_custkey)
 
 PLAN FRAGMENT 2(F04)
 
@@ -184,7 +188,7 @@ OutPut Exchange Id: 13
 6:HdfsScanNode
 TABLE: lineitem
 NON-PARTITION PREDICATES: 26: l_returnflag = 'R'
-MIN/MAX PREDICATES: 40: l_returnflag <= 'R', 41: l_returnflag >= 'R'
+MIN/MAX PREDICATES: 26: l_returnflag <= 'R', 26: l_returnflag >= 'R'
 partitions=1/1
 avgRowSize=25.0
 cardinality: 200012634
@@ -214,7 +218,7 @@ OutPut Exchange Id: 10
 8:HdfsScanNode
 TABLE: orders
 NON-PARTITION PREDICATES: 13: o_orderdate >= '1994-05-01', 13: o_orderdate < '1994-08-01'
-MIN/MAX PREDICATES: 42: o_orderdate >= '1994-05-01', 43: o_orderdate < '1994-08-01'
+MIN/MAX PREDICATES: 13: o_orderdate >= '1994-05-01', 13: o_orderdate < '1994-08-01'
 partitions=1/1
 avgRowSize=20.0
 cardinality: 5738046

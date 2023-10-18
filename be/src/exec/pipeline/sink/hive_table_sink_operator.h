@@ -74,8 +74,6 @@ public:
 
     static void add_hive_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state);
 
-    static Status partition_value_to_string(Column* column, std::string& partition_value);
-
 private:
     std::string _get_partition_location(const std::vector<std::string>& values);
 

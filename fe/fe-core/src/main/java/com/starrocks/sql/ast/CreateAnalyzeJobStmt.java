@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.StatsConstants;
 
@@ -24,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 
 public class CreateAnalyzeJobStmt extends DdlStmt {
+    private String catalogName;
     private long dbId;
     private long tableId;
     private final TableName tbl;
@@ -42,6 +44,7 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     public CreateAnalyzeJobStmt(TableName tbl, List<String> columnNames, boolean isSample,
                                 Map<String, String> properties, NodePosition pos) {
         super(pos);
+        this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         this.tbl = tbl;
         this.dbId = StatsConstants.DEFAULT_ALL_ID;
         this.tableId = StatsConstants.DEFAULT_ALL_ID;
@@ -84,6 +87,14 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
 
     public void setProperties(Map<String, String> properties) {
         this.properties = properties;
+    }
+
+    public boolean isNative() {
+        return this.catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalogName = catalogName;
     }
 
     @Override

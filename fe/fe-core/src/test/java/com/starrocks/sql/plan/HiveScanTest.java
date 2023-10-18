@@ -18,14 +18,19 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 import java.util.List;
 
 public class HiveScanTest extends ConnectorPlanTestBase {
+    @ClassRule
+    public static TemporaryFolder temp = new TemporaryFolder();
+
     @BeforeClass
     public static void beforeClass() throws Exception {
-        ConnectorPlanTestBase.beforeClass();
+        ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
         GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.partitioned_db");
     }
 
@@ -42,7 +47,7 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             String sql = sqlString[i];
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(scanNodeList.get(0).getCanUseAnyColumn(), expexted[i]);
+            Assert.assertEquals(scanNodeList.get(0).getScanOptimzeOption().getCanUseAnyColumn(), expexted[i]);
         }
 
         connectContext.getSessionVariable().setEnableCountStarOptimization(false);
@@ -50,7 +55,7 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             String sql = sqlString[i];
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(scanNodeList.get(0).getCanUseAnyColumn(), false);
+            Assert.assertEquals(scanNodeList.get(0).getScanOptimzeOption().getCanUseAnyColumn(), false);
         }
         connectContext.getSessionVariable().setEnableCountStarOptimization(true);
     }
@@ -73,7 +78,7 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             boolean expexted = Boolean.valueOf(sqlString[i + 1]);
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(expexted, scanNodeList.get(0).getCanUseMinMaxCountOpt());
+            Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimzeOption().getCanUseMinMaxCountOpt());
         }
     }
 }

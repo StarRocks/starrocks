@@ -76,7 +76,7 @@ public class ConnectContextTest {
                 minTimes = 0;
                 result = "192.168.1.1";
 
-                executor.cancel();
+                executor.cancel("set up");
                 minTimes = 0;
             }
         };
@@ -134,7 +134,7 @@ public class ConnectContextTest {
         Assert.assertNotNull(ctx.toThreadInfo());
         long currentTimeMillis = System.currentTimeMillis();
         List<String> row = ctx.toThreadInfo().toRow(currentTimeMillis, false);
-        Assert.assertEquals(11, row.size());
+        Assert.assertEquals(10, row.size());
         Assert.assertEquals("101", row.get(0));
         Assert.assertEquals("testUser", row.get(1));
         Assert.assertEquals("127.0.0.1:12345", row.get(2));
@@ -183,9 +183,9 @@ public class ConnectContextTest {
         Assert.assertTrue(ctx.isKilled());
 
         // Kill
-        ctx.kill(true);
+        ctx.kill(true, "sleep time out");
         Assert.assertTrue(ctx.isKilled());
-        ctx.kill(false);
+        ctx.kill(false, "sleep time out");
         Assert.assertTrue(ctx.isKilled());
 
         // clean up
@@ -209,7 +209,7 @@ public class ConnectContextTest {
         Assert.assertFalse(ctx.isKilled());
 
         // Kill
-        ctx.kill(true);
+        ctx.kill(true, "query timeout");
         Assert.assertTrue(ctx.isKilled());
 
         // clean up

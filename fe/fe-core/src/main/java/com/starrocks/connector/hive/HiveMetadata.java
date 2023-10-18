@@ -27,11 +27,13 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.PartitionUpdate.UpdateMode;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -60,24 +62,30 @@ public class HiveMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(HiveMetadata.class);
     public static final String STARROCKS_QUERY_ID = "starrocks_query_id";
     private final String catalogName;
+    private final HdfsEnvironment hdfsEnvironment;
     private final HiveMetastoreOperations hmsOps;
     private final RemoteFileOperations fileOps;
     private final HiveStatisticsProvider statisticsProvider;
     private final Optional<CacheUpdateProcessor> cacheUpdateProcessor;
     private Executor updateExecutor;
+    private Executor refreshOthersFeExecutor;
 
     public HiveMetadata(String catalogName,
+                        HdfsEnvironment hdfsEnvironment,
                         HiveMetastoreOperations hmsOps,
                         RemoteFileOperations fileOperations,
                         HiveStatisticsProvider statisticsProvider,
                         Optional<CacheUpdateProcessor> cacheUpdateProcessor,
-                        Executor updateExecutor) {
+                        Executor updateExecutor,
+                        Executor refreshOthersFeExecutor) {
         this.catalogName = catalogName;
+        this.hdfsEnvironment = hdfsEnvironment;
         this.hmsOps = hmsOps;
         this.fileOps = fileOperations;
         this.statisticsProvider = statisticsProvider;
         this.cacheUpdateProcessor = cacheUpdateProcessor;
         this.updateExecutor = updateExecutor;
+        this.refreshOthersFeExecutor = refreshOthersFeExecutor;
     }
 
     @Override
@@ -139,6 +147,12 @@ public class HiveMetadata implements ConnectorMetadata {
                         " 'Force' must be set when dropping a hive table." +
                         " Please execute 'drop table %s.%s.%s force'", stmt.getCatalogName(), dbName, tableName));
             }
+
+            if (getTable(dbName, tableName) == null && stmt.isSetIfExists()) {
+                LOG.warn("Table {}.{} doesn't exist", dbName, tableName);
+                return;
+            }
+
             hmsOps.dropTable(dbName, tableName);
         }
     }
@@ -169,7 +183,8 @@ public class HiveMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate, List<String> fieldNames) {
+                                                   long snapshotId, ScalarOperator predicate,
+                                                   List<String> fieldNames, long limit) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
 
@@ -216,7 +231,8 @@ public class HiveMetadata implements ConnectorMetadata {
                                          Table table,
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate) {
+                                         ScalarOperator predicate,
+                                         long limit) {
         Statistics statistics = null;
         List<ColumnRefOperator> columnRefOperators = Lists.newArrayList(columns.keySet());
         try {
@@ -263,6 +279,10 @@ public class HiveMetadata implements ConnectorMetadata {
 
     @Override
     public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos) {
+        if (commitInfos.isEmpty()) {
+            LOG.warn("No commit info on {}.{} after hive sink", dbName, tableName);
+            return;
+        }
         HiveTable table = (HiveTable) getTable(dbName, tableName);
         String stagingDir = commitInfos.get(0).getStaging_dir();
         boolean isOverwrite = commitInfos.get(0).isIs_overwrite();
@@ -284,7 +304,7 @@ public class HiveMetadata implements ConnectorMetadata {
                 Preconditions.checkState(partitionColNames.size() == partitionValues.size(),
                         "Partition columns names size doesn't equal partition values size. %s vs %s",
                         partitionColNames.size(), partitionValues.size());
-                if (hmsOps.partitionExists(dbName, tableName, partitionValues)) {
+                if (hmsOps.partitionExists(table, partitionValues)) {
                     mode = isOverwrite ? UpdateMode.OVERWRITE : UpdateMode.APPEND;
                 } else {
                     mode = PartitionUpdate.UpdateMode.NEW;
@@ -293,7 +313,8 @@ public class HiveMetadata implements ConnectorMetadata {
             }
         }
 
-        HiveCommitter committer = new HiveCommitter(hmsOps, fileOps, updateExecutor, table, new Path(stagingDir));
+        HiveCommitter committer = new HiveCommitter(
+                hmsOps, fileOps, updateExecutor, refreshOthersFeExecutor, table, new Path(stagingDir));
         committer.commit(partitionUpdates);
     }
 
@@ -301,5 +322,10 @@ public class HiveMetadata implements ConnectorMetadata {
     public void clear() {
         hmsOps.invalidateAll();
         fileOps.invalidateAll();
+    }
+
+    @Override
+    public CloudConfiguration getCloudConfiguration() {
+        return hdfsEnvironment.getCloudConfiguration();
     }
 }

@@ -62,10 +62,10 @@ bool HashPartitionContext::is_finished() {
 
 StatusOr<ChunkPtr> HashPartitionContext::pull_one_chunk(RuntimeState* state) {
     if (!_chunks_partitioner->is_hash_map_eos()) {
-        _chunks_partitioner->consume_from_hash_map([&](int32_t partition_idx, ChunkPtr& chunk) {
+        RETURN_IF_ERROR(_chunks_partitioner->consume_from_hash_map([&](int32_t partition_idx, ChunkPtr& chunk) {
             _acc.push(std::move(chunk));
             return _acc.need_input();
-        });
+        }));
         if (_chunks_partitioner->is_hash_map_eos()) {
             _acc.finalize();
         }

@@ -1,5 +1,7 @@
 # Authenticate to AWS resources
 
+StarRocks supports using three authentication methods to integrate with AWS resources: instance profile-based authentication, assumed role-based authentication, and IAM user-based authentication. This topic describes how to configure AWS credentials by using these authentication methods.
+
 ## Authentication methods
 
 ### Instance profile-based authentication
@@ -20,128 +22,97 @@ The IAM user-based authentication method supports using IAM user credentials to 
 
 <!--You can bind multiple catalogs each to the credentials (Access Key and Secret Key) of a specific IAM user, so that different users within the same cluster can access different data sources.-->
 
-## Preparation for authentication in AWS IAM
+## Preparations
 
-### Instance profile-based authentication
+First, find the IAM role associated with the EC2 instance on which your StarRocks cluster runs (that role is referred to as the EC2 instance role hereinafter in this topic), and obtain the role's ARN. You will need the EC2 instance role for instance profile-based authentication and need the EC2 instance role and its ARN for assumed role-based authentication.
 
-You need to create an IAM policy like below to grant access to your AWS resource, and then attach the policy to the IAM role associated with the EC2 instance on which your StarRocks cluster runs.
-
-#### Access AWS S3
-
-If you choose AWS S3 as storage, StarRocks accesses your S3 bucket based on the following IAM policy:
+Next step, create an IAM policy based on the type of AWS resource you want to access and the specific operation scenario within StarRocks. A policy in AWS IAM declares a set of permissions on a specific AWS resource. After creating a policy, you need to attach it to an IAM role or user. As such, the IAM role or user is assigned the permissions declared in the policy to access the specified AWS resource.
 
 > **NOTICE**
 >
-> Remember to replace `<bucket_name>` with the name of your S3 bucket.
+> To make these preparations, you must have permission to sign in to the [AWS IAM console](https://us-east-1.console.aws.amazon.com/iamv2/home#/home) and edit IAM users and roles.
 
-```JSON
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "s3",
-            "Effect": "Allow",
-            "Action": ["s3:GetObject"],
-            "Resource": ["arn:aws:s3:::<bucket_name>/*"]
-        },
-        {
-            "Sid": "s3list",
-            "Effect": "Allow",
-            "Action": ["s3:ListBucket"],
-            "Resource": ["arn:aws:s3:::<bucket_name>"]
-        }
-        ]
-}
-```
+For the IAM policy you will need to access a specific AWS resource, see the following sections:
 
-#### Access AWS Glue
+- [Batch load data from AWS S3](../reference/aws_iam_policies.md#batch-load-data-from-aws-s3)
+- [Read/write AWS S3](../reference/aws_iam_policies.md#readwrite-aws-s3)
+- [Integrate with AWS Glue](../reference/aws_iam_policies.md#integrate-with-aws-glue)
 
-If you choose AWS Glue as metastore, StarRocks accesses your AWS Glue Data Catalog based on the following IAM policy:
+### Preparation for instance profile-based authentication
 
-```JSON
-{
-     "Version": "2012-10-17",
-     "Statement": [
-         {
-             "Effect": "Allow",
-             "Action": [
-                "glue:GetDatabase",
-                "glue:GetDatabases",
-                "glue:GetPartition",
-                "glue:GetPartitions",
-                "glue:GetTable",
-                "glue:GetTableVersions",
-                "glue:GetTables",
-                "glue:GetConnection",
-                "glue:GetConnections",
-                "glue:GetDevEndpoint",
-                "glue:GetDevEndpoints",
-                "glue:BatchGetPartition"
-            ],
-            "Resource": [
-                "*"
-            ]
-        }
-    ]
-}
-```
+Attach the [IAM policies](../reference/aws_iam_policies.md) for accessing the required AWS resources to the EC2 instance role.
 
-### Assumed role-based authentication
+### Preparation for assumed role-based authentication
 
-You need to create an assumed role (for example, named `s3_role_test`) and attach the policy provided in the "[Access AWS S3](../integrations/authenticate_to_aws_resources.md#access-aws-s3)" section of this topic to it. This assumed role will be assumed by the IAM role associated with the EC2 instance on which your StarRocks cluster runs.
+#### Create IAM roles and attach policies to them
 
-Also, if you choose AWS Glue as metastore, you can create another assumed role (for example, named `glue_role_test`) and attach the policy provided in the "[Access AWS Glue](../integrations/authenticate_to_aws_resources.md#access-aws-glue)" section of this topic to it. Otherwise, skip the step of creating an assumed role for AWS Glue and directly attach the policy to the above assumed role you have created (for example, `s3_role_test`).
+Create one or more IAM roles, depending on the AWS resources you want to access. See [Creating IAM roles](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create.html). Then, attach the [IAM policies](../reference/aws_iam_policies.md) for accessing the required AWS resources to the IAM roles you create.
 
-After you finish this, you need to configure a trust relationship between the assumed role and the IAM role associated with the EC2 instance on which your StarRocks cluster runs.
+For example, you want your StarRocks cluster to access AWS S3 and AWS Glue. In this situation, you can choose to create one IAM role (for example, `s3_assumed_role`), and attach the policy for accessing AWS S3 and the policy for accessing AWS Glue both to that role. Alternatively, you can choose to create two different IAM roles (for example, `s3_assumed_role` and `glue_assumed_role`), and attach these policies to the two different roles respectively (that is, attach the policy for accessing AWS S3 to `s3_assumed_role` and the policy for accessing AWS Glue to `glue_assumed_role`).
+
+The IAM roles you create will be assumed by the EC2 instance role of the StarRocks cluster to access the specified AWS resources.
+
+This section assumes that you have created only one assumed role, `s3_assumed_role`, and have added the policy for accessing AWS S3 and the policy for accessing AWS Glue both to that role.
 
 #### Configure a trust relationship
 
-First, edit the trust relationship as shown below to your assumed role `s3_role_test`:
+Configure your assumed role as follows:
 
-> **NOTICE**
->
-> Remember to replace `<cluster_EC2_iam_role_ARN>` with the ARN of the IAM role associated with the EC2 instance on which your StarRocks cluster runs.
+1. Sign in to the [AWS IAM console](https://us-east-1.console.aws.amazon.com/iamv2/home#/home).
+2. In the left-side navigation pane, choose **Access management** > **Roles**.
+3. Find the assumed role (`s3_assumed_role`) and click its name.
+4. On the role's details page, click the **Trust relationships** tab, and on the **Trust relationships** tab click **Edit trust policy**.
+5. On the **Edit trust policy** page, delete the existing JSON policy document, and paste the following IAM policy, in which you must replace `<cluster_EC2_iam_role_ARN>` with the EC2 instance role's ARN you have obtained above. Then, click **Update policy**.
 
-```JSON
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Principal": {
-                "AWS": "<cluster_EC2_iam_role_ARN>"
-            },
-            "Action": "sts:AssumeRole"
-        }
-    ]
-}
-```
+   ```JSON
+   {
+       "Version": "2012-10-17",
+       "Statement": [
+           {
+               "Effect": "Allow",
+               "Principal": {
+                   "AWS": "<cluster_EC2_iam_role_ARN>"
+               },
+               "Action": "sts:AssumeRole"
+           }
+       ]
+   }
+   ```
 
-Then, create and attach a new IAM policy as shown below to the IAM role associated with the EC2 instance on which your StarRocks cluster runs:
+If you have created different assumed roles for accessing different AWS resources, you need to repeat the preceding steps to configure your other assumed roles. For example, you have created `s3_assumed_role` and `glue_assumed_role` for accessing AWS S3 and AWS Glue respectively. In this situation, you need to repeat the preceding steps to configure `glue_assumed_role`.
 
-> **NOTICE**
->
-> Remember to replace `<ARN of s3_role_test>` with the ARN of your assumed role `s3_role_test`. You need to replace `<ARN of glue_role_test>` with the ARN of your assumed role `glue_role_test` only when you choose AWS Glue as metastore and have created another assumed role named `glue_role_test` for AWS Glue.
+Configure your EC2 instance role as follows:
 
-```JSON
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": ["sts:AssumeRole"],
-            "Resource": [
-                "<ARN of s3_role_test>",
-                "<ARN of glue_role_test>"
-            ]
-        }
-    ]
-}
-```
+1. Sign in to the [AWS IAM console](https://us-east-1.console.aws.amazon.com/iamv2/home#/home).
+2. In the left-side navigation pane, choose **Access management** > **Roles**.
+3. Find the EC2 instance role and click its name.
+4. In the **Permissions policies** section of the role's details page, click **Add permissions** and choose **Create inline policy**.
+5. In the **Specify permissions** step, click the **JSON** tab, delete the existing JSON policy document, and paste the following IAM policy, in which you must replace `<s3_assumed_role_ARN>` with the ARN of the assumed role `s3_assumed_role`. Then, click **Review policy**.
 
-### IAM user-based authentication
+   ```JSON
+   {
+       "Version": "2012-10-17",
+       "Statement": [
+           {
+               "Effect": "Allow",
+               "Action": ["sts:AssumeRole"],
+               "Resource": [
+                   "<s3_assumed_role_ARN>"
+               ]
+           }
+       ]
+   }
+   ```
 
-You need to create an IAM user and attach the policy provided in the "[Access AWS S3](../integrations/authenticate_to_aws_resources.md#access-aws-s3)" or "[Access AWS Glue](../integrations/authenticate_to_aws_resources.md#access-aws-glue)" section of this topic to it.
+   If you have created different assumed roles for accessing different AWS resources, you need to fill the ARNs of all these assumed roles in the **Resource** element of the preceding IAM policy and separate them with a comma (,). For example, you have created`s3_assumed_role` and `glue_assumed_role` for accessing AWS S3 and AWS Glue respectively. In this situation, you need to fill the ARN of `s3_assumed_role` and the ARN of `glue_assumed_role` in the **Resource** element by using the following format: `"<s3_assumed_role_ARN>","<glue_assumed_role_ARN>"`.
+
+6. In the **Review Policy** step, enter a policy name and click **Create policy**.
+
+### Preparation for IAM user-based authentication
+
+Create an IAM user. See [Creating an IAM user in your AWS account](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_create.html).
+
+Then, attach the [IAM policies](../reference/aws_iam_policies.md) for accessing the required AWS resources to the IAM user you create.
 
 ## Comparison between authentication methods
 
@@ -155,9 +126,9 @@ The following figure provides a high-level explanation of the differences in mec
 
 In various scenarios in which StarRocks needs to integrate with AWS S3, for example, when you create external catalogs or file external tables or when you ingest, back up, or restore data from AWS S3, configure the authentication parameters for accessing AWS S3 as follows:
 
-- If you use the instance profile-based authentication method to access AWS S3, set `aws.s3.use_instance_profile` to `true`.
-- If you use the assumed role-based authentication method to access AWS S3, set `aws.s3.use_instance_profile` to `true` and configure `aws.s3.iam_role_arn` as the assumed role's ARN that you use to access AWS S3.
-- If you use the IAM user-based authentication method to access AWS S3, set `aws.s3.use_instance_profile` to `false` and configure `aws.s3.access_key` and `aws.s3.secret_key` as the access key and secret key of your AWS IAM user.
+- For instance profile-based authentication, set `aws.s3.use_instance_profile` to `true`.
+- For assumed role-based authentication, set `aws.s3.use_instance_profile` to `true` and configure `aws.s3.iam_role_arn` as the assumed role's ARN that you use to access AWS S3 (for example, the ARN of the assumed role `s3_assumed_role` you have created above).
+- For IAM user-based authentication, set `aws.s3.use_instance_profile` to `false` and configure `aws.s3.access_key` and `aws.s3.secret_key` as the access key and secret key of your AWS IAM user.
 
 The following table describes the parameters.
 
@@ -172,9 +143,9 @@ The following table describes the parameters.
 
 In various scenarios in which StarRocks needs to integrate with AWS Glue, for example, when you create external catalogs, configure the authentication parameters for accessing AWS Glue as follows:
 
-- If you use the instance profile-based authentication method to access AWS Glue, set `aws.glue.use_instance_profile` to `true`.
-- If you use the assumed role-based authentication method to access AWS Glue, set `aws.glue.use_instance_profile` to `true` and configure `aws.glue.iam_role_arn` as the assumed role's ARN that you use to access AWS Glue.
-- If you use the IAM user-based authentication method to access AWS Glue, set `aws.glue.use_instance_profile` to `false` and configure `aws.glue.access_key` and `aws.glue.secret_key` as the access key and secret key of your AWS IAM user.
+- For instance profile-based authentication, set `aws.glue.use_instance_profile` to `true`.
+- For assumed role-based authentication, set `aws.glue.use_instance_profile` to `true` and configure `aws.glue.iam_role_arn` as the assumed role's ARN that you use to access AWS Glue (for example, the ARN of the assumed role `glue_assumed_role` you have created above).
+- For IAM user-based authentication, set `aws.glue.use_instance_profile` to `false` and configure `aws.glue.access_key` and `aws.glue.secret_key` as the access key and secret key of your AWS IAM user.
 
 The following table describes the parameters.
 
@@ -243,7 +214,7 @@ The following examples create a Hive catalog named `hive_catalog_hms` or `hive_c
   (
       "type" = "hive",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/s3_assumed_role",
       "aws.s3.region" = "us-west-2",
       "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
   );
@@ -257,11 +228,11 @@ The following examples create a Hive catalog named `hive_catalog_hms` or `hive_c
   (
       "type" = "hive",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/s3_assumed_role",
       "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
-      "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
+      "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/glue_assumed_role",
       "aws.glue.region" = "us-west-2"
   );
   ```
@@ -344,7 +315,7 @@ PROPERTIES
     "path" = "s3://starrocks-test/",
     "format" = "ORC",
     "aws.s3.use_instance_profile" = "true",
-    "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+    "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/s3_assumed_role",
     "aws.s3.region" = "us-west-2"
 );
 ```
@@ -375,7 +346,7 @@ PROPERTIES
 
 You can use LOAD LABEL to load data from AWS S3.
 
-The following examples load the data from all Parquet data files stored in the `s3a://test-bucket/test_brokerload_ingestion` path into the `test_ingestion_2` table in an existing database named `test_s3_db`. For detailed syntax and parameters, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+The following examples load the data from all Parquet data files stored in the `s3a://test-bucket/test_brokerload_ingestion` path into the `test_ingestion_2` table in an existing database named `test_s3_db`. For detailed syntax and parameters, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 #### Instance profile-based authentication
 
@@ -413,7 +384,7 @@ LOAD LABEL test_s3_db.test_credential_instanceprofile_7
 WITH BROKER
 (
     "aws.s3.use_instance_profile" = "true",
-    "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+    "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/s3_assumed_role",
     "aws.s3.region" = "us-west-1"
 )
 PROPERTIES

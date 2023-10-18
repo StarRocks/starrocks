@@ -36,6 +36,7 @@ package com.starrocks.qe;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.cluster.ClusterNamespace;
@@ -52,7 +53,6 @@ import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
@@ -133,14 +133,19 @@ public class ConnectContext {
     protected String currentDb = "";
     // warehouse
     protected String currentWarehouse;
-
-    // username@host of current login user
+    // `qualifiedUser` is the user used when the user establishes connection and authentication.
+    // It is the real user used for this connection.
+    // Different from the `currentUserIdentity` authentication user of execute as,
+    // `qualifiedUser` should not be changed during the entire session.
     protected String qualifiedUser;
-    // username@host combination for the StarRocks account
-    // that the server used to authenticate the current client.
-    // In other word, currentUserIdentity is the entry that matched in StarRocks auth table.
-    // This account determines user's access privileges.
+    // `currentUserIdentity` is the user used for authorization. Under normal circumstances,
+    // `currentUserIdentity` and `qualifiedUser` are the same user,
+    // but currentUserIdentity may be modified by execute as statement.
     protected UserIdentity currentUserIdentity;
+    // currentRoleIds is the role that has taken effect in the current session.
+    // Note that this set is not all roles belonging to the current user.
+    // `execute as` will modify currentRoleIds and assign the active role of the impersonate user to currentRoleIds.
+    // For specific logic, please refer to setCurrentRoleIds.
     protected Set<Long> currentRoleIds = new HashSet<>();
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
@@ -195,7 +200,6 @@ public class ConnectContext {
     // The related db ids for current sql
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
 
-    protected PlannerProfile plannerProfile;
     protected StatementBase.ExplainLevel explainLevel;
 
     protected TWorkGroup resourceGroup;
@@ -207,6 +211,8 @@ public class ConnectContext {
     private ConnectContext parent;
 
     private boolean relationAliasCaseInsensitive = false;
+
+    private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
     public StmtExecutor getExecutor() {
         return executor;
@@ -243,7 +249,6 @@ public class ConnectContext {
         userVariables = new HashMap<>();
         command = MysqlCommand.COM_SLEEP;
         queryDetail = null;
-        plannerProfile = new PlannerProfile();
 
         mysqlChannel = new MysqlChannel(channel);
         if (channel != null) {
@@ -255,6 +260,18 @@ public class ConnectContext {
         if (shouldDumpQuery()) {
             this.dumpInfo = new QueryDumpInfo(this);
         }
+    }
+
+    public void putPreparedStmt(String stmtName, PrepareStmtContext ctx) {
+        this.preparedStmtCtxs.put(stmtName, ctx);
+    }
+
+    public PrepareStmtContext getPreparedStmt(String stmtName) {
+        return this.preparedStmtCtxs.get(stmtName);
+    }
+
+    public void removePreparedStmt(String stmtName) {
+        this.preparedStmtCtxs.remove(stmtName);
     }
 
     public long getStmtId() {
@@ -345,7 +362,7 @@ public class ConnectContext {
 
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
         VariableMgr.setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
-        if (!setVar.getType().equals(SetType.GLOBAL) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
+        if (!SetType.GLOBAL.equals(setVar.getType()) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
     }
@@ -584,10 +601,6 @@ public class ConnectContext {
         this.currentSqlDbIds = currentSqlDbIds;
     }
 
-    public PlannerProfile getPlannerProfile() {
-        return plannerProfile;
-    }
-
     public StatementBase.ExplainLevel getExplainLevel() {
         return explainLevel;
     }
@@ -668,7 +681,7 @@ public class ConnectContext {
     }
 
     // kill operation with no protect.
-    public void kill(boolean killConnection) {
+    public void kill(boolean killConnection, String cancelledMessage) {
         LOG.warn("kill query, {}, kill connection: {}",
                 getMysqlChannel().getRemoteHostPortString(), killConnection);
         // Now, cancel running process.
@@ -677,7 +690,7 @@ public class ConnectContext {
             isKilled = true;
         }
         if (executorRef != null) {
-            executorRef.cancel();
+            executorRef.cancel(cancelledMessage);
         }
         if (killConnection) {
             int times = 0;
@@ -728,7 +741,7 @@ public class ConnectContext {
             }
         }
         if (killFlag) {
-            kill(killConnection);
+            kill(killConnection, "query timeout");
         }
     }
 
@@ -834,7 +847,6 @@ public class ConnectContext {
             }
             row.add(stmt);
             row.add(Boolean.toString(isPending));
-            row.add(currentWarehouse);
             return row;
         }
     }

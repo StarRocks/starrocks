@@ -18,6 +18,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/rowset.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_meta_manager.h"
 
@@ -29,6 +30,10 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
         LOG(WARNING) << "tablet: " << tablet->id() << " is not primary key tablet";
         return Status::NotSupported("Only PrimaryKey table is supported to use persistent index");
     }
+    // persistent index' minor compaction is a new strategy to decrease the IO amplification.
+    // More detail: https://github.com/StarRocks/starrocks/issues/27581.
+    // disable minor_compaction in cloud native table for now, will enable it later
+    config::enable_pindex_minor_compaction = false;
 
     MonotonicStopWatch timer;
     timer.start();
@@ -80,8 +85,9 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
                           << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
                           << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
                           << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
-                          << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " memory: " << memory_usage()
-                          << " status: " << status.to_string() << " time:" << timer.elapsed_time() / 1000000 << "ms";
+                          << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
+                          << " memory: " << memory_usage() << " status: " << status.to_string()
+                          << " time:" << timer.elapsed_time() / 1000000 << "ms";
                 return status;
             } else {
                 LOG(WARNING) << "load persistent index failed, tablet: " << tablet->id() << ", status: " << status;
@@ -207,14 +213,12 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
 
     size_t total_data_size = 0;
     size_t total_segments = 0;
-    size_t total_rows = 0;
 
     // NOTICE: primary index will be builded by segment files in metadata, and delvecs.
     // The delvecs we need are stored in delvec file by base_version and current MetaFileBuilder's cache.
     for (auto& rowset : *rowsets) {
         total_data_size += rowset->data_size();
         total_segments += rowset->num_segments();
-        total_rows += rowset->num_rows();
 
         auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
         if (!res.ok()) {
@@ -291,18 +295,18 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
         return status;
     }
 
-    RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version,
-                                               _l2_versions.size() > 0 ? _l2_versions[0] : EditVersion()));
+    RETURN_IF_ERROR(_delete_expired_index_file(
+            _version, _l1_version,
+            _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
     _dump_snapshot = false;
     _flushed = false;
-    _primary_index->update_data_version(base_version);
 
     LOG(INFO) << "build persistent index finish tablet: " << tablet->id() << " version:" << base_version
               << " #rowset:" << rowsets->size() << " #segment:" << total_segments << " data_size:" << total_data_size
               << " size: " << _size << " l0_size: " << _l0->size() << " l0_capacity:" << _l0->capacity()
               << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
-              << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " memory: " << memory_usage()
-              << " time: " << timer.elapsed_time() / 1000000 << "ms";
+              << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
+              << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
     return Status::OK();
 }
 

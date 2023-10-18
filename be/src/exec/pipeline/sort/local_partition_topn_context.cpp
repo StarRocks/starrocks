@@ -68,10 +68,10 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
                         _topn_type, ChunksSorterTopn::tunning_buffered_chunks(_partition_limit)));
             },
             [this, state](size_t partition_idx, const ChunkPtr& chunk) {
-                _chunks_sorters[partition_idx]->update(state, chunk);
+                (void)_chunks_sorters[partition_idx]->update(state, chunk);
             });
     if (_chunks_partitioner->is_passthrough()) {
-        transfer_all_chunks_from_partitioner_to_sorters(state);
+        RETURN_IF_ERROR(transfer_all_chunks_from_partitioner_to_sorters(state));
     }
     return st;
 }
@@ -85,6 +85,7 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
         return Status::OK();
     }
 
+    _partition_num = _chunks_partitioner->num_partitions();
     RETURN_IF_ERROR(
             _chunks_partitioner->consume_from_hash_map([this, state](int32_t partition_idx, const ChunkPtr& chunk) {
                 _chunks_sorters[partition_idx]->update(state, chunk);

@@ -32,9 +32,7 @@ static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page)
     DelvecCacheKeyPB cache_key_pb;
     cache_key_pb.set_id(tablet_id);
     cache_key_pb.mutable_delvec_page()->CopyFrom(page);
-    std::string cache_key;
-    cache_key_pb.SerializeToString(&cache_key);
-    return cache_key;
+    return cache_key_pb.SerializeAsString();
 }
 
 MetaFileBuilder::MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata)
@@ -56,9 +54,15 @@ void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment
     }
 }
 
-void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::vector<std::string>& orphan_files) {
+void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
+                                    const std::map<int, std::string>& replace_segments,
+                                    const std::vector<std::string>& orphan_files) {
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(op_write.rowset());
+    for (const auto& replace_seg : replace_segments) {
+        // when handle partial update, replace old segments with new rewrite segments
+        rowset->set_segments(replace_seg.first, replace_seg.second);
+    }
     rowset->set_id(_tablet_meta->next_rowset_id());
     // if rowset don't contain segment files, still inc next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
@@ -69,7 +73,6 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
     for (const auto& del_file : op_write.dels()) {
         _trash_files->push_back(del_file);
     }
-    _has_update_index = true;
 }
 
 void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction) {
@@ -121,8 +124,6 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         rowset->set_id(_tablet_meta->next_rowset_id());
         _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + rowset->segments_size());
     }
-
-    _has_update_index = true;
 
     VLOG(2) << fmt::format("MetaFileBuilder apply_opcompaction, id:{} input range:{} delvec del cnt:{} output:{}",
                            _tablet_meta->id(), del_range_ss.str(), delvec_erase_cnt,
@@ -198,6 +199,8 @@ Status MetaFileBuilder::finalize(int64_t txn_id) {
     RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
     _update_mgr->update_primary_index_data_version(_tablet, version);
     _fill_delvec_cache();
+    // Set _has_finalized at last, and if failure happens before this, we need to clear pk index
+    // and retry publish later.
     _has_finalized = true;
     return Status::OK();
 }

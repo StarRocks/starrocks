@@ -139,6 +139,9 @@ public class ColumnFilterConverter {
 
     public static void convertColumnFilterWithoutExpr(ScalarOperator predicate, Map<String,
             PartitionColumnFilter> result, Table table) {
+        if (predicate == null) {
+            return;
+        }
         if (predicate.getChildren().size() <= 0) {
             return;
         }
@@ -156,7 +159,7 @@ public class ColumnFilterConverter {
 
     public static void convertColumnFilter(ScalarOperator predicate, Map<String, PartitionColumnFilter> result,
                                            Table table) {
-        if (predicate.getChildren().size() <= 0) {
+        if (CollectionUtils.isEmpty(predicate.getChildren())) {
             return;
         }
 
@@ -188,7 +191,9 @@ public class ColumnFilterConverter {
         Expr predicateExpr = firstPartitionExpr.clone();
 
         // only support binary predicate
-        if (predicate instanceof BinaryPredicateOperator && predicate.getChildren().size() == 2) {
+        if (predicate instanceof BinaryPredicateOperator
+                && predicate.getChild(0) instanceof ColumnRefOperator
+                && predicate.getChild(1) instanceof ConstantOperator) {
             List<ScalarOperator> argument = predicate.getChildren();
             ColumnRefOperator columnRef = (ColumnRefOperator) argument.get(0);
             ConstantOperator constant = (ConstantOperator) argument.get(1);

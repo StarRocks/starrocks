@@ -32,7 +32,6 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InsertStmt;
@@ -115,10 +114,10 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
         LOG.debug("statistics collect sql : " + sql);
         StatisticExecutor executor = new StatisticExecutor();
-        SessionVariable sessionVariable = context.getSessionVariable();
-        // Full table scan is performed for full statistics collecting. In this case, 
-        // we do not need to use pagecache.
-        sessionVariable.setUsePageCache(false);
+
+        // set default session variables for stats context
+        setDefaultSessionVariable(context);
+
         List<TStatisticData> dataList = executor.executeStatisticDQL(context, sql);
 
         String tableName = StringEscapeUtils.escapeSql(db.getOriginName() + "." + table.getName());

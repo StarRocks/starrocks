@@ -56,6 +56,7 @@
 #include "storage/kv_store.h"
 #include "storage/olap_define.h"
 #include "storage/rocksdb_status_adapter.h"
+#include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
 #include "util/coding.h"
@@ -1458,15 +1459,42 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
     };
     RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_tabletmeta_func));
     stats->total_count += stats->tablet_count;
-    stats->total_count += stats->update_tablet_count;
     stats->total_meta_bytes += stats->tablet_meta_bytes;
+    stats->total_count += stats->update_tablet_count;
+    stats->total_meta_bytes += stats->update_tablet_meta_bytes;
 
-    auto traverse_rst_func = [&](std::string_view key, std::string_view value) -> bool {
-        stats->rowset_count++;
-        stats->rowset_meta_bytes += value.size();
-        return true;
-    };
-    RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, "rst_", traverse_rst_func));
+    RowsetMetaManager::traverse_rowset_metas(
+            meta, [&](const TabletUid& tablet_uid, const RowsetId& rowset_id, std::string_view value) -> bool {
+                stats->rowset_count++;
+                stats->rowset_meta_bytes += value.size();
+                if (detail) {
+                    bool parsed = false;
+                    auto rowset_meta = std::make_shared<RowsetMeta>(value, &parsed);
+                    if (!parsed) {
+                        LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
+                        return true;
+                    }
+                    if (rowset_meta->tablet_uid() != tablet_uid) {
+                        LOG(WARNING) << "tablet uid is not equal, skip the rowset"
+                                     << ", rowset_id=" << rowset_meta->rowset_id()
+                                     << ", in_put_tablet_uid=" << tablet_uid
+                                     << ", tablet_uid in rowset meta=" << rowset_meta->tablet_uid();
+                        return true;
+                    }
+                    auto itr = stats->tablets.find(rowset_meta->tablet_id());
+                    if (itr == stats->tablets.end()) {
+                        // reduce print warning log here, cause there may be many orphan rowsets
+                        stats->error_count++;
+                        LOG_EVERY_SECOND(WARNING)
+                                << "rst_ rowset without tablet tablet_id:" << rowset_meta->tablet_id()
+                                << " rowset_id:" << rowset_meta->rowset_id() << " version:" << rowset_meta->version();
+                    } else {
+                        itr->second.rowset_count++;
+                        itr->second.rowset_meta_bytes += value.size();
+                    }
+                }
+                return true;
+            });
     stats->total_count += stats->rowset_count;
     stats->total_meta_bytes += stats->rowset_meta_bytes;
 
@@ -1484,6 +1512,7 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
             auto itr = stats->tablets.find(tid);
             if (itr == stats->tablets.end()) {
                 LOG(WARNING) << "tablet_meta_log without tablet tablet_id:" << tid << " logid:" << logid;
+                stats->error_count++;
             } else {
                 itr->second.log_count++;
                 itr->second.log_meta_bytes += value.size();
@@ -1505,7 +1534,8 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
         if (detail) {
             auto itr = stats->tablets.find(tid);
             if (itr == stats->tablets.end()) {
-                LOG(WARNING) << "tablet_delvec without tablet tablet_id:" << tid;
+                LOG(WARNING) << "tablet_delvec without tablet tablet_id:" << tid << " rssid:" << rssid
+                             << " version:" << version;
                 stats->error_count++;
             } else {
                 itr->second.delvec_count++;
@@ -1556,7 +1586,7 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
         if (detail) {
             auto itr = stats->tablets.find(tid);
             if (itr == stats->tablets.end()) {
-                LOG(WARNING) << "tablet_rowset without tablet tablet_id:" << tid;
+                LOG(WARNING) << "pending_rowset without tablet tablet_id:" << tid << " version:" << version;
                 stats->error_count++;
             } else {
                 itr->second.pending_rowset_count++;
@@ -1627,7 +1657,7 @@ Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id) {
     string prefix = strings::Substitute("$0$1_", HEADER_PREFIX, tablet_id);
     RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, prefix, traverse_tabletmeta_func));
     if (is_primary) {
-        remove_primary_key_meta(store, &batch, tablet_id);
+        (void)remove_primary_key_meta(store, &batch, tablet_id);
     }
     return meta->write_batch(&batch);
 }
@@ -1650,13 +1680,13 @@ Status TabletMetaManager::remove_table_meta(DataDir* store, TTableId table_id) {
                 if (!st.ok()) {
                     LOG(WARNING) << "batch.Delete failed, key:" << key;
                 } else if (is_primary) {
-                    remove_primary_key_meta(store, &batch, tablet_meta_pb.tablet_id());
+                    (void)remove_primary_key_meta(store, &batch, tablet_meta_pb.tablet_id());
                 }
             }
         }
         return true;
     };
-    meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_tabletmeta_func);
+    RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_tabletmeta_func));
     return meta->write_batch(&batch);
 }
 
@@ -1677,7 +1707,7 @@ Status TabletMetaManager::remove_table_persistent_index_meta(DataDir* store, TTa
         }
         return true;
     };
-    meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_tabletmeta_func);
+    RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_tabletmeta_func));
     return meta->write_batch(&batch);
 }
 

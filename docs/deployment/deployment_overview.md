@@ -28,8 +28,8 @@ The deployment of StarRocks generally follows the steps outlined here:
 
 5. Deploy StarRocks.
 
-   - If you want to deploy a shared-data StarRocks cluster, which features a disaggregated storage and compute architecture, see [Deploy and use shared-data StarRocks](../deployment/deploy_shared_data.md) for instructions.
-   - If you want to deploy a classic StarRocks cluster, which uses local storage, you have the following options:
+   - If you want to deploy a shared-data StarRocks cluster, which features a disaggregated storage and compute architecture, see [Deploy and use shared-data StarRocks](../deployment/shared_data/s3.md) for instructions.
+   - If you want to deploy a shared-nothing StarRocks cluster, which uses local storage, you have the following options:
 
      - [Deploy StarRocks manually](../deployment/deploy_manually.md).
      - [Deploy StarRocks on Kubernetes with operator](../deployment/sr_operator.md).

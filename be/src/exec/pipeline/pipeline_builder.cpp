@@ -244,7 +244,7 @@ void PipelineBuilderContext::interpolate_spill_process(size_t plan_node_id,
                                                        const SpillProcessChannelFactoryPtr& spill_channel_factory,
                                                        size_t dop) {
     OpFactories spill_process_operators;
-    auto spill_process_factory = std::make_shared<SpillProcessOperatorFactory>(next_operator_id(), "spill-process",
+    auto spill_process_factory = std::make_shared<SpillProcessOperatorFactory>(next_operator_id(), "spill_process",
                                                                                plan_node_id, spill_channel_factory);
     spill_process_factory->set_degree_of_parallelism(dop);
     spill_process_operators.emplace_back(std::move(spill_process_factory));

@@ -34,7 +34,7 @@ Returns a value of the ARRAY type, optionally sorted by `col0`.
 
 Take the following data table as an example:
 
-```Plain%20Text
+```plaintext
 mysql> select * from t;
 +------+------+------+
 | a    | name | pv   |
@@ -49,7 +49,7 @@ mysql> select * from t;
 
 Example 1: Group the values in column `a` and aggregate values in column `pv` into an array by ordering `a` by `name`.
 
-```Plain%20Text
+```plaintext
 mysql> select a, array_agg(pv order by name nulls first) from t group by a;
 +------+---------------------------------+
 | a    | array_agg(pv ORDER BY name ASC) |
@@ -73,7 +73,7 @@ mysql> select a, array_agg(pv) from t group by a;
 
 Example 2: Aggregate values in column `pv` into an array with ordering by `name`.
 
-```Plain%20Text
+```plaintext
 mysql> select array_agg(pv order by name desc nulls last) from t;
 +----------------------------------+
 | array_agg(pv ORDER BY name DESC) |
@@ -94,7 +94,7 @@ mysql> select array_agg(pv) from t;
 
 Example 3: Aggregate values in column `pv` using the WHERE clause. If no data in `pv` meets the filter condition, a `NULL` value is returned.
 
-```Plain%20Text
+```plaintext
 mysql> select array_agg(pv order by name desc nulls last) from t where a < 0;
 +----------------------------------+
 | array_agg(pv ORDER BY name DESC) |

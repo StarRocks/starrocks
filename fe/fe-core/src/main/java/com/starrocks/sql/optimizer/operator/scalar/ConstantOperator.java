@@ -186,6 +186,26 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return new ConstantOperator(value, binaryType);
     }
 
+    public static ConstantOperator createExampleValueByType(Type type) {
+        if (type.isTinyint()) {
+            return createTinyInt((byte) 1);
+        } else if (type.isSmallint()) {
+            return createSmallInt((short) 1);
+        } else if (type.isInt()) {
+            return createInt(1);
+        } else if (type.isBigint()) {
+            return createBigint(1L);
+        } else if (type.isLargeint()) {
+            return createLargeInt(new BigInteger("1"));
+        } else if (type.isDate()) {
+            return createDate(LocalDateTime.of(2000, 1, 1, 00, 00, 00));
+        } else if (type.isDatetime()) {
+            return createDatetime(LocalDateTime.of(2000, 1, 1, 00, 00, 00));
+        } else {
+            throw new IllegalArgumentException("unsupported type: " + type);
+        }
+    }
+
     public boolean isNull() {
         return isNull;
     }
@@ -330,7 +350,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             BigDecimal decimal = BigDecimal.valueOf(val);
             return decimal.stripTrailingZeros().toPlainString();
         } else if (type.isDecimalV2()) {
-            return String.valueOf(value);
+            // remove trailing zero and use plain string, keep same with BE
+            return ((BigDecimal) value).stripTrailingZeros().toPlainString();
         } else if (type.isDecimalOfAnyVersion()) {
             // align zero, keep same with BE
             int scale = ((ScalarType) type).getScalarScale();
@@ -463,14 +484,37 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         } else if (desc.isSmallint()) {
             return ConstantOperator.createSmallInt(Short.parseShort(childString.trim()));
         } else if (desc.isInt()) {
+            if (Type.DATE.equals(type)) {
+                childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+            }
             return ConstantOperator.createInt(Integer.parseInt(childString.trim()));
         } else if (desc.isBigint()) {
+            if (Type.DATE.equals(type)) {
+                childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+            } else if (Type.DATETIME.equals(type)) {
+                childString = DateUtils.convertDateTimeFormaterToSecondFormater(childString);
+            }
             return ConstantOperator.createBigint(Long.parseLong(childString.trim()));
         } else if (desc.isLargeint()) {
+            if (Type.DATE.equals(type)) {
+                childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+            } else if (Type.DATETIME.equals(type)) {
+                childString = DateUtils.convertDateTimeFormaterToSecondFormater(childString);
+            }
             return ConstantOperator.createLargeInt(new BigInteger(childString.trim()));
         } else if (desc.isFloat()) {
+            if (Type.DATE.equals(type)) {
+                childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+            } else if (Type.DATETIME.equals(type)) {
+                childString = DateUtils.convertDateTimeFormaterToSecondFormater(childString);
+            }
             return ConstantOperator.createFloat(Double.parseDouble(childString));
         } else if (desc.isDouble()) {
+            if (Type.DATE.equals(type)) {
+                childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+            } else if (Type.DATETIME.equals(type)) {
+                childString = DateUtils.convertDateTimeFormaterToSecondFormater(childString);
+            }
             return ConstantOperator.createDouble(Double.parseDouble(childString));
         } else if (desc.isDate() || desc.isDatetime()) {
             String dateStr = StringUtils.strip(childString, "\r\n\t ");
@@ -562,6 +606,26 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             return Optional.empty();
         } else {
             return Optional.of(creator.apply(func.apply(value)));
+        }
+    }
+
+    public long distance(ConstantOperator other) {
+        if (type.isTinyint()) {
+            return other.getTinyInt() - getTinyInt();
+        } else if (type.isSmallint()) {
+            return other.getSmallint() - getSmallint();
+        } else if (type.isInt()) {
+            return other.getInt() - getInt();
+        } else if (type.isBigint()) {
+            return other.getBigint() - getBigint();
+        } else if (type.isLargeint()) {
+            return other.getLargeInt().subtract(getLargeInt()).longValue();
+        } else if (type.isDatetime()) {
+            return ChronoUnit.SECONDS.between(getDatetime(), other.getDatetime());
+        } else if (type.isDateType()) {
+            return ChronoUnit.DAYS.between(getDatetime(), other.getDatetime());
+        } else {
+            throw UnsupportedException.unsupportedException("unsupported distince for type:" + type);
         }
     }
 }

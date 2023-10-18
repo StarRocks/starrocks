@@ -42,8 +42,8 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TBackend;
@@ -102,6 +102,8 @@ public class AgentTaskTest {
     private AgentTask modifyEnablePersistentIndexTask1;
     private AgentTask modifyEnablePersistentIndexTask2;
     private AgentTask modifyInMemoryTask;
+    private AgentTask modifyPrimaryIndexCacheExpireSecTask1;
+    private AgentTask modifyPrimaryIndexCacheExpireSecTask2;
 
     @Before
     public void setUp() throws AnalysisException {
@@ -125,7 +127,7 @@ public class AgentTaskTest {
                 version, KeysType.AGG_KEYS,
                 storageType, TStorageMedium.SSD,
                 columns, null, 0, latch, null,
-                false, false, TTabletType.TABLET_TYPE_DISK, TCompressionType.LZ4_FRAME);
+                false, false, 0, TTabletType.TABLET_TYPE_DISK, TCompressionType.LZ4_FRAME);
 
         // drop
         dropTask = new DropReplicaTask(backendId1, tabletId1, schemaHash1, false);
@@ -154,6 +156,15 @@ public class AgentTaskTest {
                         countDownLatch, TTabletMetaType.ENABLE_PERSISTENT_INDEX);
         modifyInMemoryTask =
                 new UpdateTabletMetaInfoTask(backendId1, tabletToMeta, TTabletMetaType.INMEMORY);
+
+        List<Triple<Long, Integer, Integer>> tabletToMeta2 = Lists.newArrayList();
+        tabletToMeta2.add(new ImmutableTriple<>(tabletId1, schemaHash1, 7200));
+        modifyPrimaryIndexCacheExpireSecTask1 =
+                new UpdateTabletMetaInfoTask(backendId1, tabletToMeta2, TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+        MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> countDownLatch2 = new MarkedCountDownLatch<>(1);
+        modifyPrimaryIndexCacheExpireSecTask2 =
+                new UpdateTabletMetaInfoTask(backendId1, tabletIdWithSchemaHash, true,
+                        countDownLatch2, TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
     }
 
     @Test
@@ -221,6 +232,19 @@ public class AgentTaskTest {
         Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request9.getTask_type());
         Assert.assertEquals(modifyInMemoryTask.getSignature(), request9.getSignature());
         Assert.assertNotNull(request9.getUpdate_tablet_meta_info_req());
+
+        // modify primary index cache
+        TAgentTaskRequest request10 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, 
+                modifyPrimaryIndexCacheExpireSecTask1);
+        Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request10.getTask_type());
+        Assert.assertEquals(modifyPrimaryIndexCacheExpireSecTask1.getSignature(), request10.getSignature());
+        Assert.assertNotNull(request10.getUpdate_tablet_meta_info_req());
+
+        TAgentTaskRequest request11 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, 
+                modifyPrimaryIndexCacheExpireSecTask2);
+        Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request11.getTask_type());
+        Assert.assertEquals(modifyPrimaryIndexCacheExpireSecTask2.getSignature(), request11.getSignature());
+        Assert.assertNotNull(request11.getUpdate_tablet_meta_info_req());
     }
 
     @Test

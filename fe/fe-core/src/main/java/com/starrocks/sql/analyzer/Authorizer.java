@@ -23,18 +23,21 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.NativeAccessControl;
+import com.starrocks.privilege.NativeAccessController;
+import com.starrocks.privilege.ObjectType;
+import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessControl;
+import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 
+import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 public class Authorizer {
@@ -42,9 +45,9 @@ public class Authorizer {
 
     static {
         if (Config.access_control.equals("ranger")) {
-            INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessControl());
+            INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessController());
         } else {
-            INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitor(), new NativeAccessControl());
+            INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitor(), new NativeAccessController());
         }
     }
 
@@ -56,81 +59,123 @@ public class Authorizer {
         getInstance().getPrivilegeCheckerVisitor().check(statement, context);
     }
 
-    public static void checkSystemAction(UserIdentity userIdentity, Set<Long> roleIds, PrivilegeType privilegeType) {
+    public static void checkSystemAction(UserIdentity currentUser, Set<Long> roleIds, PrivilegeType privilegeType)
+            throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                .checkSystemAction(userIdentity, roleIds, privilegeType);
+                .checkSystemAction(currentUser, roleIds, privilegeType);
+    }
+
+    public static void checkUserAction(UserIdentity currentUser, Set<Long> roleIds, UserIdentity impersonateUser,
+                                       PrivilegeType privilegeType) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkUserAction(currentUser, roleIds, impersonateUser, privilegeType);
     }
 
     public static void checkCatalogAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName,
-                                          PrivilegeType privilegeType) {
+                                          PrivilegeType privilegeType) throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkCatalogAction(currentUser, roleIds, catalogName, privilegeType);
     }
 
-    public static void checkAnyActionOnCatalog(UserIdentity currentUser, Set<Long> roleIds, String catalogName) {
-        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                .checkAnyActionOnCatalog(currentUser, roleIds, catalogName);
+    public static void checkAnyActionOnCatalog(UserIdentity currentUser, Set<Long> roleIds, String catalogName)
+            throws AccessDeniedException {
+        //Any user has an implicit usage permission on the internal catalog
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                    .checkAnyActionOnCatalog(currentUser, roleIds, catalogName);
+        }
     }
 
     public static void checkDbAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db,
-                                     PrivilegeType privilegeType) {
+                                     PrivilegeType privilegeType) throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(catalogName)
                 .checkDbAction(currentUser, roleIds, catalogName, db, privilegeType);
     }
 
-    public static void checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db) {
+    public static void checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db)
+            throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(catalogName).checkAnyActionOnDb(currentUser, roleIds, catalogName, db);
     }
 
-    public static void checkTableAction(UserIdentity userIdentity, Set<Long> roleIds, String db, String table,
-                                        PrivilegeType privilegeType) {
+    public static void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, String db, String table,
+                                        PrivilegeType privilegeType) throws AccessDeniedException {
+        TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db, table);
+        Optional<Table> tableObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        if (tableObj.isPresent() && !tableObj.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
+            return;
+        }
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                .checkTableAction(userIdentity, roleIds,
+                .checkTableAction(currentUser, roleIds,
                         new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db, table), privilegeType);
     }
 
-    public static void checkTableAction(UserIdentity userIdentity, Set<Long> roleIds, String catalog, String db,
-                                        String table, PrivilegeType privilegeType) {
-        getInstance().getAccessControlOrDefault(catalog).checkTableAction(userIdentity, roleIds,
+    public static void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, String catalog, String db,
+                                        String table, PrivilegeType privilegeType) throws AccessDeniedException {
+        TableName tableName = new TableName(catalog, db, table);
+        Optional<Table> tableObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        if (tableObj.isPresent() && !tableObj.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
+            return;
+        }
+        getInstance().getAccessControlOrDefault(catalog).checkTableAction(currentUser, roleIds,
                 new TableName(catalog, db, table), privilegeType);
     }
 
-    public static void checkTableAction(UserIdentity userIdentity, Set<Long> roleIds, TableName tableName,
-                                        PrivilegeType privilegeType) {
+    public static void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+                                        PrivilegeType privilegeType) throws AccessDeniedException {
+        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        if (table.isPresent() && !table.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
+            return;
+        }
         String catalog = tableName.getCatalog();
-        getInstance().getAccessControlOrDefault(catalog).checkTableAction(userIdentity, roleIds, tableName, privilegeType);
+        getInstance().getAccessControlOrDefault(catalog)
+                .checkTableAction(currentUser, roleIds, tableName, privilegeType);
     }
 
-    public static void checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, TableName tableName) {
+    public static void checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
+            throws AccessDeniedException {
         String catalog = tableName.getCatalog();
         getInstance().getAccessControlOrDefault(catalog).checkAnyActionOnTable(currentUser, roleIds, tableName);
     }
 
     public static void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
-                                       PrivilegeType privilegeType) {
+                                       PrivilegeType privilegeType) throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkViewAction(currentUser, roleIds, tableName, privilegeType);
     }
 
-    public static void checkAnyActionOnView(UserIdentity currentUser, Set<Long> roleIds, TableName tableName) {
+    public static void checkAnyActionOnView(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
+            throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkAnyActionOnView(currentUser, roleIds, tableName);
     }
 
     public static void checkMaterializedViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
-                                                   PrivilegeType privilegeType) {
+                                                   PrivilegeType privilegeType) throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkMaterializedViewAction(currentUser, roleIds, tableName, privilegeType);
     }
 
     public static void checkAnyActionOnMaterializedView(UserIdentity currentUser, Set<Long> roleIds,
-                                                        TableName tableName) {
+                                                        TableName tableName) throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkAnyActionOnMaterializedView(currentUser, roleIds, tableName);
     }
 
+    public static void checkActionOnTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+                                                    PrivilegeType privilegeType) throws AccessDeniedException {
+        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        if (table.isPresent()) {
+            doCheckTableLikeObject(currentUser, roleIds, tableName.getDb(), table.get(), privilegeType);
+        }
+    }
+
     public static void checkAnyActionOnTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
-                                                       Table tbl) {
+                                                       Table tbl) throws AccessDeniedException {
+        doCheckTableLikeObject(currentUser, roleIds, dbName, tbl, null);
+    }
+
+    private static void doCheckTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
+                                               Table tbl, PrivilegeType privilegeType) throws AccessDeniedException {
         Table.TableType type = tbl.getType();
         switch (type) {
             case OLAP:
@@ -138,6 +183,7 @@ public class Authorizer {
             case MYSQL:
             case ELASTICSEARCH:
             case HIVE:
+            case HIVE_VIEW:
             case ICEBERG:
             case HUDI:
             case JDBC:
@@ -145,48 +191,87 @@ public class Authorizer {
             case FILE:
             case SCHEMA:
             case PAIMON:
-                checkAnyActionOnTable(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+                // `privilegeType == null` meaning we don't check specified action, just any action
+                if (privilegeType == null) {
+                    checkAnyActionOnTable(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+                } else {
+                    checkTableAction(currentUser, roleIds, dbName, tbl.getName(), privilegeType);
+                }
                 break;
             case MATERIALIZED_VIEW:
             case CLOUD_NATIVE_MATERIALIZED_VIEW:
-                checkAnyActionOnMaterializedView(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+                // `privilegeType == null` meaning we don't check specified action, just any action
+                if (privilegeType == null) {
+                    checkAnyActionOnMaterializedView(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+                } else {
+                    checkMaterializedViewAction(currentUser, roleIds, new TableName(dbName, tbl.getName()),
+                            privilegeType);
+                }
                 break;
             case VIEW:
-                checkAnyActionOnView(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+                // `privilegeType == null` meaning we don't check specified action, just any action
+                if (privilegeType == null) {
+                    checkAnyActionOnView(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+                } else {
+                    checkViewAction(currentUser, roleIds, new TableName(dbName, tbl.getName()), privilegeType);
+                }
                 break;
             default:
-                throw new AccessDeniedException(
-                        ErrorReport.reportCommon(null, ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                                "ANY ON TABLE/VIEW/MV OBJECT"));
+                throw new AccessDeniedException();
+        }
+    }
+
+    public static void checkActionForAnalyzeStatement(UserIdentity userIdentity, Set<Long> currentRoleIds,
+                                                      TableName tableName) {
+        try {
+            Authorizer.checkActionOnTableLikeObject(userIdentity, currentRoleIds,
+                    tableName, PrivilegeType.SELECT);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    tableName.getCatalog(),
+                    userIdentity, currentRoleIds,
+                    PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName.getTbl());
+        }
+        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        if (table.isPresent() && table.get().isTable()) {
+            try {
+                Authorizer.checkActionOnTableLikeObject(userIdentity, currentRoleIds,
+                        tableName, PrivilegeType.INSERT);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        tableName.getCatalog(),
+                        userIdentity, currentRoleIds,
+                        PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), tableName.getTbl());
+            }
         }
     }
 
     public static void checkFunctionAction(UserIdentity currentUser, Set<Long> roleIds, Database database,
-                                           Function function,
-                                           PrivilegeType privilegeType) {
+                                           Function function, PrivilegeType privilegeType) throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkFunctionAction(currentUser, roleIds, database, function, privilegeType);
     }
 
-    public static void checkAnyActionOnFunction(UserIdentity currentUser, Set<Long> roleIds, String database,
-                                                Function function) {
+    public static void checkAnyActionOnFunction(UserIdentity currentUser, Set<Long> roleIds, String database, Function function)
+            throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkAnyActionOnFunction(currentUser, roleIds, database, function);
     }
 
     public static void checkGlobalFunctionAction(UserIdentity currentUser, Set<Long> roleIds, Function function,
-                                                 PrivilegeType privilegeType) {
+                                                 PrivilegeType privilegeType) throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkGlobalFunctionAction(currentUser, roleIds, function, privilegeType);
     }
 
-    public static void checkAnyActionOnGlobalFunction(UserIdentity currentUser, Set<Long> roleIds, Function function) {
+    public static void checkAnyActionOnGlobalFunction(UserIdentity currentUser, Set<Long> roleIds, Function function)
+            throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkAnyActionOnGlobalFunction(currentUser, roleIds, function);
     }
 
-    public static void checkActionInDb(UserIdentity currentUser, Set<Long> roleIds, String db,
-                                       PrivilegeType privilegeType) {
+    public static void checkActionInDb(UserIdentity currentUser, Set<Long> roleIds, String db, PrivilegeType privilegeType)
+            throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkActionInDb(currentUser, roleIds, db, privilegeType);
     }
@@ -195,8 +280,8 @@ public class Authorizer {
      * Check whether current user has any privilege action on the db or objects(table/view/mv) in the db.
      * Currently, it's used by `show databases` or `use database`.
      */
-    public static void checkAnyActionOnOrInDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName,
-                                              String db) {
+    public static void checkAnyActionOnOrInDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db)
+            throws AccessDeniedException {
         Preconditions.checkNotNull(db, "db should not null");
 
         try {
@@ -220,45 +305,46 @@ public class Authorizer {
                         }
                     }
                 } else {
-                    throw new AccessDeniedException(ErrorReport.reportCommon(null,
-                            ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ANY IN DATABASE " + db));
+                    throw new AccessDeniedException();
                 }
             }
         }
     }
 
-    public static void checkAnyActionOnOrInCatalog(UserIdentity userIdentity, Set<Long> roleIds, String catalogName) {
-        if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            getInstance().getAccessControlOrDefault(catalogName).checkAnyActionOnCatalog(userIdentity, roleIds, catalogName);
-        }
-    }
-
     public static void checkResourceAction(UserIdentity currentUser, Set<Long> roleIds, String name,
-                                           PrivilegeType privilegeType) {
+                                           PrivilegeType privilegeType) throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkResourceAction(currentUser, roleIds, name, privilegeType);
     }
 
-    public static void checkAnyActionOnResource(UserIdentity currentUser, Set<Long> roleIds, String name) {
+    public static void checkAnyActionOnResource(UserIdentity currentUser, Set<Long> roleIds, String name)
+            throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkAnyActionOnResource(currentUser, roleIds, name);
     }
 
     public static void checkResourceGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name,
-                                                PrivilegeType privilegeType) {
+                                                PrivilegeType privilegeType) throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkResourceGroupAction(currentUser, roleIds, name, privilegeType);
     }
 
     public static void checkStorageVolumeAction(UserIdentity currentUser, Set<Long> roleIds, String storageVolume,
-                                                PrivilegeType privilegeType) {
+                                                PrivilegeType privilegeType) throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkStorageVolumeAction(currentUser, roleIds, storageVolume, privilegeType);
     }
 
-    public static void checkAnyActionOnStorageVolume(UserIdentity currentUser, Set<Long> roleIds, String name) {
+    public static void checkAnyActionOnStorageVolume(UserIdentity currentUser, Set<Long> roleIds, String storageVolume)
+            throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                .checkAnyActionOnStorageVolume(currentUser, roleIds, name);
+                .checkAnyActionOnStorageVolume(currentUser, roleIds, storageVolume);
+    }
+
+    public static void withGrantOption(UserIdentity currentUser, Set<Long> roleIds, ObjectType type, List<PrivilegeType> wants,
+                                       List<PEntryObject> objects) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME).
+                withGrantOption(currentUser, roleIds, type, wants, objects);
     }
 
     public static Expr getColumnMaskingPolicy(ConnectContext currentUser, TableName tableName, String columnName, Type type) {

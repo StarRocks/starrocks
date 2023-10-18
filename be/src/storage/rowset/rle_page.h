@@ -167,7 +167,7 @@ class RlePageDecoder final : public PageDecoder {
 public:
     RlePageDecoder(Slice slice) : _data(slice) {}
 
-    Status init() override {
+    [[nodiscard]] Status init() override {
         CHECK(!_parsed);
 
         if (_data.size < RLE_PAGE_HEADER_SIZE) {
@@ -178,11 +178,11 @@ public:
         _bit_width = (Type == TYPE_BOOLEAN) ? 1 : SIZE_OF_TYPE * 8;
         _rle_decoder = RleDecoder<CppType>((uint8_t*)_data.data + RLE_PAGE_HEADER_SIZE,
                                            _data.size - RLE_PAGE_HEADER_SIZE, _bit_width);
-        seek_to_position_in_page(0);
+        RETURN_IF_ERROR(seek_to_position_in_page(0));
         return Status::OK();
     }
 
-    Status seek_to_position_in_page(uint32_t pos) override {
+    [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override {
         DCHECK(_parsed) << "Must call init()";
         DCHECK_LE(pos, _num_elements) << "Tried to seek to " << pos << " which is > number of elements ("
                                       << _num_elements << ") in the block!";
@@ -205,7 +205,7 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t* n, Column* dst) override {
+    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override {
         SparseRange<> read_range;
         uint32_t begin = current_index();
         read_range.add(Range<>(begin, begin + *n));
@@ -214,7 +214,7 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(const SparseRange<>& range, Column* dst) override {
+    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override {
         DCHECK(_parsed);
         if (PREDICT_FALSE(_cur_index >= _num_elements)) {
             return Status::OK();
@@ -225,7 +225,7 @@ public:
                 std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
         SparseRangeIterator<> iter = range.new_iterator();
         while (to_read > 0) {
-            seek_to_position_in_page(iter.begin());
+            RETURN_IF_ERROR(seek_to_position_in_page(iter.begin()));
             Range<> r = iter.next(to_read);
             for (size_t i = 0; i < r.span_size(); ++i) {
                 if (PREDICT_FALSE(!_rle_decoder.Get(&value))) {

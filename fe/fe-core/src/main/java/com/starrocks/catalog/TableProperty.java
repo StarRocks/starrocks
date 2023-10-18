@@ -59,6 +59,7 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
@@ -69,6 +70,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -97,7 +99,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
 
         public static QueryRewriteConsistencyMode defaultForExternalTable() {
-            return DISABLE;
+            return CHECKED;
         }
 
         public static QueryRewriteConsistencyMode parse(String str) {
@@ -133,6 +135,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // Indicates which tables do not listen to auto refresh events when load
     private List<TableName> excludedTriggerTables;
 
+    // This property only applies to materialized views
+    private List<String> mvSortKeys;
+
     // This property only applies to materialized views,
     // Specify the query rewrite behaviour for external table
     private QueryRewriteConsistencyMode forceExternalTableQueryRewrite =
@@ -148,8 +153,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private boolean enablePersistentIndex = false;
 
     // Only meaningful when enablePersistentIndex = true.
-    // and it's null in SHARED NOTHGING
     TPersistentIndexType persistendIndexType;
+
+    private int primaryIndexCacheExpireSec = 0;
 
     /*
      * the default storage volume of this table.
@@ -174,6 +180,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // the default disable replicated storage
     private boolean enableReplicatedStorage = false;
+
+    private String storageType;
 
     // the default automatic bucket size
     private long bucketSize = 0;
@@ -205,6 +213,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private Boolean useSchemaLightChange;
 
     private PeriodDuration dataCachePartitionDuration;
+
+    public TableProperty() {
+        this.properties = new LinkedHashMap<>();
+    }
 
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
@@ -244,6 +256,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
                 buildEnablePersistentIndex();
+                buildPersistentIndexType();
+                break;
+            case OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC:
+                buildPrimaryIndexCacheExpireSec();
                 break;
             case OperationType.OP_MODIFY_WRITE_QUORUM:
                 buildWriteQuorum();
@@ -281,6 +297,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildAutoRefreshPartitionsLimit();
         buildExcludedTriggerTables();
         buildResourceGroup();
+        buildConstraint();
+        buildMvSortKeys();
         return this;
     }
 
@@ -382,6 +400,20 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildMvSortKeys() {
+        String sortKeys = properties.get(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS);
+        this.mvSortKeys = analyzeMvSortKeys(sortKeys);
+        return this;
+    }
+
+    public static List<String> analyzeMvSortKeys(String value) {
+        if (StringUtils.isEmpty(value)) {
+            return Lists.newArrayList();
+        } else {
+            return Splitter.on(",").omitEmptyStrings().trimResults().splitToList(value);
+        }
+    }
+
     public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) {
         QueryRewriteConsistencyMode res = EnumUtils.getEnumIgnoreCase(QueryRewriteConsistencyMode.class, value);
         if (res == null) {
@@ -479,6 +511,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildPrimaryIndexCacheExpireSec() {
+        primaryIndexCacheExpireSec = Integer.parseInt(properties.getOrDefault(
+                PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, "0"));
+        return this;
+    }
+
     public TableProperty buildPersistentIndexType() {
         String type = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");
         if (type.equals("LOCAL")) {
@@ -501,15 +539,23 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
 
     public TableProperty buildConstraint() {
-        try {
-            uniqueConstraints = UniqueConstraint.parse(
-                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
-        } catch (SemanticException e) {
-            LOG.warn("Failed to parse unique constraint, ignore this unique constraint", e);
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+            try {
+                uniqueConstraints = UniqueConstraint.parse(
+                        properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
+            } catch (Exception e) {
+                LOG.warn("Failed to parse unique constraints, ignore this unique constraint", e);
+            }
         }
 
-        foreignKeyConstraints = ForeignKeyConstraint.parse(
-                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+            try {
+                foreignKeyConstraints = ForeignKeyConstraint.parse(
+                        properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
+            } catch (Exception e) {
+                LOG.warn("Failed to parse foreign key constraints, ignore this foreign key constraints", e);
+            }
+        }
         return this;
     }
 
@@ -529,6 +575,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
             } else {
                 this.storageCoolDownTTL = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
             }
+        }
+        return this;
+    }
+
+    public TableProperty buildStorageType() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)) {
+            storageType = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE);
         }
         return this;
     }
@@ -593,6 +646,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.excludedTriggerTables = excludedTriggerTables;
     }
 
+    public List<String> getMvSortKeys() {
+        return mvSortKeys;
+    }
+
+    public void setMvSortKeys(List<String> sortKeys) {
+        this.mvSortKeys = sortKeys;
+    }
+
     public QueryRewriteConsistencyMode getForceExternalTableQueryRewrite() {
         return this.forceExternalTableQueryRewrite;
     }
@@ -617,12 +678,20 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enablePersistentIndex;
     }
 
+    public int primaryIndexCacheExpireSec() {
+        return primaryIndexCacheExpireSec;
+    }
+
     public String getPersistentIndexTypeString() {
         return persistentIndexTypeToString(persistendIndexType);
     }
 
     public TPersistentIndexType getPersistentIndexType() {
         return persistendIndexType;
+    }
+
+    public String storageType() {
+        return storageType;
     }
 
     public TWriteQuorumType writeQuorum() {
@@ -739,6 +808,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildStorageCoolDownTTL();
         buildEnablePersistentIndex();
         buildPersistentIndexType();
+        buildPrimaryIndexCacheExpireSec();
         buildCompressionType();
         buildWriteQuorum();
         buildPartitionTTL();

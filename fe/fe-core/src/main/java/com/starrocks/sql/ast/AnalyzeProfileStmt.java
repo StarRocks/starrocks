@@ -31,7 +31,7 @@ public class AnalyzeProfileStmt extends StatementBase {
 
     @Override
     public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
+        return RedirectStatus.NO_FORWARD;
     }
 
     @Override

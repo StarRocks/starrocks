@@ -36,7 +36,8 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
     // Create writer based on sink type
     switch (_sink_type) {
     case TResultSinkType::MYSQL_PROTOCAL:
-        _writer = std::make_shared<MysqlResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
+        _writer = std::make_shared<MysqlResultWriter>(_sender.get(), _output_expr_ctxs, _is_binary_format,
+                                                      _profile.get());
         break;
     case TResultSinkType::STATISTIC:
         _writer = std::make_shared<StatisticResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
@@ -64,10 +65,10 @@ void ResultSinkOperator::close(RuntimeState* state) {
     }
 
     // Close the shared sender when the last result sink operator is closing.
-    if (_num_result_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+    if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
         if (_sender != nullptr) {
             // Incrementing and reading _num_written_rows needn't memory barrier, because
-            // the visibility of _num_written_rows is guaranteed by _num_result_sinkers.fetch_sub().
+            // the visibility of _num_written_rows is guaranteed by _num_sinkers.fetch_sub().
             _sender->update_num_written_rows(_num_written_rows.load(std::memory_order_relaxed));
 
             QueryContext* query_ctx = state->query_ctx();
@@ -82,8 +83,9 @@ void ResultSinkOperator::close(RuntimeState* state) {
             _sender->close(final_status);
         }
 
-        state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
-                                                        state->fragment_instance_id());
+        st = state->exec_env()->result_mgr()->cancel_at_time(
+                time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
+        st.permit_unchecked_error();
     }
 
     Operator::close(state);
@@ -145,7 +147,9 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk
 
 Status ResultSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(), 1024, &_sender));
+    auto dop = state->query_options().pipeline_dop;
+    RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(),
+                                                                   std::min(dop << 1, 1024), &_sender));
 
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
 

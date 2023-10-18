@@ -144,6 +144,7 @@ public class LoadStmt extends DdlStmt {
             .add(LOG_REJECTED_RECORD_NUM)
             .add(PARTIAL_UPDATE_MODE)
             .add(SPARK_LOAD_SUBMIT_TIMEOUT)
+            .add(MERGE_CONDITION)
             .build();
 
     public LoadStmt(LabelName label, List<DataDescription> dataDescriptions, BrokerDesc brokerDesc,

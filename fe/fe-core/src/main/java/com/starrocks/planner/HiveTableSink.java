@@ -18,6 +18,8 @@ import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.connector.Connector;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
@@ -32,7 +34,6 @@ import com.starrocks.thrift.THiveTableSink;
 import java.util.List;
 
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
-import static com.starrocks.connector.hive.HiveMetastoreOperations.FILE_FORMAT;
 
 public class HiveTableSink extends DataSink {
 
@@ -53,14 +54,18 @@ public class HiveTableSink extends DataSink {
         this.dataColNames = hiveTable.getDataColumnNames();
         this.tableIdentifier = hiveTable.getUUID();
         this.isStaticPartitionSink = isStaticPartitionSink;
-        this.fileFormat = hiveTable.getHiveProperties().getOrDefault(FILE_FORMAT, "parquet");
-        this.compressionType = hiveTable.getHiveProperties().getOrDefault("compression_codec", "gzip");
+        HiveStorageFormat format = hiveTable.getStorageFormat();
+        if (format != HiveStorageFormat.PARQUET) {
+            throw new StarRocksConnectorException("Writing to hive table in [%s] format is not supported.", format.name());
+        }
+        this.fileFormat = hiveTable.getStorageFormat().name().toLowerCase();
+        this.compressionType = hiveTable.getProperties().getOrDefault("compression_codec", "gzip");
         String catalogName = hiveTable.getCatalogName();
         Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalogName));
 
-        this.cloudConfiguration = connector.getCloudConfiguration();
+        this.cloudConfiguration = connector.getMetadata().getCloudConfiguration();
 
         Preconditions.checkState(cloudConfiguration != null,
                 String.format("cloudConfiguration of catalog %s should not be null", catalogName));

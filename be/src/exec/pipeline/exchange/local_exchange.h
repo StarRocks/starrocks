@@ -100,7 +100,7 @@ class RandomPartitioner final : public Partitioner {
 public:
     RandomPartitioner(LocalExchangeSourceOperatorFactory* source) : Partitioner(source) {}
 
-    virtual ~RandomPartitioner() override = default;
+    ~RandomPartitioner() override = default;
 
     Status shuffle_channel_ids(const ChunkPtr& chunk, int32_t num_partitions) override;
 };
@@ -125,7 +125,7 @@ public:
     virtual void finish(RuntimeState* state) {
         if (decr_sinker() == 1) {
             for (auto* source : _source->get_sources()) {
-                source->set_finishing(state);
+                static_cast<void>(source->set_finishing(state));
             }
         }
     }
@@ -143,7 +143,7 @@ public:
     void epoch_finish(RuntimeState* state) {
         if (incr_epoch_finished_sinker() == _sink_number) {
             for (auto* source : _source->get_sources()) {
-                source->set_epoch_finishing(state);
+                static_cast<void>(source->set_epoch_finishing(state));
             }
             // reset the number to be reused in the next epoch.
             _epoch_finished_sinker = 0;

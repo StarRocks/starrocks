@@ -49,6 +49,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -249,17 +250,13 @@ public class CompactionScheduler extends Daemon {
             return null;
         }
 
-        if (!db.tryReadLock(50, TimeUnit.MILLISECONDS)) {
-            LOG.info("Skipped partition compaction due to get database lock timeout");
-            compactionManager.enableCompactionAfter(partitionIdentifier, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
-            return null;
-        }
-
         long txnId;
         long currentVersion;
         OlapTable table;
         Partition partition;
         Map<Long, List<Long>> beToTablets;
+
+        db.readLock();
 
         try {
             // lake table or lake materialized view
@@ -394,7 +391,8 @@ public class CompactionScheduler extends Daemon {
         VisibleStateWaiter waiter;
         db.writeLock();
         try {
-            waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList, Lists.newArrayList());
+            waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
+                    Collections.emptyList(), null);
         } finally {
             db.writeUnlock();
         }

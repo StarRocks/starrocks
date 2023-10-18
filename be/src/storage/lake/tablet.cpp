@@ -125,16 +125,13 @@ StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
     return _mgr->get_tablet_schema(_id, &_version_hint);
 }
 
+StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_index_id(int64_t index_id) {
+    return _mgr->get_tablet_schema_by_index_id(_id, index_id);
+}
+
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
     ASSIGN_OR_RETURN(auto tablet_metadata, get_metadata(version));
-    std::vector<RowsetPtr> rowsets;
-    rowsets.reserve(tablet_metadata->rowsets_size());
-    for (int i = 0, size = tablet_metadata->rowsets_size(); i < size; ++i) {
-        const auto& rowset_metadata = tablet_metadata->rowsets(i);
-        auto rowset = std::make_shared<Rowset>(this, std::make_shared<const RowsetMetadata>(rowset_metadata), i);
-        rowsets.emplace_back(std::move(rowset));
-    }
-    return rowsets;
+    return get_rowsets(*tablet_metadata);
 }
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(const TabletMetadata& metadata) {
@@ -142,7 +139,7 @@ StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(const TabletMetadata& metad
     rowsets.reserve(metadata.rowsets_size());
     for (int i = 0, size = metadata.rowsets_size(); i < size; ++i) {
         const auto& rowset_metadata = metadata.rowsets(i);
-        auto rowset = std::make_shared<Rowset>(this, std::make_shared<const RowsetMetadata>(rowset_metadata), i);
+        auto rowset = std::make_shared<Rowset>(*this, std::make_shared<const RowsetMetadata>(rowset_metadata), i);
         rowsets.emplace_back(std::move(rowset));
     }
     return rowsets;
@@ -150,18 +147,20 @@ StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(const TabletMetadata& metad
 
 StatusOr<SegmentPtr> Tablet::load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
                                           bool fill_data_cache, bool fill_metadata_cache) {
-    auto location = segment_location(segment_name);
-    auto segment = _mgr->lookup_segment(location);
-    if (segment != nullptr) {
-        return segment;
+    auto segment_path = segment_location(segment_name);
+    auto segment = _mgr->lookup_segment(segment_path);
+    if (segment == nullptr) {
+        ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(segment_path));
+        segment = std::make_shared<Segment>(std::move(fs), segment_path, seg_id, std::move(tablet_schema), _mgr);
+        if (fill_metadata_cache) {
+            _mgr->cache_segment(segment_path, segment);
+        }
     }
-    ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
-    ASSIGN_OR_RETURN(segment, Segment::open(fs, location, seg_id, std::move(tablet_schema), footer_size_hint, nullptr,
-                                            !fill_data_cache));
-    if (fill_metadata_cache) {
-        _mgr->cache_segment(location, segment);
-    }
+    // segment->open will read the footer, and it is time-consuming.
+    // separate it from static Segment::open is to prevent a large number of cache misses,
+    // and many temporary segment objects generation when loading the same segment concurrently.
+    RETURN_IF_ERROR(segment->open(footer_size_hint, nullptr, !fill_data_cache));
     return segment;
 }
 

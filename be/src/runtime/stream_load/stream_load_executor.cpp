@@ -253,6 +253,11 @@ Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_tim
         bool visible =
                 wait_txn_visible_until(ctx->auth, request.db, request.tbl, request.txnId, ctx->load_deadline_sec);
         return visible ? Status::OK() : status;
+    } else if (status.code() == TStatusCode::SR_EAGAIN) {
+        LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry after sleeping "
+                     << result.retry_interval_ms << "ms. errmsg=" << status.get_error_msg();
+        std::this_thread::sleep_for(std::chrono::milliseconds(result.retry_interval_ms));
+        return commit_txn_internal(request, rpc_timeout_ms, ctx);
     } else {
         ctx->need_rollback = true;
         return status;

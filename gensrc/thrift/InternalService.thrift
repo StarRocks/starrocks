@@ -95,9 +95,8 @@ struct TLoadErrorHubInfo {
 }
 
 enum TPipelineProfileLevel {
-  CORE_METRICS,
-  ALL_METRICS,
-  DETAIL
+  MERGE = 1;
+  DETAIL = 2;
 }
 
 enum TSpillMode {
@@ -117,6 +116,11 @@ enum TSpillableOperatorType {
 enum TTabletInternalParallelMode {
   AUTO,
   FORCE_SPLIT
+}
+
+enum TOverflowMode {
+  OUTPUT_NULL = 0;
+  REPORT_ERROR = 1;
 }
 
 // Query options with their respective defaults
@@ -172,13 +176,13 @@ struct TQueryOptions {
 
   64: optional TLoadJobType load_job_type
 
-  66: optional bool use_scan_block_cache;
+  66: optional bool enable_scan_datacache;
 
   67: optional bool enable_pipeline_query_statistic = false;
 
   68: optional i32 transmission_encode_level;
   
-  69: optional bool enable_populate_block_cache;
+  69: optional bool enable_populate_datacache;
 
   70: optional bool allow_throw_exception = 0;
 
@@ -219,6 +223,13 @@ struct TQueryOptions {
   101: optional i64 runtime_profile_report_interval = 30;
 
   102: optional bool enable_collect_table_level_scan_stats;
+
+  103: optional i32 interleaving_group_size;
+
+  104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
+  105: optional bool use_column_pool = true;
+
+  106: optional bool enable_agg_spill_preaggregation;
 }
 
 

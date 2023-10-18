@@ -42,10 +42,10 @@ import com.starrocks.analysis.LabelName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo;
@@ -54,16 +54,18 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
-import com.starrocks.task.PriorityLeaderTask;
-import com.starrocks.task.PriorityLeaderTaskExecutor;
+import com.starrocks.transaction.CommitRateExceededException;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TxnCommitAttachment;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -363,78 +365,6 @@ public class BrokerLoadJobTest {
     }
 
     @Test
-    public void testPendingTaskOnFinished(@Injectable BrokerPendingTaskAttachment attachment,
-                                          @Mocked GlobalStateMgr globalStateMgr,
-                                          @Injectable Database database,
-                                          @Injectable BrokerFileGroupAggInfo fileGroupAggInfo,
-                                          @Injectable BrokerFileGroup brokerFileGroup1,
-                                          @Injectable BrokerFileGroup brokerFileGroup2,
-                                          @Injectable BrokerFileGroup brokerFileGroup3,
-                                          @Mocked LeaderTaskExecutor leaderTaskExecutor,
-                                          @Mocked PriorityLeaderTaskExecutor priorityLeaderTaskExecutor,
-                                          @Injectable OlapTable olapTable,
-                                          @Mocked LoadingTaskPlanner loadingTaskPlanner) {
-        Config.enable_pipeline_load = false;
-        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
-        brokerLoadJob.setConnectContext(new ConnectContext());
-        Deencapsulation.setField(brokerLoadJob, "state", JobState.LOADING);
-        long taskId = 1L;
-        long tableId1 = 1L;
-        long tableId2 = 2L;
-        long partitionId1 = 3L;
-        long partitionId2 = 4;
-
-        Map<FileGroupAggKey, List<BrokerFileGroup>> aggKeyToFileGroups = Maps.newHashMap();
-        List<BrokerFileGroup> fileGroups1 = Lists.newArrayList();
-        fileGroups1.add(brokerFileGroup1);
-        aggKeyToFileGroups.put(new FileGroupAggKey(tableId1, null), fileGroups1);
-
-        List<BrokerFileGroup> fileGroups2 = Lists.newArrayList();
-        fileGroups2.add(brokerFileGroup2);
-        fileGroups2.add(brokerFileGroup3);
-        aggKeyToFileGroups.put(new FileGroupAggKey(tableId2, Lists.newArrayList(partitionId1)), fileGroups2);
-        // add another file groups with different partition id
-        aggKeyToFileGroups.put(new FileGroupAggKey(tableId2, Lists.newArrayList(partitionId2)), fileGroups2);
-
-        Deencapsulation.setField(brokerLoadJob, "fileGroupAggInfo", fileGroupAggInfo);
-        new Expectations() {
-            {
-                attachment.getTaskId();
-                minTimes = 0;
-                result = taskId;
-                globalStateMgr.getDb(anyLong);
-                minTimes = 0;
-                result = database;
-                fileGroupAggInfo.getAggKeyToFileGroups();
-                minTimes = 0;
-                result = aggKeyToFileGroups;
-                database.getTable(anyLong);
-                minTimes = 0;
-                result = olapTable;
-                globalStateMgr.getNextId();
-                minTimes = 0;
-                result = 1L;
-                result = 2L;
-                result = 3L;
-                leaderTaskExecutor.submit((LeaderTask) any);
-                minTimes = 0;
-                result = true;
-                priorityLeaderTaskExecutor.submit((PriorityLeaderTask) any);
-                minTimes = 0;
-                result = true;
-            }
-        };
-
-        brokerLoadJob.onTaskFinished(attachment);
-        Set<Long> finishedTaskIds = Deencapsulation.getField(brokerLoadJob, "finishedTaskIds");
-        Assert.assertEquals(1, finishedTaskIds.size());
-        Assert.assertEquals(true, finishedTaskIds.contains(taskId));
-        Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
-        Assert.assertEquals(3, idToTasks.size());
-        Config.enable_pipeline_load = true;
-    }
-
-    @Test
     public void testLoadingTaskOnFinishedWithUnfinishedTask(@Injectable BrokerLoadingTaskAttachment attachment,
                                                             @Injectable LoadTask loadTask1,
                                                             @Injectable LoadTask loadTask2) {
@@ -622,5 +552,49 @@ public class BrokerLoadJobTest {
         Assert.assertEquals(99, (int) Deencapsulation.getField(brokerLoadJob, "progress"));
         Assert.assertEquals(1, brokerLoadJob.getFinishTimestamp());
         Assert.assertEquals(JobState.LOADING, brokerLoadJob.getState());
+    }
+
+    @Test
+    public void testCommitRateExceeded(@Injectable BrokerLoadingTaskAttachment attachment1,
+                                       @Injectable LoadTask loadTask1,
+                                       @Mocked GlobalStateMgr globalStateMgr,
+                                       @Injectable Database database,
+                                       @Mocked GlobalTransactionMgr transactionMgr) throws UserException {
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        Deencapsulation.setField(brokerLoadJob, "state", JobState.LOADING);
+        Map<Long, LoadTask> idToTasks = Maps.newHashMap();
+        idToTasks.put(1L, loadTask1);
+        Deencapsulation.setField(brokerLoadJob, "idToTasks", idToTasks);
+        new Expectations() {
+            {
+                attachment1.getCounter(BrokerLoadJob.DPP_NORMAL_ALL);
+                minTimes = 0;
+                result = 10;
+                attachment1.getCounter(BrokerLoadJob.DPP_ABNORMAL_ALL);
+                minTimes = 0;
+                result = 0;
+                attachment1.getTaskId();
+                minTimes = 0;
+                result = 1L;
+                globalStateMgr.getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                globalStateMgr.getCurrentGlobalTransactionMgr();
+                result = transactionMgr;
+                transactionMgr.commitTransaction(anyLong, anyLong, (List<TabletCommitInfo>) any,
+                        (List<TabletFailInfo>) any, (TxnCommitAttachment) any);
+                result = new CommitRateExceededException(100, System.currentTimeMillis() + 10);
+                result = null;
+            }
+        };
+
+        brokerLoadJob.onTaskFinished(attachment1);
+        Set<Long> finishedTaskIds = Deencapsulation.getField(brokerLoadJob, "finishedTaskIds");
+        Assert.assertEquals(1, finishedTaskIds.size());
+        EtlStatus loadingStatus = Deencapsulation.getField(brokerLoadJob, "loadingStatus");
+        Assert.assertEquals("10", loadingStatus.getCounters().get(BrokerLoadJob.DPP_NORMAL_ALL));
+        Assert.assertEquals("0", loadingStatus.getCounters().get(BrokerLoadJob.DPP_ABNORMAL_ALL));
+        int progress = Deencapsulation.getField(brokerLoadJob, "progress");
+        Assert.assertEquals(99, progress);
     }
 }

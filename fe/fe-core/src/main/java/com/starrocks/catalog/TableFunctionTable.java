@@ -23,9 +23,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.proto.PGetFileSchemaResult;
-import com.starrocks.proto.PScalarType;
 import com.starrocks.proto.PSlotDescriptor;
-import com.starrocks.proto.PTypeNode;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.server.GlobalStateMgr;
@@ -42,6 +40,7 @@ import com.starrocks.thrift.TGetFileSchemaRequest;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
@@ -54,7 +53,13 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
+import javax.annotation.Nullable;
+
+import static com.google.common.base.Verify.verify;
+import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 
 public class TableFunctionTable extends Table {
 
@@ -64,9 +69,17 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_PATH = "path";
     public static final String PROPERTY_FORMAT = "format";
 
+    public static final String PROPERTY_COLUMNS_FROM_PATH = "columns_from_path";
+
     private String path;
     private String format;
-    private Map<String, String> properties;
+    private String compressionType;
+
+    private List<String> columnsFromPath = new ArrayList<>();
+    private final Map<String, String> properties;
+    @Nullable
+    private List<Integer> partitionColumnIDs;
+    private boolean writeSingleFile;
 
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
@@ -79,14 +92,39 @@ public class TableFunctionTable extends Table {
         parseProperties();
         parseFiles();
 
+
+        List<Column> columns = new ArrayList<>();
         if (path.startsWith(FAKE_PATH)) {
-            List<Column> columns = new ArrayList<>();
             columns.add(new Column("col_int", Type.INT));
             columns.add(new Column("col_string", Type.VARCHAR));
-            setNewFullSchema(columns);
         } else {
-            setNewFullSchema(getFileSchema());
+            columns = getFileSchema();
         }
+
+        columns.addAll(getSchemaFromPath());
+
+        setNewFullSchema(columns);
+    }
+
+    // Ctor for unload data via table function
+    public TableFunctionTable(String path, String format, String compressionType, List<Column> columns,
+                              @Nullable List<Integer> partitionColumnIDs, boolean writeSingleFile,
+                              Map<String, String> properties) {
+        super(TableType.TABLE_FUNCTION);
+        verify(!Strings.isNullOrEmpty(path), "path is null or empty");
+        verify(!(partitionColumnIDs != null && writeSingleFile));
+        this.path = path;
+        this.format = format;
+        this.compressionType = compressionType;
+        this.partitionColumnIDs = partitionColumnIDs;
+        this.writeSingleFile = writeSingleFile;
+        this.properties = properties;
+        super.setNewFullSchema(columns);
+    }
+
+    @Override
+    public boolean supportInsert() {
+        return true;
     }
 
     public List<TBrokerFileStatus> fileList() {
@@ -100,20 +138,26 @@ public class TableFunctionTable extends Table {
 
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
-        TTableFunctionTable tTbl = new TTableFunctionTable();
-        tTbl.setPath(path);
-
-        List<TColumn> tColumns = Lists.newArrayList();
-
-        for (Column column : getBaseSchema()) {
-            tColumns.add(column.toThrift());
-        }
-        tTbl.setColumns(tColumns);
-
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.TABLE_FUNCTION_TABLE, fullSchema.size(),
                 0, "_table_function_table", "_table_function_db");
-        tTableDescriptor.setTableFunctionTable(tTbl);
+
+        TTableFunctionTable tTableFunctionTable = this.toTTableFunctionTable();
+        tTableDescriptor.setTableFunctionTable(tTableFunctionTable);
         return tTableDescriptor;
+    }
+
+    public TTableFunctionTable toTTableFunctionTable() {
+        TTableFunctionTable tTableFunctionTable = new TTableFunctionTable();
+        List<TColumn> tColumns = getFullSchema().stream().map(Column::toThrift).collect(Collectors.toList());
+        tTableFunctionTable.setPath(path);
+        tTableFunctionTable.setColumns(tColumns);
+        tTableFunctionTable.setFile_format(format);
+        tTableFunctionTable.setWrite_single_file(writeSingleFile);
+        tTableFunctionTable.setCompression_type(PARQUET_COMPRESSION_TYPE_MAP.get(compressionType));
+        if (partitionColumnIDs != null) {
+            tTableFunctionTable.setPartition_column_ids(partitionColumnIDs);
+        }
+        return tTableFunctionTable;
     }
 
     public String getFormat() {
@@ -142,12 +186,31 @@ public class TableFunctionTable extends Table {
         if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc")) {
             throw new DdlException("not supported format: " + format);
         }
+
+        String colsFromPathProp = properties.get(PROPERTY_COLUMNS_FROM_PATH);
+        if (!Strings.isNullOrEmpty(colsFromPathProp)) {
+            String[] colsFromPath = colsFromPathProp.split(",");
+            for (String col : colsFromPath) {
+                columnsFromPath.add(col.trim());
+            }
+        }
     }
 
     private void parseFiles() throws DdlException {
         try {
             // fake:// is a faked path, for testing purpose
             if (path.startsWith("fake://")) {
+                TBrokerFileStatus file1 = new TBrokerFileStatus();
+                file1.isDir = false;
+                file1.path = "fake://some_bucket/some_dir/file1";
+                file1.size = 1024;
+                fileStatuses.add(file1);
+
+                TBrokerFileStatus file2 = new TBrokerFileStatus();
+                file2.isDir = false;
+                file2.path = "fake://some_bucket/some_dir/file2";
+                file2.size = 2048;
+                fileStatuses.add(file2);
                 return;
             }
             List<String> pieces = Splitter.on(",").trimResults().omitEmptyStrings().splitToList(path);
@@ -245,15 +308,27 @@ public class TableFunctionTable extends Table {
             throw new DdlException("failed to get file schema", e);
         }
 
+        if (TStatusCode.findByValue(result.status.statusCode) != TStatusCode.OK) {
+            throw new DdlException("failed to get file schema, path: " + path + ", error: " + result.status.errorMsgs);
+        }
+
         List<Column> columns = new ArrayList<>();
         for (PSlotDescriptor slot : result.schema) {
-
-            List<PTypeNode> types = slot.slotType.types;
-            if (types.size() != 1) {
-                throw new DdlException("non-scalar type is not supported: " + slot.colName);
+            columns.add(new Column(slot.colName, Type.fromProtobuf(slot.slotType), true));
+        }
+        return columns;
+    }
+    private List<Column> getSchemaFromPath() throws DdlException {
+        List<Column> columns = new ArrayList<>();
+        if (!columnsFromPath.isEmpty()) {
+            for (String colName : columnsFromPath) {
+                Optional<Column> column =  columns.stream().filter(col -> col.nameEquals(colName, false)).findFirst();
+                if (column.isPresent()) {
+                    throw new DdlException("duplicated name in columns from path, " +
+                            "a column with same name already exists in the file table: " + colName);
+                }
+                columns.add(new Column(colName, ScalarType.createDefaultString(), true));
             }
-            PScalarType scalarType = slot.slotType.types.get(0).scalarType;
-            columns.add(new Column(slot.colName, ScalarType.createType(scalarType), true));
         }
         return columns;
     }
@@ -267,6 +342,10 @@ public class TableFunctionTable extends Table {
         return exprs;
     }
 
+    public List<String> getColumnsFromPath() {
+        return columnsFromPath;
+    }
+
     @Override
     public String toString() {
         return String.format("TABLE('path'='%s', 'format'='%s')", path, format);
@@ -275,5 +354,17 @@ public class TableFunctionTable extends Table {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    @Override
+    public List<String> getPartitionColumnNames() {
+        if (partitionColumnIDs == null) {
+            return new ArrayList<>();
+        }
+        return partitionColumnIDs.stream().map(id -> fullSchema.get(id).getName()).collect(Collectors.toList());
+    }
+
+    public boolean isWriteSingleFile() {
+        return writeSingleFile;
     }
 }

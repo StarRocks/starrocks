@@ -1031,7 +1031,7 @@ public class AstToStringBuilder {
                 sb.append("@@");
                 if (node.getSetType() == SetType.GLOBAL) {
                     sb.append("GLOBAL.");
-                } else {
+                } else if (node.getSetType() != null) {
                     sb.append("SESSION.");
                 }
             }
@@ -1221,8 +1221,10 @@ public class AstToStringBuilder {
             }
             Map<String, String> properties = new HashMap<>(stmt.getProperties());
             StorageVolume.addMaskForCredential(properties);
-            sb.append(" PROPERTIES (").
-                    append(new PrintableMap<>(properties, "=", true, false)).append(")");
+            if (!stmt.getProperties().isEmpty()) {
+                sb.append(" PROPERTIES (")
+                        .append(new PrintableMap<>(properties, "=", true, false)).append(")");
+            }
             return sb.toString();
         }
 

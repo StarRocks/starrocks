@@ -185,7 +185,7 @@ public class LoadMgr implements Writable {
                 .build());
     }
 
-    // add load job and also add to to callback factory
+    // add load job and also add to callback factory
     private void createLoadJob(LoadJob loadJob) {
         addLoadJob(loadJob);
         // add callback before txn created, because callback will be performed on replay without txn begin

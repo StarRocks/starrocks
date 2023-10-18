@@ -15,6 +15,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
+import com.starrocks.alter.OptimizeTask;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
@@ -24,6 +25,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.PipeTaskDesc;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskSchedule;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
@@ -89,6 +91,16 @@ public class TaskBuilder {
             stmt = "";
         }
         return stmt;
+    }
+
+    public static OptimizeTask buildOptimizeTask(String name, Map<String, String> properties, String sql, String dbName) {
+        OptimizeTask task = new OptimizeTask(name);
+        task.setSource(Constants.TaskSource.INSERT);
+        task.setDbName(dbName);
+        task.setProperties(properties);
+        task.setDefinition(sql);
+        task.setExpireTime(0L);
+        return task;
     }
 
     public static Task buildMvTask(MaterializedView materializedView, String dbName) {
@@ -176,6 +188,28 @@ public class TaskBuilder {
                 task.setSchedule(taskSchedule);
                 task.setType(Constants.TaskType.PERIODICAL);
             }
+        }
+    }
+
+    public static void rebuildMVTask(String dbName,
+                                     MaterializedView materializedView) throws DdlException {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+        Task task;
+        if (currentTask == null) {
+            task = TaskBuilder.buildMvTask(materializedView, dbName);
+            TaskBuilder.updateTaskInfo(task, materializedView);
+            taskManager.createTask(task, false);
+        } else {
+            Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, currentTask.getProperties());
+            TaskBuilder.updateTaskInfo(changedTask, materializedView);
+            taskManager.alterTask(currentTask, changedTask, false);
+            task = currentTask;
+        }
+
+        // for event triggered type, run task
+        if (task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
+            taskManager.executeTask(task.getName());
         }
     }
 

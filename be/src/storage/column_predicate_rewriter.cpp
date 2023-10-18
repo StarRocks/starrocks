@@ -155,7 +155,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
             i = pool->add(ptr);
         }
         if (PredicateType::kGE == pred->type() || PredicateType::kGT == pred->type()) {
-            _get_segment_dict(&sorted_dicts, _column_iterators[cid].get());
+            RETURN_IF_ERROR(_get_segment_dict(&sorted_dicts, _column_iterators[cid].get()));
             // use non-padding string value.
             auto value = pred->values()[0].get_slice().to_string();
             auto iter = std::lower_bound(
@@ -182,7 +182,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
             }
         }
         if (PredicateType::kLE == pred->type() || PredicateType::kLT == pred->type()) {
-            _get_segment_dict(&sorted_dicts, _column_iterators[cid].get());
+            RETURN_IF_ERROR(_get_segment_dict(&sorted_dicts, _column_iterators[cid].get()));
             // use non-padding string value.
             auto value = pred->values()[0].get_slice().to_string();
             auto iter = std::lower_bound(
@@ -219,7 +219,8 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
         if (PredicateType::kExpr == pred->type()) {
             if (!load_seg_dict_vec) {
                 load_seg_dict_vec = true;
-                _get_segment_dict_vec(_column_iterators[cid].get(), &dict_column, &code_column, field->is_nullable());
+                RETURN_IF_ERROR(_get_segment_dict_vec(_column_iterators[cid].get(), &dict_column, &code_column,
+                                                      field->is_nullable()));
             }
 
             ColumnPredicate* ptr;
@@ -244,10 +245,11 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
 // This function is only used to rewrite the LE/LT/GE/GT condition.
 // For the greater than or less than condition,
 // you need to get the values of all ordered dictionaries and rewrite them as `InList` expressions
-void ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::string, int>>* dicts, ColumnIterator* iter) {
+Status ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::string, int>>* dicts,
+                                                  ColumnIterator* iter) {
     // We already loaded dicts, no need to do once more.
     if (!dicts->empty()) {
-        return;
+        return Status::OK();
     }
     auto column_iterator = down_cast<ScalarColumnIterator*>(iter);
     auto dict_size = column_iterator->dict_size();
@@ -255,7 +257,7 @@ void ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::strin
     std::iota(dict_codes, dict_codes + dict_size, 0);
 
     auto column = BinaryColumn::create();
-    column_iterator->decode_dict_codes(dict_codes, dict_size, column.get());
+    RETURN_IF_ERROR(column_iterator->decode_dict_codes(dict_codes, dict_size, column.get()));
 
     for (int i = 0; i < dict_size; ++i) {
         dicts->emplace_back(column->get_slice(i).to_string(), dict_codes[i]);
@@ -263,17 +265,18 @@ void ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::strin
 
     std::sort(dicts->begin(), dicts->end(),
               [](const auto& e1, const auto& e2) { return e1.first.compare(e2.first) < 0; });
+    return Status::OK();
 }
 
-void ColumnPredicateRewriter::_get_segment_dict_vec(ColumnIterator* iter, ColumnPtr* dict_column,
-                                                    ColumnPtr* code_column, bool field_nullable) {
+Status ColumnPredicateRewriter::_get_segment_dict_vec(ColumnIterator* iter, ColumnPtr* dict_column,
+                                                      ColumnPtr* code_column, bool field_nullable) {
     auto column_iterator = down_cast<ScalarColumnIterator*>(iter);
     auto dict_size = column_iterator->dict_size();
     int dict_codes[dict_size];
     std::iota(dict_codes, dict_codes + dict_size, 0);
 
     auto dict_col = BinaryColumn::create();
-    column_iterator->decode_dict_codes(dict_codes, dict_size, dict_col.get());
+    RETURN_IF_ERROR(column_iterator->decode_dict_codes(dict_codes, dict_size, dict_col.get()));
 
     if (field_nullable) {
         // create nullable column with NULL at last.
@@ -294,6 +297,7 @@ void ColumnPredicateRewriter::_get_segment_dict_vec(ColumnIterator* iter, Column
         code_buf[i] = dict_codes[i];
     }
     *code_column = code_col;
+    return Status::OK();
 }
 
 StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool, const ColumnPredicate* raw_pred,
@@ -374,7 +378,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
     builder.set_is_not_in(is_not_in);
     builder.use_array_set(code_size);
     DCHECK_IF_ERROR(builder.create());
-    builder.add_values(used_values, 0);
+    (void)builder.add_values(used_values, 0);
     ExprContext* filter = builder.get_in_const_predicate();
 
     DCHECK_IF_ERROR(filter->prepare(state));

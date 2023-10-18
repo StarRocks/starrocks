@@ -31,7 +31,7 @@ StatusOr<ColumnExprPredicate*> ColumnExprPredicate::make_column_expr_predicate(T
     auto* expr_predicate = new ColumnExprPredicate(std::move(type_info), column_id, state, slot_desc);
     // note: conjuncts would be shared by multiple scanners
     // so here we have to clone one to keep thread safe.
-    RETURN_IF_ERROR(expr_predicate->_add_expr_ctx(expr_ctx));
+    expr_predicate->_add_expr_ctx(expr_ctx);
     return expr_predicate;
 }
 
@@ -41,14 +41,13 @@ ColumnExprPredicate::~ColumnExprPredicate() {
     }
 }
 
-Status ColumnExprPredicate::_add_expr_ctxs(const std::vector<ExprContext*>& expr_ctxs) {
+void ColumnExprPredicate::_add_expr_ctxs(const std::vector<ExprContext*>& expr_ctxs) {
     for (auto& expr : expr_ctxs) {
-        RETURN_IF_ERROR(_add_expr_ctx(expr));
+        _add_expr_ctx(expr);
     }
-    return Status::OK();
 }
 
-Status ColumnExprPredicate::_add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx) {
+void ColumnExprPredicate::_add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx) {
     if (expr_ctx != nullptr) {
         DCHECK(expr_ctx->opened());
         // Transfer the ownership to object pool
@@ -56,10 +55,9 @@ Status ColumnExprPredicate::_add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx)
         _expr_ctxs.emplace_back(ctx);
         _monotonic &= ctx->root()->is_monotonic();
     }
-    return Status::OK();
 }
 
-Status ColumnExprPredicate::_add_expr_ctx(ExprContext* expr_ctx) {
+void ColumnExprPredicate::_add_expr_ctx(ExprContext* expr_ctx) {
     if (expr_ctx != nullptr) {
         DCHECK(expr_ctx->opened());
         ExprContext* ctx = nullptr;
@@ -67,7 +65,6 @@ Status ColumnExprPredicate::_add_expr_ctx(ExprContext* expr_ctx) {
         _expr_ctxs.emplace_back(ctx);
         _monotonic &= ctx->root()->is_monotonic();
     }
-    return Status::OK();
 }
 
 Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
@@ -168,7 +165,10 @@ bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
         size += 2;
     }
     // if all of them are evaluated to false, we don't need this zone.
-    evaluate(col.get(), selection, 0, size);
+    if (!evaluate(col.get(), selection, 0, size).ok()) {
+        return true;
+    }
+
     for (uint16_t i = 0; i < size; i++) {
         if (selection[i] != 0) {
             return true;
@@ -194,8 +194,8 @@ Status ColumnExprPredicate::convert_to(const ColumnPredicate** output, const Typ
     ASSIGN_OR_RETURN(auto pred, ColumnExprPredicate::make_column_expr_predicate(target_type_info, _column_id, _state,
                                                                                 nullptr, _slot_desc));
 
-    RETURN_IF_ERROR(pred->_add_expr_ctxs(_expr_ctxs));
-    RETURN_IF_ERROR(pred->_add_expr_ctx(std::move(cast_expr_ctx)));
+    pred->_add_expr_ctxs(_expr_ctxs);
+    pred->_add_expr_ctx(std::move(cast_expr_ctx));
     *output = pred;
     return Status::OK();
 }

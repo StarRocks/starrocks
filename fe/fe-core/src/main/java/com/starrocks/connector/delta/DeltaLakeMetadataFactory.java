@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.delta;
 
 import com.starrocks.connector.HdfsEnvironment;
@@ -23,6 +22,9 @@ import com.starrocks.connector.hive.HiveMetastoreOperations;
 import com.starrocks.connector.hive.IHiveMetastore;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 
+import java.util.Map;
+
+import static com.starrocks.connector.delta.DeltaLakeConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.hive.CachingHiveMetastore.createQueryLevelInstance;
 
 public class DeltaLakeMetadataFactory {
@@ -33,12 +35,16 @@ public class DeltaLakeMetadataFactory {
     private final MetastoreType metastoreType;
 
     public DeltaLakeMetadataFactory(String catalogName, IHiveMetastore metastore, CachingHiveMetastoreConf hmsConf,
-                                    String uri, HdfsEnvironment hdfsEnvironment, MetastoreType metastoreType) {
+                                    Map<String, String> properties, HdfsEnvironment hdfsEnvironment,
+                                    MetastoreType metastoreType) {
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.perQueryMetastoreMaxNum = hmsConf.getPerQueryCacheMaxNum();
         this.hdfsEnvironment = hdfsEnvironment;
-        this.hdfsEnvironment.getConfiguration().set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), uri);
+        if (properties.containsKey(HIVE_METASTORE_URIS)) {
+            this.hdfsEnvironment.getConfiguration().set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(),
+                    properties.get(HIVE_METASTORE_URIS));
+        }
         this.metastoreType = metastoreType;
     }
 
@@ -48,6 +54,6 @@ public class DeltaLakeMetadataFactory {
                 metastore instanceof CachingHiveMetastore,
                 hdfsEnvironment.getConfiguration(), metastoreType, catalogName);
 
-        return new DeltaLakeMetadata(hdfsEnvironment.getConfiguration(), catalogName, hiveMetastoreOperations);
+        return new DeltaLakeMetadata(hdfsEnvironment, catalogName, hiveMetastoreOperations);
     }
 }

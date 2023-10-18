@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.starrocks.connector.Connector;
@@ -32,7 +31,6 @@ public class HiveConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
     private final Map<String, String> properties;
-    private final CloudConfiguration cloudConfiguration;
     private final String catalogName;
     private final HiveConnectorInternalMgr internalMgr;
     private final HiveMetadataFactory metadataFactory;
@@ -40,7 +38,7 @@ public class HiveConnector implements Connector {
     public HiveConnector(ConnectorContext context) {
         this.properties = context.getProperties();
         this.catalogName = context.getCatalogName();
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.internalMgr = new HiveConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory(hdfsEnvironment);
@@ -64,9 +62,10 @@ public class HiveConnector implements Connector {
                 internalMgr.getPullRemoteFileExecutor(),
                 internalMgr.getupdateRemoteFilesExecutor(),
                 internalMgr.getUpdateStatisticsExecutor(),
+                internalMgr.getRefreshOthersFeExecutor(),
                 internalMgr.isSearchRecursive(),
                 internalMgr.enableHmsEventsIncrementalSync(),
-                hdfsEnvironment.getConfiguration(),
+                hdfsEnvironment,
                 internalMgr.getMetastoreType()
         );
     }
@@ -92,9 +91,5 @@ public class HiveConnector implements Connector {
         metadataFactory.getCacheUpdateProcessor().ifPresent(CacheUpdateProcessor::invalidateAll);
         GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterCacheUpdateProcessor(catalogName);
         GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
-    }
-
-    public CloudConfiguration getCloudConfiguration() {
-        return cloudConfiguration;
     }
 }

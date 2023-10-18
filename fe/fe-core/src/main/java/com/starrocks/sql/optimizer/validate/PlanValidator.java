@@ -15,8 +15,9 @@
 package com.starrocks.sql.optimizer.validate;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -38,7 +39,8 @@ public final class PlanValidator {
         checkerList = ImmutableList.of(
                 InputDependenciesChecker.getInstance(),
                 TypeChecker.getInstance(),
-                CTEUniqueChecker.getInstance());
+                CTEUniqueChecker.getInstance(),
+                ColumnReuseChecker.getInstance());
     }
 
     public static PlanValidator getInstance() {
@@ -49,14 +51,14 @@ public final class PlanValidator {
         boolean enablePlanValidation = ConnectContext.get().getSessionVariable().getEnablePlanValidation();
         try {
             for (Checker checker : checkerList) {
-                try (PlannerProfile.ScopedTimer tracer = PlannerProfile.getScopedTimer(checker.getClass().getSimpleName())) {
+                try (Timer tracer = Tracers.watchScope(checker.getClass().getSimpleName())) {
                     checker.validate(optExpression, taskContext);
                 }
             }
         } catch (IllegalArgumentException e) {
             String message = e.getMessage();
             if (!message.contains("Invalid plan")) {
-                message = "Invalid plan:\n" + optExpression.explain() + message;
+                message = "Invalid plan:\n" + optExpression.debugString() + message;
             }
             LOGGER.debug("Failed to validate plan.", e);
             if (enablePlanValidation) {

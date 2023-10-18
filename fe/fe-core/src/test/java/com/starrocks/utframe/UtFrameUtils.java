@@ -54,10 +54,13 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
@@ -71,7 +74,6 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
-import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -414,7 +416,7 @@ public class UtFrameUtils {
         originStmt = LogUtil.removeLineSeparator(originStmt);
 
         List<StatementBase> statements;
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Parser")) {
+        try (Timer ignored = Tracers.watchScope("Parser")) {
             statements = SqlParser.parse(originStmt, connectContext.getSessionVariable());
         }
         connectContext.getDumpInfo().setOriginStmt(originStmt);
@@ -438,7 +440,7 @@ public class UtFrameUtils {
             }
 
             ExecPlan execPlan;
-            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Planner")) {
+            try (Timer ignored = Tracers.watchScope("Planner")) {
                 execPlan = StatementPlanner.plan(statementBase, connectContext);
             }
 
@@ -521,7 +523,7 @@ public class UtFrameUtils {
             String viewName = "view" + INDEX.getAndIncrement();
             String createView = "create view " + viewName + " as " + originStmt;
             CreateViewStmt createTableStmt;
-            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Test View")) {
+            try (Timer ignored = Tracers.watchScope("Test View")) {
                 createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
                 try {
                     StatementBase viewStatement =
@@ -700,14 +702,14 @@ public class UtFrameUtils {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
 
         LogicalPlan logicalPlan;
-        try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Transformer")) {
+        try (Timer t = Tracers.watchScope("Transformer")) {
             logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
                     .transform((statement).getQueryRelation());
 
         }
 
         OptExpression optimizedPlan;
-        try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Optimizer")) {
+        try (Timer t = Tracers.watchScope("Optimizer")) {
             Optimizer optimizer = new Optimizer();
             optimizedPlan = optimizer.optimize(
                     connectContext,
@@ -718,7 +720,7 @@ public class UtFrameUtils {
         }
 
         ExecPlan execPlan;
-        try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Builder")) {
+        try (Timer t = Tracers.watchScope("Builder")) {
             execPlan = PlanFragmentBuilder
                     .createPhysicalPlan(optimizedPlan, connectContext,
                             logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
@@ -729,7 +731,7 @@ public class UtFrameUtils {
     }
 
     private static Pair<String, ExecPlan> getInsertExecPlan(InsertStmt statement, ConnectContext connectContext) {
-        PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Planner");
+        Timer t = Tracers.watchScope("Planner");
         ExecPlan execPlan = new InsertPlanner().plan(statement, connectContext);
         t.close();
         return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
@@ -742,7 +744,7 @@ public class UtFrameUtils {
         Map<String, Database> dbs = null;
         try {
             StatementBase statementBase;
-            try (PlannerProfile.ScopedTimer st = PlannerProfile.getScopedTimer("Parse")) {
+            try (Timer st = Tracers.watchScope("Parse")) {
                 statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
                         connectContext.getSessionVariable()).get(0);
                 if (statementBase instanceof QueryStatement) {
@@ -750,7 +752,7 @@ public class UtFrameUtils {
                 }
             }
 
-            try (PlannerProfile.ScopedTimer st1 = PlannerProfile.getScopedTimer("Analyze")) {
+            try (Timer st1 = Tracers.watchScope("Analyze")) {
                 com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
             }
 
@@ -935,6 +937,25 @@ public class UtFrameUtils {
             }
         }
 
+        public static synchronized void replayJournalToEnd() throws InterruptedException, IOException {
+            int count = followerJournalQueue.size();
+            while (!followerJournalQueue.isEmpty()) {
+                DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
+                JournalEntity je = new JournalEntity();
+                try (DataInputStream dis = new DataInputStream(
+                        new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()))) {
+                    je.readFields(dis);
+                    EditLog.loadJournal(GlobalStateMgr.getCurrentState(), je);
+                    // System.out.println("replayed journal type: " + je.getOpCode());
+                } catch (JournalInconsistentException e) {
+                    System.err.println("load journal failed, type: " + je.getOpCode() + " , error: " + e.getMessage());
+                    e.printStackTrace();
+                    Assert.fail();
+                }
+            }
+            System.out.println("replayed " + count + " journal(s) from begin to end");
+        }
+
         protected static synchronized void tearDown() {
             if (fakeJournalWriter != null) {
                 try {
@@ -952,7 +973,7 @@ public class UtFrameUtils {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setCurrentUserIdentity(userIdentity);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-        ctx.setQualifiedUser(userIdentity.getQualifiedUser());
+        ctx.setQualifiedUser(userIdentity.getUser());
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         globalStateMgr.initAuth(true);
         ctx.setGlobalStateMgr(globalStateMgr);

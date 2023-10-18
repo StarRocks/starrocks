@@ -74,15 +74,13 @@ public class SplitScanORToUnionRule extends TransformationRule {
                 && !scan.isFromSplitOR();
     }
 
-
-
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         try {
             return transformImpl(input, context);
         } catch (Exception e) {
             if (LOG.isDebugEnabled()) {
-                LOG.debug("input: {}, msg: {}", input.explain(), e.getMessage());
+                LOG.debug("input: {}, msg: {}", input.debugString(), e.getMessage());
             }
             return Lists.newArrayList();
         }

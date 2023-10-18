@@ -24,6 +24,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/priority_thread_pool.hpp"
+#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -225,7 +226,7 @@ Status ConnectorScanNode::open(RuntimeState* state) {
 
 Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
     for (TScanRangeParams& scan_range : _scan_ranges) {
-        _create_and_init_scanner(state, scan_range.scan_range);
+        RETURN_IF_ERROR(_create_and_init_scanner(state, scan_range.scan_range));
     }
     _num_scanners = _pending_scanners.size();
     if (_num_scanners == 0) {
@@ -262,7 +263,7 @@ Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, TScanRan
     data_source->set_runtime_profile(_runtime_profile.get());
     data_source->update_has_any_predicate();
     ConnectorScanner* scanner = _pool->add(new ConnectorScanner(std::move(data_source), _runtime_profile.get()));
-    scanner->init(state);
+    RETURN_IF_ERROR(scanner->init(state));
     _push_pending_scanner(scanner);
     return Status::OK();
 }
@@ -360,6 +361,14 @@ static int compute_priority(int32_t num_submitted_tasks) {
 }
 
 bool ConnectorScanNode::_submit_scanner(ConnectorScanner* scanner, bool blockable) {
+    // submit the streaming load scanner to the dedicated thread pool if needed
+    const TQueryOptions& query_options = _runtime_state->query_options();
+    if (query_options.query_type == TQueryType::LOAD && query_options.load_job_type == TLoadJobType::STREAM_LOAD &&
+        config::enable_streaming_load_thread_pool) {
+        VLOG(1) << "Submit streaming load scanner, fragment: " << print_id(runtime_state()->fragment_instance_id());
+        return _submit_streaming_load_scanner(scanner, blockable);
+    }
+
     auto* thread_pool = _runtime_state->exec_env()->thread_pool();
     int delta = static_cast<int>(!scanner->keep_priority());
     int32_t num_submit = _scanner_submit_count.fetch_add(delta, std::memory_order_relaxed);
@@ -380,6 +389,49 @@ bool ConnectorScanNode::_submit_scanner(ConnectorScanner* scanner, bool blockabl
     LOG(WARNING) << "thread pool busy";
     _running_threads.fetch_sub(1, std::memory_order_release);
     _scanner_submit_count.fetch_sub(delta, std::memory_order_relaxed);
+    return false;
+}
+
+bool ConnectorScanNode::_submit_streaming_load_scanner(ConnectorScanner* scanner, bool blockable) {
+#ifdef BE_TEST
+    _use_stream_load_thread_pool = true;
+#endif
+    ThreadPool* thread_pool = _runtime_state->exec_env()->streaming_load_thread_pool();
+    _running_threads.fetch_add(1, std::memory_order_release);
+    // Assume the thread pool is large enough, so there is no need to set the priority
+    Status status = thread_pool->submit_func([this, scanner] { _scanner_thread(scanner); });
+    if (status.ok()) {
+        return true;
+    }
+
+    // Thread pool for streaming load is assumed to be infinite, and submit should not fail
+    // because of the pool is full. The possible failure reason is that the thread pool is
+    // shutdown. But we still implement a block logic like PriorityPool::offer used in
+    // _submit_scanner to handle unexpected cases.
+    if (blockable) {
+        Status block_status;
+        while (thread_pool->is_pool_status_ok()) {
+            sleep(1);
+            block_status = thread_pool->submit_func([this, scanner] { _scanner_thread(scanner); });
+            if (block_status.ok()) {
+                // Should not reach here if thread pool is infinite and in normal status in general,
+                // and log the status if happened for debug
+                LOG(INFO) << "Success to submit scanner for streaming load after retry, "
+                          << "fragment: " << print_id(runtime_state()->fragment_instance_id())
+                          << ", first fail status: " << status;
+                return true;
+            }
+        }
+        VLOG(1) << "Failed to submit scanner for streaming load with block mode, "
+                << "fragment: " << print_id(runtime_state()->fragment_instance_id()) << ", first status: " << status
+                << ", last status: " << block_status;
+        // always return true for blockable which is same as that in _submit_scanner
+        return true;
+    }
+
+    LOG(WARNING) << "Failed to submit scanner for streaming load with unblock mode, "
+                 << "fragment: " << print_id(runtime_state()->fragment_instance_id()) << ", status: " << status;
+    _running_threads.fetch_sub(1, std::memory_order_release);
     return false;
 }
 

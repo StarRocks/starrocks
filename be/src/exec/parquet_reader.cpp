@@ -24,6 +24,7 @@
 #include "common/logging.h"
 #include "fmt/format.h"
 #include "parquet/schema.h"
+#include "parquet_schema_builder.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {
@@ -47,7 +48,7 @@ ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile
     _parquet = std::move(parquet_file);
     _properties = parquet::ReaderProperties();
     _properties.enable_buffered_stream();
-    _properties.set_buffer_size(8 * 1024 * 1024);
+    _properties.set_buffer_size(1 * 1024 * 1024);
     _filename = (reinterpret_cast<ParquetChunkFile*>(_parquet.get()))->filename();
 }
 
@@ -89,9 +90,10 @@ Status ParquetReaderWrap::_init_parquet_reader() {
                                                    parquet::ParquetFileReader::Open(_parquet, _properties),
                                                    arrow_reader_properties, &_reader);
         if (!st.ok()) {
-            LOG(WARNING) << "Failed to create parquet file reader. error: " << st.ToString()
-                         << ", filename: " << _filename;
-            return Status::InternalError(fmt::format("Failed to create file reader. filename: {}", _filename));
+            std::ostringstream oss;
+            oss << "Failed to create parquet file reader. error: " << st.ToString() << ", filename: " << _filename;
+            LOG(INFO) << oss.str();
+            return Status::InternalError(oss.str());
         }
 
         if (!_reader || !_reader->parquet_reader()) {
@@ -185,87 +187,9 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
         const auto& field = file_schema->group_node()->field(i);
         const auto& name = field->name();
 
-        if (!field->is_primitive()) {
-            // Now, we treat all nested types as VARCHAR.
-            schema->emplace_back(i, name, TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
-            continue;
-        }
-
-        auto column = file_schema->Column(file_schema->ColumnIndex(*field));
-
-        auto physical_type = column->physical_type();
-        auto logical_type = column->logical_type();
-
-        // See detail in https://arrow.apache.org/docs/cpp/parquet.html
         TypeDescriptor tp;
-        switch (physical_type) {
-        case parquet::Type::BOOLEAN:
-            tp = TypeDescriptor(TYPE_BOOLEAN);
-            break;
-        case parquet::Type::FLOAT:
-            tp = TypeDescriptor(TYPE_FLOAT);
-            break;
-        case parquet::Type::DOUBLE:
-            tp = TypeDescriptor(TYPE_DOUBLE);
-            break;
-        case parquet::Type::INT32:
-            if (logical_type->is_int()) {
-                tp = TypeDescriptor(TYPE_INT);
-            } else if (logical_type->is_date()) {
-                tp = TypeDescriptor(TYPE_DATE);
-            } else if (logical_type->is_time()) {
-                tp = TypeDescriptor(TYPE_TIME);
-            } else if (logical_type->is_decimal()) {
-                auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
-                tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, decimal_logical_type->precision(),
-                                                           decimal_logical_type->scale());
-            } else {
-                tp = TypeDescriptor(TYPE_INT);
-            }
-            break;
-        case parquet::Type::INT64:
-            if (logical_type->is_int()) {
-                tp = TypeDescriptor(TYPE_BIGINT);
-            } else if (logical_type->is_time()) {
-                tp = TypeDescriptor(TYPE_TIME);
-            } else if (logical_type->is_timestamp()) {
-                tp = TypeDescriptor(TYPE_DATETIME);
-            } else if (logical_type->is_decimal()) {
-                auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
-                tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, decimal_logical_type->precision(),
-                                                           decimal_logical_type->scale());
-            } else {
-                tp = TypeDescriptor(TYPE_BIGINT);
-            }
-            break;
-        case parquet::Type::INT96:
-            tp = TypeDescriptor(TYPE_DATETIME);
-            break;
-        case parquet::Type::BYTE_ARRAY:
-            if (logical_type->is_string()) {
-                tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-            } else if (logical_type->is_decimal()) {
-                auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
-                tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, decimal_logical_type->precision(),
-                                                           decimal_logical_type->scale());
-            } else {
-                tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-            }
-            break;
-        case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
-            if (logical_type->is_decimal()) {
-                auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
-                tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, decimal_logical_type->precision(),
-                                                           decimal_logical_type->scale());
-            } else {
-                tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-            }
-            break;
-        }
-        default:
-            return Status::NotSupported(
-                    fmt::format("Unkown supported parquet physical type: {}, column name: {}", physical_type, name));
-        }
+        RETURN_IF_ERROR(get_parquet_type(field, &tp));
+
         schema->emplace_back(i, name, tp);
     }
 

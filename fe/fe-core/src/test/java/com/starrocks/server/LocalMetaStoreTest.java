@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
@@ -31,6 +30,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -43,6 +43,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -92,7 +93,7 @@ public class LocalMetaStoreTest {
         Assert.assertEquals(olapTable.getName(), copiedTable.getName());
         Set<Long> tabletIdSet = Sets.newHashSet();
         List<Partition> newPartitions = localMetastore.getNewPartitionsFromPartitions(db,
-                olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds);
+                olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds, null);
         Assert.assertEquals(sourcePartitionIds.size(), newPartitions.size());
         Assert.assertEquals(1, newPartitions.size());
         Partition newPartition = newPartitions.get(0);
@@ -191,5 +192,36 @@ public class LocalMetaStoreTest {
         } finally {
             db.writeUnlock();
         }
+    }
+
+    @Test
+    public void testCreateTableIfNotExists() throws Exception {
+        // create table if not exists, if the table already exists, do nothing
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
+        Table table = db.getTable("t1");
+        Assert.assertTrue(table instanceof OlapTable);
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+
+        new Expectations(localMetastore) {
+            {
+                localMetastore.onCreate((Database) any, (Table) any, anyString, anyBoolean);
+                // don't expect any invoke to this method
+                minTimes = 0;
+                maxTimes = 0;
+                result = null;
+            }
+        };
+
+        starRocksAssert = new StarRocksAssert(connectContext);
+        // with IF NOT EXIST
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE IF NOT EXISTS test.t1(k1 int, k2 int, k3 int)" +
+                        " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+
+        // w/o IF NOT EXIST
+        Assert.assertThrows(AnalysisException.class, () ->
+                starRocksAssert.useDatabase("test").withTable(
+                        "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
+                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');"));
     }
 }

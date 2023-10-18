@@ -49,41 +49,42 @@ public:
     explicit ScalarColumnIterator(ColumnReader* reader);
     ~ScalarColumnIterator() override;
 
-    Status init(const ColumnIteratorOptions& opts) override;
+    [[nodiscard]] Status init(const ColumnIteratorOptions& opts) override;
 
-    Status seek_to_first() override;
+    [[nodiscard]] Status seek_to_first() override;
 
-    Status seek_to_ordinal(ordinal_t ord) override;
+    [[nodiscard]] Status seek_to_ordinal(ordinal_t ord) override;
 
-    Status seek_to_ordinal_and_calc_element_ordinal(ordinal_t ord) override;
+    [[nodiscard]] Status seek_to_ordinal_and_calc_element_ordinal(ordinal_t ord) override;
 
-    Status next_batch(size_t* n, Column* dst) override;
+    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const SparseRange<>& range, Column* dst) override;
+    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     ordinal_t get_current_ordinal() const override { return _current_ordinal; }
 
-    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
-                                      const ColumnPredicate* del_predicate, SparseRange<>* range) override;
+    [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
+                                                    const ColumnPredicate* del_predicate,
+                                                    SparseRange<>* range) override;
 
-    Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                          SparseRange<>* range) override;
+    [[nodiscard]] Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                        SparseRange<>* range) override;
 
     bool all_page_dict_encoded() const override { return _all_dict_encoded; }
 
-    Status fetch_all_dict_words(std::vector<Slice>* words) const override;
+    [[nodiscard]] Status fetch_all_dict_words(std::vector<Slice>* words) const override;
 
     int dict_lookup(const Slice& word) override;
 
-    Status next_dict_codes(size_t* n, Column* dst) override;
+    [[nodiscard]] Status next_dict_codes(size_t* n, Column* dst) override;
 
-    Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
+    [[nodiscard]] Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
 
-    Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override;
+    [[nodiscard]] Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override;
 
-    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+    [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
-    Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+    [[nodiscard]] Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
     ParsedPage* get_current_page() { return _page.get(); }
 
@@ -96,7 +97,7 @@ public:
     int dict_size();
 
 private:
-    static void _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);
+    static Status _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);
     Status _load_next_page(bool* eos);
     Status _read_data_page(const OrdinalPageIndexIterator& iter);
 

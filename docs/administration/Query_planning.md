@@ -12,7 +12,7 @@ Query performance in StarRocks is determined by query planning and query executi
 
 A query plan provides the DBA with a macro perspective to access query information. A query plan is the key to query performance and a good resource for the DBA to reference. The following code snippet uses `TPCDS query96` as an example to show how to view a query plan.
 
-~~~ SQL
+~~~SQL
 -- query96.sql
 select  count(*)
 from store_sales
@@ -203,7 +203,7 @@ You can set one or more [system variables](../reference/System_variable.md) by u
 
 #### Syntax
 
-~~~ SQL
+~~~SQL
 [...] SELECT [/*+ SET_VAR(key=value [, key = value]*) */] ...
 SUBMIT [/*+ SET_VAR(key=value [, key = value]*) */] TASK ...
 ~~~
@@ -212,19 +212,19 @@ SUBMIT [/*+ SET_VAR(key=value [, key = value]*) */] TASK ...
 
  Hint the aggregation method for an aggregate query by setting the system variables `streaming_preaggregation_mode` and `new_planner_agg_stage`.
 
-~~~ SQL
+~~~SQL
 SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage = '2') */ SUM(sales_amount) AS total_sales_amount FROM sales_orders;
 ~~~
 
 Hint the query's task execution timeout period by setting the system variable `query_timeout` in the SUBMIT TASK statement.
 
-~~~ SQL
+~~~SQL
 SUBMIT /*+ SET_VAR(query_timeout=3) */ TASK AS CREATE TABLE temp AS SELECT count(*) AS cnt FROM tbl1;
 ~~~
 
 Hint the query's execution timeout period by setting the system variable `query_timeout` in the SELECT clause when creating a materialized view.
 
-~~~ SQL
+~~~SQL
 CREATE MATERIALIZED VIEW mv 
 PARTITION BY dt 
 DISTRIBUTED BY HASH(`key`) 

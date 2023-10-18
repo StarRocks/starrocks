@@ -293,60 +293,6 @@ public class JobSpecTest extends SchedulerTestBase {
     }
 
     @Test
-    public void testFromNonPipelineBrokerLoadJobSpec() throws Exception {
-        Config.enable_pipeline_load = false;
-
-        // Prepare input arguments.
-        String sql = "insert into lineitem select * from lineitem";
-        ExecPlan execPlan = getExecPlan(sql);
-
-        long loadJobId = 1L;
-        TUniqueId queryId = new TUniqueId(2, 3);
-        DescriptorTable descTable = new DescriptorTable();
-        List<PlanFragment> fragments = execPlan.getFragments();
-        List<ScanNode> scanNodes = execPlan.getScanNodes();
-        String timezone = connectContext.getSessionVariable().getTimeZone();
-        long startTime = connectContext.getStartTime();
-        Map<String, String> sessionVariables = ImmutableMap.of();
-        long execMemLimit = 4L;
-
-        DefaultCoordinator coordinator = COORDINATOR_FACTORY.createNonPipelineBrokerLoadScheduler(
-                loadJobId, queryId, descTable, fragments, scanNodes, timezone, startTime,
-                sessionVariables,
-                connectContext,
-                execMemLimit);
-        JobSpec jobSpec = coordinator.getJobSpec();
-
-        // Check created jobSpec.
-        Assert.assertEquals(loadJobId, jobSpec.getLoadJobId());
-        Assert.assertEquals(queryId, jobSpec.getQueryId());
-        Assert.assertEquals(TQueryType.LOAD, jobSpec.getQueryOptions().getQuery_type());
-        Assert.assertEquals(execMemLimit, jobSpec.getQueryOptions().getMem_limit());
-        Assert.assertEquals(execMemLimit, jobSpec.getQueryOptions().getLoad_mem_limit());
-        Assert.assertFalse(jobSpec.isEnablePipeline());
-        Assert.assertFalse(jobSpec.isEnableStreamPipeline());
-        Assert.assertTrue(jobSpec.isBlockQuery());
-        Assert.assertEquals(LOAD_RESOURCE_GROUP, jobSpec.getResourceGroup());
-
-        // Check created jobSpec for sessionVariables.
-        Assert.assertFalse(jobSpec.getQueryOptions().isSetLoad_transmission_compression_type());
-        Assert.assertFalse(jobSpec.getQueryOptions().isSetLog_rejected_record_num());
-
-        sessionVariables = ImmutableMap.of(
-                SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE, "LZ4",
-                BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY, "10"
-        );
-        coordinator = COORDINATOR_FACTORY.createNonPipelineBrokerLoadScheduler(
-                loadJobId, queryId, descTable, fragments, scanNodes, timezone, startTime,
-                sessionVariables,
-                connectContext,
-                execMemLimit);
-        jobSpec = coordinator.getJobSpec();
-        Assert.assertEquals(TCompressionType.LZ4, jobSpec.getQueryOptions().getLoad_transmission_compression_type());
-        Assert.assertEquals(10L, jobSpec.getQueryOptions().getLog_rejected_record_num());
-    }
-
-    @Test
     public void testFromBrokerExportSpec() throws Exception {
         // Prepare input arguments.
         String sql = "insert into lineitem select * from lineitem";

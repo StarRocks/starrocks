@@ -55,7 +55,7 @@ void QueryStatistics::to_pb(PQueryStatistics* statistics) {
     }
 }
 
-void QueryStatistics::to_params(TReportAuditStatisticsParams* params) {
+void QueryStatistics::to_params(TAuditStatistics* params) {
     DCHECK(params != nullptr);
     params->__set_scan_rows(scan_rows);
     params->__set_scan_bytes(scan_bytes);

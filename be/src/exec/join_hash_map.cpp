@@ -27,6 +27,52 @@
 
 namespace starrocks {
 
+// if the same hash values are clustered, after the first probe, all related hash buckets are cached, without too many
+// misses. So check time locality of probe keys here.
+void HashTableProbeState::consider_probe_time_locality() {
+    if (active_coroutines > 0) {
+        // redo decision
+        if ((probe_chunks & (detect_step - 1)) == 0) {
+            int window_size = std::min(active_coroutines * 4, 50);
+            if (probe_row_count > window_size) {
+                phmap::flat_hash_map<uint32_t, uint32_t> occurrence;
+                occurrence.reserve(probe_row_count);
+                uint32_t unique_size = 0;
+                bool enable_interleaving = true;
+                uint32_t target = probe_row_count >> 3;
+                for (auto i = 0; i < probe_row_count; i++) {
+                    if (occurrence[next[i]] == 0) {
+                        ++unique_size;
+                        if (unique_size >= target) {
+                            break;
+                        }
+                    }
+                    occurrence[next[i]]++;
+                    if (i >= window_size) {
+                        occurrence[next[i - window_size]]--;
+                    }
+                }
+                if (unique_size < target) {
+                    active_coroutines = 0;
+                    enable_interleaving = false;
+                }
+                // enlarge step if the decision is the same, otherwise reduce it
+                if (enable_interleaving == last_enable_interleaving) {
+                    detect_step = detect_step >= 1024 ? detect_step : (detect_step << 1);
+                } else {
+                    last_enable_interleaving = enable_interleaving;
+                    detect_step = 1;
+                }
+            } else {
+                active_coroutines = 0;
+            }
+        } else if (!last_enable_interleaving) {
+            active_coroutines = 0;
+        }
+    }
+    ++probe_chunks;
+}
+
 void SerializedJoinBuildFunc::prepare(RuntimeState* state, JoinHashTableItems* table_items) {
     table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
     table_items->first.resize(table_items->bucket_size, 0);
@@ -82,6 +128,7 @@ void SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHash
         }
         _build_columns(table_items, probe_state, data_columns, 1 + state->chunk_size() * quo, rem, &ptr);
     }
+    table_items->calculate_ht_info(serialize_size);
 }
 
 void SerializedJoinBuildFunc::_build_columns(JoinHashTableItems* table_items, HashTableProbeState* probe_state,
@@ -163,6 +210,7 @@ void SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_items,
     } else {
         _probe_column(table_items, probe_state, data_columns, ptr);
     }
+    probe_state->consider_probe_time_locality();
 }
 
 void SerializedJoinProbeFunc::_probe_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
@@ -195,6 +243,7 @@ void SerializedJoinProbeFunc::_probe_nullable_column(const JoinHashTableItems& t
         }
     }
 
+    probe_state->null_array = &null_columns[0]->get_data();
     for (uint32_t i = 0; i < row_count; i++) {
         if (probe_state->is_nulls[i] == 0) {
             probe_state->probe_slice[i] = JoinHashMapHelper::get_hash_key(data_columns, i, ptr);
@@ -249,12 +298,8 @@ void JoinHashTable::set_probe_profile(RuntimeProfile::Counter* search_ht_timer,
     _probe_state->output_build_column_timer = output_build_column_timer;
 }
 
-size_t JoinHashTable::get_used_bucket_count() const {
-    size_t count = 0;
-    for (const auto value : _table_items->first) {
-        count += value != 0;
-    }
-    return count;
+float JoinHashTable::get_keys_per_bucket() const {
+    return _table_items->get_keys_per_bucket();
 }
 
 void JoinHashTable::close() {
@@ -414,7 +459,7 @@ Status JoinHashTable::build(RuntimeState* state) {
     return Status::OK();
 }
 
-Status JoinHashTable::reset_probe_state(starrocks::RuntimeState* state) {
+void JoinHashTable::reset_probe_state(starrocks::RuntimeState* state) {
     _hash_map_type = _choose_join_hash_map();
     switch (_hash_map_type) {
 #define M(NAME)                                                                                                       \
@@ -427,7 +472,6 @@ Status JoinHashTable::reset_probe_state(starrocks::RuntimeState* state) {
     default:
         assert(false);
     }
-    return Status::OK();
 }
 
 Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,

@@ -62,7 +62,7 @@ public:
     // Create an empty chunk according to the |slots| and reserve it of size |n|.
     static ChunkUniquePtr new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
 
-    static Chunk* new_chunk_pooled(const Schema& schema, size_t n, bool force = true);
+    static Chunk* new_chunk_pooled(const Schema& schema, size_t n, bool force);
 
     // Create a vectorized column from field .
     // REQUIRE: |type| must be scalar type.
@@ -97,7 +97,7 @@ public:
     void finalize();
     bool empty() const;
     bool reach_limit() const;
-    Status push(ChunkPtr&& chunk);
+    [[nodiscard]] Status push(ChunkPtr&& chunk);
     ChunkPtr pull();
 
 private:

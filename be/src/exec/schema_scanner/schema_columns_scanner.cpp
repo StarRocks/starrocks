@@ -18,8 +18,8 @@
 
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
-#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -52,7 +52,8 @@ SchemaScanner::ColumnDesc SchemaColumnsScanner::_s_col_columns[] = {
 };
 
 SchemaColumnsScanner::SchemaColumnsScanner()
-        : SchemaScanner(_s_col_columns, sizeof(_s_col_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
+        : SchemaScanner(_s_col_columns, sizeof(_s_col_columns) / sizeof(SchemaScanner::ColumnDesc)),
+          _timeout_ms(config::thrift_rpc_timeout_ms) {}
 
 SchemaColumnsScanner::~SchemaColumnsScanner() = default;
 
@@ -63,6 +64,7 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
     if (_param->without_db_table) {
         return Status::OK();
     }
+
     // get all database
     TGetDbsParams db_params;
     if (nullptr != _param->catalog) {
@@ -84,8 +86,10 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
 
     {
         SCOPED_TIMER(_param->_rpc_timer);
+        _timeout_ms = state->query_options().query_timeout * 1000;
         if (nullptr != _param->ip && 0 != _param->port) {
-            RETURN_IF_ERROR(SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result));
+            RETURN_IF_ERROR(
+                    SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result, _timeout_ms));
         } else {
             return Status::InternalError("IP or port doesn't exists");
         }
@@ -138,6 +142,10 @@ std::string SchemaColumnsScanner::to_mysql_data_type_string(TColumnDesc& desc) {
         return "json";
     case TPrimitiveType::ARRAY:
         return "array";
+    case TPrimitiveType::BINARY:
+        return "binary";
+    case TPrimitiveType::VARBINARY:
+        return "varbinary";
     default:
         return "unknown";
     }
@@ -212,6 +220,10 @@ std::string SchemaColumnsScanner::type_to_string(TColumnDesc& desc) {
         return "json";
     case TPrimitiveType::ARRAY:
         return "array";
+    case TPrimitiveType::BINARY:
+        return "binary";
+    case TPrimitiveType::VARBINARY:
+        return "varbinary";
     default:
         return "unknown";
     }
@@ -530,7 +542,8 @@ Status SchemaColumnsScanner::get_new_desc() {
     }
 
     if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::describe_table(*(_param->ip), _param->port, desc_params, &_desc_result));
+        RETURN_IF_ERROR(
+                SchemaHelper::describe_table(*(_param->ip), _param->port, desc_params, &_desc_result, _timeout_ms));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
@@ -563,7 +576,8 @@ Status SchemaColumnsScanner::get_new_table() {
     }
 
     if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_table_names(*(_param->ip), _param->port, table_params, &_table_result));
+        RETURN_IF_ERROR(
+                SchemaHelper::get_table_names(*(_param->ip), _param->port, table_params, &_table_result, _timeout_ms));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }

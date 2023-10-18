@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hudi;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.hive.CachingHiveMetastore;
@@ -27,6 +27,8 @@ import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreOperations;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.HiveStatisticsProvider;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.utframe.UtFrameUtils;
@@ -66,7 +68,7 @@ public class HudiMetadataTest {
         executorForPullFiles = Executors.newFixedThreadPool(5);
 
         client = new HiveMetastoreTest.MockedHiveMetaClient();
-        metastore = new HiveMetastore(client, "hive_catalog");
+        metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
                 metastore, executorForHmsRefresh, 100, 10, 1000, false);
         hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
@@ -82,7 +84,8 @@ public class HudiMetadataTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         columnRefFactory = new ColumnRefFactory();
-        hudiMetadata = new HudiMetadata("hive_catalog", hmsOps, fileOps, statisticsProvider, Optional.empty());
+        hudiMetadata =
+                new HudiMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps, statisticsProvider, Optional.empty());
     }
 
     @After
@@ -116,5 +119,11 @@ public class HudiMetadataTest {
         Database database = hudiMetadata.getDb("db1");
         Assert.assertEquals("db1", database.getFullName());
 
+    }
+
+    @Test
+    public void testGetCloudConfiguration() {
+        CloudConfiguration cc = hudiMetadata.getCloudConfiguration();
+        Assert.assertEquals(cc.getCloudType(), CloudType.DEFAULT);
     }
 }

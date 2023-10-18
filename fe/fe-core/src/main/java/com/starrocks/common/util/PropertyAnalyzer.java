@@ -134,11 +134,18 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_BINLOG_MAX_SIZE = "binlog_max_size";
 
+    public static final String PROPERTIES_STORAGE_TYPE_COLUMN = "column";
+    public static final String PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW = "column_with_row";
+    public static final String PROPERTIES_STORAGE_TYPE_ROW = "row";
+    public static final String PROPERTIES_STORAGE_TYPE_ROW_MVCC = "row_mvcc";
+
     public static final String PROPERTIES_WRITE_QUORUM = "write_quorum";
 
     public static final String PROPERTIES_REPLICATED_STORAGE = "replicated_storage";
 
     public static final String PROPERTIES_BUCKET_SIZE = "bucket_size";
+
+    public static final String PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC = "primary_index_cache_expire_sec";
 
     public static final String PROPERTIES_TABLET_TYPE = "tablet_type";
 
@@ -157,6 +164,10 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
+
+    // 1. `force_external_table_query_rewrite` is used to control whether external table can be rewritten or not
+    // 2. external table can be rewritten by default if not specific.
+    // 3. you can use `query_rewrite_consistency` to control mv's rewrite consistency.
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
     public static final String PROPERTIES_QUERY_REWRITE_CONSISTENCY = "query_rewrite_consistency";
     public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
@@ -178,6 +189,11 @@ public class PropertyAnalyzer {
     // -1: disable randomize, use current time as start
     // positive value: use [0, mv_randomize_start) as random interval
     public static final String PROPERTY_MV_RANDOMIZE_START = "mv_randomize_start";
+
+    /**
+     * Materialized View sort keys
+     */
+    public static final String PROPERTY_MV_SORT_KEYS = "mv_sort_keys";
 
     // light schema change
     public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
@@ -335,7 +351,7 @@ public class PropertyAnalyzer {
                 throw new AnalysisException("Bucket size: " + e.getMessage());
             }
             if (bucketSize <= 0) {
-                throw new AnalysisException("Illegal Partition Bucket size: " + bucketSize);
+                throw new AnalysisException("Illegal bucket size: " + bucketSize);
             }
             return bucketSize;
         } else {
@@ -494,20 +510,27 @@ public class PropertyAnalyzer {
         return rowDelimiter;
     }
 
-    public static TStorageType analyzeStorageType(Map<String, String> properties) throws AnalysisException {
+    public static TStorageType analyzeStorageType(Map<String, String> properties, OlapTable olapTable)
+            throws AnalysisException {
         // default is COLUMN
         TStorageType tStorageType = TStorageType.COLUMN;
         if (properties != null && properties.containsKey(PROPERTIES_STORAGE_TYPE)) {
             String storageType = properties.get(PROPERTIES_STORAGE_TYPE);
             if (storageType.equalsIgnoreCase(TStorageType.COLUMN.name())) {
                 tStorageType = TStorageType.COLUMN;
+            } else if (olapTable.supportsUpdate() && storageType.equalsIgnoreCase(TStorageType.ROW.name())) {
+                tStorageType = TStorageType.ROW;
+            } else if (olapTable.supportsUpdate() && storageType.equalsIgnoreCase(TStorageType.COLUMN_WITH_ROW.name())) {
+                tStorageType = TStorageType.COLUMN_WITH_ROW;
+                if (!olapTable.supportColumnWithRow()) {
+                    throw new AnalysisException("Olap Table must have more value columns exclude key columns");
+                }
             } else {
-                throw new AnalysisException("Invalid storage type: " + storageType);
+                throw new AnalysisException("Invalid storage type: " + storageType + ", maybe row store need primary key");
             }
 
             properties.remove(PROPERTIES_STORAGE_TYPE);
         }
-
         return tStorageType;
     }
 
@@ -562,16 +585,11 @@ public class PropertyAnalyzer {
 
     public static Boolean analyzeUseLightSchemaChange(Map<String, String> properties) throws AnalysisException {
         if (properties == null || properties.isEmpty()) {
-            return false;
+            return Config.allow_default_light_schema_change;
         }
         String value = properties.get(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
-        // set light schema change false by default
-        if (Config.allow_default_light_schema_change) {
-            properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
-            return true;
-        }
         if (null == value) {
-            return false;
+            return Config.allow_default_light_schema_change;
         }
         properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
         if (Boolean.TRUE.toString().equalsIgnoreCase(value)) {
@@ -773,6 +791,26 @@ public class PropertyAnalyzer {
         return val;
     }
 
+    public static int analyzePrimaryIndexCacheExpireSecProp(Map<String, String> properties, String propKey, int defaultVal)
+            throws AnalysisException {
+        int val = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
+            String valStr = properties.get(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+            try {
+                val = Integer.parseInt(valStr);
+                if (val < 0) {
+                    throw new AnalysisException("Property " + PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC
+                            + " must not be less than 0");
+                }
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Property " + PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC
+                        + " must be integer: " + valStr);
+            }
+            properties.remove(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+        }
+        return val;
+    }
+
     public static List<UniqueConstraint> analyzeUniqueConstraint(Map<String, String> properties, Database db, OlapTable table) {
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
         List<UniqueConstraint> analyzedUniqueConstraints = Lists.newArrayList();
@@ -865,7 +903,7 @@ public class PropertyAnalyzer {
 
         BaseTableInfo tableInfo;
         if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
-            tableInfo = new BaseTableInfo(parentDb.getId(), dbName, table.getId());
+            tableInfo = new BaseTableInfo(parentDb.getId(), dbName, table.getName(), table.getId());
         } else {
             tableInfo = new BaseTableInfo(catalogName, dbName, table.getName(), table.getTableIdentifier());
         }
@@ -1024,10 +1062,9 @@ public class PropertyAnalyzer {
 
         boolean enableAsyncWriteBack =
                 analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK, false);
-        if (!enableDataCache && enableAsyncWriteBack) {
-            throw new AnalysisException("enable_async_write_back can't be turned on when cache is disabled");
+        if (enableAsyncWriteBack) {
+            throw new AnalysisException("enable_async_write_back is disabled since version 3.1.4");
         }
-
         return new DataCacheInfo(enableDataCache, enableAsyncWriteBack);
     }
 
@@ -1070,5 +1107,4 @@ public class PropertyAnalyzer {
         }
         return periodDuration;
     }
-
 }

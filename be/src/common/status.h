@@ -23,8 +23,13 @@ class TStatus;
 
 template <typename T>
 class StatusOr;
+#ifdef STARROCKS_STATUS_NODISCARD
+#define STATUS_ATTRIBUTE [[nodiscard]]
+#else
+#define STATUS_ATTRIBUTE
+#endif
 
-class Status {
+class STATUS_ATTRIBUTE Status {
 public:
     Status() = default;
 
@@ -245,6 +250,11 @@ public:
     bool is_corruption() const {
         mark_checked();
         return code() == TStatusCode::CORRUPTION;
+    }
+
+    bool is_resource_busy() const {
+        mark_checked();
+        return code() == TStatusCode::RESOURCE_BUSY;
     }
 
     /// @return @c true if the status indicates Uninitialized.

@@ -2,7 +2,7 @@
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
-[Primary Key tables](../table_design/table_types/primary_key_table.md) provided by StarRocks allow you to make data changes to StarRocks tables by running [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), or [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) jobs. These data changes include inserts, updates, and deletions. However, Primary Key tables do not support changing data by using [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) or [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
+[Primary Key tables](../table_design/table_types/primary_key_table.md) provided by StarRocks allow you to make data changes to StarRocks tables by running [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), or [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) jobs. These data changes include inserts, updates, and deletions. However, Primary Key tables do not support changing data by using [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) or [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
 
 StarRocks also supports partial updates and conditional updates.
 
@@ -58,7 +58,7 @@ If you choose Routine Load, make sure that topics are created in your Apache Kaf
 
 ## Basic operations
 
-This section provides examples of how to make data changes to a StarRocks table through loading. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), and [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
+This section provides examples of how to make data changes to a StarRocks table through loading. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), and [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md).
 
 ### UPSERT
 
@@ -595,7 +595,7 @@ The conditional update feature is designed to resolve data disorder. If the sour
 >
 > - You cannot specify different columns as update conditions for the same batch of data.
 > - DELETE operations do not support conditional updates.
-> - Partial updates and conditional updates cannot be used simultaneously.
+> - In versions earlier than v3.1.3, partial updates and conditional updates cannot be used simultaneously. From v3.1.3 onwards, StarRocks supports using partial updates with conditional updates.
 > - Only Stream Load and Routine Load support conditional updates.
 
 ### Data examples

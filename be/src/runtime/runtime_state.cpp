@@ -117,6 +117,13 @@ RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
     TimezoneUtils::find_cctz_time_zone(_timezone, _timezone_obj);
 }
 
+RuntimeState::RuntimeState(ExecEnv* exec_env) : _exec_env(exec_env) {
+    _profile = std::make_shared<RuntimeProfile>("<unnamed>");
+    _query_options.batch_size = DEFAULT_CHUNK_SIZE;
+    _timezone = TimezoneUtils::default_time_zone;
+    _timestamp_ms = 0;
+}
+
 RuntimeState::~RuntimeState() {
     // close error log file
     if (_error_log_file != nullptr && _error_log_file->is_open()) {
@@ -128,6 +135,7 @@ RuntimeState::~RuntimeState() {
     if (_rejected_record_file != nullptr && _rejected_record_file->is_open()) {
         _rejected_record_file->close();
     }
+    _process_status.permit_unchecked_error();
 }
 
 void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -204,10 +212,9 @@ void RuntimeState::init_mem_trackers(const std::shared_ptr<MemTracker>& query_me
     _instance_mem_pool = std::make_unique<MemPool>();
 }
 
-Status RuntimeState::init_instance_mem_tracker() {
+void RuntimeState::init_instance_mem_tracker() {
     _instance_mem_tracker = std::make_unique<MemTracker>(-1);
     _instance_mem_pool = std::make_unique<MemPool>();
-    return Status::OK();
 }
 
 ObjectPool* RuntimeState::global_obj_pool() const {
@@ -256,6 +263,17 @@ bool RuntimeState::use_page_cache() {
     }
     if (_query_options.__isset.use_page_cache) {
         return _query_options.use_page_cache;
+    }
+    return true;
+}
+
+bool RuntimeState::use_column_pool() const {
+    if (config::disable_column_pool) {
+        return false;
+    }
+
+    if (_query_options.__isset.use_column_pool) {
+        return _query_options.use_column_pool;
     }
     return true;
 }

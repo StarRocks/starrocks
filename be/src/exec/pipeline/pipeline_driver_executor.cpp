@@ -55,7 +55,8 @@ void GlobalDriverExecutor::initialize(int num_threads) {
     _blocked_driver_poller->start();
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
-        (void)_thread_pool->submit_func([this]() { this->_worker_thread(); });
+        auto st = _thread_pool->submit_func([this]() { this->_worker_thread(); });
+        st.permit_unchecked_error();
     }
 }
 
@@ -65,7 +66,8 @@ void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-        (void)_thread_pool->submit_func([this]() { this->_worker_thread(); });
+        auto st = _thread_pool->submit_func([this]() { this->_worker_thread(); });
+        st.permit_unchecked_error();
     }
 }
 
@@ -250,7 +252,7 @@ StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver(std::queue<DriverR
 }
 
 void GlobalDriverExecutor::submit(DriverRawPtr driver) {
-    driver->start_schedule(_schedule_count, _driver_execution_ns);
+    driver->start_timers();
 
     if (driver->is_precondition_block()) {
         driver->set_driver_state(DriverState::PRECONDITION_BLOCK);
@@ -343,7 +345,8 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
     TReportAuditStatisticsParams params;
     params.__set_query_id(fragment_ctx->query_id());
     params.__set_fragment_instance_id(fragment_ctx->fragment_instance_id());
-    query_statistics->to_params(&params);
+    params.__set_audit_statistics({});
+    query_statistics->to_params(&params.audit_statistics);
 
     auto fe_addr = fragment_ctx->fe_addr();
     if (fe_addr.hostname.empty()) {
@@ -446,8 +449,6 @@ RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContex
             continue;
         }
 
-        _remove_non_core_metrics(query_ctx, driver_profiles);
-
         auto* merged_driver_profile =
                 RuntimeProfile::merge_isomorphic_profiles(query_ctx->object_pool(), driver_profiles);
 
@@ -472,29 +473,4 @@ RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContex
 
     return new_instance_profile;
 }
-
-void GlobalDriverExecutor::_remove_non_core_metrics(QueryContext* query_ctx,
-                                                    std::vector<RuntimeProfile*>& driver_profiles) {
-    if (query_ctx->profile_level() > TPipelineProfileLevel::CORE_METRICS) {
-        return;
-    }
-
-    for (auto* driver_profile : driver_profiles) {
-        driver_profile->remove_counters(std::set<std::string>{"DriverTotalTime", "ActiveTime", "PendingTime"});
-
-        std::vector<RuntimeProfile*> operator_profiles;
-        driver_profile->get_children(&operator_profiles);
-
-        for (auto* operator_profile : operator_profiles) {
-            RuntimeProfile* common_metrics = operator_profile->get_child("CommonMetrics");
-            DCHECK(common_metrics != nullptr);
-            common_metrics->remove_counters(std::set<std::string>{"OperatorTotalTime"});
-
-            RuntimeProfile* unique_metrics = operator_profile->get_child("UniqueMetrics");
-            DCHECK(unique_metrics != nullptr);
-            unique_metrics->remove_counters(std::set<std::string>{"ScanTime", "WaitTime"});
-        }
-    }
-}
-
 } // namespace starrocks::pipeline

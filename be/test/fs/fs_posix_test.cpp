@@ -134,7 +134,7 @@ TEST_F(PosixFileSystemTest, random_access) {
 
 TEST_F(PosixFileSystemTest, iterate_dir) {
     const std::string dir_path = "./ut_dir/fs_posix/iterate_dir";
-    fs::remove_all(dir_path);
+    ASSERT_OK(fs::remove_all(dir_path));
     ASSERT_OK(FileSystem::Default()->create_dir_if_missing(dir_path));
 
     ASSERT_OK(FileSystem::Default()->create_dir_if_missing(dir_path + "/abc"));

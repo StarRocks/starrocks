@@ -29,20 +29,22 @@ import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.MultiCastDataSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanNode;
-import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TUnit;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -64,6 +66,7 @@ public class ExplainAnalyzer {
 
     private static final int FINAL_SINK_PSEUDO_PLAN_NODE_ID = -1;
     private static final Pattern PLAN_NODE_ID = Pattern.compile("^.*?\\(.*?plan_node_id=([-0-9]+)\\)$");
+    private static final Pattern PLAN_OP_NAME = Pattern.compile("^(.*?) \\(.*?plan_node_id=[-0-9]+\\)$");
 
     // ANSI Characters
     private static final String ANSI_RESET = "\u001B[0m";
@@ -108,6 +111,20 @@ public class ExplainAnalyzer {
         private final String content;
     }
 
+    private enum SearchMode {
+        NATIVE_ONLY,
+        SUBORDINATE_ONLY,
+        BOTH;
+
+        public boolean isNative() {
+            return this == NATIVE_ONLY || this == BOTH;
+        }
+
+        public boolean isSubordinate() {
+            return this == SUBORDINATE_ONLY || this == BOTH;
+        }
+    }
+
     private final ProfilingExecPlan plan;
     private final RuntimeProfile summaryProfile;
     private final RuntimeProfile plannerProfile;
@@ -118,6 +135,7 @@ public class ExplainAnalyzer {
     private final LinkedList<String> indents = Lists.newLinkedList();
     private final Map<Integer, NodeInfo> allNodeInfos = Maps.newHashMap();
     private boolean isRuntimeProfile;
+    private boolean isFinishedIdentical;
 
     private String color = ANSI_RESET;
 
@@ -170,6 +188,8 @@ public class ExplainAnalyzer {
         String queryState = summaryProfile.getInfoString("Query State");
         if (Objects.equals(queryState, "Running")) {
             isRuntimeProfile = true;
+        } else {
+            checkIdentical();
         }
 
         for (int i = 0; i < executionProfile.getChildList().size(); i++) {
@@ -192,10 +212,11 @@ public class ExplainAnalyzer {
         // Bind plan element
         plan.getFragments().forEach((fragment) -> {
             ProfilingExecPlan.ProfilingElement sink = fragment.getSink();
-            if (sink.instanceOf(ResultSink.class) || sink.instanceOf(OlapTableSink.class)) {
+            if (sink.isFinalSink()) {
                 NodeInfo resultNodeInfo = allNodeInfos.get(FINAL_SINK_PSEUDO_PLAN_NODE_ID);
                 if (resultNodeInfo == null) {
-                    resultNodeInfo = new NodeInfo(isRuntimeProfile, FINAL_SINK_PSEUDO_PLAN_NODE_ID, true, null, null);
+                    resultNodeInfo =
+                            new NodeInfo(isRuntimeProfile, FINAL_SINK_PSEUDO_PLAN_NODE_ID, true, null, null, null);
                     allNodeInfos.put(resultNodeInfo.planNodeId, resultNodeInfo);
                 }
                 resultNodeInfo.element = sink;
@@ -211,7 +232,7 @@ public class ExplainAnalyzer {
                     Preconditions.checkNotNull(peek);
                     NodeInfo nodeInfo = allNodeInfos.get(peek.getId());
                     if (nodeInfo == null) {
-                        nodeInfo = new NodeInfo(isRuntimeProfile, peek.getId(), true, null, null);
+                        nodeInfo = new NodeInfo(isRuntimeProfile, peek.getId(), true, null, null, null);
                         allNodeInfos.put(nodeInfo.planNodeId, nodeInfo);
                     }
                     nodeInfo.element = peek;
@@ -225,20 +246,71 @@ public class ExplainAnalyzer {
 
         allNodeInfos.values().forEach(NodeInfo::initState);
 
+        // Setup output rows
         allNodeInfos.values().forEach(nodeInfo -> {
             if (nodeInfo.planNodeId == FINAL_SINK_PSEUDO_PLAN_NODE_ID) {
-                nodeInfo.outputRowNums = searchMetricFromUpperLevel(nodeInfo, "CommonMetrics", "PushRowNum");
+                nodeInfo.outputRowNums = searchOutputRows(nodeInfo, "CommonMetrics", "PushRowNum");
             } else if (nodeInfo.element.instanceOf(UnionNode.class)) {
-                nodeInfo.outputRowNums = sumUpMetric(nodeInfo, false, false, "CommonMetrics", "PullRowNum");
+                nodeInfo.outputRowNums = sumUpMetric(nodeInfo, SearchMode.NATIVE_ONLY,
+                        false, "CommonMetrics", "PullRowNum");
             } else {
-                nodeInfo.outputRowNums = searchMetricFromUpperLevel(nodeInfo, "CommonMetrics", "PullRowNum");
+                nodeInfo.outputRowNums = searchOutputRows(nodeInfo, "CommonMetrics", "PullRowNum");
+            }
+
+            // Broadcast exchange
+            if (nodeInfo.element.instanceOf(ExchangeNode.class)) {
+                String partType = searchInfoString(nodeInfo, SearchMode.NATIVE_ONLY,
+                        null, "UniqueMetrics", "PartType");
+                if (TPartitionType.UNPARTITIONED.name().equalsIgnoreCase(partType) &&
+                        nodeInfo.fragmentProfile != null) {
+                    Counter instanceNum = nodeInfo.fragmentProfile.getCounter("InstanceNum");
+                    if (instanceNum != null && instanceNum.getValue() > 0) {
+                        nodeInfo.outputRowNums.setValue(nodeInfo.outputRowNums.getValue() / instanceNum.getValue());
+                    }
+                }
             }
         });
+
+        // Setup mv hits
+        String mvContent = summaryProfile.getInfoString("HitMaterializedViews");
+        if (StringUtils.isNotBlank(mvContent)) {
+            HashSet<String> mvs = Sets.newHashSet(mvContent.split(","));
+            allNodeInfos.values().forEach(nodeInfo -> {
+                if (nodeInfo.element.instanceOf(ScanNode.class)) {
+                    String mv = searchInfoString(nodeInfo, SearchMode.NATIVE_ONLY,
+                            null, "UniqueMetrics", "Rollup");
+                    if (StringUtils.isNotBlank(mv) && mvs.contains(mv)) {
+                        nodeInfo.element.addTitleAttribute("MV");
+                    }
+                }
+            });
+        }
 
         cumulativeOperatorTime = executionProfile.getCounter("QueryCumulativeOperatorTime").getValue();
         cumulativeScanTime = executionProfile.getCounter("QueryCumulativeScanTime");
         cumulativeNetworkTime = executionProfile.getCounter("QueryCumulativeNetworkTime");
         scheduleTime = executionProfile.getCounter("QueryPeakScheduleTime");
+    }
+
+    private void checkIdentical() {
+        isFinishedIdentical = true;
+        Queue<RuntimeProfile> queue = Lists.newLinkedList();
+        queue.offer(executionProfile);
+        while (!queue.isEmpty()) {
+            int size = queue.size();
+            for (int i = 0; i < size; i++) {
+                RuntimeProfile top = queue.poll();
+                Preconditions.checkState(top != null);
+                if (top.containsInfoString("NotIdentical")) {
+                    isFinishedIdentical = false;
+                    return;
+                }
+
+                for (RuntimeProfile child : top.getChildMap().values()) {
+                    queue.offer(child);
+                }
+            }
+        }
     }
 
     private void appendSummaryInfo() {
@@ -251,6 +323,10 @@ public class ExplainAnalyzer {
             appendSummaryLine("Attention: ", ANSI_BOLD + ANSI_BLACK_ON_RED,
                     "The transaction of the statement will be aborted, and no data will be actually inserted!!!",
                     ANSI_RESET);
+        }
+        if (!isFinishedIdentical) {
+            appendSummaryLine("Attention: ", ANSI_BOLD + ANSI_BLACK_ON_RED,
+                    "Profile is not identical!!!", ANSI_RESET);
         }
         appendSummaryLine("QueryId: ", summaryProfile.getInfoString(ProfileManager.QUERY_ID));
         appendSummaryLine("Version: ", summaryProfile.getInfoString("StarRocks Version"));
@@ -414,7 +490,7 @@ public class ExplainAnalyzer {
             appendDetailLine(GraphElement.LST_OPERATOR_INDENT, sink.getDisplayName(),
                     String.format(" (ids=[%s])", String.join(", ", ids)));
         } else {
-            if (sink.instanceOf(ResultSink.class) || sink.instanceOf(OlapTableSink.class)) {
+            if (sink.isFinalSink()) {
                 isFinalSink = true;
                 // Calculate result sink's time info, other sink's type will be properly processed
                 // at the receiver side fragment through exchange node
@@ -565,8 +641,10 @@ public class ExplainAnalyzer {
         }
 
         // 5. Runtime Filters
-        Counter rfInputRows = searchMetricFromUpperLevel(nodeInfo, "CommonMetrics", "JoinRuntimeFilterInputRows");
-        Counter rfOutputRows = searchMetricFromUpperLevel(nodeInfo, "CommonMetrics", "JoinRuntimeFilterOutputRows");
+        Counter rfInputRows = searchMetric(nodeInfo, SearchMode.NATIVE_ONLY, null, false,
+                "CommonMetrics", "JoinRuntimeFilterInputRows");
+        Counter rfOutputRows = searchMetric(nodeInfo, SearchMode.NATIVE_ONLY, null, false,
+                "CommonMetrics", "JoinRuntimeFilterOutputRows");
         if (rfInputRows != null && rfOutputRows != null && rfInputRows.getValue() > 0) {
             appendDetailLine("RuntimeFilter: ", rfInputRows, " -> ", rfOutputRows, String.format(" (%.2f%%)",
                     100.0 * (rfInputRows.getValue() - rfOutputRows.getValue()) / rfInputRows.getValue()));
@@ -586,7 +664,10 @@ public class ExplainAnalyzer {
         // 7. Unique Infos
         appendOperatorUniqueInfo(nodeInfo);
 
-        // 8. Details
+        // 8. Subordinate Infos
+        appendSubordinateInfos(nodeInfo);
+
+        // 9. Details
         appendOperatorDetailInfo(nodeInfo);
     }
 
@@ -616,9 +697,9 @@ public class ExplainAnalyzer {
 
     private void appendOperatorUniqueInfo(NodeInfo nodeInfo) {
         if (nodeInfo.element.instanceOf(JoinNode.class)) {
-            Counter buildTime = searchMetric(nodeInfo, false, "_JOIN_BUILD (", true,
+            Counter buildTime = searchMetric(nodeInfo, SearchMode.NATIVE_ONLY, "_JOIN_BUILD (", true,
                     "CommonMetrics", "OperatorTotalTime");
-            Counter probeTime = searchMetric(nodeInfo, false, "_JOIN_PROBE (", true,
+            Counter probeTime = searchMetric(nodeInfo, SearchMode.NATIVE_ONLY, "_JOIN_PROBE (", true,
                     "CommonMetrics", "OperatorTotalTime");
             appendDetailLine("BuildTime: ", buildTime);
             appendDetailLine("ProbeTime: ", probeTime);
@@ -630,14 +711,14 @@ public class ExplainAnalyzer {
                     nodeInfo.element.getChild(0).instanceOf(ScanNode.class)) {
                 ProfilingExecPlan.ProfilingElement scanNode = nodeInfo.element.getChild(0);
                 NodeInfo scanNodeInfo = allNodeInfos.get(scanNode.getId());
-                Counter tabletNum = searchMetric(scanNodeInfo, false, null, false,
+                Counter tabletNum = searchMetric(scanNodeInfo, SearchMode.NATIVE_ONLY, null, false,
                         "UniqueMetrics", "TabletCount");
-                Counter cachePassthroughTabletNum = searchMetric(nodeInfo, true, "CACHE (", false,
-                        "UniqueMetrics", "CachePassthroughTabletNum");
-                Counter cacheProbeTabletNum = searchMetric(nodeInfo, true, "CACHE (", false,
-                        "UniqueMetrics", "CacheProbeTabletNum");
-                Counter cachePopulateTabletNum = searchMetric(nodeInfo, true, "CACHE (", false,
-                        "UniqueMetrics", "CachePopulateTabletNum");
+                Counter cachePassthroughTabletNum = searchMetric(nodeInfo, SearchMode.SUBORDINATE_ONLY,
+                        "CACHE (", false, "UniqueMetrics", "CachePassthroughTabletNum");
+                Counter cacheProbeTabletNum = searchMetric(nodeInfo, SearchMode.SUBORDINATE_ONLY,
+                        "CACHE (", false, "UniqueMetrics", "CacheProbeTabletNum");
+                Counter cachePopulateTabletNum = searchMetric(nodeInfo, SearchMode.SUBORDINATE_ONLY,
+                        "CACHE (", false, "UniqueMetrics", "CachePopulateTabletNum");
                 if (tabletNum != null && tabletNum.getValue() > 0 && cachePassthroughTabletNum != null &&
                         cacheProbeTabletNum != null && cachePopulateTabletNum != null) {
                     appendDetailLine("TabletNum: ", tabletNum, " [",
@@ -656,6 +737,47 @@ public class ExplainAnalyzer {
         }
 
         nodeInfo.element.getUniqueInfos().forEach((key, value) -> appendDetailLine(key, ": ", value));
+    }
+
+    private void appendSubordinateInfos(NodeInfo nodeInfo) {
+        List<RuntimeProfile> subordinateOperatorProfiles = nodeInfo.subordinateOperatorProfiles;
+        if (CollectionUtils.isEmpty(subordinateOperatorProfiles)) {
+            return;
+        }
+        Set<String> names = Sets.newTreeSet();
+        for (RuntimeProfile profile : subordinateOperatorProfiles) {
+            Matcher matcher = PLAN_OP_NAME.matcher(profile.getName());
+            Preconditions.checkState(matcher.matches());
+            String name = matcher.group(1);
+            if (name.endsWith("_SINK")) {
+                name = name.substring(0, name.length() - 5);
+            }
+            if (name.endsWith("_SOURCE")) {
+                name = name.substring(0, name.length() - 7);
+            }
+            names.add(name);
+        }
+        appendDetailLine("SubordinateOperators: ");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        for (String name : names) {
+            StringBuilder titleBuilder = new StringBuilder();
+            titleBuilder.append(name);
+            List<String> attributes = Lists.newArrayList();
+            if ("LOCAL_EXCHANGE".equalsIgnoreCase(name)) {
+                String shuffleType = searchInfoString(nodeInfo, SearchMode.SUBORDINATE_ONLY, "LOCAL_EXCHANGE",
+                        "UniqueMetrics", "Type");
+                attributes.add(shuffleType);
+            }
+            if (CollectionUtils.isNotEmpty(attributes)) {
+                titleBuilder.append(' ')
+                        .append('[')
+                        .append(String.join(", ", attributes))
+                        .append(']');
+            }
+
+            appendDetailLine(titleBuilder.toString());
+        }
+        popIndent(); // metric indent
     }
 
     private void appendOperatorDetailInfo(NodeInfo nodeInfo) {
@@ -789,11 +911,38 @@ public class ExplainAnalyzer {
         appendDetailLine(items.toArray());
     }
 
-    private static Counter searchMetric(NodeInfo nodeInfo, boolean searchSubordinateOperator, String pattern,
+    private static String searchInfoString(NodeInfo nodeInfo, SearchMode searchMode, String pattern,
+                                           String... nameLevels) {
+        List<RuntimeProfile> profiles = Lists.newArrayList();
+        if (searchMode.isNative()) {
+            profiles.addAll(nodeInfo.operatorProfiles);
+        }
+        if (searchMode.isSubordinate()) {
+            profiles.addAll(nodeInfo.subordinateOperatorProfiles);
+        }
+        for (RuntimeProfile operatorProfile : profiles) {
+            if (pattern != null && !operatorProfile.getName().contains(pattern)) {
+                continue;
+            }
+            RuntimeProfile cur = getLastLevel(operatorProfile, nameLevels);
+            int lastIndex = nameLevels.length - 1;
+            String content = cur.getInfoString(nameLevels[lastIndex]);
+
+            if (content != null) {
+                return content;
+            }
+        }
+
+        return null;
+    }
+
+    private static Counter searchMetric(NodeInfo nodeInfo, SearchMode searchMode, String pattern,
                                         boolean useMaxValue, String... nameLevels) {
         List<RuntimeProfile> profiles = Lists.newArrayList();
-        profiles.addAll(nodeInfo.operatorProfiles);
-        if (searchSubordinateOperator) {
+        if (searchMode.isNative()) {
+            profiles.addAll(nodeInfo.operatorProfiles);
+        }
+        if (searchMode.isSubordinate()) {
             profiles.addAll(nodeInfo.subordinateOperatorProfiles);
         }
         for (RuntimeProfile operatorProfile : profiles) {
@@ -821,10 +970,11 @@ public class ExplainAnalyzer {
     // For example, we have an operator group including AGGREGATE_BLOCKING_SINK and AGGREGATE_BLOCKING_SOURCE
     // And the order between these operators are not stable, and we need to get the output rows information
     // form the AGGREGATE_BLOCKING_SOURCE, rather than AGGREGATE_BLOCKING_SINK
-    private static Counter searchMetricFromUpperLevel(NodeInfo nodeInfo, String... nameLevels) {
+    private static Counter searchOutputRows(NodeInfo nodeInfo, String... nameLevels) {
         for (int i = 0; i < nodeInfo.operatorProfiles.size(); i++) {
             RuntimeProfile operatorProfile = nodeInfo.operatorProfiles.get(i);
-            if (i < nodeInfo.operatorProfiles.size() - 1 && operatorProfile.getName().contains("_SINK (")) {
+            if (i < nodeInfo.operatorProfiles.size() - 1 && (operatorProfile.getName().contains("_SINK (")
+                    || operatorProfile.getName().contains("_BUILD ("))) {
                 continue;
             }
             RuntimeProfile cur = getLastLevel(operatorProfile, nameLevels);
@@ -834,15 +984,18 @@ public class ExplainAnalyzer {
         return null;
     }
 
-    private static Counter sumUpMetric(NodeInfo nodeInfo, boolean searchSubordinateOperator, boolean useMaxValue,
+    private static Counter sumUpMetric(NodeInfo nodeInfo, SearchMode searchMode, boolean useMaxValue,
                                        String... nameLevels) {
         Counter counterSumUp = null;
-        List<RuntimeProfile> operatorProfiles = Lists.newArrayList(nodeInfo.operatorProfiles);
-        if (searchSubordinateOperator) {
-            operatorProfiles.addAll(nodeInfo.subordinateOperatorProfiles);
+        List<RuntimeProfile> profiles = Lists.newArrayList();
+        if (searchMode.isNative()) {
+            profiles.addAll(nodeInfo.operatorProfiles);
         }
-        for (RuntimeProfile operatorProfile : operatorProfiles) {
-            RuntimeProfile cur = getLastLevel(operatorProfile, nameLevels);
+        if (searchMode.isSubordinate()) {
+            profiles.addAll(nodeInfo.subordinateOperatorProfiles);
+        }
+        for (RuntimeProfile profile : profiles) {
+            RuntimeProfile cur = getLastLevel(profile, nameLevels);
             int lastIndex = nameLevels.length - 1;
             Counter counter;
             if (useMaxValue) {
@@ -967,6 +1120,8 @@ public class ExplainAnalyzer {
         private final int planNodeId;
         private final boolean isIntegrated;
 
+        private final RuntimeProfile fragmentProfile;
+
         // One node in plan may be decomposed into multiply pipeline operators
         // like `aggregate -> (aggregate_sink_operator, aggregate_source_operator)`
         // as well as some subordinate operators, including local_exchange_operator and chunk_accumulate etc.
@@ -986,11 +1141,12 @@ public class ExplainAnalyzer {
         private boolean isSecondMostConsuming;
         private NodeState state;
 
-        public NodeInfo(boolean isRuntimeProfile, int planNodeId, boolean isIntegrated,
+        public NodeInfo(boolean isRuntimeProfile, int planNodeId, boolean isIntegrated, RuntimeProfile fragmentProfile,
                         List<RuntimeProfile> operatorProfiles, List<RuntimeProfile> subordinateOperatorProfiles) {
             this.isRuntimeProfile = isRuntimeProfile;
             this.planNodeId = planNodeId;
             this.isIntegrated = isIntegrated;
+            this.fragmentProfile = fragmentProfile;
             this.operatorProfiles = operatorProfiles == null ? Lists.newArrayList() : operatorProfiles;
             this.subordinateOperatorProfiles =
                     subordinateOperatorProfiles == null ? Lists.newArrayList() : subordinateOperatorProfiles;
@@ -1046,17 +1202,17 @@ public class ExplainAnalyzer {
 
         public void computeTimeUsage(long cumulativeOperatorTime) {
             totalTime = new Counter(TUnit.TIME_NS, null, 0);
-            cpuTime = sumUpMetric(this, true, true, "CommonMetrics", "OperatorTotalTime");
+            cpuTime = sumUpMetric(this, SearchMode.BOTH, true, "CommonMetrics", "OperatorTotalTime");
             if (cpuTime != null) {
                 totalTime.update(cpuTime.getValue());
             }
             if (element.instanceOf(ExchangeNode.class)) {
-                networkTime = searchMetric(this, false, null, true, "UniqueMetrics", "NetworkTime");
+                networkTime = searchMetric(this, SearchMode.NATIVE_ONLY, null, true, "UniqueMetrics", "NetworkTime");
                 if (networkTime != null) {
                     totalTime.update(networkTime.getValue());
                 }
             } else if (element.instanceOf(ScanNode.class)) {
-                scanTime = searchMetric(this, false, null, true, "UniqueMetrics", "ScanTime");
+                scanTime = searchMetric(this, SearchMode.NATIVE_ONLY, null, true, "UniqueMetrics", "ScanTime");
                 if (scanTime != null) {
                     totalTime.update(scanTime.getValue());
                 }
@@ -1070,14 +1226,16 @@ public class ExplainAnalyzer {
         }
 
         public void computeMemoryUsage() {
-            peekMemory = sumUpMetric(this, false, true, "CommonMetrics", "OperatorPeakMemoryUsage");
-            allocatedMemory = sumUpMetric(this, false, false, "CommonMetrics", "OperatorAllocatedMemoryUsage");
+            peekMemory = sumUpMetric(this, SearchMode.NATIVE_ONLY,
+                    true, "CommonMetrics", "OperatorPeakMemoryUsage");
+            allocatedMemory = sumUpMetric(this, SearchMode.NATIVE_ONLY,
+                    false, "CommonMetrics", "OperatorAllocatedMemoryUsage");
         }
 
         public String getTitle() {
             StringBuilder titleBuilder = new StringBuilder();
             titleBuilder.append(element.getDisplayName());
-            if (!(element.instanceOf(ResultSink.class) && !(element.instanceOf(OlapTableSink.class)))) {
+            if (!element.isFinalSink()) {
                 titleBuilder.append(String.format(" (id=%d) ", planNodeId));
             }
             // Attributes
@@ -1098,6 +1256,7 @@ public class ExplainAnalyzer {
     private static final class ProfileNodeParser {
         private final boolean isRuntimeProfile;
         private final boolean isIntegrated;
+        private final RuntimeProfile fragmentProfile;
         private final List<RuntimeProfile> pipelineProfiles;
         private int pipelineIdx;
         private int operatorIdx;
@@ -1105,6 +1264,7 @@ public class ExplainAnalyzer {
         public ProfileNodeParser(boolean isRuntimeProfile, RuntimeProfile fragmentProfile) {
             this.isRuntimeProfile = isRuntimeProfile;
             this.isIntegrated = !fragmentProfile.containsInfoString("NotIdentical");
+            this.fragmentProfile = fragmentProfile;
             this.pipelineProfiles = fragmentProfile.getChildList().stream()
                     .map(pair -> pair.first)
                     .collect(Collectors.toList());
@@ -1122,8 +1282,6 @@ public class ExplainAnalyzer {
                 int planNodeId = getPlanNodeId(nextOperator);
                 RuntimeProfile commonMetrics = nextOperator.getChild("CommonMetrics");
                 boolean isSubordinate = commonMetrics != null && commonMetrics.containsInfoString("IsSubordinate");
-                boolean isFinalSink = commonMetrics != null && commonMetrics.containsInfoString("IsFinalSink");
-                Preconditions.checkState(isFinalSink || planNodeId != FINAL_SINK_PSEUDO_PLAN_NODE_ID);
                 if (isSubordinate) {
                     subordinateOperatorProfiles.add(nextOperator);
                 } else {
@@ -1131,7 +1289,7 @@ public class ExplainAnalyzer {
                 }
                 moveForward();
 
-                NodeInfo node = new NodeInfo(isRuntimeProfile, planNodeId, isIntegrated,
+                NodeInfo node = new NodeInfo(isRuntimeProfile, planNodeId, isIntegrated, this.fragmentProfile,
                         operatorProfiles, subordinateOperatorProfiles);
                 if (nodes.containsKey(planNodeId)) {
                     NodeInfo existingNode = nodes.get(planNodeId);

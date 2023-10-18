@@ -62,6 +62,8 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     private List<Column> schema = Lists.newArrayList();
     @SerializedName(value = "sortKeyIdxes")
     public List<Integer> sortKeyIdxes = Lists.newArrayList();
+    @SerializedName(value = "sortKeyUniqueIds")
+    public List<Integer> sortKeyUniqueIds = Lists.newArrayList();
     @SerializedName(value = "schemaVersion")
     private int schemaVersion;
     @SerializedName(value = "schemaHash")
@@ -81,9 +83,10 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @SerializedName(value = "isColocateMVIndex")
     private boolean isColocateMVIndex = false;
 
+
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
-                                 OriginStatement defineStmt, List<Integer> sortKeyIdxes) {
+                                 OriginStatement defineStmt, List<Integer> sortKeyIdxes, List<Integer> sortKeyUniqueIds) {
         this.indexId = indexId;
         Preconditions.checkState(schema != null);
         Preconditions.checkState(schema.size() != 0);
@@ -97,6 +100,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         this.keysType = keysType;
         this.defineStmt = defineStmt;
         this.sortKeyIdxes = sortKeyIdxes;
+        this.sortKeyUniqueIds = sortKeyUniqueIds;
+    }
+
+    public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
+                                 short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
+                                 OriginStatement defineStmt, List<Integer> sortKeyIdxes) {
+        this(indexId, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType, defineStmt,
+                sortKeyIdxes, null);        
     }
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
@@ -133,6 +144,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return sortKeyIdxes;
     }
 
+    public void setSortKeyIdxes(List<Integer> sortKeyIdxes) {
+        this.sortKeyIdxes = sortKeyIdxes;
+    }
+
+    public List<Integer> getSortKeyUniqueIds() {
+        return sortKeyUniqueIds;
+    }
+
     public int getSchemaHash() {
         return schemaHash;
     }
@@ -156,6 +175,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         } else {
             return defineStmt.originStmt;
         }
+    }
+
+    public void setDefineStmt(OriginStatement stmt) {
+        this.defineStmt = stmt;
+    }
+
+    public OriginStatement getDefineStmt() {
+        return this.defineStmt;
     }
 
     public long getDbId() {

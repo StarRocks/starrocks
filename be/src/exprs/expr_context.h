@@ -67,14 +67,14 @@ public:
 
     /// Prepare expr tree for evaluation.
     /// Allocations from this context will be counted against 'tracker'.
-    Status prepare(RuntimeState* state);
+    [[nodiscard]] Status prepare(RuntimeState* state);
 
     /// Must be called after calling Prepare(). Does not need to be called on clones.
     /// Idempotent (this allows exprs to be opened multiple times in subplans without
     /// reinitializing function state).
-    Status open(RuntimeState* state);
+    [[nodiscard]] Status open(RuntimeState* state);
 
-    static Status open(std::vector<ExprContext*> input_evals, RuntimeState* state);
+    [[nodiscard]] static Status open(std::vector<ExprContext*> input_evals, RuntimeState* state);
 
     /// Creates a copy of this ExprContext. Open() must be called first. The copy contains
     /// clones of each FunctionContext, which share the fragment-local state of the
@@ -82,7 +82,7 @@ public:
     /// to create an ExprContext for each execution thread that needs to evaluate
     /// 'root'. Note that clones are already opened. '*new_context' must be initialized by
     /// the caller to NULL.
-    Status clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_context);
+    [[nodiscard]] Status clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_context);
 
     /// Closes all FunctionContexts. Must be called on every ExprContext, including clones.
     void close(RuntimeState* state);
@@ -108,12 +108,14 @@ public:
 
     bool opened() { return _opened; }
 
-    Status get_udf_error();
+    [[nodiscard]] Status get_udf_error();
 
     std::string get_error_msg() const;
 
-    StatusOr<ColumnPtr> evaluate(Chunk* chunk, uint8_t* filter = nullptr);
-    StatusOr<ColumnPtr> evaluate(Expr* expr, Chunk* chunk, uint8_t* filter = nullptr);
+    [[nodiscard]] StatusOr<ColumnPtr> evaluate(Chunk* chunk, uint8_t* filter = nullptr);
+    [[nodiscard]] StatusOr<ColumnPtr> evaluate(Expr* expr, Chunk* chunk, uint8_t* filter = nullptr);
+
+    bool error_if_overflow() const;
 
 private:
     friend class Expr;

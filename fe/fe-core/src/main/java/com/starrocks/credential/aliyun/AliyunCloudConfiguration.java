@@ -23,10 +23,9 @@ import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.HashMap;
 import java.util.Map;
 
-public class AliyunCloudConfiguration implements CloudConfiguration {
+public class AliyunCloudConfiguration extends CloudConfiguration {
 
     private final AliyunCloudCredential aliyunCloudCredential;
 
@@ -38,16 +37,16 @@ public class AliyunCloudConfiguration implements CloudConfiguration {
     // reuse aws client logic of BE
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
+        super.toThrift(tCloudConfiguration);
         tCloudConfiguration.setCloud_type(TCloudType.AWS);
-
-        Map<String, String> properties = new HashMap<>();
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties_v2();
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(true));
         aliyunCloudCredential.toThrift(properties);
-        tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
+        super.applyToConfiguration(configuration);
         aliyunCloudCredential.applyToConfiguration(configuration);
     }
 
@@ -58,12 +57,12 @@ public class AliyunCloudConfiguration implements CloudConfiguration {
 
     @Override
     public FileStoreInfo toFileStoreInfo() {
-        // TODO: Support oss credential
         return aliyunCloudCredential.toFileStoreInfo();
     }
 
     @Override
-    public String getCredentialString() {
-        return aliyunCloudCredential.getCredentialString();
+    public String toConfString() {
+        return String.format("AliyunCloudConfiguration{%s, cred=%s}", getCommonFieldsString(),
+                aliyunCloudCredential.toCredString());
     }
 }

@@ -1618,7 +1618,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     }
 
     public void alter_partition(String catName, String dbName, String tblName, Partition newPart, EnvironmentContext environmentContext) throws TException {
-        this.client.alter_partition_with_environment_context(MetaStoreUtils.prependCatalogToDbName(catName, dbName, this.conf), tblName, newPart, environmentContext);
+        this.client.alter_partition_with_environment_context(dbName, tblName, newPart, environmentContext);
     }
     @Override
     public void alter_partitions(String dbName, String tblName, List<Partition> newParts)

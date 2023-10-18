@@ -96,6 +96,8 @@ public:
     // RuntimeState for executing expr in fe-support.
     explicit RuntimeState(const TQueryGlobals& query_globals);
 
+    explicit RuntimeState(ExecEnv* exec_env);
+
     // Empty d'tor to avoid issues with std::unique_ptr.
     ~RuntimeState();
 
@@ -109,7 +111,7 @@ public:
     void init_mem_trackers(const std::shared_ptr<MemTracker>& query_mem_tracker);
 
     // for ut only
-    Status init_instance_mem_tracker();
+    void init_instance_mem_tracker();
 
     const TQueryOptions& query_options() const { return _query_options; }
     ObjectPool* obj_pool() const { return _obj_pool.get(); }
@@ -122,6 +124,7 @@ public:
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
     int chunk_size() const { return _query_options.batch_size; }
     void set_chunk_size(int chunk_size) { _query_options.batch_size = chunk_size; }
+    bool use_column_pool() const;
     bool abort_on_default_limit_exceeded() const { return _query_options.abort_on_default_limit_exceeded; }
     int64_t timestamp_ms() const { return _timestamp_ms; }
     const std::string& timezone() const { return _timezone; }
@@ -149,7 +152,7 @@ public:
     RuntimeProfile* runtime_profile() { return _profile.get(); }
     std::shared_ptr<RuntimeProfile> runtime_profile_ptr() { return _profile; }
 
-    Status query_status() {
+    [[nodiscard]] Status query_status() {
         std::lock_guard<std::mutex> l(_process_status_lock);
         return _process_status;
     };
@@ -206,17 +209,19 @@ public:
     // This value and tracker are only used for error reporting.
     // If 'msg' is non-NULL, it will be appended to query_status_ in addition to the
     // generic "Memory limit exceeded" error.
-    Status set_mem_limit_exceeded(MemTracker* tracker = nullptr, int64_t failed_allocation_size = 0,
-                                  const std::string* msg = nullptr);
+    [[nodiscard]] Status set_mem_limit_exceeded(MemTracker* tracker = nullptr, int64_t failed_allocation_size = 0,
+                                                const std::string* msg = nullptr);
 
-    Status set_mem_limit_exceeded(const std::string& msg) { return set_mem_limit_exceeded(nullptr, 0, &msg); }
+    [[nodiscard]] Status set_mem_limit_exceeded(const std::string& msg) {
+        return set_mem_limit_exceeded(nullptr, 0, &msg);
+    }
 
     // Returns a non-OK status if query execution should stop (e.g., the query was cancelled
     // or a mem limit was exceeded). Exec nodes should check this periodically so execution
     // doesn't continue if the query terminates abnormally.
-    Status check_query_state(const std::string& msg);
+    [[nodiscard]] Status check_query_state(const std::string& msg);
 
-    Status check_mem_limit(const std::string& msg);
+    [[nodiscard]] Status check_mem_limit(const std::string& msg);
 
     std::vector<std::string>& output_files() { return _output_files; }
 
@@ -245,7 +250,7 @@ public:
 
     bool has_reached_max_error_msg_num(bool is_summary = false);
 
-    Status create_rejected_record_file();
+    [[nodiscard]] Status create_rejected_record_file();
 
     bool enable_log_rejected_record() {
         return _query_options.log_rejected_record_num == -1 ||
@@ -331,6 +336,8 @@ public:
 
     int32_t spill_mem_table_num() const { return _query_options.spill_mem_table_num; }
 
+    bool enable_agg_spill_preaggregation() const { return _query_options.enable_agg_spill_preaggregation; }
+
     double spill_mem_limit_threshold() const { return _query_options.spill_mem_limit_threshold; }
 
     int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
@@ -338,6 +345,10 @@ public:
     int64_t spill_revocable_max_bytes() const { return _query_options.spill_revocable_max_bytes; }
 
     int32_t spill_encode_level() const { return _query_options.spill_encode_level; }
+
+    bool error_if_overflow() const {
+        return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;
+    }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
@@ -381,8 +392,8 @@ public:
     const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() { return _load_dict_versions; }
 
     using GlobalDictLists = std::vector<TGlobalDict>;
-    Status init_query_global_dict(const GlobalDictLists& global_dict_list);
-    Status init_load_global_dict(const GlobalDictLists& global_dict_list);
+    [[nodiscard]] Status init_query_global_dict(const GlobalDictLists& global_dict_list);
+    [[nodiscard]] Status init_load_global_dict(const GlobalDictLists& global_dict_list);
 
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
@@ -393,7 +404,7 @@ public:
     std::shared_ptr<QueryStatistics> intermediate_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
-    Status reset_epoch();
+    [[nodiscard]] Status reset_epoch();
 
     int64_t get_rpc_http_min_size() {
         return _query_options.__isset.rpc_http_min_size ? _query_options.rpc_http_min_size : kRpcHttpMinSize;
@@ -411,10 +422,10 @@ private:
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                const TQueryGlobals& query_globals, ExecEnv* exec_env);
 
-    Status create_error_log_file();
+    [[nodiscard]] Status create_error_log_file();
 
-    Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
-                              phmap::flat_hash_map<uint32_t, int64_t>* version);
+    [[nodiscard]] Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
+                                            phmap::flat_hash_map<uint32_t, int64_t>* version);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.

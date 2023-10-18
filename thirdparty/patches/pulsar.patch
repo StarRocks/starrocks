@@ -1,13 +1,13 @@
-diff --git a/pulsar-client-cpp/lib/CompressionCodecZstd.cc b/pulsar-client-cpp/lib/CompressionCodecZstd.cc
-index 14c09925501dafc6cb8d7540fa5c5c169da7baea..74e533f70fe87152e9c647f4088d1261316a5a18 100644
---- a/pulsar-client-cpp/lib/CompressionCodecZstd.cc
-+++ b/pulsar-client-cpp/lib/CompressionCodecZstd.cc
+diff --git a/lib/CompressionCodecZstd.cc b/lib/CompressionCodecZstd.cc
+index 14c0992..74e533f 100644
+--- a/lib/CompressionCodecZstd.cc
++++ b/lib/CompressionCodecZstd.cc
 @@ -19,7 +19,7 @@
  #include "CompressionCodecZstd.h"
- 
+
  #if HAS_ZSTD
 -#include <zstd.h>
 +#include <zstd/zstd.h>
- 
+
  namespace pulsar {
- 
+

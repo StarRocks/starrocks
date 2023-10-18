@@ -36,7 +36,10 @@ StatusOr<int64_t> CompressedInputStream::read(void* data, int64_t size) {
         size_t input_bytes_read = 0;
         size_t output_bytes_written = 0;
 
-        DCHECK_GT(compressed_data.size, 0);
+        // NOTE(yanz): input data size could be 0 because for some block compression algorithm.
+        // codec will decompress a block into buffer, and then copy buffer into output later(if output buffer is not large enough)
+        // so sometimes input data size is 0, but there is still some data in buffer.
+        // DCHECK_GT(compressed_data.size, 0);
 
         RETURN_IF_ERROR(_decompressor->decompress((uint8_t*)compressed_data.data, compressed_data.size,
                                                   &input_bytes_read, output, output_len, &output_bytes_written,

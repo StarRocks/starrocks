@@ -50,6 +50,7 @@ import org.junit.Test;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -121,5 +122,15 @@ public class OlapTableTest {
         Assert.assertEquals(olapTable.hasDelete(), copied.hasDelete());
         Assert.assertEquals(olapTable.hasForbitGlobalDict(), copied.hasForbitGlobalDict());
         Assert.assertEquals(olapTable, copied);
+    }
+
+    @Test
+    public void testFilePathInfo() {
+        OlapTable olapTable = new OlapTable();
+        Assert.assertNull(olapTable.getDefaultFilePathInfo());
+        Assert.assertNull(olapTable.getPartitionFilePathInfo(10));
+        olapTable.setTableProperty(new TableProperty(new HashMap<>()));
+        Assert.assertNull(olapTable.getDefaultFilePathInfo());
+        Assert.assertNull(olapTable.getPartitionFilePathInfo(10));
     }
 }

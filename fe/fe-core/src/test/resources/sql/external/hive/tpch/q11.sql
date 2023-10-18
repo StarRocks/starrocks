@@ -230,7 +230,7 @@ OutPut Exchange Id: 16
 14:HdfsScanNode
 TABLE: nation
 NON-PARTITION PREDICATES: 32: n_name = 'PERU'
-MIN/MAX PREDICATES: 39: n_name <= 'PERU', 40: n_name >= 'PERU'
+MIN/MAX PREDICATES: 32: n_name <= 'PERU', 32: n_name >= 'PERU'
 partitions=1/1
 avgRowSize=29.0
 cardinality: 1
@@ -343,7 +343,7 @@ OutPut Exchange Id: 04
 2:HdfsScanNode
 TABLE: nation
 NON-PARTITION PREDICATES: 14: n_name = 'PERU'
-MIN/MAX PREDICATES: 41: n_name <= 'PERU', 42: n_name >= 'PERU'
+MIN/MAX PREDICATES: 14: n_name <= 'PERU', 14: n_name >= 'PERU'
 partitions=1/1
 avgRowSize=29.0
 cardinality: 1

@@ -93,16 +93,16 @@ public:
 
     ~FragmentExecState();
 
-    Status prepare(const TExecPlanFragmentParams& params);
+    [[nodiscard]] Status prepare(const TExecPlanFragmentParams& params);
 
     // just no use now
     void callback(const Status& status, RuntimeProfile* profile, bool done);
 
     std::string to_http_path(const std::string& file_name);
 
-    Status execute();
+    [[nodiscard]] Status execute();
 
-    Status cancel(const PPlanFragmentCancelReason& reason);
+    void cancel(const PPlanFragmentCancelReason& reason);
 
     TUniqueId fragment_instance_id() const { return _fragment_instance_id; }
 
@@ -119,7 +119,7 @@ public:
     int backend_num() const { return _backend_num; }
 
     // Update status of this fragment execute
-    Status update_status(const Status& status) {
+    [[nodiscard]] Status update_status(const Status& status) {
         std::lock_guard<std::mutex> l(_status_lock);
         if (!status.ok() && _exec_status.ok()) {
             _exec_status = status;
@@ -207,14 +207,16 @@ Status FragmentExecState::execute() {
     return Status::OK();
 }
 
-Status FragmentExecState::cancel(const PPlanFragmentCancelReason& reason) {
+void FragmentExecState::cancel(const PPlanFragmentCancelReason& reason) {
     std::lock_guard<std::mutex> l(_status_lock);
-    RETURN_IF_ERROR(_exec_status);
+    if (!_exec_status.ok()) {
+        return;
+    }
+
     if (reason == PPlanFragmentCancelReason::LIMIT_REACH) {
         _executor.set_is_report_on_cancel(false);
     }
     _executor.cancel();
-    return Status::OK();
 }
 
 void FragmentExecState::callback(const Status& status, RuntimeProfile* profile, bool done) {}
@@ -240,7 +242,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
         std::stringstream ss;
         ss << "couldn't get a client for " << _coord_addr;
         LOG(WARNING) << ss.str();
-        update_status(Status::InternalError(ss.str()));
+        (void)update_status(Status::InternalError(ss.str()));
         return;
     }
 
@@ -329,7 +331,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
 
             if (!rpc_status.ok()) {
                 // we need to cancel the execution of this fragment
-                update_status(rpc_status);
+                (void)update_status(rpc_status);
                 _executor.cancel();
                 return;
             }
@@ -346,7 +348,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
 
     if (!rpc_status.ok()) {
         // we need to cancel the execution of this fragment
-        update_status(rpc_status);
+        (void)update_status(rpc_status);
         _executor.cancel();
     }
 }
@@ -395,7 +397,8 @@ void FragmentMgr::exec_actual(const std::shared_ptr<FragmentExecState>& exec_sta
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(s_tracker.get());
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    exec_state->execute();
+    WARN_IF_ERROR(exec_state->execute(),
+                  strings::Substitute("Fail to execute fragment $0", print_id(exec_state->fragment_instance_id())));
 
     // Callback after remove from this id
     cb(exec_state->executor());
@@ -536,7 +539,8 @@ void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& par
 void FragmentMgr::close() {
     std::lock_guard<std::mutex> lock(_lock);
     for (auto& it : _fragment_map) {
-        cancel(it.second->fragment_instance_id(), PPlanFragmentCancelReason::USER_CANCEL);
+        WARN_IF_ERROR(cancel(it.second->fragment_instance_id(), PPlanFragmentCancelReason::USER_CANCEL),
+                      strings::Substitute("Fail to cancel fragment $0", print_id(it.first)));
     }
 }
 
@@ -554,7 +558,8 @@ void FragmentMgr::cancel_worker() {
             }
         }
         for (auto& id : to_delete) {
-            cancel(id, PPlanFragmentCancelReason::TIMEOUT);
+            WARN_IF_ERROR(cancel(id, PPlanFragmentCancelReason::TIMEOUT),
+                          strings::Substitute("Fail to cancel fragment $0", print_id(id)));
             LOG(INFO) << "FragmentMgr cancel worker going to cancel timeout fragment " << print_id(id);
         }
         nap_sleep(1, [this] { return _stop; });
@@ -757,7 +762,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                     int32_t index = cur_batch_report_indexes[j];
                     FragmentExecState* fragment_exec_state = need_report_exec_states[index].get();
                     PlanFragmentExecutor* executor = fragment_exec_state->executor();
-                    fragment_exec_state->update_status(rpc_status);
+                    (void)fragment_exec_state->update_status(rpc_status);
                     executor->cancel();
                 }
             }
@@ -908,6 +913,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     query_options.query_type = TQueryType::EXTERNAL;
     // For spark sql / flink sql, we dont use page cache.
     query_options.use_page_cache = false;
+    query_options.use_column_pool = false;
     exec_fragment_params.__set_query_options(query_options);
     VLOG_ROW << "external exec_plan_fragment params is "
              << apache::thrift::ThriftDebugString(exec_fragment_params).c_str();

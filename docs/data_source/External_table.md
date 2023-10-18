@@ -4,45 +4,10 @@ StarRocks supports access to other data sources by using external tables. Extern
 
 > **NOTICE**
 >
-> Since v3.0, we recommend that you use catalogs to query data from Hive, Iceberg, Hudi, and JDBC data sources. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../data_source/catalog/hudi_catalog.md), and [JDBC catalog](../data_source/catalog/jdbc_catalog.md).
+> * From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, and Hudi. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
+> * From v3.1 onwards, we recommend that you use [JDBC catalog](../data_source/catalog/jdbc_catalog.md) to query data from MySQL and PostgreSQL and use [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) to query data from Elasticsearch.
 
 From 2.5 onwards, StarRocks provides the Data Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Data Cache](data_cache.md).
-
-## MySQL external table
-
-In the star schema, data is generally divided into dimension tables and fact tables. Dimension tables have less data but involve UPDATE operations. Currently, StarRocks does not support direct UPDATE operations (update can be implemented by using the Unique Key table). In some scenarios, you can store dimension tables in MySQL for direct data read.
-
-To query MySQL data, you must create an external table in StarRocks and map it to the table in your MySQL database. You need to specify the MySQL connection information when creating the table.
-
-~~~sql
-CREATE EXTERNAL TABLE mysql_external_table
-(
-    k1 DATE,
-    k2 INT,
-    k3 SMALLINT,
-    k4 VARCHAR(2048),
-    k5 DATETIME
-)
-ENGINE=mysql
-PROPERTIES
-(
-    "host" = "127.0.0.1",
-    "port" = "3306",
-    "user" = "mysql_user",
-    "password" = "mysql_passwd",
-    "database" = "mysql_db_test",
-    "table" = "mysql_table_test"
-);
-~~~
-
-Parameters:
-
-* **host**: the connection address of the MySQL database
-* **port**: the port number of the MySQL database
-* **user**: the username to log in to MySQL
-* **password**: the password to log in to MySQL
-* **database**: the name of the MySQL database
-* **table**: the name of the table in the MySQL database
 
 ## StarRocks external table
 
@@ -110,265 +75,7 @@ The following limits apply when you use a StarRocks external table:
 * The syntax of creating an external table is the same as creating a normal table, but the column names and other information in the external table must be the same as the destination table.
 * The external table synchronizes table metadata from the destination table every 10 seconds. If a DDL operation is performed on the destination table, there may be a delay for data synchronization between the two tables.
 
-## (Deprecated) Elasticsearch external table
-
-StarRocks and Elasticsearch are two popular analytics systems. StarRocks is performant in large-scale distributed computing. Elasticsearch is ideal for full-text search. StarRocks combined with Elasticsearch can deliver a more complete OLAP solution.
-
-### Example of creating an Elasticsearch external table
-
-#### Syntax
-
-~~~sql
-CREATE EXTERNAL TABLE elastic_search_external_table
-(
-    k1 DATE,
-    k2 INT,
-    k3 SMALLINT,
-    k4 VARCHAR(2048),
-    k5 DATETIME
-)
-ENGINE=ELASTICSEARCH
-PROPERTIES (
-    "hosts" = "http://192.168.0.1:9200,http://192.168.0.2:9200",
-    "user" = "root",
-    "password" = "root",
-    "index" = "tindex",
-    "type" = "_doc",
-    "es.net.ssl" = "true"
-);
-~~~
-
-The following table describes the parameters.
-
-| **Parameter**        | **Required** | **Default value** | **Description**                                              |
-| -------------------- | ------------ | ----------------- | ------------------------------------------------------------ |
-| hosts                | Yes          | None              | The connection address of the Elasticsearch cluster. You can specify one or more addresses. StarRocks can parse the Elasticsearch version and index shard allocation from this address. StarRocks communicates with your Elasticsearch cluster based on the address returned by the `GET /_nodes/http` API operation. Therefore, the value of the `host` parameter must be the same as the address returned by the `GET /_nodes/http` API operation. Otherwise, BEs may not be able to communicate with your Elasticsearch cluster. |
-| index                | Yes          | None              | The name of the Elasticsearch index that is created on the table in StarRocks. The name can be an alias. This parameter supports wildcards (\*). For example, if you set `index` to <code class="language-text">hello*</code>, StarRocks retrieves all indexes whose names start with `hello`. |
-| user                 | No           | Empty             | The username that is used to log in to the Elasticsearch cluster with basic authentication enabled. Make sure you have access to `/*cluster/state/*nodes/http` and the index. |
-| password             | No           | Empty             | The password that is used to log in to the Elasticsearch cluster. |
-| type                 | No           | `_doc`            | The type of the index. Default value: `_doc`. If you want to query data in Elasticsearch 8 and later versions, you do not need to configure this parameter because the mapping types have been removed in Elasticsearch 8 and later versions. |
-| es.nodes.wan.only    | No           | `false`           | Specifies whether StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data.<ul><li>`true`: StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data and does not sniff data nodes on which the shards of the Elasticsearch index reside. If StarRocks cannot access the addresses of the data nodes inside the Elasticsearch cluster, you need to set this parameter to `true`.</li><li>`false`: StarRocks uses the addresses specified by `host` to sniff data nodes on which the shards of the Elasticsearch cluster indexes reside. After StarRocks generates a query execution plan, the relevant BEs directly access the data nodes inside the Elasticsearch cluster to fetch data from the shards of indexes. If StarRocks can access the addresses of the data nodes inside the Elasticsearch cluster, we recommend that you retain the default value `false`.</li></ul> |
-| es.net.ssl           | No           | `false`           | Specifies whether the HTTPS protocol can be used to access your Elasticsearch cluster. Only StarRocks 2.4 and later versions support configuring this parameter.<ul><li>`true`: Both the HTTPS and HTTP protocols can be used to access your Elasticsearch cluster.</li><li>`false`: Only the HTTP protocol can be used to access your Elasticsearch cluster.</li></ul> |
-| enable_docvalue_scan | No           | `true`            | Specifies whether to obtain the values of the target fields from Elasticsearch columnar storage. In most cases, reading data from columnar storage outperforms reading data from row storage. |
-| enable_keyword_sniff | No           | `true`            | Specifies whether to sniff TEXT-type fields in Elasticsearch based on KEYWORD-type fields. If this parameter is set to `false`, StarRocks performs matching after tokenization. |
-
-##### Columnar scan for faster queries
-
-If you set `enable_docvalue_scan` to `true`, StarRocks follows these rules when it obtains data from Elasticsearch:
-
-* **Try and see**: StarRocks automatically checks if columnar storage is enabled for the target fields. If so, StarRocks obtains all values in the target fields from columnar storage.
-* **Auto-downgrading**: If any one of the target fields is unavailable in columnar storage, StarRocks parses and obtains all values in the target fields from row storage (`_source`).
-
-> **NOTE**
->
-> * Columnar storage is unavailable for TEXT-type fields in Elasticsearch. Therefore, if you query fields containing TEXT-type values, StarRocks obtains the values of the fields from `_source`.
-> * If you query a large number (greater than or equal to 25) of fields, reading field values from `docvalue` does not show noticeable benefits compared with reading field values from `_source`.
-
-##### Sniff KEYWORD-type fields
-
-If you set `enable_keyword_sniff` to `true`, Elasticsearch allows direct data ingestion without an index because it will automatically create an index after ingestion. For STRING-type fields, Elasticsearch will create a field with both TEXT and KEYWORD types. This is how the Multi-Field feature of Elasticsearch works. The mapping is as follows:
-
-~~~SQL
-"k4": {
-   "type": "text",
-   "fields": {
-      "keyword": {   
-         "type": "keyword",
-         "ignore_above": 256
-      }
-   }
-}
-~~~
-
-For example, to conduct "=" filtering on `k4`, StarRocks on Elasticsearch will convert the filtering operation into an Elasticsearch TermQuery.
-
-The original SQL filter is as follows:
-
-~~~SQL
-k4 = "StarRocks On Elasticsearch"
-~~~
-
-The converted Elasticsearch query DSL is as follows:
-
-~~~SQL
-"term" : {
-    "k4": "StarRocks On Elasticsearch"
-
-}
-~~~
-
-The first field of `k4` is TEXT, and it will be tokenized by the analyzer configured for `k4` (or by the standard analyzer if no analyzer has been configured for `k4`) after data ingestion. As a result, the first field will be tokenized into three terms: `StarRocks`, `On`, and `Elasticsearch`. The details are as follows:
-
-~~~SQL
-POST /_analyze
-{
-  "analyzer": "standard",
-  "text": "StarRocks On Elasticsearch"
-}
-~~~
-
-The tokenization results are as follows:
-
-~~~SQL
-{
-   "tokens": [
-      {
-         "token": "starrocks",
-         "start_offset": 0,
-         "end_offset": 5,
-         "type": "<ALPHANUM>",
-         "position": 0
-      },
-      {
-         "token": "on",
-         "start_offset": 6,
-         "end_offset": 8,
-         "type": "<ALPHANUM>",
-         "position": 1
-      },
-      {
-         "token": "elasticsearch",
-         "start_offset": 9,
-         "end_offset": 11,
-         "type": "<ALPHANUM>",
-         "position": 2
-      }
-   ]
-}
-~~~
-
-Suppose you conduct a query as follows:
-
-~~~SQL
-"term" : {
-    "k4": "StarRocks On Elasticsearch"
-}
-~~~
-
-There is no term in the dictionary that matches the term `StarRocks On Elasticsearch`, and therefore no result will be returned.
-
-However, if you have set `enable_keyword_sniff` to `true`, StarRocks will convert `k4 = "StarRocks On Elasticsearch"` to `k4.keyword = "StarRocks On Elasticsearch"` to match the SQL semantics. The converted `StarRocks On Elasticsearch` query DSL is as follows:
-
-~~~SQL
-"term" : {
-    "k4.keyword": "StarRocks On Elasticsearch"
-}
-~~~
-
-`k4.keyword` is of the KEYWORD type. Therefore, the data is written into Elasticsearch as a complete term, allowing for successful matching.
-
-#### Mapping of column data types
-
-When you create an external table, you need to specify the data types of columns in the external table based on the data types of columns in the Elasticsearch table. The following table shows the mapping of column data types.
-
-| **Elasticsearch** | **StarRocks**               |
-| ----------------- | --------------------------- |
-| BOOLEAN           | BOOLEAN                     |
-| BYTE              | TINYINT/SMALLINT/INT/BIGINT |
-| SHORT             | SMALLINT/INT/BIGINT         |
-| INTEGER           | INT/BIGINT                  |
-| LONG              | BIGINT                      |
-| FLOAT             | FLOAT                       |
-| DOUBLE            | DOUBLE                      |
-| KEYWORD           | CHAR/VARCHAR                |
-| TEXT              | CHAR/VARCHAR                |
-| DATE              | DATE/DATETIME               |
-| NESTED            | CHAR/VARCHAR                |
-| OBJECT            | CHAR/VARCHAR                |
-| ARRAY             | ARRAY                       |
-
-> **Note**
->
-> * StarRocks reads the data of the NESTED type by using JSON-related functions.
-> * Elasticsearch automatically flattens multi-dimensional arrays into one-dimensional arrays. StarRocks does the same. The support for querying ARRAY data from Elasticsearch is added from v2.5.
-
-### Predicate pushdown
-
-StarRocks supports predicate pushdown. Filters can be pushed down to Elasticsearch for execution, which improves query performance. The following table lists the operators that support predicate pushdown.
-
-|   SQL syntax  |   ES syntax  |
-| :---: | :---: |
-|  =   |  term query   |
-|  in   |  terms query   |
-|  \>=,  <=, >, <   |  range   |
-|  and   |  bool.filter   |
-|  or   |  bool.should   |
-|  not   |  bool.must_not   |
-|  not in   |  bool.must_not + terms   |
-|  esquery   |  ES Query DSL  |
-
-### Examples
-
-The **esquery function** is used to push down queries **that cannot be expressed in SQL** (such as match and geoshape) to Elasticsearch for filtering. The first parameter in the esquery function is used to associate an index. The second parameter is a JSON expression of basic Query DSL, which is enclosed in brackets {}. **The JSON expression must have but only one root key**, such as match, geo_shape, or bool.
-
-* match query
-
-~~~sql
-select * from es_table where esquery(k4, '{
-    "match": {
-       "k4": "StarRocks on elasticsearch"
-    }
-}');
-~~~
-
-* geo-related query
-
-~~~sql
-select * from es_table where esquery(k4, '{
-  "geo_shape": {
-     "location": {
-        "shape": {
-           "type": "envelope",
-           "coordinates": [
-              [
-                 13,
-                 53
-              ],
-              [
-                 14,
-                 52
-              ]
-           ]
-        },
-        "relation": "within"
-     }
-  }
-}');
-~~~
-
-* bool query
-
-~~~sql
-select * from es_table where esquery(k4, ' {
-     "bool": {
-        "must": [
-           {
-              "terms": {
-                 "k1": [
-                    11,
-                    12
-                 ]
-              }
-           },
-           {
-              "terms": {
-                 "k2": [
-                    100
-                 ]
-              }
-           }
-        ]
-     }
-  }');
-~~~
-
-### Usage notes
-
-* Elasticsearch earlier than 5.x scans data in a different way than that later than 5.x. Currently, **only versions later than 5.x** are supported.
-* Elasticsearch clusters with HTTP basic authentication enabled are supported.
-* Querying data from StarRocks may not be as fast as directly querying data from Elasticsearch, such as count-related queries. The reason is that Elasticsearch directly reads the metadata of target documents without the need to filter the real data, which accelerates the count query.
-
-## (Deprecated) External table for a JDBC-compatible database
+## External table for a JDBC-compatible database
 
 From v2.3.0, StarRocks provides external tables to query JDBC-compatible databases. This way, you can analyze the data of such databases in a blazing fast manner without the need to import the data into StarRocks. This section describes how to create an external table in StarRocks and query data in JDBC-compatible databases.
 
@@ -577,6 +284,264 @@ The mapping between the target database and StarRocks varies based on the type o
 
 * When you query JDBC external tables, StarRocks cannot push down functions to the tables.
 
+## (Deprecated) Elasticsearch external table
+
+StarRocks and Elasticsearch are two popular analytics systems. StarRocks is performant in large-scale distributed computing. Elasticsearch is ideal for full-text search. StarRocks combined with Elasticsearch can deliver a more complete OLAP solution.
+
+### Example of creating an Elasticsearch external table
+
+#### Syntax
+
+~~~sql
+CREATE EXTERNAL TABLE elastic_search_external_table
+(
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    k4 VARCHAR(2048),
+    k5 DATETIME
+)
+ENGINE=ELASTICSEARCH
+PROPERTIES (
+    "hosts" = "http://192.168.0.1:9200,http://192.168.0.2:9200",
+    "user" = "root",
+    "password" = "root",
+    "index" = "tindex",
+    "type" = "_doc",
+    "es.net.ssl" = "true"
+);
+~~~
+
+The following table describes the parameters.
+
+| **Parameter**        | **Required** | **Default value** | **Description**                                              |
+| -------------------- | ------------ | ----------------- | ------------------------------------------------------------ |
+| hosts                | Yes          | None              | The connection address of the Elasticsearch cluster. You can specify one or more addresses. StarRocks can parse the Elasticsearch version and index shard allocation from this address. StarRocks communicates with your Elasticsearch cluster based on the address returned by the `GET /_nodes/http` API operation. Therefore, the value of the `host` parameter must be the same as the address returned by the `GET /_nodes/http` API operation. Otherwise, BEs may not be able to communicate with your Elasticsearch cluster. |
+| index                | Yes          | None              | The name of the Elasticsearch index that is created on the table in StarRocks. The name can be an alias. This parameter supports wildcards (\*). For example, if you set `index` to <code class="language-text">hello*</code>, StarRocks retrieves all indexes whose names start with `hello`. |
+| user                 | No           | Empty             | The username that is used to log in to the Elasticsearch cluster with basic authentication enabled. Make sure you have access to `/*cluster/state/*nodes/http` and the index. |
+| password             | No           | Empty             | The password that is used to log in to the Elasticsearch cluster. |
+| type                 | No           | `_doc`            | The type of the index. Default value: `_doc`. If you want to query data in Elasticsearch 8 and later versions, you do not need to configure this parameter because the mapping types have been removed in Elasticsearch 8 and later versions. |
+| es.nodes.wan.only    | No           | `false`           | Specifies whether StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data.<ul><li>`true`: StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data and does not sniff data nodes on which the shards of the Elasticsearch index reside. If StarRocks cannot access the addresses of the data nodes inside the Elasticsearch cluster, you need to set this parameter to `true`.</li><li>`false`: StarRocks uses the addresses specified by `host` to sniff data nodes on which the shards of the Elasticsearch cluster indexes reside. After StarRocks generates a query execution plan, the relevant BEs directly access the data nodes inside the Elasticsearch cluster to fetch data from the shards of indexes. If StarRocks can access the addresses of the data nodes inside the Elasticsearch cluster, we recommend that you retain the default value `false`.</li></ul> |
+| es.net.ssl           | No           | `false`           | Specifies whether the HTTPS protocol can be used to access your Elasticsearch cluster. Only StarRocks 2.4 and later versions support configuring this parameter.<ul><li>`true`: Both the HTTPS and HTTP protocols can be used to access your Elasticsearch cluster.</li><li>`false`: Only the HTTP protocol can be used to access your Elasticsearch cluster.</li></ul> |
+| enable_docvalue_scan | No           | `true`            | Specifies whether to obtain the values of the target fields from Elasticsearch columnar storage. In most cases, reading data from columnar storage outperforms reading data from row storage. |
+| enable_keyword_sniff | No           | `true`            | Specifies whether to sniff TEXT-type fields in Elasticsearch based on KEYWORD-type fields. If this parameter is set to `false`, StarRocks performs matching after tokenization. |
+
+##### Columnar scan for faster queries
+
+If you set `enable_docvalue_scan` to `true`, StarRocks follows these rules when it obtains data from Elasticsearch:
+
+* **Try and see**: StarRocks automatically checks if columnar storage is enabled for the target fields. If so, StarRocks obtains all values in the target fields from columnar storage.
+* **Auto-downgrading**: If any one of the target fields is unavailable in columnar storage, StarRocks parses and obtains all values in the target fields from row storage (`_source`).
+
+> **NOTE**
+>
+> * Columnar storage is unavailable for TEXT-type fields in Elasticsearch. Therefore, if you query fields containing TEXT-type values, StarRocks obtains the values of the fields from `_source`.
+> * If you query a large number (greater than or equal to 25) of fields, reading field values from `docvalue` does not show noticeable benefits compared with reading field values from `_source`.
+
+##### Sniff KEYWORD-type fields
+
+If you set `enable_keyword_sniff` to `true`, Elasticsearch allows direct data ingestion without an index because it will automatically create an index after ingestion. For STRING-type fields, Elasticsearch will create a field with both TEXT and KEYWORD types. This is how the Multi-Field feature of Elasticsearch works. The mapping is as follows:
+
+~~~SQL
+"k4": {
+   "type": "text",
+   "fields": {
+      "keyword": {   
+         "type": "keyword",
+         "ignore_above": 256
+      }
+   }
+}
+~~~
+
+For example, to conduct "=" filtering on `k4`, StarRocks on Elasticsearch will convert the filtering operation into an Elasticsearch TermQuery.
+
+The original SQL filter is as follows:
+
+~~~SQL
+k4 = "StarRocks On Elasticsearch"
+~~~
+
+The converted Elasticsearch query DSL is as follows:
+
+~~~SQL
+"term" : {
+    "k4": "StarRocks On Elasticsearch"
+
+}
+~~~
+
+The first field of `k4` is TEXT, and it will be tokenized by the analyzer configured for `k4` (or by the standard analyzer if no analyzer has been configured for `k4`) after data ingestion. As a result, the first field will be tokenized into three terms: `StarRocks`, `On`, and `Elasticsearch`. The details are as follows:
+
+~~~SQL
+POST /_analyze
+{
+  "analyzer": "standard",
+  "text": "StarRocks On Elasticsearch"
+}
+~~~
+
+The tokenization results are as follows:
+
+~~~SQL
+{
+   "tokens": [
+      {
+         "token": "starrocks",
+         "start_offset": 0,
+         "end_offset": 5,
+         "type": "<ALPHANUM>",
+         "position": 0
+      },
+      {
+         "token": "on",
+         "start_offset": 6,
+         "end_offset": 8,
+         "type": "<ALPHANUM>",
+         "position": 1
+      },
+      {
+         "token": "elasticsearch",
+         "start_offset": 9,
+         "end_offset": 11,
+         "type": "<ALPHANUM>",
+         "position": 2
+      }
+   ]
+}
+~~~
+
+Suppose you conduct a query as follows:
+
+~~~SQL
+"term" : {
+    "k4": "StarRocks On Elasticsearch"
+}
+~~~
+
+There is no term in the dictionary that matches the term `StarRocks On Elasticsearch`, and therefore no result will be returned.
+
+However, if you have set `enable_keyword_sniff` to `true`, StarRocks will convert `k4 = "StarRocks On Elasticsearch"` to `k4.keyword = "StarRocks On Elasticsearch"` to match the SQL semantics. The converted `StarRocks On Elasticsearch` query DSL is as follows:
+
+~~~SQL
+"term" : {
+    "k4.keyword": "StarRocks On Elasticsearch"
+}
+~~~
+
+`k4.keyword` is of the KEYWORD type. Therefore, the data is written into Elasticsearch as a complete term, allowing for successful matching.
+
+#### Mapping of column data types
+
+When you create an external table, you need to specify the data types of columns in the external table based on the data types of columns in the Elasticsearch table. The following table shows the mapping of column data types.
+
+| **Elasticsearch** | **StarRocks**               |
+| ----------------- | --------------------------- |
+| BOOLEAN           | BOOLEAN                     |
+| BYTE              | TINYINT/SMALLINT/INT/BIGINT |
+| SHORT             | SMALLINT/INT/BIGINT         |
+| INTEGER           | INT/BIGINT                  |
+| LONG              | BIGINT                      |
+| FLOAT             | FLOAT                       |
+| DOUBLE            | DOUBLE                      |
+| KEYWORD           | CHAR/VARCHAR                |
+| TEXT              | CHAR/VARCHAR                |
+| DATE              | DATE/DATETIME               |
+| NESTED            | CHAR/VARCHAR                |
+| OBJECT            | CHAR/VARCHAR                |
+| ARRAY             | ARRAY                       |
+
+> **Note**
+>
+> * StarRocks reads the data of the NESTED type by using JSON-related functions.
+> * Elasticsearch automatically flattens multi-dimensional arrays into one-dimensional arrays. StarRocks does the same. The support for querying ARRAY data from Elasticsearch is added from v2.5.
+
+### Predicate pushdown
+
+StarRocks supports predicate pushdown. Filters can be pushed down to Elasticsearch for execution, which improves query performance. The following table lists the operators that support predicate pushdown.
+
+|   SQL syntax  |   ES syntax  |
+| :---: | :---: |
+|  `=`   |  term query   |
+|  `in`   |  terms query   |
+|  `>=,  <=, >, <`   |  range   |
+|  `and`   |  bool.filter   |
+|  `or`   |  bool.should   |
+|  `not`   |  bool.must_not   |
+|  `not in`   |  bool.must_not + terms   |
+|  `esquery`   |  ES Query DSL  |
+
+### Examples
+
+The **esquery function** is used to push down queries **that cannot be expressed in SQL** (such as match and geoshape) to Elasticsearch for filtering. The first parameter in the esquery function is used to associate an index. The second parameter is a JSON expression of basic Query DSL, which is enclosed in brackets {}. **The JSON expression must have but only one root key**, such as match, geo_shape, or bool.
+
+* match query
+
+~~~sql
+select * from es_table where esquery(k4, '{
+    "match": {
+       "k4": "StarRocks on elasticsearch"
+    }
+}');
+~~~
+
+* geo-related query
+
+~~~sql
+select * from es_table where esquery(k4, '{
+  "geo_shape": {
+     "location": {
+        "shape": {
+           "type": "envelope",
+           "coordinates": [
+              [
+                 13,
+                 53
+              ],
+              [
+                 14,
+                 52
+              ]
+           ]
+        },
+        "relation": "within"
+     }
+  }
+}');
+~~~
+
+* bool query
+
+~~~sql
+select * from es_table where esquery(k4, ' {
+     "bool": {
+        "must": [
+           {
+              "terms": {
+                 "k1": [
+                    11,
+                    12
+                 ]
+              }
+           },
+           {
+              "terms": {
+                 "k2": [
+                    100
+                 ]
+              }
+           }
+        ]
+     }
+  }');
+~~~
+
+### Usage notes
+
+* Elasticsearch earlier than 5.x scans data in a different way than that later than 5.x. Currently, **only versions later than 5.x** are supported.
+* Elasticsearch clusters with HTTP basic authentication enabled are supported.
+* Querying data from StarRocks may not be as fast as directly querying data from Elasticsearch, such as count-related queries. The reason is that Elasticsearch directly reads the metadata of target documents without the need to filter the real data, which accelerates the count query.
+
 ## (Deprecated) Hive external table
 
 Before using Hive external tables, make sure JDK 1.8 has been installed on your servers.
@@ -607,7 +572,7 @@ SHOW RESOURCES;
 DROP RESOURCE "hive0";
 ~~~
 
-You can modify `hive.metastore.uris` of a Hive resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md).
+You can modify `hive.metastore.uris` of a Hive resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
 
 ### Create a database
 
@@ -816,7 +781,7 @@ The following table describes the related parameters.
 | iceberg.catalog.type | The catalog type of the resource. Both Hive catalog and custom catalog are supported. If you specify a Hive catalog, set the value to `HIVE`. If you specify a custom catalog, set the value to `CUSTOM`. |
 | iceberg.catalog-impl   | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg external table. |
 
-You can modify `hive.metastore.uris` and `iceberg.catalog-impl`of a Iceberg resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md).
+You can modify `hive.metastore.uris` and `iceberg.catalog-impl`of a Iceberg resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
 
 ##### View Iceberg resources
 
@@ -959,9 +924,9 @@ The following table describes the parameters.
 | Parameter           | Description                                                  |
 | ------------------- | ------------------------------------------------------------ |
 | type                | The type of the Hudi resource. Set the vaue to hudi.         |
-| hive.metastore.uris | The Thrift URI of the Hive metastore to which the Hudi resource connects. After connecting the Hudi resource to a Hive metastore, you can create and manage Hudi tables by using Hive. The Thrift URI is in the <IP address of the Hive metastore\>:<Port number of the Hive metastore\> format. The default port number is 9083. |
+| hive.metastore.uris | The Thrift URI of the Hive metastore to which the Hudi resource connects. After connecting the Hudi resource to a Hive metastore, you can create and manage Hudi tables by using Hive. The Thrift URI is in the `<IP address of the Hive metastore>:<Port number of the Hive metastore>` format. The default port number is 9083. |
 
-From v2.3 onwards, StarRocks allows changing the `hive.metastore.uris` value of a Hudi resource. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md).
+From v2.3 onwards, StarRocks allows changing the `hive.metastore.uris` value of a Hudi resource. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
 
 ##### View Hudi resources
 
@@ -1054,3 +1019,39 @@ After you create a Hudi external table associated with a specific Hudi managed t
 ~~~SQL
 SELECT COUNT(*) FROM hudi_tbl;
 ~~~
+
+## (Deprecated) MySQL external table
+
+In the star schema, data is generally divided into dimension tables and fact tables. Dimension tables have less data but involve UPDATE operations. Currently, StarRocks does not support direct UPDATE operations (update can be implemented by using the Unique Key table). In some scenarios, you can store dimension tables in MySQL for direct data read.
+
+To query MySQL data, you must create an external table in StarRocks and map it to the table in your MySQL database. You need to specify the MySQL connection information when creating the table.
+
+~~~sql
+CREATE EXTERNAL TABLE mysql_external_table
+(
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    k4 VARCHAR(2048),
+    k5 DATETIME
+)
+ENGINE=mysql
+PROPERTIES
+(
+    "host" = "127.0.0.1",
+    "port" = "3306",
+    "user" = "mysql_user",
+    "password" = "mysql_passwd",
+    "database" = "mysql_db_test",
+    "table" = "mysql_table_test"
+);
+~~~
+
+Parameters:
+
+* **host**: the connection address of the MySQL database
+* **port**: the port number of the MySQL database
+* **user**: the username to log in to MySQL
+* **password**: the password to log in to MySQL
+* **database**: the name of the MySQL database
+* **table**: the name of the table in the MySQL database

@@ -1,4 +1,5 @@
 name: CI Report
+run-name: CI Report(#${{ github.event.workflow_run.id }})
 
 on:
   workflow_run:
@@ -20,6 +21,9 @@ permissions:
   security-events: write
   statuses: write
 
+env:
+  HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+
 jobs:
   INFO:
     runs-on: [ self-hosted, quick ]
@@ -28,7 +32,6 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure')
     outputs:
       PR_NUMBER: ${{ steps.pr_details.outputs.PR_NUMBER }}
-      HEAD_SHA: ${{ steps.pr_details.outputs.HEAD_SHA }}
       BASE_REF: ${{ steps.pr_details.outputs.BASE_REF }}
     steps:
       - run: |
@@ -41,45 +44,29 @@ jobs:
           run_id: ${{ github.event.workflow_run.id }}
           name: 'pr_num'
 
-      - name: Download workflow artifact - HEAD REF
-        uses: dawidd6/action-download-artifact@v2
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          run_id: ${{ github.event.workflow_run.id }}
-          name: 'head_sha'
-
       - name: Read the pr num file
         id: pr_num_reader
         uses: juliangruber/read-file-action@v1
         with:
           path: ./pr_num.txt
 
-      - name: Read the pr head ref
-        id: head_sha_reader
-        uses: juliangruber/read-file-action@v1
-        with:
-          path: ./head_sha.txt
-
       - name: PR DETAILS
         id: pr_details
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ steps.pr_num_reader.outputs.content }}
-          HEAD_SHA: ${{ steps.head_sha_reader.outputs.content }}
           REPO: ${{ github.repository }}
         run: |
           PR_NUMBER=`echo ${PR_NUMBER}`
-          HEAD_SHA=`echo ${HEAD_SHA}`
           base_ref=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName -q .baseRefName`
           echo "BASE_REF=${base_ref}" >> $GITHUB_OUTPUT
           echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_OUTPUT
-          echo "HEAD_SHA=${HEAD_SHA}" >> $GITHUB_OUTPUT
 
-      - name: Set Workflow Name
-        id: set_workflow_name
-        env:
-          pr: ${{ steps.pr_details.outputs.PR_NUMBER }}
-        run: echo "workflow_name=\"CI Report - ${pr}\"" >> $GITHUB_OUTPUT
+      - name: INFO
+        id: info
+        run: |
+          echo ${{ steps.pr_details.outputs.PR_NUMBER }}
+          echo ${{ steps.pr_details.outputs.BASE_REF }}
 
   FE-REPORT:
     runs-on: [ self-hosted, quick ]
@@ -87,7 +74,7 @@ jobs:
     if: needs.INFO.outputs.PR_NUMBER != ''
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
-      branch: ${{ needs.INFO.outputs.BASE_REF }}
+      BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
     steps:
       - name: CLEAN
         run: |
@@ -105,7 +92,7 @@ jobs:
         env:
           bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
-          oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Report/${PR_NUMBER}
+          oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/Release/pr/UT-Report/${PR_NUMBER}
           size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path}/fe_ut_report.tar.gz | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
@@ -169,7 +156,7 @@ jobs:
           java -jar $package_path/jacococli.jar report ${fe_path}/merge.exec --classfiles ${fe_core_path}/target/classes/ \
             --html ./result --xml ${{ github.workspace }}/coverage.xml \
             --sourcefiles ${fe_core_path}/src/main/java/ --encoding utf-8 --name fe-coverage
-          oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Report/${PR_NUMBER}/
+          oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/Release/pr/UT-Report/${PR_NUMBER}/
           ossutil64 --config-file ~/.ossutilconfig cp coverage.xml ${oss_path} -f
 
       # Incremental Total Coverage
@@ -206,9 +193,9 @@ jobs:
           flags: fe-total
           fail_ci_if_error: false
           verbose: true
-          override_pr: ${{ needs.INFO.outputs.PR_NUMBER }}
-          override_branch: ${{ needs.INFO.outputs.BASE_REF }}
-          override_commit: ${{ needs.INFO.outputs.HEAD_SHA }}
+          override_pr: ${{ env.PR_NUMBER }}
+          override_branch: ${{ env.BASE_REF }}
+          override_commit: ${{ env.HEAD_SHA }}
 
       - name: Clean ENV
         if: always()
@@ -218,10 +205,12 @@ jobs:
   BE-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
+    if: needs.INFO.outputs.PR_NUMBER != ''
     env:
-      PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
-      BRANCH: ${{ needs.INFO.outputs.BASE_REF }}
       GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
+      BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
     steps:
       - name: CLEAN
         run: |
@@ -230,8 +219,7 @@ jobs:
       - name: INFO
         id: info
         run: |
-          repo="${{ github.repository }}"
-          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
+          bucket_prefix=`echo ${REPO%/*} | tr '[:upper:]' '[:lower:]'`
           echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
 
       - uses: actions/checkout@v3
@@ -243,7 +231,7 @@ jobs:
         env:
           bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
-          oss_path=oss://${bucket_prefix}-ci-release/$BRANCH/ASAN/pr/UT-Report/${PR_NUMBER}
+          oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/ASAN/pr/UT-Report/${PR_NUMBER}
           size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path}/be_ut_coverage.xml | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
@@ -261,62 +249,54 @@ jobs:
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com -type cobertura --module BE
           fi
 
-      - name: Publish UT Report
-        uses: mikepenz/action-junit-report@v3
-        id: publish_report
-        if: steps.download-ut-xml.outcome == 'success' && steps.download-ut-xml.outputs.size != '0'
-        env:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          check_name: 'BE UT Report'
-          detailed_summary: true
-          fail_on_failure: true
-          commit: ${{ github.event.workflow_run.head_sha }}
-          report_paths: ./be/be_ut_coverage.xml
-
-      - name: Checkout PR Code
-        if: steps.publish_report.outcome == 'success'
-        env:
-          CODE_PATH: ${{ github.workspace }}
-          BASE_VERSION: ${{ steps.download-ut-xml.outputs.base_version }}
+      - name: Merge Total Coverage
+        id: merge
+        if: steps.download-ut-xml.outputs.size != '0'
         run: |
-          cd /var/lib/ci-tool/ && git pull && ./bin/checkout.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ECI_ID=`./bin/create_eci.sh ${BASE_REF} ${REPO}`
+          TOTAL_COV_XML=/var/local/env/be_total_coverage_${PR_ID}.xml
+          
+          echo "ECI_ID=${ECI_ID}" >> $GITHUB_OUTPUT
+          echo "COV_XML=${TOTAL_COV_XML}" >> $GITHUB_OUTPUT
+          
+          eci cp ./bin/gen_be_cov.sh $ECI_ID:/root/gen_be_cov.sh
+          eci exec ${ECI_ID} bash -c "cd /root; ./gen_be_cov.sh ${REPO} ${BASE_REF} ${PR_NUMBER} ${HEAD_SHA}" | tee run.log
+          result=`tail -n 1 run.log`
+          echo "RESULT=${result}" >> $GITHUB_OUTPUT
 
       # Incremental Total Coverage
       - name: Publish Incremental Coverage Report - Total
-        if: steps.publish_report.outcome == 'success'
+        if: always() && steps.download-ut-xml.outputs.size != '0'
         env:
           be_path: ${{ github.workspace }}/be
+          merge_outcome: ${{ steps.merge.outcome }}
+          merge_result: ${{ steps.merge.outputs.RESULT }}
+          total_xml: ${{ steps.merge.outputs.COV_XML }}
         run: |
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
+          if [[ ${merge_outcome} == 'failure' || ${merge_result} == 'FALSE' ]]; then
+              total_xml=${be_path}/be_ut_coverage.xml
+          fi
           java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-            --cover ${be_path}/be_ut_coverage.xml --github-token ${{ secrets.PAT }} --repo ${{ github.repository }} \
+            --cover ${total_xml} --github-token ${{ secrets.PAT }} --repo ${{ github.repository }} \
             --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type cobertura --module BE \
             -d ${be_path}/diff.txt -dt file
 
-      # total coverage
-      - name: Coverage Report
-        uses: codecov/codecov-action@v3
-        if: steps.publish_report.outcome == 'success'
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ${{ github.workspace }}/be/be_ut_coverage.xml
-          dry_run: false
-          name: be-total
-          flags: be-total
-          fail_ci_if_error: false
-          verbose: true
-          override_pr: ${{ needs.INFO.outputs.PR_NUMBER }}
-          override_branch: ${{ needs.INFO.outputs.BASE_REF }}
-          override_commit: ${{ needs.INFO.outputs.HEAD_SHA }}
-
       - name: Clean ENV
         if: always()
+        env:
+          total_xml: ${{ steps.merge.outputs.COV_XML }}
         run: |
           rm -rf ${{ github.workspace }}/*
+          if [[ "${{ steps.merge.outputs.ECI_ID }}" != "" ]]; then
+            eci rm ${{ steps.merge.outputs.ECI_ID }}
+          fi
+          if [[ "${total_xml}" != "" ]]; then
+            rm -f ${total_xml}
+          fi
 
   SQL-Tester-REPORT:
     runs-on: [ self-hosted, quick ]
@@ -324,7 +304,7 @@ jobs:
     if: needs.INFO.outputs.PR_NUMBER != ''
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
-      branch: ${{ needs.INFO.outputs.BASE_REF }}
+      BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
     steps:
       - name: CLEAN
         run: |
@@ -343,7 +323,7 @@ jobs:
           bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
           mkdir sql-tester-result && cd sql-tester-result
-          oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/
+          oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/Release/pr/SQL-Tester-XML/${PR_NUMBER}/
           size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path} | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
@@ -366,7 +346,7 @@ jobs:
           fail_on_failure: true
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit: ${{ github.event.workflow_run.head_sha }}
+          commit: ${{ env.HEAD_SHA }}
           report_paths: 'sql-tester-result/*.xml'
 
   Admit-REPORT:
@@ -375,7 +355,7 @@ jobs:
     if: needs.INFO.outputs.PR_NUMBER != ''
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
-      branch: ${{ needs.INFO.outputs.BASE_REF }}
+      BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
     steps:
       - name: CLEAN
         run: |
@@ -394,7 +374,7 @@ jobs:
           bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
           mkdir admit-result && cd admit-result
-          oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/
+          oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/Release/pr/Admit-XML/${PR_NUMBER}/
           size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path} | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
@@ -416,7 +396,7 @@ jobs:
           check_name: 'Admit Report'
           fail_on_failure: true
           detailed_summary: true
-          commit: ${{ github.event.workflow_run.head_sha }}
+          commit: ${{ env.HEAD_SHA }}
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'admit-result/*.xml'
 
@@ -425,10 +405,10 @@ jobs:
     needs: [ INFO, FE-REPORT, Admit-REPORT, BE-REPORT, SQL-Tester-REPORT ]
     if: always() && needs.INFO.outputs.PR_NUMBER != ''
     env:
-      PR_ID: ${{ needs.INFO.outputs.PR_NUMBER }}
       WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
       FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
       FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+      PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
     steps:
       - name: CLEAN
         run: |

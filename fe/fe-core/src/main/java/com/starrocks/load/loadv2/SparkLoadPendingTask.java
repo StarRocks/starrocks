@@ -612,7 +612,7 @@ public class SparkLoadPendingTask extends LoadTask {
                 throw new LoadException("table does not exist. id: " + srcTableId);
             }
             hiveDbTableName = srcHiveTable.getHiveDbTable();
-            hiveTableProperties.putAll(srcHiveTable.getHiveProperties());
+            hiveTableProperties.putAll(srcHiveTable.getProperties());
         }
 
         // check hll and bitmap func

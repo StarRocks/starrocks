@@ -223,7 +223,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return Joiner.on(":").join(name, createTime);
     }
 
-    public Map<String, String> getHiveProperties() {
+    @Override
+    public Map<String, String> getProperties() {
         // The user may alter the resource properties
         // So we do this to get the fresh properties
         Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
@@ -232,6 +233,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             hiveProperties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
         }
         return hiveProperties == null ? new HashMap<>() : hiveProperties;
+    }
+
+    public boolean hasBooleanTypePartitionColumn() {
+        return getPartitionColumns().stream().anyMatch(column -> column.getType().isBoolean());
     }
 
     public void modifyTableSchema(String dbName, String tableName, HiveTable updatedTable) {

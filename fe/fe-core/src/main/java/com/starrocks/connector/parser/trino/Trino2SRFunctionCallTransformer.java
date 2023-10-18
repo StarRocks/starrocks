@@ -175,6 +175,10 @@ public class Trino2SRFunctionCallTransformer {
         // format_datetime -> jodatime_format
         registerFunctionTransformer("format_datetime", 2, "jodatime_format",
                 ImmutableList.of(Expr.class, Expr.class));
+
+        // parse_datetime -> str_to_jodatime
+        registerFunctionTransformer("parse_datetime", 2, "str_to_jodatime",
+                ImmutableList.of(Expr.class, Expr.class));
     }
 
     private static void registerStringFunctionTransformer() {

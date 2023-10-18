@@ -482,4 +482,72 @@ PARALLEL_TEST(ConvertHelperTest, testSameTypeConvertColumn_TIMESTAMP) {
     EXPECT_EQ(values[1], c1->get(1).get_timestamp());
 }
 
+PARALLEL_TEST(ConvertHelperTest, testValidSchema) {
+    std::shared_ptr<Schema> in_schema;
+    std::shared_ptr<Schema> out_schema;
+    {
+        TabletSchemaPB schema_pb;
+        schema_pb.set_keys_type(PRIMARY_KEYS);
+        schema_pb.set_num_short_key_columns(1);
+        schema_pb.set_num_rows_per_row_block(5);
+        schema_pb.set_next_column_unique_id(2);
+
+        ColumnPB& col = *(schema_pb.add_column());
+        col.set_unique_id(1);
+        col.set_name("col1");
+        col.set_type("DECIMAL_V2");
+        col.set_is_key(true);
+        col.set_is_nullable(false);
+        col.set_length(4);
+        col.set_index_length(4);
+
+        ColumnPB& col2 = *(schema_pb.add_column());
+        col2.set_unique_id(2);
+        col2.set_name("col2");
+        col2.set_type("DECIMAL_V2");
+        col2.set_is_key(false);
+        col2.set_is_nullable(false);
+        col.set_length(4);
+        col.set_index_length(4);
+
+        auto table_schema = std::make_shared<TabletSchema>(schema_pb);
+        in_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(table_schema));
+    }
+    {
+        TabletSchemaPB schema_pb;
+        schema_pb.set_keys_type(PRIMARY_KEYS);
+        schema_pb.set_num_short_key_columns(1);
+        schema_pb.set_num_rows_per_row_block(5);
+        schema_pb.set_next_column_unique_id(2);
+
+        ColumnPB& col = *(schema_pb.add_column());
+        col.set_unique_id(1);
+        col.set_name("col1");
+        col.set_type("DECIMAL");
+        col.set_is_key(true);
+        col.set_is_nullable(false);
+        col.set_length(4);
+        col.set_index_length(4);
+
+        ColumnPB& col2 = *(schema_pb.add_column());
+        col2.set_unique_id(2);
+        col2.set_name("col2");
+        col2.set_type("DECIMAL");
+        col2.set_is_key(false);
+        col2.set_is_nullable(false);
+        col.set_length(4);
+        col.set_index_length(4);
+
+        auto table_schema = std::make_shared<TabletSchema>(schema_pb);
+        out_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(table_schema));
+    }
+    ChunkConverter cc;
+    ASSERT_TRUE(cc.init(*in_schema, *out_schema).ok());
+    auto chunk_ptr = ChunkHelper::new_chunk(*in_schema, 10);
+    auto chunk_ptr1 = cc.copy_convert(*chunk_ptr);
+    ASSERT_TRUE(chunk_ptr1->schema()->sort_key_idxes().size() == 1);
+    auto chunk_ptr2 = cc.move_convert(chunk_ptr.get());
+    ASSERT_TRUE(chunk_ptr2->schema()->sort_key_idxes().size() == 1);
+}
+
 } // namespace starrocks

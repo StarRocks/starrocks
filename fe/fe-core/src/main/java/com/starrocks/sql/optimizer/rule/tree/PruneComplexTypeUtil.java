@@ -25,6 +25,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -60,12 +61,15 @@ public class PruneComplexTypeUtil {
     protected static class Context {
         // The same ColumnRefOperator may have multiple access paths for complex type
         private final Map<ColumnRefOperator, ComplexTypeAccessGroup> accessGroups;
-
+        private final Map<ColumnRefOperator, ColumnRefOperator> unnestColRefMap;
+        private boolean enablePruneComplexTypesInUnnest;
         private boolean enablePruneComplexTypes;
 
-        public Context() {
+        public Context(boolean enablePruneComplexTypesInUnnest) {
             this.accessGroups = new HashMap<>();
             this.enablePruneComplexTypes = true;
+            this.unnestColRefMap = new HashMap<>();
+            this.enablePruneComplexTypesInUnnest = enablePruneComplexTypesInUnnest;
         }
 
         public void setEnablePruneComplexTypes(boolean enablePruneComplexTypes) {
@@ -79,6 +83,12 @@ public class PruneComplexTypeUtil {
         public void addAccessPaths(ColumnRefOperator columnRefOperator, ComplexTypeAccessPaths accessPaths) {
             accessGroups.putIfAbsent(columnRefOperator, new ComplexTypeAccessGroup());
             accessGroups.get(columnRefOperator).addAccessPaths(accessPaths);
+
+            ColumnRefOperator oriColRefOperator = getOriginalColRef(columnRefOperator);
+            if (oriColRefOperator != columnRefOperator) {
+                accessGroups.putIfAbsent(oriColRefOperator, new ComplexTypeAccessGroup());
+                accessGroups.get(oriColRefOperator).addAccessPaths(accessPaths);
+            }
         }
 
         public void addAccessPaths(ColumnRefOperator columnRefOperator,
@@ -110,8 +120,41 @@ public class PruneComplexTypeUtil {
             scalarOperator.accept(markSubfieldsVisitor, this);
         }
 
+        public void setUnnest(PhysicalTableFunctionOperator operator) {
+            for (int i = 0; i < operator.getFnResultColRefs().size(); i++) {
+                ColumnRefOperator output = operator.getFnResultColRefs().get(i);
+                ColumnRefOperator input = operator.getFnParamColumnRefs().get(i);
+                unnestColRefMap.put(output, input);
+                if (getVisitedAccessGroup(output) != null) {
+                    accessGroups.put(input, getVisitedAccessGroup(output));
+                    if (operator.getProjection() == null && operator.getOutputColRefs().contains(output)) {
+                        add(input, input);
+                    }
+                }
+            }
+        }
+
+        public boolean isEnablePruneComplexTypesInUnnest() {
+            return enablePruneComplexTypesInUnnest;
+        }
+
+        public boolean hasUnnestColRefMapValue(ColumnRefOperator columnRefOperator) {
+            return unnestColRefMap.containsValue(columnRefOperator);
+        }
+
+        public boolean hasUnnestColRefMapKey(ColumnRefOperator columnRefOperator) {
+            return unnestColRefMap.containsKey(columnRefOperator);
+        }
+
         public ComplexTypeAccessGroup getVisitedAccessGroup(ColumnRefOperator columnRefOperator) {
             return accessGroups.get(columnRefOperator);
+        }
+
+        private ColumnRefOperator getOriginalColRef(ColumnRefOperator col) {
+            if (unnestColRefMap.containsKey(col)) {
+                return unnestColRefMap.get(col);
+            }
+            return col;
         }
 
         private boolean checkCanPrune(ColumnRefOperator columnRefOperator, ScalarOperator scalarOperator) {
@@ -125,8 +168,8 @@ public class PruneComplexTypeUtil {
             }
 
             if (!columnRefOperator.getType().equals(scalarOperator.getType())) {
-                LOG.warn("Complex type columnRefOperator and scalarOperator should has the same type.");
-                return false;
+                LOG.warn(String.format("Complex type columnRefOperator[%s] and scalarOperator[%s] should has the same " +
+                        "type", columnRefOperator.getType(), scalarOperator.getType()));
             }
             return true;
         }

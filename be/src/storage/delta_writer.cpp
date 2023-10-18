@@ -198,15 +198,21 @@ Status DeltaWriter::_init() {
 
     // build tablet schema in request level
     auto tablet_schema_ptr = _tablet->tablet_schema();
-    _build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, _tablet->tablet_schema());
+    RETURN_IF_ERROR(_build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, _tablet->tablet_schema()));
+    size_t real_num_columns = _tablet_schema->num_columns();
+    if (_tablet->is_column_with_row_store()) {
+        if (_tablet_schema->columns().back().name() != "__row") {
+            return Status::InternalError("bad column_with_row schema, not __row column");
+        }
+        real_num_columns -= 1;
+    }
 
     // maybe partial update, change to partial tablet schema
-    if (tablet_schema_ptr->keys_type() == KeysType::PRIMARY_KEYS &&
-        partial_cols_num < tablet_schema_ptr->num_columns()) {
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && partial_cols_num < real_num_columns) {
         writer_context.referenced_column_ids.reserve(partial_cols_num);
         for (auto i = 0; i < partial_cols_num; ++i) {
             const auto& slot_col_name = (*_opt.slots)[i]->col_name();
-            int32_t index = _tablet->field_index(slot_col_name);
+            int32_t index = _tablet_schema->field_index(slot_col_name);
             if (index < 0) {
                 auto msg = strings::Substitute("Invalid column name: $0", slot_col_name);
                 LOG(WARNING) << msg;
@@ -223,22 +229,36 @@ Status DeltaWriter::_init() {
             // If tablet is a new created tablet and has no historical data, average_row_size is 0
             // And we use schema size as average row size. If there are complex type(i.e. BITMAP/ARRAY) or varchar,
             // we will consider it as 16 bytes.
-            average_row_size = tablet_schema_ptr->estimate_row_size(16);
+            average_row_size = _tablet_schema->estimate_row_size(16);
             _memtable_buffer_row = config::write_buffer_size / average_row_size;
         }
-        writer_context.partial_update_tablet_schema =
-                TabletSchema::create(tablet_schema_ptr, writer_context.referenced_column_ids);
-        auto sort_key_idxes = tablet_schema_ptr->sort_key_idxes();
+        auto sort_key_idxes = _tablet_schema->sort_key_idxes();
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         if (!std::includes(writer_context.referenced_column_ids.begin(), writer_context.referenced_column_ids.end(),
                            sort_key_idxes.begin(), sort_key_idxes.end())) {
             _partial_schema_with_sort_key = true;
         }
-        writer_context.tablet_schema = writer_context.partial_update_tablet_schema;
-        _tablet_schema = writer_context.partial_update_tablet_schema;
+        if (!_opt.merge_condition.empty()) {
+            writer_context.merge_condition = _opt.merge_condition;
+        }
+        auto partial_update_schema = TabletSchema::create(_tablet_schema, writer_context.referenced_column_ids);
+        // In column mode partial update, we need to modify sort key idxes and short key column num in partial
+        // tablet schema
+        if (_opt.partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE ||
+            _opt.partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+            std::vector<ColumnId> sort_key_idxes(_tablet_schema->num_key_columns());
+            std::iota(sort_key_idxes.begin(), sort_key_idxes.end(), 0);
+            partial_update_schema->set_num_short_key_columns(1);
+            partial_update_schema->set_sort_key_idxes(sort_key_idxes);
+        }
+
+        writer_context.tablet_schema = partial_update_schema;
+        writer_context.full_tablet_schema = _tablet_schema;
+        writer_context.is_partial_update = true;
         writer_context.partial_update_mode = _opt.partial_update_mode;
+        _tablet_schema = partial_update_schema;
     } else {
-        if (tablet_schema_ptr->keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
+        if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
             writer_context.merge_condition = _opt.merge_condition;
         }
         writer_context.tablet_schema = _tablet_schema;
@@ -330,6 +350,7 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(_check_partial_update_with_sort_key(chunk));
+
     // Delay the creation memtables until we write data.
     // Because for the tablet which doesn't have any written data, we will not use their memtables.
     if (_mem_table == nullptr) {
@@ -350,6 +371,10 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
                                                  _opt.tablet_id, _replica_state_name(_replica_state)));
     }
 
+    if (!_mem_table->check_supported_column_partial_update(chunk)) {
+        return Status::InternalError(
+                fmt::format("can't partial update for column with row. tablet_id: {}", _opt.tablet_id));
+    }
     Status st;
     bool full = _mem_table->insert(chunk, indexes, from, size);
     if (_mem_tracker->limit_exceeded()) {
@@ -484,24 +509,31 @@ Status DeltaWriter::_flush_memtable() {
     return _flush_token->wait();
 }
 
-void DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam& ptable_schema_param,
-                                               const TabletSchemaCSPtr& ori_tablet_schema) {
+Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam& ptable_schema_param,
+                                                 const TabletSchemaCSPtr& ori_tablet_schema) {
+    Status st;
     _tablet_schema->copy_from(ori_tablet_schema);
-    // new tablet schema if new table
 
+    // new tablet schema if new table
     // find the right index id
     int i = 0;
     for (; i < ptable_schema_param.indexes_size(); i++) {
         if (ptable_schema_param.indexes(i).id() == index_id) break;
     }
-    if (ptable_schema_param.indexes_size() > 0 && ptable_schema_param.indexes(0).columns_desc_size() != 0 &&
-        ptable_schema_param.indexes(0).columns_desc(0).unique_id() >= 0) {
-        _tablet_schema->build_current_tablet_schema(index_id, ptable_schema_param.version(),
-                                                    ptable_schema_param.indexes(i), ori_tablet_schema);
+    if (i < ptable_schema_param.indexes_size()) {
+        if (ptable_schema_param.indexes_size() > 0 && ptable_schema_param.indexes(i).has_column_param() &&
+            ptable_schema_param.indexes(i).column_param().columns_desc_size() != 0 &&
+            ptable_schema_param.indexes(i).column_param().columns_desc(0).unique_id() >= 0) {
+            RETURN_IF_ERROR(_tablet_schema->build_current_tablet_schema(
+                    index_id, ptable_schema_param.version(), ptable_schema_param.indexes(i), ori_tablet_schema));
+        }
     }
+
     if (_tablet_schema->schema_version() > ori_tablet_schema->schema_version()) {
         _tablet->update_max_version_schema(_tablet_schema);
     }
+
+    return st;
 }
 
 void DeltaWriter::_reset_mem_table() {
@@ -517,7 +549,6 @@ void DeltaWriter::_reset_mem_table() {
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
     _mem_table->set_write_buffer_row(_memtable_buffer_row);
-    _mem_table->set_partial_schema_with_sort_key(_partial_schema_with_sort_key);
 }
 
 Status DeltaWriter::commit() {

@@ -107,8 +107,8 @@ DESC hive_catalog.hive_db.hive_table;
 
 ## References
 
-- [CREATE DATABASE](../data-definition/CREATE%20DATABASE.md)
-- [SHOW CREATE DATABASE](SHOW%20CREATE%20DATABASE.md)
+- [CREATE DATABASE](../data-definition/CREATE_DATABASE.md)
+- [SHOW CREATE DATABASE](../data-manipulation/SHOW_CREATE_DATABASE.md)
 - [USE](../data-definition/USE.md)
-- [SHOW DATABASES](../data-manipulation/SHOW%20DATABASES.md)
-- [DROP DATABASE](../data-definition/DROP%20DATABASE.md)
+- [SHOW DATABASES](../data-manipulation/SHOW_DATABASES.md)
+- [DROP DATABASE](../data-definition/DROP_DATABASE.md)

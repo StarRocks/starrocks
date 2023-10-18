@@ -48,7 +48,7 @@ public:
             : _tablet(std::move(tablet)), _mgr(mgr) {}
 
     void run() override {
-        _tablet->updates()->pk_index_major_compaction();
+        WARN_IF_ERROR(_tablet->updates()->pk_index_major_compaction(), "Failed to run PkIndexMajorCompactionTask");
         _mgr->unmark_running(_tablet->tablet_id());
     }
 

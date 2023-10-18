@@ -109,31 +109,27 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return;
             }
 
-            if (!RunMode.allowCreateLakeTable()) {
+            if (!RunMode.allowCreateLakeTable()) { // share_nothing mode
                 publishVersionForOlapTable(readyTransactionStates);
-                return;
-            }
-
-            if (!RunMode.allowCreateOlapTable()) {
+            } else if (!RunMode.allowCreateOlapTable()) { // share_data mode
                 publishVersionForLakeTable(readyTransactionStates);
-                return;
-            }
-
-            List<TransactionState> olapTransactions = new ArrayList<>();
-            List<TransactionState> lakeTransactions = new ArrayList<>();
-            for (TransactionState txnState : readyTransactionStates) {
-                if (isLakeTableTransaction(txnState)) {
-                    lakeTransactions.add(txnState);
-                } else {
-                    olapTransactions.add(txnState);
+            } else { // hybrid mode
+                List<TransactionState> olapTransactions = new ArrayList<>();
+                List<TransactionState> lakeTransactions = new ArrayList<>();
+                for (TransactionState txnState : readyTransactionStates) {
+                    if (isLakeTableTransaction(txnState)) {
+                        lakeTransactions.add(txnState);
+                    } else {
+                        olapTransactions.add(txnState);
+                    }
                 }
-            }
 
-            if (!olapTransactions.isEmpty()) {
-                publishVersionForOlapTable(olapTransactions);
-            }
-            if (!lakeTransactions.isEmpty()) {
-                publishVersionForLakeTable(lakeTransactions);
+                if (!olapTransactions.isEmpty()) {
+                    publishVersionForOlapTable(olapTransactions);
+                }
+                if (!lakeTransactions.isEmpty()) {
+                    publishVersionForLakeTable(lakeTransactions);
+                }
             }
         } catch (Throwable t) {
             LOG.error("errors while publish version to all backends", t);
@@ -347,7 +343,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         } else {
             List<CompletableFuture<Boolean>> futureList = new ArrayList<>();
             for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-                CompletableFuture<Boolean> future = publishLakePartitionAsync(db, tableCommitInfo, partitionCommitInfo, txnState);
+                CompletableFuture<Boolean> future =
+                        publishLakePartitionAsync(db, tableCommitInfo, partitionCommitInfo, txnState);
                 futureList.add(future);
             }
             return CompletableFuture.allOf(futureList.toArray(new CompletableFuture[0]))
@@ -355,7 +352,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         }
     }
 
-    private CompletableFuture<Boolean> publishLakePartitionAsync(@NotNull Database db, @NotNull TableCommitInfo tableCommitInfo,
+    private CompletableFuture<Boolean> publishLakePartitionAsync(@NotNull Database db,
+                                                                 @NotNull TableCommitInfo tableCommitInfo,
                                                                  @NotNull PartitionCommitInfo partitionCommitInfo,
                                                                  @NotNull TransactionState txnState) {
         long versionTime = partitionCommitInfo.getVersionTime();
@@ -383,6 +381,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long tableId = tableCommitInfo.getTableId();
         long txnVersion = partitionCommitInfo.getVersion();
         long txnId = txnState.getTransactionId();
+        long commitTime = txnState.getCommitTime();
         String txnLabel = txnState.getLabel();
         List<Tablet> normalTablets = null;
         List<Tablet> shadowTablets = null;
@@ -428,7 +427,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
-                Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, compactionScores);
+                Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, commitTime / 1000,
+                        compactionScores);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);

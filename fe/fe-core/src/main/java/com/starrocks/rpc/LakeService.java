@@ -57,7 +57,7 @@ public interface LakeService {
     @ProtobufRPC(serviceName = "LakeService", methodName = "compact", onceTalkTimeout = /*24H=*/86400000)
     Future<CompactResponse> compact(CompactRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_tablet", onceTalkTimeout = /*10m=*/60000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_tablet", onceTalkTimeout = /*10m=*/600000)
     Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "delete_data", onceTalkTimeout = 300000)
@@ -87,7 +87,7 @@ public interface LakeService {
     @ProtobufRPC(serviceName = "LakeService", methodName = "abort_compaction", onceTalkTimeout = 5000)
     Future<AbortCompactionResponse> abortCompaction(AbortCompactionRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "vacuum", onceTalkTimeout = /*10m=*/600000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "vacuum", onceTalkTimeout = /*1h=*/3600000)
     Future<VacuumResponse> vacuum(VacuumRequest request);
 }
 

@@ -34,6 +34,7 @@
 package com.starrocks.http;
 
 import com.starrocks.common.UserException;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
@@ -68,7 +69,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
                         ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
                 .setDb(ctx.getDatabase())
                 .setCatalog(ctx.getCurrentCatalog());
-        ctx.getPlannerProfile().reset();
+        Tracers.register(ctx);
 
         StatementBase parsedStmt = ((HttpConnectContext) ctx).getStatement();
         String sql = parsedStmt.getOrigStmt().originStmt;
@@ -107,6 +108,8 @@ public class HttpConnectProcessor extends ConnectProcessor {
                 // ignore kill stmt execute err(not monitor it)
                 ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             }
+        } finally {
+            Tracers.close();
         }
 
         // audit after exec

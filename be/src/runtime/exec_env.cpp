@@ -241,14 +241,10 @@ void GlobalEnv::_reset_tracker() {
     }
 }
 
-Status GlobalEnv::_init_storage_page_cache() {
+void GlobalEnv::_init_storage_page_cache() {
     int64_t storage_cache_limit = get_storage_page_cache_size();
     storage_cache_limit = check_storage_page_cache_size(storage_cache_limit);
     StoragePageCache::create_global_cache(page_cache_mem_tracker(), storage_cache_limit);
-
-    // TODO(zc): The current memory usage configuration is a bit confusing,
-    // we need to sort out the use of memory
-    return Status::OK();
 }
 
 int64_t GlobalEnv::get_storage_page_cache_size() {
@@ -310,6 +306,23 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
             new PriorityThreadPool("table_scan_io", // olap/external table scan thread pool
                                    config::scanner_thread_pool_thread_num, config::scanner_thread_pool_queue_size);
 
+    // Thread pool used for streaming load to scan StreamLoadPipe. The maximum number of
+    // threads and queue size are set INT32_MAX which indicate there is no limit for the
+    // thread pool, and this can avoid deadlock for concurrent streaming loads. The thread
+    // pool will not be full easily because fragment execution pool and http workers also
+    // limit the streaming load concurrency which is controlled by fragment_pool_thread_num_max
+    // and webserver_num_workers respectively. This pool will be used when
+    // enable_streaming_load_thread_pool is true.
+    std::unique_ptr<ThreadPool> streaming_load_pool;
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("stream_load_io")
+                    .set_min_threads(config::streaming_load_thread_pool_num_min)
+                    .set_max_threads(INT32_MAX)
+                    .set_max_queue_size(INT32_MAX)
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
+                    .build(&streaming_load_pool));
+    _streaming_load_thread_pool = streaming_load_pool.release();
+
     _udf_call_pool = new PriorityThreadPool("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
     _fragment_mgr = new FragmentMgr(this);
 
@@ -321,11 +334,20 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&_automatic_partition_pool));
 
     int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
-    if (num_prepare_threads <= 0) {
+    if (num_prepare_threads == 0) {
         num_prepare_threads = CpuInfo::num_cores();
+    } else if (num_prepare_threads < 0) {
+        // -n: means n * num_cpu_cores
+        num_prepare_threads = -num_prepare_threads * CpuInfo::num_cores();
     }
     _pipeline_prepare_pool =
             new PriorityThreadPool("pip_prepare", num_prepare_threads, config::pipeline_prepare_thread_pool_queue_size);
+    // register the metrics to monitor the task queue len
+    auto task_qlen_fun = [] {
+        auto pool = ExecEnv::GetInstance()->pipeline_prepare_pool();
+        return (pool == nullptr) ? 0U : pool->get_queue_size();
+    };
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_prepare_pool_queue_len, task_qlen_fun);
 
     int num_sink_io_threads = config::pipeline_sink_io_thread_pool_thread_num;
     if (num_sink_io_threads <= 0) {
@@ -427,7 +449,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
     _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
     _broker_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "broker");
-    _result_mgr->init();
+    RETURN_IF_ERROR(_result_mgr->init());
 
     int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                  ? CpuInfo::num_cores()
@@ -478,7 +500,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _agent_server->init_or_die();
 
     _broker_mgr->init();
-    _small_file_mgr->init();
+    RETURN_IF_ERROR(_small_file_mgr->init());
 
     RETURN_IF_ERROR(_load_channel_mgr->init(GlobalEnv::GetInstance()->load_mem_tracker()));
 
@@ -503,10 +525,6 @@ void ExecEnv::add_rf_event(const RfTracePoint& pt) {
 }
 
 void ExecEnv::stop() {
-    if (_stream_mgr != nullptr) {
-        _stream_mgr->close();
-    }
-
     if (_load_channel_mgr) {
         // Clear load channel should be executed before stopping the storage engine,
         // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
@@ -520,6 +538,10 @@ void ExecEnv::stop() {
 
     if (_fragment_mgr) {
         _fragment_mgr->close();
+    }
+
+    if (_stream_mgr != nullptr) {
+        _stream_mgr->close();
     }
 
     if (_pipeline_sink_io_pool) {
@@ -576,6 +598,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_scan_executor);
     SAFE_DELETE(_connector_scan_executor);
     SAFE_DELETE(_thread_pool);
+    SAFE_DELETE(_streaming_load_thread_pool);
 
     if (_lake_tablet_manager != nullptr) {
         _lake_tablet_manager->prune_metacache();

@@ -94,7 +94,7 @@ public:
         _local_memory_limit = _memory_manager->get_memory_limit_per_driver() * 0.8;
     }
 
-    Status add_chunk(ChunkPtr chunk);
+    void add_chunk(ChunkPtr chunk);
 
     Status add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes, uint32_t from,
                      uint32_t size, size_t memory_bytes);
@@ -108,7 +108,7 @@ public:
     bool is_finished() const override;
 
     Status set_finished(RuntimeState* state) override;
-    Status set_finishing(RuntimeState* state) override {
+    [[nodiscard]] Status set_finishing(RuntimeState* state) override {
         std::lock_guard<std::mutex> l(_chunk_lock);
         _is_finished = true;
         return Status::OK();
@@ -118,7 +118,7 @@ public:
         std::lock_guard<std::mutex> l(_chunk_lock);
         return _is_epoch_finished && _full_chunk_queue.empty() && !_partition_rows_num;
     }
-    Status set_epoch_finishing(RuntimeState* state) override {
+    [[nodiscard]] Status set_epoch_finishing(RuntimeState* state) override {
         std::lock_guard<std::mutex> l(_chunk_lock);
         _is_epoch_finished = true;
         return Status::OK();

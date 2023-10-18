@@ -19,8 +19,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ShowResultSet;
@@ -28,6 +28,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -50,6 +51,46 @@ public class MvRewriteTest extends MvRewriteTestBase {
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
         MvRewriteTestBase.prepareDefaultDatas();
+        prepareDatas();
+    }
+
+    public static void prepareDatas() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test_partition_tbl1 (\n" +
+                " k1 date NOT NULL,\n" +
+                " v1 INT,\n" +
+                " v2 INT)\n" +
+                " DUPLICATE KEY(k1)\n" +
+                " PARTITION BY RANGE(k1)\n" +
+                " (\n" +
+                "   PARTITION p1 VALUES LESS THAN ('2020-01-01'),\n" +
+                "   PARTITION p2 VALUES LESS THAN ('2020-02-01'),\n" +
+                "   PARTITION p3 VALUES LESS THAN ('2020-03-01'),\n" +
+                "   PARTITION p4 VALUES LESS THAN ('2020-04-01'),\n" +
+                "   PARTITION p5 VALUES LESS THAN ('2020-05-01'),\n" +
+                "   PARTITION p6 VALUES LESS THAN ('2020-06-01')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k1);");
+
+        starRocksAssert.withTable("CREATE TABLE test_partition_tbl2 (\n" +
+                " k1 date NOT NULL,\n" +
+                " v1 INT,\n" +
+                " v2 INT)\n" +
+                " DUPLICATE KEY(k1)\n" +
+                " PARTITION BY RANGE(k1)\n" +
+                " (\n" +
+                "   PARTITION p1 VALUES LESS THAN ('2020-01-01'),\n" +
+                "   PARTITION p2 VALUES LESS THAN ('2020-02-01'),\n" +
+                "   PARTITION p3 VALUES LESS THAN ('2020-03-01'),\n" +
+                "   PARTITION p4 VALUES LESS THAN ('2020-04-01'),\n" +
+                "   PARTITION p5 VALUES LESS THAN ('2020-05-01'),\n" +
+                "   PARTITION p6 VALUES LESS THAN ('2020-06-01')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k1);");
+
+        cluster.runSql("test", "insert into test_partition_tbl1 values (\"2019-01-01\",1,1),(\"2019-01-01\",1,2)," +
+                "(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
+                "(\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2),\n" +
+                "(\"2020-02-11\",1,1),(\"2020-02-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2);");
     }
 
     @Test
@@ -580,7 +621,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String plan1 = getFragmentPlan(query1);
         PlanTestBase.assertContains(plan1, "1:Project\n" +
                 "  |  <slot 1> : 16: v1\n" +
-                "  |  <slot 7> : 16: v1\n" +
+                "  |  <slot 7> : clone(16: v1)\n" +
                 "  |  <slot 14> : 18: total_sum\n" +
                 "  |  <slot 15> : 19: total_num\n" +
                 "  |  \n" +
@@ -595,10 +636,11 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 " on t0.v1 = test_all_type.t1d" +
                 " where t0.v1 < 100" +
                 " group by v1, test_all_type.t1d";
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewPlanCache(false);
         String plan2 = getFragmentPlan(query2);
         PlanTestBase.assertContains(plan2, "1:Project\n" +
                 "  |  <slot 1> : 16: v1\n" +
-                "  |  <slot 7> : 16: v1\n" +
+                "  |  <slot 7> : clone(16: v1)\n" +
                 "  |  <slot 14> : 18: total_sum\n" +
                 "  |  <slot 15> : 19: total_num\n" +
                 "  |  \n" +
@@ -611,10 +653,11 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 " on t0.v1 = test_all_type.t1d" +
                 " where t0.v1 < 99" +
                 " group by v1, test_all_type.t1d";
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewPlanCache(true);
         String plan3 = getFragmentPlan(query3);
         PlanTestBase.assertContains(plan3, "1:Project\n" +
                 "  |  <slot 1> : 16: v1\n" +
-                "  |  <slot 7> : 16: v1\n" +
+                "  |  <slot 7> : clone(16: v1)\n" +
                 "  |  <slot 14> : 18: total_sum\n" +
                 "  |  <slot 15> : 19: total_num\n" +
                 "  |  \n" +
@@ -658,7 +701,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "  |  <slot 19> : 19: total_sum\n" +
                 "  |  <slot 20> : 20: total_num\n" +
                 "  |  <slot 23> : 17: v1 + 1");
-
 
         dropMv("test", "agg_join_mv_1");
 
@@ -973,19 +1015,17 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "        dt;");
         refreshMaterializedView("test", "test_cache_mv1");
 
-        {
-            String sql = "select\n" +
-                    "      col1,\n" +
-                    "        sum(col2) AS sum_col2,\n" +
-                    "        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3\n" +
-                    "    FROM\n" +
-                    "        test_base_tbl AS f\n" +
-                    "    WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
-                    "        AND (dt <= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
-                    "    GROUP BY col1;";
-            String plan = getFragmentPlan(sql);
-            PlanTestBase.assertContains(plan, "test_cache_mv1");
-        }
+        String sql = "select\n" +
+                "      col1,\n" +
+                "        sum(col2) AS sum_col2,\n" +
+                "        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3\n" +
+                "    FROM\n" +
+                "        test_base_tbl AS f\n" +
+                "    WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
+                "        AND (dt <= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
+                "    GROUP BY col1;";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "test_cache_mv1");
 
         {
             // invalid base table
@@ -999,327 +1039,29 @@ public class MvRewriteTest extends MvRewriteTestBase {
             Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
             MaterializedView mv1 = ((MaterializedView) testDb.getTable("test_cache_mv1"));
             Assert.assertFalse(mv1.isActive());
+            try {
+                cluster.runSql("test", "alter materialized view test_cache_mv1 active;");
+                Assert.fail("could not active the mv");
+            } catch (Exception e) {
+                Assert.assertTrue(e.getMessage().contains("mv schema changed"));
+            }
 
-            String sql = "select\n" +
-                    "      col1,\n" +
-                    "        sum(col2) AS sum_col2,\n" +
-                    "        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3\n" +
-                    "    FROM\n" +
-                    "        test_base_tbl AS f\n" +
-                    "    WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
-                    "        AND (dt <= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
-                    "    GROUP BY col1;";
-            String plan = getFragmentPlan(sql);
+            plan = getFragmentPlan(sql);
             PlanTestBase.assertNotContains(plan, "test_cache_mv1");
+        }
+
+        {
+            // alter the column to original one
+            String alterSql = "alter table test_base_tbl modify column col1 bigint;";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql,
+                    connectContext);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            waitForSchemaChangeAlterJobFinish();
 
             cluster.runSql("test", "alter materialized view test_cache_mv1 active;");
             plan = getFragmentPlan(sql);
             PlanTestBase.assertContains(plan, "test_cache_mv1");
         }
-    }
-
-    @Test
-    public void testUnionRewrite() throws Exception {
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-
-        starRocksAssert.withTable("create table emps2 (\n" +
-                        "    empid int not null,\n" +
-                        "    deptno int not null,\n" +
-                        "    name varchar(25) not null,\n" +
-                        "    salary double\n" +
-                        ")\n" +
-                        "distributed by hash(`empid`) buckets 10\n" +
-                        "properties (\n" +
-                        "\"replication_num\" = \"1\"\n" +
-                        ");")
-                .withTable("create table depts2 (\n" +
-                        "    deptno int not null,\n" +
-                        "    name varchar(25) not null\n" +
-                        ")\n" +
-                        "distributed by hash(`deptno`) buckets 10\n" +
-                        "properties (\n" +
-                        "\"replication_num\" = \"1\"\n" +
-                        ");");
-
-        cluster.runSql("test", "insert into emps2 values(1, 1, \"emp_name1\", 100);");
-        cluster.runSql("test", "insert into emps2 values(2, 1, \"emp_name1\", 120);");
-        cluster.runSql("test", "insert into emps2 values(3, 1, \"emp_name1\", 150);");
-        cluster.runSql("test", "insert into depts2 values(1, \"dept_name1\")");
-        cluster.runSql("test", "insert into depts2 values(2, \"dept_name2\")");
-        cluster.runSql("test", "insert into depts2 values(3, \"dept_name3\")");
-
-        Table emps2 = getTable("test", "emps2");
-        PlanTestBase.setTableStatistics((OlapTable) emps2, 1000000);
-        Table depts2 = getTable("test", "depts2");
-        PlanTestBase.setTableStatistics((OlapTable) depts2, 1000000);
-
-        /*
-        {
-            // single table union
-            createAndRefreshMv("test", "union_mv_1", "create materialized view union_mv_1" +
-                    " distributed by hash(empid)  as select empid, deptno, name, salary from emps2 where empid < 3");
-            MaterializedView mv1 = getMv("test", "union_mv_1");
-            PlanTestBase.setTableStatistics(mv1, 10);
-            String query1 = "select empid, deptno, name, salary from emps2 where empid < 5";
-            String plan1 = getFragmentPlan(query1);
-            PlanTestBase.assertContains(plan1, "0:UNION\n" +
-                    "  |  \n" +
-                    "  |----5:EXCHANGE");
-            PlanTestBase.assertContains(plan1, "  3:OlapScanNode\n" +
-                    "     TABLE: union_mv_1");
-            PlanTestBase.assertContains(plan1, "TABLE: emps2\n" +
-                    "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 9: empid <= 4, 9: empid >= 3");
-
-            String query7 = "select deptno, empid from emps2 where empid < 5";
-            String plan7 = getFragmentPlan(query7);
-            PlanTestBase.assertContains(plan7, "union_mv_1");
-            OptExpression optExpression7 = getOptimizedPlan(query7, connectContext);
-            List<PhysicalScanOperator> scanOperators = getScanOperators(optExpression7, "union_mv_1");
-            Assert.assertEquals(1, scanOperators.size());
-            Assert.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("name"));
-            Assert.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("salary"));
-
-            dropMv("test", "union_mv_1");
-        }
-
-        {
-            // multi tables query
-            createAndRefreshMv("test", "join_union_mv_1", "create materialized view join_union_mv_1" +
-                    " distributed by hash(empid)" +
-                    " as" +
-                    " select emps2.empid, emps2.salary, depts2.deptno, depts2.name" +
-                    " from emps2 join depts2 using (deptno) where depts2.deptno < 100");
-            MaterializedView mv2 = getMv("test", "join_union_mv_1");
-            PlanTestBase.setTableStatistics(mv2, 1);
-            String query2 = "select emps2.empid, emps2.salary, depts2.deptno, depts2.name" +
-                    " from emps2 join depts2 using (deptno) where depts2.deptno < 120";
-            String plan2 = getFragmentPlan(query2);
-            PlanTestBase.assertContains(plan2, "join_union_mv_1");
-            PlanTestBase.assertContains(plan2, "4:HASH JOIN\n" +
-                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                    "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 15: deptno = 12: deptno\n" +
-                    "  |  \n" +
-                    "  |----3:EXCHANGE");
-            dropMv("test", "join_union_mv_1");
-        }
-
-         */
-
-        {
-            // multi tables query
-            createAndRefreshMv("test", "join_union_mv_1", "create materialized view join_union_mv_1" +
-                    " distributed by hash(empid)" +
-                    " as" +
-                    " select emps2.empid, emps2.salary, d1.deptno, d1.name name1, d2.name name2" +
-                    " from emps2 join depts2 d1 on emps2.deptno = d1.deptno" +
-                    " join depts2 d2 on emps2.deptno = d2.deptno where d1.deptno < 100");
-            MaterializedView mv2 = getMv("test", "join_union_mv_1");
-            PlanTestBase.setTableStatistics(mv2, 1);
-            String query2 = "select emps2.empid, emps2.salary, d1.deptno, d1.name name1, d2.name name2" +
-                    " from emps2 join depts2 d1 on emps2.deptno = d1.deptno" +
-                    " join depts2 d2 on emps2.deptno = d2.deptno where d1.deptno < 120";
-            String plan2 = getFragmentPlan(query2);
-            PlanTestBase.assertContains(plan2, "join_union_mv_1");
-            PlanTestBase.assertContains(plan2, "6:HASH JOIN\n" +
-                    "  |  join op: INNER JOIN (COLOCATE)\n" +
-                    "  |  colocate: true\n" +
-                    "  |  equal join conjunct: 15: deptno = 20: deptno");
-            PlanTestBase.assertContains(plan2, "2:OlapScanNode\n" +
-                    "     TABLE: emps2\n" +
-                    "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 15: deptno < 120, 15: deptno >= 100\n" +
-                    "     partitions=1/1");
-            PlanTestBase.assertContains(plan2, "1:OlapScanNode\n" +
-                    "     TABLE: depts2\n" +
-                    "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 18: deptno < 120, 18: deptno >= 100");
-        }
-
-        starRocksAssert.withTable("CREATE TABLE `test_all_type2` (\n" +
-                "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
-                "  `t1b` smallint(6) NULL COMMENT \"\",\n" +
-                "  `t1c` int(11) NULL COMMENT \"\",\n" +
-                "  `t1d` bigint(20) NULL COMMENT \"\",\n" +
-                "  `t1e` float NULL COMMENT \"\",\n" +
-                "  `t1f` double NULL COMMENT \"\",\n" +
-                "  `t1g` bigint(20) NULL COMMENT \"\",\n" +
-                "  `id_datetime` datetime NULL COMMENT \"\",\n" +
-                "  `id_date` date NULL COMMENT \"\", \n" +
-                "  `id_decimal` decimal(10,2) NULL COMMENT \"\" \n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`t1a`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-        starRocksAssert.withTable("CREATE TABLE `t02` (\n" +
-                "  `v1` bigint NULL COMMENT \"\",\n" +
-                "  `v2` bigint NULL COMMENT \"\",\n" +
-                "  `v3` bigint NULL\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
-                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-
-        cluster.runSql("test", "insert into t02 values(1, 2, 3)");
-        cluster.runSql("test", "insert into test_all_type2 values(" +
-                "\"value1\", 1, 2, 3, 4.0, 5.0, 6, \"2022-11-11 10:00:01\", \"2022-11-11\", 10.12)");
-
-        Table t0Table = getTable("test", "t02");
-        PlanTestBase.setTableStatistics((OlapTable) t0Table, 1000000);
-        Table testAllTypeTable = getTable("test", "test_all_type2");
-        PlanTestBase.setTableStatistics((OlapTable) testAllTypeTable, 1000000);
-        // aggregate querys
-
-        createAndRefreshMv("test", "join_agg_union_mv_1", "create materialized view join_agg_union_mv_1" +
-                " distributed by hash(v1)" +
-                " as " +
-                " SELECT t02.v1 as v1, test_all_type2.t1d," +
-                " sum(test_all_type2.t1c) as total_sum, count(test_all_type2.t1c) as total_num" +
-                " from t02 join test_all_type2" +
-                " on t02.v1 = test_all_type2.t1d" +
-                " where t02.v1 < 100" +
-                " group by v1, test_all_type2.t1d");
-        MaterializedView mv3 = getMv("test", "join_agg_union_mv_1");
-        PlanTestBase.setTableStatistics(mv3, 1);
-
-        String query3 = " SELECT t02.v1 as v1, test_all_type2.t1d," +
-                " sum(test_all_type2.t1c) as total_sum, count(test_all_type2.t1c) as total_num" +
-                " from t02 join test_all_type2" +
-                " on t02.v1 = test_all_type2.t1d" +
-                " where t02.v1 < 120" +
-                " group by v1, test_all_type2.t1d";
-        String plan3 = getFragmentPlan(query3);
-        PlanTestBase.assertContains(plan3, "join_agg_union_mv_1");
-        dropMv("test", "join_agg_union_mv_1");
-
-        {
-            createAndRefreshMv("test", "join_agg_union_mv_2", "create materialized view join_agg_union_mv_2" +
-                    " distributed by hash(v1)" +
-                    " as " +
-                    " SELECT t02.v1 as v1, test_all_type2.t1d," +
-                    " sum(test_all_type2.t1c) as total_sum, count(test_all_type2.t1c) as total_num" +
-                    " from t02 left join test_all_type2" +
-                    " on t02.v1 = test_all_type2.t1d" +
-                    " where t02.v1 < 100" +
-                    " group by v1, test_all_type2.t1d");
-            MaterializedView mv4 = getMv("test", "join_agg_union_mv_2");
-            PlanTestBase.setTableStatistics(mv4, 1);
-
-            String query8 = " SELECT t02.v1 as v1, test_all_type2.t1d," +
-                    " sum(test_all_type2.t1c) as total_sum, count(test_all_type2.t1c) as total_num" +
-                    " from t02 left join test_all_type2" +
-                    " on t02.v1 = test_all_type2.t1d" +
-                    " where t02.v1 < 120" +
-                    " group by v1, test_all_type2.t1d";
-            String plan8 = getFragmentPlan(query8);
-            PlanTestBase.assertContains(plan8, "join_agg_union_mv_2");
-            PlanTestBase.assertContains(plan8, "4:HASH JOIN\n" +
-                    "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                    "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 20: v1 = 24: t1d\n" +
-                    "  |  \n" +
-                    "  |----3:EXCHANGE");
-            PlanTestBase.assertContains(plan8, "2:OlapScanNode\n" +
-                    "     TABLE: test_all_type2\n" +
-                    "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 24: t1d >= 100, 24: t1d < 120");
-            PlanTestBase.assertContains(plan8, "1:OlapScanNode\n" +
-                    "     TABLE: t02\n" +
-                    "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 20: v1 >= 100, 20: v1 < 120");
-            dropMv("test", "join_agg_union_mv_2");
-        }
-
-        cluster.runSql("test", "insert into test_base_part values(1, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(100, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(200, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(1000, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(2000, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(2500, 1, 2, 3)");
-
-        createAndRefreshMv("test", "ttl_union_mv_1", "CREATE MATERIALIZED VIEW `ttl_union_mv_1`\n" +
-                "COMMENT \"MATERIALIZED_VIEW\"\n" +
-                "PARTITION BY (`c3`)\n" +
-                "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
-                "REFRESH MANUAL\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"storage_medium\" = \"HDD\",\n" +
-                "\"partition_ttl_number\" = \"3\"\n" +
-                ")\n" +
-                "AS SELECT `test_base_part`.`c1`, `test_base_part`.`c3`, sum(`test_base_part`.`c2`) AS `c2`\n" +
-                "FROM `test_base_part`\n" +
-                "GROUP BY `test_base_part`.`c1`, `test_base_part`.`c3`;");
-
-        MaterializedView ttlMv1 = getMv("test", "ttl_union_mv_1");
-        Assert.assertNotNull(ttlMv1);
-        GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
-        Assert.assertEquals(3, ttlMv1.getPartitions().size());
-
-        String query4 = "select c3, sum(c2) from test_base_part group by c3";
-        String plan4 = getFragmentPlan(query4);
-        PlanTestBase.assertContains(plan4, "ttl_union_mv_1", "UNION", "test_base_part");
-        dropMv("test", "ttl_union_mv_1");
-
-        starRocksAssert.withTable("CREATE TABLE multi_mv_table (\n" +
-                "                    k1 INT,\n" +
-                "                    v1 INT,\n" +
-                "                    v2 INT)\n" +
-                "                DUPLICATE KEY(k1)\n" +
-                "                PARTITION BY RANGE(`k1`)\n" +
-                "                (\n" +
-                "                PARTITION `p1` VALUES LESS THAN ('3'),\n" +
-                "                PARTITION `p2` VALUES LESS THAN ('6'),\n" +
-                "                PARTITION `p3` VALUES LESS THAN ('9'),\n" +
-                "                PARTITION `p4` VALUES LESS THAN ('12'),\n" +
-                "                PARTITION `p5` VALUES LESS THAN ('15'),\n" +
-                "                PARTITION `p6` VALUES LESS THAN ('18')\n" +
-                "                )\n" +
-                "                DISTRIBUTED BY HASH(k1) properties('replication_num'='1');");
-        cluster.runSql("test", "insert into multi_mv_table values (1,1,1),(2,1,1),(3,1,1),\n" +
-                "                                      (4,1,1),(5,1,1),(6,1,1),\n" +
-                "                                      (7,1,1),(8,1,1),(9,1,1),\n" +
-                "                                      (10,1,1),(11,1,1);");
-        createAndRefreshMv("test", "multi_mv_1", "CREATE MATERIALIZED VIEW multi_mv_1" +
-                " DISTRIBUTED BY HASH(k1) AS SELECT k1,v1,v2 from multi_mv_table where k1>1;");
-        createAndRefreshMv("test", "multi_mv_2", "CREATE MATERIALIZED VIEW multi_mv_2" +
-                " DISTRIBUTED BY HASH(k1) AS SELECT k1,v1,v2 from multi_mv_1 where k1>2;");
-        createAndRefreshMv("test", "multi_mv_3", "CREATE MATERIALIZED VIEW multi_mv_3" +
-                " DISTRIBUTED BY HASH(k1) AS SELECT k1,v1,v2 from multi_mv_2 where k1>3;");
-
-        String query5 = "select * from multi_mv_1";
-        String plan5 = getFragmentPlan(query5);
-        PlanTestBase.assertContains(plan5, "multi_mv_1", "multi_mv_2", "UNION");
-        dropMv("test", "multi_mv_1");
-        dropMv("test", "multi_mv_2");
-        dropMv("test", "multi_mv_3");
-        starRocksAssert.dropTable("multi_mv_table");
-
-        createAndRefreshMv("test", "mv_agg_1", "CREATE MATERIALIZED VIEW `mv_agg_1`\n" +
-                "COMMENT \"MATERIALIZED_VIEW\"\n" +
-                "DISTRIBUTED BY HASH(`name`) BUCKETS 2\n" +
-                "REFRESH MANUAL\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"storage_medium\" = \"HDD\"\n" +
-                ")\n" +
-                "AS SELECT `emps`.`deptno`, `emps`.`name`, sum(`emps`.`salary`) AS `salary`\n" +
-                "FROM `emps`\n" +
-                "WHERE `emps`.`empid` < 5\n" +
-                "GROUP BY `emps`.`deptno`, `emps`.`name`;");
-        String query6 =
-                "SELECT `emps`.`deptno`, `emps`.`name`, sum(salary) as salary FROM `emps` group by deptno, name;";
-        String plan6 = getFragmentPlan(query6);
-        PlanTestBase.assertContains(plan6, "mv_agg_1", "emps", "UNION");
-        dropMv("test", "mv_agg_1");
     }
 
     @Test
@@ -1690,25 +1432,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testPartitionPrune1() throws Exception {
-        starRocksAssert.withTable("CREATE TABLE test_partition_tbl1 (\n" +
-                "                            k1 date,\n" +
-                "                            v1 INT,\n" +
-                "                            v2 INT)\n" +
-                "                        DUPLICATE KEY(k1)\n" +
-                "                        PARTITION BY RANGE(k1)\n" +
-                "                        (\n" +
-                "                        PARTITION p1 VALUES LESS THAN ('2020-01-01'),\n" +
-                "                        PARTITION p2 VALUES LESS THAN ('2020-02-01'),\n" +
-                "                        PARTITION p3 VALUES LESS THAN ('2020-03-01'),\n" +
-                "                        PARTITION p4 VALUES LESS THAN ('2020-04-01'),\n" +
-                "                        PARTITION p5 VALUES LESS THAN ('2020-05-01'),\n" +
-                "                        PARTITION p6 VALUES LESS THAN ('2020-06-01')\n" +
-                "                        )\n" +
-                "                        DISTRIBUTED BY HASH(k1);");
-        cluster.runSql("test", "insert into test_partition_tbl1 values (\"2019-01-01\",1,1),(\"2019-01-01\",1,2)," +
-                "(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
-                "(\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2),\n" +
-                "(\"2020-02-11\",1,1),(\"2020-02-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2);");
         createAndRefreshMv("test", "test_partition_tbl_mv1",
                 "CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
                         "               PARTITION BY k1\n" +
@@ -1723,14 +1446,14 @@ public class MvRewriteTest extends MvRewriteTestBase {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-11' group by k1;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
-            PlanTestBase.assertContains(plan, "PREDICATES: 5: k1 >= '2020-02-11'\n" +
-                    "     partitions=4/6");
+            PlanTestBase.assertContains(plan, "PREDICATES: 5: k1 >= '2020-02-11'");
+            PlanTestBase.assertContains(plan, "partitions=4/4");
         }
         {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-01' group by k1;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
-            PlanTestBase.assertContains(plan, "partitions=4/6\n" +
+            PlanTestBase.assertContains(plan, "partitions=4/4\n" +
                     "     rollup: test_partition_tbl_mv1");
         }
     }
@@ -1944,5 +1667,305 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "    GROUP BY col1;";
         String plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan, "test_empty_partition_mv1");
+    }
+
+    @Test
+    public void testJoinWithConstExprs1() throws Exception {
+        // a.k1/b.k1 are both output
+        createAndRefreshMv("test", "test_partition_tbl_mv3",
+                "CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
+                        "PARTITION BY k1\n" +
+                        "DISTRIBUTED BY HASH(v1) BUCKETS 10\n" +
+                        "REFRESH ASYNC\n" +
+                        "AS SELECT a.k1, a.v1,sum(a.v1) as sum_v1 \n" +
+                        "FROM test_partition_tbl1 as a \n" +
+                        "join test_partition_tbl2 as b " +
+                        "on a.k1=b.k1 and a.v1=b.v1\n" +
+                        "group by a.k1, a.v1;");
+        // should not be rollup
+        {
+            // if a.k1=b.k1
+            String query = "select a.k1, a.v1, sum(a.v1) " +
+                    "FROM test_partition_tbl1 as a join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 " +
+                    "where a.k1 = '2020-01-01' and b.k1 = '2020-01-01' " +
+                    "group by a.k1, a.v1;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: k1 = '2020-01-01'\n" +
+                    "     partitions=1/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+
+        // should not be rollup
+        {
+            // if a.k1=b.k1
+            String query = "select a.k1, a.v1, sum(a.v1) " +
+                    "FROM test_partition_tbl1 as a join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 and a.k1=b.k1 " +
+                    "where a.k1 = '2020-01-01' and b.k1 = '2020-01-01' " +
+                    "group by a.k1, a.v1;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: k1 = '2020-01-01'\n" +
+                    "     partitions=1/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+
+        // should rollup
+        {
+            String query = "select a.k1, sum(a.v1) " +
+                    "FROM test_partition_tbl1 as a join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 " +
+                    "where a.k1='2020-01-01' and b.k1='2020-01-01' and a.v1=1 " +
+                    "group by a.k1;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: k1 = '2020-01-01', 9: v1 = 1\n" +
+                    "     partitions=1/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+        starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
+    }
+
+    @Test
+    public void testJoinWithConstExprs2() throws Exception {
+        // a.k1/b.k1 are both output
+        createAndRefreshMv("test", "test_partition_tbl_mv3",
+                "CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
+                        "PARTITION BY a_k1\n" +
+                        "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
+                        "REFRESH ASYNC\n" +
+                        "AS SELECT a.k1 as a_k1, b.k1 as b_k1, " +
+                        "a.v1 as a_v1, b.v1 as b_v1,sum(a.v1) as sum_v1 \n" +
+                        "FROM test_partition_tbl1 as a \n" +
+                        "left join test_partition_tbl2 as b " +
+                        "on a.k1=b.k1 and a.v1=b.v1\n" +
+                        "group by a.k1, b.k1, a.v1, b.v1;");
+        {
+            String query = "SELECT a.k1 as a_k1, b.k1 as b_k1, " +
+                    "a.v1 as a_v1, b.v1 as b_v1,sum(a.v1) as sum_v1 \n" +
+                    "FROM test_partition_tbl1 as a \n" +
+                    "left join test_partition_tbl2 as b " +
+                    "on a.k1=b.k1 and a.v1=b.v1 and a.k1=b.k1 and b.v1=a.v1 \n" +
+                    "group by a.k1, b.k1, a.v1, b.v1";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "partitions=6/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+
+        // should not be rollup
+        {
+            String query = "select a.k1, b.k1, a.v1, b.v1, sum(a.v1) " +
+                    "FROM test_partition_tbl1 as a left join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 " +
+                    "where a.k1='2020-01-01' and b.k1 = '2020-01-01' " +
+                    "group by a.k1, b.k1, a.v1,b.v1;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: a_k1 = '2020-01-01', 9: b_k1 = '2020-01-01'\n" +
+                    "     partitions=1/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+
+        // should be rollup
+        {
+            String query = "select a.k1,a.v1, sum(a.v1) " +
+                    "FROM test_partition_tbl1 as a left join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 " +
+                    "where a.k1='2020-01-01' and b.k1 = '2020-01-01' " +
+                    "group by a.k1, a.v1 ;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: a_k1 = '2020-01-01', 9: b_k1 = '2020-01-01'\n" +
+                    "     partitions=1/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+
+        // should be rollup
+        {
+            String query = "select a.k1,a.v1, sum(a.v1) " +
+                    "FROM test_partition_tbl1 as a left join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 and a.k1=b.k1 " +
+                    "where a.k1='2020-01-01' and b.k1 = '2020-01-01' " +
+                    "group by a.k1, a.v1 ;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: a_k1 = '2020-01-01', " +
+                    "9: b_k1 IS NOT NULL\n" +
+                    "     partitions=1/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+
+        // should be rollup
+        {
+            String query = "select a.k1,a.v1, sum(a.v1) " +
+                    "FROM test_partition_tbl1 as a left join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 and a.v1=b.v1 and a.v1=b.v1 " +
+                    "where a.k1='2020-01-01' and b.k1 = '2020-01-01' " +
+                    "group by a.k1, a.v1 ;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: a_k1 = '2020-01-01', 9: b_k1 = '2020-01-01'\n" +
+                    "     partitions=1/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+        starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
+    }
+
+    @Test
+    public void testJoinWithConstExprs3() throws Exception {
+        // a.k1/b.k1 are both output
+        createAndRefreshMv("test", "test_partition_tbl_mv3",
+                "CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
+                        "PARTITION BY a_k1\n" +
+                        "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
+                        "REFRESH ASYNC\n" +
+                        "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
+                        "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
+                        "FROM test_partition_tbl1 as a \n" +
+                        "join test_partition_tbl2 as b " +
+                        "on a.v1=b.v1 and a.v2=b.v2 \n");
+        // should not be rollup
+        {
+            // if a.k1=b.k1
+            String query = "select a.k1, a.v1 " +
+                    "FROM test_partition_tbl1 as a join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 " +
+                    "where a.v1=1 and b.v2=1 ;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "test_partition_tbl_mv3");
+        }
+
+        // should not be rollup
+        {
+            // if a.k1=b.k1
+            String query = "select a.k1, a.v1 " +
+                    "FROM test_partition_tbl1 as a join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 and a.v2=b.v2 " +
+                    "where a.v1=1 and b.v2=1 ;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: a_v1 = 1, 9: a_v2 = 1\n" +
+                    "     partitions=6/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+        starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
+    }
+
+    @Test
+    public void testJoinWithConstExprs4() throws Exception {
+        // a.k1/b.k1 are both output
+        createAndRefreshMv("test", "test_partition_tbl_mv3",
+                "CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
+                        "PARTITION BY a_k1\n" +
+                        "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
+                        "REFRESH ASYNC\n" +
+                        "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
+                        "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
+                        "FROM test_partition_tbl1 as a \n" +
+                        "join test_partition_tbl2 as b " +
+                        "on a.v1=b.v1 \n");
+        // should not be rollup
+        {
+            // if a.k1=b.k1
+            String query = "select a.k1, a.v1 " +
+                    "FROM test_partition_tbl1 as a join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 " +
+                    "where a.v1=1 and b.v2=1 ;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, " TABLE: test_partition_tbl_mv3\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 8: a_v1 = 1, 12: b_v2 = 1\n" +
+                    "     partitions=6/6");
+        }
+
+        starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
+    }
+
+    @Test
+    public void testJoinWithConstExprs5() throws Exception {
+        // a.k1/b.k1 are both output
+        createAndRefreshMv("test", "test_partition_tbl_mv3",
+                "CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
+                        "PARTITION BY a_k1\n" +
+                        "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
+                        "REFRESH ASYNC\n" +
+                        "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
+                        "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
+                        "FROM test_partition_tbl1 as a \n" +
+                        "join test_partition_tbl2 as b " +
+                        "on a.v1=b.v1 and a.v1=b.v2 \n");
+        // should not be rollup
+        {
+            // if a.k1=b.k1
+            String query = "select a.k1, a.v1 " +
+                    "FROM test_partition_tbl1 as a join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 " +
+                    "where a.v1=1 and b.v2=1 ;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertNotContains(plan, "PREDICATES: 8: a_v1 = 1, 11: b_v1 = 1, 12: b_v2 = 1\n" +
+                    "     partitions=6/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+
+        starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
+    }
+
+    @Test
+    public void testPlanCache() throws Exception {
+        {
+            String mvSql = "create materialized view agg_join_mv_1" +
+                    " distributed by hash(v1) as SELECT t0.v1 as v1," +
+                    " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                    " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
+                    " where t0.v1 < 100" +
+                    " group by v1, test_all_type.t1d";
+            starRocksAssert.withMaterializedView(mvSql);
+
+            MaterializedView mv = getMv("test", "agg_join_mv_1");
+            MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            Assert.assertNotNull(planContext);
+            Assert.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
+            planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false);
+            Assert.assertNotNull(planContext);
+            starRocksAssert.dropMaterializedView("agg_join_mv_1");
+        }
+
+        {
+            String mvSql = "create materialized view mv_with_window" +
+                    " distributed by hash(t1d) as" +
+                    " SELECT test_all_type.t1d, row_number() over (partition by t1c)" +
+                    " from test_all_type";
+            starRocksAssert.withMaterializedView(mvSql);
+
+            MaterializedView mv = getMv("test", "mv_with_window");
+            MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            Assert.assertNotNull(planContext);
+            Assert.assertFalse(CachingMvPlanContextBuilder.getInstance().contains(mv));
+            starRocksAssert.dropMaterializedView("mv_with_window");
+        }
+
+        {
+            for (int i = 0; i < 1010; i++) {
+                String mvName = "plan_cache_mv_" + i;
+                String mvSql = String.format("create materialized view %s" +
+                        " distributed by hash(v1) as SELECT t0.v1 as v1," +
+                        " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                        " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
+                        " where t0.v1 < 100" +
+                        " group by v1, test_all_type.t1d", mvName);
+                starRocksAssert.withMaterializedView(mvSql);
+
+                MaterializedView mv = getMv("test", mvName);
+                MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+                Assert.assertNotNull(planContext);
+            }
+            for (int i = 0; i < 1010; i++) {
+                String mvName = "plan_cache_mv_" + i;
+                starRocksAssert.dropMaterializedView(mvName);
+            }
+        }
     }
 }

@@ -57,7 +57,7 @@ Before you set up the BE, configure the  `storage_root_path` parameter and the c
 
 |Configuration|Description|Default|
 |---|---|---|
-|thrift_port|Thrift Server port of the Compute Node. The port is used to receive requests from FE.|9060|
+|be_port|Thrift Server port of the Compute Node. The port is used to receive requests from FE.|9060|
 |be_http_port|HTTP Server port of the Compute Node.|8040|
 |heartbeat_service_port|Thrift server port of the Compute Node. The port is used to receive requests from FE.|9050|
 |brpc_port|RPC port between BE and the Compute Node.|8060|
@@ -407,7 +407,7 @@ Q: I have recently upgraded StarRocks v2.0 to v2.1 or later versions. When I loa
 
 A: StarRocks v2.0 parses all columns as strings and then performs type conversion for loading. When you load BOOLEAN type data (`true` and `false`) in JSON format into an integer column, StarRocks v2.0 converts the data into `0` and `1` for loading. StarRocks v2.1 refactored its JSON Paerser, which directly extracts the JSON fields according to the target column type, resulting in this problem.
 
-You can solve this problem by adding the expression `tmp, target=if(tmp,1,0)` to the `columns` parameter of the [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md) command. The complete command is as follows:
+You can solve this problem by adding the expression `tmp, target=if(tmp,1,0)` to the `columns` parameter of the [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) command. The complete command is as follows:
 
 ```shell
 curl --location-trusted -u <username>:<password> \

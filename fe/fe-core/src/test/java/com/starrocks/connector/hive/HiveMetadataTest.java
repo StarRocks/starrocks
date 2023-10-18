@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
@@ -29,6 +30,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
@@ -73,7 +75,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 import static com.starrocks.connector.hive.HiveMetadata.STARROCKS_QUERY_ID;
-import static com.starrocks.connector.hive.MockedRemoteFileSystem.TEST_FILES;
+import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABLE;
 
 public class HiveMetadataTest {
     private HiveMetaClient client;
@@ -101,13 +103,13 @@ public class HiveMetadataTest {
         executorForPullFiles = Executors.newFixedThreadPool(5);
 
         client = new HiveMetastoreTest.MockedHiveMetaClient();
-        metastore = new HiveMetastore(client, "hive_catalog");
+        metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
                 metastore, executorForHmsRefresh, 100, 10, 1000, false);
         hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
-        FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
         hiveRemoteFileIO.setFileSystem(fs);
         cachingRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
                 hiveRemoteFileIO, executorForRemoteFileRefresh, 100, 10, 10);
@@ -120,8 +122,8 @@ public class HiveMetadataTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         columnRefFactory = new ColumnRefFactory();
         optimizerContext = new OptimizerContext(new Memo(), columnRefFactory, connectContext);
-        hiveMetadata = new HiveMetadata("hive_catalog", hmsOps, fileOps, statisticsProvider,
-                Optional.empty(), executorForHmsRefresh);
+        hiveMetadata = new HiveMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps, statisticsProvider,
+                Optional.empty(), executorForHmsRefresh, executorForHmsRefresh);
     }
 
     @After
@@ -176,7 +178,7 @@ public class HiveMetadataTest {
         FeConstants.runningUnitTest = true;
         String tableLocation = "hdfs://127.0.0.1:10000/hive.db/hive_tbl";
         HiveMetaClient client = new HiveMetastoreTest.MockedHiveMetaClient();
-        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", null);
         List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
         Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
         HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
@@ -187,7 +189,7 @@ public class HiveMetadataTest {
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
 
         List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFileInfos(
-                hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), -1, null, null);
+                hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), -1, null, null, -1);
         Assert.assertEquals(2, remoteFileInfos.size());
 
         RemoteFileInfo fileInfo = remoteFileInfos.get(0);
@@ -237,7 +239,7 @@ public class HiveMetadataTest {
         columns.put(partColumnRefOperator, null);
         columns.put(dataColumnRefOperator, null);
         Statistics statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null);
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1);
         Assert.assertEquals(1, statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
         Assert.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
@@ -257,14 +259,15 @@ public class HiveMetadataTest {
         columns.put(partColumnRefOperator, null);
         columns.put(dataColumnRefOperator, null);
 
-        Statistics statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null);
+        Statistics statistics = hiveMetadata.getTableStatistics(
+                optimizerContext, hiveTable, columns, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2),
+                null, -1);
         Assert.assertEquals(1,  statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
 
         cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1", "col1=2"));
         statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null);
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1);
 
         Assert.assertEquals(100, statistics.getOutputRowCount(), 0.001);
         Map<ColumnRefOperator, ColumnStatistic> columnStatistics = statistics.getColumnStatistics();
@@ -331,6 +334,15 @@ public class HiveMetadataTest {
                 () -> hiveMetadata.dropTable(new DropTableStmt(false, tableName, false)));
 
         hiveMetadata.dropTable(new DropTableStmt(false, tableName, true));
+
+        new MockUp<HiveMetadata>() {
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return null;
+            }
+        };
+
+        hiveMetadata.dropTable(new DropTableStmt(true, tableName, true));
     }
 
     @Test(expected = StarRocksConnectorException.class)
@@ -345,9 +357,9 @@ public class HiveMetadataTest {
         tSinkCommitInfo.setStaging_dir(stagingDir);
         tSinkCommitInfo.setIs_overwrite(false);
         tSinkCommitInfo.setHive_file_info(fileInfo);
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList());
         hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
     }
-
 
     @Test(expected = StarRocksConnectorException.class)
     public void testAddPartition() throws Exception {
@@ -504,7 +516,7 @@ public class HiveMetadataTest {
                                         @Mocked RemoteFileOperations fileOps,
                                         @Mocked HiveTable hiveTable) throws Exception {
         HiveCommitter hiveCommitter = new HiveCommitter(hmsOps, fileOps, Executors.newSingleThreadExecutor(),
-                hiveTable, new Path("hdfs://hadoop01:9000/hive"));
+                Executors.newSingleThreadExecutor(), hiveTable, new Path("hdfs://hadoop01:9000/hive"));
         HiveCommitter.DeleteRecursivelyResult result = hiveCommitter.recursiveDeleteFiles(new Path("hdfs://aaa"), false);
         Assert.assertTrue(result.dirNotExists());
         Assert.assertTrue(result.getNotDeletedEligibleItems().isEmpty());
@@ -616,7 +628,7 @@ public class HiveMetadataTest {
                                          @Mocked RemoteFileOperations fileOps,
                                          @Mocked HiveTable hiveTable) {
         HiveCommitter hiveCommitter = new HiveCommitter(hmsOps, fileOps, Executors.newSingleThreadExecutor(),
-                hiveTable, new Path("hdfs://hadoop01:9000/hive"));
+                Executors.newSingleThreadExecutor(), hiveTable, new Path("hdfs://hadoop01:9000/hive"));
         new Expectations() {
             {
                 hiveTable.isUnPartitioned();

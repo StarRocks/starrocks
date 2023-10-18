@@ -121,15 +121,15 @@ class BinaryPrefixPageDecoder final : public PageDecoder {
 public:
     BinaryPrefixPageDecoder(Slice data) : _data(data) {}
 
-    Status init() override;
+    [[nodiscard]] Status init() override;
 
-    Status seek_to_position_in_page(uint32_t pos) override;
+    [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override;
 
-    Status seek_at_or_after_value(const void* value, bool* exact_match) override;
+    [[nodiscard]] Status seek_at_or_after_value(const void* value, bool* exact_match) override;
 
-    Status next_batch(size_t* n, Column* dst) override;
+    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const SparseRange<>& range, Column* dst) override;
+    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     uint32_t count() const override {
         DCHECK(_parsed);

@@ -225,6 +225,13 @@ StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_c
                     slot_desc->col_name()));
         }
         return TYPE_BIGINT;
+    } else if (java_class == "java.math.BigInteger") {
+        if (type != TYPE_LARGEINT && type != TYPE_VARCHAR) {
+            return Status::NotSupported(fmt::format(
+                    "Type mismatches on column[{}], JDBC result type is BigInteger, please set the type to largeint",
+                    slot_desc->col_name()));
+        }
+        return TYPE_VARCHAR;
     } else if (java_class == "java.lang.Boolean") {
         if (type != TYPE_BOOLEAN && type != TYPE_SMALLINT && type != TYPE_INT && type != TYPE_BIGINT) {
             return Status::NotSupported(
@@ -396,24 +403,6 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk
             auto st =
                     helper.get_result_from_boxed_array(_result_column_types[i], result_column.get(), jcolumn, num_rows);
             RETURN_IF_ERROR(st);
-            // check data's length for string type
-            auto origin_type = _slot_descs[i]->type().type;
-            if (origin_type == TYPE_VARCHAR || origin_type == TYPE_CHAR) {
-                DCHECK_EQ(_result_column_types[i], TYPE_VARCHAR);
-                int max_len = _slot_descs[i]->type().len;
-                ColumnViewer<TYPE_VARCHAR> viewer(result_column);
-                for (int row = 0; row < viewer.size(); row++) {
-                    if (viewer.is_null(row)) {
-                        continue;
-                    }
-                    auto value = viewer.value(row);
-                    if ((int)value.size > max_len) {
-                        return Status::DataQualityError(fmt::format(
-                                "Value length exceeds limit on column[{}], max length is [{}], value is [{}]",
-                                _slot_descs[i]->col_name(), max_len, value));
-                    }
-                }
-            }
             down_cast<NullableColumn*>(result_column.get())->update_has_null();
         }
     }

@@ -48,7 +48,7 @@ protected:
     void TearDown() override {}
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
-        return std::make_shared<Segment>(Segment::private_type(0), fs, fname, 1, _dummy_segment_schema);
+        return std::make_shared<Segment>(fs, fname, 1, _dummy_segment_schema, nullptr);
     }
 
     void test_int_map() {
@@ -210,10 +210,13 @@ protected:
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
-                ASSERT_EQ("{NULL:NULL}", dst_column->debug_item(0));
+                ASSERT_TRUE(dst_column->keys_column()->only_null());
+                ASSERT_TRUE(dst_column->values_column()->only_null());
+                ASSERT_EQ("{CONST: NULL:CONST: NULL}", dst_column->debug_item(0));
                 ASSERT_EQ("{}", dst_column->debug_item(1));
-                ASSERT_EQ("{NULL:NULL,NULL:NULL}", dst_column->debug_item(2));
-                ASSERT_EQ("{NULL:NULL,NULL:NULL,NULL:NULL}", dst_column->debug_item(3));
+                ASSERT_EQ("{CONST: NULL:CONST: NULL,CONST: NULL:CONST: NULL}", dst_column->debug_item(2));
+                ASSERT_EQ("{CONST: NULL:CONST: NULL,CONST: NULL:CONST: NULL,CONST: NULL:CONST: NULL}",
+                          dst_column->debug_item(3));
             }
         }
 
@@ -248,10 +251,11 @@ protected:
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
-                ASSERT_EQ("{1:NULL}", dst_column->debug_item(0));
+                ASSERT_TRUE(dst_column->values_column()->only_null());
+                ASSERT_EQ("{1:CONST: NULL}", dst_column->debug_item(0));
                 ASSERT_EQ("{}", dst_column->debug_item(1));
-                ASSERT_EQ("{2:NULL,3:NULL}", dst_column->debug_item(2));
-                ASSERT_EQ("{4:NULL,5:NULL,6:NULL}", dst_column->debug_item(3));
+                ASSERT_EQ("{2:CONST: NULL,3:CONST: NULL}", dst_column->debug_item(2));
+                ASSERT_EQ("{4:CONST: NULL,5:CONST: NULL,6:CONST: NULL}", dst_column->debug_item(3));
             }
         }
     }

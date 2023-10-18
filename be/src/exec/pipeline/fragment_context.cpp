@@ -170,7 +170,7 @@ void FragmentContext::set_final_status(const Status& status) {
                 LOG(WARNING) << ss.str();
             }
             DriverExecutor* executor = _runtime_state->exec_env()->wg_driver_executor();
-            iterate_drivers([executor](const DriverPtr& driver) {
+            (void)iterate_drivers([executor](const DriverPtr& driver) {
                 executor->cancel(driver.get());
                 return Status::OK();
             });
@@ -184,7 +184,7 @@ void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadConte
 }
 
 void FragmentContext::cancel(const Status& status) {
-    if (_runtime_state != nullptr && _runtime_state->query_ctx() != nullptr) {
+    if (!status.ok() && _runtime_state != nullptr && _runtime_state->query_ctx() != nullptr) {
         _runtime_state->query_ctx()->release_workgroup_token_once();
     }
 

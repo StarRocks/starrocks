@@ -41,8 +41,10 @@ import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTransactionStatus;
@@ -97,7 +99,8 @@ public class DatabaseTransactionMgrTest {
         Map<String, Long> lableToTxnId = Maps.newHashMap();
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long transactionId1 = masterTransMgr
-                .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
                         GlobalStateMgrTestUtil.testTxnLable1,
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
@@ -112,8 +115,10 @@ public class DatabaseTransactionMgrTest {
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);
         transTablets.add(tabletCommitInfo3);
-        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, transTablets);
-        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, transTablets,
+                Lists.newArrayList(), null);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         assertEquals(TTransactionStatus.COMMITTED, masterDbTransMgr.getTxnStatus(transactionId1));
         masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, null);
         lableToTxnId.put(GlobalStateMgrTestUtil.testTxnLable1, transactionId1);
@@ -121,19 +126,22 @@ public class DatabaseTransactionMgrTest {
         TransactionState.TxnCoordinator beTransactionSource =
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "be1");
         long transactionId2 = masterTransMgr
-                .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
                         GlobalStateMgrTestUtil.testTxnLable2,
                         beTransactionSource,
                         TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK,
                         Config.stream_load_default_timeout_second);
         long transactionId3 = masterTransMgr
-                .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
                         GlobalStateMgrTestUtil.testTxnLable3,
                         beTransactionSource,
                         TransactionState.LoadJobSourceType.BACKEND_STREAMING,
                         Config.stream_load_default_timeout_second);
         long transactionId4 = masterTransMgr
-                .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
                         GlobalStateMgrTestUtil.testTxnLable4,
                         beTransactionSource,
                         TransactionState.LoadJobSourceType.BACKEND_STREAMING,
@@ -151,12 +159,14 @@ public class DatabaseTransactionMgrTest {
 
     @Test
     public void testNormal() throws UserException {
-        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         assertEquals(4, masterDbTransMgr.getTransactionNum());
         assertEquals(2, masterDbTransMgr.getRunningTxnNums());
         assertEquals(1, masterDbTransMgr.getRunningRoutineLoadTxnNums());
         assertEquals(1, masterDbTransMgr.getFinishedTxnNums());
-        DatabaseTransactionMgr slaveDbTransMgr = slaveTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr slaveDbTransMgr =
+                slaveTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         assertEquals(1, slaveDbTransMgr.getTransactionNum());
         assertEquals(1, slaveDbTransMgr.getFinishedTxnNums());
 
@@ -165,7 +175,8 @@ public class DatabaseTransactionMgrTest {
         assertEquals(1, masterDbTransMgr.unprotectedGetTxnIdsByLabel(GlobalStateMgrTestUtil.testTxnLable3).size());
         assertEquals(1, masterDbTransMgr.unprotectedGetTxnIdsByLabel(GlobalStateMgrTestUtil.testTxnLable4).size());
 
-        Long txnId1 = masterDbTransMgr.unprotectedGetTxnIdsByLabel(GlobalStateMgrTestUtil.testTxnLable1).iterator().next();
+        Long txnId1 =
+                masterDbTransMgr.unprotectedGetTxnIdsByLabel(GlobalStateMgrTestUtil.testTxnLable1).iterator().next();
         assertEquals(txnId1, lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1));
         TransactionState transactionState1 =
                 masterDbTransMgr.getTransactionState(lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1));
@@ -173,19 +184,21 @@ public class DatabaseTransactionMgrTest {
         assertEquals(TransactionStatus.VISIBLE, transactionState1.getTransactionStatus());
         assertEquals(TTransactionStatus.VISIBLE, masterDbTransMgr.getTxnStatus(txnId1.longValue()));
 
-        Long txnId2 = masterDbTransMgr.unprotectedGetTxnIdsByLabel(GlobalStateMgrTestUtil.testTxnLable2).iterator().next();
+        Long txnId2 =
+                masterDbTransMgr.unprotectedGetTxnIdsByLabel(GlobalStateMgrTestUtil.testTxnLable2).iterator().next();
         assertEquals(txnId2, lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable2));
         TransactionState transactionState2 = masterDbTransMgr.getTransactionState(txnId2);
         assertEquals(txnId2.longValue(), transactionState2.getTransactionId());
         assertEquals(TransactionStatus.PREPARE, transactionState2.getTransactionStatus());
-        assertEquals(TTransactionStatus.PREPARE, masterDbTransMgr.getTxnStatus(txnId2.longValue())); 
+        assertEquals(TTransactionStatus.PREPARE, masterDbTransMgr.getTxnStatus(txnId2.longValue()));
 
-        assertEquals(TTransactionStatus.UNKNOWN, masterDbTransMgr.getTxnStatus(12134)); 
+        assertEquals(TTransactionStatus.UNKNOWN, masterDbTransMgr.getTxnStatus(12134));
     }
 
     @Test
     public void testAbortTransaction() throws UserException {
-        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
 
         long txnId2 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable2);
         masterDbTransMgr.abortTransaction(txnId2, "test abort transaction", null);
@@ -206,7 +219,8 @@ public class DatabaseTransactionMgrTest {
 
     @Test
     public void testAbortTransactionWithNotFoundException() throws UserException {
-        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
 
         long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
         expectedEx.expect(UserException.class);
@@ -216,7 +230,8 @@ public class DatabaseTransactionMgrTest {
 
     @Test
     public void testGetTransactionIdByCoordinateBe() throws UserException {
-        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         List<Pair<Long, Long>> transactionInfoList = masterDbTransMgr.getTransactionIdByCoordinateBe("be1", 10);
         assertEquals(3, transactionInfoList.size());
         assertEquals(GlobalStateMgrTestUtil.testDbId1, transactionInfoList.get(0).first.longValue());
@@ -226,9 +241,11 @@ public class DatabaseTransactionMgrTest {
 
     @Test
     public void testGetSingleTranInfo() throws AnalysisException {
-        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         long txnId = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
-        List<List<String>> singleTranInfos = masterDbTransMgr.getSingleTranInfo(GlobalStateMgrTestUtil.testDbId1, txnId);
+        List<List<String>> singleTranInfos =
+                masterDbTransMgr.getSingleTranInfo(GlobalStateMgrTestUtil.testDbId1, txnId);
         assertEquals(1, singleTranInfos.size());
         List<String> txnInfo = singleTranInfos.get(0);
         assertEquals("1000", txnInfo.get(0));
@@ -249,7 +266,8 @@ public class DatabaseTransactionMgrTest {
 
     @Test
     public void testRemoveExpiredTxns() throws AnalysisException {
-        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         Config.label_keep_max_second = -1;
         long currentMillis = System.currentTimeMillis();
         masterDbTransMgr.removeExpiredTxns(currentMillis);
@@ -260,7 +278,8 @@ public class DatabaseTransactionMgrTest {
 
     @Test
     public void testGetTableTransInfo() throws AnalysisException {
-        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         Long txnId = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
         List<List<Comparable>> tableTransInfos = masterDbTransMgr.getTableTransInfo(txnId);
         assertEquals(1, tableTransInfos.size());
@@ -272,7 +291,8 @@ public class DatabaseTransactionMgrTest {
 
     @Test
     public void testGetPartitionTransInfo() throws AnalysisException {
-        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         Long txnId = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
         List<List<Comparable>> partitionTransInfos =
                 masterDbTransMgr.getPartitionTransInfo(txnId, GlobalStateMgrTestUtil.testTableId1);
@@ -285,7 +305,8 @@ public class DatabaseTransactionMgrTest {
 
     @Test
     public void testDeleteTransaction() throws AnalysisException {
-        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         long txnId = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
         TransactionState transactionState = masterDbTransMgr.getTransactionState(txnId);
         masterDbTransMgr.deleteTransaction(transactionState);
@@ -294,5 +315,18 @@ public class DatabaseTransactionMgrTest {
         assertEquals(0, masterDbTransMgr.getFinishedTxnNums());
         assertEquals(3, masterDbTransMgr.getTransactionNum());
         assertNull(masterDbTransMgr.unprotectedGetTxnIdsByLabel(GlobalStateMgrTestUtil.testTxnLable1));
+    }
+
+    @Test
+    public void testCheckRunningTxnExceedLimit() {
+        int maxRunningTxnNumPerDb = Config.max_running_txn_num_per_db;
+        DatabaseTransactionMgr mgr = new DatabaseTransactionMgr(0, masterGlobalStateMgr);
+        Deencapsulation.setField(mgr, "runningTxnNums", maxRunningTxnNumPerDb);
+        ExceptionChecker.expectThrowsNoException(
+                () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK));
+        ExceptionChecker.expectThrowsNoException(
+                () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.LAKE_COMPACTION));
+        ExceptionChecker.expectThrows(BeginTransactionException.class,
+                () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING));
     }
 }

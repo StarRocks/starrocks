@@ -20,6 +20,7 @@ public enum CloudType {
     AWS,
     AZURE,
     GCP,
-    HDFS,
-    ALIYUN
+    ALIYUN,
+    TENCENT,
+    HDFS
 }

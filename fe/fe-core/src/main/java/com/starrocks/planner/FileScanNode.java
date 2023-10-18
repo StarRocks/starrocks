@@ -690,7 +690,7 @@ public class FileScanNode extends LoadScanNode {
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.FILE_SCAN_NODE;
         TFileScanNode fileScanNode = new TFileScanNode(desc.getId().asInt());
-        fileScanNode.setEnable_pipeline_load(Config.enable_pipeline_load);
+        fileScanNode.setEnable_pipeline_load(true);
         msg.setFile_scan_node(fileScanNode);
     }
 
@@ -767,8 +767,7 @@ public class FileScanNode extends LoadScanNode {
 
     @Override
     public boolean canUsePipeLine() {
-        // @TODO(silverbullet233): remove this config and always return true
-        return Config.enable_pipeline_load;
+        return true;
     }
 
 

@@ -25,6 +25,7 @@ import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.SimpleScheduler;
+import com.starrocks.rpc.AttachmentRequest;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.system.ComputeNode;
@@ -38,6 +39,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
+import org.apache.thrift.TSerializer;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Collection;
@@ -83,6 +85,7 @@ public class FragmentInstanceExecState {
      * request and future will be cleaned after deployment completion.
      */
     private TExecPlanFragmentParams requestToDeploy;
+    private byte[] serializedRequest;
     private Future<PExecPlanFragmentResult> deployFuture = null;
 
     private final int fragmentIndex;
@@ -97,9 +100,11 @@ public class FragmentInstanceExecState {
      */
     public static FragmentInstanceExecState createFakeExecution(TUniqueId fragmentInstanceId,
                                                                 TNetworkAddress address) {
-        String name = "Instance " + DebugUtil.printId(fragmentInstanceId);
+        String instanceId = DebugUtil.printId(fragmentInstanceId);
+        String name = "Instance " + instanceId + " (host=" + address + ")";
         RuntimeProfile profile = new RuntimeProfile(name);
         profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
+        profile.addInfoString("InstanceId", instanceId);
 
         return new FragmentInstanceExecState(null, null, 0, fragmentInstanceId, 0, null, profile, null, null, -1);
     }
@@ -110,9 +115,11 @@ public class FragmentInstanceExecState {
                                                             TExecPlanFragmentParams request,
                                                             ComputeNode worker) {
         TNetworkAddress address = worker.getAddress();
-        String name = "Instance " + DebugUtil.printId(request.params.fragment_instance_id) + " (host=" + address + ")";
+        String instanceId = DebugUtil.printId(request.params.fragment_instance_id);
+        String name = "Instance " + instanceId + " (host=" + address + ")";
         RuntimeProfile profile = new RuntimeProfile(name);
         profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
+        profile.addInfoString("InstanceId", instanceId);
 
         return new FragmentInstanceExecState(jobSpec,
                 fragmentId, fragmentIndex,
@@ -148,6 +155,15 @@ public class FragmentInstanceExecState {
         this.lastMissingHeartbeatTime = lastMissingHeartbeatTime;
     }
 
+    public void serializeRequest() {
+        TSerializer serializer = AttachmentRequest.getSerializer(jobSpec.getPlanProtocol());
+        try {
+            serializedRequest = serializer.serialize(requestToDeploy);
+        } catch (TException ignore) {
+            // throw exception means serializedRequest will be empty, and then we will treat it as not serialized
+        }
+    }
+
     /**
      * Deploy the fragment instance to the worker asynchronously.
      * The state transitions to DEPLOYING.
@@ -157,8 +173,13 @@ public class FragmentInstanceExecState {
 
         TNetworkAddress brpcAddress = worker.getBrpcAddress();
         try {
-            deployFuture = BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, requestToDeploy,
-                    jobSpec.getPlanProtocol());
+            if (serializedRequest.length != 0) {
+                deployFuture = BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, serializedRequest,
+                        jobSpec.getPlanProtocol());
+            } else {
+                deployFuture = BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, requestToDeploy,
+                        jobSpec.getPlanProtocol());
+            }
         } catch (RpcException | TException e) {
             // DO NOT throw exception here, return a complete future with error code,
             // so that the following logic will cancel the fragment.

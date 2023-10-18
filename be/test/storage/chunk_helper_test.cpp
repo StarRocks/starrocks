@@ -62,7 +62,8 @@ private:
         std::vector<TTupleId> row_tuples{0};
         std::vector<bool> nullable_tuples{true};
         DescriptorTbl* tbl = nullptr;
-        DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+        CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
+                      .ok());
 
         auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
@@ -97,7 +98,8 @@ TupleDescriptor* ChunkHelperTest::_create_tuple_desc() {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
+                  .ok());
 
     auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
     auto* tuple_desc = row_desc->tuple_descriptors()[0];
@@ -286,7 +288,7 @@ TEST_F(ChunkHelperTest, Accumulator) {
         chunk->get_column_by_index(0)->append_default(1025);
         input_rows += 1025;
 
-        accumulator.push(std::move(chunk));
+        static_cast<void>(accumulator.push(std::move(chunk)));
         if (ChunkPtr output = accumulator.pull()) {
             output_rows += output->num_rows();
             EXPECT_EQ(kDesiredSize, output->num_rows());
@@ -297,7 +299,7 @@ TEST_F(ChunkHelperTest, Accumulator) {
         auto chunk = ChunkHelper::new_chunk(*tuple_desc, 8888);
         chunk->get_column_by_index(0)->append_default(8888);
         input_rows += 8888;
-        accumulator.push(std::move(chunk));
+        static_cast<void>(accumulator.push(std::move(chunk)));
     }
 
     accumulator.finalize();
@@ -310,7 +312,7 @@ TEST_F(ChunkHelperTest, Accumulator) {
     // push empty chunks
     for (int i = 0; i < ChunkAccumulator::kAccumulateLimit; i++) {
         auto chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
-        accumulator.push(std::move(chunk));
+        static_cast<void>(accumulator.push(std::move(chunk)));
     }
     EXPECT_TRUE(accumulator.reach_limit());
     auto output = accumulator.pull();

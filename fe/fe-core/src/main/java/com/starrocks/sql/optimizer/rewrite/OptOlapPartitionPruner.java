@@ -18,8 +18,12 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -317,7 +321,7 @@ public class OptOlapPartitionPruner {
     private static List<Long> rangePartitionPrune(OlapTable olapTable, RangePartitionInfo partitionInfo,
                                                   LogicalOlapScanOperator operator) {
         Map<Long, Range<PartitionKey>> keyRangeById;
-        if (operator.getPartitionNames() != null) {
+        if (operator.getPartitionNames() != null && operator.getPartitionNames().getPartitionNames() != null) {
             keyRangeById = Maps.newHashMap();
             for (String partName : operator.getPartitionNames().getPartitionNames()) {
                 Partition part = olapTable.getPartition(partName, operator.getPartitionNames().isTemp());
@@ -333,7 +337,7 @@ public class OptOlapPartitionPruner {
                 partitionInfo.getPartitionColumns(), operator.getColumnFilters());
         try {
             return partitionPruner.prune();
-        } catch (AnalysisException e) {
+        } catch (Exception e) {
             LOG.warn("PartitionPrune Failed. ", e);
         }
         return null;
@@ -341,22 +345,29 @@ public class OptOlapPartitionPruner {
 
     private static boolean isNeedFurtherPrune(List<Long> candidatePartitions, LogicalOlapScanOperator olapScanOperator,
                                               PartitionInfo partitionInfo) {
-        boolean probeResult = true;
-        if (candidatePartitions.isEmpty()) {
-            probeResult = false;
-        } else if (!partitionInfo.isRangePartition()) {
-            probeResult = false;
-        } else if (((RangePartitionInfo) partitionInfo).getPartitionColumns().size() > 1) {
-            probeResult = false;
-        } else if (((RangePartitionInfo) partitionInfo).getIdToRange(true)
-                .containsKey(candidatePartitions.get(0))) {
-            // it's a temp partition list, no need to do the further prune
-            probeResult = false;
-        } else if (olapScanOperator.getPredicate() == null) {
-            probeResult = false;
+        if (candidatePartitions.isEmpty()
+                || olapScanOperator.getPredicate() == null) {
+            return false;
         }
 
-        return probeResult;
+        // only support RANGE and EXPR_RANGE
+        // EXPR_RANGE_V2 type like partition by RANGE(cast(substring(col, 3)) as int)) is unsupported
+        if (partitionInfo.getType() == PartitionType.RANGE) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            return rangePartitionInfo.getPartitionColumns().size() == 1
+                    && !rangePartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
+        } else if (partitionInfo.getType() == PartitionType.EXPR_RANGE) {
+            ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            List<Expr> partitionExpr = exprPartitionInfo.getPartitionExprs();
+            if (partitionExpr.size() == 1 && partitionExpr.get(0) instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr.get(0);
+                String functionName = functionCallExpr.getFnName().getFunction();
+                return (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)
+                        || FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName))
+                        && !exprPartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
+            }
+        }
+        return false;
     }
 
     private static boolean containsNullValue(Column column, PartitionKey minRange) {

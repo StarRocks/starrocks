@@ -41,13 +41,17 @@ namespace starrocks::config {
 CONF_Int32(cluster_id, "-1");
 // The port on which ImpalaInternalService is exported.
 CONF_Int32(be_port, "9060");
-CONF_Int32(thrift_port, "9060");
+CONF_Int32(thrift_port, "0");
 
 // The port for brpc.
 CONF_Int32(brpc_port, "8060");
 
 // The number of bthreads for brpc, the default value is set to -1, which means the number of bthreads is #cpu-cores.
 CONF_Int32(brpc_num_threads, "-1");
+
+// The max number of single connections maintained by the brpc client and each server.
+// Theses connections are created during the first few access and will be used thereafter
+CONF_Int32(brpc_max_connections_per_server, "1");
 
 // Declare a selection strategy for those servers have many ips.
 // Note that there should at most one ip match this list.
@@ -363,6 +367,14 @@ CONF_Double(dictionary_encoding_ratio, "0.7");
 // The minimum chunk size for dictionary encoding speculation
 CONF_Int32(dictionary_speculate_min_chunk_size, "10000");
 
+// Whether to use special thread pool for streaming load to avoid deadlock for
+// concurrent streaming loads. The maximum number of threads and queue size are
+// set INT32_MAX which indicate there is no limit for the thread pool. Note you
+// don't need to change these configurations in general.
+CONF_mBool(enable_streaming_load_thread_pool, "true");
+CONF_Int32(streaming_load_thread_pool_num_min, "0");
+CONF_Int32(streaming_load_thread_pool_idle_time_ms, "2000");
+
 // The maximum amount of data that can be processed by a stream load
 CONF_mInt64(streaming_load_max_mb, "102400");
 // Some data formats, such as JSON, cannot be streamed.
@@ -669,6 +681,9 @@ CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 // The number of execution threads for pipeline engine.
 CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // The number of threads for preparing fragment instances in pipeline engine, vCPUs by default.
+// *  "n": positive integer, fixed number of threads to n.
+// *  "0": default value, means the same as number of cpu cores.
+// * "-n": negative integer, means n times of number of cpu cores.
 CONF_Int64(pipeline_prepare_thread_pool_thread_num, "0");
 CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
 // The number of threads for executing sink io task in pipeline engine, vCPUs by default.
@@ -935,29 +950,45 @@ CONF_Int64(max_length_for_to_base64, "200000");
 // Used by bitmap functions
 CONF_Int64(max_length_for_bitmap_function, "1000000");
 
+// Configuration items for datacache
+CONF_mBool(datacache_enable, "false");
+CONF_mString(datacache_mem_size, "10%");
+CONF_mString(datacache_disk_size, "0");
+CONF_mString(datacache_disk_path, "${STARROCKS_HOME}/datacache/");
+CONF_String(datacache_meta_path, "${STARROCKS_HOME}/datacache/");
+CONF_Int64(datacache_block_size, "262144"); // 256K
+CONF_Bool(datacache_checksum_enable, "false");
+CONF_Bool(datacache_direct_io_enable, "false");
+// Maximum number of concurrent inserts we allow globally for datacache.
+// 0 means unlimited.
+CONF_Int64(datacache_max_concurrent_inserts, "1500000");
+// Total memory limit for in-flight cache jobs.
+// Once this is reached, cache populcation will be rejected until the flying memory usage gets under the limit.
+CONF_Int64(datacache_max_flying_memory_mb, "256");
+// Whether to use datacache adaptor, which will skip reading cache when disk overload is high.
+CONF_Bool(datacache_adaptor_enable, "true");
+// A factor to control the io traffic between cache and network. The larger this parameter,
+// the more requests will be sent to the network.
+// Usually there is no need to modify it.
+CONF_Int64(datacache_skip_read_factor, "1");
+// DataCache engines, alternatives: cachelib, starcache.
+// Set the default value empty to indicate whether it is manully configured by users.
+// If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
+CONF_String(datacache_engine, "");
+
+// The following configurations will be deprecated, and we use the `datacache` prefix instead.
+// But it is temporarily necessary to keep them for a period of time to be compatible with
+// the old configuration files.
 CONF_Bool(block_cache_enable, "false");
 CONF_Int64(block_cache_disk_size, "0");
 CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
 CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
 CONF_Int64(block_cache_block_size, "262144");   // 256K
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
-CONF_Bool(block_cache_checksum_enable, "false");
-// Maximum number of concurrent inserts we allow globally for block cache.
-// 0 means unlimited.
 CONF_Int64(block_cache_max_concurrent_inserts, "1500000");
-// Total memory limit for in-flight parcels.
-// Once this is reached, requests will be rejected until the parcel memory usage gets under the limit.
-CONF_Int64(block_cache_max_parcel_memory_mb, "256");
-CONF_Bool(block_cache_report_stats, "false");
-// This essentially turns the LRU into a two-segmented LRU. Setting this to 1 means every new insertion
-// will be inserted 1/2 from the end of the LRU, 2 means 1/4 from the end of the LRU, and so on.
-// It is only useful for the cachelib engine currently.
-CONF_Int64(block_cache_lru_insertion_point, "1");
-// Block cache engines, alternatives: cachelib, starcache.
-// Set the default value empty to indicate whether it is manully configured by users.
-// If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
-CONF_String(block_cache_engine, "");
+CONF_Bool(block_cache_checksum_enable, "false");
 CONF_Bool(block_cache_direct_io_enable, "false");
+CONF_String(block_cache_engine, "");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
@@ -1026,7 +1057,7 @@ CONF_mInt64(file_write_history_size, "10000");
 CONF_mInt32(update_cache_evict_internal_sec, "11");
 CONF_mBool(enable_auto_evict_update_cache, "true");
 
-CONF_mInt64(load_tablet_timeout_seconds, "30");
+CONF_mInt64(load_tablet_timeout_seconds, "60");
 
 CONF_mBool(enable_pk_value_column_zonemap, "true");
 
@@ -1036,6 +1067,9 @@ CONF_Int32(default_mv_resource_group_cpu_limit, "1");
 
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");
+
+// used for control the max memory cost when batch get pk index in each tablet
+CONF_mInt64(primary_key_batch_get_index_memory_limit, "104857600"); // 100MB
 
 // If your sort key cardinality is very high,
 // You could enable this config to speed up the point lookup query,
@@ -1048,5 +1082,12 @@ CONF_mInt32(finish_publish_version_internal, "100");
 CONF_mInt32(get_txn_status_internal_sec, "30");
 
 CONF_mBool(dump_metrics_with_bvar, "true");
+
+CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
+
+// 0 means no limit
+CONF_Int32(lake_service_max_concurrency, "0");
+
+CONF_mInt64(lake_vacuum_max_batch_delete_size, "10000");
 
 } // namespace starrocks::config

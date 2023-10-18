@@ -15,8 +15,8 @@
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HudiTable;
@@ -26,7 +26,6 @@ import com.starrocks.connector.RemoteScanRangeLocations;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
-import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -77,9 +76,11 @@ public class HudiScanNode extends ScanNode {
             return;
         }
         CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
-        if (connector != null) {
-            cloudConfiguration = connector.getCloudConfiguration();
-        }
+        Preconditions.checkState(connector != null,
+                String.format("connector of catalog %s should not be null", catalog));
+        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        Preconditions.checkState(cloudConfiguration != null,
+                String.format("cloudConfiguration of catalog %s should not be null", catalog));
     }
 
     @Override
@@ -145,48 +146,16 @@ public class HudiScanNode extends ScanNode {
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
         msg.hdfs_scan_node = tHdfsScanNode;
 
-        List<Expr> noEvalPartitionConjuncts = scanNodePredicates.getNoEvalPartitionConjuncts();
-        String partitionSqlPredicate = getExplainString(noEvalPartitionConjuncts);
-        for (Expr expr : noEvalPartitionConjuncts) {
-            msg.hdfs_scan_node.addToPartition_conjuncts(expr.treeToThrift());
-        }
-        msg.hdfs_scan_node.setPartition_sql_predicates(partitionSqlPredicate);
-
-        // put non-partition conjuncts into conjuncts
-        if (msg.isSetConjuncts()) {
-            msg.conjuncts.clear();
-        }
-
-        List<Expr> nonPartitionConjuncts = scanNodePredicates.getNonPartitionConjuncts();
-        for (Expr expr : nonPartitionConjuncts) {
-            msg.addToConjuncts(expr.treeToThrift());
-        }
-        String sqlPredicate = getExplainString(nonPartitionConjuncts);
-        msg.hdfs_scan_node.setSql_predicates(sqlPredicate);
-
-        List<Expr> minMaxConjuncts = scanNodePredicates.getMinMaxConjuncts();
-        if (!minMaxConjuncts.isEmpty()) {
-            String minMaxSqlPredicate = getExplainString(minMaxConjuncts);
-            for (Expr expr : minMaxConjuncts) {
-                msg.hdfs_scan_node.addToMin_max_conjuncts(expr.treeToThrift());
-            }
-            msg.hdfs_scan_node.setMin_max_tuple_id(scanNodePredicates.getMinMaxTuple().getId().asInt());
-            msg.hdfs_scan_node.setMin_max_sql_predicates(minMaxSqlPredicate);
-        }
-
         if (hudiTable != null) {
             msg.hdfs_scan_node.setHive_column_names(hudiTable.getDataColumnNames());
             msg.hdfs_scan_node.setTable_name(hudiTable.getName());
         }
 
-        if (cloudConfiguration != null) {
-            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
-            cloudConfiguration.toThrift(tCloudConfiguration);
-            msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
-        }
-
-        msg.hdfs_scan_node.setCan_use_any_column(canUseAnyColumn);
-        msg.hdfs_scan_node.setCan_use_min_max_count_opt(canUseMinMaxCountOpt);
+        HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
+        HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
+        HdfsScanNode.setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
+        HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
+        HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
     }
 
     @Override

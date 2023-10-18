@@ -512,6 +512,24 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 || !replicaHostSet.add(backend.getHost());
     }
 
+    private boolean needRecoverWithEmptyTablet(SystemInfoService systemInfoService) {
+        if (Config.recover_with_empty_tablet && replicas.size() > 1) {
+            int numReplicaLostForever = 0;
+            int numReplicaRecoverable = 0;
+            for (Replica replica : replicas) {
+                if (replica.isBad() || systemInfoService.getBackend(replica.getBackendId()) == null) {
+                    numReplicaLostForever++;
+                } else {
+                    numReplicaRecoverable++;
+                }
+            }
+
+            return numReplicaLostForever > 0 && numReplicaRecoverable == 0;
+        }
+
+        return false;
+    }
+
     /**
      * A replica is healthy only if
      * 1. the backend is available
@@ -564,6 +582,16 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
         // 1. alive replicas are not enough
         int aliveBackendsNum = aliveBeIdsInCluster.size();
+        // check whether we need to forcefully recover with an empty tablet first
+        // we use a FORCE_REDUNDANT task to drop the invalid replica first and
+        // then REPLICA_MISSING task will try to create that empty tablet
+        if (needRecoverWithEmptyTablet(systemInfoService)) {
+            LOG.info("need to forcefully recover with empty tablet for {}, replica info:{}",
+                    id, getReplicaInfos());
+            return createRedundantSchedCtx(TabletStatus.FORCE_REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
+                    needFurtherRepairReplica);
+        }
+
         if (alive < replicationNum && replicas.size() >= aliveBackendsNum
                 && aliveBackendsNum >= replicationNum && replicationNum > 1) {
             // there is no enough backend for us to create a new replica, so we have to delete an existing replica,
@@ -572,7 +600,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             // condition explain:
             // 1. alive < replicationNum: replica is missing or bad
             // 2. replicas.size() >= aliveBackendsNum: the existing replicas occupies all available backends
-            // 3. aliveBackendsNum >= replicationNum: make sure after deleting, there will be
+            // 3. aliveBackendsNum >= replicationNum: make sure after deletion, there will be
             //    at least one backend for new replica.
             // 4. replicationNum > 1: if replication num is set to 1, do not delete any replica, for safety reason
             // For example: 3 replica, 3 be, one set bad, we need to forcefully delete one first

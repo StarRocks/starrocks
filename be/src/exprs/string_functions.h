@@ -423,6 +423,8 @@ public:
 
     DEFINE_VECTORIZED_FN(url_extract_parameter);
 
+    DEFINE_VECTORIZED_FN(url_extract_host);
+
     /**
      * @param: [BigIntColumn]
      * @return: StringColumn
@@ -521,8 +523,8 @@ private:
     };
 
     static StatusOr<ColumnPtr> parse_url_general(FunctionContext* context, const starrocks::Columns& columns);
-    static StatusOr<ColumnPtr> parse_url_const(UrlParser::UrlPart* url_part, FunctionContext* context,
-                                               const starrocks::Columns& columns);
+    static StatusOr<ColumnPtr> parse_const_urlpart(UrlParser::UrlPart* url_part, FunctionContext* context,
+                                                   const starrocks::Columns& columns);
 
     template <LogicalType Type, bool scale_up, bool check_overflow>
     static inline void money_format_decimal_impl(FunctionContext* context, ColumnViewer<Type> const& money_viewer,

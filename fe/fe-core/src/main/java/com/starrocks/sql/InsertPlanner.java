@@ -30,19 +30,24 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -129,7 +134,7 @@ public class InsertPlanner {
         //2. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan;
-        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("Transform")) {
+        try (Timer ignore = Tracers.watchScope("Transform")) {
             logicalPlan = new RelationTransformer(columnRefFactory, session).transform(queryRelation);
         }
 
@@ -159,7 +164,7 @@ public class InsertPlanner {
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(targetTable);
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
-        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("InsertPlanner")) {
+        try (Timer ignore = Tracers.watchScope("InsertPlanner")) {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(false);
             }
@@ -172,7 +177,7 @@ public class InsertPlanner {
             LOG.debug("property {}", requiredPropertySet);
             OptExpression optimizedPlan;
 
-            try (PlannerProfile.ScopedTimer ignore2 = PlannerProfile.getScopedTimer("Optimizer")) {
+            try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
                 optimizedPlan = optimizer.optimize(
                         session,
                         logicalPlan.getRoot(),
@@ -185,7 +190,7 @@ public class InsertPlanner {
             boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
                     || targetTable instanceof MysqlTable);
             ExecPlan execPlan;
-            try (PlannerProfile.ScopedTimer ignore3 = PlannerProfile.getScopedTimer("PlanBuilder")) {
+            try (Timer ignore3 = Tracers.watchScope("PlanBuilder")) {
                 execPlan = PlanFragmentBuilder.createPhysicalPlan(
                         optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
                         queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
@@ -250,7 +255,7 @@ public class InsertPlanner {
 
                 }
                 dataSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
-                        canUsePipeline, olapTable.writeQuorum(),
+                        olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
                         nullExprInAutoIncrement, enableAutomaticPartition);
                 if (olapTable.getAutomaticBucketSize() > 0) {
@@ -265,13 +270,15 @@ public class InsertPlanner {
             } else if (targetTable instanceof HiveTable) {
                 dataSink = new HiveTableSink((HiveTable) targetTable, tupleDesc,
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
+            } else if (targetTable instanceof TableFunctionTable) {
+                dataSink = new TableFunctionTableSink((TableFunctionTable) targetTable);
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
 
             PlanFragment sinkFragment = execPlan.getFragments().get(0);
             if (canUsePipeline && (targetTable instanceof OlapTable || targetTable.isIcebergTable() ||
-                    targetTable.isHiveTable())) {
+                    targetTable.isHiveTable() || targetTable.isTableFunctionTable())) {
                 if (shuffleServiceEnable) {
                     // For shuffle insert into, we only support tablet sink dop = 1
                     // because for tablet sink dop > 1, local passthourgh exchange will influence the order of sending,
@@ -294,6 +301,8 @@ public class InsertPlanner {
                     sinkFragment.setHasHiveTableSink();
                 } else if (targetTable.isIcebergTable()) {
                     sinkFragment.setHasIcebergTableSink();
+                } else if (targetTable.isTableFunctionTable()) {
+                    sinkFragment.setHasTableFunctionTableSink();
                 }
 
                 sinkFragment.disableRuntimeAdaptiveDop();
@@ -509,6 +518,29 @@ public class InsertPlanner {
             // this could be created by user.
             if (targetColumn.isNameWithPrefix(MATERIALIZED_VIEW_NAME_PREFIX) &&
                     !baseSchema.contains(targetColumn)) {
+                if (targetColumn.getDefineExpr() == null) {
+                    Table targetTable = insertStatement.getTargetTable();
+                    // Only olap table can have the synchronized materialized view.
+                    OlapTable targetOlapTable = (OlapTable) targetTable;
+                    MaterializedIndexMeta targetIndexMeta = null;
+                    for (MaterializedIndexMeta indexMeta : targetOlapTable.getIndexIdToMeta().values()) {
+                        if (indexMeta.getIndexId() == targetOlapTable.getBaseIndexId()) {
+                            continue;
+                        }
+                        for (Column column : indexMeta.getSchema()) {
+                            if (column.getName().equals(targetColumn.getName())) {
+                                targetIndexMeta = indexMeta;
+                                break;
+                            }
+                        }
+                    }
+                    String targetIndexMetaName = targetIndexMeta == null ? "" :
+                            targetOlapTable.getIndexNameById(targetIndexMeta.getIndexId());
+                    throw new SemanticException("The define expr of shadow column " + targetColumn.getName() + " is null, " +
+                            "please check the associated materialized view " + targetIndexMetaName
+                            + " of target table:" + insertStatement.getTargetTable().getName());
+                }
+
                 ExpressionAnalyzer.analyzeExpression(targetColumn.getDefineExpr(), new AnalyzeState(),
                         new Scope(RelationId.anonymous(),
                                 new RelationFields(insertStatement.getTargetTable().getBaseSchema().stream()
@@ -602,8 +634,9 @@ public class InsertPlanner {
             return new PhysicalPropertySet(distributionProperty);
         }
 
-        if (insertStmt.getTargetTable() instanceof IcebergTable) {
-            IcebergTable icebergTable = (IcebergTable) insertStmt.getTargetTable();
+        Table targetTable = insertStmt.getTargetTable();
+        if (targetTable instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) targetTable;
             SortOrder sortOrder = icebergTable.getNativeTable().sortOrder();
 
             if (sortOrder.isUnsorted()) {
@@ -625,11 +658,18 @@ public class InsertPlanner {
             }
         }
 
-        if (!(insertStmt.getTargetTable() instanceof OlapTable)) {
+
+        if (targetTable instanceof TableFunctionTable && ((TableFunctionTable) targetTable).isWriteSingleFile()) {
+            DistributionProperty distributionProperty = new DistributionProperty(new GatherDistributionSpec());
+            return new PhysicalPropertySet(distributionProperty);
+        }
+
+
+        if (!(targetTable instanceof OlapTable)) {
             return new PhysicalPropertySet();
         }
 
-        OlapTable table = (OlapTable) insertStmt.getTargetTable();
+        OlapTable table = (OlapTable) targetTable;
 
         if (KeysType.DUP_KEYS.equals(table.getKeysType())) {
             return new PhysicalPropertySet();

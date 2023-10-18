@@ -95,7 +95,7 @@ Status SpillableNLJoinChunkStream::reset(RuntimeState* state, spill::Spiller* du
 
     stream = spill::SpillInputStream::union_all(spilled_input_streams);
     _reader = std::make_shared<spill::SpillerReader>(dummy_spiller);
-    RETURN_IF_ERROR(_reader->set_stream(std::move(stream)));
+    _reader->set_stream(std::move(stream));
 
     return Status::OK();
 }
@@ -255,7 +255,7 @@ Status NLJoinContext::finish_one_right_sinker(int32_t sinker_id, RuntimeState* s
 Status NLJoinContext::finish_one_left_prober(RuntimeState* state) {
     if (_num_left_probers == _num_finished_left_probers.fetch_add(1) + 1) {
         // All the probers have finished, so the builders can be short-circuited.
-        set_finished();
+        RETURN_IF_ERROR(set_finished());
     }
     return Status::OK();
 }

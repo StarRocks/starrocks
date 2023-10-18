@@ -4,36 +4,33 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 
 You can find a function based on the following categories:
 
-- [Aggregate functions](#aggregate-functions)
-- [Array functions](#array-functions)
-- [Binary functions](#binary-functions)
-- [Bit functions](#bit-functions)
-- [Bitmap functions](#bitmap-functions)
-- [CAST](cast.md)
-- [Conditional functions](#conditional-functions)
-- [Cryptographic functions](#cryptographic-functions)
-- [Date functions](#date-functions)
-- [Geographic functions](#geographic-functions)
-- [Hash functions](#hash-functions)
-- [Java UDF](JAVA_UDF.md)
-- [JSON functions](#json-functions)
-- [Lambda expression](Lambda_expression.md)
-- [Map functions](#map-functions)
-- [Math functions](#math-functions)
-- [Pattern matching functions](#pattern-matching-functions)
-- [Percentile functions](#percentile-functions)
-- [Scalar functions](#scalar-functions)
-- [String functions](#string-functions)
-- [Struct functions](#struct-functions)
-- [Table functions](#table-functions)
-- [Utility functions](#utility-functions)
-- [Window functions](Window_function.md)
+- [Function list](#function-list)
+  - [Aggregate functions](#aggregate-functions)
+  - [Array functions](#array-functions)
+  - [Binary functions](#binary-functions)
+  - [Bit functions](#bit-functions)
+  - [Bitmap functions](#bitmap-functions)
+  - [Conditional functions](#conditional-functions)
+  - [Cryptographic functions](#cryptographic-functions)
+  - [Date functions](#date-functions)
+  - [Geographic functions](#geographic-functions)
+  - [Hash functions](#hash-functions)
+  - [JSON functions](#json-functions)
+  - [String functions](#string-functions)
+  - [Map functions](#map-functions)
+  - [Math functions](#math-functions)
+  - [Pattern matching functions](#pattern-matching-functions)
+  - [Percentile functions](#percentile-functions)
+  - [Scalar functions](#scalar-functions)
+  - [Struct functions](#struct-functions)
+  - [Table functions](#table-functions)
+  - [Utility functions](#utility-functions)
 
 ## Aggregate functions
 
 - [any_value](../sql-functions/aggregate-functions/any_value.md)
 - [approx_count_distinct](../sql-functions/aggregate-functions/approx_count_distinct.md)
-- [array_agg](../sql-functions/array-functions)
+- [array_agg](../sql-functions/array-functions/array_agg.md)
 - [avg](../sql-functions/aggregate-functions/avg.md)
 - [bitmap](../sql-functions/aggregate-functions/bitmap.md)
 - [bitmap_agg](../sql-functions/bitmap-functions/bitmap_agg.md)
@@ -387,8 +384,8 @@ You can find a function based on the following categories:
 
 - [like](../sql-functions/like_predicate-functions/like.md)
 - [regexp](../sql-functions/like_predicate-functions/regexp.md)
-- [regexp_extract](../sql-functions/string-functions/regexp_extract.md)
-- [regexp_replace](../sql-functions/string-functions/regexp_replace.md)
+- [regexp_extract](../sql-functions/like_predicate-functions/regexp_extract.md)
+- [regexp_replace](../sql-functions/like_predicate-functions/regexp_replace.md)
 
 ## Percentile functions
 
@@ -415,10 +412,10 @@ You can find a function based on the following categories:
 
 ## Utility functions
 
-- [catalog](./sql-reference/sql-functions/utility-functions/catalog.md)
+- [catalog](../sql-functions/utility-functions/catalog.md)
 - [current_role](../sql-functions/utility-functions/current_role.md)
 - [current_version](../sql-functions/utility-functions/current_version.md)
-- [database](./sql-reference/sql-functions/utility-functions/database.md)
+- [database](../sql-functions/utility-functions/database.md)
 - [host_name](../sql-functions/utility-functions/host_name.md)
 - [isnull](../sql-functions/utility-functions/isnull.md)
 - [isnotnull](../sql-functions/utility-functions/isnotnull.md)

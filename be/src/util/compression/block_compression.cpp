@@ -47,8 +47,12 @@
 
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
+#include "util/coding.h"
 #include "util/compression/compression_context_pool_singletons.h"
 #include "util/faststring.h"
+namespace orc {
+uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit);
+} // namespace orc
 
 namespace starrocks {
 
@@ -1005,6 +1009,72 @@ public:
 };
 #endif
 
+class LzoBlockCompression : public BlockCompressionCodec {
+public:
+    LzoBlockCompression() : BlockCompressionCodec(CompressionTypePB::LZO) {}
+
+    static const LzoBlockCompression* instance() {
+        static LzoBlockCompression s_instance;
+        return &s_instance;
+    }
+
+    ~LzoBlockCompression() override = default;
+
+    Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
+                    faststring* compressed_body1, raw::RawString* compressed_body2) const override {
+        return Status::NotSupported("LzoBlockCompression does not support compress. Support decompress only.");
+    }
+
+    Status decompress(const Slice& input, Slice* output) const override {
+        const char* input_data = input.get_data();
+        size_t input_size = input.get_size();
+        char* output_data = output->mutable_data();
+        char* output_limit = output_data + output->get_size();
+
+        uint32_t uncompressed_size = decode_fixed32_be((const uint8_t*)input_data);
+        if (uncompressed_size != output->get_size()) {
+            return Status::InternalError(
+                    "LzoBlockCompression decompress failed: uncompress size and output size not match");
+        }
+
+        input_data += 4;
+        input_size -= 4;
+
+        while (uncompressed_size) {
+            if (input_size < 4) {
+                return Status::InternalError("LzoBlockCompression decompress failed. input data not enough");
+            }
+            uint32_t block_size = decode_fixed32_be((const uint8_t*)input_data);
+            input_data += 4;
+            input_size -= 4;
+
+            if (input_size < block_size) {
+                return Status::InternalError("LzoBlockCompression decompress failed: input data not enough");
+            }
+            try {
+                uint64_t read = orc::lzoDecompress(input_data, input_data + block_size, output_data, output_limit);
+                DCHECK(read <= uncompressed_size);
+                uncompressed_size -= read;
+                output_data += read;
+            } catch (const std::runtime_error& e) {
+                return Status::InternalError("LzoBlockCompression decompress failed: data corruption");
+            }
+
+            input_data += block_size;
+            input_size -= block_size;
+        }
+        return Status::OK();
+    }
+
+    Status compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
+                    size_t uncompressed_size, faststring* compressed_body1,
+                    raw::RawString* compressed_body2) const override {
+        return Status::NotSupported("LzoBlockCompression does not support compress. Support decompress only.");
+    }
+
+    size_t max_compressed_len(size_t len) const override { return size_t(-1); }
+};
+
 Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec) {
     switch (type) {
     case CompressionTypePB::NO_COMPRESSION:
@@ -1034,6 +1104,9 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
         break;
     case CompressionTypePB::LZ4_HADOOP:
         *codec = Lz4HadoopBlockCompression::instance();
+        break;
+    case CompressionTypePB::LZO:
+        *codec = LzoBlockCompression::instance();
         break;
     default:
         return Status::NotFound(strings::Substitute("unknown compression type($0)", type));

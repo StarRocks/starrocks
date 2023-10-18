@@ -191,6 +191,9 @@ public class StatisticExecutor {
                 " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
 
         ConnectContext context = StatisticUtils.buildConnectContext();
+        // The parallelism degree of low-cardinality dict collect task is uniformly set to 1 to
+        // prevent collection tasks from occupying a large number of be execution threads and scan threads.
+        context.getSessionVariable().setPipelineDop(1);
         context.setThreadLocalInfo();
         StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
 
@@ -301,8 +304,12 @@ public class StatisticExecutor {
                         refreshAsync);
             } else {
                 // for external table
-                GlobalStateMgr.getCurrentAnalyzeMgr().refreshConnectorTableBasicStatisticsCache(table,
-                        statsJob.getColumns(), refreshAsync);
+                ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta(statsJob.getCatalogName(),
+                        db.getFullName(), table.getName(), statsJob.getColumns(), statsJob.getType(),
+                        analyzeStatus.getEndTime(), statsJob.getProperties());
+                GlobalStateMgr.getCurrentAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
+                GlobalStateMgr.getCurrentAnalyzeMgr().refreshConnectorTableBasicStatisticsCache(statsJob.getCatalogName(),
+                        db.getFullName(), table.getName(), statsJob.getColumns(), refreshAsync);
             }
         }
         return analyzeStatus;

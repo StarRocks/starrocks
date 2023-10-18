@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import autovalue.shaded.com.google.common.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -51,6 +52,28 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
         }
     };
 
+    // Comparator to normalize predicates, only use scalar operators' string to compare.
+    private static final Comparator<ScalarOperator> SCALAR_OPERATOR_COMPARATOR_IGNORE_COLUMN_ID =
+            new Comparator<ScalarOperator>() {
+                @Override
+                public int compare(ScalarOperator o1, ScalarOperator o2) {
+                    if (o1 == null && o2 == null) {
+                        return 0;
+                    } else if (o1 == null) {
+                        return -1;
+                    } else if (o2 == null) {
+                        return 1;
+                    } else {
+                        String s1 = o1.toString();
+                        String s2 = o2.toString();
+                        String n1 = s1.replaceAll("\\d: ", "");
+                        String n2 = s2.replaceAll("\\d: ", "");
+                        int ret = n1.compareTo(n2);
+                        return (ret == 0) ? s1.compareTo(s2) : ret;
+                    }
+                }
+            };
+
     // should maintain sequence for case:
     // a like "%hello%" and (b * c = 100 or b * c = 200)
     // (b * c = 200 or b * c = 100) and a like "%hello%"
@@ -75,6 +98,25 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
         } else {
             // for not
             return predicate;
+        }
+    }
+
+    @Override
+    public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate,
+                                               ScalarOperatorRewriteContext context) {
+        ScalarOperator l = predicate.getChild(0);
+        ScalarOperator r = predicate.getChild(1);
+        if (l.isVariable() && r.isVariable()) {
+            // `a < b` is equal to `b > a`, but here we all normalized it into a < b for better rewrite.
+            if (SCALAR_OPERATOR_COMPARATOR_IGNORE_COLUMN_ID.compare(l, r) <= 0) {
+                return predicate;
+            }
+            ScalarOperator result = predicate.commutative();
+            Preconditions.checkState(SCALAR_OPERATOR_COMPARATOR_IGNORE_COLUMN_ID
+                    .compare(result.getChild(0), result.getChild(1)) <= 0);
+            return result;
+        } else {
+            return  super.visitBinaryPredicate(predicate, context);
         }
     }
 

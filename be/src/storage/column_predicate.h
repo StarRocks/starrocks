@@ -122,23 +122,26 @@ public:
 
     uint32_t column_id() const { return _column_id; }
 
-    Status evaluate(const Column* column, uint8_t* selection) const {
+    [[nodiscard]] Status evaluate(const Column* column, uint8_t* selection) const {
         return evaluate(column, selection, 0, column->size());
     }
 
-    Status evaluate_and(const Column* column, uint8_t* selection) const {
+    [[nodiscard]] Status evaluate_and(const Column* column, uint8_t* selection) const {
         return evaluate_and(column, selection, 0, column->size());
     }
 
-    Status evaluate_or(const Column* column, uint8_t* selection) const {
+    [[nodiscard]] Status evaluate_or(const Column* column, uint8_t* selection) const {
         return evaluate_or(column, selection, 0, column->size());
     }
 
-    virtual Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
+    [[nodiscard]] virtual Status evaluate(const Column* column, uint8_t* selection, uint16_t from,
+                                          uint16_t to) const = 0;
 
-    virtual Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
+    [[nodiscard]] virtual Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from,
+                                              uint16_t to) const = 0;
 
-    virtual Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
+    [[nodiscard]] virtual Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from,
+                                             uint16_t to) const = 0;
 
     virtual StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const {
         CHECK(false) << "not supported";
@@ -155,7 +158,7 @@ public:
     // Return false to filter out a data page.
     virtual bool bloom_filter(const BloomFilter* bf) const { return true; }
 
-    virtual Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const {
+    [[nodiscard]] virtual Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const {
         return Status::Cancelled("not implemented");
     }
 
@@ -182,8 +185,8 @@ public:
     // Constant value in the predicate in vector form. In contrast to `value()`, these value are un-modified.
     virtual std::vector<Datum> values() const { return std::vector<Datum>{}; }
 
-    virtual Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
-                              ObjectPool* obj_pool) const = 0;
+    [[nodiscard]] virtual Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
+                                            ObjectPool* obj_pool) const = 0;
 
     virtual std::string debug_string() const {
         std::stringstream ss;

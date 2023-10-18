@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterLoadStmt;
@@ -49,8 +50,10 @@ import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
+import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -70,6 +73,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
@@ -83,11 +87,13 @@ import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
+import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
@@ -109,6 +115,7 @@ import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -409,36 +416,6 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     }
 
     @Override
-    public Void visitCreateCatalogStatement(CreateCatalogStmt statement, ConnectContext context) {
-        CatalogAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitDropCatalogStatement(DropCatalogStmt statement, ConnectContext context) {
-        CatalogAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
-        CatalogAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
-        CatalogAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
-        CatalogAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
     public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
         DropStmtAnalyzer.analyze(statement, context);
         return null;
@@ -534,6 +511,44 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, ConnectContext session) {
         PauseRoutineLoadAnalyzer.analyze(statement, session);
+        return null;
+    }
+
+    // ---------------------------------------- Catalog Statement -------------------------------------------
+
+    @Override
+    public Void visitCreateCatalogStatement(CreateCatalogStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDropCatalogStatement(DropCatalogStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterCatalogStatement(AlterCatalogStmt statement, ConnectContext context) {
+        CatalogAnalyzer.analyze(statement, context);
         return null;
     }
 
@@ -693,6 +708,31 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         return null;
     }
 
+    // -------------------------------------- Data Cache Management Statement -----------------------------------------
+
+    @Override
+    public Void visitCreateDataCacheRuleStatement(CreateDataCacheRuleStmt stmt, ConnectContext context) {
+        DataCacheStmtAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitShowDataCacheRulesStatement(ShowDataCacheRulesStmt stmt, ConnectContext context) {
+        DataCacheStmtAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDropDataCacheRuleStatement(DropDataCacheRuleStmt statement, ConnectContext context) {
+        DataCacheStmtAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitClearDataCacheRulesStatement(ClearDataCacheRulesStmt statement, ConnectContext context) {
+        DataCacheStmtAnalyzer.analyze(statement, context);
+        return null;
+    }
 
     // ---------------------------------------- Backup Restore Statement -------------------------------------------
 
@@ -867,6 +907,19 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitCancelCompactionStatement(CancelCompactionStmt statement, ConnectContext context) {
         CancelCompactionStmtAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    // ---------------------------------------- Prepare Statement -------------------------------------------
+    @Override
+    public Void visitPrepareStatement(PrepareStmt statement, ConnectContext context) {
+        new PrepareAnalyzer(context).analyze(statement);
+        return null;
+    }
+
+    @Override
+    public Void visitExecuteStatement(ExecuteStmt statement, ConnectContext context) {
+        new PrepareAnalyzer(context).analyze(statement);
         return null;
     }
 }

@@ -43,10 +43,6 @@ namespace starrocks::spill {
 
 // some metrics for spill
 struct SpillProcessMetrics {
-private:
-    // For profile
-    std::shared_ptr<RuntimeProfile> _spiller_metrics;
-
 public:
     SpillProcessMetrics() = default;
     SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes);
@@ -80,6 +76,10 @@ public:
     RuntimeProfile::HighWaterMarkCounter* mem_table_peak_memory_usage = nullptr;
     // peak memory usage of input stream
     RuntimeProfile::HighWaterMarkCounter* input_stream_peak_memory_usage = nullptr;
+    // time spent to sort chunk before flush
+    RuntimeProfile::Counter* sort_chunk_timer = nullptr;
+    // time spent to materialize chunk by permutation
+    RuntimeProfile::Counter* materialize_chunk_timer = nullptr;
 
     // time spent to shuffle data to the corresponding partition, only used in join operator
     RuntimeProfile::Counter* shuffle_timer = nullptr;
@@ -91,6 +91,14 @@ public:
     RuntimeProfile::Counter* restore_from_mem_table_rows = nullptr;
     // peak memory usage of partition writer, only used in join operator
     RuntimeProfile::HighWaterMarkCounter* partition_writer_peak_memory_usage = nullptr;
+
+    // the number of blocks created
+    RuntimeProfile::Counter* block_count = nullptr;
+    // flush/restore task count
+    RuntimeProfile::Counter* flush_io_task_count = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* peak_flush_io_task_count = nullptr;
+    RuntimeProfile::Counter* restore_io_task_count = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* peak_restore_io_task_count = nullptr;
 };
 
 // major spill interfaces
@@ -108,9 +116,9 @@ public:
     const SpillProcessMetrics& metrics() { return _metrics; }
 
     // set partitions for spiller only works when spiller has partitioned spill writer
-    Status set_partition(const std::vector<const SpillPartitionInfo*>& parititons);
+    void set_partition(const std::vector<const SpillPartitionInfo*>& parititons);
     // init partition by `num_partitions`
-    Status set_partition(RuntimeState* state, size_t num_partitions);
+    void set_partition(RuntimeState* state, size_t num_partitions);
 
     // no thread-safe
     // TaskExecutor: Executor for runing io tasks
@@ -190,6 +198,7 @@ public:
             const std::vector<const SpillPartitionInfo*>& parititons);
 
     const std::unique_ptr<SpillerWriter>& writer() { return _writer; }
+    const std::shared_ptr<SpillerReader>& reader() { return _reader; }
 
     const std::shared_ptr<spill::Serde>& serde() { return _serde; }
     BlockManager* block_manager() { return _block_manager; }
@@ -208,7 +217,7 @@ private:
     std::weak_ptr<SpillerFactory> _parent;
 
     std::unique_ptr<SpillerWriter> _writer;
-    std::unique_ptr<SpillerReader> _reader;
+    std::shared_ptr<SpillerReader> _reader;
 
     std::mutex _mutex;
 

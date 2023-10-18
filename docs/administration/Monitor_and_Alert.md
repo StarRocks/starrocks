@@ -2,52 +2,52 @@
 
 You can build your own monitoring services, or use the Prometheus + Grafana solution. StarRocks provides a Prometheus-compatible interface that directly links to the HTTP port of the BE and FE to obtain monitoring information from the cluster.
 
-## Monitoring Indicators
+## Metrics
 
 The available metrics are:
 
-|Indicator|Unit|Type|Meaning|
+|Metric|Unit|Type|Meaning|
 |---|:---:|:---:|---|
-|be_broker_count|pcs|average|Number of brokers |
-|be_brpc_endpoint_count|pcs|average|Number of StubCache in BRPC|
+|be_broker_count|count|average|Number of brokers |
+|be_brpc_endpoint_count|count|average|Number of StubCache in BRPC|
 |be_bytes_read_per_second|bytes/s|average| Read speed of BE |
 |be_bytes_written_per_second|bytes/s|average|Write speed of BE |
 |be_base_compaction_bytes_per_second|bytes/s|average|Base compaction speed of BE|
 |be_cumulative_compaction_bytes_per_second|bytes/s|average|Cumulative compaction speed of BE|
 |be_base_compaction_rowsets_per_second|rowsets/s|average| Base compaction speed of BE rowsets|
 |be_cumulative_compaction_rowsets_per_second|rowsets/s|average| Cumulative compaction speed of BE rowsets |
-|be_base_compaction_failed|pcs/s|average|Base compaction failure of BE |
-|be_clone_failed| pcs/s |average|BE clone failure |
-|be_create_rollup_failed| pcs/s |average|Materialized view creation failure of BE |
-|be_create_tablet_failed| pcs/s |average|Tablet creation failure of BE |
-|be_cumulative_compaction_failed| pcs/s |average|Cumulative compaction failure of BE |
-|be_delete_failed| pcs/s |average| Delete failure of BE |
-|be_finish_task_failed| pcs/s |average|Task failure of BE |
-|be_publish_failed| pcs/s |average| Version release failure of BE |
-|be_report_tables_failed| pcs/s |average| Table report failure of BE |
-|be_report_disk_failed| pcs/s |average|Disk report failure of BE |
-|be_report_tablet_failed| pcs/s |average|Tablet report failure of BE |
-|be_report_task_failed| pcs/s |average|Task report failure of BE |
-|be_schema_change_failed| pcs/s |average|Schema change failure of BE |
-|be_base_compaction_requests| pcs/s |average|Base compaction request of BE |
-|be_clone_total_requests| pcs/s |average|Clone request of BE |
-|be_create_rollup_requests| pcs/s |average| Materialized view creation request of BE |
-|be_create_tablet_requests|pcs/s|average| Tablet creation request of BE |
-|be_cumulative_compaction_requests|pcs/s|average|Cumulative compaction request of BE |
-|be_delete_requests|pcs/s|average| Delete request of BE |
-|be_finish_task_requests|pcs/s|average| Task finish request of BE |
-|be_publish_requests|pcs/s|average| Version publish request of BE |
-|be_report_tablets_requests|pcs/s|average|Tablet report request of BE |
-|be_report_disk_requests|pcs/s|average|Disk report request of BE |
-|be_report_tablet_requests|pcs/s|average|Tablet report request of BE |
-|be_report_task_requests|pcs/s|average|Task report request of BE |
-|be_schema_change_requests|pcs/s|average|Schema change report request of BE |
-|be_storage_migrate_requests|pcs/s|average| Migration request of BE |
-|be_fragment_endpoint_count|pcs|average|Number of BE DataStream |
+|be_base_compaction_failed|count/s|average|Base compaction failure of BE |
+|be_clone_failed| count/s |average|BE clone failure |
+|be_create_rollup_failed| count/s |average|Materialized view creation failure of BE |
+|be_create_tablet_failed| count/s |average|Tablet creation failure of BE |
+|be_cumulative_compaction_failed| count/s |average|Cumulative compaction failure of BE |
+|be_delete_failed| count/s |average| Delete failure of BE |
+|be_finish_task_failed| count/s |average|Task failure of BE |
+|be_publish_failed| count/s |average| Version release failure of BE |
+|be_report_tables_failed| count/s |average| Table report failure of BE |
+|be_report_disk_failed| count/s |average|Disk report failure of BE |
+|be_report_tablet_failed| count/s |average|Tablet report failure of BE |
+|be_report_task_failed| count/s |average|Task report failure of BE |
+|be_schema_change_failed| count/s |average|Schema change failure of BE |
+|be_base_compaction_requests| count/s |average|Base compaction request of BE |
+|be_clone_total_requests| count/s |average|Clone request of BE |
+|be_create_rollup_requests| count/s |average| Materialized view creation request of BE |
+|be_create_tablet_requests|count/s|average| Tablet creation request of BE |
+|be_cumulative_compaction_requests|count/s|average|Cumulative compaction request of BE |
+|be_delete_requests|count/s|average| Delete request of BE |
+|be_finish_task_requests|count/s|average| Task finish request of BE |
+|be_publish_requests|count/s|average| Version publish request of BE |
+|be_report_tablets_requests|count/s|average|Tablet report request of BE |
+|be_report_disk_requests|count/s|average|Disk report request of BE |
+|be_report_tablet_requests|count/s|average|Tablet report request of BE |
+|be_report_task_requests|count/s|average|Task report request of BE |
+|be_schema_change_requests|count/s|average|Schema change report request of BE |
+|be_storage_migrate_requests|count/s|average| Migration request of BE |
+|be_fragment_endpoint_count|count|average|Number of BE DataStream |
 |be_fragment_request_latency_avg|ms|average| Latency of fragment requests |
-|be_fragment_requests_per_second|pcs/s|average|Number of fragment requests|
+|be_fragment_requests_per_second|count/s|average|Number of fragment requests|
 |be_http_request_latency_avg|ms|average|Latency of HTTP requests |
-|be_http_requests_per_second|pcs/s|average|Number of HTTP requests|
+|be_http_requests_per_second|count/s|average|Number of HTTP requests|
 |be_http_request_send_bytes_per_second|bytes/s|average| Number of bytes sent for HTTP requests |
 |fe_connections_per_second|connections/s|average| New connection rate of FE |
 |fe_connection_total|connections| cumulative | Total number of FE connections |
@@ -55,28 +55,28 @@ The available metrics are:
 |fe_edit_log_size_bytes|bytes/s|average|Size of FE edit log |
 |fe_edit_log_write|bytes/s|average|Write speed of FE edit log |
 |fe_checkpoint_push_per_second|operations/s|average|Number of FE checkpoints |
-|fe_pending_hadoop_load_job|pcs|average| Number of pending hadoop jobs|
-|fe_committed_hadoop_load_job|pcs|average| Number of committed hadoop jobs|
-|fe_loading_hadoop_load_job|pcs|average| Number of loading hadoop jobs|
-|fe_finished_hadoop_load_job|pcs|average| Number of completed  hadoop jobs|
-|fe_cancelled_hadoop_load_job|pcs|average| Number of cancelled hadoop jobs|
-|fe_pending_insert_load_job|pcs|average| Number of pending insert jobs |
-|fe_loading_insert_load_job|pcs|average| Number of loading insert jobs|
-|fe_committed_insert_load_job|pcs|average| Number of committed insert jobs|
-|fe_finished_insert_load_job|pcs|average| Number of completed insert jobs|
-|fe_cancelled_insert_load_job|pcs|average| Number of cancelled insert jobs|
-|fe_pending_broker_load_job|pcs|average| Number of pending broker jobs|
-|fe_loading_broker_load_job|pcs|average| Number of loading broker jobs
-|fe_committed_broker_load_job|pcs|average| Number of committed broker jobs|
-|fe_finished_broker_load_job|pcs|average| Number of finished broker jobs|
-|fe_cancelled_broker_load_job|pcs|average| Number of cancelled broker jobs |
-|fe_pending_delete_load_job|pcs|average| Number of pending delete jobs|
-|fe_loading_delete_load_job|pcs|average| Number of loading delete jobs|
-|fe_committed_delete_load_job|pcs|average| Number of committed delete jobs|
-|fe_finished_delete_load_job|pcs|average| Number of finished delete jobs|
-|fe_cancelled_delete_load_job|pcs|average| Number of cancelled delete jobs|
-|fe_rollup_running_alter_job|pcs|average| Number of jobs created in rollup |
-|fe_schema_change_running_job|pcs|average| Number of jobs in schema change |
+|fe_pending_hadoop_load_job|count|average| Number of pending hadoop jobs|
+|fe_committed_hadoop_load_job|count|average| Number of committed hadoop jobs|
+|fe_loading_hadoop_load_job|count|average| Number of loading hadoop jobs|
+|fe_finished_hadoop_load_job|count|average| Number of completed  hadoop jobs|
+|fe_cancelled_hadoop_load_job|count|average| Number of cancelled hadoop jobs|
+|fe_pending_insert_load_job|count|average| Number of pending insert jobs |
+|fe_loading_insert_load_job|count|average| Number of loading insert jobs|
+|fe_committed_insert_load_job|count|average| Number of committed insert jobs|
+|fe_finished_insert_load_job|count|average| Number of completed insert jobs|
+|fe_cancelled_insert_load_job|count|average| Number of cancelled insert jobs|
+|fe_pending_broker_load_job|count|average| Number of pending broker jobs|
+|fe_loading_broker_load_job|count|average| Number of loading broker jobs
+|fe_committed_broker_load_job|count|average| Number of committed broker jobs|
+|fe_finished_broker_load_job|count|average| Number of finished broker jobs|
+|fe_cancelled_broker_load_job|count|average| Number of cancelled broker jobs |
+|fe_pending_delete_load_job|count|average| Number of pending delete jobs|
+|fe_loading_delete_load_job|count|average| Number of loading delete jobs|
+|fe_committed_delete_load_job|count|average| Number of committed delete jobs|
+|fe_finished_delete_load_job|count|average| Number of finished delete jobs|
+|fe_cancelled_delete_load_job|count|average| Number of cancelled delete jobs|
+|fe_rollup_running_alter_job|count|average| Number of jobs created in rollup |
+|fe_schema_change_running_job|count|average| Number of jobs in schema change |
 |cpu_util| percentage|average|CPU usage rate |
 |cpu_system | percentage|average|cpu_system usage rate |
 |cpu_user| percentage|average|cpu_user usage rate |
@@ -88,24 +88,25 @@ The available metrics are:
 |cpu_softirq| percentage|average|cpu_softirq usage rate |
 |cpu_steal| percentage|average|cpu_steal usage rate |
 |disk_free|bytes|average| Free disk capacity |
-|disk_io_svctm|Ms|average| Disk IO service time |
+|disk_io_svctm|ms|average| Disk IO service time |
 |disk_io_util|percentage|average| Disk usage |
 |disk_used|bytes|average| Used disk capacity |
-|starrocks_fe_meta_log_count|pcs|Instantaneous|The number of Edit Logs without a checkpoint. A value within `100000` is considered reasonable.|
-|starrocks_fe_query_resource_group|pcs|cumulative|The number of queries for each resource group|
+|starrocks_fe_meta_log_count|count|Instantaneous|The number of Edit Logs without a checkpoint. A value within `100000` is considered reasonable.|
+|starrocks_fe_query_resource_group|count|cumulative|The number of queries for each resource group|
 |starrocks_fe_query_resource_group_latency|second|average|the query latency percentile for each resource group|
-|starrocks_fe_query_resource_group_err|pcs|cumulative|The number of incorrect queries for each resource group|
+|starrocks_fe_query_resource_group_err|count|cumulative|The number of incorrect queries for each resource group|
 |starrocks_be_resource_group_cpu_limit_ratio|percentage|Instantaneous|Instantaneous value of resource group cpu quota ratio|
 |starrocks_be_resource_group_cpu_use_ratio|percentage|average|The ratio of CPU time used by the resource group to the CPU time of all resource groups|
-|starrocks_be_resource_group_mem_limit_bytes|Byte|Instantaneous|Instantaneous value of resource group memory quota|
-|starrocks_be_resource_group_mem_allocated_bytes|Byte|Instantaneous|Instantaneous value of resource group memory usage|
+|starrocks_be_resource_group_mem_limit_bytes|byte|Instantaneous|Instantaneous value of resource group memory quota|
+|starrocks_be_resource_group_mem_allocated_bytes|byte|Instantaneous|Instantaneous value of resource group memory usage|
+|starrocks_be_pipe_prepare_pool_queue_len|count|Instantaneous|Instantaneous value of pipeline prepare thread pool task queue length|
 
 ## Monitoring Alarm Best Practices
 
 Background information on the monitoring system:
 
 1. The system collects information every 15 seconds.
-2. Some indicators are divided by 15 seconds and the unit is pcs/sec. Some indicators are not divided, and the count is still 15 seconds.
+2. Some indicators are divided by 15 seconds and the unit is count/s. Some indicators are not divided, and the count is still 15 seconds.
 3. P90, P99 and other quantile values are currently counted within 15 seconds. When calculating at a greater granularity (1 minute, 5 minutes, etc.), use "how many alarms greater than a certain value" rather than "what is the average value".
 
 ### References
@@ -253,7 +254,7 @@ This command runs Prometheus in the background and specifies its web port as 909
 
 **4.** Accessing Prometheus
 
-Prometheus can be accessed via BUI. You simply need to open port 9090 in your browser. Go to`Status -> Targets` to see the monitored host nodes for all grouped jobs. Under normal circumstances, all nodes should be `UP`. If the node status is not `UP`, you can visit the StarRocks metrics (<http://fe_host:fe_http_port/metrics> or <http://be_host:be_http_port/metrics>) interface first to check if it is accessible, or check the Prometheus documentation for troubleshooting.
+Prometheus can be accessed via BUI. You simply need to open port 9090 in your browser. Go to`Status -> Targets` to see the monitored host nodes for all grouped jobs. Under normal circumstances, all nodes should be `UP`. If the node status is not `UP`, you can visit the StarRocks metrics (`http://fe_host:fe_http_port/metrics` or `http://be_host:be_http_port/metrics`) interface first to check if it is accessible, or check the Prometheus documentation for troubleshooting.
 
 ![8.10.2-6](../assets/8.10.2-6.png)
 
@@ -293,7 +294,7 @@ nohup ./bin/grafana-server \
 
 #### DashBoard Configuration
 
-Log in to Grafana through the address configured in the previous step <http://grafana_host:8000> with the default username/password (i.e. admin/admin).
+Log in to Grafana through the address configured in the previous step `http://grafana_host:8000` with the default username,password (i.e. admin,admin).
 
 **1.** Add a data source.
 
@@ -304,7 +305,7 @@ Data Source Configuration Introduction
 ![8.10.2-2](../assets/8.10.2-2.png)
 
 * Name: Name of the data source. Can be customized, e.g. starrocks_monitor
-* URL: The web address of Prometheus, e.g. <http://prometheus_host:9090>
+* URL: The web address of Prometheus, e.g. `http://prometheus_host:9090`
 * Access: Select the Server method, i.e., the server where Grafana is located for Prometheus to access.
 The rest of the options are default.
 

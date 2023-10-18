@@ -260,13 +260,25 @@ with tmp as (select ship_mode, if(ship_code > 4, 1, 0) as layer0, if (ship_code 
 select * from t0 where nullif('China', region) = 'China' order by 1,2,3,4,5;
 select * from t0 where nullif('China', region) <> 'China' order by 1,2,3,4,5;
 select * from t0 where nullif('China', region) is NULL order by 1,2,3,4,5;
+select * from t0 where (nullif('China', region) is NULL) is NULL order by 1,2,3,4,5;
+select * from t0 where (nullif('China', region) is NULL) is NOT NULL order by 1,2,3,4,5;
 select * from t0 where nullif('China', region) is NOT NULL order by 1,2,3,4,5;
+select * from t0 where (nullif('China', region) is NOT NULL) is NULL order by 1,2,3,4,5;
+select * from t0 where (nullif('China', region) is NOT NULL) is NOT NULL order by 1,2,3,4,5;
 select * from t0 where nullif('China', region) = 'USA' order by 1,2,3,4,5;
 select * from t0 where nullif('China', region) <>  'USA' order by 1,2,3,4,5;
 select * from t0 where nullif(1, ship_code) = 1 order by 1,2,3,4,5;
 select * from t0 where nullif(1, ship_code) <> 1 order by 1,2,3,4,5;
 select * from t0 where nullif(1, ship_code) is NULL order by 1,2,3,4,5;
+select * from t0 where (nullif(1, ship_code) is NULL) is NULL order by 1,2,3,4,5;
+select * from t0 where (nullif(1, ship_code) is NULL) is NOT NULL order by 1,2,3,4,5;
 select * from t0 where nullif(1, ship_code) is NOT NULL order by 1,2,3,4,5;
+select * from t0 where (nullif(1, ship_code) is NOT NULL) is NULL order by 1,2,3,4,5;
+select * from t0 where (nullif(1, ship_code) is NOT NULL) is NOT NULL order by 1,2,3,4,5;
+SELECT * from t0 WHERE NULLIF(1919971645 = -672243616 , ship_code <  CONV('', 1400516661, -2096754551)) IS NULL order by 1,2,3,4,5;
+SELECT * from t0 WHERE NOT NULLIF(1919971645 = -672243616 , ship_code <  CONV('', 1400516661, -2096754551)) IS NULL;
+SELECT * from t0 WHERE (NULLIF(1919971645 = -672243616 , ship_code <  CONV('', 1400516661, -2096754551)) IS NULL) IS NULL order by 1,2,3,4,5;
+
 select * from t0 where nullif(1, ship_code) = 2 order by 1,2,3,4,5;
 select * from t0 where nullif(1, ship_code) <>  2 order by 1,2,3,4,5;
 select * from t0 where

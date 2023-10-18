@@ -39,6 +39,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
@@ -81,13 +82,22 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitPrepareStatement(PrepareStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitExecuteStatement(ExecuteStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDeallocatePrepareStatement(DeallocateStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+
     // ---------------------------------------- Warehouse Statement ----------------------------------------------------
 
     public R visitShowWarehousesStatement(ShowWarehousesStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    public R visitShowClusterStatement(ShowClustersStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -296,6 +306,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitSetCatalogStatement(SetCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterCatalogStatement(AlterCatalogStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -719,6 +733,23 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    // ------------------------------- DataCache Management Statement -------------------------------------------------
+    public R visitCreateDataCacheRuleStatement(CreateDataCacheRuleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowDataCacheRulesStatement(ShowDataCacheRulesStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropDataCacheRuleStatement(DropDataCacheRuleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitClearDataCacheRulesStatement(ClearDataCacheRulesStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // --------------------------------------- Export Statement --------------------------------------------------------
 
     public R visitExportStatement(ExportStmt statement, C context) {
@@ -904,6 +935,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitOptimizeClause(OptimizeClause clause, C context) {
         return visitNode(clause, context);
     }
 
@@ -1184,6 +1219,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitPlaceholderExpr(PlaceholderExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitParameterExpr(Parameter node, C context) {
         return visitExpression(node, context);
     }
 

@@ -51,7 +51,6 @@ Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* ind
 
     _tracker->consume(mem_usage);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, mem_usage);
-
     return Status::OK();
 }
 
@@ -102,7 +101,6 @@ Status OrderedMemTable::append_selective(const Chunk& src, const uint32_t* index
 
     _tracker->consume(mem_usage);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, mem_usage);
-
     return Status::OK();
 }
 
@@ -132,10 +130,16 @@ StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {
     _permutation.resize(0);
 
     auto& order_bys = segment.order_by_columns;
-    RETURN_IF_ERROR(sort_and_tie_columns(_runtime_state->cancelled_ref(), order_bys, _sort_desc, &_permutation));
+    {
+        SCOPED_TIMER(_spiller->metrics().sort_chunk_timer);
+        RETURN_IF_ERROR(sort_and_tie_columns(_runtime_state->cancelled_ref(), order_bys, _sort_desc, &_permutation));
+    }
 
     ChunkPtr sorted_chunk = _chunk->clone_empty_with_slot(_chunk->num_rows());
-    materialize_by_permutation(sorted_chunk.get(), {_chunk}, _permutation);
+    {
+        SCOPED_TIMER(_spiller->metrics().materialize_chunk_timer);
+        materialize_by_permutation(sorted_chunk.get(), {_chunk}, _permutation);
+    }
 
     return sorted_chunk;
 }

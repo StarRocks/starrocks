@@ -1047,11 +1047,11 @@ void Tablet::delete_all_files() {
     // removing hash_map item and iterating hash_map concurrently.
     std::shared_lock rdlock(_meta_lock);
     for (const auto& it : _rs_version_map) {
-        it.second->remove();
+        (void)it.second->remove();
     }
     _rs_version_map.clear();
     for (const auto& it : _inc_rs_version_map) {
-        it.second->remove();
+        (void)it.second->remove();
     }
     _inc_rs_version_map.clear();
     _stale_rs_version_map.clear();
@@ -1185,78 +1185,84 @@ void Tablet::get_compaction_status(std::string* json_result) {
         }
         // get snapshot version path json_doc
         _timestamped_version_tracker.get_stale_version_path_json_doc(stale_path_arr);
+    }
 
+    {
         std::lock_guard lock(_compaction_task_lock);
-        compaction_running = _compaction_task != nullptr;
-        if (compaction_running) {
-            compaction_task_id = _compaction_task->task_id();
-            compaction_score = _compaction_task->compaction_score();
-            compaction_type = to_string(_compaction_task->compaction_type());
-            compaction_rowsets.reserve(_compaction_task->input_rowsets().size());
-            for (auto& it : _compaction_task->input_rowsets()) {
+        auto task_set = StorageEngine::instance()->compaction_manager()->get_running_task(
+                std::static_pointer_cast<Tablet>(shared_from_this()));
+        compaction_running = task_set.size() > 0;
+        rapidjson::Value compaction_detail;
+        compaction_detail.SetObject();
+
+        rapidjson::Value enable_compaction;
+        enable_compaction.SetBool(_enable_compaction);
+        compaction_detail.AddMember("enable_compaction", enable_compaction, root.GetAllocator());
+
+        rapidjson::Value compaction_status;
+        std::string compaction_status_value = compaction_running ? "RUNNING" : "NO_RUNNING_TASK";
+        compaction_status.SetString(compaction_status_value.c_str(), compaction_status_value.length(),
+                                    root.GetAllocator());
+        compaction_detail.AddMember("compaction_status", compaction_status, root.GetAllocator());
+
+        for (const auto& compaction_task : task_set) {
+            rapidjson::Value task;
+            task.SetObject();
+            compaction_task_id = compaction_task->task_id();
+            compaction_score = compaction_task->compaction_score();
+            compaction_type = to_string(compaction_task->compaction_type());
+            compaction_rowsets.reserve(compaction_task->input_rowsets().size());
+            for (auto& it : compaction_task->input_rowsets()) {
                 compaction_rowsets.push_back(it);
             }
-            compaction_start_time = _compaction_task->get_start_time();
+            compaction_start_time = compaction_task->get_start_time();
             std::sort(compaction_rowsets.begin(), compaction_rowsets.end(), Rowset::comparator);
+
+            rapidjson::Value compaction_task_id_value;
+            compaction_task_id_value.SetUint64(compaction_task_id);
+            task.AddMember("task_id", compaction_task_id_value, root.GetAllocator());
+
+            rapidjson::Value elapsed_time;
+            int64_t elapsed = (UnixMillis() - compaction_start_time) / MILLIS_PER_SEC;
+            elapsed_time.SetInt64(elapsed);
+            task.AddMember("elapsed_time", elapsed_time, root.GetAllocator());
+
+            rapidjson::Value compaction_score_value;
+            compaction_score_value.SetDouble(compaction_score);
+            task.AddMember("score", compaction_score_value, root.GetAllocator());
+
+            rapidjson::Value compaction_type_value;
+            compaction_type_value.SetString(compaction_type.c_str(), compaction_type.length(), root.GetAllocator());
+            task.AddMember("type", compaction_type_value, root.GetAllocator());
+
+            rapidjson::Value compaction_rowsets_count;
+            compaction_rowsets_count.SetUint64(compaction_rowsets.size());
+            task.AddMember("rowsets_count", compaction_rowsets_count, root.GetAllocator());
+
+            rapidjson::Document input_rowset_details;
+            input_rowset_details.SetArray();
+            for (auto& compaction_rowset : compaction_rowsets) {
+                rapidjson::Value value;
+                value.SetObject();
+
+                rapidjson::Value rowset_id;
+                std::string rowset_id_value = compaction_rowset->rowset_id().to_string();
+                rowset_id.SetString(rowset_id_value.c_str(), rowset_id_value.length(), root.GetAllocator());
+                value.AddMember("rowset_id", rowset_id, root.GetAllocator());
+
+                rapidjson::Value version;
+                const Version& ver = compaction_rowset->version();
+                std::string version_value = strings::Substitute("$0-$1", ver.first, ver.second);
+                version.SetString(version_value.c_str(), version_value.length(), root.GetAllocator());
+                value.AddMember("version", version, root.GetAllocator());
+
+                input_rowset_details.PushBack(value, input_rowset_details.GetAllocator());
+            }
+            task.AddMember("input_rowset_details", input_rowset_details, root.GetAllocator());
+            compaction_detail.AddMember("task", task, root.GetAllocator());
         }
+        root.AddMember("compaction_detail", compaction_detail, root.GetAllocator());
     }
-
-    rapidjson::Value compaction_detail;
-    compaction_detail.SetObject();
-
-    rapidjson::Value enable_compaction;
-    enable_compaction.SetBool(_enable_compaction);
-    compaction_detail.AddMember("enable_compaction", enable_compaction, root.GetAllocator());
-
-    rapidjson::Value compaction_status;
-    std::string compaction_status_value = compaction_running ? "RUNNING" : "NO_RUNNING_TASK";
-    compaction_status.SetString(compaction_status_value.c_str(), compaction_status_value.length(), root.GetAllocator());
-    compaction_detail.AddMember("compaction_status", compaction_status, root.GetAllocator());
-
-    if (compaction_running) {
-        rapidjson::Value compaction_task_id_value;
-        compaction_task_id_value.SetUint64(compaction_task_id);
-        compaction_detail.AddMember("task_id", compaction_task_id_value, root.GetAllocator());
-
-        rapidjson::Value elapsed_time;
-        int64_t elapsed = (UnixMillis() - compaction_start_time) / MILLIS_PER_SEC;
-        elapsed_time.SetInt64(elapsed);
-        compaction_detail.AddMember("elapsed_time", elapsed_time, root.GetAllocator());
-
-        rapidjson::Value compaction_score_value;
-        compaction_score_value.SetDouble(compaction_score);
-        compaction_detail.AddMember("score", compaction_score_value, root.GetAllocator());
-
-        rapidjson::Value compaction_type_value;
-        compaction_type_value.SetString(compaction_type.c_str(), compaction_type.length(), root.GetAllocator());
-        compaction_detail.AddMember("type", compaction_type_value, root.GetAllocator());
-
-        rapidjson::Value compaction_rowsets_count;
-        compaction_rowsets_count.SetUint64(compaction_rowsets.size());
-        compaction_detail.AddMember("rowsets_count", compaction_rowsets_count, root.GetAllocator());
-
-        rapidjson::Document input_rowset_details;
-        input_rowset_details.SetArray();
-        for (auto& compaction_rowset : compaction_rowsets) {
-            rapidjson::Value value;
-            value.SetObject();
-
-            rapidjson::Value rowset_id;
-            std::string rowset_id_value = compaction_rowset->rowset_id().to_string();
-            rowset_id.SetString(rowset_id_value.c_str(), rowset_id_value.length(), root.GetAllocator());
-            value.AddMember("rowset_id", rowset_id, root.GetAllocator());
-
-            rapidjson::Value version;
-            const Version& ver = compaction_rowset->version();
-            std::string version_value = strings::Substitute("$0-$1", ver.first, ver.second);
-            version.SetString(version_value.c_str(), version_value.length(), root.GetAllocator());
-            value.AddMember("version", version, root.GetAllocator());
-
-            input_rowset_details.PushBack(value, input_rowset_details.GetAllocator());
-        }
-        compaction_detail.AddMember("input_rowset_details", input_rowset_details, root.GetAllocator());
-    }
-    root.AddMember("compaction_detail", compaction_detail, root.GetAllocator());
 
     root.AddMember("cumulative_point", _cumulative_point.load(), root.GetAllocator());
     rapidjson::Value cumu_value;
@@ -1331,6 +1337,9 @@ void Tablet::get_compaction_status(std::string* json_result) {
 
 void Tablet::do_tablet_meta_checkpoint() {
     std::unique_lock store_lock(_meta_store_lock);
+    if (_will_be_force_replaced) {
+        return;
+    }
     if (_newly_created_rowset_num == 0) {
         return;
     }
@@ -1431,6 +1440,7 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
     tablet_info->__set_storage_medium(_data_dir->storage_medium());
     tablet_info->__set_path_hash(_data_dir->path_hash());
     tablet_info->__set_enable_persistent_index(_tablet_meta->get_enable_persistent_index());
+    tablet_info->__set_primary_index_cache_expire_sec(_tablet_meta->get_primary_index_cache_expire_sec());
     if (_tablet_meta->get_binlog_config() != nullptr) {
         tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
     }
@@ -1543,12 +1553,15 @@ void Tablet::set_compaction_context(std::unique_ptr<CompactionContext>& context)
 
 std::shared_ptr<CompactionTask> Tablet::create_compaction_task() {
     std::lock_guard lock(_compaction_task_lock);
-    if (_compaction_task == nullptr && _enable_compaction) {
+    std::shared_ptr<CompactionTask> compaction_task;
+    if (_enable_compaction && (config::enable_size_tiered_compaction_strategy || !_has_running_compaction)) {
+        // only the size tiered strategy supports the parallelization of compaction tasks under one tablet
         if (_compaction_context) {
-            _compaction_task = _compaction_context->policy->create_compaction(
+            compaction_task = _compaction_context->policy->create_compaction(
                     std::static_pointer_cast<Tablet>(shared_from_this()));
+            _has_running_compaction = compaction_task != nullptr;
         }
-        return _compaction_task;
+        return compaction_task;
     } else {
         return nullptr;
     }
@@ -1556,16 +1569,16 @@ std::shared_ptr<CompactionTask> Tablet::create_compaction_task() {
 
 bool Tablet::has_compaction_task() {
     std::lock_guard lock(_compaction_task_lock);
-    return _compaction_task != nullptr;
+    return StorageEngine::instance()->compaction_manager()->has_running_task(
+            std::static_pointer_cast<Tablet>(shared_from_this()));
 }
 
 bool Tablet::need_compaction() {
     std::lock_guard lock(_compaction_task_lock);
-    if (_compaction_task == nullptr && _enable_compaction) {
+    if (_enable_compaction && (config::enable_size_tiered_compaction_strategy || !_has_running_compaction)) {
+        // only the size tiered strategy supports the parallelization of compaction tasks under one tablet
         _compaction_context->type = INVALID_COMPACTION;
         if (_compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
-            // if there is running task, return false
-            // else, return true
             return true;
         }
     }
@@ -1574,7 +1587,8 @@ bool Tablet::need_compaction() {
 
 bool Tablet::force_base_compaction() {
     std::lock_guard lock(_compaction_task_lock);
-    if (_compaction_task == nullptr && _enable_compaction) {
+    if (_enable_compaction && (config::enable_size_tiered_compaction_strategy || !_has_running_compaction)) {
+        // only the size tiered strategy supports the parallelization of compaction tasks under one tablet
         _compaction_context->type = BASE_COMPACTION;
         if (_compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
             return true;
@@ -1595,16 +1609,16 @@ double Tablet::compaction_score() {
 
 void Tablet::stop_compaction() {
     std::lock_guard lock(_compaction_task_lock);
-    if (_compaction_task) {
-        _compaction_task->stop();
-        _compaction_task = nullptr;
-    }
+    StorageEngine::instance()->compaction_manager()->stop_compaction(
+            std::static_pointer_cast<Tablet>(shared_from_this()));
+    _has_running_compaction = false;
     _enable_compaction = false;
 }
 
-void Tablet::reset_compaction() {
+void Tablet::reset_compaction_status() {
     std::lock_guard lock(_compaction_task_lock);
-    _compaction_task = nullptr;
+    _has_running_compaction = StorageEngine::instance()->compaction_manager()->has_running_task(
+            std::static_pointer_cast<Tablet>(shared_from_this()));
 }
 
 bool Tablet::enable_compaction() {
@@ -1708,12 +1722,17 @@ const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
     return _max_version_schema;
 }
 
-void Tablet::update_max_version_schema(const TabletSchemaSPtr& tablet_schema) {
+void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
     std::lock_guard wrlock(_schema_lock);
     // Double Check for concurrent update
     if (!_max_version_schema || tablet_schema->schema_version() > _max_version_schema->schema_version()) {
-        _max_version_schema = tablet_schema;
+        if (tablet_schema->id() == TabletSchema::invalid_id()) {
+            _max_version_schema = tablet_schema;
+        } else {
+            _max_version_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_schema).first;
+        }
     }
+    _tablet_meta->save_tablet_schema(_max_version_schema, _data_dir);
 }
 
 const TabletSchema& Tablet::unsafe_tablet_schema_ref() const {

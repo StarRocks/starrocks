@@ -52,6 +52,7 @@ import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.http.rest.RestBaseResult;
 import com.starrocks.http.rest.RestResult;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -107,7 +108,7 @@ public class ColocateMetaService {
 
         @Override
         public void executeWithoutPassword(BaseRequest request, BaseResponse response)
-                throws DdlException {
+                throws DdlException, AccessDeniedException {
             if (redirectToLeader(request, response)) {
                 return;
             }

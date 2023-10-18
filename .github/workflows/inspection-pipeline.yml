@@ -1,0 +1,407 @@
+name: INSPECTION PIPELINE
+
+on:
+  schedule:
+    - cron: "10 0 * * 1-5"
+    - cron: "30 5 * * 1-5"
+    - cron: "30 8 * * 1-5"
+    - cron: "30 10 * * 1-5"
+  workflow_dispatch:
+
+concurrency:
+  group: 'INSPECTION-MAIN'
+  cancel-in-progress: false
+
+permissions:
+  checks: write
+  actions: write
+  contents: write
+  deployments: write
+  discussions: write
+  issues: write
+  packages: write
+  pages: write
+  pull-requests: write
+  repository-projects: write
+  security-events: write
+  statuses: write
+
+jobs:
+
+  be-ut:
+    runs-on: [self-hosted, normal]
+    if: github.repository == 'StarRocks/starrocks'
+    timeout-minutes: 180
+    name: BE UT
+    env:
+      BRANCH: 'main'
+    steps:
+      - name: UPDATE ECI & RUN UT
+        id: run_ut
+        shell: bash
+        timeout-minutes: 180
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/elastic-ut.sh --module be --repository ${{ github.repository }} --with-gcov
+
+      - name: clean ECI
+        if: always()
+        run: |
+          echo ${{ steps.run_ut.outputs.ECI_ID }}
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+
+      - name: Upload log
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: BE UT LOG
+          path: ${{ steps.run_ut.outputs.RES_LOG }}
+          retention-days: 1
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -f ${{ steps.run_ut.outputs.RES_FILE }}
+          rm -f ${{ steps.run_ut.outputs.RES_LOG }}
+          rm -rf ${{ github.workspace }}/*
+
+  fe-ut:
+    runs-on: [self-hosted, normal]
+    name: FE UT
+    if: github.repository == 'StarRocks/starrocks'
+    env:
+      BRANCH: 'main'
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
+
+      - name: UPDATE ECI & RUN UT
+        id: run_ut
+        shell: bash
+        timeout-minutes: 60
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/elastic-ut.sh --module fe --build Release --repository ${{ github.repository }}
+
+      - name: Clean ECI
+        if: always()
+        run: |
+          echo ${{ steps.run_ut.outputs.ECI_ID }}
+          echo ">>> Dmesg info:"
+          eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: FE UT LOG
+          path: ${{ steps.run_ut.outputs.RES_LOG }}
+          retention-days: 1
+
+      - name: Download FE UT XML
+        if: always()
+        id: download-ut-xml
+        env:
+          bucket_prefix: ${{ steps.branch.outputs.bucket_prefix }}
+          PR_NUMBER: ${{ steps.run_ut.outputs.PR_NUMBER }}
+        run: |
+          oss_path=oss://${bucket_prefix}-ci-release/$BRANCH/Release/pr/UT-Report/${PR_NUMBER}
+          mkdir fe && cd fe
+          ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/ . --recursive
+          tar zxf fe_ut_report.tar.gz
+
+      - name: Publish UT Report
+        uses: mikepenz/action-junit-report@v4
+        if: always()
+        id: publish_report
+        env:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          check_name: 'FE UT Report'
+          detailed_summary: true
+          fail_on_failure: true
+          report_paths: ./fe/fe-core/target/surefire-reports/*.xml
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
+          rm -f ${{ steps.run_ut.outputs.RES_FILE }}
+          rm -f ${{ steps.run_ut.outputs.RES_LOG }}
+          rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
+          rm -rf ${{ github.workspace }}/*
+
+
+  build:
+    runs-on: [self-hosted, normal]
+    name: BUILD
+    if: github.repository == 'StarRocks/starrocks'
+    env:
+      BRANCH: 'main'
+    outputs:
+      build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
+      pr_number: ${{ steps.run_build.outputs.PR_NUMBER }}
+      base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: UPDATE ECI & RUN BUILD
+        id: run_build
+        shell: bash
+        timeout-minutes: 90
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/elastic-build.sh --repository ${{ github.repository }} --with-gcov
+
+      - name: build result
+        run: |
+          echo ${{ steps.run_build.outputs.OUTPUT_TAR }}
+          echo ${{ steps.run_build.outputs.BASE_VERSION }} > ./base_version.txt
+
+      - name: clean ECI
+        if: always()
+        run: |
+          echo ${{ steps.run_build.outputs.ECI_ID }}
+          eci rm ${{ steps.run_build.outputs.ECI_ID }}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -f ${{ steps.run_build.outputs.RES_FILE }}
+          rm -f ${{ steps.run_build.outputs.RES_LOG }}
+          rm -rf ${{ github.workspace }}
+
+  deploy:
+    runs-on: [self-hosted, normal]
+    if: always() && needs.build.result == 'success'
+    needs: build
+    name: DEPLOY SR
+    env:
+      CLUSTER_NAME: ci-admit
+      BRANCH: 'main'
+      PR_NUMBER: ${{ needs.build.outputs.pr_number }}
+    outputs:
+      fe: ${{steps.deploy_sr.outputs.fe}}
+      be: ${{steps.deploy_sr.outputs.be}}
+      deploy_conf_file: ${{steps.apply_resource.outputs.deploy_conf_file}}
+    steps:
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+
+      - name: Apply for resources
+        id: apply_resource
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/elastic-cluster.sh --template ci-admit
+          cp conf/starrocks_deploy.conf /var/local/env/${PR_NUMBER}-starrocks_deploy.conf
+          echo "deploy_conf_file=/var/local/env/${PR_NUMBER}-starrocks_deploy.conf" >> $GITHUB_OUTPUT
+
+      - name: Deploy SR
+        id: deploy_sr
+        run: |
+          cd ci-tool && source lib/init.sh
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
+          tar_path="oss://${bucket_prefix}-ci-release/$BRANCH/Release/pr/${{needs.build.outputs.build_output_tar}}"
+          echo ${tar_path}
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} --with-coverage
+
+      - run: |
+          echo "FE: ${{ steps.deploy_sr.outputs.fe }}, BE: ${{ steps.deploy_sr.outputs.be }}"
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/* 
+
+  SQL-Tester:
+    runs-on: [self-hosted, normal]
+    name: SQL-Tester
+    needs: [ build, deploy ]
+    if: always() && needs.deploy.result == 'success'
+    timeout-minutes: 60
+    env:
+      PR_NUMBER: ${{ needs.build.outputs.pr_number }}
+      CLUSTER_NAME: ci-admit
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+      BASE_VERSION: ${{needs.build.outputs.base_version}}
+      BRANCH: 'main'
+    outputs:
+      MYSQL_ECI_ID: ${{ steps.run_case.outputs.MYSQL_ECI_ID }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
+
+      - name: Checkout PR
+        run: |
+          git checkout $BRANCH;
+          git reset ${BASE_VERSION} --hard 
+
+      - name: Run Case (${{ needs.deploy.outputs.fe }})
+        id: run_case
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/run-sql-tester.sh
+
+      - name: Prepare Tools
+        id: prepare-tools
+        if: success() || failure()
+        run: |
+          mkdir -p .actions/nose-report-action
+          cd .actions/nose-report-action
+          git clone https://github.com/StarRocks/action-junit-report.git .
+
+      - name: Publish SQL-Tester Report
+        uses: ./.actions/nose-report-action
+        if: always() && steps.prepare-tools.outcome == 'success'
+        with:
+          check_name: 'SQL-Tester Report'
+          fail_on_failure: true
+          detailed_summary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          report_paths: 'test/*.xml'
+
+      - name: Upload log
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: SQL-Tester Log
+          path: test/log/
+          retention-days: 1
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
+  admit:
+    runs-on: [self-hosted, normal]
+    name: ADMIT TEST
+    needs: [ build, deploy, SQL-Tester ]
+    if: always() && needs.deploy.result == 'success'
+    timeout-minutes: 40
+    env:
+      PR_NUMBER: ${{ needs.build.outputs.pr_number }}
+      CLUSTER_NAME: ci-admit
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+      BRANCH: 'main'
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
+
+      - name: Run Case
+        run: |
+          echo "FE: ${{needs.deploy.outputs.fe}}, BE: ${{needs.deploy.outputs.be}}"
+
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+
+          cd ${{ github.workspace }}
+          rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull
+
+          cd ${{ github.workspace }}/ci-tool
+          ./bin/run-admit.sh --pr ${PR_NUMBER} --branch ${{ github.base_ref }} --build Release --repository ${{ github.repository }}
+
+      - name: Prepare Tools
+        if: success() || failure()
+        id: prepare-tools
+        run: |
+          mkdir -p .actions/nose-report-action
+          cd .actions/nose-report-action
+          git clone https://github.com/StarRocks/action-junit-report.git .
+
+      - name: Publish Admit Report
+        uses: ./.actions/nose-report-action
+        if: always() && steps.prepare-tools.outcome == 'success'
+        with:
+          check_name: 'Admit Report'
+          fail_on_failure: true
+          detailed_summary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          report_paths: './StarRocksTest/result/*.xml'
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
+  Teardown:
+    runs-on: [self-hosted, normal]
+    name: Teardown
+    needs: [ deploy, SQL-Tester, admit ]
+    if: always()
+    env:
+      BRANCH: ${{ github.base_ref }}
+      CONF_FILE: ${{ needs.deploy.outputs.deploy_conf_file }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Backup SR Info
+        if: needs.deploy.outputs.deploy_conf_file != ''
+        id: backup
+        run: |
+          set -x
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          cp -f $CONF_FILE ./conf/starrocks_deploy.conf
+          cat ./conf/starrocks_deploy.conf
+
+      - name: Clean ECS
+        if: steps.backup.outcome == 'success'
+        env:
+          SQL_TESTER_RESULT: ${{ needs.SQL-Tester.result }}
+          ADMIT_RESULT: ${{ needs.admit.result }}
+        run: |
+          cd ci-tool && source lib/init.sh
+          ./bin/elastic-cluster.sh --renew 0.5
+
+      - name: save unstable cases
+        if: always()
+        run: |
+          cd ci-tool && source lib/init.sh
+          ./bin/save_unstable_cases.sh
+
+      - name: clean ECI
+        if: always() && needs.SQL-Tester.outputs.MYSQL_ECI_ID != ''
+        run: |
+          eci rm ${{ needs.SQL-Tester.outputs.MYSQL_ECI_ID }}
+
+      - name: Clean
+        if: always()
+        run: |
+          rm -f $CONF_FILE
+          rm -rf ${{ github.workspace }}/*

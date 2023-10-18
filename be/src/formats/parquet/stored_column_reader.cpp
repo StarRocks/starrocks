@@ -631,7 +631,7 @@ Status StoredColumnReader::_next_selected_page(size_t records_to_read, ColumnCon
             RETURN_IF_ERROR(_reader->load_page());
             _num_values_left_in_cur_page = _reader->num_values();
             size_t batch_size = records_to_read;
-            _lazy_load_page_rows(batch_size, content_type, dst);
+            RETURN_IF_ERROR(_lazy_load_page_rows(batch_size, content_type, dst));
             _num_values_skip_in_cur_page = 0;
             break;
         }
@@ -882,7 +882,9 @@ Status OptionalStoredColumnReader::_lazy_skip_values(uint64_t begin) {
 }
 
 Status RepeatedStoredColumnReader::_lazy_skip_values(uint64_t begin) {
-    return _reader->skip_values(_not_null_to_skip);
+    size_t to_skip = _not_null_to_skip;
+    _not_null_to_skip = 0;
+    return _reader->skip_values(to_skip);
 }
 
 Status RequiredStoredColumnReader::_read_values_on_levels(size_t num_values,

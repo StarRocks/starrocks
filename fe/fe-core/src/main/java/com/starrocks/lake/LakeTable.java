@@ -16,7 +16,6 @@ package com.starrocks.lake;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Range;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
@@ -30,33 +29,26 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.StorageVolumeMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Metadata for StarRocks lake table
@@ -75,20 +67,6 @@ public class LakeTable extends OlapTable {
     public LakeTable(long id, String tableName, List<Column> baseSchema, KeysType keysType, PartitionInfo partitionInfo,
                      DistributionInfo defaultDistributionInfo) {
         this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, null);
-    }
-
-    private FilePathInfo getDefaultFilePathInfo() {
-        return tableProperty.getStorageInfo().getFilePathInfo();
-    }
-
-    @Override
-    public String getStoragePath() {
-        return getDefaultFilePathInfo().getFullPath();
-    }
-
-    @Override
-    public FilePathInfo getPartitionFilePathInfo() {
-        return getDefaultFilePathInfo();
     }
 
     @Override
@@ -161,6 +139,9 @@ public class LakeTable extends OlapTable {
                         String.valueOf(storageInfo.isEnableAsyncWriteBack()));
             }
         }
+        // storage volume
+        StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, svm.getStorageVolumeNameOfTable(id));
         return properties;
     }
 
@@ -168,7 +149,7 @@ public class LakeTable extends OlapTable {
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash,
                                           long partitionId, long shardGroupId) {
-        FilePathInfo fsInfo = getPartitionFilePathInfo();
+        FilePathInfo fsInfo = getPartitionFilePathInfo(partitionId);
         FileCacheInfo cacheInfo = getPartitionFileCacheInfo(partitionId);
         Map<String, String> properties = new HashMap<>();
         properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(partitionId));
@@ -216,49 +197,5 @@ public class LakeTable extends OlapTable {
             return CatalogUtils.addEscapeCharacter(comment);
         }
         return TableType.OLAP.name();
-    }
-
-    /**
-     * Check if data cache is allowed for the specified partition's data:
-     *  - If the partition is NOT partitioned by DATE or DATETIME, data cache is allowed
-     *  - If the partition is partitioned by DATE or DATETIME:
-     *    - if the partition's end value (of type DATE/DATETIME) is within the last "datacache.partition_duration"
-     *      duration, allow data cache for the partition.
-     *    - otherwise, disallow the data cache for the partition
-     *
-     * @param partition the partition to check. the partition must belong to this table.
-     * @return true if the partition is enabled for the data cache, false otherwise
-     */
-    public boolean isEnableFillDataCache(Partition partition) {
-        try {
-            return isEnableFillDataCacheImpl(Objects.requireNonNull(partition, "partition is null"));
-        } catch (AnalysisException ignored) {
-            return true;
-        }
-    }
-
-    private boolean isEnableFillDataCacheImpl(Partition partition) throws AnalysisException {
-        PeriodDuration cacheDuration = getTableProperty().getDataCachePartitionDuration();
-        if (cacheDuration != null && getPartitionInfo().isRangePartition()) {
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) getPartitionInfo();
-            Range<PartitionKey> partitionRange = rangePartitionInfo.getRange(partition.getId());
-            Range<PartitionKey> dataCacheRange;
-            if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATETIME)) {
-                LocalDateTime upper = LocalDateTime.now();
-                LocalDateTime lower = upper.minus(cacheDuration);
-                dataCacheRange = Range.openClosed(PartitionKey.ofDateTime(lower), PartitionKey.ofDateTime(upper));
-                return partitionRange.isConnected(dataCacheRange);
-            } else if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATE)) {
-                LocalDate upper = LocalDate.now();
-                LocalDate lower = upper.minus(cacheDuration);
-                dataCacheRange = Range.openClosed(PartitionKey.ofDate(lower), PartitionKey.ofDate(upper));
-                return partitionRange.isConnected(dataCacheRange);
-            } else {
-                // If the table was not partitioned by DATE/DATETIME, ignore the property "datacache.partition_duration" and
-                // enable data cache by default.
-                return true;
-            }
-        }
-        return true;
     }
 }

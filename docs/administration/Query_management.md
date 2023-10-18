@@ -45,7 +45,7 @@ set query_mem_limit  = 137438953472;
 
 ## capacity quota of database storage
 
-The default capacity limit of each DB is 1TB. The quota value can be changed by `alter database`.
+The quota value can be changed by `alter database`.
 
 ```sql
 ALTER DATABASE db_name SET DATA QUOTA quota;

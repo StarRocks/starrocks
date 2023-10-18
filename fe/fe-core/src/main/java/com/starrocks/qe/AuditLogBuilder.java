@@ -104,6 +104,9 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
 
                 // Ignore -1 by default, ignore 0 if annotated with ignore_zero
                 Object value = f.get(event);
+                if (af.ignore_zero() && value == null) {
+                    continue;
+                }
                 if (value instanceof Long) {
                     long longValue = (Long) value;
                     if (longValue == -1 || (longValue == 0 && af.ignore_zero())) {
@@ -144,7 +147,7 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                 }
             }
         } catch (Exception e) {
-            LOG.debug("failed to process audit event", e);
+            LOG.warn("failed to process audit event", e);
         }
     }
 

@@ -1354,7 +1354,7 @@ void build_persistent_index_from_tablet(size_t N) {
 
     auto manager = StorageEngine::instance()->update_manager();
     auto index_entry = manager->index_cache().get_or_create(tablet->tablet_id());
-    index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+    index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(*tablet));
     auto& primary_index = index_entry->value();
     st = primary_index.load(tablet.get());
     if (!st.ok()) {
@@ -2321,6 +2321,32 @@ PARALLEL_TEST(PersistentIndexTest, test_multi_l2_delete) {
         }
     }
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+}
+
+PARALLEL_TEST(PersistentIndexTest, test_l2_versions) {
+    EditVersionWithMerge m1(INT64_MAX, INT64_MAX, true);
+    EditVersionWithMerge m2(INT64_MAX, INT64_MAX, false);
+    EditVersionWithMerge m3(10, 0, true);
+    EditVersionWithMerge m4(10, 0, false);
+    EditVersionWithMerge m5(11, 0, true);
+    EditVersionWithMerge m6(11, 0, false);
+    EditVersionWithMerge m7(11, 1, true);
+    EditVersionWithMerge m8(11, 1, false);
+    EditVersionWithMerge m9(11, 2, true);
+    EditVersionWithMerge m10(11, 2, false);
+    ASSERT_TRUE(m2 < m1);
+    ASSERT_FALSE(m1 < m2);
+    ASSERT_TRUE(m3 < m2);
+    ASSERT_FALSE(m2 < m3);
+    ASSERT_TRUE(m4 < m3);
+    ASSERT_FALSE(m3 < m4);
+    ASSERT_TRUE(m3 < m6);
+    ASSERT_FALSE(m6 < m3);
+    ASSERT_TRUE(m6 < m5);
+    ASSERT_FALSE(m5 < m6);
+    ASSERT_TRUE(m5 < m7);
+    ASSERT_TRUE(m8 < m9);
+    ASSERT_TRUE(m10 < m9);
 }
 
 } // namespace starrocks

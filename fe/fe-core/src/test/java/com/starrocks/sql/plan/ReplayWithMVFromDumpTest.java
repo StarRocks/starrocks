@@ -14,24 +14,38 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.Set;
 
 public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
-        connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
+        connectContext.getSessionVariable().setEnableQueryDebugTrace(true);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
+                                                           boolean isQueryRewrite) {
+                return true;
+            }
+        };
 
         new MockUp<UtFrameUtils>() {
             @Mock
@@ -39,6 +53,15 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 return true;
             }
         };
+    }
+
+    @Before
+    public void before() {
+        super.before();
+    }
+
+    @After
+    public void after() {
     }
 
     @Test
@@ -65,9 +88,14 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     public void testMV_JoinAgg2() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg2");
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode(
-                SessionVariable.MaterializedViewRewriteMode.MODE_FORCE_OR_ERROR);
+        Tracers.register(connectContext);
+        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, connectContext.getSessionVariable());
+        String pr = Tracers.printLogs();
+        System.out.println(pr);
+        Tracers.close();
         Assert.assertTrue(replayPair.second.contains("table: mv1, rollup: mv1"));
         FeConstants.isReplayFromQueryDump = false;
     }
@@ -87,7 +115,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     public void testMV_JoinAgg4() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         connectContext.getSessionVariable().setMaterializedViewRewriteMode(
-                SessionVariable.MaterializedViewRewriteMode.MODE_FORCE_OR_ERROR);
+                SessionVariable.MaterializedViewRewriteMode.MODE_FORCE.toString());
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg4"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
@@ -113,6 +141,15 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                         null, TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second.contains("tbl_mock_017"));
         FeConstants.isReplayFromQueryDump = false;
+    }
+
+    @Test
+    public void testMVOnMV2() throws Exception {
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv2"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("test_mv2"));
     }
 
     @Test
@@ -144,7 +181,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mock_agg_with_having3"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("tbl_mock_023"));
     }
 }

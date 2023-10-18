@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <cstring>
+#include <filesystem>
 
 #include "common/logging.h"
 #include "common/statusor.h"
@@ -44,6 +45,7 @@ TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
     options.disk_spaces.push_back({.path = "./ut_dir/final_entry_not_exist", .size = quota});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
+    options.enable_checksum = false;
 #ifdef WITH_STARCACHE
     options.engine = "starcache";
 #else
@@ -75,6 +77,65 @@ TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
     }
 
     cache->shutdown();
+}
+
+TEST_F(BlockCacheTest, copy_to_iobuf) {
+    // Create an iobuffer which contains 3 blocks
+    const size_t buf_block_size = 100;
+    void* data1 = malloc(buf_block_size);
+    void* data2 = malloc(buf_block_size);
+    void* data3 = malloc(buf_block_size);
+    memset(data1, 1, buf_block_size);
+    memset(data2, 2, buf_block_size);
+    memset(data3, 3, buf_block_size);
+
+    IOBuffer buffer;
+    buffer.append_user_data(data1, buf_block_size, nullptr);
+    buffer.append_user_data(data2, buf_block_size, nullptr);
+    buffer.append_user_data(data3, buf_block_size, nullptr);
+
+    // Copy the last 150 bytes of iobuffer to a target buffer
+    const off_t offset = 150;
+    const size_t size = 150;
+    char result[size] = {0};
+    buffer.copy_to(result, size, offset);
+
+    // Check the target buffer content
+    char expect[size] = {0};
+    memset(expect, 2, 50);
+    memset(expect + 50, 3, 100);
+    ASSERT_EQ(memcmp(result, expect, size), 0);
+}
+
+TEST_F(BlockCacheTest, parse_cache_space_str) {
+    uint64_t mem_size = 10;
+    ASSERT_EQ(parse_mem_size("10"), mem_size);
+    mem_size *= 1024;
+    ASSERT_EQ(parse_mem_size("10K"), mem_size);
+    mem_size *= 1024;
+    ASSERT_EQ(parse_mem_size("10M"), mem_size);
+    mem_size *= 1024;
+    ASSERT_EQ(parse_mem_size("10G"), mem_size);
+    mem_size *= 1024;
+    ASSERT_EQ(parse_mem_size("10T"), mem_size);
+    ASSERT_EQ(parse_mem_size("10%", 10 * 1024), 1024);
+
+    std::string disk_path = "./ut_dir/block_disk_cache";
+    uint64_t disk_size = 10;
+    ASSERT_EQ(parse_disk_size(disk_path, "10"), disk_size);
+    disk_size *= 1024;
+    ASSERT_EQ(parse_disk_size(disk_path, "10K"), disk_size);
+    disk_size *= 1024;
+    ASSERT_EQ(parse_disk_size(disk_path, "10M"), disk_size);
+    disk_size *= 1024;
+    ASSERT_EQ(parse_disk_size(disk_path, "10G"), disk_size);
+    disk_size *= 1024;
+    ASSERT_EQ(parse_disk_size(disk_path, "10T"), disk_size);
+
+    disk_size = parse_disk_size(disk_path, "10%");
+    std::error_code ec;
+    auto space_info = std::filesystem::space(disk_path, ec);
+    ASSERT_EQ(disk_size, int64_t(10.0 / 100.0 * space_info.capacity));
 }
 
 #ifdef WITH_STARCACHE
@@ -148,8 +209,9 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
     Status st = cache->write_cache(cache_key, 0, cache_size, value.c_str());
     ASSERT_TRUE(st.ok());
 
+    WriteCacheOptions write_options;
     std::string value2(cache_size, 'b');
-    st = cache->write_cache(cache_key, 0, cache_size, value2.c_str(), 0, true);
+    st = cache->write_cache(cache_key, 0, cache_size, value2.c_str(), &write_options);
     ASSERT_TRUE(st.ok());
 
     char rvalue[cache_size] = {0};
@@ -158,12 +220,79 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
     std::string expect_value(cache_size, 'b');
     ASSERT_EQ(memcmp(rvalue, expect_value.c_str(), cache_size), 0);
 
+    write_options.overwrite = false;
     std::string value3(cache_size, 'c');
-    st = cache->write_cache(cache_key, 0, cache_size, value3.c_str(), 0, false);
+    st = cache->write_cache(cache_key, 0, cache_size, value3.c_str(), &write_options);
     ASSERT_TRUE(st.is_already_exist());
 
     cache->shutdown();
 }
+
+TEST_F(BlockCacheTest, read_cache_with_adaptor) {
+    std::unique_ptr<BlockCache> cache(new BlockCache);
+    const size_t block_size = 1024 * 1024;
+
+    CacheOptions options;
+    options.mem_space_size = 1024;
+    size_t quota = 500 * 1024 * 1024;
+    options.disk_spaces.push_back({.path = "./ut_dir/block_disk_cache", .size = quota});
+    options.block_size = block_size;
+    options.max_concurrent_inserts = 100000;
+    options.engine = "starcache";
+    options.enable_cache_adaptor = true;
+    options.skip_read_factor = 1;
+    Status status = cache->init(options);
+    ASSERT_TRUE(status.ok());
+
+    const size_t batch_size = block_size - 1234;
+    const size_t rounds = 20;
+    const std::string cache_key = "test_file";
+
+    // write cache
+    for (size_t i = 0; i < rounds; ++i) {
+        char ch = 'a' + i % 26;
+        std::string value(batch_size, ch);
+        Status st = cache->write_cache(cache_key + std::to_string(i), 0, batch_size, value.c_str());
+        ASSERT_TRUE(st.ok());
+    }
+
+    const int kAdaptorWindowSize = 50;
+
+    // record read latencyr to ensure cache latency > remote latency
+    for (size_t i = 0; i < kAdaptorWindowSize; ++i) {
+        cache->record_read_cache(batch_size, 1000000000);
+        cache->record_read_remote(batch_size, 10);
+    }
+
+    // all reads will be reject by cache adaptor
+    for (size_t i = 0; i < rounds; ++i) {
+        char ch = 'a' + i % 26;
+        std::string expect_value(batch_size, ch);
+        char value[batch_size] = {0};
+        ReadCacheOptions opts;
+        auto res = cache->read_cache(cache_key + std::to_string(i), 0, batch_size, value, &opts);
+        ASSERT_TRUE(res.status().is_resource_busy());
+    }
+
+    // record read latencyr to ensure cache latency < remote latency
+    for (size_t i = 0; i < kAdaptorWindowSize; ++i) {
+        cache->record_read_cache(batch_size, 10);
+        cache->record_read_remote(batch_size, 1000000000);
+    }
+
+    // all reads will be accepted by cache adaptor
+    for (size_t i = 0; i < rounds; ++i) {
+        char ch = 'a' + i % 26;
+        std::string expect_value(batch_size, ch);
+        char value[batch_size] = {0};
+        ReadCacheOptions opts;
+        auto res = cache->read_cache(cache_key + std::to_string(i), 0, batch_size, value, &opts);
+        ASSERT_TRUE(res.status().ok());
+    }
+
+    cache->shutdown();
+}
+
 #endif
 
 #ifdef WITH_CACHELIB
@@ -176,8 +305,6 @@ TEST_F(BlockCacheTest, custom_lru_insertion_point) {
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
     options.engine = "cachelib";
-    // insert in the 1/2 of the lru list
-    options.lru_insertion_point = 1;
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
 

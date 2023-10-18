@@ -50,7 +50,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
-import com.starrocks.sql.ast.ShowClustersStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
@@ -181,20 +180,6 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowWarehousesStatement(ShowWarehousesStmt node, ConnectContext context) {
-            return null;
-        }
-
-        @Override
-        public Void visitShowClusterStatement(ShowClustersStmt node, ConnectContext context) {
-            String warehouseName;
-            if (node.getWarehouseName() != null) {
-                warehouseName = node.getWarehouseName();
-            } else {
-                warehouseName = context.getCurrentWarehouse();
-            }
-            if (!GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(warehouseName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, warehouseName);
-            }
             return null;
         }
 

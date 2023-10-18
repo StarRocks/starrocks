@@ -51,6 +51,8 @@ Status HashJoinBuildOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 void HashJoinBuildOperator::close(RuntimeState* state) {
+    COUNTER_SET(_join_builder->build_metrics().hash_table_memory_usage,
+                _join_builder->hash_join_builder()->hash_table_mem_usage());
     _join_builder->unref(state);
 
     Operator::close(state);
@@ -63,22 +65,21 @@ StatusOr<ChunkPtr> HashJoinBuildOperator::pull_chunk(RuntimeState* state) {
 }
 
 size_t HashJoinBuildOperator::output_amplification_factor() const {
-    if (_avg_keys_perf_bucket > 0) {
-        return _avg_keys_perf_bucket;
+    if (_avg_keys_per_bucket > 0) {
+        return _avg_keys_per_bucket;
     }
+    _avg_keys_per_bucket = _join_builder->avg_keys_per_bucket();
+    _avg_keys_per_bucket = std::max<size_t>(_avg_keys_per_bucket, 1);
 
-    _avg_keys_perf_bucket = _join_builder->avg_keys_perf_bucket();
-    _avg_keys_perf_bucket = std::max<size_t>(_avg_keys_perf_bucket, 1);
-
-    auto* counter = ADD_COUNTER(_unique_metrics, "AvgKeysPerBuckets", TUnit::UNIT);
-    COUNTER_SET(counter, static_cast<int64_t>(_avg_keys_perf_bucket));
-
-    return _avg_keys_perf_bucket;
+    return _avg_keys_per_bucket;
 }
 
 Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     DeferOp op([this]() { _is_finished = true; });
 
+    if (state->is_cancelled()) {
+        return Status::Cancelled("runtime state is cancelled");
+    }
     RETURN_IF_ERROR(_join_builder->build_ht(state));
 
     size_t merger_index = _driver_sequence;

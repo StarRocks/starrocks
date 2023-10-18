@@ -68,7 +68,7 @@ Status JsonScanner::open() {
         RETURN_IF_ERROR(parse_json_paths(range.jsonpaths, &_json_paths));
     }
     if (range.__isset.json_root) {
-        JsonFunctions::parse_json_paths(range.json_root, &_root_paths);
+        RETURN_IF_ERROR(JsonFunctions::parse_json_paths(range.json_root, &_root_paths));
     }
     if (range.__isset.strip_outer_array) {
         _strip_outer_array = range.strip_outer_array;
@@ -254,7 +254,7 @@ Status JsonScanner::parse_json_paths(const std::string& jsonpath, std::vector<st
             std::vector<SimpleJsonPath> parsed_paths;
             const char* cstr = path.get_c_str();
 
-            JsonFunctions::parse_json_paths(std::string(cstr), &parsed_paths);
+            RETURN_IF_ERROR(JsonFunctions::parse_json_paths(std::string(cstr), &parsed_paths));
             path_vecs->emplace_back(std::move(parsed_paths));
         }
         return Status::OK();
@@ -365,7 +365,7 @@ Status JsonReader::open() {
 }
 
 JsonReader::~JsonReader() {
-    close();
+    (void)close();
 }
 
 Status JsonReader::close() {

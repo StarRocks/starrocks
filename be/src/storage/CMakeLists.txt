@@ -82,6 +82,7 @@ add_library(Storage STATIC
     rowset/default_value_column_iterator.cpp
     rowset/dictcode_column_iterator.cpp
     rowset/encoding_info.cpp
+    rowset/fill_subfield_iterator.cpp
     rowset/scalar_column_iterator.cpp
     rowset/index_page.cpp
     rowset/indexed_column_reader.cpp
@@ -137,6 +138,9 @@ add_library(Storage STATIC
     projection_iterator.cpp
     push_handler.cpp
     row_source_mask.cpp
+    row_store_encoder.cpp
+    row_store_encoder_simple.cpp
+    row_store_encoder_factory.cpp
     schema_change.cpp
     schema_change_utils.cpp
     tablet_reader.cpp

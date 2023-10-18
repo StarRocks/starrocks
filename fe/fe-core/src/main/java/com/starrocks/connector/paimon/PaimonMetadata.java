@@ -24,9 +24,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -39,13 +41,20 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
+import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.predicate.Predicate;
+import org.apache.paimon.predicate.PredicateBuilder;
+import org.apache.paimon.reader.RecordReader;
+import org.apache.paimon.reader.RecordReaderIterator;
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
+import org.apache.paimon.table.system.SchemasTable;
 import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.DataType;
+import org.apache.paimon.types.RowType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -58,6 +67,7 @@ import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 public class PaimonMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(PaimonMetadata.class);
     private final Catalog paimonNativeCatalog;
+    private final HdfsEnvironment hdfsEnvironment;
     private final String catalogType;
     private final String metastoreUris;
     private final String warehousePath;
@@ -65,9 +75,11 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final Map<Identifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PaimonFilter, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
-    public PaimonMetadata(String catalogName, Catalog paimonNativeCatalog,
+
+    public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
                           String catalogType, String metastoreUris, String warehousePath) {
         this.paimonNativeCatalog = paimonNativeCatalog;
+        this.hdfsEnvironment = hdfsEnvironment;
         this.catalogType = catalogType;
         this.metastoreUris = metastoreUris;
         this.warehousePath = warehousePath;
@@ -146,26 +158,34 @@ public class PaimonMetadata implements ConnectorMetadata {
         try {
             paimonNativeTable = this.paimonNativeCatalog.getTable(identifier);
         } catch (Catalog.TableNotExistException e) {
-            LOG.error("Paimon table {}.{} does not exist.", dbName, tblName);
+            LOG.error("Paimon table {}.{} does not exist.", dbName, tblName, e);
             return null;
         }
         List<DataField> fields = paimonNativeTable.rowType().getFields();
         ArrayList<Column> fullSchema = new ArrayList<>(fields.size());
         for (DataField field : fields) {
             String fieldName = field.name();
-            Type fieldType = ColumnTypeConverter.fromPaimonType(field.type());
+            DataType type = field.type();
+            Type fieldType = ColumnTypeConverter.fromPaimonType(type);
             Column column = new Column(fieldName, fieldType, true);
             fullSchema.add(column);
         }
+        long createTime = 0;
+        try {
+            createTime = getTableCreateTime(dbName, tblName);
+        } catch (Exception e) {
+            LOG.error("Get paimon table {}.{} createtime failed, error: {}", dbName, tblName, e);
+        }
         PaimonTable table = new PaimonTable(catalogName, dbName, tblName, fullSchema,
-                catalogType, metastoreUris, warehousePath, paimonNativeTable);
+                catalogType, metastoreUris, warehousePath, paimonNativeTable, createTime);
         tables.put(identifier, table);
         return table;
     }
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate, List<String> fieldNames) {
+                                                   long snapshotId, ScalarOperator predicate,
+                                                   List<String> fieldNames, long limit) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         PaimonTable paimonTable = (PaimonTable) table;
         PaimonFilter filter = new PaimonFilter(paimonTable.getDbName(), paimonTable.getTableName(), predicate, fieldNames);
@@ -193,7 +213,8 @@ public class PaimonMetadata implements ConnectorMetadata {
                                          Table table,
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate) {
+                                         ScalarOperator predicate,
+                                         long limit) {
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
@@ -201,14 +222,10 @@ public class PaimonMetadata implements ConnectorMetadata {
 
         List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                catalogName, table, null, -1, predicate, fieldNames);
+                catalogName, table, null, -1, predicate, fieldNames, limit);
         RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
         List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
-        long rowCount = 0;
-        for (Split split : splits) {
-            DataSplit dataSplit = (DataSplit) split;
-            rowCount += dataSplit.files().stream().map(DataFileMeta::rowCount).reduce(0L, Long::sum);
-        }
+        long rowCount = getRowCount(splits);
         if (rowCount == 0) {
             builder.setOutputRowCount(1);
         } else {
@@ -216,6 +233,15 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
 
         return builder.build();
+    }
+
+    public static long getRowCount(List<? extends Split> splits) {
+        long rowCount = 0;
+        for (Split split : splits) {
+            DataSplit dataSplit = (DataSplit) split;
+            rowCount += dataSplit.dataFiles().stream().map(DataFileMeta::rowCount).reduce(0L, Long::sum);
+        }
+        return rowCount;
     }
 
     private List<Predicate> extractPredicates(PaimonTable paimonTable, ScalarOperator predicate) {
@@ -230,5 +256,43 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
         }
         return predicates;
+    }
+
+    @Override
+    public CloudConfiguration getCloudConfiguration() {
+        return hdfsEnvironment.getCloudConfiguration();
+    }
+
+    public long getTableCreateTime(String dbName, String tblName) throws Exception {
+        Identifier sysIdentifier = new Identifier(dbName, String.format("%s%s", tblName, "$schemas"));
+        RecordReaderIterator<InternalRow> iterator = null;
+        try {
+            SchemasTable table = (SchemasTable) paimonNativeCatalog.getTable(sysIdentifier);
+            RowType rowType = table.rowType();
+            if (!rowType.getFieldNames().contains("update_time")) {
+                return 0;
+            }
+            int[] projected = new int[] {0, 6};
+            PredicateBuilder predicateBuilder = new PredicateBuilder(rowType);
+            Predicate equal = predicateBuilder.equal(predicateBuilder.indexOf("schema_id"), 0);
+            RecordReader<InternalRow> recordReader = table.newReadBuilder().withProjection(projected).
+                    withFilter(equal).newRead().createReader(table.newScan().plan());
+            iterator = new RecordReaderIterator<>(recordReader);
+            while (iterator.hasNext()) {
+                InternalRow rowData = iterator.next();
+                Long schemaIdValue = rowData.getLong(0);
+                org.apache.paimon.data.Timestamp updateTime = rowData.getTimestamp(1, 3);
+                if (schemaIdValue == 0) {
+                    return updateTime.getMillisecond();
+                }
+            }
+        } catch (Exception e) {
+            LOG.error("Get paimon table {}.{} createtime failed, error: {}", dbName, tblName, e);
+        } finally {
+            if (iterator != null) {
+                iterator.close();
+            }
+        }
+        return 0;
     }
 }

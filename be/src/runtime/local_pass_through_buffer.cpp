@@ -24,7 +24,7 @@ namespace starrocks {
 // channel per [sender_id]
 class PassThroughSenderChannel {
 public:
-    PassThroughSenderChannel() = default;
+    PassThroughSenderChannel(std::atomic_int64_t& total_bytes) : _total_bytes(total_bytes) {}
 
     ~PassThroughSenderChannel() {
         if (_physical_bytes > 0) {
@@ -44,6 +44,7 @@ public:
         _buffer.emplace_back(std::make_pair(std::move(clone), driver_sequence));
         _bytes.push_back(chunk_size);
         _physical_bytes += physical_bytes;
+        _total_bytes += physical_bytes;
     }
     void pull_chunks(ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
         std::unique_lock lock(_mutex);
@@ -52,6 +53,7 @@ public:
 
         // Consume physical bytes in current MemTracker, since later it would be released
         CurrentThread::current().mem_consume(_physical_bytes);
+        _total_bytes -= _physical_bytes;
         _physical_bytes = 0;
     }
 
@@ -60,6 +62,7 @@ private:
     ChunkUniquePtrVector _buffer;
     std::vector<size_t> _bytes;
     int64_t _physical_bytes = 0; // Physical consumed bytes for each chunk
+    std::atomic_int64_t& _total_bytes;
 };
 
 // channel per [fragment_instance_id, dest_node_id]
@@ -69,7 +72,7 @@ public:
         std::unique_lock lock(_mutex);
         auto it = _sender_id_to_channel.find(sender_id);
         if (it == _sender_id_to_channel.end()) {
-            auto* channel = new PassThroughSenderChannel();
+            auto* channel = new PassThroughSenderChannel(_total_bytes);
             _sender_id_to_channel.emplace(std::make_pair(sender_id, channel));
             return channel;
         } else {
@@ -83,9 +86,12 @@ public:
         _sender_id_to_channel.clear();
     }
 
+    int64_t get_total_bytes() const { return _total_bytes; }
+
 private:
     std::mutex _mutex;
     std::unordered_map<int, PassThroughSenderChannel*> _sender_id_to_channel;
+    std::atomic_int64_t _total_bytes = 0;
 };
 
 PassThroughChunkBuffer::PassThroughChunkBuffer(const TUniqueId& query_id)
@@ -122,6 +128,10 @@ void PassThroughContext::append_chunk(int sender_id, const Chunk* chunk, size_t 
 void PassThroughContext::pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
     PassThroughSenderChannel* sender_channel = _channel->get_or_create_sender_channel(sender_id);
     sender_channel->pull_chunks(chunks, bytes);
+}
+
+int64_t PassThroughContext::total_bytes() const {
+    return _channel->get_total_bytes();
 }
 
 void PassThroughChunkBufferManager::open_fragment_instance(const TUniqueId& query_id) {

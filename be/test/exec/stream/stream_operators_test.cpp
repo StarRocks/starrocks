@@ -141,7 +141,7 @@ DescriptorTbl* StreamOperatorsTest::_create_table_desc(int num_columns, int chun
     tuple_desc_builder.build(&desc_tbl_builder);
 
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(_runtime_state, _obj_pool, desc_tbl_builder.desc_tbl(), &tbl, chunk_size);
+    CHECK(DescriptorTbl::create(_runtime_state, _obj_pool, desc_tbl_builder.desc_tbl(), &tbl, chunk_size).ok());
     _runtime_state->set_desc_tbl(tbl);
     return tbl;
 }
@@ -361,7 +361,7 @@ TEST_F(StreamOperatorsTest, binlog_dop_1) {
             auto tnode = _create_tplan_node(next_plan_node_id(), 0);
             auto binlog_scan_node = std::make_shared<starrocks::ConnectorScanNode>(_obj_pool, *tnode, *descs);
             _connector_node = binlog_scan_node;
-            Status status = binlog_scan_node->init(*tnode, _runtime_state);
+            ASSERT_TRUE(binlog_scan_node->init(*tnode, _runtime_state).ok());
             auto scan_ranges = _create_binlog_scan_ranges(_degree_of_parallelism);
             _generate_morse_queue(binlog_scan_node.get(), scan_ranges, _degree_of_parallelism);
             OpFactories op_factories = binlog_scan_node->decompose_to_pipeline(_pipeline_context);

@@ -15,6 +15,8 @@
 #pragma once
 #include <gtest/gtest.h>
 
+#include <utility>
+
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
@@ -23,13 +25,14 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
+#include "storage/tablet_meta_manager.h"
 #include "testutil/assert.h"
 
 namespace starrocks::lake {
 
 class TestBase : public ::testing::Test {
 public:
-    virtual ~TestBase() override {
+    ~TestBase() override {
         // Wait for all vacuum tasks finished processing before destroying
         // _tablet_mgr.
         ExecEnv::GetInstance()->vacuum_thread_pool()->wait();
@@ -37,8 +40,8 @@ public:
     }
 
 protected:
-    explicit TestBase(const std::string& test_dir, int64_t cache_limit = 1024 * 1024)
-            : _test_dir(test_dir),
+    explicit TestBase(std::string test_dir, int64_t cache_limit = 1024 * 1024)
+            : _test_dir(std::move(test_dir)),
               _parent_tracker(std::make_unique<MemTracker>(-1)),
               _mem_tracker(std::make_unique<MemTracker>(-1, "", _parent_tracker.get())),
               _lp(std::make_unique<FixedLocationProvider>(_test_dir)),
@@ -54,6 +57,13 @@ protected:
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kTxnLogDirectoryName)));
+    }
+
+    void check_local_persistent_index_meta(int64_t tablet_id, int64_t expected_version) {
+        PersistentIndexMetaPB index_meta;
+        DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store();
+        CHECK_OK(TabletMetaManager::get_persistent_index_meta(data_dir, tablet_id, &index_meta));
+        ASSERT_TRUE(index_meta.version().major_number() == expected_version);
     }
 
     std::string _test_dir;

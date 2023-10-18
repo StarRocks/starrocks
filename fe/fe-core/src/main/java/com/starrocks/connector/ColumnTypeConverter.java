@@ -40,12 +40,14 @@ import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.BinaryType;
 import org.apache.paimon.types.BooleanType;
 import org.apache.paimon.types.CharType;
+import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataTypeDefaultVisitor;
 import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
+import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
@@ -60,6 +62,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.ScalarType.MAX_VARCHAR_LENGTH;
 import static com.starrocks.catalog.Type.BIGINT;
 import static com.starrocks.catalog.Type.BOOLEAN;
 import static com.starrocks.catalog.Type.DATE;
@@ -214,7 +217,7 @@ public class ColumnTypeConverter {
             throw new StarRocksConnectorException("Unsupported Hive type: %s. Supported CHAR types: CHAR(<=%d).",
                     type, HiveChar.MAX_CHAR_LENGTH);
         } else if (type.isVarchar()) {
-            if (type.getColumnSize() == -1) {
+            if (type.getColumnSize() == -1 || type.getColumnSize() == MAX_VARCHAR_LENGTH) {
                 return stringTypeInfo;
             }
             if (type.getColumnSize() <= HiveVarchar.MAX_VARCHAR_LENGTH) {
@@ -319,6 +322,7 @@ public class ColumnTypeConverter {
                 if (!isConvertedFailed) {
                     return new StructType(structFields);
                 }
+                break;
             case MAP:
                 Schema value = avroSchema.getValueType();
                 Type valueType = fromHudiType(value);
@@ -331,6 +335,7 @@ public class ColumnTypeConverter {
                     // Hudi map's key must be string
                     return new MapType(ScalarType.createDefaultExternalTableString(), valueType);
                 }
+                break;
             case UNION:
                 List<Schema> nonNullMembers = avroSchema.getTypes().stream()
                         .filter(schema -> !Schema.Type.NULL.equals(schema.getType()))
@@ -554,17 +559,16 @@ public class ColumnTypeConverter {
             return new MapType(fromPaimonType(mapType.getKeyType()), fromPaimonType(mapType.getValueType()));
         }
 
-        // TODO: uncomment this and unit test case when this type is supported in paimon connector
-        //public Type visit(RowType rowType) {
-        //    List<DataField> fields = rowType.getFields();
-        //    ArrayList<StructField> structFields = new ArrayList<>(fields.size());
-        //    for (DataField field : fields) {
-        //        String fieldName = field.name();
-        //        Type fieldType = fromPaimonType(field.type());
-        //        structFields.add(new StructField(fieldName, fieldType));
-        //    }
-        //    return new StructType(structFields);
-        //}
+        public Type visit(RowType rowType) {
+            List<DataField> fields = rowType.getFields();
+            ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+            for (DataField field : fields) {
+                String fieldName = field.name();
+                Type fieldType = fromPaimonType(field.type());
+                structFields.add(new StructField(fieldName, fieldType));
+            }
+            return new StructType(structFields);
+        }
 
         @Override
         protected Type defaultMethod(org.apache.paimon.types.DataType dataType) {

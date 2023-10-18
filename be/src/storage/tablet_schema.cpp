@@ -251,7 +251,8 @@ void TabletColumn::init_from_thrift(const TColumn& tcolumn) {
     auto shared_tcolumn_desc = std::make_shared<TColumn>(tcolumn);
     convert_to_new_version(shared_tcolumn_desc.get());
 
-    t_column_to_pb_column(_unique_id, *shared_tcolumn_desc, &column_pb);
+    WARN_IF_ERROR(t_column_to_pb_column(_unique_id, *shared_tcolumn_desc, &column_pb),
+                  "failed to covert TColumn to ColumnPB");
     init_from_pb(column_pb);
 }
 
@@ -285,7 +286,7 @@ void TabletSchema::append_column(TabletColumn column) {
     if (column.is_key()) {
         _num_key_columns++;
     }
-    _field_id_to_index[column.unique_id()] = _num_columns;
+    _unique_id_to_index[column.unique_id()] = _num_columns;
     _cols.push_back(std::move(column));
     if (_sort_key_idxes_set.count(_num_columns) > 0) {
         _cols[_num_columns].set_is_sort_key(true);
@@ -294,7 +295,7 @@ void TabletSchema::append_column(TabletColumn column) {
 }
 
 void TabletSchema::clear_columns() {
-    _field_id_to_index.clear();
+    _unique_id_to_index.clear();
     _num_columns = 0;
     _num_key_columns = 0;
     _cols.clear();
@@ -327,6 +328,10 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaPB& schema_
     return std::make_shared<TabletSchema>(schema_pb, schema_map);
 }
 
+// Be careful
+// When you use this function to create a new partial tablet schema, please make sure `referenced_column_ids` include
+// all sort key column index of `src_tablet_schema`. Otherwise you need to recalculate the short key columns of the
+// partial tablet schema
 std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_tablet_schema,
                                                    const std::vector<int32_t>& referenced_column_ids) {
     TabletSchemaPB partial_tablet_schema_pb;
@@ -338,10 +343,17 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_
     if (src_tablet_schema->has_bf_fpp()) {
         partial_tablet_schema_pb.set_bf_fpp(src_tablet_schema->bf_fpp());
     }
+    std::vector<ColumnId> sort_key_idxes;
+    uint32_t cid = 0;
     for (const auto referenced_column_id : referenced_column_ids) {
         auto* tablet_column = partial_tablet_schema_pb.add_column();
         src_tablet_schema->column(referenced_column_id).to_schema_pb(tablet_column);
+        if (src_tablet_schema->column(referenced_column_id).is_sort_key()) {
+            sort_key_idxes.emplace_back(cid);
+        }
+        cid++;
     }
+    partial_tablet_schema_pb.mutable_sort_key_idxes()->Add(sort_key_idxes.begin(), sort_key_idxes.end());
     return std::make_shared<TabletSchema>(partial_tablet_schema_pb);
 }
 
@@ -408,22 +420,34 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
         if (column.is_key()) {
             _num_key_columns++;
         }
-        _field_id_to_index[column.unique_id()] = _num_columns;
+        _unique_id_to_index[column.unique_id()] = _num_columns;
         _num_columns++;
     }
-    if (schema.sort_key_idxes().empty()) {
-        _sort_key_idxes.reserve(_num_key_columns);
-        for (auto i = 0; i < _num_key_columns; ++i) {
-            _sort_key_idxes.push_back(i);
-            _sort_key_idxes_set.emplace(i);
+
+    // There are three conditions:
+    // 1. sort_key_unique_ids is not empty, sort key column should be located by unique id
+    // 2. sort_key_unique_ids is empty but sort_key_idxes is not empty. This table maybe create in
+    //    old version and upgrade, sort key column shoud be located by sort key column index
+    // 3. both of them are empty, sort key columns are equal to key columns
+    if (!schema.sort_key_unique_ids().empty()) {
+        for (auto uid : schema.sort_key_unique_ids()) {
+            _sort_key_uids.emplace_back(uid);
+            _sort_key_idxes.emplace_back(_unique_id_to_index.at(uid));
         }
-    } else {
+    } else if (!schema.sort_key_idxes().empty()) {
         _sort_key_idxes.reserve(schema.sort_key_idxes_size());
         for (auto i = 0; i < schema.sort_key_idxes_size(); ++i) {
             _sort_key_idxes.push_back(schema.sort_key_idxes(i));
             _sort_key_idxes_set.emplace(schema.sort_key_idxes(i));
         }
+    } else {
+        _sort_key_idxes.reserve(_num_key_columns);
+        for (auto i = 0; i < _num_key_columns; ++i) {
+            _sort_key_idxes.push_back(i);
+            _sort_key_idxes_set.emplace(i);
+        }
     }
+
     for (auto cid : _sort_key_idxes) {
         _cols[cid].set_is_sort_key(true);
     }
@@ -440,11 +464,11 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
     _schema_version = schema.schema_version();
 }
 
-void TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t version, const POlapTableIndexSchema& index,
-                                               const TabletSchemaCSPtr& ori_tablet_schema) {
+Status TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t version, const POlapTableIndexSchema& index,
+                                                 const TabletSchemaCSPtr& ori_tablet_schema) {
     // copy from ori_tablet_schema
     _keys_type = ori_tablet_schema->keys_type();
-    _num_short_key_columns = ori_tablet_schema->num_short_key_columns();
+    _num_short_key_columns = index.column_param().short_key_column_count();
     _num_rows_per_row_block = ori_tablet_schema->num_rows_per_row_block();
     _compression_type = ori_tablet_schema->compression_type();
 
@@ -454,12 +478,14 @@ void TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t version
     _num_key_columns = 0;
     _num_columns = 0;
     bool has_bf_columns = false;
+
     _cols.clear();
-    _field_id_to_index.clear();
+    _unique_id_to_index.clear();
+    _sort_key_uids.clear();
 
     _schema_version = version;
     if (index.id() == index_id) {
-        for (auto& pcolumn : index.columns_desc()) {
+        for (auto& pcolumn : index.column_param().columns_desc()) {
             TabletColumn column;
             column.init_from_pb(pcolumn);
             if (column.is_key()) {
@@ -468,14 +494,29 @@ void TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t version
             if (column.is_bf_column()) {
                 has_bf_columns = true;
             }
-            _field_id_to_index[column.unique_id()] = _num_columns;
+            _unique_id_to_index[column.unique_id()] = _num_columns;
             _cols.emplace_back(std::move(column));
             _num_columns++;
         }
     }
 
-    for (auto cid : _sort_key_idxes) {
-        _cols[cid].set_is_sort_key(true);
+    if (!index.column_param().sort_key_uid().empty()) {
+        _sort_key_idxes.clear();
+        for (auto uid : index.column_param().sort_key_uid()) {
+            auto it = _unique_id_to_index.find(uid);
+            if (it == _unique_id_to_index.end()) {
+                std::string msg = strings::Substitute("sort key column uid: $0 is not exist in columns", uid);
+                LOG(WARNING) << msg;
+                return Status::InternalError(msg);
+            }
+            _sort_key_uids.emplace_back(uid);
+            _sort_key_idxes.emplace_back(it->second);
+            _cols[it->second].set_is_sort_key(true);
+        }
+    } else {
+        for (auto cid : _sort_key_idxes) {
+            _cols[cid].set_is_sort_key(true);
+        }
     }
     if (has_bf_columns) {
         _has_bf_fpp = true;
@@ -484,6 +525,7 @@ void TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t version
         _has_bf_fpp = false;
         _bf_fpp = BLOOM_FILTER_DEFAULT_FPP;
     }
+    return Status::OK();
 }
 
 void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
@@ -502,6 +544,7 @@ void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
     tablet_schema_pb->set_next_column_unique_id(_next_column_unique_id);
     tablet_schema_pb->set_compression_type(_compression_type);
     tablet_schema_pb->mutable_sort_key_idxes()->Add(_sort_key_idxes.begin(), _sort_key_idxes.end());
+    tablet_schema_pb->mutable_sort_key_unique_ids()->Add(_sort_key_uids.begin(), _sort_key_uids.end());
     tablet_schema_pb->set_schema_version(_schema_version);
 }
 
@@ -525,8 +568,8 @@ size_t TabletSchema::field_index(std::string_view field_name) const {
 }
 
 int32_t TabletSchema::field_index(int32_t col_unique_id) const {
-    const auto& found = _field_id_to_index.find(col_unique_id);
-    return (found == _field_id_to_index.end()) ? -1 : found->second;
+    const auto& found = _unique_id_to_index.find(col_unique_id);
+    return (found == _unique_id_to_index.end()) ? -1 : found->second;
 }
 
 const std::vector<TabletColumn>& TabletSchema::columns() const {

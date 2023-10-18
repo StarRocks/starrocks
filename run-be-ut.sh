@@ -150,6 +150,13 @@ if [ "${USE_STAROS}" == "ON"  ]; then
   fi
   export STARLET_INSTALL_DIR
 fi
+
+# Temporarily keep the default behavior same as before to avoid frequent thirdparty update.
+# Once the starcache version is stable, we will turn on it by default.
+if [[ -z ${WITH_STARCACHE} ]]; then
+  WITH_STARCACHE=${USE_STAROS}
+fi
+
 ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
             -DSTARROCKS_HOME=${STARROCKS_HOME} \
@@ -160,7 +167,7 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
             -DWITH_CACHELIB=${WITH_CACHELIB} \
-            -DWITH_STARCACHE=${USE_STAROS} \
+            -DWITH_STARCACHE=${WITH_STARCACHE} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 
 ${BUILD_SYSTEM} -j${PARALLEL}
@@ -240,7 +247,7 @@ test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
 if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
   echo "Run test: ${STARROCKS_TEST_BINARY_DIR}/starrocks_test"
   if [ ${DRY_RUN} -eq 0 ]; then
-    if [ -x ${GTEST_PARALLEL} ]; then
+    if [ -x "${GTEST_PARALLEL}" ]; then
         ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test \
             --gtest_filter=${TEST_NAME} \
             --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
@@ -250,13 +257,13 @@ if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
   fi
 fi
 
-for test in $test_files
+for test_bin in $test_files
 do
-    echo "Run test: $test"
+    echo "Run test: $test_bin"
     if [ ${DRY_RUN} -eq 0 ]; then
-        file_name=${test##*/}
+        file_name=${test_bin##*/}
         if [ -z $RUN_FILE ] || [ $file_name == $RUN_FILE ]; then
-            $test $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
+            $test_bin $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
         fi
     fi
 done

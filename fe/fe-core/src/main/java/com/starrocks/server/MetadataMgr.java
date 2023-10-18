@@ -24,19 +24,18 @@ import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.View;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.CatalogConnector;
@@ -56,7 +55,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
-import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -203,6 +201,9 @@ public class MetadataMgr {
     public void dropDb(String catalogName, String dbName, boolean isForce) throws DdlException, MetaNotFoundException {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         if (connectorMetadata.isPresent()) {
+            if (getDb(catalogName, dbName) == null) {
+                throw new MetaNotFoundException(String.format("Database %s.%s doesn't exists", catalogName, dbName));
+            }
             connectorMetadata.get().dropDb(dbName, isForce);
         }
     }
@@ -273,33 +274,12 @@ public class MetadataMgr {
         connectorMetadata.ifPresent(metadata -> {
             try {
                 metadata.dropTable(stmt);
-                inactiveViews(ImmutableList.of(new TableName(dbName, tableName)),
-                        "table [" + tableName + "] " + " has been dropped");
             } catch (DdlException e) {
                 LOG.error("Failed to drop table {}.{}.{}", catalogName, dbName, tableName, e);
                 throw new StarRocksConnectorException("Failed to drop table %s.%s.%s. msg: %s",
                         catalogName, dbName, tableName, e.getMessage());
             }
         });
-    }
-
-    public static void inactiveViews(List<TableName> tableNames, String reason) {
-        List<Long> allDbIds = GlobalStateMgr.getCurrentState().getDbIds();
-        List<View> views = Lists.newArrayList();
-        for (Long viewDbId : allDbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(viewDbId);
-            if (null == db) {
-                continue;
-            }
-            db.getTables().stream().filter(v -> v instanceof View).forEach(v -> views.add((View) v));
-        }
-
-        for (View view : views) {
-            List<TableName> usedTables = view.getTableRefs();
-            if (CollectionUtils.containsAny(usedTables, tableNames)) {
-                view.setInvalid(reason);
-            }
-        }
     }
 
     public Optional<Table> getTable(TableName tableName) {
@@ -361,6 +341,19 @@ public class MetadataMgr {
         return ImmutableList.copyOf(partitionNames.build());
     }
 
+    public List<PartitionKey> getPrunedPartitions(String catalogName, Table table, ScalarOperator predicate, long limit) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getPrunedPartitions(table, predicate, limit);
+            } catch (Exception e) {
+                LOG.error("Failed to getPrunedPartitions on [{}.{}]", catalogName, table, e);
+                throw e;
+            }
+        }
+        return new ArrayList<>();
+    }
+
     public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {
         List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(columns.keySet());
         List<String> columnNames = requiredColumnRefs.stream().map(col -> columns.get(col).getName()).collect(
@@ -382,33 +375,48 @@ public class MetadataMgr {
         return statistics.build();
     }
 
+
+    public Statistics getTableStatistics(OptimizerContext session,
+                                         String catalogName,
+                                         Table table,
+                                         Map<ColumnRefOperator, Column> columns,
+                                         List<PartitionKey> partitionKeys,
+                                         ScalarOperator predicate,
+                                         long limit) {
+        Statistics statistics = null;
+        if (!FeConstants.runningUnitTest) {
+            statistics = getTableStatisticsFromInternalStatistics(table, columns);
+        }
+        if (statistics == null || statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
+            Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+            return connectorMetadata.map(metadata -> metadata.getTableStatistics(
+                    session, table, columns, partitionKeys, predicate, limit)).orElse(null);
+        } else {
+            return statistics;
+        }
+    }
+
     public Statistics getTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate) {
-        Statistics statistics = getTableStatisticsFromInternalStatistics(table, columns);
-        if (statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
-            Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-            return connectorMetadata.map(metadata ->
-                    metadata.getTableStatistics(session, table, columns, partitionKeys, predicate)).orElse(null);
-        } else {
-            return statistics;
-        }
+        return getTableStatistics(session, catalogName, table, columns, partitionKeys, predicate, -1);
     }
 
     public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
-        return getRemoteFileInfos(catalogName, table, partitionKeys, -1, null, null);
+        return getRemoteFileInfos(catalogName, table, partitionKeys, -1, null, null, -1);
     }
 
     public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate, List<String> fieldNames) {
+                                                   long snapshotId, ScalarOperator predicate, List<String> fieldNames,
+                                                   long limit) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames)
+                connectorMetadata.get().getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames, limit)
                         .forEach(files::add);
             } catch (Exception e) {
                 LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", catalogName, table, e);

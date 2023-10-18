@@ -746,4 +746,22 @@ public class SharedDataStorageVolumeMgrTest {
         sdsvm.bindTableToStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, 1L, 2L);
         Assert.assertEquals(Arrays.asList(Arrays.asList(1L), new ArrayList()), sdsvm.getBindingsOfBuiltinStorageVolume());
     }
+
+    @Test
+    public void testGetStorageVolumeNameOfTable() throws DdlException, AlreadyExistsException {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        svm.createBuiltinStorageVolume();
+        svm.bindTableToStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, 1L, 1L);
+        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm.getStorageVolumeNameOfTable(1L));
+        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm.getStorageVolumeNameOfTable(2L));
+    }
+
+    @Test
+    public void testGetStorageVolumeNameOfDb() throws DdlException, AlreadyExistsException {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        svm.createBuiltinStorageVolume();
+        svm.bindDbToStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, 1L);
+        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm.getStorageVolumeNameOfDb(1L));
+        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm.getStorageVolumeNameOfDb(2L));
+    }
 }

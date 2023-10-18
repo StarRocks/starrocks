@@ -32,6 +32,7 @@
 #include "formats/orc/utils.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
+#include "orc_schema_builder.h"
 #include "simd/simd.h"
 #include "types/logical_type.h"
 #include "util/timezone_utils.h"
@@ -563,7 +564,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
             }
         }
         ColumnPtr& col = (*chunk)->get_column_by_slot_id(slot_desc->id());
-        _column_readers[src_index]->get_next(cvb, col, 0, _batch->numElements);
+        RETURN_IF_ERROR(_column_readers[src_index]->get_next(cvb, col, 0, _batch->numElements));
     }
 
     if (_broker_load_mode) {
@@ -904,7 +905,7 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
             CHECK(false) << "unexpected op_type in compound_pred type. op_type = " << std::to_string(op_type);
         }
         for (Expr* c : conjunct->children()) {
-            _add_conjunct(c, builder);
+            RETURN_IF_ERROR(_add_conjunct(c, builder));
         }
         builder->end();
         return Status::OK();
@@ -1259,75 +1260,9 @@ Status OrcChunkReader::get_schema(std::vector<SlotDescriptor>* schema) {
         auto name = root.getFieldName(i);
 
         auto subtype = root.getSubtype(i);
-        switch (subtype->getKind()) {
-        case orc::TypeKind::BOOLEAN:
-            tp = TypeDescriptor(TYPE_BOOLEAN);
-            break;
 
-        case orc::TypeKind::BYTE:
-            tp = TypeDescriptor(TYPE_TINYINT);
-            break;
+        RETURN_IF_ERROR(get_orc_type(subtype, &tp));
 
-        case orc::TypeKind::SHORT:
-            tp = TypeDescriptor(TYPE_SMALLINT);
-            break;
-
-        case orc::TypeKind::INT:
-            tp = TypeDescriptor(TYPE_INT);
-            break;
-
-        case orc::TypeKind::LONG:
-            tp = TypeDescriptor(TYPE_BIGINT);
-            break;
-
-        case orc::TypeKind::FLOAT:
-            tp = TypeDescriptor(TYPE_FLOAT);
-            break;
-
-        case orc::TypeKind::DOUBLE:
-            tp = TypeDescriptor(TYPE_DOUBLE);
-            break;
-
-        case orc::TypeKind::STRING:
-            tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-            break;
-
-        case orc::TypeKind::BINARY:
-            tp = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-            break;
-
-        case orc::TypeKind::TIMESTAMP:
-            tp = TypeDescriptor(TYPE_DATETIME);
-            break;
-
-        case orc::TypeKind::LIST:
-        case orc::TypeKind::MAP:
-        case orc::TypeKind::STRUCT:
-        case orc::TypeKind::UNION:
-            //TODO: nested types
-            return Status::NotSupported(
-                    fmt::format("Unkown supported orc type: {}, column name: {}", subtype->getKind(), name));
-
-        case orc::TypeKind::DECIMAL:
-            tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, subtype->getPrecision(), subtype->getScale());
-            break;
-
-        case orc::TypeKind::DATE:
-            tp = TypeDescriptor(TYPE_DATE);
-            break;
-
-        case orc::TypeKind::VARCHAR:
-            tp = TypeDescriptor::create_varchar_type(subtype->getMaximumLength());
-            break;
-
-        case orc::TypeKind::CHAR:
-            tp = TypeDescriptor::create_char_type(subtype->getMaximumLength());
-            break;
-
-        default:
-            return Status::NotSupported(
-                    fmt::format("Unkown supported orc type: {}, column name: {}", subtype->getKind(), name));
-        }
         schema->emplace_back(i, name, tp);
     }
     return Status::OK();

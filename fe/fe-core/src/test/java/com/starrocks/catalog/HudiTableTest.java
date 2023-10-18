@@ -15,23 +15,30 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreTest;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.common.EngineType;
+import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.avro.Schema;
+import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.exception.HoodieIOException;
 import org.junit.Assert;
 import org.junit.Before;
@@ -192,5 +199,54 @@ public class HudiTableTest {
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createUnion(Schema.create(Schema.Type.INT))),
                 ScalarType.createType(PrimitiveType.INT));
+    }
+
+    @Test
+    public void testToThrift(
+            @Mocked ConnectorMgr connectorMgr,
+            @Mocked CatalogConnector catalogConnector,
+            @Mocked ConnectorMetadata connectorMetadata,
+            @Mocked HoodieTableMetaClient hoodieTableMetaClient) {
+        new Expectations() {
+            {
+                connectorMgr.getConnector(anyString);
+                result = catalogConnector;
+            }
+
+            {
+                catalogConnector.getMetadata();
+                result = connectorMetadata;
+            }
+
+            {
+                connectorMetadata.getCloudConfiguration();
+                result = new CloudConfiguration();
+                times = 1;
+            }
+        };
+
+        List<Column> columns = Lists.newArrayList();
+        columns.add(new Column("col1", Type.INT, true));
+        columns.add(new Column("col2", Type.INT, true));
+        long createTime = System.currentTimeMillis();
+
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("hudi.table.base.path", "hdfs://127.0.0.1:10000/hudi");
+        HudiTable.Builder tableBuilder = HudiTable.builder()
+                .setId(2)
+                .setTableName("table0")
+                .setCatalogName("catalog")
+                .setHiveDbName("db0")
+                .setHiveTableName("table0")
+                .setResourceName("catalog")
+                .setFullSchema(columns)
+                .setPartitionColNames(Lists.newArrayList("col1"))
+                .setCreateTime(createTime)
+                .setHudiProperties(properties);
+        HudiTable table = tableBuilder.build();
+
+        TTableDescriptor tTableDescriptor = table.toThrift(ImmutableList.of());
+        Assert.assertEquals("db0", tTableDescriptor.getDbName());
+        Assert.assertEquals("table0", tTableDescriptor.getTableName());
     }
 }

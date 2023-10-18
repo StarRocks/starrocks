@@ -41,14 +41,24 @@ std::string ChunkRow::debug_string() {
     return os.str();
 }
 
+void OlapTableColumnParam::to_protobuf(POlapTableColumnParam* pcolumn) const {
+    pcolumn->set_short_key_column_count(short_key_column_count);
+    for (auto uid : sort_key_uid) {
+        pcolumn->add_sort_key_uid(uid);
+    }
+    for (auto& column : columns) {
+        column->to_schema_pb(pcolumn->add_columns_desc());
+    }
+}
+
 void OlapTableIndexSchema::to_protobuf(POlapTableIndexSchema* pindex) const {
     pindex->set_id(index_id);
     pindex->set_schema_hash(schema_hash);
     for (auto slot : slots) {
         pindex->add_columns(slot->col_name());
     }
-    for (auto column : columns) {
-        column->to_schema_pb(pindex->add_columns_desc());
+    if (column_param != nullptr) {
+        column_param->to_protobuf(pindex->mutable_column_param());
     }
 }
 
@@ -73,10 +83,19 @@ Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
                 index->slots.emplace_back(it->second);
             }
         }
-        for (auto& pcolumn_desc : p_index.columns_desc()) {
-            TabletColumn* tc = _obj_pool.add(new TabletColumn());
-            tc->init_from_pb(pcolumn_desc);
-            index->columns.emplace_back(tc);
+
+        if (p_index.has_column_param()) {
+            auto col_param = _obj_pool.add(new OlapTableColumnParam());
+            for (auto& pcolumn_desc : p_index.column_param().columns_desc()) {
+                TabletColumn* tc = _obj_pool.add(new TabletColumn());
+                tc->init_from_pb(pcolumn_desc);
+                col_param->columns.emplace_back(tc);
+            }
+            for (auto& uid : p_index.column_param().sort_key_uid()) {
+                col_param->sort_key_uid.emplace_back(uid);
+            }
+            col_param->short_key_column_count = p_index.column_param().short_key_column_count();
+            index->column_param = col_param;
         }
         _indexes.emplace_back(index);
     }
@@ -108,10 +127,19 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema) {
                 index->slots.emplace_back(it->second);
             }
         }
-        for (auto& tcolumn_desc : t_index.columns_desc) {
-            TabletColumn* tc = _obj_pool.add(new TabletColumn());
-            tc->init_from_thrift(tcolumn_desc);
-            index->columns.emplace_back(tc);
+
+        if (t_index.__isset.column_param) {
+            auto col_param = _obj_pool.add(new OlapTableColumnParam());
+            for (auto& tcolumn_desc : t_index.column_param.columns) {
+                TabletColumn* tc = _obj_pool.add(new TabletColumn());
+                tc->init_from_thrift(tcolumn_desc);
+                col_param->columns.emplace_back(tc);
+            }
+            for (auto& uid : t_index.column_param.sort_key_uid) {
+                col_param->sort_key_uid.emplace_back(uid);
+            }
+            col_param->short_key_column_count = t_index.column_param.short_key_column_count;
+            index->column_param = col_param;
         }
         _indexes.emplace_back(index);
     }

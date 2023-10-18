@@ -31,12 +31,15 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import static com.starrocks.connector.iceberg.cost.IcebergFileStats.convertObjectToOptionalDouble;
 
 public class IcebergStatisticProviderTest extends TableTestBase {
     private static StarRocksAssert starRocksAssert;
@@ -52,19 +55,19 @@ public class IcebergStatisticProviderTest extends TableTestBase {
     }
 
     @Test
-    public void testMakeTableStatistics() {
+    public void testUnknownTableStatistics() {
         IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
-        table.newFastAppend().appendFile(FILE_A).commit();
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
-                "table_name", Lists.newArrayList(), table, Maps.newHashMap());
+                "table_name", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
         ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
         ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
         colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
 
-        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, null, colRefToColumnMetaMap);
-        Assert.assertEquals(2.0, statistics.getOutputRowCount(), 0.001);
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, null);
+        Assert.assertEquals(1.0, statistics.getOutputRowCount(), 0.001);
     }
 
     @Test
@@ -91,4 +94,30 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         Map<Integer, Object> result = IcebergFileStats.toMap(idToTypeMapping, bounds);
         Assert.assertNotNull(result);
     }
+
+    @Test
+    public void testGetEmptyTableStatistics() {
+        IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
+        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
+        colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, null);
+        Assert.assertEquals(1.0, statistics.getOutputRowCount(), 0.001);
+    }
+
+    @Test
+    public void testDoubleValue() {
+        Assert.assertEquals(1.0, convertObjectToOptionalDouble(Types.BooleanType.get(), true).get(), 0.001);
+        Assert.assertEquals(1.0, convertObjectToOptionalDouble(Types.IntegerType.get(), 1).get(), 0.001);
+        Assert.assertEquals(1.0, convertObjectToOptionalDouble(Types.LongType.get(), 1L).get(), 0.001);
+        Assert.assertEquals(1.0, convertObjectToOptionalDouble(Types.FloatType.get(), Float.valueOf("1")).get(), 0.001);
+        Assert.assertEquals(1.0, convertObjectToOptionalDouble(Types.DoubleType.get(), 1.0).get(), 0.001);
+        Assert.assertEquals(121.0, convertObjectToOptionalDouble(Types.DecimalType.of(5, 2), new BigDecimal(121)).get(), 0.001);
+        Assert.assertFalse(convertObjectToOptionalDouble(Types.BinaryType.get(), "11").isPresent());
+    }
+
 }

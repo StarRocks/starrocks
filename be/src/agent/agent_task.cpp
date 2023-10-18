@@ -22,6 +22,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/snapshot_loader.h"
 #include "service/backend_options.h"
+#include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_manager.h"
@@ -160,6 +161,33 @@ void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& age
 
     auto dropped_tablet = StorageEngine::instance()->tablet_manager()->get_tablet(drop_tablet_req.tablet_id);
     if (dropped_tablet != nullptr) {
+        if (!config::enable_drop_tablet_if_unfinished_txn) {
+            int64_t partition_id;
+            std::set<int64_t> transaction_ids;
+            {
+                std::lock_guard push_lock(dropped_tablet->get_push_lock());
+                StorageEngine::instance()->txn_manager()->get_tablet_related_txns(
+                        drop_tablet_req.tablet_id, drop_tablet_req.schema_hash, dropped_tablet->tablet_uid(),
+                        &partition_id, &transaction_ids);
+            }
+            if (!transaction_ids.empty()) {
+                std::stringstream ss;
+                ss << "Failed to drop tablet when there is unfinished txns."
+                   << "tablet_id: " << drop_tablet_req.tablet_id << ", txn_ids: ";
+                for (auto itr = transaction_ids.begin(); itr != transaction_ids.end(); itr++) {
+                    ss << *itr;
+                    if (std::next(itr) != transaction_ids.end()) {
+                        ss << ",";
+                    }
+                }
+                LOG(WARNING) << ss.str();
+                error_msgs.emplace_back(ss.str());
+                status_code = TStatusCode::RUNTIME_ERROR;
+                unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature);
+                return;
+            }
+        }
+
         TabletDropFlag flag = force_drop ? kDeleteFiles : kMoveFilesToTrash;
         auto st = StorageEngine::instance()->tablet_manager()->drop_tablet(drop_tablet_req.tablet_id, flag);
         if (!st.ok()) {
@@ -473,7 +501,7 @@ void run_compaction_task(const std::shared_ptr<CompactionTaskRequest>& agent_tas
     for (auto tablet_id : compaction_req.tablet_ids) {
         EngineManualCompactionTask engine_task(GlobalEnv::GetInstance()->compaction_mem_tracker(), tablet_id,
                                                compaction_req.is_base_compaction);
-        StorageEngine::instance()->execute_task(&engine_task);
+        (void)StorageEngine::instance()->execute_task(&engine_task);
     }
 
     task_status.__set_status_code(status_code);
@@ -692,9 +720,26 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
 
     LOG(INFO) << "get update tablet meta task, signature:" << agent_task_req->signature;
 
+    auto update_manager = StorageEngine::instance()->update_manager();
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
 
+    // alter meta SHARED_DATA
+    if (update_tablet_meta_req.__isset.tablet_type &&
+        update_tablet_meta_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+        lake::SchemaChangeHandler handler(ExecEnv::GetInstance()->lake_tablet_manager());
+        auto res = handler.process_update_tablet_meta(update_tablet_meta_req);
+        if (!res.ok()) {
+            // TODO explict the error message and errorCode
+            error_msgs.emplace_back(res.get_error_msg());
+            status_code = TStatusCode::RUNTIME_ERROR;
+        }
+        unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature);
+        LOG(INFO) << "finish update tablet meta task. signature:" << agent_task_req->signature;
+        return;
+    }
+
+    // SHARED_NOTHING, tablet_type = TTabletType::TABLET_TYPE_DISK
     for (const auto& tablet_meta_info : update_tablet_meta_req.tabletMetaInfos) {
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_meta_info.tablet_id);
         if (tablet == nullptr) {
@@ -743,8 +788,25 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                 // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
                 // because the primary index is available in cache
                 // But it will be remove from index cache after apply is finished
-                auto manager = StorageEngine::instance()->update_manager();
-                manager->index_cache().try_remove_by_key(tablet->tablet_id());
+                update_manager->index_cache().try_remove_by_key(tablet->tablet_id());
+                break;
+            case TTabletMetaType::PRIMARY_INDEX_CACHE_EXPIRE_SEC: {
+                LOG(INFO) << "update tablet:" << tablet->tablet_id()
+                          << " primary_index_cache_expire_sec:" << tablet_meta_info.primary_index_cache_expire_sec;
+                tablet->tablet_meta()->set_primary_index_cache_expire_sec(
+                        tablet_meta_info.primary_index_cache_expire_sec);
+                // update index's expire right now, if pk index is alive
+                auto index_entry = update_manager->index_cache().get(tablet->tablet_id());
+                if (index_entry != nullptr) {
+                    index_entry->update_expire_time(MonotonicMillis() +
+                                                    update_manager->get_index_cache_expire_ms(*tablet));
+                    update_manager->index_cache().release(index_entry);
+                }
+            } break;
+            case TTabletMetaType::STORAGE_TYPE:
+                LOG(INFO) << "change storage_type not supported";
+                break;
+            default:
                 break;
             }
         }

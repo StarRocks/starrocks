@@ -40,6 +40,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.proto.PScalarType;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScalarType;
@@ -77,7 +79,6 @@ public class ScalarType extends Type implements Cloneable {
     // Only used for type CHAR.
     @SerializedName(value = "len")
     private int len = -1;
-    private boolean isAssignedStrLenInColDefinition = false;
 
     // Only used if type is DECIMAL. -1 (for both) is used to represent a
     // decimal with any precision and scale.
@@ -178,12 +179,14 @@ public class ScalarType extends Type implements Cloneable {
     /**
      * Unified decimal is used for parser, which creating default decimal from name
      */
-    public static ScalarType createUnifiedDecimalType() throws AnalysisException {
-        throw decimalParseError("both precision and scale are absent");
+    public static ScalarType createUnifiedDecimalType() {
+        // for mysql compatibility
+        return createUnifiedDecimalType(10, 0);
     }
 
-    public static ScalarType createUnifiedDecimalType(int precision) throws AnalysisException {
-        throw decimalParseError("scale is absent");
+    public static ScalarType createUnifiedDecimalType(int precision) {
+        // for mysql compatibility
+        return createUnifiedDecimalType(precision, 0);
     }
 
     public static ScalarType createUnifiedDecimalType(int precision, int scale) {
@@ -214,11 +217,27 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     public static ScalarType createDecimalV3Type(PrimitiveType type, int precision, int scale) {
-        Preconditions.checkArgument(0 <= precision && precision <= PrimitiveType.getMaxPrecisionOfDecimal(type),
-                "DECIMAL's precision should range from 1 to 38");
-        Preconditions.checkArgument(0 <= scale && scale <= precision,
-                "DECIMAL(P[,S]) type P must be greater than or equal to the value of S");
-
+        int maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx == null ||
+                ctx.getSessionVariable() == null ||
+                ctx.getSessionVariable().getLargeDecimalUnderlyingType() == null ||
+                ctx.getSessionVariable().getLargeDecimalUnderlyingType().equals(SessionVariableConstants.PANIC)) {
+            Preconditions.checkArgument(0 <= precision &&
+                            precision <= PrimitiveType.getMaxPrecisionOfDecimal(type),
+                    "DECIMAL's precision should range from 1 to 38");
+            Preconditions.checkArgument(0 <= scale && scale <= precision,
+                    "DECIMAL(P[,S]) type P must be greater than or equal to the value of S");
+        }
+        if (precision > maxPrecision) {
+            String underlyingType = ConnectContext.get().getSessionVariable().getLargeDecimalUnderlyingType();
+            if (underlyingType.equals(SessionVariableConstants.DOUBLE)) {
+                return ScalarType.DOUBLE;
+            } else {
+                precision = maxPrecision;
+                type = PrimitiveType.DECIMAL128;
+            }
+        }
         ScalarType scalarType = new ScalarType(type);
         scalarType.precision = Math.max(precision, 1);
         scalarType.scale = scale;
@@ -286,20 +305,17 @@ public class ScalarType extends Type implements Cloneable {
 
     public static ScalarType createDefaultString() {
         ScalarType stringType = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
-        stringType.setAssignedStrLenInColDefinition();
         return stringType;
     }
 
     // Use for Hive string now.
     public static ScalarType createDefaultExternalTableString() {
         ScalarType stringType = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
-        stringType.setAssignedStrLenInColDefinition();
         return stringType;
     }
 
     public static ScalarType createMaxVarcharType() {
         ScalarType stringType = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
-        stringType.setAssignedStrLenInColDefinition();
         return stringType;
     }
 
@@ -705,14 +721,6 @@ public class ScalarType extends Type implements Cloneable {
 
     public void setLength(int len) {
         this.len = len;
-    }
-
-    public boolean isAssignedStrLenInColDefinition() {
-        return isAssignedStrLenInColDefinition;
-    }
-
-    public void setAssignedStrLenInColDefinition() {
-        this.isAssignedStrLenInColDefinition = true;
     }
 
     // add scalar infix to override with getPrecision

@@ -1,0 +1,33 @@
+-- name: test_column_default
+CREATE TABLE `test_column_default` (
+  `date` date NOT NULL DEFAULT "1970-01-01" COMMENT "",
+  `device_id` varchar(150) NOT NULL DEFAULT "" COMMENT "",
+  `server_ip` varchar(150) NOT NULL DEFAULT "" COMMENT "",
+  `id` int(11) NOT NULL COMMENT "",
+  `device_type` tinyint(4) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`date`, `device_id`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+show full columns from test_column_default;
+-- result:
+date	date		NO	YES	1970-01-01			
+device_id	varchar(150)		NO	YES				
+server_ip	varchar(150)		NO	NO				
+id	int		NO	NO	None			
+device_type	tinyint		NO	NO	None			
+-- !result
+select COLUMN_NAME, DATA_TYPE, NUMERIC_SCALE, COLUMN_DEFAULT, COLUMN_COMMENT AS DESCRIPTION, COLUMN_TYPE
+from INFORMATION_SCHEMA.COLUMNS
+where table_name = 'test_column_default';
+-- result:
+date	date	None	1970-01-01		date
+device_id	varchar	None			varchar(150)
+server_ip	varchar	None			varchar(150)
+id	int	0	None		int(11)
+device_type	tinyint	0	None		tinyint(4)
+-- !result

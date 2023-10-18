@@ -20,14 +20,20 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.utframe.UtFrameUtils;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -163,6 +169,95 @@ class ParserTest {
         } catch (Exception e) {
             fail("sql should success. errMsg: " +  e.getMessage());
         }
+    }
+
+    @Test
+    void testParseLargeDecimal() {
+        String sql = "select cast(1 as decimal(65,0))";
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        SessionVariable sessionVariable = ctx.getSessionVariable();
+        try {
+            sessionVariable.setSqlDialect("sr");
+            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
+            Assert.fail();
+        } catch (Throwable err) {
+            Assert.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 38"));
+        }
+
+        try {
+            sessionVariable.setSqlDialect("trino");
+            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
+            Assert.fail();
+        } catch (Throwable err) {
+            Assert.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 38"));
+        }
+
+        try {
+            sessionVariable.setSqlDialect("sr");
+            sessionVariable.setLargeDecimalUnderlyingType("double");
+            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
+            Analyzer.analyze(stmt, ctx);
+            Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
+            Assert.assertTrue(type.isDouble());
+        } catch (Throwable err) {
+            Assert.fail(err.getMessage());
+        }
+
+        try {
+            sessionVariable.setSqlDialect("trino");
+            sessionVariable.setLargeDecimalUnderlyingType("double");
+            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
+            Analyzer.analyze(stmt, ctx);
+            Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
+            Assert.assertTrue(type.isDouble());
+        } catch (Throwable err) {
+            Assert.fail(err.getMessage());
+        }
+
+        try {
+            sessionVariable.setSqlDialect("sr");
+            sessionVariable.setLargeDecimalUnderlyingType("decimal");
+            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
+            Analyzer.analyze(stmt, ctx);
+            Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
+            Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+        } catch (Throwable err) {
+            Assert.fail(err.getMessage());
+        }
+
+        try {
+            sessionVariable.setSqlDialect("trino");
+            sessionVariable.setLargeDecimalUnderlyingType("decimal");
+            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
+            Analyzer.analyze(stmt, ctx);
+            Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
+            Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+        } catch (Throwable err) {
+            Assert.fail(err.getMessage());
+        }
+        try {
+            sessionVariable.setLargeDecimalUnderlyingType("foobar");
+            Assert.fail();
+        } catch (Throwable error) {
+
+        }
+    }
+
+    @Test
+    void testDecimalTypeDeclarationMysqlCompatibility() {
+        String sql = "select cast(1 as decimal(65)),cast(1 as decimal)";
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        SessionVariable sessionVariable = ctx.getSessionVariable();
+        sessionVariable.setSqlDialect("sr");
+        sessionVariable.setLargeDecimalUnderlyingType("decimal");
+        QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
+        Analyzer.analyze(stmt, ctx);
+        Type type1 = stmt.getQueryRelation().getOutputExpression().get(0).getType();
+        Type type2 = stmt.getQueryRelation().getOutputExpression().get(1).getType();
+        Assert.assertEquals(type1, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+        Assert.assertEquals(type2, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 0));
     }
 
     @Test
@@ -319,7 +414,7 @@ class ParserTest {
         sqls.add("revoke export on DATABASE db1 from test");
         sqls.add("ALTER SYSTEM MODIFY BACKEND HOST '1' to '1'");
         sqls.add("SHOW COMPUTE NODES");
-        sqls.add("trace optimizer select 1");
+        sqls.add("trace times select 1");
         sqls.add("select anti from t1 left anti join t2 on true");
         sqls.add("select anti, semi from t1 left semi join t2 on true");
         sqls.add("select * from tbl1 MINUS select * from tbl2");

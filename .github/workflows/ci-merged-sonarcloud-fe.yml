@@ -1,0 +1,52 @@
+name: MERGE SONARCLOUD FE
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'fe/**.java'
+      - 'fe/**.xml'
+
+jobs:
+  sonarcloud-fe:
+    runs-on: [self-hosted, normal]
+    steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Analyze FE
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: f0fb4d25c03bae90c2e994c45c29c49dc86fc169
+        run: |
+          set -x
+          export JAVA_HOME=/var/local/env/jdk17.0.8;
+          export PATH=$JAVA_HOME/bin:/var/local/env/tools/maven/bin:$PATH;
+          export MAVEN_OPTS=-D"maven.repo.local"=/var/local/env/.m2/repository;
+          export STARROCKS_HOME=${{ github.workspace }}
+          source env.sh
+          mkdir -p thirdparty/installed/bin/
+          cd thirdparty/installed/bin/ && ln -s /var/local/env/tools/thrift_0.13/thrift thrift
+          cd ${{ github.workspace }}/fe
+          sed -i 's#<tasks>#<target>#g' fe-core/pom.xml
+          sed -i 's#</tasks>#</target>#g' fe-core/pom.xml
+          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
+
+      - name: clean
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*

@@ -42,6 +42,8 @@ private:
     TGetDbsResult _db_result;
     TGetTablesResult _table_result;
     TDescribeTableResult _desc_result;
+    int _timeout_ms;
+
     static SchemaScanner::ColumnDesc _s_col_columns[];
 };
 

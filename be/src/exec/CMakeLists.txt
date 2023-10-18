@@ -83,6 +83,7 @@ set(EXEC_FILES
     arrow_to_starrocks_converter.cpp
     arrow_to_json_converter.cpp
     parquet_scanner.cpp
+    parquet_schema_builder.cpp
     parquet_reader.cpp
     parquet_writer.cpp
     parquet_builder.cpp
@@ -188,6 +189,7 @@ set(EXEC_FILES
     pipeline/scan/schema_scan_context.cpp
     pipeline/sink/iceberg_table_sink_operator.cpp
     pipeline/sink/hive_table_sink_operator.cpp
+    pipeline/sink/table_function_table_sink_operator.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp

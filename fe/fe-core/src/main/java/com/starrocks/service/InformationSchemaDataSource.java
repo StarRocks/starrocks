@@ -220,6 +220,12 @@ public class InformationSchemaDataSource {
         propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                 String.valueOf(olapTable.enablePersistentIndex()));
 
+        // primary index cache expire sec
+        if (olapTable.primaryIndexCacheExpireSec() > 0) {
+            propsMap.put(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC,
+                    String.valueOf(olapTable.primaryIndexCacheExpireSec()));
+        }
+
         // compression type
         if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME ||
                 olapTable.getCompressionType() == TCompressionType.LZ4) {

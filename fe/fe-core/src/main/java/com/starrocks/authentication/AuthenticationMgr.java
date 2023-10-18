@@ -83,7 +83,7 @@ public class AuthenticationMgr {
                     return compareByHost;
                 }
                 // compare user name
-                return o1.getQualifiedUser().compareTo(o2.getQualifiedUser());
+                return o1.getUser().compareTo(o2.getUser());
             });
         }
 
@@ -145,7 +145,7 @@ public class AuthenticationMgr {
         info.setAuthPlugin(PlainPasswordAuthenticationProvider.PLUGIN_NAME);
         info.setPassword(MysqlPassword.EMPTY_PASSWORD);
         userToAuthenticationInfo.put(UserIdentity.ROOT, info);
-        userNameToProperty.put(UserIdentity.ROOT.getQualifiedUser(), new UserProperty());
+        userNameToProperty.put(UserIdentity.ROOT.getUser(), new UserProperty());
     }
 
     private void readLock() {
@@ -302,7 +302,7 @@ public class AuthenticationMgr {
         if (Config.enable_password_reuse) {
             return;
         }
-        if (checkPlainPassword(user.getQualifiedUser(), user.getHost(), plainPassword) != null) {
+        if (checkPlainPassword(user.getUser(), user.getHost(), plainPassword) != null) {
             throw new DdlException("password should not be the same as the previous one!");
         }
     }
@@ -322,9 +322,9 @@ public class AuthenticationMgr {
             userToAuthenticationInfo.put(userIdentity, info);
 
             UserProperty userProperty = null;
-            if (!userNameToProperty.containsKey(userIdentity.getQualifiedUser())) {
+            if (!userNameToProperty.containsKey(userIdentity.getUser())) {
                 userProperty = new UserProperty();
-                userNameToProperty.put(userIdentity.getQualifiedUser(), userProperty);
+                userNameToProperty.put(userIdentity.getUser(), userProperty);
             }
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             AuthorizationMgr authorizationManager = globalStateMgr.getAuthorizationMgr();
@@ -488,7 +488,7 @@ public class AuthenticationMgr {
         userToAuthenticationInfo.remove(userIdentity);
         LOG.info("user {} is dropped", userIdentity);
         // 2. remove from userNameToProperty
-        String userName = userIdentity.getQualifiedUser();
+        String userName = userIdentity.getUser();
         if (!hasUserNameNoLock(userName)) {
             LOG.info("user property for {} is dropped: {}", userName, userNameToProperty.get(userName));
             userNameToProperty.remove(userName);
@@ -508,7 +508,7 @@ public class AuthenticationMgr {
             info.analyze();
             updateUserNoLock(userIdentity, info, false);
             if (userProperty != null) {
-                userNameToProperty.put(userIdentity.getQualifiedUser(), userProperty);
+                userNameToProperty.put(userIdentity.getUser(), userProperty);
             }
 
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -524,11 +524,11 @@ public class AuthenticationMgr {
             throws AuthenticationException {
         if (userToAuthenticationInfo.containsKey(userIdentity)) {
             if (!shouldExists) {
-                throw new AuthenticationException("user " + userIdentity.getQualifiedUser() + " already exists");
+                throw new AuthenticationException("user " + userIdentity.getUser() + " already exists");
             }
         } else {
             if (shouldExists) {
-                throw new AuthenticationException("failed to find user " + userIdentity.getQualifiedUser());
+                throw new AuthenticationException("failed to find user " + userIdentity.getUser());
             }
         }
         userToAuthenticationInfo.put(userIdentity, info);
@@ -536,7 +536,7 @@ public class AuthenticationMgr {
 
     private boolean hasUserNameNoLock(String userName) {
         for (UserIdentity userIdentity : userToAuthenticationInfo.keySet()) {
-            if (userIdentity.getQualifiedUser().equals(userName)) {
+            if (userIdentity.getUser().equals(userName)) {
                 return true;
             }
         }

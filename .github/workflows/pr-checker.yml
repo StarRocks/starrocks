@@ -10,6 +10,21 @@ on:
       - opened
       - reopened
       - edited
+      - synchronize
+
+permissions:
+  checks: write
+  actions: write
+  contents: write
+  deployments: write
+  discussions: write
+  issues: write
+  packages: write
+  pages: write
+  pull-requests: write
+  repository-projects: write
+  security-events: write
+  statuses: write
 
 jobs:
 
@@ -38,10 +53,15 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       (startsWith(github.event.pull_request.title, '[BugFix]') ||
-       startsWith(github.event.pull_request.title, '[Enhancement]'))&&
+       startsWith(github.event.pull_request.title, '[Enhancement]')) &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     steps:
+      - name: add branch-3.2 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 3.2')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '3.2'
 
       - name: add branch-3.1 label
         if: contains(toJson(github.event.pull_request.body), '[x] 3.1')
@@ -61,11 +81,11 @@ jobs:
         with:
           labels: '2.5'
 
-      - name: add branch-2.4 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 2.4')
-        uses: actions-ecosystem/action-add-labels@v1
+      - name: remove branch-3.2 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 3.2') && contains(github.event.pull_request.labels.*.name, '3.2')
+        uses: actions-ecosystem/action-remove-labels@v1
         with:
-          labels: '2.4'
+          labels: '3.2'
 
       - name: remove branch-3.1 label
         if: contains(toJson(github.event.pull_request.body), '[ ] 3.1') && contains(github.event.pull_request.labels.*.name, '3.1')
@@ -85,12 +105,6 @@ jobs:
         with:
           labels: '2.5'
 
-      - name: remove branch-2.4 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 2.4') && contains(github.event.pull_request.labels.*.name, '2.4')
-        uses: actions-ecosystem/action-remove-labels@v1
-        with:
-          labels: '2.4'
-
       - name: check-done
         if: >
           (startsWith(github.event.pull_request.title, '[BugFix]') ||
@@ -99,7 +113,7 @@ jobs:
           !contains(github.event.pull_request.title, 'backport') &&
           contains(toJson(github.event.pull_request.body), '[ ] I have checked the version labels')
         run: |
-          echo "You must mark this checkbox - I have checked the version labels which the pr will be auto-backported to the target branch"
+          echo "::error::You must mark this checkbox - I have checked the version labels which the pr will be auto-backported to the target branch"
           exit 1
 
   behavior-check:
@@ -107,10 +121,24 @@ jobs:
     if: >
       !startsWith(github.event.pull_request.title, '[Doc]') && github.base_ref == 'main'
     steps:
+      - name: Format Check
+        id: check
+        if: >
+          (!contains(toJson(github.event.pull_request.body), '[ ] Yes, this PR will result in a change in behavior') &&
+          !contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior')) ||
+          (!contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior') &&
+          !contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')) ||
+          (contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
+          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior'))
+        run: |
+          echo "::error::Please check the format of your pr body about the behavior change checkbox!"
+          exit 1
+
       - name: Behavior Unchanged Label
         id: unchanged
         if: >
-          contains(toJson(github.event.pull_request.body), '[ ] Yes, this PR will result in a change in behavior')
+          steps.check.outcome == 'skipped' &&
+          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')
         uses: actions-ecosystem/action-remove-labels@v1
         with:
           labels: 'behavior_changed'
@@ -118,7 +146,7 @@ jobs:
       - name: Behavior Changed Check
         id: changed_check
         if: >
-          always() && steps.unchanged.outcome == 'skipped' &&
+          always() && steps.check.outcome == 'skipped' && steps.unchanged.outcome == 'skipped' &&
           contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
           contains(toJson(github.event.pull_request.body), '[ ] Interface/UI changes: syntax, type conversion, expression evaluation, display information') &&
           contains(toJson(github.event.pull_request.body), '[ ] Parameter changes: default values, similar parameters but with different default values') &&
@@ -126,24 +154,18 @@ jobs:
           contains(toJson(github.event.pull_request.body), '[ ] Feature removed') &&
           contains(toJson(github.event.pull_request.body), '[ ] Miscellaneous: upgrade & downgrade compatibility, etc')
         run: |
-          echo "You must specify the type of change!" 
+          echo "::error::You must specify the type of change!"
           exit 1
 
       - name: Behavior Changed Label
         if: >
-          always() && steps.unchanged.outcome == 'skipped' && steps.changed_check.outcome != 'failure'
+          always() &&
+          steps.check.outcome == 'skipped' &&
+          steps.unchanged.outcome == 'skipped' &&
+          steps.changed_check.outcome != 'failure'
         uses: actions-ecosystem/action-add-labels@v1
         with:
           labels: 'behavior_changed'
-
-      - name: Behavior Unchanged Label
-        if: >
-          always() &&
-          !contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
-          !contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')
-        run: |
-          echo "You must specify whether this PR entail a change in behavior!" 
-          exit 1
 
   automerge-check:
     runs-on: ubuntu-latest
@@ -167,3 +189,18 @@ jobs:
           token: ${{ secrets.PAT }}
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: rebase
+
+  changelist-check:
+    runs-on: [self-hosted, normal]
+    if: >
+      (github.event.action == 'opened' || github.event.action == 'synchronize') &&
+      !contains(github.event.pull_request.title, 'cherry-pick') &&
+      !contains(github.event.pull_request.title, 'backport')
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+    steps:
+      - name: CHECK CHANGELIST
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/check-pr-changelist.sh

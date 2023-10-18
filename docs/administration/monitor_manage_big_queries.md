@@ -103,7 +103,7 @@ You can also decide how to deal with these queued queries by configuring the max
   SET GLOBAL query_queue_pending_timeout_second = 480;
   ```
 
-You can check whether a query is pending using [SHOW PROCESSLIST](../sql-reference/sql-statements/Administration/SHOW%20PROCESSLIST.md).
+You can check whether a query is pending using [SHOW PROCESSLIST](../sql-reference/sql-statements/Administration/SHOW_PROCESSLIST.md).
 
 ```Plain
 mysql> SHOW PROCESSLIST;
@@ -122,7 +122,7 @@ From v3.0 onwards, StarRocks supports viewing the queries that are currently pro
 
 ### Monitor via MySQL client
 
-1. You can view the queries that are currently processed (`current_queries`) using [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW%20PROC.md).
+1. You can view the queries that are currently processed (`current_queries`) using [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW_PROC.md).
 
    ```SQL
    SHOW PROC '/current_queries';
@@ -243,7 +243,7 @@ To enable SQL Blacklist, execute the following statement:
 ADMIN SET FRONTEND CONFIG ("enable_sql_blacklist" = "true");
 ```
 
-Then you can add the regular expression that represents the SQL pattern to SQL Blacklist using [ADD SQLBLACKLIST](../sql-reference/sql-statements/Administration/ADD%20SQLBLACKLIST.md).
+Then you can add the regular expression that represents the SQL pattern to SQL Blacklist using [ADD SQLBLACKLIST](../sql-reference/sql-statements/Administration/ADD_SQLBLACKLIST.md).
 
 The following example adds `COUNT(DISTINCT)` to SQL Blacklist:
 

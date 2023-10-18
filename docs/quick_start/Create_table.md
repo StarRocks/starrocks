@@ -23,17 +23,17 @@ mysql -h <fe_ip> -P<fe_query_port> -uroot
 
 ## Step 2: Create a database
 
-Create a database named `sr_hub` by referring to [CREATE DATABASE](../sql-reference/sql-statements/data-definition/CREATE%20DATABASE.md).
+Create a database named `sr_hub` by referring to [CREATE DATABASE](../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md).
 
 ```SQL
 CREATE DATABASE IF NOT EXISTS sr_hub;
 ```
 
-You can view all databases in this StarRocks instance by executing [SHOW DATABASES](../sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) SQL.
+You can view all databases in this StarRocks instance by executing [SHOW DATABASES](../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) SQL.
 
 ## Step 3: Create a table
 
-Run `USE sr_hub` to switch to the `sr_hub` database and create a table named `sr_member` by referring to [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
+Run `USE sr_hub` to switch to the `sr_hub` database and create a table named `sr_member` by referring to [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
 
 ```SQL
 USE sr_hub;
@@ -63,7 +63,7 @@ DISTRIBUTED BY HASH(city_code);
 > - The columns of the table exactly correspond to the fields of data that you will be loading into StarRocks in the tutorial on [loading and querying data](../quick_start/Import_and_query.md).
 > - To guarantee the high performance **in the production environment**, we strongly recommend that you strategize the data partitioning plan for the table by using the `PARTITION BY` clause. See [Design partitioning and bucketing rules](../table_design/Data_distribution.md#design-partitioning-and-bucketing-rules) for more instructions.
 
-After the table is created, you can check the details of the table using the DESC statement, and view all the tables in the database by executing [SHOW TABLES](../sql-reference/sql-statements/data-manipulation/SHOW%20TABLES.md). Tables in StarRocks support schema changes. You can see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE) for more information.
+After the table is created, you can check the details of the table using the DESC statement, and view all the tables in the database by executing [SHOW TABLES](../sql-reference/sql-statements/data-manipulation/SHOW_TABLES.md). Tables in StarRocks support schema changes. You can see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE) for more information.
 
 ## What to do next
 
@@ -74,5 +74,5 @@ In addition to the features this tutorial has demonstrated, StarRocks also suppo
 - A variety of [data types](../sql-reference/sql-statements/data-types/BIGINT.md)
 - Multiple [table types](../table_design/table_types/table_types.md)
 - Flexible [partitioning strategies](../table_design/Data_distribution.md#dynamic-partition-management)
-- Classic database query indexes, including [bitmap index](../table_design/Bitmap_index.md) and [bloom filter index](../table_design/Bloomfilter_index.md)
+- Classic database query indexes, including [bitmap index](../using_starrocks/Bitmap_index.md) and [bloom filter index](../using_starrocks/Bloomfilter_index.md)
 - [Materialized view](../using_starrocks/Materialized_view.md)

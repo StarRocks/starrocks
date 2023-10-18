@@ -123,10 +123,12 @@ void PipelineTestBase::_execute() {
             [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
     ASSERT_TRUE(prepare_status.ok());
 
-    _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
-        exec_env->wg_driver_executor()->submit(driver.get());
-        return Status::OK();
-    });
+    ASSERT_TRUE(_fragment_ctx
+                        ->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
+                            exec_env->wg_driver_executor()->submit(driver.get());
+                            return Status::OK();
+                        })
+                        .ok());
 }
 
 ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<SlotDescriptor*>& slots, size_t row_num) {
@@ -301,7 +303,7 @@ ChunkPtr PipelineTestBase::_create_and_fill_chunk(size_t row_num) {
     TDescriptorTable tbl;
     const uint8_t* buf = reinterpret_cast<uint8_t*>(content.data());
     uint32_t len = content.size();
-    deserialize_thrift_msg(buf, &len, TProtocolType::JSON, &tbl);
+    CHECK(deserialize_thrift_msg(buf, &len, TProtocolType::JSON, &tbl).ok());
 
     std::vector<SlotDescriptor> slots;
     for (auto& t_slot : tbl.slotDescriptors) {

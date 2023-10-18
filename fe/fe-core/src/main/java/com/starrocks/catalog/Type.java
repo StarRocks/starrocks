@@ -42,6 +42,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlColType;
+import com.starrocks.proto.PScalarType;
+import com.starrocks.proto.PTypeDesc;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
@@ -1305,6 +1307,52 @@ public abstract class Type implements Cloneable {
             }
         }
         return new Pair<Type, Integer>(type, tmpNodeIdx);
+    }
+
+    public static Type fromProtobuf(PTypeDesc pTypeDesc) {
+        return fromProtobuf(pTypeDesc, 0).first;
+    }
+
+    private static Pair<Type, Integer> fromProtobuf(PTypeDesc pTypeDesc, int nodeIndex) {
+        Preconditions.checkState(pTypeDesc.types.size() > nodeIndex);
+        TTypeNodeType tTypeNodeType = TTypeNodeType.findByValue(pTypeDesc.types.get(nodeIndex).type);
+        switch (tTypeNodeType) {
+            case SCALAR: {
+                PScalarType scalarType = pTypeDesc.types.get(nodeIndex).scalarType;
+                return new Pair<>(ScalarType.createType(scalarType), 1);
+            }
+            case ARRAY: {
+                Preconditions.checkState(pTypeDesc.types.size() > nodeIndex + 1);
+                Pair<Type, Integer> res = fromProtobuf(pTypeDesc, nodeIndex + 1);
+                return new Pair<>(new ArrayType(res.first), 1 + res.second);
+            }
+            case MAP: {
+                Preconditions.checkState(pTypeDesc.types.size() > nodeIndex + 2);
+                Pair<Type, Integer> keyRes = fromProtobuf(pTypeDesc, nodeIndex + 1);
+                int keyStep = keyRes.second;
+
+                Pair<Type, Integer> valueRes = fromProtobuf(pTypeDesc, nodeIndex + 1 + keyStep);
+                int valueStep = valueRes.second;
+                return new Pair<>(new MapType(keyRes.first, valueRes.first), 1 + keyStep + valueStep);
+            }
+            case STRUCT: {
+                Preconditions.checkState(pTypeDesc.types.size() >=
+                        nodeIndex + 1 + pTypeDesc.types.get(nodeIndex).structFields.size());
+                ArrayList<StructField> fields = new ArrayList<>();
+
+                int totalStep = 0;
+                for (int i = 0; i < pTypeDesc.types.get(nodeIndex).structFields.size(); ++i) {
+                    String fieldName = pTypeDesc.types.get(nodeIndex).structFields.get(i).name;
+                    Pair<Type, Integer> res = fromProtobuf(pTypeDesc, nodeIndex + 1 + totalStep);
+                    fields.add(new StructField(fieldName, res.first));
+                    totalStep += res.second;
+                }
+                return new Pair<>(new StructType(fields), 1 + totalStep);
+            }
+        }
+        // NEVER REACH.
+        Preconditions.checkState(false);
+        return null;
     }
 
     /**

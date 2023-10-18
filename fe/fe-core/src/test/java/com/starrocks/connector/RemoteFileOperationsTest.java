@@ -44,14 +44,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static com.starrocks.connector.hive.MockedRemoteFileSystem.TEST_FILES;
+import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABLE;
 import static io.airlift.concurrent.MoreFutures.getFutureValue;
 
 public class RemoteFileOperationsTest {
     @Test
     public void testGetHiveRemoteFiles() {
         HiveRemoteFileIO hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
-        FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
         hiveRemoteFileIO.setFileSystem(fs);
         FeConstants.runningUnitTest = true;
         ExecutorService executorToRefresh = Executors.newFixedThreadPool(5);
@@ -65,7 +65,7 @@ public class RemoteFileOperationsTest {
         RemotePathKey pathKey = RemotePathKey.of(tableLocation, false);
 
         HiveMetaClient client = new HiveMetastoreTest.MockedHiveMetaClient();
-        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
         Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
 
@@ -110,7 +110,7 @@ public class RemoteFileOperationsTest {
     @Test
     public void asyncRenameFilesTest() {
         HiveRemoteFileIO hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
-        FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
         hiveRemoteFileIO.setFileSystem(fs);
         FeConstants.runningUnitTest = true;
         ExecutorService executorToRefresh = Executors.newFixedThreadPool(5);
@@ -134,7 +134,7 @@ public class RemoteFileOperationsTest {
         RemoteFileOperations ops1 = new RemoteFileOperations(cachingFileIO, executorToLoad, Executors.newSingleThreadExecutor(),
                 false, true, new Configuration());
 
-        FileSystem mockedFs = new MockedRemoteFileSystem(TEST_FILES) {
+        FileSystem mockedFs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE) {
             @Override
             public boolean exists(Path path) {
                 return true;
@@ -180,7 +180,7 @@ public class RemoteFileOperationsTest {
     @Test
     public void testRenameDir() {
         HiveRemoteFileIO hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
-        FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
         hiveRemoteFileIO.setFileSystem(fs);
         FeConstants.runningUnitTest = true;
         ExecutorService executorToRefresh = Executors.newSingleThreadExecutor();
@@ -208,7 +208,7 @@ public class RemoteFileOperationsTest {
     @Test
     public void testRenameDirFailed() {
         HiveRemoteFileIO hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
-        FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
         hiveRemoteFileIO.setFileSystem(fs);
         FeConstants.runningUnitTest = true;
         ExecutorService executorToRefresh = Executors.newSingleThreadExecutor();
@@ -220,7 +220,7 @@ public class RemoteFileOperationsTest {
 
         Path writePath = new Path("hdfs://hadoop01:9000/tmp/starrocks/queryid");
         Path targetPath = new Path("hdfs://hadoop01:9000/user/hive/warehouse/test.db/t1");
-        FileSystem mockedFs = new MockedRemoteFileSystem(TEST_FILES) {
+        FileSystem mockedFs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE) {
             @Override
             public boolean exists(Path path) {
                 if (path.equals(targetPath.getParent())) {
@@ -247,7 +247,7 @@ public class RemoteFileOperationsTest {
     @Test
     public void testRemoveNotCurrentQueryFiles() {
         HiveRemoteFileIO hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
-        FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
         hiveRemoteFileIO.setFileSystem(fs);
         FeConstants.runningUnitTest = true;
         ExecutorService executorToRefresh = Executors.newSingleThreadExecutor();

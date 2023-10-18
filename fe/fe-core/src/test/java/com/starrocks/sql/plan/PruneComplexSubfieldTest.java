@@ -75,6 +75,18 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE `tt` (\n" +
+                "  `v1` bigint NULL, \n" +
+                "  `ass` ARRAY<STRUCT<a int, b int, c int>> NULL " +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
     }
 
     @Before
@@ -195,7 +207,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     public void testIsNullStruct() throws Exception {
         String sql = "select 1 from sc0 where st1.s2 is null";
         String plan = getVerboseExplain(sql);
-        System.out.println(plan);
         assertContains(plan, "[/st1/s2]");
     }
 
@@ -624,5 +635,203 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "5:Project\n" +
                         "  |  <slot 16> : array_map(<slot 15> -> CAST(<slot 15> AS BIGINT) + 8: v1, 7: a1)\n" +
                         "  |  <slot 27> : 27: expr");
+    }
+
+    @Test
+    public void testLiteralArrayPredicates() throws Exception {
+        {
+            String sql = "select pc0.a1 from pc0 where (([]) is not NULL)";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "  0:OlapScanNode\n" +
+                    "     table: pc0, rollup: pc0\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: array_length([]) IS NOT NULL\n" +
+                    "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                    "     tabletList=\n" +
+                    "     actualRows=0, avgRowSize=1.0\n" +
+                    "     Pruned type: 7 <-> [ARRAY<INT>]\n" +
+                    "     cardinality: 1");
+
+        }
+        {
+            String sql = "select st3.sa3, array_length(st3.sa3) from sc0 where (([1,2,3]) is NOT NULL)";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "  0:OlapScanNode\n" +
+                    "     table: sc0, rollup: sc0\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: array_length([1,2,3]) IS NOT NULL\n" +
+                    "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                    "     tabletList=\n" +
+                    "     actualRows=0, avgRowSize=3.0\n" +
+                    "     Pruned type: 4 <-> [struct<s1 int(11), s2 int(11), sa3 array<int(11)>>]\n" +
+                    "     ColumnAccessPath: [/st3/sa3]\n" +
+                    "     cardinality: 1\n");
+        }
+    }
+
+    @Test
+    public void testCommonPathMerge() throws Exception {
+        {
+            String sql = "select pc0.a1[0],pc0.a1[1] from pc0 where (([]) is not NULL)";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "  0:OlapScanNode\n" +
+                    "     table: pc0, rollup: pc0\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: array_length([]) IS NOT NULL\n" +
+                    "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                    "     tabletList=\n" +
+                    "     actualRows=0, avgRowSize=3.0\n" +
+                    "     Pruned type: 7 <-> [ARRAY<INT>]\n" +
+                    "     ColumnAccessPath: [/a1/INDEX]\n" +
+                    "     cardinality: 1");
+        }
+        {
+            String sql = "select st3.sa3[0], array_length(st3.sa3) from sc0 where (([1,2,3]) is NOT NULL)";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "  0:OlapScanNode\n" +
+                    "     table: sc0, rollup: sc0\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: array_length([1,2,3]) IS NOT NULL\n" +
+                    "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                    "     tabletList=\n" +
+                    "     actualRows=0, avgRowSize=3.0\n" +
+                    "     Pruned type: 4 <-> [struct<s1 int(11), s2 int(11), sa3 array<int(11)>>]\n" +
+                    "     ColumnAccessPath: [/st3/sa3/ALL]\n" +
+                    "     cardinality: 1\n");
+        }
+    }
+
+    @Test
+    public void testSubfieldWithoutCols() throws Exception {
+        String sql = "select [1, 2, 3] is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "5:Project\n" +
+                "  |  <slot 15> : array_length([1,2,3]) IS NULL");
+
+        sql = "select [1, 2, 3][1] is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "5:Project\n" +
+                "  |  <slot 15> : [1,2,3][1] IS NULL");
+
+        sql = "select map_keys(map{'a':1,'b':2}) is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "5:Project\n" +
+                "  |  <slot 15> : array_length(map_keys(map{'a':1,'b':2})) IS NULL");
+
+        sql = "select row(1,2,3).col2 is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "5:Project\n" +
+                "  |  <slot 15> : row(1, 2, 3).col2 IS NULL");
+    }
+
+
+
+    @Test
+    public void testForceReuseCTE1() throws Exception {
+        String sql = "with cte1 as (select array_map((x -> uuid()), t.a1) c1, t.map1 c2 from pc0 t) " +
+                "select * from " +
+                "(select * from cte1) t1 join " +
+                "(select * from cte1) t2 on t1.c1=t2.c1 ";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE2() throws Exception {
+        String sql = "with cte1 as (select rand() as c1, t.map1 c2 from pc0 t) " +
+                "select * from " +
+                "(select * from cte1) t1 join " +
+                "(select * from cte1) t2 on t1.c1=t2.c1 ";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE3() throws Exception {
+        String sql = "with cte1 as (select random() as c1, t.map1 c2 from pc0 t) " +
+                "select * from " +
+                "(select * from cte1) t1 join " +
+                "(select * from cte1) t2 on t1.c1=t2.c1 ";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE4() throws Exception {
+        String sql = "with cte1 as (select v1 as c1, t.map1 c2 from pc0 t where rand() < 0.5) " +
+                "select * from " +
+                "(select * from cte1) t1 join " +
+                "(select * from cte1) t2 on t1.c1=t2.c1 ";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE5() throws Exception {
+        String sql = "with cte1 as (select rand() as c1, t.map1 c2 from pc0 t), " +
+                "cte2 as (select c1, count(1) as c11 from cte1 group by c1)" +
+                "select * from " +
+                "(select * from cte1) t1 join " +
+                "(select * from cte2) t2 on t1.c1=t2.c1 ";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE6() throws Exception {
+        String sql = "with cte1 as (select c1 + 1 as c1, c2 from " +
+                "   (select v1 as c1, t.map1 c2 from pc0 t where rand() < 0.5) t2) " +
+                "select * from " +
+                "(select * from cte1) t1 join " +
+                "(select * from cte1) t2 on t1.c1=t2.c1 ";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE7() throws Exception {
+        String sql = "with cte1 as (select c1 + 1 as c1, c2 from " +
+                "   (select rand() as c1, t.map1 c2 from pc0 t) t2) " +
+                "select * from " +
+                "(select * from cte1) t1 join " +
+                "(select * from cte1) t2 on t1.c1=t2.c1 ";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE8() throws Exception {
+        String sql = "with cte1 as (select rank() over(order by c1) as c1, c2 from " +
+                "   (select rand() as c1, t.map1 c2 from pc0 t) t2) " +
+                "select * from " +
+                "(select * from cte1) t1 join " +
+                "(select * from cte1) t2 on t1.c1=t2.c1 ";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE9() throws Exception {
+        String sql = "with cte1 as (select rand() as c1, t.map1 c2 from pc0 t), " +
+                "cte2 as (select a.c1, b.c2 from cte1 as a join cte1 as b on a.c1 = b.c1)" +
+                "select * from " +
+                "(select * from cte2) t1 join " +
+                "(select * from cte2) t2 on t1.c1=t2.c1 ";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE10() throws Exception {
+        String sql = "with cte1 as (select rand() as c1, t.map1 c2 from pc0 t) " +
+                "select * from cte1 union all " +
+                "select * from cte1";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testForceReuseCTE11() throws Exception {
+        String sql = "with cte1 as (select t.v1, sum(t.v1) from pc0 t group by t.v1 having rand() > 0.5) " +
+                "select * from cte1 union all " +
+                "select * from cte1";
+        assertContainsCTEReuse(sql);
+    }
+
+    @Test
+    public void testArrayIndexStruct() throws Exception {
+        String sql = "select ass[1].a, ass[1].b from tt;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "[/ass/INDEX/a, /ass/INDEX/b]");
     }
 }
