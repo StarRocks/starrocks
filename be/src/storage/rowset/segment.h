@@ -80,10 +80,6 @@ using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 // is changed, this segment can not be used any more. For example, after a schema
 // change finished, client should disable all cached Segment for old TabletSchema.
 class Segment : public std::enable_shared_from_this<Segment> {
-    struct private_type {
-        explicit private_type(int) {}
-    };
-
 public:
     // Does NOT take the ownership of |tablet_schema|.
     static StatusOr<std::shared_ptr<Segment>> open(std::shared_ptr<FileSystem> fs, const std::string& path,
@@ -104,13 +100,20 @@ public:
                                                      size_t* footer_length_hint,
                                                      const FooterPointerPB* partial_rowset_footer);
 
+<<<<<<< HEAD
     Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
             const TabletSchema* tablet_schema);
 
     Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
             std::shared_ptr<const TabletSchema> tablet_schema, lake::TabletManager* tablet_manager);
+=======
+    Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
+            lake::TabletManager* tablet_manager);
+>>>>>>> 965e880984 ([Enhancement] Optimize segment open for cloud native tablet (#32996))
 
     ~Segment();
+
+    Status open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer, bool skip_fill_local_cache);
 
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
@@ -270,6 +273,8 @@ private:
 
     // for cloud native tablet
     lake::TabletManager* _tablet_manager = nullptr;
+    // used to guarantee that segment will be opened at most once in a thread-safe way
+    OnceFlag _open_once;
 };
 
 } // namespace starrocks
