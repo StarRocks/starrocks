@@ -86,6 +86,7 @@ Status HdfsScannerTest::_init_block_cache(size_t mem_size, const std::string& en
     cache_options.mem_space_size = mem_size;
     cache_options.block_size = starrocks::config::block_cache_block_size;
     cache_options.enable_checksum = starrocks::config::block_cache_checksum_enable;
+    cache_options.max_concurrent_inserts = 1500000;
     cache_options.engine = engine;
     return cache->init(cache_options);
 }
