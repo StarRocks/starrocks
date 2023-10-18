@@ -151,6 +151,12 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             (void)StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->update_max_threads(
                     max_thread_cnt);
         });
+        _config_callback.emplace("compact_task_queue_count", [&]() {
+            auto tablet_manager = _exec_env->lake_tablet_manager();
+            if (tablet_manager != nullptr) {
+                tablet_manager->compaction_scheduler()->update_compact_task_queue_count(config::compact_task_queue_count);
+            }
+        });
     });
 
     Status s = config::set_config(name, value);

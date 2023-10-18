@@ -146,7 +146,7 @@ CONF_Int32(sleep_one_second, "1");
 CONF_Int32(sleep_five_seconds, "5");
 
 // The count of thread to compact
-CONF_Int32(compact_threads, "4");
+CONF_mInt32(compact_task_queue_count, "4");
 CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The log dir.

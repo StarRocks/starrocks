@@ -115,11 +115,11 @@ struct CompactionTaskInfo {
 
 class CompactionScheduler {
     // Limiter is used to control the maximum compaction concurrency based on the memory usage limitation:
-    //  - The initial maximum compaction concurrency is config::compact_threads
+    //  - The initial maximum compaction concurrency is config::compact_task_queue_count
     //  - Once Status::MemoryLimitExceeded is encountered, reduce the maximum concurrency by one until the
     //    concurrency is reduced to 1
     //  - If no Status::MemoryLimitExceeded is encountered for "kConcurrencyRestoreTimes" consecutive time,
-    //    increase the maximum concurrency by one until config::compact_threads is reached or
+    //    increase the maximum concurrency by one until config::compact_task_queue_count is reached or
     //    Status::MemoryLimitExceeded is encountered again.
     class Limiter {
     public:
@@ -139,9 +139,11 @@ class CompactionScheduler {
 
         int16_t concurrency() const;
 
+        void adapt_to_task_queue_count(int16_t new_val);
+
     private:
         mutable std::mutex _mtx;
-        const int16_t _total;
+        int16_t _total;
         // The number of tokens can be assigned to compaction tasks.
         int64_t _free;
         // The number of reserved tokens. reserved tokens cannot be assigned to compaction task.
@@ -171,6 +173,9 @@ public:
 
     int16_t concurrency() const { return _limiter.concurrency(); }
 
+    // update at runtime
+    void update_compact_task_queue_count(int32_t new_val);
+
 private:
     friend class CompactionTaskCallback;
 
@@ -196,7 +201,7 @@ private:
 
     void steal_task(int start_index, std::unique_ptr<CompactionTaskContext>* context);
 
-    int choose_task_queue_by_txn_id(int64_t txn_id) const { return txn_id % _task_queue_count; }
+    int choose_task_queue_by_txn_id(int64_t txn_id) const { return txn_id % _task_queue_count.load(); }
 
     bool txn_log_exists(int64_t tablet_id, int64_t txn_id) const;
 
@@ -204,8 +209,11 @@ private:
     Limiter _limiter;
     bthread::Mutex _contexts_lock;
     butil::LinkedList<CompactionTaskContext> _contexts;
-    int _task_queue_count;
-    TaskQueue* _task_queues;
+
+    std::atomic<int> _task_queue_count;
+    // use a mutex to protect the resize operation of _task_queues at runtime
+    std::mutex _task_queues_mutex;
+    std::vector<TaskQueue> _task_queues;
     std::unique_ptr<ThreadPool> _threads;
     std::atomic<bool> _stopped{false};
 };
@@ -245,6 +253,30 @@ inline void CompactionScheduler::Limiter::memory_limit_exceeded() {
 inline int16_t CompactionScheduler::Limiter::concurrency() const {
     std::lock_guard l(_mtx);
     return _total - _reserved;
+}
+
+inline void CompactionScheduler::Limiter::adapt_to_task_queue_count(int16_t new_val) {
+    std::lock_guard l(_mtx);
+    if (new_val > _total) {
+        auto diff = new_val - _total;
+        _free += diff;
+        _total += diff;
+    } else {
+        auto diff = _total - new_val;
+        _total = new_val;
+        // ensure `concurrency > 0`, which means `_total - _reserved > 0`
+        if (_total <= _free) {
+            _free = _total;
+            _reserved = 0;
+        } else if (_total < _reserved) {
+            _reserved -= diff;
+            if (_reserved < 0) {
+                _reserved = 0;
+            }
+        }
+    }
+    LOG(INFO) << "Update Limiter's _total value to " << _total << ", _free value to "
+              << _free << ", and _reserved value to " << _reserved;
 }
 
 } // namespace starrocks::lake
