@@ -1127,7 +1127,170 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
     }
 
+<<<<<<< HEAD
     private Map<String, MaterializedView.BasePartitionInfo> getSelectedPartitionInfos(OlapScanNode olapScanNode) {
+=======
+    /**
+     * For external table, the partition name is normalized which should convert it into original partition name.
+     *
+     * For multi-partition columns, `refTableAndPartitionNames` is not fully exact to describe which partitions
+     *  of ref base table are refreshed, use `getSelectedPartitionInfosOfExternalTable` later if we can solve the multi
+     * partition columns problem.
+     * eg:
+     *  partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
+     *  partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
+     */
+    private Set<String> convertMVPartitionNameToRealPartitionName(Table table, String mvPartitionName) {
+        if (!table.isNativeTableOrMaterializedView()) {
+            Map<String, Set<String>> refBaseTableRangePartitionMap = mvContext.getExternalRefBaseTableMVPartitionMap();
+            Preconditions.checkState(refBaseTableRangePartitionMap.containsKey(mvPartitionName));
+            return refBaseTableRangePartitionMap.get(mvPartitionName);
+        } else {
+            return Sets.newHashSet(mvPartitionName);
+        }
+    }
+
+    /**
+     * @param mvToRefreshedPartitions :  to-refreshed materialized view partition names
+     * @return : return to-refreshed base table's table name and partition names mapping
+     */
+    private Map<Table, Set<String>> getRefTableRefreshPartitions(Set<String> mvToRefreshedPartitions) {
+        Table refBaseTable = mvContext.getRefBaseTable();
+        Map<Table, Set<String>> refTableAndPartitionNames = Maps.newHashMap();
+        for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
+            Table table = tablePair.second;
+            if (refBaseTable != null && refBaseTable == table) {
+                Set<String> needRefreshTablePartitionNames = Sets.newHashSet();
+                Map<String, Set<String>> mvToBaseNameRef = mvContext.getMvRefBaseTableIntersectedPartitions();
+                for (String mvPartitionName : mvToRefreshedPartitions) {
+                    needRefreshTablePartitionNames.addAll(mvToBaseNameRef.get(mvPartitionName));
+                }
+                refTableAndPartitionNames.put(table, needRefreshTablePartitionNames);
+                return refTableAndPartitionNames;
+            }
+        }
+        return refTableAndPartitionNames;
+    }
+
+    /**
+     * Return all non-ref base table and refreshed partitions.
+     */
+    private Map<Table, Set<String>> getNonRefTableRefreshPartitions() {
+        Table partitionTable = mvContext.getRefBaseTable();
+        Map<Table, Set<String>> tableNamePartitionNames = Maps.newHashMap();
+        for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
+            Table table = tablePair.second;
+            if (partitionTable != null && partitionTable.equals(table)) {
+                // do nothing
+            } else {
+                if (table.isNativeTableOrMaterializedView()) {
+                    tableNamePartitionNames.put(table, ((OlapTable) table).getVisiblePartitionNames());
+                } else if (table.isView()) {
+                    // do nothing
+                } else {
+                    tableNamePartitionNames.put(table, Sets.newHashSet(PartitionUtil.getPartitionNames(table)));
+                }
+            }
+        }
+        return tableNamePartitionNames;
+    }
+
+    /**
+     * Collect base olap tables and its partition infos based on refreshed table infos.
+     *
+     * @param baseTableAndPartitionNames : refreshed base table and its partition names mapping.
+     * @return
+     */
+    private Map<Long, Map<String, MaterializedView.BasePartitionInfo>> getSelectedPartitionInfosOfOlapTable(
+            Map<Table, Set<String>> baseTableAndPartitionNames) {
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> changedOlapTablePartitionInfos = Maps.newHashMap();
+        for (Map.Entry<Table, Set<String>> entry : baseTableAndPartitionNames.entrySet()) {
+            if (entry.getKey().isNativeTableOrMaterializedView()) {
+                Map<String, MaterializedView.BasePartitionInfo> partitionInfos = Maps.newHashMap();
+                OlapTable olapTable = (OlapTable) entry.getKey();
+                for (String partitionName : entry.getValue()) {
+                    Partition partition = olapTable.getPartition(partitionName);
+                    MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
+                            partition.getId(), partition.getVisibleVersion(), partition.getVisibleVersionTime());
+                    partitionInfos.put(partition.getName(), basePartitionInfo);
+                }
+                changedOlapTablePartitionInfos.put(olapTable.getId(), partitionInfos);
+            }
+        }
+        return changedOlapTablePartitionInfos;
+    }
+
+    /**
+     * Collect base hive tables and its partition infos based on refreshed table infos.
+     *
+     * @param baseTableAndPartitionNames : refreshed base table and its partition names mapping.
+     * @return
+     */
+    private Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> getSelectedPartitionInfosOfExternalTable(
+            Map<Table, Set<String>> baseTableAndPartitionNames) {
+        Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> changedOlapTablePartitionInfos = Maps.newHashMap();
+        for (Map.Entry<Table, Set<String>> entry : baseTableAndPartitionNames.entrySet()) {
+            if (entry.getKey().isHiveTable()) {
+                HiveTable hiveTable = (HiveTable) entry.getKey();
+                Optional<BaseTableInfo> baseTableInfoOptional = materializedView.getBaseTableInfos().stream().filter(
+                        baseTableInfo -> baseTableInfo.getTableIdentifier().equals(hiveTable.getTableIdentifier())).
+                        findAny();
+                if (!baseTableInfoOptional.isPresent()) {
+                    continue;
+                }
+                BaseTableInfo baseTableInfo = baseTableInfoOptional.get();
+                Map<String, MaterializedView.BasePartitionInfo> partitionInfos =
+                        getSelectedPartitionInfos(hiveTable, Lists.newArrayList(entry.getValue()),
+                                baseTableInfo);
+                changedOlapTablePartitionInfos.put(baseTableInfo, partitionInfos);
+            } else if (entry.getKey().isJDBCTable()) {
+                JDBCTable jdbcTable = (JDBCTable) entry.getKey();
+                Optional<BaseTableInfo> baseTableInfoOptional = materializedView.getBaseTableInfos().stream().filter(
+                        baseTableInfo -> baseTableInfo.getTableIdentifier().equals(jdbcTable.getTableIdentifier())).
+                        findAny();
+                if (!baseTableInfoOptional.isPresent()) {
+                    continue;
+                }
+                BaseTableInfo baseTableInfo = baseTableInfoOptional.get();
+                Map<String, MaterializedView.BasePartitionInfo> partitionInfos =
+                        getSelectedPartitionInfos(jdbcTable, Lists.newArrayList(entry.getValue()),
+                                baseTableInfo);
+                changedOlapTablePartitionInfos.put(baseTableInfo, partitionInfos);
+            } else if (entry.getKey().isIcebergTable()) {
+                IcebergTable icebergTable = (IcebergTable) entry.getKey();
+                Optional<BaseTableInfo> baseTableInfoOptional = materializedView.getBaseTableInfos().stream().filter(
+                        baseTableInfo -> baseTableInfo.getTableIdentifier().equals(icebergTable.getTableIdentifier())).
+                        findAny();
+                if (!baseTableInfoOptional.isPresent()) {
+                    continue;
+                }
+                BaseTableInfo baseTableInfo = baseTableInfoOptional.get();
+                // first record the changed partition infos, it needs to use this these partition infos to check if
+                // the partition has been deal with. the task has PARTITION_START/PARTITION_END properties, could
+                // refresh partial partitions.
+                Map<String, MaterializedView.BasePartitionInfo> partitionInfos = entry.getValue().stream().collect(
+                        Collectors.toMap(partitionName -> partitionName,
+                                partitionName -> new MaterializedView.BasePartitionInfo(-1,
+                                icebergTable.getRefreshSnapshotTime(), icebergTable.getRefreshSnapshotTime())));
+                // add ALL partition info, use this partition info to check if the partition has been updated.
+                partitionInfos.put(ICEBERG_ALL_PARTITION, new MaterializedView.BasePartitionInfo(-1,
+                                icebergTable.getRefreshSnapshotTime(), icebergTable.getRefreshSnapshotTime()));
+                changedOlapTablePartitionInfos.put(baseTableInfo, partitionInfos);
+            }
+        }
+        return changedOlapTablePartitionInfos;
+    }
+
+    /**
+     * @param hiveTable                 : input hive table to collect refresh partition infos
+     * @param selectedPartitionNames    : input hive table refreshed partition names
+     * @param baseTableInfo             : input hive table's base table info
+     * @return                          : return the given hive table's refresh partition infos
+     */
+    private Map<String, MaterializedView.BasePartitionInfo> getSelectedPartitionInfos(HiveTable hiveTable,
+                                                                                      List<String> selectedPartitionNames,
+                                                                                      BaseTableInfo baseTableInfo) {
+>>>>>>> 7c340b3aa2 ([BugFix] fix non-partitioned mv for iceberg (#33013))
         Map<String, MaterializedView.BasePartitionInfo> partitionInfos = Maps.newHashMap();
         List<Long> selectedPartitionIds = olapScanNode.getSelectedPartitionIds();
         OlapTable olapTable = olapScanNode.getOlapTable();
