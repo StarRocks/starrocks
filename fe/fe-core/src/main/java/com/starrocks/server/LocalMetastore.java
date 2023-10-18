@@ -259,6 +259,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -3792,9 +3793,11 @@ public class LocalMetastore implements ConnectorMetadata {
 
             Set<String> bfColumns = olapTable.getBfColumns();
             if (bfColumns != null) {
-                for (String bfColumn : bfColumns) {
+                Iterator<String> iterator = bfColumns.iterator();
+                while (iterator.hasNext()) {
+                    String bfColumn = iterator.next();
                     if (bfColumn.equalsIgnoreCase(colName)) {
-                        bfColumns.remove(colName);
+                        iterator.remove();
                         bfColumns.add(newColName);
                         break;
                     }
