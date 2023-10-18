@@ -69,7 +69,7 @@ jobs:
   code-checker:
     runs-on: ubuntu-latest
     needs: sync-checker
-    name: BE FILTER
+    name: CODE FILTER
     outputs:
       output1: ${{ steps.changes-info.outputs.be }}
       output2: ${{ steps.changes-info.outputs.thirdparty }}
@@ -104,9 +104,53 @@ jobs:
           echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
           echo "fe=${{ steps.changes.outputs.fe }}" >> $GITHUB_OUTPUT
 
-  build:
+  thirdparty-update:
     runs-on: [self-hosted, normal]
     needs: [code-checker]
+    name: Thirdparty Update
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
+      REPO: ${{ github.repository }}
+    if: >
+      needs.code-checker.outputs.output1 == 'true' ||
+      needs.code-checker.outputs.output2 == 'true' ||
+      needs.code-checker.outputs.output3 == 'true'
+    outputs:
+      ip: ${{ steps.update-image.outputs.ip }}
+      instance_id: ${{ steps.update-image.outputs.instance_id }}
+      image_cache_id: ${{ steps.update-image.outputs.image_cache_id }}
+    steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Update Image
+        id: update-image
+        run: |
+          if [[ "${{ needs.code-checker.outputs.output2 }}" == 'true' ]]; then
+              rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+              ./bin/run-pr-update-image.sh
+          fi
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+              cd ci-tool && source lib/init.sh
+              ./bin/elastic-cluster.sh --delete
+          fi
+          rm -rf ${{ github.workspace }}/*
+
+  build:
+    runs-on: [self-hosted, normal]
+    needs: [thirdparty-update]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -114,7 +158,6 @@ jobs:
     outputs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
       base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
-    if: needs.code-checker.outputs.output1 == 'true' || needs.code-checker.outputs.output2 == 'true' || needs.code-checker.outputs.output3 == 'true'
     steps:
       - name: clean
         run: |
@@ -135,6 +178,10 @@ jobs:
           SKIP_OSS: 'true'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          if [[ "${{ needs.code-checker.outputs.output2 }}" == 'true' ]]; then
+              export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
+              export image_tag=$BRANCH-$PR_NUMBER
+          fi
           ./bin/elastic-build.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }}
 
       - name: build result
