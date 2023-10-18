@@ -61,7 +61,7 @@ protected:
 
     void check_local_persistent_index_meta(int64_t tablet_id, int64_t expected_version) {
         PersistentIndexMetaPB index_meta;
-        DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store();
+        DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
         CHECK_OK(TabletMetaManager::get_persistent_index_meta(data_dir, tablet_id, &index_meta));
         ASSERT_TRUE(index_meta.version().major_number() == expected_version);
     }
