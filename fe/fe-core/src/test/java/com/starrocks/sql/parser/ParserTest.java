@@ -27,9 +27,15 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.Analyzer;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.JoinRelation;
+>>>>>>> 33e1c8bd01 ([BugFix] fix mod operator not be parsed correctly (#33073))
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
@@ -46,7 +52,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static com.starrocks.sql.plan.PlanTestBase.assertContains;
+<<<<<<< HEAD
 import static org.junit.Assert.assertThrows;
+=======
+import static org.junit.Assert.assertEquals;
+>>>>>>> 33e1c8bd01 ([BugFix] fix mod operator not be parsed correctly (#33073))
 import static org.junit.Assert.fail;
 
 class ParserTest {
@@ -270,6 +280,126 @@ class ParserTest {
                 exprs[1] instanceof FunctionCallExpr);
     }
 
+<<<<<<< HEAD
+=======
+    @ParameterizedTest
+    @MethodSource("keyWordSqls")
+    void testNodeReservedWords_3(String sql) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+        } catch (Exception e) {
+            fail("sql should success. errMsg: " +  e.getMessage());
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("reservedWordSqls")
+    void testReservedWords(String sql) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+            fail("Not quoting reserved words. sql should fail.");
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof ParsingException);
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("multipleStatements")
+    void testMultipleStatements(String sql, boolean isValid) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+            if (!isValid) {
+                fail("sql should fail.");
+            }
+        } catch (Exception e) {
+            if (isValid) {
+                fail("sql should success. errMsg: " +  e.getMessage());
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("setQuantifierInAggFunc")
+    void testSetQuantifierInAggFunc(String sql, boolean isValid) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+            if (!isValid) {
+                fail("sql should fail.");
+            }
+        } catch (Exception e) {
+            if (isValid) {
+                fail("sql should success. errMsg: " +  e.getMessage());
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("unexpectedTokenSqls")
+    void testUnexpectedTokenSqls(String sql, String expecting) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+            fail("sql should fail.");
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            assertContains(e.getMessage(), expecting);
+        }
+    }
+
+    @Test
+    void testWrongVariableName() {
+        String res = VariableMgr.findSimilarVarNames("disable_coloce_join");
+        assertContains(res, "{'disable_colocate_join', 'disable_join_reorder', 'disable_function_fold_constants'}");
+
+        res = VariableMgr.findSimilarVarNames("SQL_AUTO_NULL");
+        assertContains(res, "{'SQL_AUTO_IS_NULL', 'sql_dialect', 'sql_mode_v2'}");
+
+        res = VariableMgr.findSimilarVarNames("pipeline");
+        assertContains(res, "{'pipeline_dop', 'pipeline_sink_dop', 'pipeline_profile_level'}");
+
+        res = VariableMgr.findSimilarVarNames("disable_joinreorder");
+        assertContains(res, "{'disable_join_reorder', 'disable_colocate_join', 'enable_predicate_reorder'}");
+    }
+
+    @Test
+    void testModOperator() {
+        String sql = "select 100 MOD 2";
+        List<StatementBase> stmts = SqlParser.parse(sql, new SessionVariable());
+        String newSql = AstToSQLBuilder.toSQL(stmts.get(0));
+        assertEquals("SELECT 100 % 2", newSql);
+    }
+
+    private static Stream<Arguments> keyWordSqls() {
+        List<String> sqls = Lists.newArrayList();
+        sqls.add("select current_role()");
+        sqls.add("select current_role");
+        sqls.add("SHOW ALL AUTHENTICATION ");
+        sqls.add("CANCEL BACKUP from tbl");
+        sqls.add("select current_role() from tbl");
+        sqls.add("grant all privileges on DATABASE db1 to test");
+        sqls.add("revoke export on DATABASE db1 from test");
+        sqls.add("ALTER SYSTEM MODIFY BACKEND HOST '1' to '1'");
+        sqls.add("SHOW COMPUTE NODES");
+        sqls.add("trace times select 1");
+        sqls.add("select anti from t1 left anti join t2 on true");
+        sqls.add("select anti, semi from t1 left semi join t2 on true");
+        sqls.add("select * from tbl1 MINUS select * from tbl2");
+        return sqls.stream().map(e -> Arguments.of(e));
+    }
+
+
+    private static Stream<Arguments> reservedWordSqls() {
+        List<String> sqls = Lists.newArrayList();
+        sqls.add("select * from current_role ");
+        sqls.add("select * from full full join anti anti on anti.col join t1 on true");
+        return sqls.stream().map(e -> Arguments.of(e));
+    }
+
+>>>>>>> 33e1c8bd01 ([BugFix] fix mod operator not be parsed correctly (#33073))
     private static Stream<Arguments> multipleStatements() {
         List<Pair<String, Boolean>> sqls = Lists.newArrayList();
         sqls.add(Pair.create("select 1;;;;;;select 2", true));
