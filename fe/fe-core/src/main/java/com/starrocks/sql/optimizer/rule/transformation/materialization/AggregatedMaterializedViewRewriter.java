@@ -75,6 +75,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             .add(FunctionSet.COUNT)
             .add(FunctionSet.MAX)
             .add(FunctionSet.MIN)
+            .add(FunctionSet.ARRAY_AGG)
             .add(FunctionSet.APPROX_COUNT_DISTINCT)
             .add(FunctionSet.BITMAP_UNION)
             .add(FunctionSet.HLL_UNION)

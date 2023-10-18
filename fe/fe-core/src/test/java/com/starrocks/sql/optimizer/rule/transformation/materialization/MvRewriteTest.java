@@ -1914,6 +1914,40 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testRollup_ArrayAgg() throws Exception {
+        String mvName = "mv_array";
+        createAndRefreshMv("test", mvName, "CREATE MATERIALIZED VIEW `mv_array`\n" +
+                "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
+                "REFRESH ASYNC\n" +
+                "AS \n" +
+                "SELECT \n" +
+                "    CAST((`d_user`->'region') AS string) AS `region`, \n" +
+                "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
+                "    array_agg(d_user) AS `cnt`\n" +
+                "FROM `json_tbl`\n" +
+                "GROUP BY region, `gender`");
+        starRocksAssert.query("select array_agg(d_user) from json_tbl " +
+                        "where cast(d_user->'gender' as string) = 'male'")
+                .explainContains(mvName);
+        starRocksAssert.query("select array_sort(array_distinct(array_agg(d_user))) from json_tbl " +
+                        "where cast(d_user->'gender' as string) = 'male'")
+                .explainContains(mvName);
+        starRocksAssert.query("select " +
+                        " cast(d_user->'region' as string) as region, " +
+                        " array_sort(array_distinct(array_agg(d_user))) " +
+                        "from json_tbl " +
+                        "where cast(d_user->'gender' as string) = 'male' " +
+                        "group by region")
+                .explainContains(mvName);
+        starRocksAssert.query("select " +
+                        " cast(d_user->'region' as string) as region, " +
+                        " array_sort(array_distinct(array_agg(d_user))) " +
+                        "from json_tbl " +
+                        "group by region")
+                .explainContains(mvName);
+    }
+
+    @Test
     public void testPlanCache() throws Exception {
         {
             String mvSql = "create materialized view agg_join_mv_1" +
