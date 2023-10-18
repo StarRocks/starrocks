@@ -366,8 +366,6 @@ The following example explains how to load data with Spark SQL by using the `INS
     +------+-----------+-------+
     2 rows in set (0.00 sec)
     ```
-<<<<<<< HEAD
-=======
 
 ## Best Practices
 
