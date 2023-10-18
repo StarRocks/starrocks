@@ -104,6 +104,13 @@ jobs:
           echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
           echo "fe=${{ steps.changes.outputs.fe }}" >> $GITHUB_OUTPUT
 
+      - name: LABEL THIRDPARTY
+        if: steps.changes.outputs.thirdparty == 'true'
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.PAT }}
+          labels: thirdparty
+
   thirdparty-update:
     runs-on: [self-hosted, normal]
     needs: [code-checker]
