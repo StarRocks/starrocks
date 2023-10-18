@@ -1334,20 +1334,10 @@ public class PartitionBasedMvRefreshProcessorTest {
         taskRun.executeTaskRun();
 
         mockedJDBCMetadata.addPartitions();
-<<<<<<< HEAD
         taskRun.executeTaskRun();
-        Collection<Partition> incrementalPartitions = materializedView.getPartitions();
-        Assert.assertEquals(4, incrementalPartitions.size());
-        Assert.assertNotNull(materializedView.getPartition("P20230802"));
-        Assert.assertNotNull(materializedView.getPartition("P20230803"));
-        Assert.assertNotNull(materializedView.getPartition("P20230804"));
-        Assert.assertNotNull(materializedView.getPartition("P20230805"));
-=======
-        refreshMVRange(materializedView.getName(), "20230801", "20230805", false);
         List<String> partitionNames = materializedView.getPartitions().stream().map(Partition::getName)
                 .sorted().collect(Collectors.toList());
         Assert.assertEquals(ImmutableList.of("p20230802", "p20230803", "p20230804"), partitionNames);
->>>>>>> a3d03a6962 ([Enhancement] fix mv on iceberg issues (#32916))
     }
 
     @Test
@@ -1440,10 +1430,6 @@ public class PartitionBasedMvRefreshProcessorTest {
                 partitions);
     }
 
-<<<<<<< HEAD
-    @Ignore
-=======
->>>>>>> a3d03a6962 ([Enhancement] fix mv on iceberg issues (#32916))
     @Test
     public void test_str2date_date_trunc() throws Exception {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
