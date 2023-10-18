@@ -20,7 +20,7 @@ Fixed the following issues:
 - Using UDFs may lead to memory leaks in certain cases. [#29467](https://github.com/StarRocks/starrocks/pull/29467) [#29465](https://github.com/StarRocks/starrocks/pull/29465)
 - If the ORDER BY clause contains aggregate functions, an error "java.lang.IllegalStateException: null" is returned. [#30108](https://github.com/StarRocks/starrocks/pull/30108)
 - If users run queries against data stored in Tencent COS by using their Hive catalog which consists of multiple levels, the query results will be incorrect. [#30363](https://github.com/StarRocks/starrocks/pull/30363)
-- If some subcfields of the STRUCT in ARRAY<STRUCT> type data are missing, the data length is incorrect when default values are filled in the missing subcfields during queries, which causes BEs to crash.
+- If some subcfields of the STRUCT in ARRAY&lt;STRUCT&gt; type data are missing, the data length is incorrect when default values are filled in the missing subcfields during queries, which causes BEs to crash.
 - The version of Berkeley DB Java Edition is upgraded to avoid security vulnerabilities.[#30029](https://github.com/StarRocks/starrocks/pull/30029)
 - If users load data into a Primary Key table on which truncate operations and queries are concurrently performed, an error "java.lang.NullPointerException" is thrown in certain cases. [#30573](https://github.com/StarRocks/starrocks/pull/30573)
 - If the Schema Change execution time is too long, it may fail because the tablet of the specified version is garbage-collected. [#31376](https://github.com/StarRocks/starrocks/pull/31376)
