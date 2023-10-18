@@ -65,7 +65,7 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 
 - 新表创建后，如果存在多种方式（比如 Insert Into）将数据插入到新表中，那么最先执行完插入操作的即最先将数据插入到新表中。
 
-- 新表创建成功后，您需要手动授予用户对该表的权限。参见 [表权限](../../../administration/privilege_item.md#表权限) 和 [GRANT](../account-management/GRANT.md)。
+- 新表创建成功后，您需要手动授予用户对该表的权限。参见 [表权限](../../../administration/privilege_item.md#表权限-table) 和 [GRANT](../account-management/GRANT.md)。
 - 当异步查询原表并基于查询结果创建新表时，如果不指定 Task 名称，那么 StarRocks 会自动生成一个 Task 名称。
 
 ## 示例
