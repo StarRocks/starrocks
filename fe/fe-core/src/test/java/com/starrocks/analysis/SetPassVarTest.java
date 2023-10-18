@@ -83,7 +83,7 @@ public class SetPassVarTest {
         //  mode: SET PASSWORD FOR 'testUser' = 'testPass';
         stmt = new SetPassVar(new UserIdentity("testUser", "%"), "*88EEBA7D913688E7278E2AD071FDB5E76D76D34B");
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(stmt)), null);
-        Assert.assertEquals("testUser", stmt.getUserIdent().getQualifiedUser());
+        Assert.assertEquals("testUser", stmt.getUserIdent().getUser());
         Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", new String(stmt.getPassword()));
         Assert.assertEquals("'testUser'@'%'", stmt.getUserIdent().toString());
 
@@ -136,12 +136,12 @@ public class SetPassVarTest {
 
     private static void ctxToTestUser() {
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
-        starRocksAssert.getCtx().setQualifiedUser(testUser.getQualifiedUser());
+        starRocksAssert.getCtx().setQualifiedUser(testUser.getUser());
     }
 
     private static void ctxToRoot() {
         starRocksAssert.getCtx().setCurrentUserIdentity(UserIdentity.ROOT);
-        starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
+        starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getUser());
     }
 
     private static void createUsers() throws Exception {

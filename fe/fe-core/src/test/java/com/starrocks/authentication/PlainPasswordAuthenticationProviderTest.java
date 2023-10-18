@@ -66,16 +66,16 @@ public class PlainPasswordAuthenticationProviderTest {
             UserAuthenticationInfo info = provider.validAuthenticationInfo(testUser,
                     new String(MysqlPassword.makeScrambledPassword(password), StandardCharsets.UTF_8), null);
             byte[] scramble = MysqlPassword.scramble(seed, password);
-            provider.authenticate(testUser.getQualifiedUser(), "10.1.1.1", scramble, seed, info);
+            provider.authenticate(testUser.getUser(), "10.1.1.1", scramble, seed, info);
         }
 
         // no password
         UserAuthenticationInfo info = provider.validAuthenticationInfo(testUser,
                 new String(EMPTY_PASSWORD, StandardCharsets.UTF_8), null);
-        provider.authenticate(testUser.getQualifiedUser(), "10.1.1.1", new byte[0], new byte[0], info);
+        provider.authenticate(testUser.getUser(), "10.1.1.1", new byte[0], new byte[0], info);
         try {
             provider.authenticate(
-                    testUser.getQualifiedUser(),
+                    testUser.getUser(),
                     "10.1.1.1",
                     "xx".getBytes(StandardCharsets.UTF_8),
                     "x".getBytes(StandardCharsets.UTF_8),
@@ -89,7 +89,7 @@ public class PlainPasswordAuthenticationProviderTest {
         info = provider.validAuthenticationInfo(testUser, new String(p, StandardCharsets.UTF_8), null);
         try {
             provider.authenticate(
-                    testUser.getQualifiedUser(),
+                    testUser.getUser(),
                     "10.1.1.1",
                     MysqlPassword.scramble(seed, "xx"),
                     seed,
@@ -101,7 +101,7 @@ public class PlainPasswordAuthenticationProviderTest {
 
         try {
             provider.authenticate(
-                    testUser.getQualifiedUser(),
+                    testUser.getUser(),
                     "10.1.1.1",
                     MysqlPassword.scramble(seed, "bb"),
                     seed,
@@ -114,7 +114,7 @@ public class PlainPasswordAuthenticationProviderTest {
         try {
             byte[] remotePassword = "bb".getBytes(StandardCharsets.UTF_8);
             provider.authenticate(
-                    testUser.getQualifiedUser(),
+                    testUser.getUser(),
                     "10.1.1.1",
                     remotePassword,
                     null,

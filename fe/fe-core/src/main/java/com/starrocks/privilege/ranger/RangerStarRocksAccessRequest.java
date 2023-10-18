@@ -35,14 +35,14 @@ public class RangerStarRocksAccessRequest extends RangerAccessRequestImpl {
 
     public static RangerStarRocksAccessRequest createAccessRequest(RangerAccessResourceImpl resource, UserIdentity user,
                                                                    String accessType) {
-        UserGroupInformation ugi = UserGroupInformation.createRemoteUser(user.getQualifiedUser());
+        UserGroupInformation ugi = UserGroupInformation.createRemoteUser(user.getUser());
         String[] groups = ugi.getGroupNames();
         Set<String> userGroups = null;
         if (groups != null && groups.length > 0) {
             userGroups = new HashSet<>(Arrays.asList(groups));
         }
         RangerStarRocksAccessRequest request = new RangerStarRocksAccessRequest();
-        request.setUser(user.getQualifiedUser());
+        request.setUser(user.getUser());
         request.setUserGroups(userGroups);
         request.setAccessType(accessType);
         request.setResource(resource);

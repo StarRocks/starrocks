@@ -125,11 +125,13 @@ public class DropStmtAnalyzer {
 
             String dbName = statement.getDbName();
             if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, context.getQualifiedUser(), dbName);
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                        context.getCurrentUserIdentity().getUser(), dbName);
             } else if (dbName.equalsIgnoreCase(SysDb.DATABASE_NAME)) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(SysDb.DATABASE_NAME.toLowerCase());
                 if (db.getId() == SystemId.SYS_DB_ID) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, context.getQualifiedUser(), dbName);
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                            context.getCurrentUserIdentity().getUser(), dbName);
                 }
             }
             return null;
