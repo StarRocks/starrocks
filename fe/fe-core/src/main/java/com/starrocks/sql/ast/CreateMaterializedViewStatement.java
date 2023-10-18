@@ -17,9 +17,11 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
@@ -47,7 +49,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     private TableName tableName;
     private final List<ColWithComment> colWithComments;
-
+    private final List<IndexDef> indexDefs;
     private boolean ifNotExists;
     private String comment;
     private RefreshSchemeClause refreshSchemeDesc;
@@ -68,6 +70,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     // Sink table information
     private List<Column> mvColumnItems = Lists.newArrayList();
+    private List<Index> mvIndexes = Lists.newArrayList();
     private Column partitionColumn;
     // record expression which related with partition by clause
     private Expr partitionRefTableExpr;
@@ -77,6 +80,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
                                            List<ColWithComment> colWithComments,
+                                           List<IndexDef> indexDefs,
                                            String comment,
                                            RefreshSchemeClause refreshSchemeDesc,
                                            ExpressionPartitionDesc expressionPartitionDesc,
@@ -86,6 +90,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         super(pos);
         this.tableName = tableName;
         this.colWithComments = colWithComments;
+        this.indexDefs = indexDefs;
         this.ifNotExists = ifNotExists;
         this.comment = comment;
         this.refreshSchemeDesc = refreshSchemeDesc;
@@ -106,6 +111,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public List<ColWithComment> getColWithComments() {
         return colWithComments;
+    }
+
+    public List<IndexDef> getIndexDefs() {
+        return indexDefs;
     }
 
     public boolean isIfNotExists() {
@@ -216,8 +225,16 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         return mvColumnItems;
     }
 
+    public List<Index> getMvIndexes() {
+        return mvIndexes;
+    }
+
     public void setMvColumnItems(List<Column> mvColumnItems) {
         this.mvColumnItems = mvColumnItems;
+    }
+
+    public void setMvIndexes(List<Index> mvIndexes) {
+        this.mvIndexes = mvIndexes;
     }
 
     public List<BaseTableInfo> getBaseTableInfos() {
