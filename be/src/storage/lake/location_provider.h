@@ -77,7 +77,7 @@ public:
                          tablet_metadata_lock_filename(tablet_id, version, expire_time));
     }
 
-    std::string schema_file_location(int64_t tablet_id, int64_t schema_id) {
+    std::string schema_file_location(int64_t tablet_id, int64_t schema_id) const {
         return join_path(root_location(tablet_id), schema_filename(schema_id));
     }
 
