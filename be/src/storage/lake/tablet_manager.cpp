@@ -41,6 +41,7 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
+#include "storage/lake/vacuum.h"
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/metadata_util.h"
 #include "storage/protobuf_file.h"
@@ -389,6 +390,7 @@ Status TabletManager::delete_tablet(int64_t tablet_id) {
 }
 
 Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
+    TEST_ERROR_POINT("TabletManager::put_tablet_metadata");
     // write metadata file
     auto t0 = butil::gettimeofday_us();
     auto filepath = tablet_metadata_location(metadata->id(), metadata->version());
@@ -412,6 +414,7 @@ Status TabletManager::put_tablet_metadata(const TabletMetadata& metadata) {
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location, bool fill_cache) {
+    TEST_ERROR_POINT("TabletManager::load_tablet_metadata");
     auto t0 = butil::gettimeofday_us();
     auto metadata = std::make_shared<TabletMetadataPB>();
     ProtobufFile file(metadata_location);
@@ -470,6 +473,7 @@ StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_
 }
 
 StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path, bool fill_cache) {
+    TEST_ERROR_POINT("TabletManager::load_txn_log");
     auto t0 = butil::gettimeofday_us();
     auto meta = std::make_shared<TxnLog>();
     ProtobufFile file(txn_log_path);
@@ -716,18 +720,21 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
         }
     }
 
+    std::vector<std::string> files_to_delete;
+
     // Apply txn logs
     int64_t alter_version = -1;
     for (int i = 0; i < txns_size; i++) {
         auto txn_id = txns[i];
-        auto txn_log_st = tablet->get_txn_log(txn_id);
+        auto log_path = tablet_mgr->txn_log_location(tablet->id(), txn_id);
+        auto txn_log_st = tablet_mgr->get_txn_log(log_path, false);
 
         if (txn_log_st.status().is_not_found()) {
             return new_version_metadata_or_error(txn_log_st.status());
         }
 
         if (!txn_log_st.ok()) {
-            LOG(WARNING) << "Fail to get " << tablet->txn_log_location(txn_id) << ": " << txn_log_st.status();
+            LOG(WARNING) << "Fail to get " << log_path << ": " << txn_log_st.status();
             return txn_log_st.status();
         }
 
@@ -738,9 +745,13 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
 
         auto st = log_applier->apply(*txn_log);
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to apply " << tablet->txn_log_location(txn_id) << ": " << st;
+            LOG(WARNING) << "Fail to apply " << log_path << ": " << st;
             return st;
         }
+
+        files_to_delete.emplace_back(log_path);
+
+        tablet_mgr->metacache()->erase(CacheKey(log_path));
     }
 
     // Apply vtxn logs for schema change
@@ -749,21 +760,26 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
     if (alter_version != -1 && alter_version + 1 < new_version) {
         DCHECK(base_version == 1 && txns_size == 1);
         for (int64_t v = alter_version + 1; v < new_version; ++v) {
-            auto txn_vlog = tablet->get_txn_vlog(v);
+            auto vlog_path = tablet_mgr->txn_vlog_location(tablet->id(), v);
+            auto txn_vlog = tablet_mgr->get_txn_vlog(vlog_path, false);
             if (txn_vlog.status().is_not_found()) {
                 return new_version_metadata_or_error(txn_vlog.status());
             }
 
             if (!txn_vlog.ok()) {
-                LOG(WARNING) << "Fail to get " << tablet->txn_vlog_location(v) << ": " << txn_vlog.status();
+                LOG(WARNING) << "Fail to get " << vlog_path << ": " << txn_vlog.status();
                 return txn_vlog.status();
             }
 
             auto st = log_applier->apply(**txn_vlog);
             if (!st.ok()) {
-                LOG(WARNING) << "Fail to apply " << tablet->txn_vlog_location(v) << ": " << st;
+                LOG(WARNING) << "Fail to apply " << vlog_path << ": " << st;
                 return st;
             }
+
+            files_to_delete.emplace_back(vlog_path);
+
+            tablet_mgr->metacache()->erase(CacheKey(vlog_path));
         }
     }
 
@@ -772,48 +788,12 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
 
     // collect trash files, and remove them by background threads
     auto trash_files = log_applier->trash_files();
-
-    CHECK_EQ(1, txns_size);
-    auto tablet_id = tablet->id();
-    auto txn_id = txns[0];
-    auto clear_task = [=]() {
-        // Delete txn logs
-        auto st = tablet_mgr->delete_txn_log(tablet_id, txn_id);
-        TEST_SYNC_POINT_CALLBACK("publish_version:delete_txn_log", &st);
-        LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet_mgr->txn_log_location(tablet_id, txn_id) << ": " << st;
-        // Delete vtxn logs
-        if (alter_version != -1 && alter_version + 1 < new_version) {
-            for (int64_t v = alter_version + 1; v < new_version; ++v) {
-                auto r = tablet_mgr->delete_txn_vlog(tablet_id, v);
-                LOG_IF(WARNING, !r.ok()) << "Fail to delete " << tablet_mgr->txn_vlog_location(tablet_id, v) << ": "
-                                         << r;
-            }
-        }
-        // Delete trash_file files
-        if (nullptr != trash_files) {
-            for (const auto& trash_file : *trash_files) {
-                if (is_del(trash_file)) {
-                    auto r = tablet_mgr->delete_del(tablet_id, trash_file);
-                    LOG_IF(WARNING, !r.ok())
-                            << "Fail to delete " << tablet_mgr->del_location(tablet_id, trash_file) << ": " << r;
-                } else if (is_segment(trash_file)) {
-                    auto r = tablet_mgr->delete_segment(tablet_id, trash_file);
-                    LOG_IF(WARNING, !r.ok())
-                            << "Fail to delete " << tablet_mgr->segment_location(tablet_id, trash_file) << ": " << r;
-                } else {
-                    LOG(ERROR) << "Unknown file: " << trash_file << " tablet_id: " << tablet_id;
-                }
-            }
-        }
-    };
-
-    auto tp = ExecEnv::GetInstance()->vacuum_thread_pool();
-    if (LIKELY(tp != nullptr)) {
-        auto st = tp->submit_func(std::move(clear_task));
-        LOG_IF(INFO, !st.ok()) << "Fail to submit clear task of txn " << txn_id << ", ignore this error";
-    } else {
-        clear_task();
+    if (trash_files != nullptr) {
+        files_to_delete.insert(files_to_delete.end(), trash_files->begin(), trash_files->end());
     }
+
+    delete_files_async(std::move(files_to_delete));
+
     return new_metadata;
 }
 
@@ -835,45 +815,45 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t ve
 }
 
 void TabletManager::abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size) {
-    // TODO: batch deletion
+    std::vector<std::string> files_to_delete;
     for (int i = 0; i < txns_size; i++) {
         auto txn_id = txns[i];
-        auto txn_log_or = get_txn_log(tablet_id, txn_id);
+        auto log_path = txn_log_location(tablet_id, txn_id);
+        auto txn_log_or = get_txn_log(log_path, false);
         if (!txn_log_or.ok()) {
             LOG_IF(WARNING, !txn_log_or.status().is_not_found())
-                    << "Fail to get txn log " << txn_log_location(tablet_id, txn_id) << ": " << txn_log_or.status();
+                    << "Fail to get txn log " << log_path << ": " << txn_log_or.status();
             continue;
         }
 
         TxnLogPtr txn_log = std::move(txn_log_or).value();
         if (txn_log->has_op_write()) {
             for (const auto& segment : txn_log->op_write().rowset().segments()) {
-                auto st = delete_segment(tablet_id, segment);
-                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
+                files_to_delete.emplace_back(segment_location(tablet_id, segment));
             }
             for (const auto& del_file : txn_log->op_write().dels()) {
-                auto st = delete_del(tablet_id, del_file);
-                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << del_file << ": " << st;
+                files_to_delete.emplace_back(del_location(tablet_id, del_file));
             }
         }
         if (txn_log->has_op_compaction()) {
             for (const auto& segment : txn_log->op_compaction().output_rowset().segments()) {
-                auto st = delete_segment(tablet_id, segment);
-                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
+                files_to_delete.emplace_back(segment_location(tablet_id, segment));
             }
         }
         if (txn_log->has_op_schema_change() && !txn_log->op_schema_change().linked_segment()) {
             for (const auto& rowset : txn_log->op_schema_change().rowsets()) {
                 for (const auto& segment : rowset.segments()) {
-                    auto st = delete_segment(tablet_id, segment);
-                    LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
+                    files_to_delete.emplace_back(segment_location(tablet_id, segment));
                 }
             }
         }
-        auto st = delete_txn_log(tablet_id, txn_id);
-        LOG_IF(WARNING, !st.ok() && !st.is_not_found())
-                << "Fail to delete " << txn_log_location(tablet_id, txn_id) << ": " << st;
+
+        files_to_delete.emplace_back(log_path);
+
+        metacache()->erase(CacheKey(log_path));
     }
+
+    delete_files_async(std::move(files_to_delete));
 }
 
 Status TabletManager::publish_log_version(int64_t tablet_id, int64_t txn_id, int64 log_version) {
@@ -894,7 +874,12 @@ Status TabletManager::publish_log_version(int64_t tablet_id, int64_t txn_id, int
     } else if (!st.ok()) {
         return st;
     } else {
+<<<<<<< HEAD
         (void)fs::delete_file(txn_log_path);
+=======
+        delete_files_async({txn_log_path});
+        metacache()->erase(CacheKey(txn_log_path));
+>>>>>>> 2c93a3cb2a ([Enhancement] optimize thread pool usage in shared data mode (#32823))
         return Status::OK();
     }
 }

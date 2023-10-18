@@ -117,7 +117,7 @@ public class Partition extends MetaObject implements Writable {
     @SerializedName(value = "shardGroupId")
     private long shardGroupId;
 
-    private volatile long nextVacuumTime = 0;
+    private volatile long lastVacuumTime = 0;
 
     private volatile long minRetainVersion = 0;
 
@@ -542,12 +542,12 @@ public class Partition extends MetaObject implements Writable {
         return hasChanged;
     }
 
-    public long getNextVacuumTime() {
-        return nextVacuumTime;
+    public long getLastVacuumTime() {
+        return lastVacuumTime;
     }
 
-    public void setNextVacuumTime(long nextVacuumTime) {
-        this.nextVacuumTime = nextVacuumTime;
+    public void setLastVacuumTime(long lastVacuumTime) {
+        this.lastVacuumTime = lastVacuumTime;
     }
 
     public long getMinRetainVersion() {
