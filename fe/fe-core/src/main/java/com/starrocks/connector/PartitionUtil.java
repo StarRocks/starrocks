@@ -83,7 +83,7 @@ public class PartitionUtil {
     private static final Logger LOG = LogManager.getLogger(PartitionUtil.class);
     public static final String ICEBERG_DEFAULT_PARTITION = "ICEBERG_DEFAULT_PARTITION";
 
-    private static final String MYSQL_PARTITION_MAXVALUE = "MAXVALUE";
+    public static final String MYSQL_PARTITION_MAXVALUE = "MAXVALUE";
 
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
         return createPartitionKey(values, columns, Table.TableType.HIVE);
