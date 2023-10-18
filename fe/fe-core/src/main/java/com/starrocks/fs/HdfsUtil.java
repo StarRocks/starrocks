@@ -110,7 +110,7 @@ public class HdfsUtil {
         String[] columns = new String[columnsFromPath.size()];
         for (int i = strings.length - 1; i >= 0; i--) {
             String str = strings[i];
-            if (str != null && str.isEmpty() || !str.contains("=")) {
+            if (str == null || str.isEmpty() || !str.contains("=")) {
                 continue;
             }
             String[] pair = str.split("=", 2);
