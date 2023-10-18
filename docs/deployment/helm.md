@@ -4,7 +4,7 @@
 
 ## Before you begin
 
-- [Create a Kubernetes cluster](./sr_operator#create-kubernetes-cluster).
+- [Create a Kubernetes cluster](./sr_operator.md#create-kubernetes-cluster).
 - [Install Helm](https://helm.sh/docs/intro/quickstart/).
 
 ## Procedure
