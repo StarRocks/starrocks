@@ -322,8 +322,8 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_close_without_finish) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    auto schema0 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {0}));
-    auto schema1 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {1}));
+    auto schema0 = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema, {0}));
+    auto schema1 = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema, {1}));
 
     Chunk c0_chunk({c0}, schema0);
     Chunk c1_chunk({c1}, schema1);
