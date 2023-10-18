@@ -41,7 +41,7 @@ public class ResourceGroupMetricMgr {
     private static final String RESOURCE_GROUP_QUERY_QUEUE_PENDING = "resource_group_query_queue_pending";
     private static final String RESOURCE_GROUP_QUERY_QUEUE_TIMEOUT = "resource_group_query_queue_timeout";
 
-    private static final String QUERY_QUEUE_PENDING_REASON = "query_queue_pending_reason";
+    private static final String QUERY_QUEUE_PENDING_REASON = "query_queue_pending_by";
     private static final String QUERY_QUEUE_PENDING_REASON_DESC =
             "the number of pending queries in the query queue with the specific reason";
 
@@ -75,10 +75,10 @@ public class ResourceGroupMetricMgr {
             Metric.MetricUnit.REQUESTS, QUERY_QUEUE_PENDING_REASON_DESC);
 
     static {
-        QUERY_QUEUE_PENDING_BY_GLOBAL_RESOURCE_QUERIES.addLabel(new MetricLabel("status", "global_cpu_or_memory_limit"));
-        QUERY_QUEUE_PENDING_BY_GLOBAL_SLOT_QUERIES.addLabel(new MetricLabel("status", "global_concurrency_limit"));
-        QUERY_QUEUE_PENDING_BY_GROUP_RESOURCE_QUERIES.addLabel(new MetricLabel("status", "group_max_cpu_cores"));
-        QUERY_QUEUE_PENDING_BY_GROUP_SLOT_QUERIES.addLabel(new MetricLabel("status", "group_concurrency_limit"));
+        QUERY_QUEUE_PENDING_BY_GLOBAL_RESOURCE_QUERIES.addLabel(new MetricLabel("reason", "global_cpu_or_memory_limit"));
+        QUERY_QUEUE_PENDING_BY_GLOBAL_SLOT_QUERIES.addLabel(new MetricLabel("reason", "global_concurrency_limit"));
+        QUERY_QUEUE_PENDING_BY_GROUP_RESOURCE_QUERIES.addLabel(new MetricLabel("reason", "group_max_cpu_cores"));
+        QUERY_QUEUE_PENDING_BY_GROUP_SLOT_QUERIES.addLabel(new MetricLabel("reason", "group_concurrency_limit"));
 
         MetricRepo.addMetric(QUERY_QUEUE_PENDING_BY_GLOBAL_RESOURCE_QUERIES);
         MetricRepo.addMetric(QUERY_QUEUE_PENDING_BY_GLOBAL_SLOT_QUERIES);
