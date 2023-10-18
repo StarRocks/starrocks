@@ -76,8 +76,7 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs,
                                                  uint32_t segment_id, const TabletSchema* tablet_schema,
                                                  size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer) {
-    auto segment = std::make_shared<Segment>(private_type(0), std::move(fs), path, segment_id, tablet_schema);
-
+    auto segment = std::make_shared<Segment>(std::move(fs), path, segment_id, tablet_schema);
     RETURN_IF_ERROR(segment->_open(footer_length_hint, partial_rowset_footer, true));
     return std::move(segment);
 }
@@ -87,10 +86,8 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs,
                                                  size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer,
                                                  bool skip_fill_local_cache, lake::TabletManager* tablet_manager) {
-    auto segment = std::make_shared<Segment>(private_type(0), std::move(fs), path, segment_id, std::move(tablet_schema),
-                                             tablet_manager);
-
-    RETURN_IF_ERROR(segment->_open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache));
+    auto segment = std::make_shared<Segment>(std::move(fs), path, segment_id, std::move(tablet_schema), tablet_manager);
+    RETURN_IF_ERROR(segment->open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache));
     return std::move(segment);
 }
 
@@ -184,13 +181,13 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
     return Status::OK();
 }
 
-Segment::Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
+Segment::Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
                  const TabletSchema* tablet_schema)
         : _fs(std::move(fs)), _fname(std::move(path)), _tablet_schema(tablet_schema), _segment_id(segment_id) {
     MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
 }
 
-Segment::Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
+Segment::Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
                  std::shared_ptr<const TabletSchema> tablet_schema, lake::TabletManager* tablet_manager)
         : _fs(std::move(fs)),
           _fname(std::move(path)),
@@ -205,13 +202,28 @@ Segment::~Segment() {
     MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->short_key_index_mem_tracker(), _short_key_index_mem_usage());
 }
 
+Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
+                     bool skip_fill_local_cache) {
+    if (invoked(_open_once)) {
+        return Status::OK();
+    }
+
+    auto res = success_once(_open_once, [&] {
+        Status st = _open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache);
+        if (st.ok()) {
+            update_cache_size();
+        }
+        return st;
+    });
+    return res.status();
+}
+
 Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
                       bool skip_fill_local_cache) {
     SegmentFooterPB footer;
     RandomAccessFileOptions opts{.skip_fill_local_cache = skip_fill_local_cache};
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _fname));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
-
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());
