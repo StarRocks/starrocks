@@ -1,0 +1,43 @@
+-- name: test_column_rename2
+CREATE TABLE `site_access` (
+  `event_day` date NULL COMMENT "",
+  `site_id` int(11) NULL DEFAULT "10" COMMENT "",
+  `city_code` varchar(100) NULL COMMENT "",
+  `user_name` varchar(32) NULL DEFAULT "" COMMENT "",
+  `pv` bigint(20) NULL DEFAULT "0" COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`event_day`, `site_id`, `city_code`, `user_name`)
+PARTITION BY RANGE(`event_day`)
+(PARTITION p20231018 VALUES [("2023-10-18"), ("2023-10-19")),
+PARTITION p20231019 VALUES [("2023-10-19"), ("2023-10-20")),
+PARTITION p20231020 VALUES [("2023-10-20"), ("2023-10-21")),
+PARTITION p20231021 VALUES [("2023-10-21"), ("2023-10-22")))
+DISTRIBUTED BY HASH(`event_day`, `site_id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+INSERT INTO `site_access` (`event_day`, `site_id`, `city_code`, `user_name`, `pv`)
+VALUES ('2023-10-18', 10, 'SH', 'username_example', 100);
+alter table site_access rename column event_day to day;
+alter table site_access rename column user_name to user;
+select * from site_access;
+CREATE TABLE bf_table
+(
+    k1 BIGINT,
+    k2 LARGEINT,
+    v1 VARCHAR(2048) REPLACE,
+    v2 SMALLINT DEFAULT "10"
+)
+ENGINE = olap
+PRIMARY KEY(k1, k2)
+DISTRIBUTED BY HASH (k1, k2)
+PROPERTIES("bloom_filter_columns" = "k1,k2");
+INSERT INTO `bf_table` (`k1`, `k2`, `v1`, `v2`)
+VALUES (1, 1000000000000000, 'example_string', 20);
+desc bf_table;
+alter table bf_table rename column k1 to k3;
+select * from bf_table;
+INSERT INTO `bf_table` (`k3`, `k2`, `v1`, `v2`)
+VALUES (1, 1000000000000000, 'example_string', 20);
+desc bf_table;
+select * from bf_table;
