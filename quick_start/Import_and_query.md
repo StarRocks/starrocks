@@ -81,7 +81,7 @@ select * from detailDemo;
 select * from detailDemo order by region_num desc;
 ```
 
-StarRocks 支持多种 select 用法，包括：[Join](/sql-reference/sql-statements/data-manipulation/SELECT.md#%E8%BF%9E%E6%8E%A5join)，[子查询](/sql-reference/sql-statements/data-manipulation/SELECT.md#子查询)，[With 子句](/sql-reference/sql-statements/data-manipulation/SELECT.md#with%E5%AD%90%E5%8F%A5) 等，详见 [查询章节](/sql-reference/sql-statements/data-manipulation/SELECT.md)。
+StarRocks 支持多种 select 用法，包括：[Join](/sql-reference/sql-statements/data-manipulation/SELECT.md#连接-join)，[子查询](/sql-reference/sql-statements/data-manipulation/SELECT.md#子查询)，[With 子句](/sql-reference/sql-statements/data-manipulation/SELECT.md#with) 等，详见 [查询章节](/sql-reference/sql-statements/data-manipulation/SELECT.md)。
 
 ## 扩展支持
 
@@ -93,11 +93,11 @@ StarRocks 中支持多种函数，包括：[日期函数](/sql-reference/sql-fun
 
 ### 视图
 
-StarRocks 支持创建 [逻辑视图](/sql-reference/sql-statements/data-definition/CREATE_VIEW.md#description) 和 [物化视图](/using_starrocks/Materialized_view.md#物化视图)。具体使用方式详见对应章节。
+StarRocks 支持创建 [逻辑视图](/sql-reference/sql-statements/data-definition/CREATE_VIEW.md#功能) 和 [物化视图](/using_starrocks/Materialized_view.md)。具体使用方式详见对应章节。
 
 ### 外部表
 
-StarRocks 支持多种外部表：[MySQL 外部表](/data_source/External_table.md#mysql-外部表)，[Elasticsearch 外部表](/data_source/External_table.md#elasticsearch-外部表)，[Apache Hive™ 外表](/data_source/External_table.md#hive-外表)，[StarRocks 外部表](/data_source/External_table.md#starrocks-外部表)，[Apache Iceberg 外表](/data_source/External_table.md#apache-iceberg-外表)，[Apache Hudi 外表](/data_source/External_table.md#apache-hudi-外表)。成功创建外部表后，可通过查询外部表的方式接入其他数据源。
+StarRocks 支持多种外部表：[MySQL 外部表](/data_source/External_table.md#deprecated-mysql-外部表)，[Elasticsearch 外部表](/data_source/External_table.md#deprecated-elasticsearch-外部表)，[Apache Hive™ 外表](/data_source/External_table.md#deprecated-hive-外部表)，[StarRocks 外部表](/data_source/External_table.md#starrocks-外部表)，[Apache Iceberg 外表](/data_source/External_table.md#deprecated-iceberg-外部表)，[Apache Hudi 外表](/data_source/External_table.md#deprecated-hudi-外部表)。成功创建外部表后，可通过查询外部表的方式接入其他数据源。
 
 ## 慢查询分析
 
@@ -105,7 +105,7 @@ StarRocks 支持通过多种方式分析查询瓶颈以及优化查询效率。
 
 ### 通过调整并行度优化查询效率
 
-我们推荐您通过设置 Pipeline 执行引擎变量。您也可以通过调整一个 [Fragment](/introduction/Features.md#mpp分布式执行框架) 实例的并行数量 `set  parallel_fragment_exec_instance_num = 8;` 来设置查询并行度，从而提高 CPU 资源利用率和查询效率。详细的参数介绍及设置，参考 [查询并行度相关参数](/administration/Query_management.md)。
+我们推荐您通过设置 Pipeline 执行引擎变量。您也可以通过调整一个 [Fragment](/introduction/Features.md#mpp-分布式执行框架) 实例的并行数量 `set  parallel_fragment_exec_instance_num = 8;` 来设置查询并行度，从而提高 CPU 资源利用率和查询效率。详细的参数介绍及设置，参考 [查询并行度相关参数](/administration/Query_management.md)。
 
 ### 查看 Profile 并分析查询瓶颈
 
