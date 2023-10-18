@@ -531,13 +531,15 @@ void TabletMeta::create_inital_updates_meta() {
 }
 
 void TabletMeta::reset_tablet_schema_for_restore(const TabletSchemaPB& schema_pb) {
-    _schema.reset();
+    std::shared_ptr<const TabletSchema> new_schema_ptr = nullptr;
     if (schema_pb.has_id() && schema_pb.id() != TabletSchema::invalid_id()) {
         // Does not collect the memory usage of |_schema|.
-        _schema = GlobalTabletSchemaMap::Instance()->emplace(schema_pb).first;
+        new_schema_ptr = GlobalTabletSchemaMap::Instance()->emplace(schema_pb).first;
     } else {
-        _schema = std::make_shared<const TabletSchema>(schema_pb);
+        new_schema_ptr = std::make_shared<const TabletSchema>(schema_pb);
     }
+    // atomic swap
+    _schema.swap(new_schema_ptr);
 }
 
 bool operator==(const TabletMeta& a, const TabletMeta& b) {
