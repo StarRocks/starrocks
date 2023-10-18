@@ -477,6 +477,7 @@ Status TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t versi
     _num_key_columns = 0;
     _num_columns = 0;
     bool has_bf_columns = false;
+
     _cols.clear();
     _unique_id_to_index.clear();
     _sort_key_uids.clear();

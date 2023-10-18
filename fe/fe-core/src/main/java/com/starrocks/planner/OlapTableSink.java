@@ -286,7 +286,7 @@ public class OlapTableSink extends DataSink {
             for (Column column : indexMeta.getSchema()) {
                 TColumn tColumn = column.toThrift();
                 tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
-                column.setIndexFlag(tColumn, table.getIndexes());
+                column.setIndexFlag(tColumn, table.getIndexes(), table.getBfColumns());
                 columnsDesc.add(tColumn);
             }
             if (indexMeta.getSortKeyUniqueIds() != null) {
