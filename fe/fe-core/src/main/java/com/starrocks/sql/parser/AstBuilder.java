@@ -1524,7 +1524,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException(PARSER_ERROR_MSG.feConfigDisable("enable_experimental_mv"), NodePosition.ZERO);
         }
 
-        return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments, comment,
+        return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments,
+                context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
+                comment,
                 refreshSchemeDesc,
                 expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement, createPos(context));
     }

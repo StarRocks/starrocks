@@ -71,6 +71,8 @@ import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.Index;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -107,6 +109,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
@@ -3051,6 +3054,10 @@ public class LocalMetastore implements ConnectorMetadata {
                             baseDistribution, mvRefreshScheme);
         }
 
+        //bitmap indexes
+        List<Index> mvIndexes = stmt.getMvIndexes();
+        materializedView.setIndexes(mvIndexes);
+
         // sort keys
         if (CollectionUtils.isNotEmpty(stmt.getSortKeys())) {
             materializedView.setTableProperty(new TableProperty());
@@ -3151,6 +3158,22 @@ public class LocalMetastore implements ConnectorMetadata {
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                 replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
                 materializedView.setReplicationNum(replicationNum);
+            }
+            // bloom_filter_columns
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)) {
+                List<Column> baseSchema = materializedView.getColumns();
+                Set<String> bfColumns = PropertyAnalyzer.analyzeBloomFilterColumns(properties, baseSchema,
+                        materializedView.getKeysType() == KeysType.PRIMARY_KEYS);
+                if (bfColumns != null && bfColumns.isEmpty()) {
+                    bfColumns = null;
+                }
+                double bfFpp = PropertyAnalyzer.analyzeBloomFilterFpp(properties);
+                if (bfColumns != null && bfFpp == 0) {
+                    bfFpp = FeConstants.DEFAULT_BLOOM_FILTER_FPP;
+                } else if (bfColumns == null) {
+                    bfFpp = 0;
+                }
+                materializedView.setBloomFilterInfo(bfColumns, bfFpp);
             }
             // mv_rewrite_staleness second.
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
