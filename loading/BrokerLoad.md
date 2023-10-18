@@ -160,7 +160,7 @@ PROPERTIES
 
 以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#hdfs)。
 
-从 3.1 版本起，StarRocks 支持使用 INSERT 语句和 TABLE 关键字直接从 HDFS 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [通过 INSERT 语句导入数据 > 通过 TABLE 关键字直接导入外部数据文件](../loading/InsertInto.md#通过-table-关键字直接导入外部数据文件)。
+从 3.1 版本起，StarRocks 支持使用 INSERT 语句和 TABLE 关键字直接从 HDFS 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [通过 INSERT 语句导入数据 > 通过 TABLE 关键字直接导入外部数据文件](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件)。
 
 #### 从 AWS S3 导入
 
@@ -191,7 +191,7 @@ WITH BROKER
 
 以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#aws-s3)。
 
-从 3.1 版本起，StarRocks 支持使用 INSERT 语句和 TABLE 关键字直接从 AWS S3 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [通过 INSERT 语句导入数据 > 通过 TABLE 关键字直接导入外部数据文件](../loading/InsertInto.md#通过-table-关键字直接导入外部数据文件)。
+从 3.1 版本起，StarRocks 支持使用 INSERT 语句和 TABLE 关键字直接从 AWS S3 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [通过 INSERT 语句导入数据 > 通过 TABLE 关键字直接导入外部数据文件](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件)。
 
 #### 从 Google GCS 导入
 

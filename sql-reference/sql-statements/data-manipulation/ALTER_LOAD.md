@@ -22,7 +22,7 @@ properties
 
 | **参数**   | **是否必选** | **说明**                                                     |
 | ---------- | ------------ | ------------------------------------------------------------ |
-| label_name | 是           | 指定导入作业的标签。格式：`[<database_name>.]<label_name>`。参见 [BROKER LOAD](../data-manipulation/BROKER_LOAD.md#label)。 |
+| label_name | 是           | 指定导入作业的标签。格式：`[<database_name>.]<label_name>`。参见 [BROKER LOAD](../data-manipulation/BROKER_LOAD.md#database_name-和-label_name)。 |
 | priority   | 是           | 指定导入作业的优先级。取值范围：`LOWEST`、`LOW`、`NORMAL`、`HIGH` 和 `HIGHEST`。参见 [BROKER LOAD](../data-manipulation/BROKER_LOAD.md#opt_properties)。 |
 
 ## 示例

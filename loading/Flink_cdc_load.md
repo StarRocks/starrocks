@@ -210,8 +210,8 @@
 
     - `[table-rule]` ：库表匹配规则，以及对应的flink-connector-starrocks 配置。
 
-        > - 如果需要为不同表匹配不同的 flink-connector-starrocks 配置，例如部分表更新频繁，需要提高导入速度，请参见[补充说明](./Flink_cdc_load.md#补充说明)。
-        > - 如果需要将 MySQL 分库分表后的多张表导入至 StarRocks的一张表中，请参见[补充说明](./Flink_cdc_load.md#补充说明)。
+        > - 如果需要为不同表匹配不同的 flink-connector-starrocks 配置，例如部分表更新频繁，需要提高导入速度，请参见[补充说明](./Flink_cdc_load.md#常见问题)。
+        > - 如果需要将 MySQL 分库分表后的多张表导入至 StarRocks的一张表中，请参见[补充说明](./Flink_cdc_load.md#常见问题)。
 
         - `database`、`table`：MySQL 中同步对象的库表名，支持正则表达式。
 
