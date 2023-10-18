@@ -1450,4 +1450,25 @@ public class AnalyzerUtils {
         return false;
     }
 
+    // rename slotRef in expr to newColName
+    public static Expr renameSlotRef(Expr expr, String newColName) {
+        if (expr instanceof FunctionCallExpr) {
+            for (int i = 0; i < expr.getChildren().size(); i++) {
+                Expr child = expr.getChildren().get(i);
+                if (child instanceof SlotRef) {
+                    expr.setChild(i, new SlotRef(null, newColName));
+                    break;
+                }
+            }
+            return expr;
+        } else if (expr instanceof CastExpr) {
+            CastExpr castExpr = (CastExpr) expr;
+            ArrayList<Expr> children = castExpr.getChildren();
+            for (Expr child : children) {
+                return renameSlotRef(child, newColName);
+            }
+        }
+        return expr;
+    }
+
 }
