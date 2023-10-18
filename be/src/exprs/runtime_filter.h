@@ -100,7 +100,9 @@ public:
 
     SimdBlockFilter() = default;
 
-    ~SimdBlockFilter() noexcept { free(_directory); }
+    ~SimdBlockFilter() noexcept {
+        if (_directory) free(_directory);
+    }
 
     SimdBlockFilter(const SimdBlockFilter& bf) = delete;
     SimdBlockFilter(SimdBlockFilter&& bf) noexcept;
@@ -123,6 +125,10 @@ public:
     }
 
     bool test_hash(const uint64_t hash) const noexcept {
+        if (UNLIKELY(_directory == nullptr)) {
+            DCHECK(false) << "unexpected test_hash on cleared bf";
+            return true;
+        }
         const uint32_t bucket_idx = hash & _directory_mask;
 #ifdef __AVX2__
         const __m256i mask = make_mask(hash >> _log_num_buckets);
@@ -166,7 +172,13 @@ public:
     bool check_equal(const SimdBlockFilter& bf) const;
     uint32_t directory_mask() const { return _directory_mask; }
 
-    void reset(size_t new_size);
+    void clear();
+    // whether this bloom filter can be used
+    // if the bloom filter's size of partial rf has exceed the size limit of global rf,
+    // we still send this rf but ignore bloom filter and only keep min/max filter,
+    // in this case, we will use clear() to release the memory of bloom filter,
+    // we can use can_use() to check if this bloom filter can be used
+    bool can_use() const { return _directory != nullptr; }
 
 private:
     // The number of bits to set in a tiny Bloom filter block
@@ -210,7 +222,9 @@ private:
     // log2(number of bytes in a bucket):
     static constexpr int LOG_BUCKET_BYTE_SIZE = 5;
 
-    size_t get_alloc_size() const { return 1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE); }
+    size_t get_alloc_size() const {
+        return _log_num_buckets == 0 ? 0 : (1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE));
+    }
 
     // Common:
     // log_num_buckets_ is the log (base 2) of the number of buckets in the directory:
@@ -304,16 +318,15 @@ public:
 
     void set_join_mode(int8_t join_mode) { _join_mode = join_mode; }
 
-    void set_ignore_bf(bool ignore_bf) {
-        _ignore_bf = true;
-        // after set_ignore_bf, the existed bloom filter is no longer use,
-        // we can reset it to a minimum size
-        if (ignore_bf) {
-            _reset_bf(SimdBlockFilter::MINIMUM_ELEMENT_NUM);
+    void clear_bf();
+
+    bool can_use_bf() const {
+        if (_num_hash_partitions == 0) {
+            return _bf.can_use();
         }
+        return _hash_partition_bf[0].can_use();
     }
 
-    bool is_ignore_bf() const { return _ignore_bf; }
     // RuntimeFilter version
     // if the RuntimeFilter is updated, the version will be updated as well,
     // (usually used for TopN Filter)
@@ -327,9 +340,7 @@ public:
 
     virtual void merge(const JoinRuntimeFilter* rf) {
         _has_null |= rf->_has_null;
-        if (UNLIKELY(!_ignore_bf)) {
-            _bf.merge(rf->_bf);
-        }
+        _bf.merge(rf->_bf);
     }
 
     virtual void concat(JoinRuntimeFilter* rf) {
@@ -345,8 +356,6 @@ public:
 protected:
     void _update_version() { _rf_version++; }
 
-    void _reset_bf(size_t new_size);
-
     bool _has_null = false;
     size_t _size = 0;
     int8_t _join_mode = 0;
@@ -354,11 +363,6 @@ protected:
     size_t _num_hash_partitions = 0;
     std::vector<SimdBlockFilter> _hash_partition_bf;
     bool _always_true = false;
-    // whether ignore bloom filter, only take effects on global runtime filter,
-    // if the bloom filter's size of partial rf has exceed the size limit of global runtime filter,
-    // we still send this rf but ignore bloom filter and only keep min/max filter.
-    // this information need to be passed when sending rf.
-    bool _ignore_bf = false;
     size_t _rf_version = 0;
 };
 
@@ -436,7 +440,7 @@ public:
     }
 
     void insert(const CppType& value) {
-        if (UNLIKELY(!_ignore_bf)) {
+        if (LIKELY(_bf.can_use())) {
             size_t hash = compute_hash(value);
             _bf.insert_hash(hash);
         }
@@ -456,11 +460,11 @@ public:
 
     void evaluate(Column* input_column, RunningContext* ctx) const override {
         if (_num_hash_partitions != 0) {
-            return _ignore_bf ? _t_evaluate<true, true>(input_column, ctx)
-                              : _t_evaluate<true, false>(input_column, ctx);
+            return _hash_partition_bf[0].can_use() ? _t_evaluate<true, true>(input_column, ctx)
+                                                   : _t_evaluate<true, false>(input_column, ctx);
         } else {
-            return _ignore_bf ? _t_evaluate<false, true>(input_column, ctx)
-                              : _t_evaluate<false, false>(input_column, ctx);
+            return _bf.can_use() ? _t_evaluate<false, true>(input_column, ctx)
+                                 : _t_evaluate<false, false>(input_column, ctx);
         }
     }
 
@@ -488,8 +492,7 @@ public:
     std::string debug_string() const override {
         LogicalType ltype = Type;
         std::stringstream ss;
-        ss << "RuntimeBF(type = " << ltype << ", bfsize = " << _size << ", has_null = " << _has_null
-           << ", ignore_bf = " << _ignore_bf;
+        ss << "RuntimeBF(type = " << ltype << ", bfsize = " << _size << ", has_null = " << _has_null;
         if constexpr (std::is_integral_v<CppType> || std::is_floating_point_v<CppType>) {
             if constexpr (!std::is_same_v<CppType, __int128>) {
                 ss << ", _min = " << _min << ", _max = " << _max;
@@ -799,6 +802,7 @@ private:
     }
 
     bool _test_data(CppType value) const {
+        DCHECK(_bf.can_use());
         size_t hash = compute_hash(value);
         return _bf.test_hash(hash);
     }
@@ -810,6 +814,7 @@ private:
         }
         // module has been done outside, so actually here is bucket idx.
         const uint32_t bucket_idx = shuffle_hash;
+        DCHECK(_hash_partition_bf[bucket_idx].can_use());
         size_t hash = compute_hash(value);
         return _hash_partition_bf[bucket_idx].test_hash(hash);
     }
@@ -832,7 +837,7 @@ private:
     // and for global runtime filter, since it concates multiple runtime filters from partitions
     // so it has multiple `simd-block-filter` and `hash_partition` is true.
     // For more information, you can refers to doc `shuffle-aware runtime filter`.
-    template <bool hash_partition = false, bool skip_evaluate_bf = false>
+    template <bool hash_partition = false, bool can_use_bf = true>
     void _t_evaluate(Column* input_column, RunningContext* ctx) const {
         size_t size = input_column->size();
         Filter& _selection_filter = ctx->use_merged_selection ? ctx->merged_selection : ctx->selection;
@@ -851,7 +856,7 @@ private:
             } else {
                 const auto& input_data = GetContainer<Type>().get_data(const_column->data_column());
                 _evaluate_min_max(input_data, _selection, 1);
-                if constexpr (!skip_evaluate_bf) {
+                if constexpr (can_use_bf) {
                     _rf_test_data<hash_partition>(_selection, input_data, _hash_values, 0);
                 }
             }
@@ -867,13 +872,13 @@ private:
                     if (null_data[i]) {
                         _selection[i] = _has_null;
                     } else {
-                        if constexpr (!skip_evaluate_bf) {
+                        if constexpr (can_use_bf) {
                             _rf_test_data<hash_partition>(_selection, input_data, _hash_values, i);
                         }
                     }
                 }
             } else {
-                if constexpr (!skip_evaluate_bf) {
+                if constexpr (can_use_bf) {
                     for (int i = 0; i < size; ++i) {
                         _rf_test_data<hash_partition>(_selection, input_data, _hash_values, i);
                     }
@@ -882,7 +887,7 @@ private:
         } else {
             const auto& input_data = GetContainer<Type>().get_data(input_column);
             _evaluate_min_max(input_data, _selection, size);
-            if constexpr (!skip_evaluate_bf) {
+            if constexpr (can_use_bf) {
                 for (int i = 0; i < size; ++i) {
                     _rf_test_data<hash_partition>(_selection, input_data, _hash_values, i);
                 }

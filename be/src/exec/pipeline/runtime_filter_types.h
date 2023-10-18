@@ -327,8 +327,7 @@ public:
             if (filter == nullptr) continue;
 
             if (desc->has_remote_targets() && row_count > _global_rf_limit) {
-                filter->set_ignore_bf(true);
-                desc->set_ignore_bf(true);
+                filter->clear_bf();
             } else {
                 filter->init(row_count);
             }

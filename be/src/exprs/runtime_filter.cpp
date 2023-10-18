@@ -62,7 +62,7 @@ SimdBlockFilter::SimdBlockFilter(SimdBlockFilter&& bf) noexcept {
 }
 
 size_t SimdBlockFilter::max_serialized_size() const {
-    const size_t alloc_size = get_alloc_size();
+    const size_t alloc_size = _directory == nullptr ? 0 : get_alloc_size();
     return sizeof(_log_num_buckets) + sizeof(_directory_mask) + // data size + max data size
            sizeof(int32_t) + alloc_size;
 }
@@ -78,8 +78,10 @@ size_t SimdBlockFilter::serialize(uint8_t* data) const {
     const size_t alloc_size = get_alloc_size();
     int32_t data_size = alloc_size;
     SIMD_BF_COPY_FIELD(data_size);
-    memcpy(data + offset, _directory, data_size);
-    offset += data_size;
+    if (LIKELY(data_size > 0)) {
+        memcpy(data + offset, _directory, data_size);
+        offset += data_size;
+    }
     return offset;
 #undef SIMD_BF_COPY_FIELD
 }
@@ -97,14 +99,19 @@ size_t SimdBlockFilter::deserialize(const uint8_t* data) {
 #undef SIMD_BF_COPY_FIELD
     const size_t alloc_size = get_alloc_size();
     DCHECK(data_size == alloc_size);
-    const int malloc_failed = posix_memalign(reinterpret_cast<void**>(&(_directory)), 64, alloc_size);
-    if (malloc_failed) throw ::std::bad_alloc();
-    memcpy(_directory, data + offset, data_size);
-    offset += data_size;
+    if (LIKELY(data_size > 0)) {
+        const int malloc_failed = posix_memalign(reinterpret_cast<void**>(&(_directory)), 64, alloc_size);
+        if (malloc_failed) throw ::std::bad_alloc();
+        memcpy(_directory, data + offset, data_size);
+        offset += data_size;
+    }
     return offset;
 }
 
 void SimdBlockFilter::merge(const SimdBlockFilter& bf) {
+    if (_directory == nullptr || bf._directory == nullptr) {
+        return;
+    }
     DCHECK(_log_num_buckets == bf._log_num_buckets);
     for (int i = 0; i < (1 << _log_num_buckets); i++) {
 #ifdef __AVX2__
@@ -140,12 +147,13 @@ bool SimdBlockFilter::check_equal(const SimdBlockFilter& bf) const {
            memcmp(_directory, bf._directory, alloc_size) == 0;
 }
 
-void SimdBlockFilter::reset(size_t new_size) {
+void SimdBlockFilter::clear() {
     if (_directory) {
         free(_directory);
         _directory = nullptr;
+        _log_num_buckets = 0;
+        _directory_mask = 0;
     }
-    init(new_size);
 }
 
 size_t JoinRuntimeFilter::max_serialized_size() const {
@@ -223,17 +231,15 @@ bool JoinRuntimeFilter::check_equal(const JoinRuntimeFilter& rf) const {
     return true;
 }
 
-void JoinRuntimeFilter::_reset_bf(size_t new_size) {
-    DCHECK(_ignore_bf);
+void JoinRuntimeFilter::clear_bf() {
     if (_num_hash_partitions == 0) {
-        _bf.reset(new_size);
-        _size = new_size;
+        _bf.clear();
     } else {
         for (size_t i = 0; i < _num_hash_partitions; i++) {
-            _hash_partition_bf[i].reset(new_size);
+            _hash_partition_bf[i].clear();
         }
-        _size = new_size * _num_hash_partitions;
     }
+    _size = 0;
 }
 
 } // namespace starrocks
