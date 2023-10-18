@@ -66,23 +66,23 @@ public class IcebergPartitionUtils {
         }
     }
 
-    public static Set<String> getChangedPartitionNames(Table table, long from) {
-        Set<IcebergPartition> changedPartition = getChangedPartition(table, from);
+    public static Set<String> getChangedPartitionNames(Table table, long fromTimestampMillis) {
+        Set<IcebergPartition> changedPartition = getChangedPartition(table, fromTimestampMillis);
         return changedPartition.stream().map(partition -> PartitionUtil.
                 convertIcebergPartitionToPartitionName(table.spec(), partition.data)).collect(Collectors.toSet());
     }
 
-    public static Set<IcebergPartition> getChangedPartition(Table table, long from) {
+    public static Set<IcebergPartition> getChangedPartition(Table table, long fromTimestampMillis) {
         ImmutableSet.Builder<IcebergPartition> builder = ImmutableSet.builder();
         Snapshot snapShot = table.currentSnapshot();
-        if (snapShot.timestampMillis() >= from) {
+        if (snapShot.timestampMillis() >= fromTimestampMillis) {
             while (snapShot.parentId() != null) {
                 snapShot = table.snapshot(snapShot.parentId());
-                if (snapShot.timestampMillis() <= from) {
+                if (snapShot.timestampMillis() <= fromTimestampMillis) {
                     break;
                 }
             }
-            if (snapShot.timestampMillis() <= from) {
+            if (snapShot.timestampMillis() <= fromTimestampMillis) {
                 IncrementalChangelogScan incrementalChangelogScan = table.newIncrementalChangelogScan().
                         fromSnapshotExclusive(snapShot.snapshotId());
                 try (CloseableIterable<ChangelogScanTask> tasks = incrementalChangelogScan.planFiles()) {
@@ -98,7 +98,6 @@ public class IcebergPartitionUtils {
                             builder.add(new IcebergPartition(deletedDataFileScanTask.spec(), data, operation));
                         } else {
                             LOG.warn("Do not support this iceberg change log type, operation is {}", operation);
-                            continue;
                         }
                     }
                 } catch (Exception e) {
