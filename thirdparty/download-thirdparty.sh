@@ -477,7 +477,20 @@ fi
 echo "Finished patching $SERDES_SOURCE"
 cd -
 
+<<<<<<< HEAD
 # patch arrows to use our built jemalloc
+=======
+# patch sasl2
+cd $TP_SOURCE_DIR/$SASL_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $SASL_SOURCE = "cyrus-sasl-2.1.28" ]; then
+    patch -p1 < $TP_PATCH_DIR/sasl2-add-k5support-link.patch
+    touch $PATCHED_MARK
+fi
+echo "Finished patching $SASL_SOURCE"
+cd -
+
+# patch arrow
+>>>>>>> 025921a93d ([Enhancement] sasl enable kerberos support (#32483))
 if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$ARROW_SOURCE
     if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-5.0.0" ] ; then
