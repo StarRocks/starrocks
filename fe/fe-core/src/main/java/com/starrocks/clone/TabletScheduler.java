@@ -1654,7 +1654,7 @@ public class TabletScheduler extends FrontendDaemon {
 
         // check if clone task success
         if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
-            LOG.warn("create replica task failed: {}", request.getTask_status().getError_msgs().get(0)));
+            LOG.warn("create replica task failed: {}", request.getTask_status().getError_msgs().get(0));
             finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.CANCELLED, request.getTask_status().getError_msgs().get(0));
             return;
         }
