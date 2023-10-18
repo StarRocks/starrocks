@@ -45,8 +45,9 @@ PipelineDriver::~PipelineDriver() noexcept {
     for (auto& op : _operators) {
         auto& op_state = _operator_stages[op->get_id()];
         if (op_state != OperatorStage::CLOSED) {
-            auto msg = fmt::format("{} close operator {} failed, may leak resources when deleting",
-                                   to_readable_string(), op->get_name());
+            auto msg =
+                    fmt::format("{} close operator {} failed, may leak resources when deleting, please reflect to SR",
+                                to_readable_string(), op->get_name());
             LOG(ERROR) << msg;
 #ifdef BE_TEST
             throw std::runtime_error(msg);
@@ -547,8 +548,8 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
     for (auto& op : _operators) {
         auto& op_state = _operator_stages[op->get_id()];
         if (op_state != OperatorStage::CLOSED) {
-            auto msg = fmt::format("{} close operator {} failed, may leak resources when closing", to_readable_string(),
-                                   op->get_name());
+            auto msg = fmt::format("{} close operator {} failed, may leak resources when closing, please reflect to SR",
+                                   to_readable_string(), op->get_name());
             LOG(ERROR) << msg;
 #ifdef BE_TEST
             throw std::runtime_error(msg);
