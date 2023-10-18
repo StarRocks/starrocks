@@ -261,7 +261,7 @@ public class PartitionBasedMvRefreshProcessorTest {
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
                         "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_extendedprice) as total_price FROM " +
-                        "`hive0`.`partitioned_db`.`lineitem_mul_par` as a group by `l_orderkey`, `l_suppkey`, `l_shipdate`;")
+                        "`hive0`.`partitioned_db`.`lineitem_mul_par as a group by `l_orderkey`, `l_suppkey`, `l_shipdate`;")
                 .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_mul_parttbl_mv2`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`par_date`)\n" +

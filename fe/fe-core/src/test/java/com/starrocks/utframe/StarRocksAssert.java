@@ -242,6 +242,10 @@ public class StarRocksAssert {
         return ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName)).orElse(null);
     }
 
+    public MaterializedView getMv(String dbName, String tableName) {
+        return (MaterializedView) getTable(dbName, tableName);
+    }
+
     public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         if (statementBase instanceof CreateTableStmt) {
@@ -507,7 +511,8 @@ public class StarRocksAssert {
         }
 
         public void explainWithout(String s) throws Exception {
-            Assert.assertFalse(explainQuery().contains(s));
+            String explain = explainQuery();
+            Assert.assertFalse(explain, explain.contains(s));
         }
 
         public String explainQuery() throws Exception {
