@@ -70,35 +70,36 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
     if (tablet->get_enable_persistent_index(base_version) && (fix_size <= 128)) {
         DCHECK(_persistent_index == nullptr);
 
-        // Even if `enable_persistent_index` is enabled,
-        // it may not take effect because `storage_root_path` is not set
-        if (StorageEngine::instance()->is_lake_persistent_index_dir_inited()) {
-            auto persistent_index_type = tablet->get_persistent_index_type(base_version);
-            if (persistent_index_type.ok()) {
-                switch (persistent_index_type.value()) {
-                case PersistentIndexTypePB::LOCAL: {
-                    std::string path = strings::Substitute(
-                            "$0/$1/",
-                            StorageEngine::instance()->get_persistent_index_store()->get_persistent_index_path(),
-                            tablet->id());
+        auto persistent_index_type = tablet->get_persistent_index_type(base_version);
+        if (persistent_index_type.ok()) {
+            switch (persistent_index_type.value()) {
+            case PersistentIndexTypePB::LOCAL: {
+                // Even if `enable_persistent_index` is enabled,
+                // it may not take effect if is as compute node without any storage path.
+                if (StorageEngine::instance()->get_persistent_index_store(tablet->id()) == nullptr) {
+                    LOG(WARNING) << "lake_persistent_index_type of LOCAL will not take effect when as cn without any "
+                                    "storage path";
+                    return Status::InternalError(
+                            "lake_persistent_index_type of LOCAL will not take effect when as cn without any storage "
+                            "path");
+                }
+                std::string path = strings::Substitute("$0/$1/",
+                                                       StorageEngine::instance()
+                                                               ->get_persistent_index_store(tablet->id())
+                                                               ->get_persistent_index_path(),
+                                                       tablet->id());
 
-                    RETURN_IF_ERROR(
-                            StorageEngine::instance()->get_persistent_index_store()->create_dir_if_path_not_exists(
-                                    path));
-                    _persistent_index = std::make_unique<LakeLocalPersistentIndex>(path);
-                    return ((LakeLocalPersistentIndex*)_persistent_index.get())
-                            ->load_from_lake_tablet(tablet, metadata, base_version, builder);
-                }
-                default:
-                    LOG(WARNING) << "only support LOCAL lake_persistend_index_type for now";
-                    return Status::InternalError("only support LOCAL lake_persistend_index_type for now");
-                }
+                RETURN_IF_ERROR(StorageEngine::instance()
+                                        ->get_persistent_index_store(tablet->id())
+                                        ->create_dir_if_path_not_exists(path));
+                _persistent_index = std::make_unique<LakeLocalPersistentIndex>(path);
+                return ((LakeLocalPersistentIndex*)_persistent_index.get())
+                        ->load_from_lake_tablet(tablet, metadata, base_version, builder);
             }
-
-        } else {
-            LOG(WARNING) << "lake tablet persistent_index will not take effect, for storage_root_path is not set";
-            return Status::InternalError(
-                    "lake tablet persistent_index will not take effect, for storage_root_path is not set");
+            default:
+                LOG(WARNING) << "only support LOCAL lake_persistent_index_type for now";
+                return Status::InternalError("only support LOCAL lake_persistent_index_type for now");
+            }
         }
     }
 

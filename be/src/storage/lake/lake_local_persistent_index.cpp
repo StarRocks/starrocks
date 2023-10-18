@@ -41,7 +41,7 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
 
     // persistent_index_dir has been checked
     Status status = TabletMetaManager::get_persistent_index_meta(
-            StorageEngine::instance()->get_persistent_index_store(), tablet->id(), &index_meta);
+            StorageEngine::instance()->get_persistent_index_store(tablet->id()), tablet->id(), &index_meta);
     if (!status.ok() && !status.is_not_found()) {
         LOG(ERROR) << "get tablet persistent index meta failed, tablet: " << tablet->id()
                    << "version: " << base_version;
@@ -286,8 +286,8 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
         return status;
     }
     // write pesistent index meta
-    status = TabletMetaManager::write_persistent_index_meta(StorageEngine::instance()->get_persistent_index_store(),
-                                                            tablet->id(), index_meta);
+    status = TabletMetaManager::write_persistent_index_meta(
+            StorageEngine::instance()->get_persistent_index_store(tablet->id()), tablet->id(), index_meta);
     if (!status.ok()) {
         LOG(WARNING) << "build persistent index failed because write persistent index meta failed: "
                      << status.to_string();
