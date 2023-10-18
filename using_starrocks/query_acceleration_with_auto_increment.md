@@ -31,9 +31,10 @@
 由于上述阶段二可以通过两种方式实现，因此本文提供两种解决方案，其主要差异如下：
 
 - **解决方案一**
-  
+
   通过一个操作导入数据：订单数据表 Join 字典表，将订单数据和字典表的映射关系通过一个 INSERT INTO 语句同时导入至目标表。<br />
   这里 Join 子句中的订单数据表可以是一个外部表，也可以是一个作为中间表的内表（可以把原始数据先导入到该中间表）。
+
 - **解决方案二**
 
   分两个操作导入数据：首先，将订单数据导入目标表；然后，通过 UPDATE 语句（技术上其实也是目标表 Join 字典表），将字典表中的映射关系更新至目标表的 INTEGER 列。<br />
@@ -43,9 +44,9 @@
 
 #### 业务场景
 
-订单数据需要来源于一张外部表，其形式可以是 [External Catalog 外部表](../data_source/catalog/hive_catalog.md)、[文件外部表](../data_source/file_external_table.md)、或者 [FILES](../sql-reference/sql-functions/table-functions/files.md) 表函数（可以理解为一个外部表）。
+订单数据需要来源于一张外部表，其形式可以是 [External Catalog 外部表](../data_source/catalog/hive_catalog.md)、[文件外部表](../data_source/file_external_table.md)。
 
-本解决方案以  Hive Catalog 外部表 `source_table` 为例，其中 `order_uuid` 列表示订单编号并且为 STRING 类型。
+本解决方案以 Hive Catalog 外部表 `source_table` 为例，其中 `order_uuid` 列表示订单编号并且为 STRING 类型。
 
 > **说明**
 >
