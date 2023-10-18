@@ -143,7 +143,7 @@ PROPERTIES 是 Spark 资源相关参数，以下对重要参数进行说明：
       * `spark.hadoop.yarn.resourcemanager.address.rm-id`: 对于每个 rm-id，指定 `host:port` 以供客户端提交作业。
 * Broker 相关参数
   * `broker`: Broker 组的名称。需要使用 `ALTER SYSTEM ADD BROKER` 命令提前完成配置。
-  * `broker.property_key`: Broker 读取 ETL 生成的中间文件时需要指定的认证信息等，详细可参考 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD)。
+  * `broker.property_key`: Broker 读取 ETL 生成的中间文件时需要指定的认证信息等，详细可参考 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 * 其他参数
   * `working_dir`: 必填，一个 HDFS 文件路径，用于存放 ETL 作业生成的文件。例如`hdfs://host: port/tmp/starrocks`。
 
@@ -376,7 +376,7 @@ LoadFinishTime: 2019-07-27 11:50:16
     JobDetails: {"ScannedRows":28133395, "TaskNumber":1, "FileNumber":1,"FileSize":200000}
 ~~~
 
-返回结果集中参数的意义可参考 [查看导入状态](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD#返回结果说明)。
+返回结果集中参数的意义可参考 [查看导入状态](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md#返回结果说明)。
 
 ### 取消导入
 

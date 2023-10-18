@@ -358,7 +358,7 @@ FROM KAFKA
 
   如果需要指定源数据和目标表之间列的映射和转换关系，则可以配置 `COLUMNS` 和 `jsonpaths` 参数。`COLUMNS` 中的列名对应目标表的列名，列的顺序对应 `jsonpaths` 中的字段顺序。`jsonpaths` 参数用于提取 Avro 数据中需要的字段数据，而后（就像新生成的 CSV 数据一样）被 `COLUMNS` 参数按顺序临时命名。
 
-  更多数据转换的说明，请参见[导入时实现数据转换](../loading/Etl_in_loading)。
+  更多数据转换的说明，请参见[导入时实现数据转换](../loading/Etl_in_loading.md)。
 
   > 说明
   >
