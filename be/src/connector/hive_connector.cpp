@@ -261,9 +261,15 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     // The reason why we need double check here is for iceberg table.
     // for some partitions, partition column maybe is not constant value.
     // If partition column is not constant value, we can not use this optimization,
-    // and have to fallback to normal workflow.
     // And we can not use `can_use_any_column` either.
+    // So checks are:
+    // 1. can_use_any_column = true
+    // 2. only one materialized slot
+    // 3. besides that, all slots are partition slots.
     auto check_opt_on_iceberg = [&]() {
+        if (!_can_use_any_column) {
+            return false;
+        }
         if ((_partition_slots.size() + 1) != slots.size()) {
             return false;
         }
