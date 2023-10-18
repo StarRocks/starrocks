@@ -137,6 +137,10 @@ public class SlotRequestQueue {
                 Long groupId = entry.getKey();
                 LinkedHashMap<TUniqueId, LogicalSlot> subQueue = entry.getValue();
 
+                if (subQueue.isEmpty()) {
+                    continue;
+                }
+
                 ResourceGroup group = GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(groupId);
                 int numAllocatedSlotsOfGroup = allocatedSlots.getNumSlotsOfGroup(groupId);
                 AllocatedResource allocatedResource = peakSlotsToAllocateFromSubQueue(
