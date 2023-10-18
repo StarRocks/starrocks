@@ -29,10 +29,12 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
@@ -49,6 +51,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static com.starrocks.sql.plan.PlanTestBase.assertContains;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 class ParserTest {
@@ -401,6 +404,14 @@ class ParserTest {
 
         res = VariableMgr.findSimilarVarNames("disable_joinreorder");
         assertContains(res, "{'disable_join_reorder', 'disable_colocate_join', 'enable_predicate_reorder'}");
+    }
+
+    @Test
+    void testModOperator() {
+        String sql = "select 100 MOD 2";
+        List<StatementBase> stmts = SqlParser.parse(sql, new SessionVariable());
+        String newSql = AstToSQLBuilder.toSQL(stmts.get(0));
+        assertEquals("SELECT 100 % 2", newSql);
     }
 
     private static Stream<Arguments> keyWordSqls() {
