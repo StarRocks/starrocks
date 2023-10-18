@@ -37,13 +37,12 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
@@ -327,10 +326,9 @@ public class LogicalPlanPrinter {
             return new OperatorStr(sb.toString(), step, Collections.emptyList());
         }
 
-        @Override
-        public OperatorStr visitPhysicalJDBCScan(OptExpression optExpression, Integer step) {
-            PhysicalJDBCScanOperator scan = (PhysicalJDBCScanOperator) optExpression.getOp();
-            StringBuilder sb = new StringBuilder("JDBC SCAN (");
+        private OperatorStr visitScanCommon(OptExpression optExpression, Integer step, String scanName) {
+            PhysicalScanOperator scan = (PhysicalScanOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder(scanName + " (");
             sb.append("columns").append(scan.getUsedColumns());
             sb.append(" predicate[").append(scan.getPredicate()).append("]");
             sb.append(")");
@@ -341,16 +339,18 @@ public class LogicalPlanPrinter {
         }
 
         @Override
+        public OperatorStr visitPhysicalJDBCScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "JDBC SCAN");
+        }
+
+        @Override
         public OperatorStr visitPhysicalHiveScan(OptExpression optExpression, Integer step) {
-            PhysicalHiveScanOperator scan = (PhysicalHiveScanOperator) optExpression.getOp();
-            StringBuilder sb = new StringBuilder("SCAN (");
-            sb.append("columns").append(scan.getUsedColumns());
-            sb.append(" predicate[").append(scan.getPredicate()).append("]");
-            sb.append(")");
-            if (scan.getLimit() >= 0) {
-                sb.append(" Limit ").append(scan.getLimit());
-            }
-            return new OperatorStr(sb.toString(), step, Collections.emptyList());
+            return visitScanCommon(optExpression, step, "HIVE SCAN");
+        }
+
+        @Override
+        public OperatorStr visitPhysicalIcebergScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "ICEBERG SCAN");
         }
 
         public OperatorStr visitPhysicalProject(OptExpression optExpression, Integer step) {

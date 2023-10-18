@@ -40,7 +40,7 @@ order by
 TOP-N (order by [[1: s_suppkey ASC NULLS FIRST]])
     TOP-N (order by [[1: s_suppkey ASC NULLS FIRST]])
         INNER JOIN (join-predicate [1: s_suppkey = 10: l_suppkey] post-join-predicate [null])
-            SCAN (columns{1,2,3,5} predicate[1: s_suppkey IS NOT NULL])
+            HIVE SCAN (columns{1,2,3,5} predicate[1: s_suppkey IS NOT NULL])
             EXCHANGE BROADCAST
                 INNER JOIN (join-predicate [25: sum = 44: max] post-join-predicate [null])
                     AGGREGATE ([GLOBAL] aggregate [{148: sum=sum(148: sum)}] group by [[129: l_suppkey]] having [148: sum IS NOT NULL]
