@@ -34,7 +34,7 @@ StorageCredentialParams ::=
 
 | **参数** | **必填** | **说明**                                                     |
 | -------- | -------- | ------------------------------------------------------------ |
-| path     | 是       | 用于访问数据文件的 URI。示例：如使用 AWS S3：`s3://testbucket/parquet/test.parquet`如使用 HDFS：`hdfs``://<hdfs_ip>:<hdfs_port>/``test/parquet/test.orc` |
+| path     | 是       | 用于访问数据文件的 URI。示例：<br />如使用 AWS S3：`s3://testbucket/parquet/test.parquet` <br />如使用 HDFS：`hdfs://<hdfs_ip>:<hdfs_port>/test/parquet/test.orc` |
 | format   | 是       | 数据文件的格式。有效值：`parquet` 和 `orc`。                 |
 
 ### StorageCredentialParams
