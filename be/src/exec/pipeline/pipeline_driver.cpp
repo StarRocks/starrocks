@@ -38,16 +38,23 @@
 
 namespace starrocks::pipeline {
 
+#ifdef BE_TEST
+PipelineDriver::~PipelineDriver() {
+#else
 PipelineDriver::~PipelineDriver() noexcept {
+#endif
     if (_workgroup != nullptr) {
         _workgroup->decr_num_running_drivers();
     }
+    check_operator_close_states(" deleting pipeline drivers");
+}
+
+void PipelineDriver::check_operator_close_states(std::string func_name) {
     for (auto& op : _operators) {
         auto& op_state = _operator_stages[op->get_id()];
         if (op_state != OperatorStage::CLOSED) {
-            auto msg =
-                    fmt::format("{} close operator {} failed, may leak resources when deleting, please reflect to SR",
-                                to_readable_string(), op->get_name());
+            auto msg = fmt::format("{} close operator {} failed, may leak resources when {}, please reflect to SR",
+                                   to_readable_string(), op->get_name(), func_name);
             LOG(ERROR) << msg;
 #ifdef BE_TEST
             throw std::runtime_error(msg);
@@ -544,18 +551,7 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
         WARN_IF_ERROR(_mark_operator_closed(op, runtime_state),
                       fmt::format("close pipeline driver error [driver={}]", to_readable_string()));
     }
-    // check should be CLOSED status
-    for (auto& op : _operators) {
-        auto& op_state = _operator_stages[op->get_id()];
-        if (op_state != OperatorStage::CLOSED) {
-            auto msg = fmt::format("{} close operator {} failed, may leak resources when closing, please reflect to SR",
-                                   to_readable_string(), op->get_name());
-            LOG(ERROR) << msg;
-#ifdef BE_TEST
-            throw std::runtime_error(msg);
-#endif
-        }
-    }
+    check_operator_close_states(" closing pipeline drivers");
 }
 
 void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op,
@@ -679,7 +675,7 @@ void PipelineDriver::_update_driver_level_timer() {
 std::string PipelineDriver::to_readable_string() const {
     std::stringstream ss;
     ss << "query_id=" << print_id(this->query_ctx()->query_id())
-       << " fragment_id=" << print_id(this->fragment_ctx()->fragment_instance_id()) << " driver=" << this
+       << " fragment_id=" << print_id(this->fragment_ctx()->fragment_instance_id()) << " driver=" << _driver_name
        << ", status=" << ds_to_string(this->driver_state()) << ", operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {
         if (i == 0) {
