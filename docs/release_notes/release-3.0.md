@@ -1,5 +1,36 @@
 # StarRocks version 3.0
 
+## 3.0.7
+
+Release date: October 18, 2023
+
+### Improvements
+
+- Window functions COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP now support the ORDER BY clause and Window clause. [#30786](https://github.com/StarRocks/starrocks/pull/30786)
+- The Publish phase of a load job that writes data into a Primary Key table is changed from asynchronous mode to synchronous mode. As such, the data loaded can be queried immediately after the load job finishes. [#27055](https://github.com/StarRocks/starrocks/pull/27055)
+- An error instead of NULL is returned if a decimal overflow occurs during queries on the DECIMAL type data. [#30419](https://github.com/StarRocks/starrocks/pull/30419)
+- Executing SQL commands with invalid comments now returns results consistent with MySQL. [#30210](https://github.com/StarRocks/starrocks/pull/30210)
+- For a StarRocks table that uses RANGE partitioning with only one partitioning column or expression partitioning, SQL predicates containing partition column expressions can also be used for partition pruning. [#30421](https://github.com/StarRocks/starrocks/pull/30421)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Concurrently creating and deleting databases and tables can, in certain cases, result in the table not being found and further leads to the failure of data loading into that table. [#28985](https://github.com/StarRocks/starrocks/pull/28985)
+- Using UDFs may lead to memory leaks in certain cases. [#29467](https://github.com/StarRocks/starrocks/pull/29467) [#29465](https://github.com/StarRocks/starrocks/pull/29465)
+- If the ORDER BY clause contains aggregate functions, an error "java.lang.IllegalStateException: null" is returned. [#30108](https://github.com/StarRocks/starrocks/pull/30108)
+- If users run queries against data stored in Tencent COS by using their Hive catalog which consists of multiple levels, the query results will be incorrect. [#30363](https://github.com/StarRocks/starrocks/pull/30363)
+- If some subcfields of the STRUCT in ARRAY<STRUCT> type data are missing, the data length is incorrect when default values are filled in the missing subcfields during queries, which causes BEs to crash.
+- The version of Berkeley DB Java Edition is upgraded to avoid security vulnerabilities.[#30029](https://github.com/StarRocks/starrocks/pull/30029)
+- If users load data into a Primary Key table on which truncate operations and queries are concurrently performed, an error "java.lang.NullPointerException" is thrown in certain cases. [#30573](https://github.com/StarRocks/starrocks/pull/30573)
+- If the Schema Change execution time is too long, it may fail because the tablet of the specified version is garbage-collected. [#31376](https://github.com/StarRocks/starrocks/pull/31376)
+- If users use CloudCanal to load data into table columns that are set to `NOT NULL` but have no default value specified, an error "Unsupported dataFormat value is : \N" is thrown. [#30799](https://github.com/StarRocks/starrocks/pull/30799)
+- In StarRocks shared-data clusters, the information of table keys is not recorded in `information_schema.COLUMNS`. As a result, DELETE operations cannot be performed when data is loaded by using Flink Connector. [#31458](https://github.com/StarRocks/starrocks/pull/31458)
+- During the upgrade, if the types of certain columns are also upgraded (for example, from Decimal type to Decimal v3 type), compaction on certain tables with specific characteristics may cause BEs to crash. [#31626](https://github.com/StarRocks/starrocks/pull/31626)
+- When data is loaded by using Flink Connector, the load job is suspended unexpectedly if there are highly concurrent load jobs and both the number of HTTP threads and the number of Scan threads have reached their upper limits. [#32251](https://github.com/StarRocks/starrocks/pull/32251)
+- BEs crash when libcurl is invoked. [#31667](https://github.com/StarRocks/starrocks/pull/31667)
+- An error occurs when a column of BITMAP type is added to a Primary Key table. [#31763](https://github.com/StarRocks/starrocks/pull/31763)
+
 ## 3.0.6
 
 Release date: September 12, 2023
