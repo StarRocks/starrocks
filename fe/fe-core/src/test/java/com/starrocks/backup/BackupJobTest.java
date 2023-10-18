@@ -320,11 +320,8 @@ public class BackupJobTest {
         BackupMeta restoreMetaInfo = null;
         BackupJobInfo restoreJobInfo = null;
         try {
-<<<<<<< HEAD
-            restoreMetaInfo = BackupMeta.fromFile(job.getLocalMetaInfoFilePath(), -1, -1);
-=======
-            restoreMetaInfo = BackupMeta.fromFile(job.getLocalMetaInfoFilePath(), FeConstants.STARROCKS_META_VERSION);
->>>>>>> 437cce8f07 ([BugFix] Backup/Restore uses new meta format (#32892))
+            restoreMetaInfo = BackupMeta.fromFile(job.getLocalMetaInfoFilePath(),
+                    FeConstants.META_VERSION, FeConstants.STARROCKS_META_VERSION);
             Assert.assertEquals(1, restoreMetaInfo.getTables().size());
             OlapTable olapTable = (OlapTable) restoreMetaInfo.getTable(tblId);
             Assert.assertNotNull(olapTable);
