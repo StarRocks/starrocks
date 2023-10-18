@@ -224,8 +224,8 @@ class ParquetScannerTest : public ::testing::Test {
                 {"issue_17822_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
                 {"nested_array_c0", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
                                             TypeDescriptor::from_logical_type(TYPE_VARCHAR)))},
-                {"col_map", TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
-                                                            TypeDescriptor::create_varchar_type(1048576))}};
+                {"col_map", TypeDescriptor::create_map_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                                            TypeDescriptor::from_logical_type(TYPE_VARCHAR), )}};
         SlotTypeDescInfoArray slot_infos;
         slot_infos.reserve(column_names.size());
         for (auto& name : column_names) {
