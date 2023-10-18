@@ -40,6 +40,7 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "gtest/int128_printer.h"
 #include "gutil/int128.h"
 #include "runtime/large_int_value.h"
 #include "runtime/mem_pool.h"
