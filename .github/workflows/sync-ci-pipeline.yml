@@ -1,4 +1,4 @@
-name: SYNC CONFLICT CHECK PIPELINE
+name: SYNC CI PIPELINE
 
 on:
   pull_request_target:
@@ -11,8 +11,9 @@ on:
       - 'branch-[0-9].[0-9]'
 
 concurrency:
-  group: ${{ github.event.number }}-conflict
+  group: ${{ github.event.number }}-sync-checker
   cancel-in-progress: true
+
 
 permissions:
   checks: write
@@ -56,7 +57,8 @@ jobs:
     if: >
       contains(github.event.pull_request.title, '(sync #') &&
       contains(needs.pr-label.outputs.labels, 'sync') &&
-      contains(needs.pr-label.outputs.labels, 'conflict')
+      !contains(needs.pr-label.outputs.labels, 'pending')
+      !contains(needs.pr-label.outputs.labels, 'force-check')
     name: RUN CHECKER
     steps:
       - run: echo "success"
@@ -129,6 +131,8 @@ jobs:
         id: run_build
         shell: bash
         timeout-minutes: 90
+        env:
+          SKIP_OSS: 'true'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-build.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }}
@@ -148,3 +152,69 @@ jobs:
         run: |
           rm -f ${{ steps.run_build.outputs.RES_FILE }}
           rm -f ${{ steps.run_build.outputs.RES_LOG }}
+
+  result:
+    runs-on: [self-hosted, normal]
+    needs: [ build ]
+    name: RESULT
+    if: always()
+    env:
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
+      GITHUB_TOKEN: ${{ secrets.PAT }}
+      ACTION_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: add label
+        uses: actions-ecosystem/action-add-labels@v1
+        if: needs.build.result == 'failure'
+        with:
+          github_token: ${{ secrets.PAT }}
+          labels: ERROR
+
+      - name: remove label
+        uses: actions-ecosystem/action-remove-labels@v1
+        if: needs.build.result == 'failure'
+        with:
+          github_token: ${{ secrets.PAT }}
+          labels: ERROR
+
+      - name: notify
+        if: needs.build.result == 'failure'
+        run: |
+          cd /var/lib/elastic-service && git pull
+          python3 lib/send_pr_notification.py ${PR_NUMBER} ${REPO} ${BRANCH} ${ACTION_URL}
+
+  auto-merge:
+    needs: build
+    name: Auto Merge
+    runs-on: [ self-hosted, sync-normal ]
+    if: >
+      contains(github.event.pull_request.title, '(sync #') &&
+      contains(needs.pr-label.outputs.labels, 'sync') &&
+      !contains(needs.pr-label.outputs.labels, 'conflict') &&
+      !contains(needs.pr-label.outputs.labels, 'pending') &&
+      needs.build.result != 'failure'
+    steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: add automerge label
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.SYNC_PAT }}
+          labels: automerge
+
+      - uses: hmarr/auto-approve-action@v3
+        with:
+          review-message: "Auto approved sync PR"
+          github-token: ${{ secrets.APPROVE_PAT }}
+
+      - name: automerge
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.SYNC_PAT }}
+          pull-request-number: ${{ github.event.pull_request.number }}
+          merge-method: rebase

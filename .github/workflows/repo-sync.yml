@@ -95,13 +95,6 @@ jobs:
           path: './elastic-service'
           token: ${{ secrets.SYNC_PAT }}
           
-      - name: wait previous prs merged
-        env:
-          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
-        run: |
-          cd ${{ github.workspace }}/elastic-service
-          python3 lib/pr_sequence_checker.py wait   
-          
       - name: pr branch
         run: |
           git pull

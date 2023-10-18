@@ -27,7 +27,7 @@ jobs:
       - id: branch
         name: BRANCH
         run: |
-          if [[ "${{ github.event.workflow_run.event }}" == "schedule" ]]; then
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
             if [[ "${{ github.event.schedule }}" == "00 15 * * *" ]]; then
               branch=main
             elif [[ "${{ github.event.schedule }}" == "10 15 * * *" ]]; then
@@ -51,7 +51,6 @@ jobs:
     name: Clang-Format
     env:
       PR_NUMBER: ${{ github.event.number }}
-    if: ${{ needs.be-checker.outputs.output1 == 'true' }}
     steps:
       - name: clean
         run: |
@@ -235,3 +234,36 @@ jobs:
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
           rm -rf ${{ github.workspace }}/*
+
+  build:
+    runs-on: [ self-hosted, normal ]
+    needs: [ info, be-ut, clang-tidy, fe-ut ]
+    name: BUILD
+    env:
+      BRANCH: ${{ needs.info.outputs.BRANCH }}
+    steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: UPDATE ECI & RUN BUILD
+        id: run_build
+        shell: bash
+        timeout-minutes: 90
+        env:
+          SKIP_OSS: 'true'
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/elastic-build.sh --branch ${BRANCH} --repository ${{ github.repository }}
+
+      - name: clean ECI - ${{ steps.run_build.outputs.ECI_ID }}
+        if: always()
+        run: |
+          eci rm ${{ steps.run_build.outputs.ECI_ID }}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -f ${{ steps.run_build.outputs.RES_FILE }}
+          rm -f ${{ steps.run_build.outputs.RES_LOG }}
