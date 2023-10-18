@@ -44,10 +44,10 @@ TOP-N (order by [[29: substring ASC NULLS FIRST]])
                 AGGREGATE ([LOCAL] aggregate [{30: count=count(), 31: sum=sum(6: c_acctbal)}] group by [[29: substring]] having [null]
                     RIGHT ANTI JOIN (join-predicate [20: o_custkey = 1: c_custkey] post-join-predicate [null])
                         EXCHANGE SHUFFLE[20]
-                            SCAN (columns{20} predicate[null])
+                            HIVE SCAN (columns{20} predicate[null])
                         EXCHANGE SHUFFLE[1]
                             INNER JOIN (join-predicate [cast(6: c_acctbal as decimal128(38, 8)) > 17: avg] post-join-predicate [null])
-                                SCAN (columns{1,5,6} predicate[substring(5: c_phone, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
+                                HIVE SCAN (columns{1,5,6} predicate[substring(5: c_phone, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
                                 EXCHANGE BROADCAST
                                     ASSERT LE 1
                                         AGGREGATE ([GLOBAL] aggregate [{97: count=sum(97: count), 96: sum=sum(96: sum)}] group by [[]] having [null]

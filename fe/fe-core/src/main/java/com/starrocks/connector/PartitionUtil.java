@@ -265,8 +265,8 @@ public class PartitionUtil {
                 return Lists.newArrayList(jdbcTable.getJdbcTable());
             }
         } else {
-            Preconditions.checkState(false, "Do not support get partition names and columns for" +
-                    "table type %s", table.getType());
+            Preconditions.checkState(false, "Not support getPartitionNames for table type %s",
+                    table.getType());
         }
         return partitionNames;
     }
